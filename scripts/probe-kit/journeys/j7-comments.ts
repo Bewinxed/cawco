@@ -1,8 +1,9 @@
 /**
  * J7, previews and comments: a session shows a page; the person opens it,
  * presses what they mean, writes in the composer that opens there and
- * presses Comment, then Send: the session receives it as one delivery
- * (artifacts/service.ts `deliverMarks`, on Send alone).
+ * presses Comment: the session receives it by itself as one delivery a few
+ * seconds later, with no Send (artifacts/service.ts `personMarked`,
+ * `deliverMarks`).
  *
  * The page is the session's own, made through the hub's artifact API as
  * `artifact_create` makes one. The outcome is read from the model: it is
@@ -108,7 +109,7 @@ async function walk(leg: Leg): Promise<void> {
 
   const composer = page.locator('[data-slot="pin-composer"]');
   await leg.step(
-    "Comment on the first line, then Send",
+    "Comment on the first line",
     async () => {
       // A tap where the line is: in Comment mode the comment layer lies
       // over the page and takes the tap (as the person's finger lands).
@@ -126,15 +127,10 @@ async function walk(leg: Leg): Promise<void> {
         .getByRole("button", { name: "Comment", exact: true })
         .click();
       await composer.waitFor({ state: "detached", timeout: 10_000 });
-      await page
-        .locator('[data-slot="send"]')
-        .filter({ visible: true })
-        .first()
-        .click();
     },
     async () => {
       const heard = await eventually(
-        "the session is sent the comment on Send",
+        "the session is sent the comment by itself",
         () =>
           fleet.seen.find(
             (one) =>

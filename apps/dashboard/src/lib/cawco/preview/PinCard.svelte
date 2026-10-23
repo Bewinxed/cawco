@@ -23,9 +23,10 @@
    * element is gone) and Close, each the `sm` ghost. Under it, in meta, the
    * element's nearest parent ("on Routine form"; none for the whole page);
    * then the line saying its element is gone, or that it stands resolved,
-   * each with its way back; then, while the session hasn't heard it, "Unsent"
-   * with its own Send ("Not sent: why" with Send again once a Send of it
-   * reached no one). Then the thread, the one part that scrolls: the
+   * each with its way back; then, when its delivery reached no one or it
+   * stands only on the page, "Not sent: why" with Try again (a comment goes
+   * to the session by itself once written). Then the thread, the one part
+   * that scrolls: the
    * transcript's own turns (turn/: Turn, Well, Who), the person's words in
    * the reader's well and the agent's bare under its mark and the session's
    * name, each speaker line ending in its turn's age at rest, a later
@@ -80,10 +81,10 @@
     problem,
     draft,
     sending = false,
-    sendingPin = false,
+    retrying = false,
     whyNotSent = null,
     onreply,
-    onsend,
+    onretry,
     onresolve,
     ondelete,
     onplace,
@@ -111,13 +112,13 @@
     draft: ComposerDraft;
     /** The reply is on its way: the glyph is the spinner. */
     sending?: boolean;
-    /** Its own Send, or the page's, is on its way. */
-    sendingPin?: boolean;
-    /** Why it hasn't reached the session, in words, when a Send of it failed or it stands only on the page; null when it is simply unsent. */
+    /** Its Try again is on its way. */
+    retrying?: boolean;
+    /** Why it hasn't reached the session, in words, when its delivery reached no one or it stands only on the page; null while it is on its way. */
     whyNotSent?: string | null;
     onreply: (text: string, extras: SendExtras) => void;
-    /** Its own Send: it alone goes to the session. */
-    onsend: () => void;
+    /** Try again: it goes to the session once more. */
+    onretry: () => void;
     onresolve: (resolved: boolean) => void;
     /** Deletes the pin once the person confirmed; rejects with the refusal's sentence. */
     ondelete: () => Promise<void>;
@@ -453,31 +454,26 @@
     />
   </div>
 {/if}
-{#if markState(pin) === "unsent"}
-  <!-- The session hasn't heard it: its own Send, one press; why a Send of it reached no one, with Send again. -->
+{#if whyNotSent && markState(pin) === "unsent"}
+  <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
   <div
-    data-slot="unsent"
-    data-not-sent={whyNotSent ? "" : undefined}
+    data-slot="not-sent"
+    data-not-sent=""
     class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
   >
     <p
-      class={[
-        "m-0 min-w-0 text-pretty wrap-anywhere",
-        whyNotSent ? "text-status-fail-ink" : "text-brand-ink",
-      ]}
+      class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
       role="status"
     >
-      {whyNotSent ? said.notSent(whyNotSent) : said.unsent}
+      {said.notSent(whyNotSent)}
     </p>
     <Button
-      aria-label={whyNotSent
-        ? said.sendCommentAgain(pin.number)
-        : said.sendComment(pin.number)}
-      data-slot="pin-send"
-      label={whyNotSent ? said.sendAgain : said.send}
-      onclick={onsend}
+      aria-label={said.retryComment(pin.number)}
+      data-slot="pin-retry"
+      label={said.tryAgain}
+      onclick={onretry}
       pad="none"
-      pending={sendingPin}
+      pending={retrying}
       size="sm"
       variant="link"
     />

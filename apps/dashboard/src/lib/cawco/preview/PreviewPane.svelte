@@ -21,7 +21,6 @@
     type Pin,
     type PreviewMode,
     pinProblem,
-    pinUnsent,
     previewMode,
   } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
@@ -131,6 +130,7 @@
     LINK_DOWN_MS,
     type ListHold,
     NOT_REACHING,
+    retryComment,
     sendArtifact,
   } from "./artifact-doc";
   import CanvasView from "./CanvasView.svelte";
@@ -1190,19 +1190,16 @@
       : 0
   );
   /**
-   * What Send sends (DESIGN.md, Sending comments): everything of the page
-   * the session hasn't heard, picks and comments alike: each pick since the
-   * last Send, each comment with something unsent (itself, a reply, a
-   * resolve), each stroke group no comment stands on. Drawn only above 0.
+   * What Send sends (DESIGN.md, How comments reach the session): each pick
+   * since the last Send. The person's comments go by themselves. Drawn only
+   * above 0.
    */
   const unsentCount = $derived(
-    (view
+    view
       ? Object.values(view.choices).filter(
           (entry) => !view?.sentAt || entry.at > view.sentAt
-        ).length + view.looseInk
-      : 0) +
-      // Every unsent comment, one only the page holds yet among them: the person's words are never left without a Send.
-      pins.filter(pinUnsent).length
+        ).length
+      : 0
   );
   /** The pane's own width, px: the rail's room is the pane's, not the window's. */
   let paneW = $state(0);
@@ -1298,32 +1295,10 @@
    * stands over the thread, where Caw answers with the files and "Open the
    * board". The `sentAt` it opened with is not a send.
    */
-  /** The note for the agent the next Send carries first (the rail's Send bar). */
-  let note = $state("");
-  /** Waiting for the page to say its pictures reached the hub, before a Send. */
-  let picturesWaiter: (() => void) | null = null;
-  /** The page's pictures of what is unheard, to the hub before the Send that carries them; at most a while. Our call: 3 s. */
-  function picturesFirst(): Promise<void> {
-    if (!(connected && iframe)) {
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      const done = () => {
-        clearTimeout(cap);
-        picturesWaiter = null;
-        resolve();
-      };
-      const cap = setTimeout(done, 3000);
-      picturesWaiter = done;
-      post({ type: "cawco:pictures-now" });
-    });
-  }
   /**
    * Send: the hub's send, which applies a setup page's fleet choices and
-   * place first, delivers every comment, reply, resolve and stroke the
-   * session hasn't heard as one message with the note first, and tells the
-   * session of the page's picks. A refusal is said in the band over the
-   * page, and what it carried stays unsent.
+   * place first and tells the session of the page's picks. A refusal is
+   * said in the band over the page, and the picks stay unsent.
    */
   async function sendAll() {
     if (!artifact || sending) {
@@ -1331,27 +1306,25 @@
     }
     sending = true;
     try {
-      await picturesFirst();
-      await sendArtifact(instanceId, artifact.id, note);
-      note = "";
+      await sendArtifact(instanceId, artifact.id);
     } catch (error) {
       failure = { message: failureWords(error), again: null };
     } finally {
       sending = false;
     }
   }
-  /** The comments whose own Send is on its way. */
-  let pinsSending = $state.raw<ReadonlySet<string>>(new Set());
+  /** The comments whose Try again is on its way. */
+  let pinsRetrying = $state.raw<ReadonlySet<string>>(new Set());
   /**
    * Why comment `id` hasn't reached the session, in words, when it is
-   * owed for a reason: a Send of it no one took (the hub's `notSent`), or
-   * it stands only in the page's doc, which hasn't reached the hub (what
+   * owed for a reason: a delivery of it no one took (the hub's `notSent`),
+   * or it stands only in the page's doc, which hasn't reached the hub (what
    * closed its link, else that it hasn't yet), kept on the device meanwhile.
    */
   const notSentWhy = (pin: Pin): string | null =>
     pin.notSent?.why ??
     (onlyOnPage(pin.id) ? (linkDown ?? commentWords.notOnHub) : null);
-  /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its own Send says it didn't. Our call. */
+  /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
   const REACH_HUB_MS = 10_000;
   /** A reason's own full stop, which the sentence that quotes it puts back. */
   const REASON_STOP = /\.$/;
@@ -1367,38 +1340,37 @@
           clearInterval(look);
           reject(
             new Error(
-              `This comment hasn't reached the hub: ${(linkDown ?? commentWords.notOnHub).replace(REASON_STOP, "")}. It's kept on this device: Send again once its link is back.`
+              `This comment hasn't reached the hub: ${(linkDown ?? commentWords.notOnHub).replace(REASON_STOP, "")}. It's kept on this device, and goes once its link is back.`
             )
           );
         }
       }, 200);
     });
   /**
-   * A comment's own Send (its row's, its thread's): it alone goes, as the
-   * page's Send would carry it, with its pictures first. One only the page
-   * holds yet has its link opened again first, and goes once it is on the
-   * hub. A Send no one took says why on the pin itself (the hub's
-   * `notSent`, which the doc brings back) as well as in the band over the
-   * page.
+   * A comment's Try again (its row's, its thread's), for one not sent. One
+   * only the page holds yet has its link opened again, and goes by itself
+   * once it is on the hub. One whose delivery no one took goes now. A Try
+   * again no one took says why on the pin itself (the hub's `notSent`,
+   * which the doc brings back) as well as in the band over the page.
    */
-  async function sendPin(id: string) {
-    if (!artifact || sending || pinsSending.has(id)) {
+  async function retryPin(id: string) {
+    if (!artifact || pinsRetrying.has(id)) {
       return;
     }
-    pinsSending = new Set([...pinsSending, id]);
+    pinsRetrying = new Set([...pinsRetrying, id]);
     try {
       if (onlyOnPage(id)) {
         // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
         post({ type: "cawco:resend-pin", id });
         relink();
         await reachedHub(id);
+      } else {
+        await retryComment(instanceId, artifact.id, id);
       }
-      await picturesFirst();
-      await sendArtifact(instanceId, artifact.id, "", [id]);
     } catch (error) {
       failure = { message: failureWords(error), again: null };
     } finally {
-      pinsSending = new Set([...pinsSending].filter((one) => one !== id));
+      pinsRetrying = new Set([...pinsRetrying].filter((one) => one !== id));
     }
   }
   let sentSeen: string | null | undefined;
@@ -2529,9 +2501,6 @@
       case "cawco:change-pressed":
         changePressed(message.anchor);
         break;
-      case "cawco:pictures-sent":
-        picturesWaiter?.();
-        break;
       // What the page said of a write the pane sent it for a pin it holds alone.
       case "cawco:reply-result":
       case "cawco:resolve-result":
@@ -3252,17 +3221,13 @@
     }}
     onresolve={(id, resolved) => resolvePin(resolved, id)}
     onretry={relink}
-    onsend={sendAll}
-    onsendpin={sendPin}
+    onretrypin={retryPin}
     open={openPin}
     whyNotSent={notSentWhy}
     {pins}
-    {pinsSending}
-    {sending}
+    retrying={pinsRetrying}
     {unread}
-    unsent={unsentCount}
     bind:filter={listFilter}
-    bind:note
     bind:scroll={listScroll}
     bind:sort={railSort}
   />
@@ -3838,9 +3803,9 @@
           onreply={(text) => reply(text)}
           onresolve={(resolved) => resolvePin(resolved)}
           onring={(on) => post({ type: "cawco:composer-ring", on })}
-          onsend={() => {
+          onretry={() => {
             if (cardPin) {
-              sendPin(cardPin.id);
+              retryPin(cardPin.id);
             }
           }}
           parent={cardParent?.id === cardPin.id ? cardParent.name : null}
@@ -3848,7 +3813,7 @@
           placing={placing === cardPin.id}
           problem={cardError}
           sending={replying}
-          sendingPin={sending || pinsSending.has(cardPin.id)}
+          retrying={pinsRetrying.has(cardPin.id)}
           whyNotSent={notSentWhy(cardPin)}
         />
       </PinFloat>

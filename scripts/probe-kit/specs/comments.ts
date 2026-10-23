@@ -10,20 +10,18 @@
  *    edge); a press on a paragraph opens the composer at the element beside
  *    a hollow pill with no number, writing nothing (pick 5); Comment writes
  *    pin 1 and its first entry at once, with its selector, source and text,
- *    its pill hollow (unsent). A press on the pill opens its thread as the
+ *    its pill hollow (until it reaches the session). A press on the pill opens its thread as the
  *    280px card beside it (pick 2); Esc closes it, Esc again leaves the
  *    mode; a press on the page closes nothing.
  * 2. A pen stroke's radial Comment opens the composer on the ink; Comment
  *    writes pin 2 on it, with the ink's box; the rail shows two rows; J and
  *    K move the focus between the pins and the overlay's outline follows.
- * 3. A reply typed in the thread is in pin 1's thread, by the person. With
- *    no Send nothing reaches the session past the old quiet period; both
- *    rows say Unsent and the head's Send and the rail's Send bar count 2.
- *    One press of the rail's Send, with a note, delivers both as one
- *    message, the note first, drawn as one quiet line and no row of the
- *    person's; every pin and entry stamped `sentAt`, the pills filled
- *    (pick 3). A second reply makes pin 1 unsent again; Send delivers it
- *    alone.
+ * 3. A reply typed in the thread is in pin 1's thread, by the person. It
+ *    goes by itself (the owner's "Go by themselves"): no Send in the head,
+ *    no Send bar nor "Unsent" in the rail; one delivery carries pin 1 with
+ *    the reply alone, no row of the person's; every pin and entry stamped
+ *    `sentAt`, the pills filled. A second reply makes pin 1 hollow until it
+ *    goes the same way, alone.
  * 4. comment_read answers both pins, what pin 1 stands on and its reply, and
  *    pin 2's ink box; comment_reply on pin 1 is in its thread within 2 s,
  *    the live dot showing while the agent's turn runs; the thread speaks in
@@ -180,8 +178,8 @@
  *    element.
  *
  * And the commenting redesign's picks (DESIGN.md, Placing a comment, A
- * pin's pill, The Comments rail, A thread beside its pin, Sending
- * comments), each a leg:
+ * pin's pill, The Comments rail, A thread beside its pin, How comments
+ * reach the session), each a leg:
  * - The 280px card: the composer at the element 280px wide, its field 178px
  *   or wider, the hint commentWords.composeHint.full uncut, its pill one line.
  * - The attachment pill: one pill for every kind, a file's name and size on
@@ -198,7 +196,7 @@
  *   while the rail is shut.
  * - At 390, light and dark: the rail the well's foot sheet (60% at most), a
  *   row's thread the foot sheet with the rail aside, its list scrolled to
- *   its end standing wholly above its Send bar.
+ *   its end standing wholly inside the sheet.
  *
  * And the review of the captures (2026-10-21):
  * - A thread's title stands whole: its glyphs no taller than the box that
@@ -294,7 +292,9 @@ const NOTICE =
   /\[CawCo\] The person commented on the page "[a-z0-9-]+" \(artifact [0-9a-f-]{36}\)\./;
 /** How long a delivery may take: the hub's send and the way to the model. */
 const DELIVERY_MS = 30_000;
-/** How long the probe watches for a delivery that should not come: past the hub's old quiet period (10 s). Our call. */
+/** The hub's quiet after the person's last mark before it delivers them (artifacts/service.ts `COMMENTS_QUIET_MS`). */
+const QUIET_MS = 3000;
+/** How long the probe watches for a delivery that should not come. Our call. */
 const STILL_MS = 14_000;
 /** An image block in a request's body. */
 const IMAGE_BLOCK = /"type":"image"/g;
@@ -709,7 +709,7 @@ const runOn = async (kit: Kit, on: On) => {
     () => draftChecks(on),
     // A pin stays on its element while a page draws it again.
     () => redrawChecks(on),
-    // A comment's own Send, and why one wasn't sent.
+    // Comments go by themselves, and why one wasn't sent.
     () => pinSendChecks(on),
     // Delete, one press in the thread's head.
     () => deleteHeadChecks(on),
@@ -720,7 +720,7 @@ const runOn = async (kit: Kit, on: On) => {
     () => canvasChangedChecks(on, id),
     // A long name holds its line.
     () => longNameChecks(on),
-    // Nothing of the person's is lost: a refused write, a hub restart before Send.
+    // Nothing of the person's is lost: a refused write, a hub restart before its delivery.
     () => refusedChecks(on),
     () => restartChecks(on),
     // Last: it loads the desk again, which gives the split its kept width.
@@ -1080,10 +1080,12 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
 };
 
 /**
- * 3. Pick 3, when the agent hears: nothing reaches the session until Send.
- * A reply in the thread, the head's and the rail's Send counting what is
- * unsent; one press sends it all once, the note first, and the pills fill;
- * a second reply waits for the next Send, which carries it alone.
+ * 3. When the agent hears: by itself, a few seconds after the person writes
+ * (the owner's "Go by themselves", 2026-10-23). A reply in the thread goes
+ * with no Send: the head offers none and the rail no Send bar nor "Unsent";
+ * one delivery carries pin 1 with that reply alone, drawn as a quiet line
+ * and no row of the person's, and the pills fill; a second reply turns pin
+ * 1 hollow until it goes the same way, alone.
  */
 const sendChecks = async (on: On, frame: Frame, one: string) => {
   await (
@@ -1116,49 +1118,21 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   );
   await on.page.keyboard.press("Escape");
 
-  // A quiet period and more pass: with no Send, the session hears nothing.
-  await on.page.waitForTimeout(STILL_MS);
-  const early = heard.slice(before).filter((said) => NOTICE.test(said.last));
   const head = on.page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
   );
-  const headCount = (
-    await head
-      .locator('[data-slot="send-count"]')
-      .textContent()
-      .catch(() => null)
-  )?.trim();
+  const headLeft = await head.count();
   const rail = await rowsOf(on);
   const unsentRows = await rail
     .locator('[data-slot="pin-row"] [data-line="back"]', { hasText: "Unsent" })
     .count();
-  const barCount = (
-    await rail
-      .locator('[data-slot="rail-send"] .num')
-      .textContent()
-      .catch(() => null)
-  )?.trim();
-  on.kit.check(
-    "pick 3, on Send: with no Send nothing reaches the session past the old quiet period; both comments' rows say Unsent, and the head's Send and the rail's Send bar count 2",
-    early.length === 0 &&
-      headCount === "2" &&
-      barCount === "2" &&
-      unsentRows === 2,
-    `delivered ${early.length}; head Send ${headCount}; rail Send ${barCount}; Unsent rows ${unsentRows}`
-  );
-
-  await rail
-    .getByRole("textbox", { name: commentWords.note })
-    .fill("Both together, please: one pass.");
-  await rail.locator('[data-slot="rail-send"]').click();
+  const barLeft = await on.page.locator('[data-slot="send-bar"]').count();
   const message = await until(
-    "the comments' delivery at the model",
+    "the reply's delivery at the model",
     () => heard.slice(before).find((said) => NOTICE.test(said.last)),
     Boolean,
-    DELIVERY_MS
+    DELIVERY_MS + QUIET_MS
   ).catch(() => undefined);
-  // The delivery's pictures ride with it: the only images in that request.
-  const pictures = message?.body.match(IMAGE_BLOCK)?.length ?? 0;
   const line = on.page.locator("[data-artifact-responses]");
   await line
     .first()
@@ -1168,18 +1142,18 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   const ownRows = await on.page
     .locator('[data-slot="turn"][data-you]:not([data-slot="pin-card"] *)')
     .count();
-  const lines = await line.count();
   const stamped = await until(
-    "sentAt on both pins and their entries",
+    "sentAt on every pin and entry",
     () => docOf(frame),
     (doc) =>
-      [one, ...Object.keys(doc.pins)].every((id) => {
-        const pin = doc.pins[id] as
-          | { sentAt?: string; thread: { by: string; sentAt?: string }[] }
-          | undefined;
+      Object.values(doc.pins).every((pin) => {
+        const stood = pin as {
+          sentAt?: string;
+          thread: { by: string; sentAt?: string }[];
+        };
         return (
-          !!pin?.sentAt &&
-          pin.thread.every((said) => said.by !== "person" || !!said.sentAt)
+          !!stood.sentAt &&
+          stood.thread.every((item) => item.by !== "person" || !!item.sentAt)
         );
       }),
     10_000
@@ -1190,36 +1164,30 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
       (g) => g.getAttribute("data-state")
     )
   );
-  const sendLeft = await head.count();
-  const barLeft = await on.page.locator('[data-slot="send-bar"]').count();
   const words = message?.last ?? "";
   // Exactly once: nothing more comes after it.
   await on.page.waitForTimeout(STILL_MS);
   const deliveries = heard
     .slice(before)
     .filter((said) => NOTICE.test(said.last)).length;
-  const noteAt = words.indexOf("## The person's note on this Send");
   on.kit.check(
-    "pick 3: one press of the rail's Send delivers both comments once as one message, the note its first section, pin 1 with both its words and its id, pin 2 on its ink, and their two pictures; one quiet line and no row of the person's; every pin and entry stamped sentAt, the pills filled, the head's Send and the Send bar gone",
-    deliveries === 1 &&
-      noteAt >= 0 &&
-      words.indexOf("Both together, please: one pass.") > noteAt &&
-      noteAt < words.indexOf("## 1. comment on #para") &&
-      words.includes('- I wrote: "Bolder, perhaps."') &&
+    "3: the reply goes by itself, no Send in the head and no Send bar nor Unsent in the rail: one delivery carrying pin 1 with the reply alone and its id, no row of the person's; every pin and entry stamped sentAt, the pills filled",
+    headLeft === 0 &&
+      barLeft === 0 &&
+      unsentRows === 0 &&
+      deliveries === 1 &&
+      words.includes("## 1. comment on #para") &&
       words.includes('- I wrote: "Make it bolder."') &&
+      !words.includes('- I wrote: "Bolder, perhaps."') &&
       words.includes(`- Pin: ${one}`) &&
-      words.includes("## 2. comment") &&
-      pictures === 2 &&
-      lines === 1 &&
+      !words.includes("## 2.") &&
       ownRows === rows &&
       Object.values(stamped.pins).every(
         (pin) => !!(pin as { sentAt?: string }).sentAt
       ) &&
       states.length >= 2 &&
-      states.every((state) => state === "sent") &&
-      sendLeft === 0 &&
-      barLeft === 0,
-    `deliveries ${deliveries}; pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; pills ${JSON.stringify(states)}; head Send ${sendLeft}; bar ${barLeft}; heard ${words.slice(0, 600)}`
+      states.every((state) => state === "sent"),
+    `head Send ${headLeft}; bar ${barLeft}; Unsent rows ${unsentRows}; deliveries ${deliveries}; person's rows ${rows} → ${ownRows}; pills ${JSON.stringify(states)}; heard ${words.slice(0, 600)}`
   );
 
   const again = heard.length;
@@ -1236,15 +1204,14 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     .getAttribute("data-state")
     .catch(() => null);
   await on.page.keyboard.press("Escape");
-  await head.click();
   const second = await until(
     "the second reply's delivery",
     () => heard.slice(again).find((said) => NOTICE.test(said.last)),
     Boolean,
-    DELIVERY_MS
+    DELIVERY_MS + QUIET_MS
   ).catch(() => undefined);
   on.kit.check(
-    "3: a second reply makes pin 1 unsent again (hollow); the head's Send delivers it alone, with that reply",
+    "3: a second reply makes pin 1 hollow until it goes by itself, alone, with that reply",
     hollow === "unsent" &&
       !!second?.last.includes('- I wrote: "And a little larger."') &&
       !second.last.includes('- I wrote: "Make it bolder."') &&
@@ -5926,7 +5893,7 @@ const rowDress = (screen: Page, number: number) =>
 /**
  * The picks on a page of their own, at the desk (DESIGN.md, Placing a
  * comment, A pin's pill, The Comments rail, A thread beside its pin,
- * Sending comments): the 280px composer and its parts; attachments by
+ * How comments reach the session): the 280px composer and its parts; attachments by
  * reference, their pills on one baseline; a picture alone sending; the
  * pill's tail turning at the page's edges; the rail beside the page, its
  * rows dressed part by part, the thumb strip, search, sort and the toggle's
@@ -6148,40 +6115,45 @@ const pickChecks = async (on: On, rig: RailRig) => {
   await capture(on.page, "p2-tail-panel-light-desk", on.page.locator(PANE));
 };
 
-/** Send from the rail carries the attachments by reference; an answer, a reply and a dropped element after it. */
+/** The comments with attachments go by themselves, by reference; an answer, a reply and a dropped element after it. */
 const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
   const { frame, numberOn, pinsNow, pressOn, submit } = rig;
-  // Send, with the attachments by reference.
-  const before = heard.length;
-  const rail = await rowsOf(on);
-  await capture(on.page, "p3-send-unsent-light-desk", on.page.locator(PANE));
-  await rail.locator('[data-slot="rail-send"]').click();
+  // No Send: each comment goes by itself, its attachments by reference.
+  const onC = await numberOn("#c");
+  const delivered = (text: string) =>
+    heard.find(
+      (request) => NOTICE.test(request.last) && request.last.includes(text)
+    );
   const message = await until(
-    "the rail page's delivery",
-    () => heard.slice(before).find((said) => NOTICE.test(said.last)),
+    "the picture-alone comment's delivery",
+    () => delivered(`## ${onC}. comment`),
     Boolean,
-    DELIVERY_MS
+    DELIVERY_MS + QUIET_MS
+  ).catch(() => undefined);
+  const file = await until(
+    "the file's delivery",
+    () => delivered("- I attached: spec.csv ("),
+    Boolean,
+    DELIVERY_MS + QUIET_MS
   ).catch(() => undefined);
   const words = message?.last ?? "";
   const images = message?.body.match(IMAGE_BLOCK)?.length ?? 0;
-  const onC = await numberOn("#c");
   const cSection = words.slice(
     words.indexOf(`## ${onC}. comment`),
     words.indexOf("- Pin:", words.indexOf(`## ${onC}. comment`))
   );
   on.kit.check(
-    'pick 6\'s delivery: the picture alone goes as an image block with its line ("I attached: ref.png (picture N of this message…") and no "I wrote"; the file goes by its Attached file line; every picture rides the message',
+    'pick 6\'s delivery, by itself: the picture alone goes as an image block with its line ("I attached: ref.png (picture N of this message…") and no "I wrote"; the file goes by its Attached file line',
     cSection.includes("- I attached: ref.png (picture ") &&
       !cSection.includes("I wrote") &&
-      words.includes("- I attached: spec.csv (") &&
-      words.includes("Attached file:") &&
-      images >= 5,
-    `images ${images}; section ${JSON.stringify(cSection)}; ${words.slice(0, 500)}`
+      images >= 1 &&
+      !!file?.last.includes("Attached file:"),
+    `images ${images}; section ${JSON.stringify(cSection)}; file ${file?.last.slice(0, 300) ?? "never"}; ${words.slice(0, 500)}`
   );
   await settle(on.page, 600);
   await capture(on.page, "p3-send-sent-light-desk", on.page.locator(PANE));
 
-  // The person's own reply on the paragraph, sent; then the agent answers on the heading (unread: a Send is a look at every answer before it); one more unsent.
+  // The person's own reply on the paragraph, sent by itself; then the agent answers on the heading (unread); one more comment.
   const pinIdOn = async (selector: string) =>
     String(
       (
@@ -6198,7 +6170,6 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
   await card.getByRole("button", { name: "Reply" }).click();
   await settle(on.page, 400);
   await card.getByRole("button", { name: "Close", exact: true }).click();
-  await (await rowsOf(on)).locator('[data-slot="rail-send"]').click();
   await settle(on.page, 1500);
   await on.fleet.api(
     `/api/instances/${on.session}/artifacts/comments/${await pinIdOn("#a")}/reply`,
@@ -6236,7 +6207,6 @@ const hierarchyChecks = async (
   rig: RailRig,
   { onB, onC, onDrop }: { onB: number; onC: number; onDrop: number }
 ) => {
-  const { pinsNow } = rig;
   const onA = await rig.numberOn("#a");
   // The rail, beside the page.
   const railNow = await rowsOf(on);
@@ -6286,14 +6256,8 @@ const hierarchyChecks = async (
     you: await rowDress(on.page, onB),
     alone: await rowDress(on.page, onC),
     gone: await rowDress(on.page, onDrop),
-    unsent: await rowDress(
-      on.page,
-      Math.max(
-        ...Object.values(await pinsNow()).map((pin) => Number(pin.number))
-      )
-    ),
   };
-  const { unread, you, alone: aloneRow, gone, unsent } = dresses;
+  const { unread, you, alone: aloneRow, gone } = dresses;
   on.kit.check(
     "hierarchy, line 1: the place is label 13px at 500 in ink-row (Element gone in ink-subtle), its age meta 12px at 400 in ink-muted, tabular",
     unread.name?.size === "13px" &&
@@ -6317,7 +6281,7 @@ const hierarchyChecks = async (
     JSON.stringify({ unread: unread.words, alone: aloneRow.words })
   );
   on.kit.check(
-    'hierarchy, line 3: an unread answer is meta in ink-strong after the agent\'s ghost, a bare 12px glyph read out as "Agent:"; the person\'s sent reply in ink-muted after their glyph in brand-ink, read out as "You:"; Unsent in brand-ink; nothing at 500',
+    'hierarchy, line 3: an unread answer is meta in ink-strong after the agent\'s ghost, a bare 12px glyph read out as "Agent:"; the person\'s sent reply in ink-muted after their glyph in brand-ink, read out as "You:"; nothing at 500',
     unread.back?.size === "12px" &&
       unread.back.color === ink.strong &&
       unread.speaker?.by === "agent" &&
@@ -6328,9 +6292,7 @@ const hierarchyChecks = async (
       you.speaker?.by === "you" &&
       you.speaker.color === ink.brand &&
       you.speaker.said === "You:" &&
-      unsent.back?.text === "Unsent" &&
-      unsent.back.color === ink.brand &&
-      [unread, you, unsent].every(
+      [unread, you].every(
         (one) =>
           one.words?.weight !== "500" &&
           one.back?.weight !== "500" &&
@@ -6341,7 +6303,6 @@ const hierarchyChecks = async (
       speaker: unread.speaker,
       you: you.back,
       yourGlyph: you.speaker,
-      unsent: unsent.back,
     })
   );
   on.kit.check(
@@ -6632,11 +6593,10 @@ const railScenes = async (on: On, artifactId: string) => {
           Math.abs(read.rail.w - read.well.w) <= 2,
         JSON.stringify(read)
       );
-      // Its list scrolls wholly above its foot: scrolled to its end, the
-      // last row stands whole inside the rows' box, over the Send bar.
+      // Its list scrolls wholly inside the sheet: scrolled to its end, the
+      // last row stands whole inside the rows' box, inside the sheet.
       const end = await rail.evaluate((el) => {
         const rows = el.querySelector<HTMLElement>('[data-slot="rows"]');
-        const bar = el.querySelector('[data-slot="send-bar"]');
         if (!rows) {
           return null;
         }
@@ -6651,17 +6611,17 @@ const railScenes = async (on: On, artifactId: string) => {
           overflows: rows.scrollHeight > rows.clientHeight,
           rows: box(rows),
           last: box(last),
-          bar: box(bar),
+          sheet: box(el),
         };
       });
       on.kit.check(
-        `phone (${theme}): the rail's list scrolls wholly above its Send bar and note: scrolled to its end, the last row stands whole inside the list, over the bar`,
+        `phone (${theme}): the rail's list scrolls wholly inside its sheet: scrolled to its end, the last row stands whole inside the list, inside the sheet`,
         !!end?.rows &&
           !!end.last &&
-          !!end.bar &&
+          !!end.sheet &&
           end.last.bottom <= end.rows.bottom + 0.5 &&
           end.last.top >= end.rows.top - 0.5 &&
-          end.last.bottom <= end.bar.top + 0.5,
+          end.last.bottom <= end.sheet.bottom + 0.5,
         JSON.stringify(end)
       );
       await rail.evaluate((el) => {
@@ -8243,7 +8203,7 @@ const callIn = async (
   )) as string;
 };
 
-/** A plain page of two paragraphs for a comment's own Send. */
+/** A plain page of two paragraphs, its comments going by themselves. */
 const SEND_PAGE = `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>body { margin: 0; font: 18px/1.6 system-ui; } main { padding: 24px; } p { width: 60%; margin: 0 0 48px; }</style></head>
@@ -8253,14 +8213,13 @@ const SEND_PAGE = `<!doctype html>
 </main></body></html>`;
 
 /**
- * A comment's own Send (the owner's "no option to trigger resend?"): two
- * comments written, each row in the rail says Unsent with its own Send; one
- * press on the first's sends it alone (one delivery naming it, not the
- * other), its row no longer Unsent; the second's thread offers its Send,
- * which sends it. A writer whose conversation is gone (outside a project,
- * no one to take its marks): a comment's own Send reaches no one, and the
- * pin says why ("Not sent: …") with Send again, in its row and in its
- * thread; its conversation back, Send again sends it and the line goes.
+ * Comments go by themselves (the owner's "Go by themselves", 2026-10-23):
+ * two comments written, each reaches the session with no Send, and no row
+ * offers a Send nor says Unsent. A writer whose conversation is gone
+ * (outside a project, no one to take its marks): its comment's delivery
+ * reaches no one, and the pin says why ("Not sent: …") with Try again, in
+ * its row and in its thread; its conversation back, Try again sends it and
+ * the line goes (the owner's "no option to trigger resend?").
  */
 const pinSendChecks = async (on: On) => {
   const made = await on.call(CREATE, {
@@ -8284,11 +8243,12 @@ const pinSendChecks = async (on: On) => {
     );
     return;
   }
+  const heardBefore = heard.length;
   await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(frame, true);
   for (const [selector, words] of [
-    ["#one", "Send this one on its own."],
-    ["#two", "Send this one from its thread."],
+    ["#one", "This one goes on its own."],
+    ["#two", "So does this one."],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one comment, then the next
     const b = await screenBox(on, frame, selector);
@@ -8296,82 +8256,37 @@ const pinSendChecks = async (on: On) => {
   }
   await on.page.keyboard.press("Escape");
   const pinsNow = async () => (await docOf(frame)).pins;
-  const both = await until(
-    "both comments in the doc",
-    pinsNow,
-    (pins) => !!pinNumbered(pins, 1) && !!pinNumbered(pins, 2),
-    10_000
-  ).catch(pinsNow);
-  const first = pinNumbered(both, 1);
-  const second = pinNumbered(both, 2);
   const rail = await rowsOf(on);
-  const rowOf = (n: number) =>
-    rail.locator(`li:has([data-slot="pin-row"][data-pin-row="${n}"])`);
-  const sendsBefore = await rail.locator('[data-slot="pin-send"]').count();
-  const heardBefore = heard.length;
-  await rowOf(1).locator('[data-slot="pin-send"]').click();
-  const oneSent = await until(
-    "pin 1 sent alone",
+  const offered = await rail
+    .locator('[data-slot="pin-send"], [data-slot="pin-retry"]')
+    .count();
+  const sent = await until(
+    "both comments sent by themselves",
     pinsNow,
-    (pins) => !!pinNumbered(pins, 1)?.sentAt,
-    DELIVERY_MS
+    (pins) => !!pinNumbered(pins, 1)?.sentAt && !!pinNumbered(pins, 2)?.sentAt,
+    DELIVERY_MS + QUIET_MS
   ).catch(pinsNow);
-  const delivered = await until(
-    "the delivery of pin 1",
-    () =>
-      heard
-        .slice(heardBefore)
-        .find((one) => NOTICE.test(one.last) && one.last.includes("pin-send")),
-    Boolean,
-    DELIVERY_MS
-  ).catch(() => undefined);
+  const told = heard
+    .slice(heardBefore)
+    .filter((one) => NOTICE.test(one.last) && one.last.includes("pin-send"))
+    .map((one) => one.last)
+    .join("\n");
+  const first = pinNumbered(sent, 1);
+  const second = pinNumbered(sent, 2);
   await settle(on.page, 400);
+  const unsentRows = await rail
+    .locator('[data-slot="pin-row"] [data-line="back"]', { hasText: "Unsent" })
+    .count();
   on.kit.check(
-    "pin send: each unsent comment's row offers its own Send; one press on the first's sends it alone, one delivery naming it and not the other, its row no longer Unsent nor offering Send, the other's still",
-    sendsBefore === 2 &&
-      !!pinNumbered(oneSent, 1)?.sentAt &&
-      !pinNumbered(oneSent, 2)?.sentAt &&
-      !!delivered &&
-      !!first &&
-      !!second &&
-      delivered.last.includes(first.id) &&
-      !delivered.last.includes(second.id) &&
-      (await rowOf(1).locator('[data-slot="pin-send"]').count()) === 0 &&
-      (await rowOf(1)
-        .locator('[data-line="back"]')
-        .textContent()
-        .catch(() => "")) !== "Unsent" &&
-      (await rowOf(2).locator('[data-slot="pin-send"]').count()) === 1,
-    `sends ${sendsBefore}; delivered ${JSON.stringify(delivered?.last.slice(0, 300))}; pins ${JSON.stringify(Object.values(oneSent).map((pin) => [pin.number, !!pin.sentAt]))}`
+    "pin send: two comments, no Send offered on any row nor Unsent said: each reaches the session by itself, stamped sent",
+    offered === 0 &&
+      unsentRows === 0 &&
+      !!first?.sentAt &&
+      !!second?.sentAt &&
+      told.includes(first.id) &&
+      told.includes(second.id),
+    `offered ${offered}; Unsent rows ${unsentRows}; pins ${JSON.stringify(Object.values(sent).map((pin) => [pin.number, !!pin.sentAt]))}; told ${told.slice(0, 300)}`
   );
-  await rowOf(2).locator('[data-slot="pin-row"]').click();
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="2"]');
-  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
-  const cardSaid = (
-    await card
-      .locator('[data-slot="unsent"] p')
-      .textContent()
-      .catch(() => null)
-  )?.trim();
-  await card.locator('[data-slot="pin-send"]').click();
-  const twoSent = await until(
-    "pin 2 sent from its thread",
-    pinsNow,
-    (pins) => !!pinNumbered(pins, 2)?.sentAt,
-    DELIVERY_MS
-  ).catch(pinsNow);
-  await settle(on.page, 400);
-  on.kit.check(
-    "pin send: the second's thread says Unsent with its own Send; one press sends it, and the line goes",
-    cardSaid === "Unsent" &&
-      !!pinNumbered(twoSent, 2)?.sentAt &&
-      (await card.locator('[data-slot="unsent"]').count()) === 0,
-    `said ${JSON.stringify(cardSaid)}; sent ${String(pinNumbered(twoSent, 2)?.sentAt)}`
-  );
-  await card
-    .getByRole("button", { name: "Close", exact: true })
-    .click()
-    .catch(() => undefined);
   await shutList(on);
   await pageOnlyChecks(on, id);
 
@@ -8440,7 +8355,7 @@ const pinSendChecks = async (on: On) => {
   const goneRow = goneRail.locator(
     'li:has([data-slot="pin-row"][data-pin-row="1"])'
   );
-  await goneRow.locator('[data-slot="pin-send"]').click();
+  // No Send: its delivery goes by itself, and reaches no one.
   const failed = await until(
     "the pin saying it wasn't sent",
     async () => pinNumbered((await docOf(goneFrame)).pins, 1),
@@ -8456,7 +8371,7 @@ const pinSendChecks = async (on: On) => {
   )?.trim();
   const again = (
     await goneRow
-      .locator('[data-slot="pin-send"]')
+      .locator('[data-slot="pin-retry"]')
       .textContent()
       .catch(() => null)
   )?.trim();
@@ -8471,32 +8386,32 @@ const pinSendChecks = async (on: On) => {
   )?.trim();
   const why = (failed?.notSent as { why?: string } | undefined)?.why ?? "";
   on.kit.check(
-    "pin send: a comment's own Send no one takes (the writer's conversation gone, no project) leaves it unsent with why on the pin; its row and its thread say \"Not sent: …\" in words, each with Send again",
+    'pin send: a comment whose delivery no one takes (the writer\'s conversation gone, no project) stays unsent with why on the pin; its row and its thread say "Not sent: …" in words, each with Try again',
     !!why &&
       !failed?.sentAt &&
       rowSays === commentWords.notSent(why) &&
-      again === commonWords.sendAgain &&
+      again === commonWords.tryAgain &&
       cardSays === rowSays &&
       (
-        await goneCard.locator('[data-slot="pin-send"]').textContent()
-      )?.trim() === commonWords.sendAgain,
+        await goneCard.locator('[data-slot="pin-retry"]').textContent()
+      )?.trim() === commonWords.tryAgain,
     `why ${JSON.stringify(why)}; row ${JSON.stringify(rowSays)} / ${JSON.stringify(again)}; card ${JSON.stringify(cardSays)}`
   );
-  // Its conversation back: Send again sends it, and the line goes.
+  // Its conversation back: Try again sends it, and the line goes.
   conversation(false);
-  await goneCard.locator('[data-slot="pin-send"]').click();
+  await goneCard.locator('[data-slot="pin-retry"]').click();
   const resent = await until(
-    "the pin sent on Send again",
+    "the pin sent on Try again",
     async () => pinNumbered((await docOf(goneFrame)).pins, 1),
     (pin) => !!pin?.sentAt && !pin.notSent,
     DELIVERY_MS
   ).catch(() => undefined);
   await settle(tab, 400);
   on.kit.check(
-    "pin send: with someone to take it, Send again sends it: stamped sent, its reason cleared, and the thread's line gone",
+    "pin send: with someone to take it, Try again sends it: stamped sent, its reason cleared, and the thread's line gone",
     !!resent?.sentAt &&
       !resent.notSent &&
-      (await goneCard.locator('[data-slot="unsent"]').count()) === 0,
+      (await goneCard.locator('[data-slot="not-sent"]').count()) === 0,
     `sentAt ${String(resent?.sentAt)}; notSent ${JSON.stringify(resent?.notSent)}`
   );
   await tab.close();
@@ -8508,9 +8423,10 @@ const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/;
 /**
  * A comment the hub never got (the owner's two "Unsent" pins with no record
  * at the hub): written while the page's link to the hub is down, it stands
- * only on the page; its row says why it isn't sent, in words, with Send
+ * only on the page; its row says why it isn't sent, in words, with Try
  * again, and so does its thread; it stays through a reload (kept on the
- * device); with the link back, Send again takes it to the hub and sends it.
+ * device); with the link back, Try again takes it to the hub, and it goes to
+ * the session by itself.
  */
 const pageOnlyChecks = async (on: On, id: string) => {
   const { origin } = new URL(on.page.url());
@@ -8557,7 +8473,7 @@ const pageOnlyChecks = async (on: On, id: string) => {
       send:
         (
           await row
-            .locator('[data-slot="pin-send"]')
+            .locator('[data-slot="pin-retry"]')
             .textContent()
             .catch(() => null)
         )?.trim() ?? null,
@@ -8590,21 +8506,21 @@ const pageOnlyChecks = async (on: On, id: string) => {
     10_000
   ).catch(rowSays);
   on.kit.check(
-    'page only: a comment written while the page\'s link is down stands only on the page; its row says "Not sent: …" why, with Send again, and it stays through a reload',
+    'page only: a comment written while the page\'s link is down stands only on the page; its row says "Not sent: …" why, with Try again, and it stays through a reload',
     !heldBefore &&
       !!down.said?.startsWith(`${commentWords.notSentHead} `) &&
-      down.send === commonWords.sendAgain &&
+      down.send === commonWords.tryAgain &&
       !!kept &&
       !!afterReload.said?.startsWith(`${commentWords.notSentHead} `) &&
-      afterReload.send === commonWords.sendAgain,
+      afterReload.send === commonWords.tryAgain,
     `before ${JSON.stringify(down)}; on the hub ${heldBefore}; after a reload ${JSON.stringify(afterReload)}; kept ${!!kept}`
   );
-  // The link back: Send again takes it to the hub, then to the session.
+  // The link back: Try again takes it to the hub, then to the session.
   link.down = false;
   const rail = await rowsOf(there);
   await rail
     .locator(
-      'li:has([data-slot="pin-row"][data-pin-row="3"]) [data-slot="pin-send"]'
+      'li:has([data-slot="pin-row"][data-pin-row="3"]) [data-slot="pin-retry"]'
     )
     .click();
   const sent = again
@@ -8616,7 +8532,7 @@ const pageOnlyChecks = async (on: On, id: string) => {
       ).catch(() => undefined)
     : undefined;
   on.kit.check(
-    "page only: with its link back, Send again takes the comment to the hub and sends it",
+    "page only: with its link back, Try again takes the comment to the hub and sends it",
     !!sent?.sentAt,
     `sentAt ${String(sent?.sentAt)}`
   );
@@ -8655,7 +8571,7 @@ const writePin = (frame: Frame, number: number, text: string) =>
     { n: number, words: text }
   );
 
-/** Pin `n`'s row in the rail: its "Not sent" line and its Send, as drawn. */
+/** Pin `n`'s row in the rail: its "Not sent" line and its Try again, as drawn. */
 const notSentRow = async (on: On, n: number) => {
   const rail = await rowsOf(on);
   const row = rail.locator(
@@ -8672,7 +8588,7 @@ const notSentRow = async (on: On, n: number) => {
     send:
       (
         await row
-          .locator('[data-slot="pin-send"]')
+          .locator('[data-slot="pin-retry"]')
           .textContent()
           .catch(() => null)
       )?.trim() ?? null,
@@ -8683,7 +8599,7 @@ const notSentRow = async (on: On, n: number) => {
  * A refused write keeps the comment (research/pi-durable.md §13.9 C): a
  * comment the hub won't keep (its words past what an entry holds) is never
  * let go when the page starts again from the hub's doc; its row says why in
- * the hub's words with Send again, through a reload; Send again writes it
+ * the hub's words with Try again, through a reload; Try again writes it
  * once more, and refused again it is still kept, saying why.
  */
 const refusedChecks = async (on: On) => {
@@ -8726,33 +8642,33 @@ const refusedChecks = async (on: On) => {
       ).catch(() => notSentRow(on, 1))
     : { said: null, send: null };
   on.kit.check(
-    'refused: a comment the hub refuses is kept on the device, never let go: its row says "Not sent: …" in the hub\'s words with Send again, and still after a reload; the hub holds none of it',
+    'refused: a comment the hub refuses is kept on the device, never let go: its row says "Not sent: …" in the hub\'s words with Try again, and still after a reload; the hub holds none of it',
     !onHub &&
       !!told.said?.startsWith(`${commentWords.notSentHead} `) &&
-      told.send === commonWords.sendAgain &&
+      told.send === commonWords.tryAgain &&
       afterReload.said === told.said &&
-      afterReload.send === commonWords.sendAgain,
+      afterReload.send === commonWords.tryAgain,
     `first ${JSON.stringify(told)}; after a reload ${JSON.stringify(afterReload)}; on the hub ${onHub}`
   );
-  // Send again: written once more, refused once more, still kept and saying why.
+  // Try again: written once more, refused once more, still kept and saying why.
   await (
     await rowsOf(on)
   )
     .locator(
-      'li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-send"]'
+      'li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-retry"]'
     )
     .click();
   await settle(on.page, 4000);
   const again = await until(
-    "the comment kept after Send again",
+    "the comment kept after Try again",
     () => notSentRow(on, 1),
     (now) => !!now.said,
     15_000
   ).catch(() => notSentRow(on, 1));
   on.kit.check(
-    "refused: Send again writes it once more; refused again, it is still kept with why and Send again",
+    "refused: Try again writes it once more; refused again, it is still kept with why and Try again",
     !!again.said?.startsWith(`${commentWords.notSentHead} `) &&
-      again.send === commonWords.sendAgain,
+      again.send === commonWords.tryAgain,
     JSON.stringify(again)
   );
   // Its thread's Delete lets it go from the device.
@@ -8789,10 +8705,11 @@ const refusedChecks = async (on: On) => {
 };
 
 /**
- * A hub restart between the marking and the Send keeps the marks'
+ * A hub restart between the marking and the delivery keeps the marks'
  * pictures (research/pi-durable.md §13.9 C): a comment's picture reaches
- * the hub's disk as soon as the page posts it; the hub stops and starts;
- * Send then delivers the comment with its picture.
+ * the hub's disk as soon as the page posts it; the hub stops then, inside
+ * its quiet before it delivers, and starts; it delivers the comment by
+ * itself once up (service.ts `resumeMarks`), with its picture.
  */
 const restartChecks = async (on: On) => {
   const made = await on.call(CREATE, {
@@ -8818,6 +8735,7 @@ const restartChecks = async (on: On) => {
     b.y + b.h / 2,
     "Keep my picture through a restart."
   );
+  const heardBefore = heard.length;
   await on.page.keyboard.press("Escape");
   const marks = join(
     dirname(on.fleet.env.CAWCO_DB_PATH as string),
@@ -8842,6 +8760,10 @@ const restartChecks = async (on: On) => {
     15_000
   ).catch(() => false);
   const saidBefore = on.said.length;
+  // Inside the hub's quiet: nothing delivered yet.
+  const raced = heard
+    .slice(heardBefore)
+    .some((one) => NOTICE.test(one.last) && one.last.includes("restart-keeps"));
   await on.fleet.stop("hub");
   on.fleet.launch("hub");
   await on.fleet.hubUp();
@@ -8855,11 +8777,11 @@ const restartChecks = async (on: On) => {
   // The hub down a moment, on purpose: the page's failed requests and sockets then are the restart's, not an error of the pages.
   const during = on.said.splice(saidBefore);
   on.said.push(...during.filter((line) => !HUB_DOWN.test(line)));
-  const heardBefore = heard.length;
-  const row = (await rowsOf(on)).locator(
-    'li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-send"]'
-  );
-  await row.click({ timeout: 30_000 });
+  if (raced) {
+    on.kit.note(
+      "restart: the comment was delivered before the hub stopped (its picture landed late in the quiet), so this run reads its delivery from before the restart"
+    );
+  }
   const delivered = await until(
     "the delivery after the restart",
     () =>
@@ -8874,7 +8796,7 @@ const restartChecks = async (on: On) => {
   const pictures = delivered?.body.match(IMAGE_BLOCK)?.length ?? 0;
   const sent = back ? pinNumbered((await docOf(back)).pins, 1) : undefined;
   on.kit.check(
-    "restart: a comment's picture is on the hub's disk once the page posts it; after the hub stops and starts, Send delivers the comment with its picture",
+    "restart: a comment's picture is on the hub's disk once the page posts it; after the hub stops and starts, the comment is delivered by itself with its picture",
     onDisk && !!delivered && pictures >= 1 && !!sent?.sentAt,
     `on disk ${onDisk}; delivered ${!!delivered}; pictures ${pictures}; sentAt ${String(sent?.sentAt)}`
   );

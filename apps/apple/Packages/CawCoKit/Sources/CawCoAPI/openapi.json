@@ -39982,7 +39982,7 @@
             "type": "string"
           },
           "notSent": {
-            "description": "The last Send that carried it reached no one: when, and why in words\n(the hub's reason). The hub writes it; the next delivery that carries\nthe pin clears it ({@link pinHeard}).",
+            "description": "The last delivery that carried it reached no one: when, and why in words\n(the hub's reason). The hub writes it; the next delivery that carries\nthe pin clears it ({@link pinHeard}).",
             "type": "object",
             "properties": {
               "at": {

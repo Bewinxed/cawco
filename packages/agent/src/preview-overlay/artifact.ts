@@ -410,7 +410,7 @@ const replaceDoc = () => {
 /**
  * The person's comments the hub refused (a write it would not keep, its
  * close's reason), kept on the device apart from the doc, per artifact: the
- * host lists each with why and Send again ({@link artifact.resend}), and a
+ * host lists each with why and Try again ({@link artifact.resend}), and a
  * reload keeps them. A browser that keeps no storage keeps them in memory.
  */
 const REFUSED_KEY = (id: string) => `cawco-refused-pins:${id}`;
@@ -653,7 +653,7 @@ export const artifact = {
 
   /**
    * Refused comment `id` written into the doc again, for the hub to take
-   * (its Send again): it leaves the device's keep; refused once more, it is
+   * (its Try again): it leaves the device's keep; refused once more, it is
    * kept again with the new reason. False when no such comment is kept.
    */
   resend: (id: string): boolean => {

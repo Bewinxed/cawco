@@ -58,8 +58,6 @@ export const LINK_DROPPED = `${NOT_REACHING}. The link to the hub dropped.`;
 export interface ArtifactView extends ArtifactChoices {
   /** What the latest revision changed, as the hub read it (`meta.changes`); null before any revision did. */
   changes: ArtifactChanges | null;
-  /** Ink groups the person drew that no pin stands on and no delivery has carried. */
-  looseInk: number;
   /** The pins, by number. */
   pins: Pin[];
   /** When the session last changed it, a revision or a new ask (`meta.revisedAt`): a Send after it is unanswered. */
@@ -138,13 +136,6 @@ const viewOf = (doc: Doc): ArtifactView => {
   const pins = Object.values(
     doc.getMap("pins").toJSON() as Record<string, Pin>
   ).filter((pin) => !gone.has(pin.id));
-  const pinned = new Set(pins.map((pin) => pin.ink));
-  const looseInk = Object.values(
-    doc.getMap("ink").toJSON() as Record<
-      string,
-      { id: string; sentAt?: string }
-    >
-  ).filter((group) => !(group.sentAt || pinned.has(group.id))).length;
   const changes = (meta.get("changes") as ArtifactChanges | undefined) ?? null;
   return {
     changes,
@@ -156,7 +147,6 @@ const viewOf = (doc: Doc): ArtifactView => {
     sentAt: (meta.get("sentAt") as string | undefined) ?? null,
     pins: pins.sort((a, b) => a.number - b.number),
     revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
-    looseInk,
     stage: (meta.get("stage") as StageState | undefined) ?? null,
     unreached: (meta.get("unreached") as StageUnreached | undefined) ?? null,
   };
@@ -166,34 +156,45 @@ const viewOf = (doc: Doc): ArtifactView => {
 export const artifactSyncPath = (artifactId: string): string =>
   `/__cawco/artifact/${artifactId}`;
 
-/**
- * The person's Send (the head's Send, the rail's): everything of the page
- * the session hasn't heard goes with one press, their note first, through
- * the hub's send on the dashboard's own origin, the one a page's
- * `cawco.send` reaches on its preview origin. With `pins`, a comment's own
- * Send: those comments alone go.
- */
-export async function sendArtifact(
+/** The hub's send on the dashboard's own origin, the one a page's `cawco.send` reaches on its preview origin. */
+async function postSend(
   instanceId: string,
   artifactId: string,
-  note = "",
-  pins?: string[]
+  body: { pins?: string[] },
+  again: string
 ): Promise<void> {
   const response = await fetch(
     `/api/instances/${encodeURIComponent(instanceId)}/artifacts/${encodeURIComponent(artifactId)}/send`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...(note.trim() ? { text: note.trim() } : {}),
-        ...(pins ? { pins } : {}),
-      }),
+      body: JSON.stringify(body),
     }
   );
   if (!response.ok) {
-    throw await hubRefusal(response, "so nothing was sent. Send again.");
+    throw await hubRefusal(response, again);
   }
 }
+
+/** The person's Send (the head's, a Needs you row's): the page's picks go to the session. Their comments go by themselves. */
+export const sendArtifact = (
+  instanceId: string,
+  artifactId: string
+): Promise<void> =>
+  postSend(instanceId, artifactId, {}, "so nothing was sent. Send again.");
+
+/** A comment's Try again, after a delivery no one took: it goes to the session now. */
+export const retryComment = (
+  instanceId: string,
+  artifactId: string,
+  pin: string
+): Promise<void> =>
+  postSend(
+    instanceId,
+    artifactId,
+    { pins: [pin] },
+    "so the comment didn't go. Try again."
+  );
 
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts `REFUSED`). */
 const REFUSED = 4400;

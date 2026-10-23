@@ -18,15 +18,12 @@
    * carries as a strip of 20px thumbs, four at most, then "+N"; what came
    * back in meta, after its speaker's glyph (the agent's ghost in the line's
    * ink, the person's in the brand ink), in the strong ink while unread,
-   * "Working on it…" while the agent works on it, "Unsent" in the brand ink
-   * while the session hasn't heard it ("Not sent: why" in the fail ink once
-   * a Send of it reached no one), and nothing for a comment sent and
-   * unanswered (its filled pill says so). An unsent comment's own Send (Send
-   * again after a failed one) stands under its row's end, on a desk and
-   * under a finger alike: one press sends it alone. On hover or focus the
-   * age gives way to Resolve; none under a finger. Its foot, while anything
-   * is unsent: the note for the agent and Send with the count, which sends
-   * them all.
+   * "Working on it…" while the agent works on it, "Not sent: why" in the
+   * fail ink when its delivery reached no one or it stands only on the page,
+   * and nothing for a comment sent and unanswered (its filled pill says so).
+   * A comment goes to the session by itself once written; one not sent has
+   * Try again under its row's end, on a desk and under a finger alike. On
+   * hover or focus the age gives way to Resolve; none under a finger.
    *
    * Until the pane holds the doc nothing is counted or claimed empty (The
    * Claim Of Nothing Rule): the rows' plain surface inside
@@ -54,14 +51,13 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconAgent,
     IconClose,
     IconDocument,
     IconPlus,
+    IconRefresh,
     IconSearch,
-    IconSend,
     IconSort,
     IconSuccess,
     IconUser,
@@ -87,9 +83,7 @@
     focused,
     live,
     unread,
-    unsent,
-    sending = false,
-    pinsSending = new Set(),
+    retrying = new Set(),
     layout = "beside",
     onopen,
     onhover,
@@ -97,13 +91,11 @@
     onclose,
     onpage,
     onresolve,
-    onsend,
-    onsendpin,
+    onretrypin,
     whyNotSent = () => null,
     filter = $bindable("open"),
     sort = $bindable("newest"),
     scroll = $bindable(0),
-    note = $bindable(""),
   }: {
     pins: Pin[];
     /** Whether the pins are read yet (artifact-doc.ts `ListHold`). */
@@ -118,12 +110,8 @@
     live: ReadonlySet<string>;
     /** Comments with an answer the person hasn't read. */
     unread: ReadonlySet<string>;
-    /** How many of the page's comments, picks and marks the session hasn't heard: the Send bar's count. */
-    unsent: number;
-    /** The Send is on its way. */
-    sending?: boolean;
-    /** The comments whose own Send is on its way. */
-    pinsSending?: ReadonlySet<string>;
+    /** The comments whose Try again is on its way. */
+    retrying?: ReadonlySet<string>;
     /** Beside the page, or the well's foot sheet. */
     layout?: "beside" | "sheet";
     /** Opens a comment's thread; `via` says whether a key or a press opened it. */
@@ -135,15 +123,13 @@
     /** A comment on the whole page: its composer opens. */
     onpage: () => void;
     onresolve: (id: string, resolved: boolean) => void;
-    onsend: () => void;
-    /** A comment's own Send: it alone goes. */
-    onsendpin: (id: string) => void;
-    /** Why an unsent comment hasn't reached the session, in words, when a Send of it failed or it stands only on the page; null when it is simply unsent. */
+    /** A comment not sent, tried again: it goes to the session once more. */
+    onretrypin: (id: string) => void;
+    /** Why a comment hasn't reached the session, in words, when its delivery reached no one or it stands only on the page; null while it is on its way. */
     whyNotSent?: (pin: Pin) => string | null;
     filter?: "open" | "resolved";
     sort?: RailSort;
     scroll?: number;
-    note?: string;
   } = $props();
 
   /** A finger taps the page, a mouse clicks it: the empty line says which; no Resolve on a row under a finger. */
@@ -227,8 +213,9 @@
 
   /** What a row says on its line 3, if anything. */
   const backOf = (pin: Pin) => {
-    if (markState(pin) === "unsent") {
-      return { kind: "unsent" as const, why: whyNotSent(pin) };
+    const why = markState(pin) === "unsent" ? whyNotSent(pin) : null;
+    if (why) {
+      return { kind: "notSent" as const, why };
     }
     if (live.has(pin.id)) {
       return { kind: "live" as const };
@@ -349,20 +336,14 @@
             {/if}
           </span>
         {/if}
-        {#if back?.kind === "unsent"}
+        {#if back?.kind === "notSent"}
           <span
             class={[
-              "mt-space-1 type-meta",
-              back.why
-                ? [
-                    "line-clamp-2 text-pretty wrap-anywhere",
-                    ink(washed, "text-status-fail-ink"),
-                  ]
-                : ink(washed, "text-brand-ink"),
+              "mt-space-1 type-meta line-clamp-2 text-pretty wrap-anywhere",
+              ink(washed, "text-status-fail-ink"),
             ]}
             data-line="back"
-            data-not-sent={back.why ? "" : undefined}
-            >{back.why ? said.notSent(back.why) : said.unsent}</span
+            data-not-sent="">{said.notSent(back.why)}</span
           >
         {:else if back?.kind === "live"}
           <span
@@ -406,24 +387,19 @@
         {/if}
       </span>
     </button>
-    {#if back?.kind === "unsent"}
-      <!-- Its own Send, one press, on a desk and under a finger alike: it alone goes. -->
+    {#if back?.kind === "notSent"}
+      <!-- Try again, one press, on a desk and under a finger alike. -->
       <div class="flex justify-end px-space-2 pb-space-1">
         <Button
-          aria-label={back.why
-            ? said.sendCommentAgain(pin.number)
-            : said.sendComment(pin.number)}
-          data-slot="pin-send"
-          onclick={() => onsendpin(pin.id)}
-          pending={sending || pinsSending.has(pin.id)}
+          aria-label={said.retryComment(pin.number)}
+          data-slot="pin-retry"
+          onclick={() => onretrypin(pin.id)}
+          pending={retrying.has(pin.id)}
           size="sm"
           variant="secondary"
         >
-          <PendingContent
-            icon={IconSend}
-            pending={sending || pinsSending.has(pin.id)}
-          />
-          <span>{back.why ? said.sendAgain : said.send}</span>
+          <PendingContent icon={IconRefresh} pending={retrying.has(pin.id)} />
+          <span>{said.tryAgain}</span>
         </Button>
       </div>
     {/if}
@@ -651,30 +627,4 @@
       </div>
     {/if}
   </div>
-  {#if unsent > 0}
-    <!-- What the session hasn't heard goes with one press, the note first in it. -->
-    <div
-      data-slot="send-bar"
-      class="flex flex-none flex-col gap-space-2 p-space-3 border-t border-border-hairline"
-    >
-      <Textarea
-        aria-label={said.note}
-        data-slot="note"
-        placeholder={said.note}
-        rows={1}
-        bind:value={note}
-      />
-      <div class="flex justify-end">
-        <Button
-          data-slot="rail-send"
-          onclick={onsend}
-          pending={sending}
-          size="sm"
-        >
-          <PendingContent icon={IconSend} pending={sending} />
-          <span>{said.send}</span><span class="num">{unsent}</span>
-        </Button>
-      </div>
-    </div>
-  {/if}
 </aside>

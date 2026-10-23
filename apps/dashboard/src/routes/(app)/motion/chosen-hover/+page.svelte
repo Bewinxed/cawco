@@ -231,12 +231,10 @@
       onpage={noop}
       onresolve={noop}
       onretry={noop}
-      onsend={noop}
-      onsendpin={noop}
+      onretrypin={noop}
       open="pin-1"
       {pins}
       unread={new Set()}
-      unsent={0}
     />
   </section>
   <section class="min-w-0" data-probe="files">

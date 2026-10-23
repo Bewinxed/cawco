@@ -660,8 +660,8 @@ interface TaskRead {
 
 /**
  * Comment mode on in the pane, a tap on `selector` in the page, the
- * person's words in its composer and Comment (pin 1 written with them),
- * then the head's Send: comments reach the session on Send alone.
+ * person's words in its composer and Comment (pin 1 written with them):
+ * it reaches the session by itself, with no Send.
  */
 const pinWith = async (
   on: On,
@@ -690,9 +690,6 @@ const pinWith = async (
     10_000
   );
   await on.page.keyboard.press("Escape");
-  await on.page
-    .locator("[data-side-card='preview'] [data-slot=\"send\"]")
-    .click({ timeout: 10_000 });
 };
 
 /** What the send-back legs read and call, from {@link run}. */

@@ -482,7 +482,7 @@ function tellDoc() {
  * (`cawco:page-pins`): one written meanwhile, or given back by the device
  * after a reload, may stand only here; and always the comments the hub
  * refused, each with its reason (artifact.ts `refused`). The host lists
- * each with why it isn't sent and its Send, so the person's words are
+ * each with why it isn't sent and its Try again, so the person's words are
  * never out of reach.
  */
 function tellPagePins() {
@@ -2431,9 +2431,9 @@ async function markPictures(): Promise<MarkPicture[]> {
 
 /**
  * How long after the person's last mark here the page draws its pictures
- * for the hub: a pause in the burst, so the Send that delivers them finds
- * them there; a Send sooner asks for them first (`cawco:pictures-now`).
- * Our call.
+ * for the hub: a pause in the burst, inside the hub's own quiet before it
+ * delivers the marks (hub artifacts/service.ts `COMMENTS_QUIET_MS`, 3 s), so
+ * the delivery finds them there. Our call.
  */
 const PICTURES_AFTER_MS = 1500;
 let picturesTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2620,14 +2620,6 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         // One the hub refused stands only in the device's keep: it goes from there.
         artifact.letGoRefused(pin) ? null : deletePin(artifact.doc(), pin)
       ),
-    // A Send is about to go: the pictures of what is unheard reach the hub first, answered once they have.
-    "cawco:pictures-now": async () => {
-      clearTimeout(picturesTimer);
-      if (artifact.kind() !== "canvas" && artifact.keeps()) {
-        await postPictures();
-      }
-      post("cawco:pictures-sent");
-    },
     // The composer's words: the comment written, its pin and first entry at once.
     "cawco:comment": (message) => writeDraft(message),
     // The composer closed with nothing said (Esc, a press outside, Close): nothing was written, and its pill goes.
@@ -2640,7 +2632,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         paint();
       }
     },
-    // A comment the hub refused, sent again (its Send again): written into the doc once more.
+    // A comment the hub refused, tried again (its Try again): written into the doc once more.
     "cawco:resend-pin": (message) => {
       if (typeof message.id === "string" && artifact.resend(message.id)) {
         tellPagePins();

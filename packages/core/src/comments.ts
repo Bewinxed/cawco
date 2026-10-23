@@ -7,13 +7,14 @@
  * a thread the person and the agent both write. A comment is written whole,
  * its pin and its first entry in one transaction ({@link commentOn}): a
  * press on the page writes nothing until there are words or attachments to
- * keep. It reaches the session when the person presses Send: the hub
- * delivers everything the session hasn't heard as one message carrying the
- * pins themselves ({@link pinSection}, {@link inkSection}) and the person's
- * note, then stamps each pin `sentAt` and `heard` ({@link pinSaid}), each
- * entry and stroke group `sentAt`. One comment goes alone by its own Send
- * ({@link SendBody} `pins`). A Send no one took marks each pin it carried
- * `notSent`, with why, until a delivery carries it. An entry's pictures, texts and files are
+ * keep. It reaches the session by itself a few seconds after it is written
+ * (the owner's pick, "Go by themselves", 2026-10-23): the hub delivers
+ * everything the session hasn't heard as one message carrying the pins
+ * themselves ({@link pinSection}, {@link inkSection}), then stamps each pin
+ * `sentAt` and `heard` ({@link pinSaid}), each entry and stroke group
+ * `sentAt`. A delivery no one took marks each pin it carried `notSent`, with
+ * why, until a delivery carries it; the person's Try again sends one alone
+ * ({@link SendBody} `pins`). An entry's pictures, texts and files are
  * stored on the hub by reference ({@link CommentAttachment}).
  *
  * A pin is placed again after every revision of the page by its anchor, in
@@ -126,9 +127,10 @@ export interface MarkPictures {
 
 /**
  * What a Send carries beside the doc: the person's note (the page's
- * `cawco.send(text)`, the rail's note) and, for one comment's own Send,
- * that comment alone by its pin's id. With no `pins`, everything the
- * session hasn't heard goes.
+ * `cawco.send(text)`, the Decisions tab's composer) with their picks; or,
+ * for a comment's Try again after a delivery no one took, that comment
+ * alone by its pin's id. The person's comments are never a Send's: they go
+ * by themselves.
  */
 export interface SendBody {
   pins?: string[];
@@ -273,7 +275,7 @@ export interface Pin {
   /** Its element is gone from the page since then; it waits in the moved tray. */
   movedAt?: string;
   /**
-   * The last Send that carried it reached no one: when, and why in words
+   * The last delivery that carried it reached no one: when, and why in words
    * (the hub's reason). The hub writes it; the next delivery that carries
    * the pin clears it ({@link pinHeard}).
    */
@@ -1188,10 +1190,6 @@ export function inkSection(
   }
   return lines.join("\n");
 }
-
-/** The person's note with their Send: the first section of its delivery. */
-export const sendNoteSection = (note: string): string =>
-  `## The person's note on this Send\n${note}`;
 
 /**
  * How a delivery carries one attachment: a picture as the message's

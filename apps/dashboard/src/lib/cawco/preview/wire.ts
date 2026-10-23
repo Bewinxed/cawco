@@ -434,7 +434,6 @@ const PAGE_MESSAGES = [
   "cawco:peek",
   "cawco:change-stops",
   "cawco:change-pressed",
-  "cawco:pictures-sent",
   "cawco:reply-result",
   "cawco:resolve-result",
   "cawco:delete-result",

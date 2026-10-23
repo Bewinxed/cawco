@@ -1,60 +1,72 @@
 /**
- * The person's comments reach the session when they press Send (owner's
- * pick 3 on the commenting page: "On Send": hollow Unsent pills, Send
- * counting them, one press sending all with a note; artifacts/service.ts
- * `send` and `deliverMarks`, server.ts `deliverArtifactMarks`).
+ * The person's comments go to the session by themselves (the owner's pick,
+ * "Go by themselves", 2026-10-23, replacing "On Send"): a few seconds after
+ * their last mark, with no Send (artifacts/service.ts `personMarked`,
+ * `marked`, `deliverMarks`; server.ts `deliverArtifactMarks`). Send is the
+ * page's picks alone.
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model) and the built dashboard at the desk, read from the hub's own
- * records (`sent_messages`), what the model was sent, the page's doc and
- * the pane's DOM:
+ * records (`sent_messages`), its journal, what the model was sent, the
+ * page's doc and the pane's DOM:
  *
  * 1. A session shows a page in its pane; nothing is unsent, so the head has
  *    no Send.
- * 2. Three comments, each pressed and written, 2 s apart: past the old quiet
- *    period nothing reaches the session, and the head's Send counts 3. One
- *    press of it: exactly one delivery, carrying all three, each with its
- *    number, id, selector, source file:line, text and the person's words,
- *    and their three pictures; the session's turn starts on it; the
- *    transcript draws one quiet line, "Comments on <page>", and no row of
- *    the person's; every pin and entry is stamped `sentAt`.
- * 3. A reply to pin 2 later and Send: one more delivery, pin 2 alone.
- * 4. The person resolves pin 3 and sends: one more delivery, its resolve line.
- * 5. A pen stroke no pin stands on and Send: one more delivery, the ink over
- *    its element with its box, and the page with the ink as its picture.
+ * 2. Three comments, each pressed and written, 2 s apart, and no Send ever
+ *    in the head: one delivery a few seconds after the third, carrying all
+ *    three, each with its number, id, selector, source file:line, text and
+ *    the person's words, and their three pictures; the session's turn
+ *    starts on it; the transcript draws one quiet line, "Comments on
+ *    <page>", and no row of the person's; every pin and entry is stamped
+ *    `sentAt`; the hub's journal says it went.
+ * 3. A reply to pin 2 later: one more delivery, pin 2 alone.
+ * 4. The person resolves pin 3: one more delivery, its resolve line.
+ * 5. A pen stroke no pin stands on: one more delivery, the ink over its
+ *    element with its box, and the page with the ink as its picture.
  * 6. Everything sent: no Send in the pane's head.
- * 8. A comment the session reads with comment_read before any Send is
- *    stamped heard and offers no Send; the person's later reply on it still
- *    delivers on Send, with only the new words.
+ * 8. A comment the session reads with comment_read before its delivery is
+ *    stamped heard and never delivered; the person's later reply on it
+ *    still goes, with only the new words.
  * 7. A writer that has ended: a session of a project with Caw makes a page,
  *    and its conversation is gone (the hub's own record, `last_error`, as
  *    the harness sets it when a resume finds nothing). A comment on its
- *    page, sent, wakes the project's Caw instead, the delivery naming the
- *    pin's id; his comment_reply lands in that pin's thread, by the agent,
- *    where the person reads it (7a). Caw's own turn needs his place's
- *    sandbox: run from inside a workspace on a host that cannot nest one
- *    (core boundary-nesting.ts), the hub's refusal of his wake is noted, the
+ *    page wakes the project's Caw instead, the delivery naming the pin's
+ *    id; his comment_reply lands in that pin's thread, by the agent, where
+ *    the person reads it (7a). Caw's own turn needs his place's sandbox:
+ *    run from inside a workspace on a host that cannot nest one (core
+ *    boundary-nesting.ts), the hub's refusal of his wake is noted, the
  *    writer is checked to be sent nothing, the pin to stay unstamped (owed
- *    for the next Send), and the writer's transcript to show the comments
- *    line "not sent" with why. Live, the pin is stamped heard. 7b, the rule
- *    through the tool: a session that is not the project's lead is refused
- *    the pin; once the hub's record names it the lead, its comment_reply
- *    lands in the thread.
+ *    for the next delivery), and the writer's transcript to show the
+ *    comments line "not sent" with why. Live, the pin is stamped heard. 7b,
+ *    the rule through the tool: a session that is not the project's lead is
+ *    refused the pin; once the hub's record names it the lead, its
+ *    comment_reply lands in the thread.
  * 9. A comment on the whole page (a press in its padding, no content within
  *    reach) stands on the page's body, its pill at the viewport's top-right,
  *    and keeps none of its words; the page's words changing twice leaves it
- *    on the page, never moved aside nor said gone, and Send delivers it
+ *    on the page, never moved aside nor said gone, and it is delivered
  *    once, as a comment on the whole page.
  * 10. The page's own doc socket dropped: once it has stood lost 15 s the
  *    Comments control and its rail say the comments aren't reaching the
  *    agent, with Try again; a comment pressed then opens its composer at
  *    once, and Comment keeps its words in the page's doc; it and an
  *    annotation made then survive a frame reload from the device, the page
- *    lets go of another artifact's stale copy, and with the link back, Try
- *    again and Send the session hears each once.
+ *    lets go of another artifact's stale copy, and with the link back and
+ *    Try again the session hears each once, by itself.
  * 11. Pins kept on a page-sized container by its place (one moved aside)
  *    stand on the page as a whole again, written back on its body, and the
  *    session is told nothing new of them.
+ * 12. The owner's report: a project's session makes a decision page and
+ *    runs a long command. A pin on its card, and no Send: the agent moves
+ *    the running command to the background (agent harnesses/claude.ts
+ *    `#moveToBackground`) and the delivery joins the turn at that tool
+ *    boundary, a few seconds after the pin, long before the command's end;
+ *    the journal says it went. A reply during the next long command joins
+ *    the same way, with only the new words. A pick on the same page waits
+ *    for Send: nothing reaches the session until the head's Send, which
+ *    counts it.
+ * 13. The same session asleep: a reply on its pin wakes it, the delivery
+ *    its turn's first message.
  *
  *   bun scripts/probe-kit/run.ts comment-delivery
  */
@@ -67,7 +79,7 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, pressAt, type Spec, settle } from "../kit";
+import { type Kit, open, pressAt, pressIn, type Spec, settle } from "../kit";
 import { shaped } from "../words";
 import {
   docOf,
@@ -86,10 +98,12 @@ const NAME = "comment-delivery";
 const NOTICE =
   /\[CawCo\] The person commented on the page "comment-delivery" \(artifact [0-9a-f-]{36}\)\./;
 const IMAGE_BLOCK = /"type":"image"/g;
-/** The hub's old quiet period: nothing may come of the person's marks in it, or past it, without Send. */
-const QUIET_MS = 10_000;
-/** How long a Send's delivery may take to reach the model: the hub's send, the agent, Claude Code's request. */
+/** The hub's quiet after the person's last mark before it delivers them (artifacts/service.ts `COMMENTS_QUIET_MS`). */
+const QUIET_MS = 3000;
+/** How long a delivery may take to reach the model once it goes: the hub's send, the agent, Claude Code's request. */
 const REACH_MS = 12_000;
+/** From the person's last mark to the model: the quiet, then the reach. */
+const MARK_TO_MODEL_MS = QUIET_MS + REACH_MS;
 /** How long after a delivery (or none) the probe watches for one that should not come. */
 const STILL_MS = 12_000;
 
@@ -213,6 +227,52 @@ const cawReply = (request: Seen, routed: RegExpExecArray): Reply => {
     : text(`${REPLY_TOOL} is not offered`);
 };
 
+/** Step 12's decision page, its program, and the session's long work it is pinned during. */
+const BUSY_PAGE = "busy-decision";
+const BUSY_PROGRAM = `root = Decisions("Delegates in any folder", [how])
+how = Decision("how", "How should a delegate work in a folder that isn't a git repository?", [live, snap], "Both use one mechanism for every folder.")
+live = Option("live", "Live folder, private writes", "A private layer over the real folder.", true, [], "Reads are slower on the Mac.")
+snap = Option("snapshot", "Frozen copy, private writes", "A frozen copy of the folder.", false, [], "Minutes to make on a full disk.")`;
+const BUSY_MARK = "PROBE-BUSY-WORK";
+/** The session's two long commands, s each: the pin's delivery joins while the first runs, the reply's while the second does. */
+const BUSY_SLEEPS = [45, 30] as const;
+const BUSY_PIN_WORDS = "how does this even work";
+const BUSY_REPLY_WORDS = "and what's the best practice?";
+const BUSY_NOTICE = `The person commented on the page "${BUSY_PAGE}"`;
+/** The hub's journal lines for a delivery that went (artifacts/service.ts `sayDelivery`; server.ts `marksToSession`). */
+const WENT_LINE = /delivered, for session|went to session/;
+/** The picks' notice (core injected.ts `artifactResponsesNotice`) for the busy page. */
+const PICKS_NOTICE = `The page "${BUSY_PAGE}" has new responses`;
+/** Step 13's reply, which wakes the sleeping session. */
+const WAKE_WORDS = "Are you still there?";
+/** The busy session's turn (12): on while the leg runs, each long command's issue time, and every request of it. */
+const busyTurn: { active: boolean; heard: Seen[]; issued: number[] } = {
+  active: false,
+  heard: [],
+  issued: [],
+};
+/** The busy session's turn: a long command, then another at its end, then done. */
+const busyReply = (request: Seen): Reply => {
+  busyTurn.heard.push(request);
+  const next = BUSY_SLEEPS[busyTurn.issued.length];
+  if (next === undefined) {
+    return { everyMs: 5, words: ["Done with the long work."] };
+  }
+  busyTurn.issued.push(Date.now());
+  return {
+    everyMs: 5,
+    words: [],
+    tool: {
+      name: "Bash",
+      input: {
+        command: `sleep ${next}`,
+        description: "A long command",
+        timeout: 120_000,
+      },
+    },
+  };
+};
+
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
@@ -225,6 +285,9 @@ const respond = (request: Seen): Reply => {
     return text("Probe title");
   }
   heard.push(request);
+  if (busyTurn.active && request.all.includes(BUSY_MARK)) {
+    return busyReply(request);
+  }
   if (NOTICE.test(request.last)) {
     return text("Heard the comments.");
   }
@@ -350,15 +413,8 @@ const sendCount = async (page: Page) =>
       .textContent({ timeout: 1000 })
       .catch(() => null)
   )?.trim() ?? null;
-/** The person's Send: the head's, or the rail's with a note. When it was pressed. */
-const sendNow = async (page: Page, note = "") => {
-  if (note) {
-    const rail = await rowsOf(page);
-    await rail.getByRole("textbox", { name: commentWords.note }).fill(note);
-    const at = Date.now();
-    await rail.locator('[data-slot="rail-send"]').click();
-    return at;
-  }
+/** The person's Send in the head (a page's picks): when it was pressed. */
+const sendNow = async (page: Page) => {
   const at = Date.now();
   await page.locator(`${PANE} [data-slot="send"]`).click();
   return at;
@@ -391,6 +447,16 @@ const commentAt = async (
   }
   return opened;
 };
+
+/** Whether the page stands in the pane's Comment mode. */
+const inCommentMode = (frame: Frame) =>
+  frame.evaluate(
+    () =>
+      document
+        .querySelector("cawco-overlay")
+        ?.shadowRoot?.querySelector(".layer")
+        ?.classList.contains("comment") ?? false
+  );
 
 /** Until the page has heard the pane's Comment mode. */
 const pageInComment = (frame: Frame) =>
@@ -473,10 +539,64 @@ const pinWith = async (
   await on.page.keyboard.press("Escape");
 };
 
+/** The person's reply in pin `number`'s thread, opened from its row: when its words were in the doc. */
+const replyOn = async (
+  page: Page,
+  frame: Frame,
+  number: number,
+  words: string
+) => {
+  await openRow(page, number);
+  const card = page.locator(
+    `[data-slot="pin-card"][data-pin-card="${number}"]`
+  );
+  await card.waitFor({ timeout: 5000 });
+  const entries = numbered((await docOf(frame)).pins, number)?.thread.length;
+  await card.getByRole("combobox").fill(words);
+  await card.getByRole("button", { name: "Reply" }).click();
+  await until(
+    `the reply in pin ${number}'s thread`,
+    () => docOf(frame),
+    (now) => (numbered(now.pins, number)?.thread.length ?? 0) > (entries ?? 0),
+    5000
+  );
+  const at = Date.now();
+  await page.keyboard.press("Escape");
+  await shutList(page);
+  return at;
+};
+
+/** Until session `id`'s turn is closed on the hub's record. */
+const turnClosed = (fleet: On["fleet"], id: string) =>
+  until(
+    `${id.slice(0, 8)}'s turn closed`,
+    () => (fleet.instance(id)?.turn_open_at === null ? true : undefined),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+
+/** Asks `id` to sleep (again every 15 s: a machine refuses one not at rest) until its row reads sleeping (account-move-asleep's way). */
+const asleep = async (fleet: On["fleet"], id: string) => {
+  let askedAt = 0;
+  return await until(
+    `${id.slice(0, 8)} asleep`,
+    async () => {
+      const status = fleet.instance(id)?.status;
+      if (status !== "sleeping" && Date.now() - askedAt > 15_000) {
+        askedAt = Date.now();
+        await fleet.control(id, "sleep");
+      }
+      return status;
+    },
+    (status) => status === "sleeping",
+    90_000
+  ).catch(() => fleet.instance(id)?.status);
+};
+
 /**
  * 8. Read before it goes: a comment the session reads with comment_read
- * before any Send is stamped heard and offers no Send; the person's later
- * reply on it goes on the next Send.
+ * inside the hub's quiet is stamped heard and never delivered; the person's
+ * later reply on it goes by itself.
  */
 const readFirstChecks = async (
   on: On,
@@ -490,13 +610,14 @@ const readFirstChecks = async (
   const keptAt = Date.now();
   const read = await callIn(session, READ_TOOL, { artifact });
   const readIn = Date.now() - keptAt;
-  await Bun.sleep(Math.max(0, keptAt + QUIET_MS + 2000 - Date.now()));
+  await Bun.sleep(Math.max(0, keptAt + MARK_TO_MODEL_MS - Date.now()));
   const pin4 = numbered((await docOf(frame)).pins, 4);
   const early = deliveries(before).filter((one) => one.last.includes("## 4."));
   const offered = await sendCount(page);
   kit.check(
-    "8: a comment the session reads with comment_read before any Send is stamped heard, is never delivered, and leaves nothing to Send",
+    "8: a comment the session reads with comment_read inside the hub's quiet is stamped heard, is never delivered, and no Send stands",
     read.includes(FIRST_WORDS) &&
+      readIn < QUIET_MS &&
       early.length === 0 &&
       !!pin4?.heard &&
       !!pin4.sentAt &&
@@ -517,15 +638,14 @@ const readFirstChecks = async (
   );
   await page.keyboard.press("Escape");
   await shutList(page);
-  await sendNow(page);
   const next = await nextDelivery(
     "the later reply's delivery",
     later,
-    REACH_MS + 5000
+    MARK_TO_MODEL_MS + 5000
   );
   const words = next?.last ?? "";
   kit.check(
-    "8: the person's later reply on that comment goes on the next Send, with only the new words",
+    "8: the person's later reply on that comment goes by itself, with only the new words",
     words.includes("## 4. comment on #e") &&
       words.includes(`- I wrote: ${JSON.stringify(LATER_WORDS)}`) &&
       !words.includes(`- I wrote: ${JSON.stringify(FIRST_WORDS)}`),
@@ -611,15 +731,14 @@ const wholePageChecks = async (on: On, frame: Frame) => {
     !!after && !after.movedAt && disc === 1 && gone === 0,
     `movedAt ${String(after?.movedAt)}; discs ${disc}; gone lines ${gone}`
   );
-  await sendNow(page);
-  await Bun.sleep(REACH_MS + STILL_MS);
+  await Bun.sleep(MARK_TO_MODEL_MS + STILL_MS);
   const went = deliveries(before).filter((one) =>
     one.last.includes(`## ${WHOLE_PIN}.`)
   );
   const words = went[0]?.last ?? "";
   const stamped = numbered((await docOf(frame)).pins, WHOLE_PIN);
   kit.check(
-    "9: on Send the page's comment reaches the session exactly once, as a comment on the whole page with the person's words and its id, never as gone, and is stamped sent",
+    "9: the page's comment reaches the session by itself exactly once, through the page's words changing twice, as a comment on the whole page with the person's words and its id, never as gone, and is stamped sent",
     went.length === 1 &&
       words.includes(`## ${WHOLE_PIN}. comment on the whole page`) &&
       words.includes(`- I wrote: ${JSON.stringify(WHOLE_WORDS)}`) &&
@@ -638,7 +757,7 @@ const wholePageChecks = async (on: On, frame: Frame) => {
  * Comments control and its panel say the comments aren't reaching the
  * agent; an annotation made then, the frame reloaded while still down,
  * comes back from the device; Try again with the link back takes it to the
- * hub, and the session hears it once.
+ * hub, and the session hears it once, by itself.
  */
 const linkDownChecks = async (on: On, frame: Frame) => {
   const { kit, page } = on;
@@ -828,16 +947,11 @@ const linkDownChecks = async (on: On, frame: Frame) => {
     15_000
   ).catch(() => false);
   await shutList(page);
-  // The page's doc reaches the hub, then the Send that carries it.
-  await until(
-    "Send standing for what the link held",
-    () => sendCount(page),
-    (count) => count !== null,
-    15_000
-  ).catch(() => null);
-  await Bun.sleep(Math.max(0, backAt + 2000 - Date.now()));
-  await sendNow(page);
-  await Bun.sleep(REACH_MS + STILL_MS);
+  // The page's doc reaches the hub, and the hub delivers what it held by itself.
+  await Bun.sleep(
+    Math.max(0, backAt + MARK_TO_MODEL_MS + STILL_MS - Date.now())
+  );
+  const offered = await sendCount(page);
   const went = deliveries(before).filter((one) =>
     one.last.includes(`## ${DOWN_PIN}.`)
   );
@@ -850,13 +964,14 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   const stamped = numbered(after, DOWN_PIN);
   const stampedComment = numbered(after, DOWN_COMMENT);
   kit.check(
-    "10: with the link back, Try again and Send, the annotation reaches the hub and the session hears it exactly once, stamped sent, and the control says nothing more",
+    "10: with the link back and Try again, the annotation reaches the hub and the session hears it exactly once by itself, stamped sent, no Send standing, and the control says nothing more",
     cleared === true &&
+      offered === null &&
       went.length === 1 &&
       words.includes(`## ${DOWN_PIN}. annotation on #c`) &&
       words.includes(`- Pin: ${madeId}`) &&
       !!stamped?.sentAt,
-    `cleared ${String(cleared)}; ${went.length} deliveries of pin ${DOWN_PIN}; stamped ${String(stamped?.sentAt)}; heard ${words.slice(0, 400) || "nothing"}`
+    `cleared ${String(cleared)}; Send ${String(offered)}; ${went.length} deliveries of pin ${DOWN_PIN}; stamped ${String(stamped?.sentAt)}; heard ${words.slice(0, 400) || "nothing"}`
   );
   kit.check(
     "10: the comment written while the link was down reaches the session exactly once, with the person's words and its id, stamped sent",
@@ -955,7 +1070,7 @@ const oldPageAnchorChecks = async (on: On, frame: Frame) => {
       `svg[data-cawco-pins-fixed] :is(g[data-pin="${OLD_PINS[0]}"], g[data-pin="${OLD_PINS[1]}"])`
     )
     .count();
-  await Bun.sleep(QUIET_MS + 2000);
+  await Bun.sleep(MARK_TO_MODEL_MS + 2000);
   const told = deliveries(before).filter(
     (one) =>
       one.last.includes(`## ${OLD_PINS[0]}.`) ||
@@ -976,6 +1091,221 @@ const oldPageAnchorChecks = async (on: On, frame: Frame) => {
       })
     )}`
   );
+};
+
+/**
+ * 12. The owner's report (2026-10-23: "when i add comments u don't seem to
+ * pick it up", a pin and a reply on the orchestrator's decision page while
+ * it worked): a project's session makes a decision page, then runs a long
+ * command. The person pins a card, and presses no Send: a few seconds on,
+ * the agent moves the running command to the background and the delivery
+ * joins the turn at that tool boundary, long before the command's end; the
+ * hub's journal says it went. The person's reply while the next long
+ * command runs joins the same way, with only the new words. A pick on the
+ * page waits for Send: nothing of it reaches the session until the head's
+ * Send, which counts it. 13: the session asleep, a reply on its pin wakes
+ * it, the delivery its turn's first message.
+ */
+const busyDecisionChecks = async (
+  desk: On,
+  base: string,
+  callIn: (to: string, tool: string, input: object) => Promise<string>
+) => {
+  const { fleet, kit } = desk;
+  const place = join(fleet.sandbox, "decider-place");
+  await mkdir(place, { recursive: true });
+  await writeFile(join(place, "README.md"), "The decider's place.\n");
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Busy decider",
+    machineId: MACHINE,
+    cwd: place,
+    caw: false,
+  });
+  const decider = await fleet.spawn("claude", "Decider", place, {
+    projectId: project.id,
+  });
+  const made = await callIn(decider, CREATE, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick how a delegate works in any folder",
+    name: BUSY_PAGE,
+    program: BUSY_PROGRAM,
+  });
+  const artifact = made.match(ANSWERED_ID)?.[1];
+  if (!artifact) {
+    kit.check("12: the decision page is made", false, made.slice(0, 300));
+    return;
+  }
+  const hubSaid = async (pattern: RegExp) =>
+    (await fleet.logs("hub"))
+      .split("\n")
+      .filter((line) => line.includes(artifact) && pattern.test(line));
+  const tab = await kit.page("desk");
+  const on: On = { ...desk, page: tab, session: decider };
+  await open(tab, `${base}/session/${decider}`, "[data-artifact-trigger]");
+  const frame = await pageFrame(on);
+  await frame.waitForSelector("#decision-how", { timeout: 60_000 });
+  await settle(tab, 600);
+
+  // The session at work: a long command running.
+  busyTurn.active = true;
+  await fleet.send(decider, BUSY_MARK);
+  await until(
+    "the decider's first long command issued",
+    () => busyTurn.issued.length,
+    (n) => n >= 1,
+    60_000
+  );
+  const busy = await until(
+    "the decider's pulse reads it working",
+    async () =>
+      (await fleet.api<Record<string, { busy?: boolean }>>("/api/pulses"))[
+        decider
+      ]?.busy === true,
+    Boolean,
+    20_000
+  ).catch(() => false);
+
+  // A pin on the card, and no Send: it joins the turn at the next tool boundary.
+  const before = busyTurn.heard.length;
+  await pinWith(on, frame, "#decision-how", 1, BUSY_PIN_WORDS);
+  const pinnedAt = Date.now();
+  const firstEnds = busyTurn.issued[0] + BUSY_SLEEPS[0] * 1000;
+  const boundary = await until(
+    "the request answering the long command",
+    () => busyTurn.heard.at(before),
+    Boolean,
+    MARK_TO_MODEL_MS + 10_000
+  ).catch(() => undefined);
+  const pinned = numbered((await docOf(frame)).pins, 1);
+  const offered = await sendCount(tab);
+  const rows = fleet.query<{ reason: string | null; state: string }>(
+    "SELECT state, reason FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+    decider,
+    `%${BUSY_NOTICE.replaceAll('"', "%")}%`
+  );
+  kit.check(
+    "12: a pin on a working session's decision page, no Send pressed or standing: a few seconds on it joins the turn at a tool boundary (the running command moved to the background), long before the command's end, carrying the pin's words and id",
+    busy === true &&
+      offered === null &&
+      !!boundary &&
+      boundary.afterTool &&
+      boundary.at - pinnedAt <= MARK_TO_MODEL_MS &&
+      boundary.at < firstEnds &&
+      boundary.all.includes(BUSY_NOTICE) &&
+      boundary.all.includes(`- I wrote: ${JSON.stringify(BUSY_PIN_WORDS)}`) &&
+      boundary.all.includes(`- Pin: ${pinned?.id}`) &&
+      rows.length === 1 &&
+      rows[0].state !== "failed",
+    `busy ${String(busy)}; Send ${String(offered)}; boundary ${boundary ? `${boundary.at - pinnedAt} ms after the pin, ${firstEnds - boundary.at} ms before the command's end, afterTool ${boundary.afterTool}, command backgrounded ${boundary.body.includes("backgrounded")}` : "never"}; rows ${JSON.stringify(rows)}; heard ${boundary?.last.slice(0, 500) ?? "-"}`
+  );
+  const wentLines = await hubSaid(WENT_LINE);
+  const stamped = numbered((await docOf(frame)).pins, 1);
+  kit.check(
+    "12: the pin is stamped sent, and the hub's journal says the delivery went, to which session, as which message",
+    !!stamped?.sentAt &&
+      wentLines.some((line) => line.includes("delivered, for session")) &&
+      wentLines.some(
+        (line) => line.includes("went to session") && line.includes(decider)
+      ),
+    `sentAt ${String(stamped?.sentAt)}; journal ${JSON.stringify(wentLines)}`
+  );
+
+  // The person's reply while the next long command runs.
+  await until(
+    "the decider's second long command issued",
+    () => busyTurn.issued.length,
+    (n) => n >= 2,
+    10_000
+  ).catch(() => undefined);
+  const beforeReply = busyTurn.heard.length;
+  const repliedAt = await replyOn(tab, frame, 1, BUSY_REPLY_WORDS);
+  const secondEnds = (busyTurn.issued[1] ?? 0) + BUSY_SLEEPS[1] * 1000;
+  const next = await until(
+    "the request answering the second long command",
+    () => busyTurn.heard.at(beforeReply),
+    Boolean,
+    MARK_TO_MODEL_MS + 10_000
+  ).catch(() => undefined);
+  const repliedRows = fleet.query<{ state: string }>(
+    "SELECT state FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+    decider,
+    `%${BUSY_NOTICE.replaceAll('"', "%")}%`
+  );
+  kit.check(
+    "12: the reply, written while the next command runs, joins the turn by itself at a tool boundary before that command's end, with only the new words",
+    !!next &&
+      next.afterTool &&
+      next.at - repliedAt <= MARK_TO_MODEL_MS &&
+      next.at < secondEnds &&
+      next.last.includes(BUSY_NOTICE) &&
+      next.last.includes(`- I wrote: ${JSON.stringify(BUSY_REPLY_WORDS)}`) &&
+      !next.last.includes(`- I wrote: ${JSON.stringify(BUSY_PIN_WORDS)}`) &&
+      repliedRows.length === 2 &&
+      repliedRows.every((row) => row.state !== "failed"),
+    `next ${next ? `${next.at - repliedAt} ms after the reply, ${secondEnds - next.at} ms before the command's end, afterTool ${next.afterTool}, command backgrounded ${next.body.includes("backgrounded")}` : "never"}; rows ${JSON.stringify(repliedRows)}; heard ${next?.last.slice(0, 500) ?? "-"}`
+  );
+
+  // A pick on the same page waits for Send.
+  await turnClosed(fleet, decider);
+  const beforePick = busyTurn.heard.length;
+  if (await inCommentMode(frame)) {
+    await tab.keyboard.press("Escape");
+  }
+  await pressIn(frame, '[data-option="snapshot"]');
+  await until(
+    "the pick in the page's state",
+    () => sendCount(tab),
+    (count) => count !== null,
+    10_000
+  ).catch(() => null);
+  await Bun.sleep(MARK_TO_MODEL_MS + STILL_MS);
+  const heldPick = busyTurn.heard
+    .slice(beforePick)
+    .filter((one) => one.all.includes(PICKS_NOTICE)).length;
+  const counted = await sendCount(tab);
+  const pickSentAt = await sendNow(tab);
+  const picked = await until(
+    "the picks' notice at the model",
+    () =>
+      busyTurn.heard
+        .slice(beforePick)
+        .find((one) => one.last.includes(PICKS_NOTICE)),
+    Boolean,
+    REACH_MS + 10_000
+  ).catch(() => undefined);
+  kit.check(
+    "12: a pick on the same page waits for Send: nothing of it reaches the session past the comments' quiet, the head's Send counts it, and one press tells the session",
+    heldPick === 0 && counted === "1" && !!picked && picked.at >= pickSentAt,
+    `before Send ${heldPick}; Send counted ${String(counted)}; notice ${picked ? `${picked.at - pickSentAt} ms after Send` : "never"}`
+  );
+
+  // 13. The session asleep: a reply on its pin wakes it.
+  await turnClosed(fleet, decider);
+  const slept = await asleep(fleet, decider);
+  const beforeWake = busyTurn.heard.length;
+  const wokenAt = await replyOn(tab, frame, 1, WAKE_WORDS);
+  const woke = await until(
+    "the sleeping decider woken by the reply",
+    () =>
+      busyTurn.heard
+        .slice(beforeWake)
+        .find((one) => one.last.includes(WAKE_WORDS)),
+    Boolean,
+    MARK_TO_MODEL_MS + 60_000
+  ).catch(() => undefined);
+  kit.check(
+    "13: a sleeping session wakes on a reply on its page's pin, by itself: its turn starts on the delivery, with only the new words",
+    slept === "sleeping" &&
+      !!woke &&
+      !woke.afterTool &&
+      woke.last.includes(BUSY_NOTICE) &&
+      !woke.last.includes(`- I wrote: ${JSON.stringify(BUSY_REPLY_WORDS)}`) &&
+      fleet.instance(decider)?.status !== "sleeping",
+    `slept ${String(slept)}; woke ${woke ? `${woke.at - wokenAt} ms after the reply, afterTool ${woke.afterTool}` : "never"}; status ${String(fleet.instance(decider)?.status)}; heard ${woke?.last.slice(0, 400) ?? "-"}`
+  );
+  busyTurn.active = false;
+  await tab.close();
 };
 
 /** 7. A writer that has ended: its page's pin goes to the project's Caw, whose reply lands in the pin's thread. */
@@ -1026,8 +1356,8 @@ const endedWriterChecks = async (
   const frame = await pageFrame(on);
   await frame.waitForSelector("#w", { timeout: 60_000 });
   await settle(on.page, 600);
+  // No Send: the comment goes by itself.
   await pinWith(on, frame, "#w", 1, "Who picks this up now?");
-  await sendNow(tab).catch(() => undefined);
   const pin = numbered((await docOf(frame)).pins, 1);
   const hubLines = async () =>
     (await fleet.logs("hub")).split("\n").filter((line) => HUB_LINE.test(line));
@@ -1278,18 +1608,18 @@ const run = async (kit: Kit) => {
   const keptAt = await writePins(on, frame);
   await page.keyboard.press("Escape");
   const [, , third] = keptAt;
-  // Past the old quiet period, with no Send: nothing goes.
-  await Bun.sleep(Math.max(0, third + QUIET_MS + 4000 - Date.now()));
-  const unsentBefore = deliveries().length;
+  // No Send: the head never offers one for comments, and they go by themselves.
   const counted = await sendCount(page);
-  const sentAt = await sendNow(page);
   const first = await nextDelivery(
     "the delivery of the three comments",
     0,
-    REACH_MS + 8000
+    MARK_TO_MODEL_MS + 8000
   );
-  const arrived = first ? first.at - sentAt : Number.NaN;
+  const arrived = first ? first.at - third : Number.NaN;
   await Bun.sleep(STILL_MS);
+  const wentLines = (await fleet.logs("hub"))
+    .split("\n")
+    .filter((entry) => entry.includes(id) && WENT_LINE.test(entry));
   const all = deliveries();
   const events = eventsOf(dbPath, session, startedAt);
   const doc = await docOf(frame);
@@ -1307,14 +1637,14 @@ const run = async (kit: Kit) => {
     );
   });
   kit.check(
-    "2: three comments written 2 s apart reach the session not at all past the old quiet period, the head's Send counting 3; one press of Send is exactly one delivery",
-    unsentBefore === 0 &&
-      counted === "3" &&
+    "2: three comments written 2 s apart, no Send standing for them in the head, go by themselves as exactly one delivery, a few seconds after the third, and the hub's journal says it went",
+    counted === null &&
       all.length === 1 &&
       events.length === 1 &&
-      arrived >= 0 &&
-      arrived <= REACH_MS,
-    `${unsentBefore} before Send; Send counted ${counted}; ${all.length} deliveries at the model, ${events.length} artifact event(s) in sent_messages; the first ${arrived} ms after Send (comments kept at +${keptAt.map((at) => at - keptAt[0]).join(", +")} ms)`
+      arrived >= QUIET_MS - 1000 &&
+      arrived <= MARK_TO_MODEL_MS &&
+      wentLines.some((entry) => entry.includes("delivered, for session")),
+    `Send ${String(counted)}; ${all.length} deliveries at the model, ${events.length} artifact event(s) in sent_messages; the first ${arrived} ms after the third comment (comments kept at +${keptAt.map((at) => at - keptAt[0]).join(", +")} ms); journal ${JSON.stringify(wentLines.slice(0, 3))}`
   );
   kit.check(
     "2: it carries all three, each with its number, selector, source file:line, text, the person's words and its id, and the three pins' pictures",
@@ -1362,7 +1692,7 @@ const run = async (kit: Kit) => {
   );
   await page.screenshot({ path: join(kit.out, "comment-delivery-first.png") });
 
-  // 3. A reply to pin 2 later, and Send: one more delivery, pin 2 alone.
+  // 3. A reply to pin 2 later: one more delivery by itself, pin 2 alone.
   const before3 = heard.length;
   const events3 = events.length;
   await openRow(page, 2);
@@ -1376,32 +1706,29 @@ const run = async (kit: Kit) => {
     (now) => (numbered(now.pins, 2)?.thread.length ?? 0) === 2,
     5000
   );
+  const repliedAt = Date.now();
   await page.keyboard.press("Escape");
   await shutList(page);
-  await Bun.sleep(QUIET_MS);
-  const held3 = deliveries(before3).length;
-  const repliedAt = await sendNow(page);
   const second = await nextDelivery(
     "the reply's delivery",
     before3,
-    REACH_MS + 5000
+    MARK_TO_MODEL_MS + 5000
   );
   await Bun.sleep(STILL_MS);
   const after3 = eventsOf(dbPath, session, startedAt).length - events3;
   const words2 = second?.last ?? "";
   kit.check(
-    "3: a reply to pin 2 later waits for Send, then is one more delivery with pin 2 alone and the reply",
-    held3 === 0 &&
-      deliveries(before3).length === 1 &&
+    "3: a reply to pin 2 later is one more delivery by itself, a few seconds on, with pin 2 alone and the reply",
+    deliveries(before3).length === 1 &&
       after3 === 1 &&
       !!second &&
-      second.at >= repliedAt &&
+      second.at - repliedAt <= MARK_TO_MODEL_MS &&
       words2.includes("## 2. comment on #b") &&
       words2.includes('- I wrote: "On second thought, keep the weight."') &&
       !words2.includes(`- I wrote: ${JSON.stringify(WORDS[1])}`) &&
       !words2.includes("## 1.") &&
       !words2.includes("## 3."),
-    `${held3} before Send; ${deliveries(before3).length} at the model, ${after3} event(s); ${second ? second.at - repliedAt : "-"} ms after Send; heard ${words2.slice(0, 600)}`
+    `${deliveries(before3).length} at the model, ${after3} event(s); ${second ? second.at - repliedAt : "-"} ms after the reply; heard ${words2.slice(0, 600)}`
   );
 
   // 4. The person resolves pin 3: its one resolve line.
@@ -1420,22 +1747,21 @@ const run = async (kit: Kit) => {
   await page.keyboard.press("Escape");
   await shutList(page);
   const pin3 = numbered((await docOf(frame)).pins, 3);
-  await sendNow(page);
   const resolved = await nextDelivery(
     "the resolve's delivery",
     before4,
-    REACH_MS + 5000
+    MARK_TO_MODEL_MS + 5000
   );
   const words4 = resolved?.last ?? "";
   kit.check(
-    "4: the person's resolve of pin 3 goes on the next Send, its one line",
+    "4: the person's resolve of pin 3 goes by itself, its one line",
     deliveries(before4).length === 1 &&
       words4.includes(`## 3. Resolved by the person (pin ${pin3?.id})`) &&
       !words4.includes("## 2."),
     words4.slice(0, 400)
   );
 
-  // 8, before the stroke: a comment read before any Send.
+  // 8, before the stroke: a comment read before its delivery.
   await readFirstChecks(on, frame, id, callIn);
 
   // 5. A pen stroke no pin stands on.
@@ -1447,16 +1773,14 @@ const run = async (kit: Kit) => {
     (now) => Object.keys(now.ink).length > 0,
     10_000
   ).catch(() => docOf(frame));
-  await settle(page, 1800);
-  await sendNow(page);
   const ink = await nextDelivery(
     "the ink's delivery",
     before5,
-    REACH_MS + 8000
+    MARK_TO_MODEL_MS + 8000
   );
   const words5 = ink?.last ?? "";
   kit.check(
-    "5: a pen stroke no pin stands on goes on the next Send: the ink over #d with its box, and the page with the ink as its picture",
+    "5: a pen stroke no pin stands on goes by itself: the ink over #d with its box, and the page with the ink as its picture",
     Object.keys(inked.ink).length === 1 &&
       deliveries(before5).length === 1 &&
       words5.includes("## Ink over #d") &&
@@ -1484,6 +1808,8 @@ const run = async (kit: Kit) => {
     atEnd === 0,
     `${atEnd} Send control(s)`
   );
+  // 12. A pin and a reply on a decision page whose session is in a long command.
+  await busyDecisionChecks(on, base, callIn);
   await endedWriterChecks(on, base, callIn);
   kit.check(
     "the page said no error",

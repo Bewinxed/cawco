@@ -128,6 +128,7 @@ import {
   ARTIFACT_ORIGIN,
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
+  artifactToolWords,
   type ArtifactNeed,
   type ArtifactNeedsRead,
   type ArtifactSessionFrame,
@@ -12436,6 +12437,13 @@ export const createServer = (
         why: { words: error instanceof Error ? error.message : String(error) },
       }));
     if (woke.woke) {
+      console.log(
+        artifactToolWords.marksWokeCaw(
+          instance.id,
+          projectId,
+          why.replace(CLOSING_STOP, "")
+        )
+      );
       return { ok: true };
     }
     const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.why.words.replace(CLOSING_STOP, "")}.`;
@@ -12485,12 +12493,21 @@ export const createServer = (
       recordUndelivered(instance, words, pictures, reason, carried);
       return { ok: false, reason };
     }
-    return record && record.state !== "failed"
-      ? { ok: true }
-      : {
-          ok: false,
-          reason: record?.reason ?? "The session didn't take them.",
-        };
+    if (record && record.state !== "failed") {
+      console.log(
+        artifactToolWords.marksWent(
+          artifact.id,
+          instance.id,
+          record.uuid,
+          `${record.state}, ${record.mode}${withdrawn.length > 0 ? `, folding in ${withdrawn.length} unread earlier one(s)` : ""}`
+        )
+      );
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      reason: record?.reason ?? "The session didn't take them.",
+    };
   };
 
   /**
@@ -12539,7 +12556,13 @@ export const createServer = (
     db: db.artifacts,
     lifetime,
     // What waits on the person in it may have moved: Needs you reads it again.
-    updated: () => artifactLane.moved(),
+    // The person's own change: what of it the session hasn't heard goes once quiet.
+    updated: (id, by) => {
+      artifactLane.moved();
+      if (by === "person") {
+        artifacts.personMarked(id);
+      }
+    },
     // A pick or a note on a project's page moves its Decisions tab.
     changed: (id) => {
       const row = db.artifacts.get(id);

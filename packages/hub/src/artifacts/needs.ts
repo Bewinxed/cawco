@@ -8,7 +8,7 @@
  *
  * What counts (a reason each, strongest first): shown and never opened, for
  * a page or canvas to pick on or judge; a decision page's picks not made;
- * picks, notes, pins and ink written and not sent; an agent's answer on an
+ * picks and notes written and not sent (comments go by themselves); an agent's answer on an
  * open pin newer than the person's look at it (core comments.ts
  * `newAnswer`). Never: a `try` preview, a `draw` canvas with nothing
  * pinned, a draft, and one the person can't act on yet: handed up to a
@@ -23,7 +23,7 @@
  *    ({@link ArtifactAsked.step}) ticked or removed, or with no step waiting
  *    on it, the writer's next turn ended ({@link ArtifactAsked.movedAt}),
  *    with no new show of it. That retires its ask (not opened, picks), never
- *    the person's own unsent marks or an answer he hasn't read.
+ *    the person's own unsent picks or an answer he hasn't read.
  * 3. Superseded: a revision, or a same-name create, is the same artifact:
  *    its item changes in place.
  * 4. Its session ended: it leaves Needs you and is one notice, "<harness>
@@ -79,8 +79,6 @@ export interface ArtifactFacts {
   draft: boolean;
   /** The first decision, in page order, not picked. */
   firstUnpicked: string | null;
-  /** The first pin, by number, that holds something not sent. */
-  firstUnsentPin: number | null;
   /** Handed up to a parent session that hasn't opened it, or a maker's change held for it: not the person's yet. */
   handed: boolean;
   /** When the person last had it on screen (a view's word), ISO. */
@@ -90,7 +88,7 @@ export interface ArtifactFacts {
   pins: number;
   /** When its session last published or changed it (`meta.revisedAt`), ISO. */
   revisedAt: string | null;
-  /** What Send sends now: picks and notes since the last Send, pins with anything unsent, loose ink. */
+  /** What Send sends now: picks and notes since the last Send. */
   unsent: number;
 }
 
@@ -216,12 +214,9 @@ export const stopOf = (
       return facts.firstUnpicked
         ? { card: facts.firstUnpicked }
         : { top: true };
-    case "unsent":
-      return facts.firstUnsentPin === null
-        ? { top: true }
-        : { pin: facts.firstUnsentPin };
     case "answer":
       return { pin: reason.pin };
+    case "unsent":
     case "unopened":
     case undefined:
       return { top: true };

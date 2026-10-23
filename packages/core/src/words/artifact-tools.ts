@@ -41,4 +41,21 @@ export const artifactToolWords = {
   /** The hub's log: marks the person made that no session took. */
   marksOwed: (id: string, reason: string) =>
     `[artifacts] ${id}: the person's marks reached no one, and stay owed: ${reason}`,
+  /** The hub's log: a delivery of the person's marks someone took, what it carried and for which session. */
+  marksDelivered: (
+    id: string,
+    carried: string,
+    session: string,
+    retry: boolean
+  ) =>
+    `[artifacts] ${id}: ${carried} delivered${retry ? " on the person's Try again" : ""}, for session ${session}`,
+  /** The hub's log: the person's marks on an artifact no session holds. */
+  marksUnheld: (id: string) =>
+    `[artifacts] ${id}: the person's marks found no session holding it, and stay owed`,
+  /** The hub's log: the send that carried the person's marks to a session, as which message and where it stands. */
+  marksWent: (id: string, session: string, message: string, state: string) =>
+    `[artifacts] ${id}: the person's marks went to session ${session} as message ${message} (${state})`,
+  /** The hub's log: the person's marks woke the project's Caw, their writer taking no input. */
+  marksWokeCaw: (session: string, project: string, why: string) =>
+    `[artifacts] the person's marks on session ${session}'s artifact woke project ${project}'s Caw: the session takes no input now (${why})`,
 };

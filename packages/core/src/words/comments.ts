@@ -1,8 +1,8 @@
 /**
  * The comments' words on the web (DESIGN.md, Placing a comment, The Comments
- * rail, A thread beside its pin, Sending comments; WORDS.md). The app keeps
- * its own until its parity with the rail (words/artifacts.ts holds the
- * words both say). The dashboard renders them from here, and the probe kit
+ * rail, A thread beside its pin, How comments reach the session; WORDS.md).
+ * The app keeps its own until its parity with the rail (words/artifacts.ts
+ * holds the words both say). The dashboard renders them from here, and the probe kit
  * finds them by these same words (scripts/probe-words-check.ts refuses a
  * copy).
  */
@@ -10,7 +10,7 @@ import { commonWords } from "./common";
 
 /** A reason's own full stop, which the line that quotes it puts back. */
 const FINAL_STOP = /\.$/;
-/** A Send no one took, before its reason. */
+/** A delivery no one took, before its reason. */
 const NOT_SENT = "Not sent:";
 
 export const commentWords = {
@@ -45,21 +45,18 @@ export const commentWords = {
   closeComments: "Close comments",
   open: "Open",
   resolved: "Resolved",
-  unsent: "Unsent",
   noneOpen: "No open comments",
   noneOpenClick: "Choose Comment, then click something on the page.",
   noneOpenTap: "Choose Comment, then tap something on the page.",
   noneResolved: "Nothing resolved yet",
   noMatch: (query: string) => `Nothing matches “${query}”`,
   attached: (n: number) => `${n} attached`,
-  // Sending.
-  note: "Add a note for the agent",
+  // The page's Send: its picks.
   send: "Send",
   sendCount: (n: number) => `Send ${n}`,
-  // One comment's own Send, and a Send of it no one took.
-  sendAgain: commonWords.sendAgain,
-  sendComment: (n: number) => `Send comment ${n}`,
-  sendCommentAgain: (n: number) => `Send comment ${n} again`,
+  // A comment whose delivery reached no one, and its way back.
+  tryAgain: commonWords.tryAgain,
+  retryComment: (n: number) => `Try comment ${n} again`,
   notSentHead: NOT_SENT,
   notSent: (why: string) => `${NOT_SENT} ${why.replace(FINAL_STOP, "")}.`,
   notOnHub: "it hasn't reached the hub yet, and is kept on this device",

@@ -9,9 +9,9 @@
  * the session: when the person sends their picks, the session hears that the
  * artifact has new responses ({@link ArtifactServiceDeps.signal}) and reads
  * them itself with `artifact_read`. The person's pins, replies, resolves and
- * ink wait for their Send, which delivers them as one message with their
- * note ({@link ArtifactServiceDeps.deliverMarks}); a sheet's saves and
- * compile errors go by themselves once quiet {@link MARKS_QUIET_MS}.
+ * ink go to the session by themselves once quiet {@link COMMENTS_QUIET_MS},
+ * as one message ({@link ArtifactServiceDeps.deliverMarks}); a sheet's
+ * saves and compile errors go the same way once quiet {@link MARKS_QUIET_MS}.
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -78,7 +78,6 @@ import {
   type SendBody,
   seeChanges,
   seenOf,
-  sendNoteSection,
   type ThreadEntry,
   unheardEntries,
 } from "@cawco/core/comments";
@@ -1177,6 +1176,16 @@ function carryOne(
 export const MARKS_QUIET_MS = 10_000;
 
 /**
+ * How long the person's comments, replies, resolves and ink stay quiet
+ * before they go to the session, since their last one: the owner's pick,
+ * "Go by themselves" (2026-10-23), a few seconds after they're written. Past
+ * the page's own pause before it posts their pictures (preview-overlay
+ * page.ts `PICTURES_AFTER_MS`, 1.5 s), so the delivery carries them. 3 s,
+ * our call.
+ */
+export const COMMENTS_QUIET_MS = 3000;
+
+/**
  * The longest a burst waits from its first mark: someone pinning steadily
  * for a minute is not held back past it. Our call.
  */
@@ -1191,8 +1200,69 @@ export interface MarksDelivery {
   text: string;
 }
 
+/** The person's marks as the journal names them: each pin by number and id, then the loose stroke groups' count. */
+const marksNamed = (pins: Pin[], strokes: number): string =>
+  [
+    ...(pins.length > 0
+      ? [
+          `${pins.length === 1 ? "pin" : "pins"} ${pins.map((pin) => `${pin.number} (${pin.id})`).join(", ")}`,
+        ]
+      : []),
+    ...(strokes > 0
+      ? [`${strokes} ${strokes === 1 ? "stroke group" : "stroke groups"}`]
+      : []),
+  ].join(" and ") || "no marks";
+
 /** Whether someone took a delivery of the marks; why not, when no one did. */
 export type MarksOutcome = { ok: true } | { ok: false; reason: string };
+
+/** Artifact `row` as the journal names it: its id, kind and name. */
+const labelOf = (row: ArtifactRow): string =>
+  `${row.id} (${row.kind} "${row.name}")`;
+
+/** The person's marks on artifact `row` found no session holding it: the journal says they stay owed. */
+const sayNoHolder = (row: ArtifactRow, owed: number) => {
+  if (owed > 0) {
+    console.warn(artifactToolWords.marksUnheld(labelOf(row)));
+  }
+};
+
+/** One delivery of artifact `row`'s marks in the journal: what it carried, for which session, and whether someone took it. */
+const sayDelivery = (
+  row: ArtifactRow,
+  instance: InstanceRow,
+  went: {
+    errors: number;
+    outcome: MarksOutcome;
+    pins: Pin[];
+    retry: boolean;
+    saves: number;
+    strokes: number;
+  }
+) => {
+  const carried = [
+    marksNamed(went.pins, went.strokes),
+    ...(went.errors > 0 ? [`${went.errors} compile error(s)`] : []),
+    ...(went.saves > 0 ? [`${went.saves} save(s)`] : []),
+  ].join(", ");
+  if (went.outcome.ok) {
+    console.log(
+      artifactToolWords.marksDelivered(
+        labelOf(row),
+        carried,
+        instance.id,
+        went.retry
+      )
+    );
+  } else {
+    console.warn(
+      artifactToolWords.marksOwed(
+        `${labelOf(row)} (${carried}, for session ${instance.id})`,
+        went.outcome.reason
+      )
+    );
+  }
+};
 
 /**
  * Where a stage runs: a session's own workspace (a sheet being made), or
@@ -3114,49 +3184,53 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /*
-   * The person's marks (pins, replies, resolves, ink) wait for their Send
-   * ({@link send}): one press delivers everything the session hasn't heard,
-   * with their note, as one message. A sheet's saves and compile errors are
-   * not the person's marks and go by themselves: each pushes its delivery
-   * back to {@link MARKS_QUIET_MS} from now, never past
-   * {@link MARKS_LONGEST_MS} from the burst's first. The page posts its
-   * pictures of the marks it just made beside the doc (sync.ts
-   * `artifactPictures`); they wait for the Send on disk, beside the
-   * artifact's own files ({@link held}), so a hub restart between the
-   * marking and the Send keeps them.
+   * The person's marks (pins, replies, resolves, ink) go to the session by
+   * themselves: each change of theirs pushes the artifact's delivery back to
+   * {@link COMMENTS_QUIET_MS} from now ({@link personMarked}), and one
+   * delivery carries everything the session hasn't heard as one message. A
+   * sheet's saves and compile errors go on the same delivery, pushed back
+   * to {@link MARKS_QUIET_MS}. Neither waits past {@link MARKS_LONGEST_MS}
+   * from the burst's first. The page posts its pictures of the marks it
+   * just made beside the doc (sync.ts `artifactPictures`); they wait for the
+   * delivery on disk, beside the artifact's own files ({@link held}), so a
+   * hub restart between the marking and the delivery keeps them.
    */
   const bursts = new Map<string, { first: number; timer: HubTimer }>();
   const held = heldPictures(deps.root);
   const delivering = new Set<string>();
-  const marked = (id: string) => {
+  const marked = (id: string, quiet = MARKS_QUIET_MS) => {
     const now = Date.now();
     const burst = bursts.get(id);
     deps.lifetime.cancel(burst?.timer);
     const first = burst?.first ?? now;
-    const wait = Math.max(
-      0,
-      Math.min(MARKS_QUIET_MS, first + MARKS_LONGEST_MS - now)
-    );
+    const wait = Math.max(0, Math.min(quiet, first + MARKS_LONGEST_MS - now));
     bursts.set(id, {
       first,
       timer: deps.lifetime.after(wait, () => {
         bursts.delete(id);
         // One delivery at a time: what is still owed when it ends goes next.
         if (delivering.has(id)) {
-          marked(id);
+          marked(id, quiet);
           return;
         }
         delivering.add(id);
-        deliverMarks(id, null)
+        deliverMarks(id)
           .catch((error: unknown) => {
             console.warn(
-              `[artifacts] ${id}: the sheet's saves and errors were not delivered: ${error instanceof Error ? error.message : String(error)}`
+              `[artifacts] ${id}: the person's marks and the sheet's saves and errors were not delivered: ${error instanceof Error ? error.message : String(error)}`
             );
           })
           .finally(() => delivering.delete(id));
       }),
     });
   };
+
+  /**
+   * The person's own change to artifact `id`'s doc (a comment, a reply, a
+   * resolve, a stroke): what of it the session hasn't heard goes once their
+   * changes have stood quiet {@link COMMENTS_QUIET_MS} ({@link marked}).
+   */
+  const personMarked = (id: string) => marked(id, COMMENTS_QUIET_MS);
 
   /**
    * What of the person's marks on an artifact's doc the session has not
@@ -3221,10 +3295,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * What a Send carries of an artifact's doc: with `body.pins` (a comment's
-   * own Send) those comments alone, no picks and no note; else every pick
-   * since the last Send, every mark the session hasn't heard, and the note.
-   * Refused when it would carry nothing.
+   * A comment's Try again: comments `only` of artifact `row`, which a
+   * delivery no one took left owed, go to the session now. Refused while a
+   * delivery is on its way, when none of them is owed, or when no one takes
+   * them (each pin says why again).
+   */
+  const retry = async (row: ArtifactRow, only: ReadonlySet<string>) => {
+    if (!marksOwed(docs.doc(row.id)).owed.some((pin) => only.has(pin.id))) {
+      throw new ArtifactRefusal(
+        409,
+        "Nothing new to send on this comment: the session has heard all of it."
+      );
+    }
+    if (delivering.has(row.id)) {
+      throw new ArtifactRefusal(
+        409,
+        "Its comments are on their way to the session already, so this didn't go."
+      );
+    }
+    delivering.add(row.id);
+    try {
+      const outcome = await deliverMarks(row.id, only);
+      if (outcome !== "nothing" && !outcome.ok) {
+        throw new ArtifactRefusal(
+          503,
+          `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. It's kept; Try again.`
+        );
+      }
+    } finally {
+      delivering.delete(row.id);
+    }
+  };
+
+  /**
+   * What a Send carries of an artifact's doc: every pick since the last
+   * Send, and the note. The person's marks are not its to carry: they go by
+   * themselves ({@link marked}). Refused when it would carry nothing.
    */
   const sendOwes = (
     doc: Doc,
@@ -3232,32 +3338,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     body: SendBody
   ) => {
     const { sentAt } = metaOf(doc);
-    const only = body.pins ? new Set(body.pins) : undefined;
-    const picked =
-      !only &&
-      Object.values(state).some((entry) => !sentAt || entry.at > sentAt);
-    const all = marksOwed(doc);
-    const owed = all.owed.filter((pin) => !only || only.has(pin.id));
-    const marks = owed.length + (only ? 0 : all.loose.length) > 0;
-    const note = only ? null : body.text?.trim() || null;
-    if (only && !marks) {
+    const picked = Object.values(state).some(
+      (entry) => !sentAt || entry.at > sentAt
+    );
+    const note = body.text?.trim() || null;
+    if (!(picked || note)) {
       throw new ArtifactRefusal(
         409,
-        "Nothing new to send on this comment: the session has heard all of it."
+        "Nothing new to send: every pick here has gone to the session."
       );
     }
-    if (!(picked || marks || note)) {
-      throw new ArtifactRefusal(
-        409,
-        "Nothing new to send: every pick and comment here has gone to the session."
-      );
-    }
-    return { only, picked, marks, note };
+    return { picked, note };
   };
 
   /**
-   * A Send no one took, said on each pin it carried (core `Pin.notSent`): the
-   * pin says why, wherever it is shown, and offers Send again until a
+   * A delivery no one took, said on each pin it carried (core `Pin.notSent`):
+   * the pin says why, wherever it is shown, and offers Try again until a
    * delivery carries it ({@link stampDelivered} clears it).
    */
   const notSent = (id: string, owed: Pin[], why: string) => {
@@ -3384,36 +3480,37 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
 
   /**
-   * Delivers what artifact `id` owes its session as one message. On the
-   * person's Send (`send`, with their note): every pin and loose stroke
-   * group the session hasn't heard ({@link marksOwed}), each pin as its
-   * section or its one resolve line with what it carries, the page's
-   * pictures of them, the note first; a sheet's saves and errors with them.
-   * Without a Send (the quiet timer), a sheet's saves and errors alone.
-   * Once someone took it, what went is stamped heard ({@link stampDelivered});
-   * when no one did, it stays owed and the outcome says why (the writer's
-   * transcript keeps it as not sent: server.ts `deliverArtifactMarks`).
-   * Nothing owed, nothing goes (`nothing`).
+   * Delivers what artifact `id` owes its session as one message: every pin
+   * and loose stroke group the session hasn't heard ({@link marksOwed}),
+   * each pin as its section or its one resolve line with what it carries,
+   * the page's pictures of them; a sheet's saves and errors with them. With
+   * `only` (a comment's Try again), those comments alone. Once someone took
+   * it, what went is stamped heard ({@link stampDelivered}); when no one
+   * did, it stays owed, each pin of it says why ({@link notSent}), and the
+   * outcome says why (the writer's transcript keeps it as not sent:
+   * server.ts `deliverArtifactMarks`). Nothing owed, nothing goes
+   * (`nothing`).
    */
   const deliverMarks = async (
     id: string,
-    send: { note: string | null; only?: ReadonlySet<string> } | null
+    only?: ReadonlySet<string>
   ): Promise<MarksOutcome | "nothing"> => {
     const row = db.get(id);
-    const instance = row ? holder(row) : undefined;
-    if (!(row && instance)) {
+    if (!row) {
       held.drop(id);
       return "nothing";
     }
+    const instance = holder(row);
     const doc = docs.doc(id);
     const all = marksOwed(doc);
+    if (!instance) {
+      sayNoHolder(row, all.owed.length + all.loose.length);
+      return "nothing";
+    }
     const { pins, groups } = all;
-    const only = send?.only;
-    // One comment's own Send carries that comment alone: no other pin, no loose ink.
-    const owed = send
-      ? all.owed.filter((pin) => !only || only.has(pin.id))
-      : [];
-    const loose = send && !only ? all.loose : [];
+    // A comment's Try again carries that comment alone: no other pin, no loose ink.
+    const owed = all.owed.filter((pin) => !only || only.has(pin.id));
+    const loose = only ? [] : all.loose;
     const errors = errorsOwed(row, doc);
     const saves = savesOwed(row, doc);
     if (owed.length + loose.length + errors.length + saves.length === 0) {
@@ -3427,7 +3524,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ahead
     );
     const marks = [
-      ...(send?.note ? [sendNoteSection(send.note)] : []),
       ...pinSections(row.id, owed, groups, url, carried),
       ...loose.map((group) =>
         inkSection(group, {
@@ -3443,8 +3539,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       images: images.slice(0, COMMENT_LIMITS.pictures),
       attachments,
     });
+    sayDelivery(row, instance, {
+      pins: owed,
+      strokes: loose.length,
+      errors: errors.length,
+      saves: saves.length,
+      retry: !!only,
+      outcome,
+    });
     if (!outcome.ok) {
-      console.warn(artifactToolWords.marksOwed(id, outcome.reason));
       notSent(id, owed, outcome.reason);
       return outcome;
     }
@@ -4879,7 +4982,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const pins = Object.values(
       doc.getMap("pins").toJSON() as Record<string, Pin>
     ).sort((a, b) => a.number - b.number);
-    const { owed, loose } = marksOwed(doc);
     const answered = pins.filter((pin) => !pin.resolvedAt && newAnswer(pin));
     const facts: ArtifactFacts = {
       ...picksFacts(row, state),
@@ -4893,17 +4995,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .filter((pin) => pin.resolvedAt && newAnswer(pin))
         .map((pin) => ({ pin: pin.number, at: answeredOn(pin) })),
       draft: meta.get("draft") === true,
-      firstUnsentPin: owed[0]?.number ?? null,
       lookedAt: (meta.get("lookedAt") as string | undefined) ?? null,
       pins: pins.length,
       revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
       handed: meta.get(HANDED) === true,
-      unsent:
-        Object.entries(state).filter(
-          ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
-        ).length +
-        owed.length +
-        loose.length,
+      unsent: Object.entries(state).filter(
+        ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
+      ).length,
     };
     factsKept.set(row.id, { facts, mark });
     return heldNext ? { ...facts, handed: true } : facts;
@@ -6460,6 +6558,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
     },
 
+    /** The person changed artifact `id`'s doc: what of it the session hasn't heard goes once quiet ({@link personMarked}). */
+    personMarked,
+
     /**
      * The page's pictures of the marks the person just made there (core
      * `MarkPictures`), each a crop round one mark, by the pin's or the
@@ -6473,17 +6574,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       body: MarkPictures
     ): { held: number } => {
       const row = own(sessionOf(instanceId), id);
-      // On disk before the page hears it was held: a restart keeps it for the Send.
+      // On disk before the page hears it was held: a restart keeps it for the delivery.
       held.hold(row.id, body);
       return { held: held.marks(row.id).length };
     },
 
     /**
      * After a restart: each artifact changed within the last day has its
-     * sheet's saves and errors scheduled again, so those written just before
-     * the hub went down still go (nothing owed, nothing goes). The person's
-     * marks wait for their Send. A day, our call: a hub down longer than
-     * that has a person who has moved on.
+     * delivery scheduled again, so the person's marks and a sheet's saves
+     * and errors written just before the hub went down still go (nothing
+     * owed, nothing goes). A day, our call: a hub down longer than that has
+     * a person who has moved on.
      */
     resumeMarks: (): void => {
       for (const row of db.touchedSince(new Date(Date.now() - 86_400_000))) {
@@ -6492,18 +6593,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The person's Send (the panel's Send, a page's `cawco.send`): one press
-     * sends everything the session hasn't heard of the artifact. Their
-     * comments, replies, resolves and ink go as one message, the note
-     * (`body.text`) its first section, exactly once ({@link deliverMarks});
-     * their picks are applied first (`sending`), and the session hears it
-     * has new responses to read ({@link ArtifactServiceDeps.signal}) when
-     * there are picks, or a note with nothing else. The note is kept as
-     * `sentText` for `artifact_read`. A Send while one is on its way, or
-     * with nothing new, is refused; one no one took says why, and what it
-     * carried stays owed, each pin of it saying why ({@link notSent}).
-     * With `body.pins`, a comment's own Send: those comments alone go, no
-     * picks and no note, and the page's Send time stands.
+     * The person's Send (the panel's Send, a page's `cawco.send`): their
+     * picks are applied (`sending`) and the session hears it has new
+     * responses to read ({@link ArtifactServiceDeps.signal}), the note
+     * (`body.text`) kept as `sentText` for `artifact_read`. Their comments
+     * are not its to carry: they go by themselves ({@link marked}). With
+     * `body.pins`, a comment's Try again after a delivery no one took: those
+     * comments go now ({@link retry}), and the page's Send time stands. A
+     * Send with nothing new is refused.
      */
     send: async (
       instanceId: string,
@@ -6514,40 +6611,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const row = own(instance, id);
       const doc = docs.doc(row.id);
       const state = stateOf(doc);
-      const { only, picked, marks, note } = sendOwes(doc, state, body);
-      if (delivering.has(row.id)) {
-        throw new ArtifactRefusal(
-          409,
-          "A Send is already on its way to the session, so this one didn't go."
-        );
-      }
-      delivering.add(row.id);
-      try {
-        if (picked) {
-          await deps.sending(instance, row, state);
-        }
-        if (marks) {
-          const outcome = await deliverMarks(row.id, {
-            note,
-            ...(only ? { only } : {}),
-          });
-          if (outcome !== "nothing" && !outcome.ok) {
-            throw new ArtifactRefusal(
-              503,
-              `The session didn't get the comments: ${outcome.reason.replace(FINAL_STOP, "")}. They're kept; Send again.`
-            );
-          }
-        }
-        if (picked || !marks) {
-          await deps.signal(instance, row, { since: row.deliveredSeq });
-        }
-      } finally {
-        delivering.delete(row.id);
-      }
-      if (only) {
-        // Not the page's Send: its picks stay owed, its Send time stands.
+      if (body.pins) {
+        await retry(row, new Set(body.pins));
         return { choices: state, ...metaOf(doc) };
       }
+      const { picked, note } = sendOwes(doc, state, body);
+      if (picked) {
+        await deps.sending(instance, row, state);
+      }
+      await deps.signal(instance, row, { since: row.deliveredSeq });
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {
         const meta = live.getMap("meta");

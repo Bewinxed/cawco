@@ -32,9 +32,9 @@
  *    opened at the viewport's edge stays inside it.
  * 4e. The pen's eraser removes the whole strokes it crosses (CDP's mouse has
  *    no eraser button, so these are the page's own PointerEvents, button 5).
- * 5. Nothing of the ink or its pins reaches the session before Send; one
- *    press of the head's Send delivers them (the hub's `deliverMarks`), and
- *    every pin and group has `sentAt`.
+ * 5. The ink and its pins go to the session by themselves, with no Send
+ *    (the hub's `personMarked`, `deliverMarks`): it hears the paragraph's
+ *    and the second paragraph's pins, and every pin and group has `sentAt`.
  * 6. On a canvas a pen stroke is Excalidraw's freedraw (the overlay's layer
  *    draws nothing), the icon stands at its end, and Annotate pins the
  *    element under it by id.
@@ -1206,22 +1206,11 @@ const placeChecks = async (
 };
 
 /**
- * 5. The ink and its pins wait for Send (DESIGN.md, Sending comments): by
- * now the old quiet period has long passed and the session has heard
- * neither pin; one press of the head's Send (artifacts/service.ts
- * `deliverMarks`) and it hears the paragraph's and the second paragraph's
- * pins, and the hub stamps every pin and group.
+ * 5. The ink and its pins go by themselves (DESIGN.md, How comments reach
+ * the session): with no Send, the session hears the paragraph's and the
+ * second paragraph's pins, and the hub stamps every pin and group.
  */
 const deliveredChecks = async (on: On, frame: Frame) => {
-  const marked = (text: string) =>
-    SECTION.test(text) && (text.includes("#para") || text.includes("#second"));
-  const early = heard.filter(marked).length;
-  const before = heard.length;
-  await on.page
-    .locator(
-      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
-    )
-    .click({ timeout: 10_000 });
   const stamped = await until(
     "sentAt on the doc, from the hub's delivery",
     () => docOf(frame),
@@ -1230,15 +1219,14 @@ const deliveredChecks = async (on: On, frame: Frame) => {
       Object.values(doc.ink).every((group) => !!group.sentAt),
     60_000
   ).catch(() => docOf(frame));
-  const told = heard.slice(before).filter((text) => SECTION.test(text));
+  const told = heard.filter((text) => SECTION.test(text));
   on.kit.check(
-    "5: nothing of the ink or its pins reaches the session before Send; the head's Send delivers them (it hears #para's and #second's pins) and every pin and group is stamped sentAt",
-    early === 0 &&
-      told.some((text) => text.includes("#para")) &&
+    "5: with no Send, the ink and its pins go by themselves (the session hears #para's and #second's pins) and every pin and group is stamped sentAt",
+    told.some((text) => text.includes("#para")) &&
       told.some((text) => text.includes("#second")) &&
       Object.values(stamped.pins).every((pin) => !!pin.sentAt) &&
       Object.values(stamped.ink).every((group) => !!group.sentAt),
-    `before Send ${early}; heard ${told.length} delivery message(s) after; pins ${Object.values(
+    `heard ${told.length} delivery message(s); pins ${Object.values(
       stamped.pins
     )
       .map((pin) => !!pin.sentAt)

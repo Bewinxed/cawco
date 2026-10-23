@@ -24,7 +24,7 @@ export type ArtifactReason =
   | { kind: "unopened" }
   /** A decision page's picks: `made` of `asked`. */
   | { asked: number; kind: "picks"; made: number }
-  /** Picks, notes, pins and ink written and not sent (the panel's Send count). */
+  /** Picks and notes written and not sent (the panel's Send count); comments go by themselves. */
   | { count: number; kind: "unsent" }
   /** Open pins with an agent's answer newer than the person's look; `pin` the first by number. */
   | { count: number; kind: "answer"; pin: number };
