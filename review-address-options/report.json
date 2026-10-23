@@ -1,0 +1,2018 @@
+{
+ "chromium-1440-light": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 1440,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 468,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 348,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 637,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 400,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 426,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 468,
+    "more": false
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   }
+  ]
+ },
+ "chromium-1440-dark": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 1440,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 468,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 348,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 637,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 400,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 426,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 468,
+    "more": false
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   }
+  ]
+ },
+ "chromium-680-light": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 680,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 467,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 347,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 636,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 373,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 424,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 467,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 200,
+    "h": 203,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   }
+  ]
+ },
+ "chromium-680-dark": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 680,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 467,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 347,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 636,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 373,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 424,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 467,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 200,
+    "h": 203,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   }
+  ]
+ },
+ "chromium-390-light": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 390,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 466,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 364,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 653,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 372,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 423,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 484,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   }
+  ]
+ },
+ "chromium-390-dark": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 390,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 466,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 364,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 653,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 372,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 423,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 484,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   }
+  ]
+ },
+ "webkit-1440-light": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 1440,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 467,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 348,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 637,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 400,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 426,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 467,
+    "more": false
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 90,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   }
+  ]
+ },
+ "webkit-1440-dark": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 1440,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 467,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 348,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 637,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 400,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 426,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live",
+    "frameW": 988,
+    "contentW": 988,
+    "h": 467,
+    "more": false
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 90,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 249,
+    "h": 168,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   }
+  ]
+ },
+ "webkit-680-light": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 680,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 466,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 347,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 636,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 373,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 424,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 466,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 90,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 200,
+    "h": 203,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   }
+  ]
+ },
+ "webkit-680-dark": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 680,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 466,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 347,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 636,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 373,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 398,
+    "contentW": 398,
+    "h": 424,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 388,
+    "contentW": 388,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 586,
+    "contentW": 988,
+    "h": 466,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 544,
+    "h": 90,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 544,
+    "h": 72,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 544,
+    "h": 116,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 200,
+    "h": 177,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 200,
+    "h": 203,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   }
+  ]
+ },
+ "webkit-390-light": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 390,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 465,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 364,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 654,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 372,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 423,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 484,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.993 0.004 85)",
+    "bd": "oklch(0.89 0.013 82)"
+   }
+  ]
+ },
+ "webkit-390-dark": {
+  "errs": [],
+  "fonts": [
+   "Figtree Variable",
+   "JetBrains Mono Variable"
+  ],
+  "overflowX": false,
+  "sw": 390,
+  "imgs": 0,
+  "shots": [
+   {
+    "cap": "Desk Settings › Addresses · live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 465,
+    "more": true
+   },
+   {
+    "cap": "Desk Settings › Addresses · the obstacle fold · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 364,
+    "more": true
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the offer",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the Needs-you row · the sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 165,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · sign-in",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 257,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · joining",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 182,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · Headscale approve",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 241,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · live",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Phone CawCo app · the sign-in step",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 297,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · two panes and the device list · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 654,
+    "more": true
+   },
+   {
+    "cap": "Phone The page the QR opens · success",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 372,
+    "more": false
+   },
+   {
+    "cap": "Phone The page the QR opens · failure",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 423,
+    "more": false
+   },
+   {
+    "cap": "Desk Caw's panel · the live step with Open on a phone",
+    "frameW": 390,
+    "contentW": 390,
+    "h": 221,
+    "more": false
+   },
+   {
+    "cap": "Desk Settings › Addresses · Option 1's row, live · scroll sideways for the rest",
+    "frameW": 390,
+    "contentW": 980,
+    "h": 484,
+    "more": true
+   }
+  ],
+  "picks": [
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "1 Option 1: The address is one",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "2 Option 2: Caw walks you thro",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "3 Option 3: Prove it from the ",
+    "w": 362,
+    "h": 107,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   },
+   {
+    "t": "Recommended 4 The architect's ",
+    "w": 362,
+    "h": 133,
+    "bg": "oklch(0.248 0.006 70)",
+    "bd": "oklch(0.352 0.009 70)"
+   }
+  ]
+ }
+}
