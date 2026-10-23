@@ -24,9 +24,10 @@
  *   with the three declared steps passing, and the stand-in recorded
  *   `install --frozen-lockfile`, `run lint:changed` and `run typecheck`, each
  *   run in a clone, not the project's checkout.
- * - A, on OpenCode and pi: a delegate on each runs the same install through
- *   its harness's shell tool, recorded in its own clone, so every harness's
- *   sessions see the same bun.
+ * - A, on OpenCode and pi: a delegate on each says which bun its shell finds
+ *   (`command -v bun`, the stand-in) and runs the same install through its
+ *   harness's shell tool (OpenCode's `shell`, pi's `bash`), recorded in its
+ *   own clone, so every harness's sessions see the same bun.
  * - B, a sheet's stage: a session in a Vite + Svelte checkout (its bun.lock,
  *   nothing installed) makes a component canvas; its stage is live, and the
  *   stand-in recorded the stage clone's `install --frozen-lockfile` and the
@@ -40,7 +41,9 @@
  * - C, the landing gate: a second delegate commits and finishes; its
  *   finish_item answer says it did not land, its first step `bun install
  *   --frozen-lockfile` failing with exit 127, the shell's "no such command",
- *   and its item is still running.
+ *   and it does not land: not done, its commit not on main (what the
+ *   delegate does after is its own; the hub fails an item that ends three
+ *   turns without finish_item).
  * - D, a sheet's stage: a session in a Vite + Svelte checkout that installs
  *   with npm makes a component canvas; artifact_create is refused with the
  *   stage's line, that it runs on this machine's own bun and its PATH has
@@ -126,22 +129,31 @@ const tool = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
+/** The shell as each harness names it: Claude Code's Bash, pi's bash, OpenCode's shell. */
+const SHELLS = ["Bash", "bash", "shell"];
+
+/** What a delegate's shell says of the `bun` it finds, before it installs: `BUN-AT:<path>`. */
+const BUN_AT = /BUN-AT:(\/[^\s"\\]*)/;
+/** And of its PATH: `PATH-AT:<PATH>`. */
+const PATH_AT = /PATH-AT:(\/[^\s"\\]*)/;
+
 /**
- * An OpenCode or pi delegate's turns: the project's install through its
- * harness's own shell tool (`bash` on both), then done.
+ * An OpenCode or pi delegate's turns: the bun its shell finds, then the
+ * project's install, through its harness's own shell tool, then done. Its
+ * result is read from the request's body, where every harness's tool results
+ * are; the call's own words spell each marker apart.
  */
 const installTurn = (request: Seen, tag: "O" | "P"): Reply => {
-  const shell = request.toolNames.find((name) => name.toLowerCase() === "bash");
-  if (request.all.includes(`INSTALLED-${tag}`) || !shell) {
-    return text(shell ? "done" : "no shell tool offered");
+  const shell = SHELLS.find((name) => request.toolNames.includes(name));
+  if (request.body.includes(`INSTALLED-${tag}`) || !shell) {
+    return text(
+      shell ? "done" : `no shell is offered: ${request.toolNames.join(", ")}`
+    );
   }
-  const command = `${INSTALL}; echo ${apart(`INSTALLED-${tag}`)}`;
-  return tool(
-    shell,
-    tag === "P"
-      ? { command }
-      : { command, description: "Install the project's dependencies" }
-  );
+  return tool(shell, {
+    command: `echo ${apart("BUN-AT")}:"$(command -v bun)"; echo ${apart("PATH-AT")}:"$PATH"; ${INSTALL}; echo ${apart(`INSTALLED-${tag}`)}`,
+    description: "Install the project's dependencies",
+  });
 };
 
 /** A Claude Code delegate's turns: A installs first, then each commits its file and finishes once. */
@@ -460,12 +472,14 @@ const run = async (kit: Kit) => {
     // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time, each install told apart by the clones before it
     const clonesBefore = new Set((await calls()).map((one) => one.pwd));
     await delegate(tag, harness);
-    await until(
+    const result = await until(
       `${tag}'s install ran`,
-      () => fleet.seen.some((one) => one.all.includes(`INSTALLED-${tag}`)),
+      () => fleet.seen.find((one) => one.body.includes(`INSTALLED-${tag}`)),
       Boolean,
       600_000
-    ).catch(() => false);
+    ).catch(() => undefined);
+    const found = result ? BUN_AT.exec(result.body)?.[1] : undefined;
+    const path = result ? PATH_AT.exec(result.body)?.[1] : undefined;
     const own = (await calls()).filter(
       (one) =>
         one.args === argsOf(INSTALL) &&
@@ -474,8 +488,8 @@ const run = async (kit: Kit) => {
     );
     check(
       `A: a ${harness} delegate's \`${INSTALL}\` in its workspace ran the PATH's bun, in its own clone`,
-      own.length === 1,
-      callsSaid(await calls())
+      found === standIn && own.length >= 1,
+      `its shell found bun at ${found ?? (result ? "none" : "(it never ran)")}, the stand-in is ${standIn}; its PATH ${path ?? "unread"}; ${callsSaid(await calls())}`
     );
   }
 
@@ -555,10 +569,21 @@ const run = async (kit: Kit) => {
       .some((line) => line.startsWith(`- ${INSTALL}: fail (exit 127`)),
     short(said) || "no answer read"
   );
+  // What the delegate does once it is refused is its own (the hub fails an
+  // item that ends three turns without finish_item); that it did not land is
+  // the gate's, with no bun to run its install.
+  const cRow = itemOf(c.workItemId);
+  const mainLog = (
+    await Bun.$`git log --format=%s main`
+      .cwd(join(fleet.sandbox, "hub", "git", `${project.id}.git`))
+      .nothrow()
+      .quiet()
+      .text()
+  ).split("\n");
   check(
-    "C: its item is still running",
-    itemOf(c.workItemId)?.state === "running",
-    JSON.stringify(itemOf(c.workItemId))
+    "C: its item did not land: not done, and its commit is not on main",
+    cRow?.state !== "done" && !mainLog.includes("Delegate commit C"),
+    `${JSON.stringify(cRow)}; main: ${mainLog.filter(Boolean).join(" | ")}`
   );
 
   // D: a sheet's stage refuses with its line.
