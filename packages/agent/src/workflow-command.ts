@@ -557,14 +557,94 @@ const BUSY_LOOK_MS = 2000;
  * (`.vscode`, `.gitmodules`, …) are not denied (workspace-policy.ts
  * `cloneDenies`, `srt`); on Linux srt binds them read-only too.
  */
-const denyPathspecs = async (workspace: WorkspaceRef): Promise<string[]> => {
+const denyPathspecs = async (
+  workspace: WorkspaceRef,
+  which: "boundary" | "config" = "boundary"
+): Promise<string[]> => {
   const clone = await realpath(workspace.path);
   return (await workspaceDenies(workspace))
-    .filter((deny) => process.platform === "linux" || !deny.srt)
+    .filter(
+      (deny) =>
+        !deny.srt || (which === "boundary" && process.platform === "linux")
+    )
     .map((deny) => relative(clone, deny.path))
     .filter((path) => path !== ".git" && !path.startsWith(".git/"))
     .map((path) => `':(literal)${path}'`);
 };
+
+/**
+ * The harness project config that commits no branch of `workspace`'s
+ * origin holds change, of those reachable from `revs` there: `.mcp.json`,
+ * OpenCode's config, Claude Code's project settings, hooks, commands,
+ * agents and the placed skills (workspace-policy.ts `cloneDenies`, srt's
+ * own names aside), by path. A host harness loads them at a workspace's next
+ * session, outside any boundary, so no workspace writes them, and no commit
+ * of one carries them into a worktree either: a commit that changed them
+ * through git's index alone (`git update-index --cacheinfo`, no file
+ * written) would otherwise reach a worktree the host checks out, a `from`
+ * cut's or a landing's, and its next session would run what they name.
+ * What origin holds (the person's own commits, what landed) is never
+ * counted, and the net change is what counts: a path a later commit puts
+ * back as origin has it is no change. Against each commit origin holds where
+ * `rev`'s own commits begin (`git rev-list --boundary`), a path counts only
+ * when it differs from all of them; a history that shares none with origin
+ * is read against the empty tree. Answers why a read failed, inside the
+ * boundary, as an error.
+ */
+export const ownConfigChanges = async (
+  workspace: WorkspaceRef,
+  revs: readonly string[]
+): Promise<string[]> => {
+  const paths = (await denyPathspecs(workspace, "config")).join(" ");
+  const changed = new Set<string>();
+  for (const rev of revs) {
+    if (!MOVE_TARGET.test(rev)) {
+      throw new Error(`"${rev}" is no commit name`);
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: a move names one or two commits
+    const listed = await insideRead(
+      workspace,
+      `git rev-list --boundary ${rev} --not --remotes=origin`
+    );
+    if (!listed.ok) {
+      throw new Error(listed.why);
+    }
+    const own = listed.out.split("\n").filter(Boolean);
+    if (own.length === 0) {
+      continue;
+    }
+    const bases = own
+      .filter((line) => line.startsWith("-"))
+      .map((line) => line.slice(1));
+    const against = bases.length > 0 ? bases : [EMPTY_TREE];
+    let differs: Set<string> | undefined;
+    for (const base of against) {
+      // biome-ignore lint/performance/noAwaitInLoops: a branch's own commits begin at one commit of origin's, a merge's at a few
+      const read = await insideRead(
+        workspace,
+        `git diff --name-only -z ${base} ${rev} -- ${paths}`
+      );
+      if (!read.ok) {
+        throw new Error(read.why);
+      }
+      const names = new Set(namesIn(read.out));
+      differs = differs
+        ? new Set([...differs].filter((name) => names.has(name)))
+        : names;
+    }
+    for (const name of differs ?? []) {
+      changed.add(name);
+    }
+  }
+  return [...changed].sort();
+};
+
+/** git's empty tree: what a history that shares no commit with origin is read against. */
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/** The refusal of commits that change `paths` ({@link ownConfigChanges}), in words. */
+export const ownConfigWords = (paths: readonly string[]): string =>
+  `its commits change ${paths.join(", ")} from what origin holds: harness project config a host session loads outside any boundary, which no workspace's commit changes. Put each back as origin has it in a new commit (\`git update-index --cacheinfo\` to origin's blob, or \`git rm --cached\` one origin does not track), then try again`;
 
 /** A read inside `workspace`'s boundary: git's stdout, or why it failed. */
 const insideRead = async (
@@ -604,7 +684,9 @@ const namesIn = (out: string): string[] =>
  * runs inside as any command does. Any other runs with git on this host
  * ({@link onHost}), as a first cut checks out before its boundary exists.
  * Either way, a move that ends 0 with a deny path the worktree holds other
- * than its HEAD does fails, naming them: nothing is dropped quietly.
+ * than its HEAD does fails, naming them: nothing is dropped quietly. Before
+ * any of it, a move of a HEAD or to a commit whose own commits change
+ * harness project config ({@link ownConfigChanges}) does not run.
  */
 const movedCommand = async (
   cwd: string,
@@ -616,6 +698,23 @@ const movedCommand = async (
   const target = run.moves ?? "";
   if (!MOVE_TARGET.test(target)) {
     throw new Error(`runCommand cannot move to "${target}": no commit name`);
+  }
+  let own: string[];
+  try {
+    own = await ownConfigChanges(workspace, ["HEAD", target]);
+  } catch (error) {
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+    };
+  }
+  if (own.length > 0) {
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: `CawCo: the move did not run: ${ownConfigWords(own)}.\n`,
+    };
   }
   const paths = (await denyPathspecs(workspace)).join(" ");
   const touched = await insideRead(

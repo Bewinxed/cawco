@@ -319,8 +319,8 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   ): string => {
     const result = item.taskResult;
     const setUp = at.patch
-      ? `run \`git checkout --detach ${at.head} && git apply --binary "$TMPDIR/inputs/${PATCH}"\` first: the commit, then what the builder has not committed yet. Read the changes with \`git diff origin/${base}\` and \`git status\`.`
-      : `run \`git checkout --detach ${at.head}\` first, then read the changes with \`git diff origin/${base}...${at.head}\`.`;
+      ? `Your clone is checked out at it, detached. Run \`git apply --binary "$TMPDIR/inputs/${PATCH}"\` first: what the builder has not committed yet. Read the changes with \`git diff origin/${base}\` and \`git status\`.`
+      : `Your clone is checked out at it, detached. Read the changes with \`git diff origin/${base}...${at.head}\`.`;
     return [
       `${VERIFIER_BRIEF} for project “${project}”. A builder session handed in ${task.id} “${task.title}”. Before the person sees it, you judge it against the project's design system. You never edit or fix the work: you judge, and the builder fixes.`,
       `## The work\n\nThe builder's work sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp}\n\nThe task:\n\n${task.description.trim() || "(no description)"}\n\nThe builder's hand-in:\n\n${result?.summary.trim() || "(none)"}\n\nWhat it shows:\n\n${artifactsOf(result?.artifacts ?? [], deps.artifact)}`,
@@ -337,8 +337,8 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     at: Snapshot
   ): string => {
     const setUp = at.patch
-      ? `run \`git checkout --detach ${at.head} && git apply --binary "$TMPDIR/inputs/${PATCH}"\` first: the commit, then what is not committed yet.`
-      : `run \`git checkout --detach ${at.head}\` first.`;
+      ? `Your clone is checked out at it, detached. Run \`git apply --binary "$TMPDIR/inputs/${PATCH}"\` first: what is not committed yet.`
+      : "Your clone is checked out at it, detached.";
     return [
       `${VERIFIER_BRIEF}. A session asked you, in a chat, to judge its ${artifact.kind} “${artifact.name}” against the project's design system. You never edit or fix the work: you judge, and the session fixes.`,
       `## The work\n\nIt sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp} Its states files: ${artifact.files.map((file) => `\`${file}\``).join(", ") || "(none named)"}.`,
@@ -381,6 +381,10 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
           machineId: workspace.machineId,
           origin: brief.origin,
           canDelegate: false,
+          // Checked out by the hub before the verifier starts, as a move: a
+          // commit that changes a path the boundary keeps is written on the
+          // host, never dropped by the verifier's own checkout.
+          detachAt: at.head,
           ...(at.patch ? { inputs: [at.patch] } : {}),
         },
         verifierParent({

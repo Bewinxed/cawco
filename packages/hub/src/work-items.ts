@@ -685,6 +685,12 @@ export interface WorkItemRequest {
   /** The repository a new workspace is cut from; the parent's directory by default. */
   cwd?: string;
   /**
+   * The commit a new workspace's worktree is moved to, detached, before its
+   * session starts ({@link detachNew}): a design check's verifier's judged
+   * commit (design-verify.ts). Set by the hub alone.
+   */
+  detachAt?: string;
+  /**
    * The item's session forks its parent's conversation as it stands now, on
    * the parent's harness and model so the parent's prompt cache still holds.
    * Always a new workspace.
@@ -4394,6 +4400,39 @@ export const createWorkItems = ({
     }
   };
 
+  /**
+   * A new workspace's worktree moved to commit `at`, detached, before its
+   * session starts: a move (`CommandOptions.moves`), so a commit that
+   * changes a path the boundary keeps is checked out on the machine's host
+   * and none is dropped. Its session's own checkout there would fail on such
+   * a path, or, without `--force`, exit 0 with the file gone. One that fails
+   * archives the workspace, unworked, and throws why.
+   */
+  const detachNew = async (
+    workspace: WorkspaceRow,
+    at: string
+  ): Promise<void> => {
+    const moved = await command(
+      workspace.machineId,
+      workspace.path,
+      `${SAFE_GIT_SHELL}git checkout --quiet --detach ${quote(at)}`,
+      GIT_TIMEOUT_MS,
+      refOf(workspace),
+      { moves: at }
+    ).catch((error: unknown) => ({
+      exitCode: 1,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+    }));
+    if (moved.exitCode === 0) {
+      return;
+    }
+    await closeWorkspace(workspace, "unmade");
+    throw new Error(
+      `Workspace ${handle(workspace.id)} could not be moved to ${at.slice(0, 9)}, so it was archived: ${(moved.stderr || moved.stdout).trim() || `exit ${moved.exitCode}`}`
+    );
+  };
+
   /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
   const targetMachine = (request: WorkItemRequest, parent: Parent): string => {
     const machineId = request.machineId ?? parent.machineId;
@@ -5201,6 +5240,9 @@ export const createWorkItems = ({
     );
     if (source) {
       await cutFrom(workspace, source);
+    }
+    if (request.detachAt) {
+      await detachNew(workspace, request.detachAt);
     }
     if (projectId) {
       recordRepository(projectId, workspace);
