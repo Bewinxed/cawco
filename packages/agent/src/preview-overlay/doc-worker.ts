@@ -29,7 +29,8 @@ import {
 } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
 import { IndexeddbPersistence } from "y-indexeddb";
-import { WebsocketProvider } from "y-websocket";
+import { readAuthMessage } from "y-protocols/auth";
+import { messageAuth, WebsocketProvider } from "y-websocket";
 import {
   AbstractType,
   applyUpdate,
@@ -39,9 +40,6 @@ import {
   type Map as YMap,
 } from "yjs";
 import type { ChangeOrigin, FromWorker, ToWorker, WriteOp } from "./doc-wire";
-
-/** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
-const REFUSED = 4400;
 
 /** Attempts in a row that never opened, after which the link is said lost. */
 const STALLS_LOST = 2;
@@ -327,6 +325,16 @@ const connect = () => {
       post({ type: "synced" });
     }
   });
+  // The hub's word that it would not keep a write of the page's (hub
+  // artifacts/sync.ts `refusal`, y-protocols' permission denied): its socket
+  // stays, and nothing more this client sends is kept there.
+  own.messageHandlers[messageAuth] = (_encoder, decoder) =>
+    readAuthMessage(decoder, doc, (_doc, reason) => {
+      if (own === provider) {
+        // Out of y-websocket's own message handling first.
+        queueMicrotask(() => refused(reason));
+      }
+    });
   own.on("connection-close", (event) => {
     if (own !== provider || stalls.reopening() || silence.reopening()) {
       return;
@@ -336,26 +344,31 @@ const connect = () => {
       kept?.clearData().catch(() => undefined);
       kept = null;
     }
-    if (event?.code !== REFUSED) {
-      post({ type: "lost", error: closedBecause(host, event), silent: false });
-      return;
-    }
-    // What the page wrote the hub would not keep: start again from the
-    // hub's, the device's copy of it cleared first so it never comes back.
-    // The page keeps aside the person's comments the hub doesn't hold.
-    const refusedCopy = kept;
-    const pins = doc.getMap("pins").toJSON();
-    replaceDoc(generation + 1);
-    post({ type: "refused", generation, pins, reason: event.reason });
-    (refusedCopy?.clearData() ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() => {
-        if (provider === null) {
-          keepOnDevice();
-          connect();
-        }
-      });
+    post({ type: "lost", error: closedBecause(host, event), silent: false });
   });
+};
+
+/**
+ * What the page wrote the hub would not keep: the page keeps aside the
+ * person's comments the hub doesn't hold, and the worker goes on from the
+ * hub's doc in a fresh one, a new Yjs client on a socket of its own (Yjs
+ * takes one client's updates in clock order only, so the old one's would
+ * all wait on the refused write), the device's copy of the old one cleared
+ * first so the refused write never comes back into it.
+ */
+const refused = (reason: string) => {
+  const refusedCopy = kept;
+  const pins = doc.getMap("pins").toJSON();
+  replaceDoc(generation + 1);
+  post({ type: "refused", generation, pins, reason });
+  (refusedCopy?.clearData() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => {
+      if (provider === null) {
+        keepOnDevice();
+        connect();
+      }
+    });
 };
 
 /** The page's writes, in one transaction, as plain values. */

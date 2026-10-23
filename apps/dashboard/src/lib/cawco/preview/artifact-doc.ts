@@ -12,6 +12,7 @@ import {
   seeChanges,
   seenOf,
   seePin,
+  type ThreadEntry,
 } from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
@@ -23,7 +24,8 @@ import {
 } from "@cawco/core/doc-link";
 import type { StageState, StageUnreached } from "@cawco/core/stage";
 import { IndexeddbPersistence } from "y-indexeddb";
-import { WebsocketProvider } from "y-websocket";
+import { readAuthMessage } from "y-protocols/auth";
+import { messageAuth, WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 
@@ -206,8 +208,32 @@ export const retryComment = (
     "so the comment didn't go. Try again."
   );
 
-/** The hub's close code for an update it would not keep (hub artifacts/sync.ts `REFUSED`). */
-const REFUSED = 4400;
+/** The person's entries in pin `pin`'s thread that a refused write of the pane's held and the hub's doc does not. */
+export interface RefusedEntries {
+  entries: ThreadEntry[];
+  pin: string;
+}
+
+/**
+ * What of the person's the pane held in `pins` before a refused write that
+ * `doc`, the hub's after it, does not: each of their entries in a thread
+ * the hub still holds. A pin the hub holds none of is the page's to keep
+ * (overlay artifact.ts `keepRefused`), or deleted.
+ */
+const lostEntries = (pins: Record<string, Pin>, doc: Doc): RefusedEntries[] => {
+  const held = doc.getMap("pins");
+  return Object.values(pins).flatMap((pin) => {
+    const now = held.get(pin.id) as Pin | undefined;
+    if (!now) {
+      return [];
+    }
+    const has = new Set(now.thread.map((entry) => entry.id));
+    const entries = pin.thread.filter(
+      (entry) => entry.by === "person" && !has.has(entry.id)
+    );
+    return entries.length > 0 ? [{ pin: pin.id, entries }] : [];
+  });
+};
 
 /**
  * Joins the artifact's doc: `changed` hears every view of it, each sync's
@@ -216,17 +242,20 @@ const REFUSED = 4400;
  * doc-link.ts says: y-websocket's resync is its keepalive, a drop is
  * reopened by y-websocket itself and resyncs, an attempt that never opens
  * is tried again, and an open socket silent for core `SILENT_MS` is said
- * down at once and opened again. A write of the pane's the hub would not keep closes the
- * socket with {@link REFUSED}, which y-websocket never reopens: the pane
- * starts again from the hub's doc, as the page's overlay does, and
- * `refused` hears the hub's reason.
+ * down at once and opened again. A write of the pane's the hub would not
+ * keep is said on the socket, which stays (hub artifacts/sync.ts
+ * `refusal`): `refused` hears the hub's reason and the pins as the pane
+ * held them, so the person's refused writes are kept aside; then the pane
+ * goes on in a fresh doc, a new Yjs client, on a socket of its own, as the
+ * page's overlay does (Yjs takes one client's updates in clock order only,
+ * so the old one's would all wait on the refused write).
  */
 export function joinArtifact(
   instanceId: string,
   artifactId: string,
   changed: (view: ArtifactView) => void,
   synced: (sync: DocSync) => void,
-  refused: (why: string) => void
+  refused: (why: string, lost: RefusedEntries[]) => void
 ): ArtifactDoc {
   // The hub's `/ws/artifact/<session>/<artifact>`, through the dashboard's
   // own `/ws` relay: never the preview's origin, which is the page's.
@@ -234,6 +263,8 @@ export function joinArtifact(
   let held = false;
   /** The pane let it go: a rejoin still queued doesn't start. */
   let gone = false;
+  /** A refusal's reason and the pins as the refused doc held them, until the fresh doc has the hub's ({@link lostEntries}). */
+  let refusing: { pins: Record<string, Pin>; why: string } | null = null;
   /** The pane is closing its own socket (Try again, a rejoin, its end): not a drop. */
   let closingOurs = false;
   /** Running from a drop until a sync: says the link down at its end. */
@@ -336,19 +367,27 @@ export function joinArtifact(
       }
       clearDown();
       changed(viewOf(into));
+      // The hub's doc is in after a refusal: what of the person's it holds
+      // not is theirs to keep aside.
+      if (refusing && into === doc) {
+        refused(refusing.why, lostEntries(refusing.pins, into));
+        refusing = null;
+      }
       if (!held || lost) {
         held = true;
         lost = false;
         synced({ state: "synced" });
       }
     });
+    // The hub's word that it would not keep a write of the pane's (hub
+    // artifacts/sync.ts `refusal`, y-protocols' permission denied).
+    joined.messageHandlers[messageAuth] = (_encoder, decoder) =>
+      readAuthMessage(decoder, into, (_doc, reason) => {
+        if (joined === provider) {
+          refusedBy(reason, into);
+        }
+      });
     joined.on("connection-close", (event: CloseEvent | null) => {
-      if (event?.code === REFUSED) {
-        refused(refusedWhy(event));
-        // Out of y-websocket's own close handling first, then a doc of the hub's.
-        queueMicrotask(again);
-        return;
-      }
       // The artifact was removed: nothing of it is kept on the device, and it is no drop to say.
       if (event?.code === ARTIFACT_GONE) {
         kept?.clearData().catch(() => undefined);
@@ -364,7 +403,7 @@ export function joinArtifact(
     });
     // A close y-websocket won't reopen (4400–4499): the hub refused the link, said at once.
     joined.on("closed", (close) => {
-      if (close.code !== REFUSED && !held) {
+      if (!held) {
         clearDown();
         synced({ state: "failed", why: refusedWhy(close) });
       }
@@ -373,8 +412,24 @@ export function joinArtifact(
   }
 
   /**
-   * What the pane wrote the hub would not keep: start again from the hub's
-   * doc, the device's copy of it cleared first so it never comes back.
+   * The hub would not keep a write of the pane's: the reason and the pins
+   * as `from` held them go to `refused`, which keeps the person's refused
+   * writes aside, and the pane goes on in a fresh doc ({@link again}).
+   */
+  function refusedBy(reason: string, from: Doc) {
+    const said = reason.trim() || "The hub didn't keep it.";
+    refusing = {
+      why: ENDS_SENTENCE.test(said) ? said : `${said}.`,
+      pins: from.getMap("pins").toJSON() as Record<string, Pin>,
+    };
+    // Out of y-websocket's own message handling first.
+    queueMicrotask(again);
+  }
+
+  /**
+   * After a refused write: a fresh doc of the hub's, a new Yjs client on a
+   * socket of its own, the device's copy of the old one cleared first so
+   * the refused write never comes back into it.
    */
   function again() {
     if (gone) {

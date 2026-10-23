@@ -23,6 +23,7 @@
     type PreviewMode,
     pinProblem,
     previewMode,
+    type ThreadEntry,
   } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
   import {
@@ -129,7 +130,7 @@
   import { sideExpand } from "../side/expand";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
-  import { readJson, store, stored, writeJson } from "../storage";
+  import { readJson, store, stored, unstore, writeJson } from "../storage";
   import { toast } from "../toasts";
   import { afterPaint, warm } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
@@ -142,6 +143,7 @@
     LINK_DOWN_MS,
     type ListHold,
     NOT_REACHING,
+    type RefusedEntries,
     retryComment,
     sendArtifact,
   } from "./artifact-doc";
@@ -932,8 +934,50 @@
    * words, resolve and delete go through the page ({@link onlyOnPage}).
    */
   let pagePins = $state.raw<Record<string, Pin>>({});
+  /**
+   * The person's replies of the pane's the hub refused (artifact-doc.ts
+   * `refusedBy`), by pin: each entry as written, and the hub's reason. Kept
+   * on the device apart from the doc, as the page keeps its refused
+   * comments (overlay artifact.ts `keepRefused`), and drawn in their
+   * thread where they stood, unsent, with the reason and Try again
+   * ({@link retryPin}). A reload keeps them.
+   */
+  let refusedReplies = $state.raw<
+    Record<string, { entries: ThreadEntry[]; why: string }>
+  >({});
+  const refusedKey = (id: string) => `cawco-refused-replies:${id}`;
+  /** `next` as the pane keeps it, on the device too. */
+  function keepReplies(
+    id: string,
+    next: Record<string, { entries: ThreadEntry[]; why: string }>
+  ) {
+    refusedReplies = next;
+    if (Object.keys(next).length > 0) {
+      writeJson(refusedKey(id), next);
+    } else {
+      unstore("local", refusedKey(id));
+    }
+  }
+  /** A refusal's entries the hub doesn't hold, kept aside with its reason. */
+  function keepRefused(id: string, why: string, lost: RefusedEntries[]) {
+    const next = { ...refusedReplies };
+    for (const { pin, entries } of lost) {
+      const was = next[pin]?.entries ?? [];
+      const ids = new Set(entries.map((entry) => entry.id));
+      next[pin] = {
+        entries: [...was.filter((entry) => !ids.has(entry.id)), ...entries],
+        why,
+      };
+    }
+    keepReplies(id, next);
+  }
   const pins = $derived.by(() => {
-    const held = view?.pins ?? [];
+    const held = (view?.pins ?? []).map((pin) => {
+      const refused = refusedReplies[pin.id];
+      return refused
+        ? { ...pin, thread: [...pin.thread, ...refused.entries] }
+        : pin;
+    });
     const known = new Set(held.map((pin) => pin.id));
     const more = Object.values(pagePins).filter((pin) => !known.has(pin.id));
     return more.length > 0
@@ -1334,6 +1378,7 @@
     pageSilent = false;
     pagePins = {};
     pageWords.clear();
+    refusedReplies = readJson(refusedKey(id), {});
     const joined = joinArtifact(
       session,
       id,
@@ -1353,9 +1398,11 @@
       (sync) => {
         docSync = sync;
       },
-      // The hub didn't keep a write of the pane's: said where the page's own refusals are.
-      (why) => {
+      // The hub didn't keep a write of the pane's: said where the page's own
+      // refusals are, and the person's words in it kept aside in their thread.
+      (why, lost) => {
         failure = { message: why, again: null };
+        keepRefused(id, why, lost);
       }
     );
     doc = joined;
@@ -1411,6 +1458,7 @@
    * closed its link, else that it hasn't yet), kept on the device meanwhile.
    */
   const notSentWhy = (pin: Pin): string | null =>
+    refusedReplies[pin.id]?.why ??
     pin.notSent?.why ??
     (onlyOnPage(pin.id) ? (linkDown ?? commentWords.notOnHub) : null);
   /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
@@ -1448,7 +1496,9 @@
     }
     pinsRetrying = new Set([...pinsRetrying, id]);
     try {
-      if (onlyOnPage(id)) {
+      if (refusedReplies[id]) {
+        retryRefused(artifact.id, id);
+      } else if (onlyOnPage(id)) {
         // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
         post({ type: "cawco:resend-pin", id });
         relink();
@@ -1460,6 +1510,41 @@
       failure = { message: failureWords(error), again: null };
     } finally {
       pinsRetrying = new Set([...pinsRetrying].filter((one) => one !== id));
+    }
+  }
+  /**
+   * A refused reply's Try again: each of its words written into the pane's
+   * doc again, now the hub's (artifact-doc.ts `again`), and let go of once
+   * written; one still refused stays with why.
+   */
+  function retryRefused(artifactKey: string, id: string) {
+    const kept = refusedReplies[id];
+    if (!(kept && doc)) {
+      throw new Error(
+        "The pane lost the page's document, so the reply wasn't kept. Reload, then try again."
+      );
+    }
+    const left: ThreadEntry[] = [];
+    let why: string | null = null;
+    for (const entry of kept.entries) {
+      const refused = doc.reply(id, {
+        text: entry.text,
+        ...(entry.attachments ? { attachments: entry.attachments } : {}),
+      });
+      if (refused) {
+        left.push(entry);
+        why = refused;
+      }
+    }
+    const { [id]: _done, ...rest } = refusedReplies;
+    keepReplies(
+      artifactKey,
+      left.length > 0
+        ? { ...rest, [id]: { entries: left, why: why ?? kept.why } }
+        : rest
+    );
+    if (why) {
+      throw new Error(why);
     }
   }
   let sentSeen: string | null | undefined;

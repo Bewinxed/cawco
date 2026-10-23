@@ -55,6 +55,7 @@
     "wayland-client": "3.0.0",
     "y-excalidraw": "2.0.12",
     "y-indexeddb": "9.0.12",
+    "y-protocols": "1.0.7",
     "y-websocket": "3.1.0",
     "yaml": "^2.9.1",
     "yjs": "13.6.33",

@@ -57,6 +57,7 @@
     "virtua": "0.53.4",
     "web-haptics": "0.0.6",
     "y-indexeddb": "9.0.12",
+    "y-protocols": "1.0.7",
     "y-websocket": "3.1.0",
     "yjs": "13.6.33"
   },

@@ -15,8 +15,12 @@
  * canvas's bounds (core `CANVAS_LIMITS`). Either may write the person's ink,
  * its moved groups and its pins (`ink`, `moved`, `pins`), within core
  * `INK_LIMITS`. An update that breaks
- * them is not applied: the socket is closed with {@link REFUSED} and the
- * reason, and the client joins again from the hub's doc.
+ * them is not applied, and its writer is told why on its socket, which
+ * stays open ({@link refusal}): never a closed socket, so nothing the writer
+ * holds is let go unsaid. Nothing more that socket sends is kept: Yjs takes
+ * one client's updates in clock order only, so each later one would wait
+ * on the refused one for ever. The writer goes on in a fresh doc (a new
+ * client) on a socket of its own, its refused writes kept aside.
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -31,6 +35,7 @@ import {
   goneProblem,
   isSendControl,
   type MarkPictures,
+  type Pin,
   pinsProblem,
   SEND_CONTROLS,
   type SendBody,
@@ -48,6 +53,7 @@ import {
   writeVarUint,
   writeVarUint8Array,
 } from "lib0/encoding";
+import { writePermissionDenied } from "y-protocols/auth";
 import {
   messageYjsSyncStep1,
   messageYjsSyncStep2,
@@ -56,7 +62,16 @@ import {
   writeSyncStep2,
   writeUpdate,
 } from "y-protocols/sync";
-import { applyUpdate, Doc, encodeStateAsUpdate, Map as YMap } from "yjs";
+import {
+  applyUpdate,
+  ContentAny,
+  Doc,
+  decodeUpdate,
+  encodeStateAsUpdate,
+  getItem,
+  Item,
+  Map as YMap,
+} from "yjs";
 import {
   type ArtifactClient,
   type ArtifactDocs,
@@ -83,14 +98,32 @@ const BEAT = (() => {
   return toUint8Array(encoder);
 })();
 
-/** The close code of an update the hub would not keep. */
-export const REFUSED = 4400;
+/** y-websocket's auth message type (its client's `messageAuth`): a refusal rides on it. */
+const MESSAGE_AUTH = 2;
+
+/**
+ * The hub's word that it would not keep an update, and why: y-protocols'
+ * permission-denied message (auth.js `writePermissionDenied`) under
+ * {@link MESSAGE_AUTH}, which a client reads with `readAuthMessage`.
+ */
+const refusal = (why: string): Uint8Array => {
+  const encoder = createEncoder();
+  writeVarUint(encoder, MESSAGE_AUTH);
+  writePermissionDenied(encoder, why);
+  return toUint8Array(encoder);
+};
 
 /** What the listener keeps on an artifact's socket. */
 export interface ArtifactSocket {
   artifactId: string;
   /** The origin its updates are applied under, so they are not sent back to it. */
   origin?: { client: ArtifactClient };
+  /**
+   * The hub refused an update from it ({@link refusal}): nothing more it
+   * sends is kept, as each would wait on the refused one; its writer goes
+   * on from a socket of its own.
+   */
+  refused?: true;
   /** A canvas's host page, which converts the agent's writes (`?screen=1` on its socket). */
   screen: boolean;
 }
@@ -282,12 +315,51 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
 };
 
 /** Why `update` from a person's client may not be applied to `doc`, or null. */
+/**
+ * Why `update` would lose the person's words: an entry of theirs one of its
+ * comments carried that the merged doc holds not, because another write to
+ * the same comment won the merge (a map keeps one value per key, the write
+ * of the client with the higher id: a pane that had not heard the agent's
+ * answer replied over it). Kept, the words would be gone unsaid; refused,
+ * the writer keeps them aside and sends them again. A comment deleted
+ * meanwhile is not read.
+ */
+const crossedProblem = (trial: Doc, update: Uint8Array): string | null => {
+  const pins = trial.getMap("pins");
+  for (const struct of decodeUpdate(update).structs) {
+    if (!(struct instanceof Item && struct.content instanceof ContentAny)) {
+      continue;
+    }
+    let held: Item;
+    try {
+      held = getItem(trial.store, struct.id) as Item;
+    } catch {
+      continue;
+    }
+    if (!(held.deleted && held.parent === pins && held.parentSub)) {
+      continue;
+    }
+    const wrote = struct.content.arr.at(-1) as Pin | undefined;
+    const now = pins.get(held.parentSub) as Pin | undefined;
+    if (!(now && Array.isArray(wrote?.thread))) {
+      continue;
+    }
+    const has = new Set(now.thread.map((entry) => entry.id));
+    if (
+      wrote.thread.some((entry) => entry.by === "person" && !has.has(entry.id))
+    ) {
+      return `Your words in comment ${now.number} crossed another write to it, so they weren't kept.`;
+    }
+  }
+  return null;
+};
+
 export const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
   const trial = new Doc();
   try {
     applyUpdate(trial, encodeStateAsUpdate(doc));
     applyUpdate(trial, update);
-    return stateProblem(doc, trial);
+    return stateProblem(doc, trial) ?? crossedProblem(trial, update);
   } catch {
     return "That is not a Yjs update.";
   } finally {
@@ -630,13 +702,17 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       );
       return;
     }
-    if (kind !== messageYjsSyncStep2 && kind !== messageYjsUpdate) {
+    if (
+      (kind !== messageYjsSyncStep2 && kind !== messageYjsUpdate) ||
+      socket.data.refused
+    ) {
       return;
     }
     const update = readVarUint8Array(decoder);
     const problem = updateProblem(doc, update);
     if (problem) {
-      socket.close(REFUSED, problem.slice(0, 120));
+      socket.data.refused = true;
+      socket.send(refusal(problem));
       return;
     }
     applyUpdate(doc, update, origin);

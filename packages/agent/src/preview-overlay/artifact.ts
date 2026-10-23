@@ -340,8 +340,8 @@ const restart = (generation: number) => {
 };
 
 /**
- * The person's comments the hub refused (a write it would not keep, its
- * close's reason), kept on the device apart from the doc, per artifact: the
+ * The person's comments the hub refused (a write it would not keep, the
+ * refusal's reason), kept on the device apart from the doc, per artifact: the
  * host lists each with why and Try again ({@link artifact.resend}), and a
  * reload keeps them. A browser that keeps no storage keeps them in memory.
  */
