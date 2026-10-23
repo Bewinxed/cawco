@@ -3,15 +3,17 @@
   CommentPanelCompact.stories.ts): a preview pane at a narrow window's size
   used with a mouse, its page drawn here (it stands for the artifact's
   frame), and the compact panel beside it, the open comment's thread the
-  real card's face (PinCardFace) hung from its row, no store read: the reply
-  under it is the app's composer, which PinCard hands the face, and is not
-  drawn here. Each story draws its state from its first frame (what
+  real card's face (PinCardFace) hung from its row, its reply the real
+  composer handed in as PinCard hands it, no store read. Each story draws its state from its first frame (what
   is open starts as its args say); a flow's `update` moves the live panel,
   and its own hang plays.
 -->
 <script lang="ts">
   import { pinName } from "@cawco/core/pin-name";
+  import { commentWords } from "@cawco/core/words/comments";
   import { untrack } from "svelte";
+  import { ComposerDraft } from "../transcript/composer-draft.svelte";
+  import CommentComposer from "./CommentComposer.svelte";
   import CommentPanelCompact from "./CommentPanelCompact.svelte";
   import {
     AGENT,
@@ -40,6 +42,8 @@
   });
   const pin = $derived(pins.find((one) => one.id === shown) ?? null);
   const none = () => undefined;
+  /** The reply being written, as the pane keeps one per pin. */
+  const draft = new ComposerDraft({ byReference: true });
 </script>
 
 <div
@@ -103,7 +107,18 @@
             onretry={none}
             parent="Retry policy"
             {pin}
-          ></PinCardFace>
+          >
+            {#snippet reply()}
+              <CommentComposer
+                action="Reply"
+                {draft}
+                onsubmit={none}
+                placeholder={pin?.resolvedAt
+                  ? commentWords.reopenHint
+                  : commentWords.replyHint}
+              />
+            {/snippet}
+          </PinCardFace>
         {/if}
       {/snippet}
     </CommentPanelCompact>
