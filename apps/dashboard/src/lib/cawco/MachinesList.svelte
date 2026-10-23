@@ -32,6 +32,7 @@
   import { connect } from "./connect/installs.svelte";
   import { CONNECT_WAYS } from "./connect/ways";
   import { retryFleetItems } from "./fleet";
+  import { signInsWaiting } from "./fleet-faults";
   import { home } from "./home/home-state.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
   import { failureWords } from "./hub-read";
@@ -40,6 +41,7 @@
   import { pausedWords } from "./machine-pause";
   import { reflow } from "./motion/rows.svelte";
   import RowFault from "./RowFault.svelte";
+  import SignInWaits from "./SignInWaits.svelte";
   import { cellFor } from "./updates/model";
   import { updates } from "./updates/updates.svelte";
 
@@ -291,6 +293,8 @@
     {/each}
   </ul>
 {:else}
+  <!-- The fleet's servers waiting on a sign-in: once for the fleet, ahead of its machines. -->
+  <SignInWaits names={signInsWaiting(cawco.machines)} />
   <ul
     data-slot="list"
     class="m-0 flex list-none flex-col gap-space-row p-0"

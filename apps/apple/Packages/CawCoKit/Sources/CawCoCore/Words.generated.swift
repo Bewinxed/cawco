@@ -2646,6 +2646,11 @@ public enum Words {
 
         public static let signInClosed = "The sign-in tab closed before it finished."
 
+        /// The machines card's line for a server waiting on the fleet's sign-in, once however many machines report it.
+        public static func needsSignIn(name: String) -> String {
+            "\(name) needs a sign-in for the fleet. Until then, no session gets its tools."
+        }
+
         /// The editor.
         public static let what = "MCP server"
 

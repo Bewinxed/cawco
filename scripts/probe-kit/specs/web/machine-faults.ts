@@ -13,10 +13,16 @@
  *      details and Retry stand together on one line, every line's actions
  *      ending on the same trailing edge;
  *  (d) nothing spills: no line, action or detail past the card's edge, and
- *      no sideways scroll in the card or the page.
+ *      no sideways scroll in the card or the page;
+ *  (e) no group line carries the "Error: " a harness's thrown error has
+ *      after its name (convergence.ts `failureReason`);
+ *  (f) ElevenLabs, waiting on the fleet's sign-in on both machines under
+ *      every harness, is one line at the card's head, and its Sign in lands
+ *      on the server's page in Configure, where its sign-in runs.
  *
  *   bun scripts/probe-kit/run.ts web machine-faults
  */
+import { mcpWords } from "../../../../packages/core/src/words/mcp";
 import type { Engine, Kit, Spec, View } from "../../kit";
 import { open, settle } from "../../kit";
 
@@ -24,6 +30,9 @@ const BENCH = "[data-bench]";
 const NIFTY = 'li[data-machine="niftybot.art"]';
 const OBELISK = 'li[data-machine="obelisk-of-light"]';
 const ENGINES: Engine[] = ["chromium", "webkit"];
+/** A harness's name and the thrown error's own prefix after it, as the agent joins them. */
+const HARNESS_ERROR = /^([\w-]+): (?:Error: )+/;
+const SERVER = "ElevenLabs";
 const VIEWS: { name: string; view: View }[] = [
   { name: "390", view: "phone" },
   { name: "1440", view: "desk" },
@@ -68,7 +77,8 @@ const spec: Spec = {
           nifty.groups.length === 1 &&
             only?.count === "141" &&
             typeof nifty.cause === "string" &&
-            only.reason === `141 items didn't set up. ${nifty.cause}` &&
+            only.reason ===
+              `141 items didn't set up. ${nifty.cause.replace(HARNESS_ERROR, "$1: ")}` &&
             nifty.details === 1 &&
             nifty.retries === 1,
           JSON.stringify(nifty)
@@ -164,6 +174,50 @@ const spec: Spec = {
             spill.cardScroll <= 0 &&
             spill.pageScroll <= 0,
           JSON.stringify(spill)
+        );
+
+        // (e) No group line says "Error: " after its harness.
+        const reasons = await page
+          .locator('[data-fault-group] [data-slot="reason"]')
+          .allInnerTexts();
+        kit.check(
+          `${at} (e) no group line carries a thrown error's "Error: "`,
+          reasons.length === 4 &&
+            reasons.every((reason) => !reason.includes("Error: ")),
+          JSON.stringify(reasons)
+        );
+
+        // (f) The sign-in waiting, once for the fleet, and its Sign in to the server's page.
+        const waits = page.locator("[data-sign-in-wait]");
+        const wait = {
+          count: await waits.count(),
+          name: await waits.first().getAttribute("data-sign-in-wait"),
+          reason: await waits
+            .first()
+            .locator('[data-slot="reason"]')
+            .innerText(),
+          href: await waits
+            .first()
+            .locator("[data-go-to]")
+            .getAttribute("href"),
+          label: await waits.first().locator("[data-go-to]").innerText(),
+        };
+        await waits.first().locator("[data-go-to]").click();
+        const landed = await page
+          .waitForURL(`**/config/mcp/${SERVER}`, { timeout: 10_000 })
+          .then(
+            () => new URL(page.url()).pathname,
+            () => `(stayed at ${page.url()})`
+          );
+        kit.check(
+          `${at} (f) ${SERVER} waiting on the fleet's sign-in is one line, and its Sign in lands on its page in Configure`,
+          wait.count === 1 &&
+            wait.name === SERVER &&
+            wait.reason === mcpWords.needsSignIn(SERVER) &&
+            wait.label.trim() === mcpWords.signIn &&
+            wait.href === `/config/mcp/${SERVER}` &&
+            landed === `/config/mcp/${SERVER}`,
+          JSON.stringify({ ...wait, landed })
         );
         await page.close();
       }

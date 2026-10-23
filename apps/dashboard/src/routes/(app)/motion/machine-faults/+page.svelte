@@ -5,13 +5,20 @@
    * 2026-10-23, 141 of 141 items failed with one cause (OpenCode not
    * installed there; the bench gives its own words for it), beside a
    * machine whose failures have three causes (two items with one, one with
-   * a long unbroken path, one with none). It
-   * stands on the floating surface at the machines card's width,
+   * a long unbroken path, one with none). Both report ElevenLabs waiting on
+   * the fleet's sign-in, under every harness, as obelisk's report did: the
+   * card says it once, at its head (SignInWaits). It stands on the floating surface at the machines card's width,
    * `--c-machines-w`, and no wider than the page's column (a phone's), with
    * the list's own insets (MachinesList `--fault-indent`, `--fault-end`).
    */
-  import type { FleetItemStatus } from "@cawco/core";
+  import type {
+    FleetItemState,
+    FleetItemStatus,
+    FleetSyncReport,
+  } from "@cawco/core";
+  import { signInsWaiting } from "#lib/cawco/fleet-faults.js";
   import ItemFaults from "#lib/cawco/ItemFaults.svelte";
+  import SignInWaits from "#lib/cawco/SignInWaits.svelte";
   import {
     MachineRow,
     machineHue,
@@ -77,9 +84,37 @@
     failed("memory"),
     { id: "skill:unlazy", hash: "bench", state: "ok" },
   ];
+  /** ElevenLabs waiting on the fleet's sign-in, as each harness reports it, and a server turned off, which is no fault. */
+  const waits: FleetItemState = { state: "needs-auth" };
+  const REPORT: FleetSyncReport = {
+    at: 0,
+    mcp: { ElevenLabs: waits, "x-browser": { state: "disabled" } },
+    mcpByHarness: {
+      claude: { ElevenLabs: waits },
+      opencode: { ElevenLabs: waits },
+      pi: { ElevenLabs: waits, "x-browser": { state: "disabled" } },
+    },
+    marketplaces: {},
+    plugins: {},
+    skills: {},
+  };
   const MACHINES = [
-    { name: "niftybot.art", os: "linux", items: NIFTY, live: 0 },
-    { name: "obelisk-of-light", os: "linux", items: MIXED, live: 11 },
+    {
+      machineId: "niftybot.art",
+      name: "niftybot.art",
+      os: "linux",
+      items: NIFTY,
+      live: 0,
+      fleet: REPORT,
+    },
+    {
+      machineId: "obelisk-of-light",
+      name: "obelisk-of-light",
+      os: "linux",
+      items: MIXED,
+      live: 11,
+      fleet: REPORT,
+    },
   ];
   const panel = floatingSurface({
     class: "mx-auto my-space-5 w-full max-w-c-machines-w p-space-1",
@@ -87,6 +122,7 @@
 </script>
 
 <div class={panel} data-bench data-cause={OPENCODE}>
+  <SignInWaits names={signInsWaiting(MACHINES)} />
   <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
     {#each MACHINES as machine, index (machine.name)}
       {@const failedCount = machine.items.filter(

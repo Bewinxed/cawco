@@ -203,6 +203,14 @@ export function failureGroups(
 }
 
 /**
+ * A harness's thrown converge as the agent joins it, one per line
+ * (session.ts `#harnessFailures`: "opencode: Error: …"): the harness's name
+ * says whose it was, and the "Error: " a thrown Error's string carries after
+ * it says nothing more.
+ */
+const HARNESS_ERROR = /^([\w-]+): (?:Error: )+/gm;
+
+/**
  * A group's reason, in the error formula: what happened (the one item by
  * name, or the count), then the machine's cause as a sentence of its own.
  */
@@ -212,7 +220,9 @@ export function failureReason(group: FailureGroup): string {
     group.items.length === 1 && first
       ? `${itemWords(first.id)} didn't set up.`
       : `${group.items.length} items didn't set up.`;
-  const cause = group.cause?.replace(/\s+/g, " ");
+  const cause = group.cause
+    ?.replace(HARNESS_ERROR, "$1: ")
+    .replace(/\s+/g, " ");
   return `${what} ${cause ?? "The machine gave no reason."}`;
 }
 

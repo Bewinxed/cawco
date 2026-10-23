@@ -11,6 +11,9 @@
    * A fault that carries its own reading and remedy (a fleet fault) is drawn
    * as `children` in the same place instead of a reason line.
    *
+   * `goTo`: the way on as a place, where `again` is an act: a link at the
+   * same place in its actions (a server's sign-in, in Configure).
+   *
    * `details`: what refused it, word for word, where the reason line is the
    * plain sentence for it (a machine's own error, its paths and ids): Show
    * details beside the reason unfolds it under the line, in the figure
@@ -29,7 +32,8 @@
    * every row inside it passes neither.
    */
   import { configureWords, shellWords } from "@cawco/core";
-  import type { Snippet } from "svelte";
+  import type { Component, Snippet } from "svelte";
+  import type { SVGAttributes } from "svelte/elements";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
@@ -40,6 +44,7 @@
   let {
     reason,
     again,
+    goTo,
     againLabel = configureWords.tryAgain,
     againPending = "Trying again…",
     class: className,
@@ -61,6 +66,12 @@
     copyLabel?: string;
     /** The way on: run the action again. */
     again?: () => unknown;
+    /** The way on as a place to go: the page where it is put right (a server's sign-in). */
+    goTo?: {
+      href: string;
+      label: string;
+      icon?: Component<SVGAttributes<SVGSVGElement>>;
+    };
     againLabel?: string;
     againPending?: string;
     class?: string;
@@ -129,7 +140,7 @@
         >
           {said}
         </p>
-        {#if details || again}
+        {#if details || again || goTo}
           <!-- One cluster at the trailing edge, beside the reason or on the line under it, so Show details and Retry never part and every row's stand in the same place. -->
           <span data-slot="actions" class="ms-auto flex flex-none gap-space-1">
             {#if details}
@@ -153,6 +164,16 @@
                 onclick={tryAgain}
                 pending={trying}
                 pendingLabel={againPending}
+                size="xs"
+                variant="ghost"
+              />
+            {/if}
+            {#if goTo}
+              <Button
+                data-go-to
+                href={goTo.href}
+                icon={goTo.icon}
+                label={goTo.label}
                 size="xs"
                 variant="ghost"
               />

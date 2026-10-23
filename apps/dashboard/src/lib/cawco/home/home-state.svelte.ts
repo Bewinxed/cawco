@@ -915,35 +915,22 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (buildConvergence(machine.build, cawco.hubBuild) === "behind") {
     return "behind hub";
   }
-  const faults = machineFaults(machine.machineId, machine.fleet);
-  // A server waiting on a sign-in is the person's to give, in Configure ›
-  // MCP servers, not a sync that failed: said by its name, once, however
-  // many harnesses report it (obelisk-of-light read "sync failed" for
-  // ElevenLabs' needs-auth alone, 2026-10-23).
-  const signIns = [
-    ...new Set(
-      faults
-        .filter((fault) => fault.cause === "needs-auth")
-        .map((fault) => fault.key)
-    ),
-  ];
-  const broken = faults.filter((fault) => fault.cause !== "needs-auth");
-  const words: string[] = [];
-  if (signIns.length === 1) {
-    words.push(`${signIns[0]} needs sign-in`);
-  } else if (signIns.length > 1) {
-    words.push(`${signIns.length} servers need sign-in`);
+  // A server waiting on a sign-in is no fault of the machine's: the
+  // sign-in is the fleet's, said once in the machines card with its Sign in
+  // (fleet-faults.ts `signInsWaiting`), never on each machine's row
+  // (obelisk-of-light read "sync failed" for ElevenLabs' needs-auth alone,
+  // 2026-10-23).
+  const broken = machineFaults(machine.machineId, machine.fleet).filter(
+    (fault) => fault.cause !== "needs-auth"
+  );
+  if (broken.length === 0) {
+    return null;
   }
-  if (broken.length > 0) {
-    // Something that did not answer in time is slow, not broken: said so
-    // only while that is all there is.
-    words.push(
-      broken.every((fault) => fault.cause === "timed-out")
-        ? "sync slow"
-        : "sync failed"
-    );
-  }
-  return words.length > 0 ? words.join(" · ") : null;
+  // Something that did not answer in time is slow, not broken: said so only
+  // while that is all there is.
+  return broken.every((fault) => fault.cause === "timed-out")
+    ? "sync slow"
+    : "sync failed";
 }
 
 /* ── The model ─────────────────────────────────────────────────────── */

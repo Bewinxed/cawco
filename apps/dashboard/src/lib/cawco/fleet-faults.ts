@@ -364,6 +364,27 @@ export function machineFaults(
 }
 
 /**
+ * The fleet's MCP servers waiting on a sign-in, by name, each once however
+ * many machines and harnesses report it: the sign-in is the fleet's (the
+ * hub's proxy holds none), so the machines card says it once, never on each
+ * machine's row (obelisk-of-light read "sync failed" for ElevenLabs alone,
+ * 2026-10-23).
+ */
+export function signInsWaiting(
+  machines: readonly { machineId: string; fleet?: FleetSyncReport }[]
+): string[] {
+  return [
+    ...new Set(
+      machines.flatMap((machine) =>
+        machineFaults(machine.machineId, machine.fleet)
+          .filter((fault) => fault.cause === "needs-auth")
+          .map((fault) => fault.key)
+      )
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Every row the HUB could not resolve. These belong to no machine: the bytes
  * were never fetched, so nothing was ever offered to one.
  *
