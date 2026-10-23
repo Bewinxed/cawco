@@ -10,8 +10,8 @@ struct PaneTab: Equatable {
     let face: SessionStatusView.Face
     /// Parked on the operator: the label keeps the strong ink chosen or not.
     let needs: Bool
-    /// A workflow run's tab is its own details: no chevron slot.
-    let isRun: Bool
+    /// A thread's or an artifact's tab has no session details: no chevron slot.
+    let noDetails: Bool
     let status: String
 }
 
@@ -1321,7 +1321,7 @@ final class TabView: UIView {
     var dragItem: () -> UIDragItem? = { nil }
     /// The details chevron's slot: none in a phone's bar row, whose tab menu is its long press.
     var chevron = true {
-        didSet { details.isHidden = (tab?.isRun ?? false) || !chevron }
+        didSet { details.isHidden = (tab?.noDetails ?? false) || !chevron }
     }
 
     /// The tab's options, by section (`TabAction`): VoiceOver's custom actions.
@@ -1681,7 +1681,7 @@ final class TabView: UIView {
         guard changed else { return }
         label.text = tab.label
         status.configure(tab.face)
-        details.isHidden = tab.isRun || !chevron
+        details.isHidden = tab.noDetails || !chevron
         close.accessibilityLabel = "Close \(tab.label)"
         details.accessibilityLabel = "Session details for \(tab.label)"
         let hit = row.arrangedSubviews.first
@@ -1693,7 +1693,7 @@ final class TabView: UIView {
     }
 
     @objc private func tapped() {
-        if chosen, tab?.isRun == false { onDetails() } else { onSelect() }
+        if chosen, tab?.noDetails == false { onDetails() } else { onSelect() }
     }
 
     @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
@@ -1717,7 +1717,7 @@ final class TabView: UIView {
     func setChosen(_ next: Bool) {
         chosen = next
         (row.arrangedSubviews.first)?.accessibilityTraits = next ? [.button, .selected] : .button
-        details.isUserInteractionEnabled = !(tab?.isRun ?? false)
+        details.isUserInteractionEnabled = !(tab?.noDetails ?? false)
         paint()
     }
 

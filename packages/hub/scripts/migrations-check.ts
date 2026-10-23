@@ -5,7 +5,9 @@
  * a seeded scratch fleet's, at a published nightly's schema, so every
  * migration added since runs over real row shapes, as it will on a hub
  * updating from that nightly. A table the fixture had rows in must still
- * have rows: a migration that empties one is caught here. Every foreign key
+ * have rows: a migration that empties one is caught here, and one that drops
+ * a table the schema still declares. A table the schema no longer declares
+ * may be dropped, its rows with it. Every foreign key
  * the schema declares stands in the migrated database with the same
  * ON DELETE and ON UPDATE ({@link foreignKeyDrift}). The journal's `when`
  * increases strictly with idx ({@link outOfOrder}). Once the hub has
@@ -246,8 +248,21 @@ try {
     (name.startsWith("project_task") ||
       name === "tool_call_keys" ||
       name === "fleet_watch_notices");
+  // A table a migration drops goes with its rows, as its SQL says it does;
+  // one the schema still declares must still be there.
+  const schema = await import("../src/db/schema");
+  const declared = new Set(
+    Object.values(schema).flatMap((value) =>
+      is(value, SQLiteTable) ? [getTableConfig(value).name] : []
+    )
+  );
   const emptied = [...before.rows]
-    .filter(([name, n]) => n > 0 && (after.rows.get(name) ?? 0) === 0)
+    .filter(
+      ([name, n]) =>
+        n > 0 &&
+        (after.rows.has(name) || declared.has(name)) &&
+        (after.rows.get(name) ?? 0) === 0
+    )
     .filter(([name]) => !startEmpties(name))
     .map(([name]) => name);
   if (emptied.length) {

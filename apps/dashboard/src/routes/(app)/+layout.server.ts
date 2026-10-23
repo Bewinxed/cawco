@@ -4,12 +4,9 @@ import {
   harnessNamed,
   type InstanceRow,
   type SessionPulse,
-  type WorkflowListing,
-  type WorkflowRun,
 } from "@cawco/core";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
-import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import {
   FOLD_BOXES_PREF,
   parseFoldBoxes,
@@ -297,7 +294,7 @@ export const load: LayoutServerLoad = async ({
       }
     }
   }
-  for (const id of open.filter((tab) => !runIdOf(tab))) {
+  for (const id of open) {
     if (!listing.ok) {
       names[id] = listing;
       continue;
@@ -310,47 +307,12 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  // A workflow run's tab is called by its workflow, as the client names it
-  // (workflow-runs.ts): the run says which workflow, the list says its name.
-  const runs = open.flatMap((id) => {
-    const runId = runIdOf(id);
-    return runId ? [{ id, runId }] : [];
-  });
-  if (runs.length > 0) {
-    const [workflows, ...reads] = await Promise.all([
-      readHub<{ workflows: WorkflowListing[] }>(fetch, "/api/workflows"),
-      ...runs.map(({ runId }) =>
-        readHub<WorkflowRun>(
-          fetch,
-          `/api/workflow-runs/${encodeURIComponent(runId)}`
-        )
-      ),
-    ]);
-    runs.forEach(({ id }, i) => {
-      const run = reads[i];
-      if (!workflows.ok) {
-        names[id] = workflows;
-        return;
-      }
-      if (!run.ok) {
-        names[id] = run;
-        return;
-      }
-      const name = workflows.value.workflows.find(
-        (workflow) => workflow.id === run.value.workflowId
-      )?.name;
-      if (name) {
-        names[id] = { ok: true, value: name };
-      }
-    });
-  }
-
   // The board is a working set: it drops a session that has not moved in a day.
   // The strip is not — it carries whatever the reader left open, so a tab on an
   // aged-out conversation has no row to read a name off. The name is not
   // missing, only filtered out of the listing, so ask for it by id: one batched
   // call, and only for the tabs the listing answered without naming.
-  const unnamed = open.filter((id) => !(names[id] || runIdOf(id)));
+  const unnamed = open.filter((id) => !names[id]);
   if (unnamed.length > 0) {
     const ctx = workspace.ctx ?? {};
     const titles = await readHub<{ id: string; title: string | null }[]>(

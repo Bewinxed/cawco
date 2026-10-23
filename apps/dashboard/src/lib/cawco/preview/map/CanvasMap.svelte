@@ -29,9 +29,9 @@
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
+  import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
-  import WorkflowCanvasTools from "#lib/components/features/workflows/WorkflowCanvasTools.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconAlert, IconRefresh } from "#lib/icons.js";
@@ -418,7 +418,7 @@
           </p>
         </Panel>
         <Panel position="bottom-center">
-          <WorkflowCanvasTools
+          <FlowCanvasTools
             onfit={() => undefined}
             onzoom={() => undefined}
             {zoom}

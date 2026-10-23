@@ -1,6 +1,6 @@
 /**
  * A thread with a project's Caw, outside its project page, is a session like
- * any other, as a workflow run is (workflow-runs.ts): one row under its
+ * any other: one row under its
  * project in the rail, the sessions its turns started nested under it, and
  * a tab in a group, drawn by ThreadPane. This is the one place that says how
  * a thread reads as a session row.
@@ -44,23 +44,17 @@ export const isThreadTab = (id: string): boolean => id.startsWith(PREFIX);
 export const threadHref = (threadId: string): string =>
   `/session/${threadTabId(threadId)}`;
 
-/**
- * The routine a thread's note says a session made, read where the hub
- * puts it: `routineMade` beside a null `event` while the bridge stands (hub
- * caw.ts `wireEvent`). The one place that reads it, so the day it becomes a
- * ThreadEvent kind only this changes.
- */
+/** The routine a thread's note says a session made. */
 export const routineMadeOf = (
   message: EventThreadMessage
-): RoutineMadeEvent | undefined => message.routineMade;
+): RoutineMadeEvent | undefined =>
+  message.event?.kind === "routine-made" ? message.event : undefined;
 
-/**
- * Caw's design-system offer a thread's note carries, read where the hub
- * puts it: `designOffer` beside a null `event` while the bridge stands.
- */
+/** Caw's design-system offer a thread's note carries. */
 export const designOfferOf = (
   message: EventThreadMessage
-): DesignOfferEvent | undefined => message.designOffer;
+): DesignOfferEvent | undefined =>
+  message.event?.kind === "design-offer" ? message.event : undefined;
 
 /**
  * Where a routine opens: open in its project's Routines tab

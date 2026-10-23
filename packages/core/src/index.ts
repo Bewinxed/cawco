@@ -113,7 +113,7 @@ export * from "./stream-relay";
 export * from "./tailnet-https";
 // A project's threads with its Caw: rows, messages and their frames.
 export * from "./threads";
-// The workflow-tool catalog and its status/policy shapes (NEW.md §10).
+// The tool catalog and its status/policy shapes (NEW.md §10).
 export * from "./tools";
 // Where a project's tasks live (Projects spec D2): CawCo's files, GitHub Issues or Linear.
 export * from "./trackers";
@@ -424,8 +424,6 @@ export interface SpawnPayload {
    * only.
    */
   title?: string;
-  workflowRunId?: string;
-  workflowStepId?: string;
   /**
    * The workspace whose boundary every shell command of this session runs
    * inside. Set on each spawn of a work item's session — the first, and every
@@ -890,7 +888,7 @@ export interface AgentRow {
   pauseStopped: string | null;
   status: string;
   /**
-   * Last-known workflow-tool status by tool id (NEW.md §10).
+   * Last-known tool status by tool id (NEW.md §10).
    */
   tools?: Record<string, ToolStatus>;
 }
@@ -943,14 +941,13 @@ export function pauseClock(at: number, now = Date.now()): string {
 
 /**
  * What a command the hub runs on a machine is, as a pause that stops it
- * counts it: a step of an item's landing gate (the iOS build among them), a
- * workflow's `w.exec`, or any other.
+ * counts it: a step of an item's landing gate (the iOS build among them), or
+ * any other.
  */
-export type RunKind = "landing gate" | "workflow command" | "command";
+export type RunKind = "landing gate" | "command";
 
 const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
   "landing gate": ["landing gate step", "landing gate steps"],
-  "workflow command": ["workflow command", "workflow commands"],
   command: ["command", "commands"],
 };
 
@@ -1436,8 +1433,7 @@ export interface InstanceRow {
    */
   owedMove?: { accountId: string; waits: "turn" | "work" | "machine" };
   /**
-   * The session that started this one (`delegate`, `start_session`, a
-   * workflow's supervisor), which every rail nests it under; absent on a
+   * The session that started this one (`delegate`, `start_session`), which every rail nests it under; absent on a
    * session a person started. A delegate is told from a session merely
    * started by {@link workItemId}, never by where it stands.
    */
@@ -1498,8 +1494,6 @@ export interface InstanceRow {
   turnEndedAt?: string | number | Date | null;
   /** When the row last moved. */
   updatedAt?: string | number | Date | null;
-  workflowRunId?: string | null;
-  workflowStepId?: string | null;
   /**
    * The work item this session runs: every delegate is one, and a session
    * never runs more than one. Null on a session nobody delegated, and on a
@@ -1762,9 +1756,7 @@ export type FramePayload =
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
   /** Hub-originated: the stream relay's journey, whole, on each change. */
-  | import("./stream-relay").RelayJourneyFrame
-  /** Hub-originated workflow run transition (§7.2). */
-  | import("./workflow").WorkflowFrame;
+  | import("./stream-relay").RelayJourneyFrame;
 
 export const CAWCO_HUB_PORT = 3456;
 
@@ -2157,8 +2149,6 @@ export * from "./words/updates";
 export * from "./words/views";
 export * from "./words/work";
 export * from "./words/workspace-needs";
-export * from "./workflow";
-export * from "./workflow-compile";
 
 /** Pushed by the hub to an online machine when the fleet's update policy changes. */
 export const CONFIGURE_BINARY_UPDATES = "configureBinaryUpdates";

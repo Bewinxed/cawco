@@ -1,7 +1,7 @@
 import type { NeutralMessage, Rule, RuleFacts } from "@cawco/core";
 import { ruleInScope } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
-import type { JevResult } from "@cawco/core/workflow-program";
+import type { JevResult } from "@cawco/core/jev";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, jevAccess } from "./jev";

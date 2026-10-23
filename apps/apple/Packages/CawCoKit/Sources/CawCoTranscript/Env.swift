@@ -29,11 +29,8 @@ final class RowEnv {
     var watchDelegate: (String, Bool) -> Void = { _, _ in }
     /// This transcript's own blocks, for what a delegate card reads back out of them.
     var parentBlocks: () -> [Block] = { [] }
-    /// A run's steps, as its detail reads them.
-    var runSteps: (String) -> [RunStep] = { _ in [] }
-    /// Opening another session, or a run, in its own view (the host routes it).
+    /// Opening another session in its own view (the host routes it).
     var openSession: (String) -> Void = { _ in }
-    var openRun: (String) -> Void = { _ in }
     /// Opening a project's task beside its board.
     var openTask: (_ projectId: String, _ taskId: String) -> Void = { _, _ in }
     /// Reveals an artifact tool row's artifact (its input) in this session's preview, once `artifact_show` has opened it.

@@ -1,15 +1,13 @@
 /**
- * What a session, or a workflow step, is doing, on one scale: its word, its
- * glyph and its tone. The rail's glyph (SessionStatus) and the phone tab's
- * rim (PaneTabs) both read it, so the two never disagree. Reads reactive
+ * What a session is doing, on one scale: its word, its glyph and its tone.
+ * The rail's glyph (SessionStatus) and the phone tab's rim (PaneTabs) both
+ * read it, so the two never disagree. Reads reactive
  * state: call it inside a `$derived` or a template.
  */
-import type { WorkflowStep } from "@cawco/core";
 import type { Component } from "svelte";
 import {
   IconNeedsYou as Attention,
   IconError as Failed,
-  IconSuccess as Passed,
   IconPauseCircle as Pause,
   IconMoonSleep as Sleeping,
   IconAsk as Unknown,
@@ -19,10 +17,8 @@ import { STOPPED_LABEL, STOPPING_LABEL } from "../activity";
 import { cawco, isFailed, isStale } from "../client.svelte";
 import { type NamedSession, sessionAnswer } from "../session-names.svelte";
 import { STALLED_LABEL } from "../session-status";
-import { runIdOf } from "../workflow-runs";
-import { workflowState } from "../workflow-state.svelte";
 
-export type StatusTone = "working" | "attention" | "failed" | "done" | "quiet";
+export type StatusTone = "working" | "attention" | "failed" | "quiet";
 
 export interface SessionStatusOf {
   /** None while it is on its way (stopping): the glyph is StopTray's spinner. */
@@ -30,19 +26,6 @@ export interface SessionStatusOf {
   label: string;
   tone: StatusTone;
 }
-
-/** A step's status on the session's scale: going, needing someone, done, or not. */
-const STEP: Record<WorkflowStep["status"], SessionStatusOf> = {
-  running: { label: "Working", icon: Working, tone: "working" },
-  waiting: { label: "Needs you", icon: Attention, tone: "attention" },
-  held: { label: "Held", icon: Attention, tone: "attention" },
-  failed: { label: "Failed", icon: Failed, tone: "failed" },
-  passed: { label: "Passed", icon: Passed, tone: "done" },
-  pending: { label: "Pending", icon: Pause, tone: "quiet" },
-  skipped: { label: "Skipped", icon: Pause, tone: "quiet" },
-  cancelled: { label: "Cancelled", icon: Pause, tone: "quiet" },
-  unknown: { label: "Unknown", icon: Unknown, tone: "quiet" },
-};
 
 /** A session the hub's names answered for, on the session's scale (session-names.svelte.ts). */
 const ANSWERED: Record<NamedSession["state"], SessionStatusOf> = {
@@ -56,26 +39,10 @@ const ANSWERED: Record<NamedSession["state"], SessionStatusOf> = {
 };
 
 /**
- * The status the rail's glyph and the phone tab's rim show: the workflow
- * step's when `step` is given, the session's own otherwise. Not
+ * The status the rail's glyph and the phone tab's rim show. Not
  * `../session-status`'s `sessionStatus`, which is a row's mark status.
  */
-export function stepSessionStatus(
-  sessionId: string,
-  step?: WorkflowStep["status"]
-): SessionStatusOf {
-  if (step) {
-    return STEP[step];
-  }
-  // A run that ended stopped, on a session's scale; it says which way.
-  const runId = runIdOf(sessionId);
-  const run = runId ? workflowState.runs[runId] : undefined;
-  if (run?.status === "done") {
-    return { label: "Done", icon: Passed, tone: "done" };
-  }
-  if (run?.status === "cancelled") {
-    return { label: "Cancelled", icon: Pause, tone: "quiet" };
-  }
+export function sessionStatusOf(sessionId: string): SessionStatusOf {
   const row = cawco.instanceIndex.byId.get(sessionId);
   if (row && isFailed(row)) {
     return { label: "Failed", icon: Failed, tone: "failed" };

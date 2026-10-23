@@ -105,7 +105,7 @@
           look) at its trailing edge: the kit reads the name out only. */
       ownHead?: boolean;
       /** The sheet's own controls in its header, after the title and before
-          Close (the workflow inspector's Settings). */
+          Close. */
       actions?: Snippet;
       portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DrawerPortal>>;
       /**

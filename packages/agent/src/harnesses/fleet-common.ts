@@ -27,10 +27,6 @@ import {
   writeSkill,
 } from "../fleet";
 import { removeTree } from "../tree-swap";
-import {
-  guardWorkflowSkillRemoval,
-  workflowSkillCollision,
-} from "../workflow-skills";
 
 export const hashText = (content: string): string =>
   new Bun.CryptoHasher("sha256").update(content).digest("hex");
@@ -105,25 +101,7 @@ export const syncSkillFiles = async (
   const held = await heldSkills(dir, Object.keys(sidecar), desired);
   const managed = await skillRecords(dir, sidecar, held, desired);
   for (const skill of desired) {
-    try {
-      // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.
-      const collision = await workflowSkillCollision(dir, skill);
-      if (collision) {
-        report[skill.name] = {
-          state: "failed",
-          cause: "unknown",
-          detail: collision,
-        };
-        continue;
-      }
-    } catch (error) {
-      report[skill.name] = {
-        state: "failed",
-        cause: "unknown",
-        detail: String(error),
-      };
-      continue;
-    }
+    // biome-ignore lint/performance/noAwaitInLoops: each skill is compared before it is written or claimed.
     if (await holdsFleetCopy(join(dir, skill.name), skill, held[skill.name])) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
@@ -200,7 +178,6 @@ export const syncSkillFiles = async (
     }
     try {
       // biome-ignore lint/performance/noAwaitInLoops: record each removal before advancing to the next managed skill.
-      await guardWorkflowSkillRemoval(dir, name);
       await removeTree(join(dir, name));
       report[name] = { state: "removed" };
     } catch (error) {

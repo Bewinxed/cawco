@@ -696,12 +696,12 @@ const spec: Spec = {
     await open(
       stranger,
       `${dashboard}/session`,
-      'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code], [data-workflow-run-view-code])',
+      'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code])',
       60_000
     );
     const shown = await stranger
       .locator(
-        'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code], [data-workflow-run-view-code])'
+        'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code])'
       )
       .innerText();
     const code = CODE.exec(shown)?.[0] ?? "";

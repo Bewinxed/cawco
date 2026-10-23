@@ -28,7 +28,7 @@ import type {
   JevQuestion,
   JevResult,
   JevText,
-} from "@cawco/core/workflow-program";
+} from "@cawco/core/jev";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
 import {
   PLACE_QUESTION,

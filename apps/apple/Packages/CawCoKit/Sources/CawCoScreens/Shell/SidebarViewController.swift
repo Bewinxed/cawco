@@ -47,7 +47,6 @@ final class SidebarViewController: ObservedViewController {
     private let headerRow = UIStackView()
     private let startButton = HeadAction(.plus, label: "Start session", tint: Palette.inkMuted)
     private let fleetRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
-    private let workflowsRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
     private let fleetBadge = KitLabel(TypeScale.typeMeta)
     private let fleetBadgeBox = UIView()
     private let homeSlot = UIView()
@@ -336,10 +335,10 @@ final class SidebarViewController: ObservedViewController {
     // MARK: Places
 
     private func buildPlaces() -> UIView {
-        let menu = UIStackView(arrangedSubviews: [fleetRow, workflowsRow])
+        let menu = UIStackView(arrangedSubviews: [fleetRow])
         menu.axis = .vertical
         menu.spacing = 2
-        for (row, glyph, title, place) in [(fleetRow, Glyph.box, "Fleet", ShellDestination.fleet), (workflowsRow, .workflow, "Workflows", .workflows)] {
+        for (row, glyph, title, place) in [(fleetRow, Glyph.box, "Fleet", ShellDestination.fleet)] {
             navConstraint(row)
             let icon = GlyphView(glyph, tint: Palette.foreground)
             let label = KitLabel(TypeScale.typeBody, ink: Palette.sidebarForeground)
@@ -789,8 +788,6 @@ final class SidebarViewController: ObservedViewController {
         guard let host else { return }
         // Places: Fleet is the place on its page while no session stands in front (Sidebar.svelte `activeSession === null`).
         fleetRow.active = host.destination == .fleet && activeSession == nil
-        // Any page under /workflows (Sidebar.svelte `path.startsWith("/workflows")`).
-        workflowsRow.active = host.destination.spoke == ShellDestination.workflows.spoke
         if configureButton.on != (host.destination == .configure) { configureButton.on = host.destination == .configure }
         // `blockedCount || runningInstances.length`: what waits on the operator, else what runs.
         let blocked = blockedCount
@@ -926,7 +923,7 @@ final class SidebarViewController: ObservedViewController {
 
     /// The rows drawn as the place in front: a place, a project, a session.
     private var currentRows: [String] {
-        let places = [(fleetRow, "Fleet"), (workflowsRow, "Workflows")].filter { $0.0.active }.map(\.1)
+        let places = [(fleetRow, "Fleet")].filter { $0.0.active }.map(\.1)
         let projects = blocks.values.filter(\.row.active).map(\.project.name)
         let sessions = sessionRows.values.filter { $0.active && $0.window != nil }.map { $0.name.text ?? $0.id }
         return places + projects + sessions
@@ -952,7 +949,7 @@ final class SidebarViewController: ObservedViewController {
         // is; a rail row archives nothing (Sidebar.svelte's SessionRow).
         let id = node.row.id
         row.menu = { [weak self] copy in
-            // A workflow run or a thread takes no session commands.
+            // A thread takes no session commands.
             guard let self, let context = host?.sessionMenus.at(askPlace),
                   let now = hub.fleet.byId[id]?.session else { return nil }
             return SessionMenus.live(now, context: context, copy: copy)

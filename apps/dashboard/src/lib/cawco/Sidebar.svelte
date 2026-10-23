@@ -39,7 +39,6 @@
     IconSearch,
     IconSettings,
     IconSort,
-    IconWorkflow,
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
@@ -91,7 +90,6 @@
   import { inLists, isThreadTab } from "./thread-tabs";
   import { rooted, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
-  import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
@@ -179,7 +177,7 @@
   const LEAD_TREE: BranchOptions = { glyph: LEAD };
 
   /**
-   * How far the fleet's first read has come: 1 workflow runs, 2 machines and
+   * How far the fleet's first read has come: 1 nothing yet, 2 machines and
    * sessions, 3 every online machine's stored sessions (or the hub is known
    * to be unreachable). It only climbs: a machine coming online later is a
    * live change, not part of the first read. A rail mounted after the read
@@ -190,9 +188,6 @@
   const readSoFar = (): number => {
     if (cawco.hub === "unreachable") {
       return 3;
-    }
-    if (!workflowState.loaded) {
-      return 0;
     }
     if (!cawco.fleetRead) {
       return 1;
@@ -244,12 +239,9 @@
 
   /**
    * What is running now: sessions and the threads Caw is on, as every list
-   * shows them (thread-tabs.ts `inLists`), and workflow runs still going.
+   * shows them (thread-tabs.ts `inLists`).
    */
-  const running = $derived([
-    ...cawco.runningRows,
-    ...cawco.runRows.filter((row) => row.status === "running"),
-  ]);
+  const running = $derived(cawco.runningRows);
 
   const orderedProjects = $derived.by(() =>
     [...cawco.projects].sort((a, b) => {
@@ -454,7 +446,6 @@
         (row) => isResumable(row) || isStale(row) || isFailed(row)
       )
     ),
-    ...cawco.runRows.filter(isFailed),
     ...cawco.threadRows.filter((row) => row.status !== "running"),
   ]);
 
@@ -930,28 +921,13 @@
             </Sidebar.MenuBadge>
           {/if}
         </Sidebar.MenuItem>
-
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton
-            isActive={path.startsWith("/workflows")}
-            row="nav"
-          >
-            {#snippet child({ props })}
-              <a href="/workflows" {...props} class="{props.class} mark-line"
-                ><span class={SLOT} data-box
-                  ><IconWorkflow class={SLOT_GLYPH} /></span
-                ><span>Workflows</span></a
-              >
-            {/snippet}
-          </Sidebar.MenuButton>
-        </Sidebar.MenuItem>
       </Sidebar.Menu>
     </Sidebar.Group>
     <Home markedElsewhere={(id) => treeRows.has(id)} variant="rail" />
 
     <!-- The groups built from the fleet come in together, once every read
-         they need is in (`stage` 3): Projects straight under the home, then
-         the workflow runs. Arriving each on its own, a later group pushed
+         they need is in (`stage` 3): Projects straight under the home.
+         Arriving each on its own, a later group pushed
          the ones before it down; arriving together, nothing drawn moves.
          Until then, rows standing where they will be. -->
     {#if stage >= 3}

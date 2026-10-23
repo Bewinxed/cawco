@@ -1,5 +1,5 @@
 /**
- * The workflow-tool executor (NEW.md §10): what the catalog's CLIs look like on
+ * The tool executor (NEW.md §10): what the catalog's CLIs look like on
  * this machine, and putting the ones it is asked for on it. Generic on purpose
  * — every fact about a particular tool lives in {@link TOOL_CATALOG}, and
  * nothing here names one.

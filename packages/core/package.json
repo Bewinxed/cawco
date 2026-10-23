@@ -12,6 +12,7 @@
     "./css-layers": "./src/css-layers.ts",
     "./at-most": "./src/at-most.ts",
     "./bounded": "./src/bounded.ts",
+    "./jev": "./src/jev.ts",
     "./preview-reach": "./src/preview-reach.ts",
     "./machine-path": "./src/machine-path.ts",
     "./capabilities": "./src/capabilities.ts",
@@ -115,18 +116,6 @@
     "./sessiond": {
       "types": "./src/sessiond.ts",
       "default": "./src/sessiond.ts"
-    },
-    "./workflow-program": {
-      "types": "./src/workflow-program.ts",
-      "default": "./src/workflow-program.ts"
-    },
-    "./workflow-sandbox": {
-      "types": "./src/workflow-sandbox.ts",
-      "default": "./src/workflow-sandbox.ts"
-    },
-    "./workflow-worker": {
-      "types": "./src/workflow-worker.ts",
-      "default": "./src/workflow-worker.ts"
     },
     "./views-library": {
       "types": "./src/views-library.ts",

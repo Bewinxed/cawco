@@ -41,13 +41,6 @@ export type Row =
   | { kind: "subagent"; key: string; branch: SubagentState; spawn: Message }
   /** A `delegate` / `start_session` call: the fleet session it spawned, as a fold. */
   | { kind: "delegate"; key: string; message: Message }
-  /**
-   * A workflow run, live, in the place it was started: its `workflow_run`
-   * call (`runId` null: the call's result names it), or the first notice of
-   * a run supervised here without one (`runId` set). Its receipts fold into
-   * it rather than rows of their own.
-   */
-  | { kind: "run"; key: string; message: Message; runId: string | null }
   | { kind: "stream"; key: string; text: string }
   | { kind: "thinking"; key: string; text: string; live: boolean }
   /**
@@ -123,8 +116,8 @@ export type Row =
  * reasoning, task lines, the cards its calls open — is the agent's and does
  * not end its group, but carries no header either, so the first words the
  * agent says after the reader still get one. A note cawco or the harness put
- * in on someone else's behalf (a peer, rule, report, hand-off, workflow row,
- * a failure card, a command's output, an interruption) is its own voice and
+ * in on someone else's behalf (a peer, rule, report, hand-off, a failure
+ * card, a command's output, an interruption) is its own voice and
  * ends every group. Rows that paint nothing change nothing.
  */
 export interface Voices {
@@ -188,7 +181,6 @@ function voiceOf(row: Row): Voice {
     case "harness":
     case "livetool":
     case "question":
-    case "run":
     case "stream":
     case "subagent":
     case "thinking":
@@ -393,98 +385,6 @@ const isDelegateMsg = (m: Message): boolean =>
   (m.metadata?.handoffKind === "delegate" ||
     m.metadata?.handoffKind === "start");
 
-/** A `workflow_run` call, whichever harness named the tool (`mcp__cawco__…`, `cawco_…`). */
-const RUN_TOOL = /(?:^|_)workflow_run$/;
-const isRunMsg = (m: Message): boolean =>
-  isToolMsg(m) && RUN_TOOL.test(m.metadata?.toolName ?? "");
-
-/** A run id, as the hub writes one into a call's result and a receipt's body. */
-const RUN_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
-/** The `runId` key in a call's result, and the quoting up to its value. */
-const RUN_ID_KEY = /runId[^0-9a-f]{0,6}/;
-
-/** The run a `workflow_run` call started, once its result has come back. */
-export function startedRunOf(m: Message): string | null {
-  const result = m.metadata?.toolResult;
-  if (result === undefined || result === null) {
-    return null;
-  }
-  // `{"runId":"…"}`, as a string or inside content blocks (quotes escaped).
-  const text = typeof result === "string" ? result : JSON.stringify(result);
-  const named = RUN_ID_KEY.exec(text);
-  return named
-    ? (RUN_ID.exec(text.slice(named.index + named[0].length))?.[0] ?? null)
-    : null;
-}
-
-/** The run a workflow notice is about, when it names one (a note names none). */
-const noticeRunOf = (m: Message): string | null =>
-  m.type === "user.peer" && m.metadata?.workflowEvent !== undefined
-    ? (RUN_ID.exec(m.content)?.[0] ?? null)
-    : null;
-
-/**
- * A workflow notice, read against the transcript it is in: folded into its
- * run's block, or — for a run this session supervises but did not start
- * with a call (a run launched from the dashboard) — the block's own place,
- * its first notice (the run supervisor's brief).
- */
-export type Receipt = { fold: true } | { fold: false; anchor: string } | null;
-
-/**
- * How each workflow notice in `messages` is told. A run started here by a
- * `workflow_run` call is told by the call's block, so every notice naming
- * it folds, and so does a note from a workflow one of those calls ran (a
- * note names no run). A run supervised here without a call is told by a
- * block at its first notice, and its later notices fold into that. Read
- * over the whole transcript, so a fold that restarts at a cut still knows
- * every run started before it.
- */
-function receiptsOf(messages: Message[]): (m: Message, i: number) => Receipt {
-  const byCall = new Set<string>();
-  const names = new Set<string>();
-  const first = new Map<string, number>();
-  messages.forEach((m, i) => {
-    const notice = noticeRunOf(m);
-    if (notice && !first.has(notice)) {
-      first.set(notice, i);
-    }
-    if (!isRunMsg(m)) {
-      return;
-    }
-    const run = startedRunOf(m);
-    if (run) {
-      byCall.add(run);
-    }
-    const input = m.metadata?.toolInput;
-    const name =
-      input && typeof input === "object" && !Array.isArray(input)
-        ? input.name
-        : undefined;
-    if (typeof name === "string") {
-      names.add(name.toLowerCase());
-    }
-  });
-  if (first.size === 0 && names.size === 0) {
-    return () => null;
-  }
-  return (m, i) => {
-    if (m.type !== "user.peer" || m.metadata?.workflowEvent === undefined) {
-      return null;
-    }
-    const run = noticeRunOf(m);
-    if (!run) {
-      return names.has((m.metadata?.peerName ?? "").toLowerCase())
-        ? { fold: true }
-        : null;
-    }
-    if (byCall.has(run) || first.get(run) !== i) {
-      return { fold: true };
-    }
-    return { fold: false, anchor: run };
-  };
-}
-
 /**
  * Whether a read of a transcript holds a compaction: what a divider, and Caw
  * beside its word, will be drawn for. Asked of a page as it arrives, before
@@ -686,22 +586,13 @@ export function foldMessages(
  * The row a message makes on its own, when it is one that never joins a run
  * of calls: harness plumbing (never a turn, so it never reaches the `single`
  * row that would give it a Who header and user styling), a subagent's
- * branch, a question, a delegate, a workflow run. `null` for the rest.
+ * branch, a question, a delegate. `null` for the rest.
  */
 function ownRow(
   m: Message,
   i: number,
-  subagents: Record<string, SubagentState>,
-  receipt: Receipt
+  subagents: Record<string, SubagentState>
 ): Row | null {
-  if (receipt && !receipt.fold) {
-    return {
-      kind: "run",
-      key: `r:${keyOf(m, i)}`,
-      message: m,
-      runId: receipt.anchor,
-    };
-  }
   const move = m.type === "system.account_move" && m.metadata?.accountMove;
   if (move) {
     return {
@@ -729,9 +620,6 @@ function ownRow(
   if (isDelegateMsg(m)) {
     return { kind: "delegate", key: `d:${keyOf(m, i)}`, message: m };
   }
-  if (isRunMsg(m)) {
-    return { kind: "run", key: `r:${keyOf(m, i)}`, message: m, runId: null };
-  }
   return null;
 }
 
@@ -754,17 +642,10 @@ function foldRange(
 ): { rows: Row[]; starts: number[] } {
   const rows: Row[] = [];
   const starts: number[] = [];
-  const receiptAt = receiptsOf(messages);
 
   let i = from;
   while (i < messages.length) {
     const m = messages[i];
-    const receipt = receiptAt(m, i);
-
-    if (receipt?.fold) {
-      i += 1;
-      continue;
-    }
     starts.push(i);
 
     const compaction = compactionAt(messages, i, said);
@@ -781,7 +662,7 @@ function foldRange(
       continue;
     }
 
-    const own = ownRow(m, i, subagents, receipt);
+    const own = ownRow(m, i, subagents);
     if (own) {
       rows.push(own);
       i += 1;
@@ -797,7 +678,6 @@ function foldRange(
         isToolMsg(messages[i]) &&
         !isQuestionMsg(messages[i]) &&
         !isDelegateMsg(messages[i]) &&
-        !isRunMsg(messages[i]) &&
         !branchOf(messages[i], subagents)
       ) {
         run.push(messages[i]);
@@ -886,7 +766,7 @@ const WHOLE_RUNS = Number.POSITIVE_INFINITY;
  * draws the calls as one run (Transcript `continued`). It also makes an
  * older page of calls rows of their own in front of the rows held: what a
  * page joins onto the first row held (a compaction's summary, a `continued`
- * line's opening, a workflow notice) takes that row's place under a key of
+ * line's opening) takes that row's place under a key of
  * its own, which the list takes as rows changed in front (its `shift`).
  */
 const LISTED_CALLS_PER_ROW = 1;
@@ -1900,15 +1780,8 @@ function tailRows(
   // row in the conversation, where it was read.
   const { messages } = session;
   const from = queuedFrom(messages);
-  // Read over the whole transcript, and asked of the waiting sends alone:
-  // with none waiting, there is nothing to ask it of.
-  const receiptAt = from < messages.length ? receiptsOf(messages) : null;
   const waiting: Row[] = [];
   for (let i = from; i < messages.length; i += 1) {
-    // A run's receipt waiting to be read is already told by its block.
-    if (receiptAt?.(messages[i], i)?.fold) {
-      continue;
-    }
     waiting.push({
       kind: "queued",
       key: keyOf(messages[i], i),

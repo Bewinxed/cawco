@@ -107,7 +107,6 @@ const CAWCO_TAG = /^\[cawco:([a-z-]+)[ \]]/;
 const TAGGED: Readonly<Record<string, DocAuthor>> = {
   report: "report",
   handoff: "agent",
-  "workflow-step": "agent",
 };
 
 /**

@@ -32,14 +32,9 @@ export interface Reading {
   running: ReadonlySet<string>;
 }
 
-/** Every row running now: sessions, and workflow runs still going. */
+/** Every row running now: the sessions. */
 export const runningIds = (): Set<string> =>
-  new Set([
-    ...cawco.runningInstances.map((row) => row.id),
-    ...cawco.runRows
-      .filter((row) => row.status === "running")
-      .map((row) => row.id),
-  ]);
+  new Set(cawco.runningInstances.map((row) => row.id));
 
 /**
  * Which of a parent's rows it lists, by id; the rest fold under its "N

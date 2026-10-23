@@ -4,7 +4,7 @@
  * one collapse model for every list that nests sessions (the rail's
  * projects, Working and Finished), so they nest, fold and open the same way
  * everywhere. Nothing here knows what a row is beyond its id and its
- * parent's: a workflow run with its step sessions under it is the same tree.
+ * parent's.
  *
  * A list that can name rows it does not hold (`context`) never leaves a
  * child on its own: when its parent is not in the list (in the other tab,

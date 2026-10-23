@@ -1685,7 +1685,7 @@
         "colorSpace": "oklch",
         "components": [0.70275, 0.01685, 77.7]
       },
-      "$description": "The nesting lines' ink (.kit-nest, WorkflowRail): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.",
+      "$description": "The nesting lines' ink (.kit-nest, the rails' nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.",
       "$extensions": {
         "dev.cawco": {
           "css": "color-mix(in oklch, {color.neutral-8} 85%, {color.neutral-9})"
@@ -4255,7 +4255,7 @@
         "value": 506.4,
         "unit": "px"
       },
-      "$description": "An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: \"at most 60% of the well\"; the workflow editor's inspector).",
+      "$description": "An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: \"at most 60% of the well\").",
       "$extensions": {
         "dev.cawco": {
           "css": "60dvh"
@@ -6721,30 +6721,6 @@
       },
       "$description": "A filed task card's least track in a reply."
     },
-    "c-workflow-when-col": {
-      "$type": "dimension",
-      "$value": {
-        "value": 110,
-        "unit": "px"
-      },
-      "$description": "The workflow list's last-run and started columns."
-    },
-    "c-workflow-count-col": {
-      "$type": "dimension",
-      "$value": {
-        "value": 60,
-        "unit": "px"
-      },
-      "$description": "The workflow list's run count column."
-    },
-    "c-workflow-actions-col": {
-      "$type": "dimension",
-      "$value": {
-        "value": 70,
-        "unit": "px"
-      },
-      "$description": "The workflow list's actions column."
-    },
     "c-atts-max-h": {
       "$type": "dimension",
       "$value": {
@@ -7001,59 +6977,6 @@
       },
       "$description": "The tallest a tool call's document well grows in the transcript before it scrolls."
     },
-    "c-graph-canvas-min": {
-      "$type": "dimension",
-      "$value": {
-        "value": 300,
-        "unit": "px"
-      },
-      "$description": "The workflow graph canvas's least height."
-    },
-    "c-graph-handle": {
-      "$type": "dimension",
-      "$value": {
-        "value": 10,
-        "unit": "px"
-      },
-      "$description": "A connection handle's diameter on the workflow canvas."
-    },
-    "c-workflow-crumb": {
-      "$type": "dimension",
-      "$value": {
-        "value": 220,
-        "unit": "px"
-      },
-      "$description": "The workflow editor's breadcrumb basis."
-    },
-    "c-workflow-name-max": {
-      "$type": "dimension",
-      "$value": {
-        "value": 300,
-        "unit": "px"
-      },
-      "$description": "The workflow name field's widest in the header."
-    },
-    "c-workflow-save-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 192,
-        "unit": "px"
-      },
-      "$description": "The save-state readout's width, so its words swap and nothing moves.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "24ch"
-        }
-      }
-    },
-    "c-workflow-runs-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 300,
-        "unit": "px"
-      },
-      "$description": "The runs list column of the workflow editor's Runs tab."
-    },
     "c-completer-max-h": {
       "$type": "dimension",
       "$value": {
@@ -7061,27 +6984,6 @@
         "unit": "px"
       },
       "$description": "The template-path completer's tallest list."
-    },
-    "c-wf-node-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 260,
-        "unit": "px"
-      },
-      "$description": "A workflow graph node card's width."
-    },
-    "c-wf-scroll-max-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 253.2,
-        "unit": "px"
-      },
-      "$description": "An inline scroll region on a workflow page (the problems list, the run log).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "30dvh"
-        }
-      }
     },
     "c-key-field-basis": {
       "$type": "dimension",
@@ -7183,14 +7085,6 @@
         "unit": "px"
       },
       "$description": "The phone's navigation sheet's width (Shell); the desk rail is c-sidebar-w."
-    },
-    "c-run-result-max": {
-      "$type": "dimension",
-      "$value": {
-        "value": 240,
-        "unit": "px"
-      },
-      "$description": "The height a run step's opened result scrolls inside (RunSteps)."
     },
     "c-session-hover-head": {
       "$type": "dimension",

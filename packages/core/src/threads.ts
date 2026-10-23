@@ -304,16 +304,9 @@ export type ThreadEvent =
       root: string;
     }
   | { kind: "hub"; what: "thread-repaired" }
-  /**
-   * Held back from the wire: an app that reads `event` closed (TestFlight
-   * 20261015) cannot read it, so the hub sends it as
-   * `EventThreadMessage.routineMade` beside a null `event` (hub caw.ts
-   * `wireEvent`; the bridge in hub scripts/wire-compat.ts) until no
-   * installable app needs that. Declared here so the apps built from now on
-   * read it.
-   */
+  /** A session made a routine (routines.ts `announce`). */
   | RoutineMadeThreadEvent
-  /** Held back from the wire as `routine-made` is: sent as `EventThreadMessage.designOffer`. */
+  /** Caw asking whether to build a design system. */
   | DesignOfferThreadEvent;
 
 /**
@@ -421,27 +414,13 @@ export interface EventThreadMessage extends ThreadMessageBase {
   author: "event";
   /** What happened, opened like a fold; absent when the title says it all. */
   body?: string;
-  /**
-   * Caw asking whether to build a design system, with `event` null: the
-   * ThreadEvent kind `design-offer`, held back as `routine-made` is.
-   */
-  designOffer?: DesignOfferEvent;
-  /**
-   * What happened, as typed data; null on a note stored before events were
-   * typed, and on one whose kind is held back from it ({@link routineMade}).
-   */
+  /** What happened, as typed data; null on a note stored before events were typed. */
   event: ThreadEvent | null;
   /**
    * One line: source and what, like "Routine · Triage issues · 09:00". The
    * time is not in it: a reader draws `createdAt` in their own time zone.
    */
   noteTitle: string;
-  /**
-   * A session made a routine, with `event` null: the ThreadEvent kind
-   * `routine-made`, held back while an installable app reads `event` closed
-   * (a bridge, hub scripts/wire-compat.ts BRIDGES).
-   */
-  routineMade?: RoutineMadeEvent;
 }
 
 export type ThreadMessage =

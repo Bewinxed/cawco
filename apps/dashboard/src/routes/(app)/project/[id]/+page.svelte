@@ -170,10 +170,10 @@
     IconFileTable,
     IconLayers,
     IconMore,
+    IconPipeline,
     IconPlus,
     IconSparkles,
     IconToolTodo,
-    IconWorkflow,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
@@ -1153,7 +1153,7 @@
   const TASK_GLYPHS = {
     board: IconColumns,
     table: IconFileTable,
-    pipeline: IconWorkflow,
+    pipeline: IconPipeline,
   } as const;
 
   /** The kept views placed on `on`, each a block there. */

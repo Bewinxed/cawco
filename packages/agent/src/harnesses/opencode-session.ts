@@ -303,13 +303,6 @@ const leadAsks: readonly OpencodeRule[] = LEAD_GATED_TOOLS.opencode.map(
 );
 const LEAD_ASKED: ReadonlySet<string> = new Set(LEAD_GATED_TOOLS.opencode);
 
-/** The CawCo tools only a workflow step calls (the plugin's own). */
-const WORKFLOW_TOOLS = [
-  "cawco_submit_result",
-  "cawco_workflow_state_read",
-  "cawco_workflow_state_write",
-];
-
 /** The CawCo tools that start or steer other sessions: off for a session that may not delegate. */
 const DELEGATION_TOOLS = [
   "start_session",
@@ -320,10 +313,6 @@ const DELEGATION_TOOLS = [
   "answer_delegate",
   "discard_workspace",
   "machine_pause",
-  "workflow_run",
-  "workflow_steer",
-  "workflow_read",
-  "workflow_list",
 ].map((name) => `cawco_${name}`);
 
 /** What OpenCode makes of a server's name in its tools' ids. */
@@ -704,7 +693,6 @@ export interface OpencodeSessionOptions {
    * or answered (undefined). The harness keeps it as a sign-in's fault.
    */
   turnOutcome: (provider: string, refusal: string | undefined) => void;
-  workflowStepId?: string;
 }
 
 export class OpencodeSession implements HarnessSession {
@@ -724,7 +712,6 @@ export class OpencodeSession implements HarnessSession {
   readonly #deniedRules: OpencodeRule[];
   readonly #fence: boolean;
   readonly #lead: boolean;
-  readonly #workflowStepId?: string;
   readonly #canDelegate?: boolean;
   /** The instruction entries put on the session, by key, as the hash of the value put. */
   readonly #instructions = new Map<string, string>();
@@ -845,7 +832,6 @@ export class OpencodeSession implements HarnessSession {
     this.#deniedRules = options.deniedRules;
     this.#fence = options.fence;
     this.#lead = options.lead;
-    this.#workflowStepId = options.workflowStepId;
     this.#canDelegate = options.canDelegate;
     this.#scopedInstructions = options.instructions ?? [];
     this.#registerChild = options.registerChild;
@@ -973,7 +959,6 @@ export class OpencodeSession implements HarnessSession {
    */
   async #rules(): Promise<OpencodeRule[]> {
     return [
-      ...(this.#workflowStepId ? [] : WORKFLOW_TOOLS.map(deny)),
       ...(this.#canDelegate === false ? DELEGATION_TOOLS.map(deny) : []),
       ...this.#deniedRules,
       ...(this.#fence ? await mcpFence(this.#client, this.#directory) : []),

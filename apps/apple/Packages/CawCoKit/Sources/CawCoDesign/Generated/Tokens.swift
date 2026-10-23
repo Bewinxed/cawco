@@ -258,7 +258,7 @@ public enum Palette {
     public static let statusDoneGlyph = Palette.named("status-done-glyph")
     public static let statusFailGlyph = Palette.named("status-fail-glyph")
     public static let statusIdleGlyph = Palette.named("status-idle-glyph")
-    /// The nesting lines' ink (.kit-nest, WorkflowRail): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.
+    /// The nesting lines' ink (.kit-nest, the rails' nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.
     public static let nestInk = Palette.named("nest-ink")
     /// Usage meters (DESIGN.md, Limit bar: a fill in the window's state colour): a window with room is the muted ink on the control-edge groove (a quiet reading is a healthy one, and coral is the action's, never data: DESIGN.md The Coral Is Where You Act Rule), spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. The calm fill holds about 4.7:1 on its track by day and 5:1 at night.
     public static let meterCalm = Palette.named("meter-calm")
@@ -570,7 +570,7 @@ public enum Size {
     public static let cTargetGap: Double = 2
     /// A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons.
     public static let cSheetInspectorW: Double = 296
-    /// An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well"; the workflow editor's inspector).
+    /// An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well").
     public static let cSheetInspectorMaxH: Double = 506.4
     /// The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink).
     public static let cSheetInspectorHeadH: Double = 44
@@ -1130,12 +1130,6 @@ public enum Size {
     public static let cUsagePctW: Double = 32
     /// A filed task card's least track in a reply.
     public static let cFiledTaskW: Double = 224
-    /// The workflow list's last-run and started columns.
-    public static let cWorkflowWhenCol: Double = 110
-    /// The workflow list's run count column.
-    public static let cWorkflowCountCol: Double = 60
-    /// The workflow list's actions column.
-    public static let cWorkflowActionsCol: Double = 70
     /// The composer's attachments row before it scrolls.
     public static let cAttsMaxH: Double = 180
     /// How far the settle's text clip reaches past a word's box, so ascenders and descenders survive.
@@ -1191,24 +1185,8 @@ public enum Size {
     public static let cDialogDocumentW: Double = 370.5
     /// The tallest a tool call's document well grows in the transcript before it scrolls.
     public static let cToolWellMaxH: Double = 420
-    /// The workflow graph canvas's least height.
-    public static let cGraphCanvasMin: Double = 300
-    /// A connection handle's diameter on the workflow canvas.
-    public static let cGraphHandle: Double = 10
-    /// The workflow editor's breadcrumb basis.
-    public static let cWorkflowCrumb: Double = 220
-    /// The workflow name field's widest in the header.
-    public static let cWorkflowNameMax: Double = 300
-    /// The save-state readout's width, so its words swap and nothing moves.
-    public static let cWorkflowSaveW: Double = 192
-    /// The runs list column of the workflow editor's Runs tab.
-    public static let cWorkflowRunsW: Double = 300
     /// The template-path completer's tallest list.
     public static let cCompleterMaxH: Double = 240
-    /// A workflow graph node card's width.
-    public static let cWfNodeW: Double = 260
-    /// An inline scroll region on a workflow page (the problems list, the run log).
-    public static let cWfScrollMaxH: Double = 253.2
     /// The Set-key field's basis beside its buttons.
     public static let cKeyFieldBasis: Double = 224
     /// The Set-key field's widest.
@@ -1233,8 +1211,6 @@ public enum Size {
     public static let cSideBenchH: Double = 120
     /// The phone's navigation sheet's width (Shell); the desk rail is c-sidebar-w.
     public static let cRailSheetW: Double = 284
-    /// The height a run step's opened result scrolls inside (RunSteps).
-    public static let cRunResultMax: Double = 240
     /// The session hover card's head at its narrowest, so a short title never narrows the card.
     public static let cSessionHoverHead: Double = 240
     /// The room the session hover card reads as its cell's (SessionHover).

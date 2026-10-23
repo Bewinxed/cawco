@@ -107,12 +107,9 @@ import {
   type PermissionResult,
   type ThreadNote,
 } from "@cawco/core";
+import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
-import type {
-  JevChoiceAnswer,
-  JevQuestion,
-} from "@cawco/core/workflow-program";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
@@ -1837,7 +1834,7 @@ export const createMemory = ({
     }
     // Delegated work is a delegate's; a session another session started
     // with `start_session` writes as a session.
-    return actor.workItemId || actor.workflowStepId ? "delegate" : "session";
+    return actor.workItemId ? "delegate" : "session";
   };
 
   // --- notes -----------------------------------------------------------------------

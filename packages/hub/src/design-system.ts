@@ -763,7 +763,7 @@ const repositoryStore = (
     },
     read: async (paths) => {
       // A command a file: one command's output is held to the agent's
-      // 8 MiB (workflow-command.ts), and a system's assets together pass it.
+      // 8 MiB (hub-command.ts), and a system's assets together pass it.
       const found = new Map<string, Uint8Array | null>();
       for (const path of paths) {
         // biome-ignore lint/performance/noAwaitInLoops: one file after another

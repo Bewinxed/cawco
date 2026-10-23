@@ -4,7 +4,7 @@
  *
  * - Status: the hub and the machines, in one line.
  * - Needs you: every ask parked on the operator (a session's permission or
- *   question, a workflow run's question), every card of kind `you`, and
+ *   question), every card of kind `you`, and
  *   every artifact waiting on the operator (core artifact-needs.ts),
  *   longest wait first by the moment the hub raised it (`raisedAt`), so
  *   every device lists them alike.
@@ -27,7 +27,6 @@ import type {
   RelayJourneyView,
   TailnetHttps,
   WaitingMachine,
-  WorkflowRun,
 } from "@cawco/core";
 import {
   archiveRefusal,
@@ -80,8 +79,6 @@ import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
 import { threadIdOf, threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
-import { runHref, runIdOf } from "../workflow-runs";
-import { workflowState } from "../workflow-state.svelte";
 import { askNaming } from "./ask-naming";
 import { choices } from "./choices.svelte";
 
@@ -149,7 +146,7 @@ function settleSeen(): void {
 }
 
 /**
- * Tells the hub sessions (and runs, as `run:<id>`) were seen, archived or
+ * Tells the hub sessions were seen, archived or
  * unarchived, and resolves with its stamp (null for an unarchive). A
  * refusal is thrown in the hub's sentence, with the row's own id taken out
  * of it: it is said on that row.
@@ -204,7 +201,7 @@ export function markOpened(id: string): void {
 }
 
 /**
- * Takes sessions (and runs, as `run:<id>`) off Finished without opening
+ * Takes sessions off Finished without opening
  * them, so each is listed again only when it ends another turn. Only what
  * `home.archivable` allows is ever offered; the hub holds the same rule
  * (core `archiveRefusal`). Each is asked on its own: its row says
@@ -320,16 +317,6 @@ export interface AskItem {
    * his lead session is never a card's place; null opens the session.
    */
   thread: string | null;
-  title: string;
-}
-
-export interface RunItem {
-  href: string;
-  key: string;
-  kind: "run";
-  place: string;
-  raisedAt: number | undefined;
-  run: WorkflowRun;
   title: string;
 }
 
@@ -573,7 +560,6 @@ export type NeedsItem =
   | ArtifactItem
   | McpItem
   | AskItem
-  | RunItem
   | CapItem
   | ActionItem
   | WatchItem
@@ -837,15 +823,15 @@ export function lastAt(row: BoardRow): number {
 }
 
 /**
- * When a session (or run, or thread) last ended, on the hub's clock as
+ * When a session (or thread) last ended, on the hub's clock as
  * `seenAt` is; `undefined` while it works or waits on the reader. A
  * session: the end of its turn as the hub took it (`turnEndedAt`), or for
  * a failed one the hub's last change to its row. A pulse's time is its
- * machine's clock, so it is never read here. A run or a thread: its own
- * last move, which the hub stamps.
+ * machine's clock, so it is never read here. A thread: its own last move,
+ * which the hub stamps.
  */
 function endedAt(row: BoardRow): number | undefined {
-  if (runIdOf(row.id) || threadIdOf(row.id)) {
+  if (threadIdOf(row.id)) {
     if (isFailed(row)) {
       return lastAt(row);
     }
@@ -987,9 +973,8 @@ class Home {
   );
 
   /**
-   * What hangs directly under each session and run, as every list nests it
-   * (a session's delegates and runs, a run's steps and child runs): the
-   * rows' own parents, runs among them.
+   * What hangs directly under each session, as every list nests it (a
+   * session's delegates): the rows' own parents.
    */
   readonly #children = $derived.by(() => {
     const children = new Map<string, string[]>();
@@ -1042,7 +1027,7 @@ class Home {
   }
 
   /**
-   * The first full read is in: machines, sessions, runs, every online
+   * The first full read is in: machines, sessions, every online
    * machine's stored sessions, and the socket's own snapshot of what is
    * mid-turn (or the hub is known to be unreachable). It only rises: a
    * reconnect later does not take the home back to its skeleton.
@@ -1106,10 +1091,7 @@ class Home {
       $effect(() => {
         if (
           cawco.hub === "unreachable" ||
-          (cawco.fleetRead &&
-            cawco.liveRead &&
-            workflowState.loaded &&
-            cawco.catalogsRead)
+          (cawco.fleetRead && cawco.liveRead && cawco.catalogsRead)
         ) {
           this.#ready = true;
         }
@@ -1193,19 +1175,6 @@ class Home {
         stale: item.stale,
       };
     });
-    const runs: NeedsItem[] = Object.values(workflowState.runs)
-      .filter((run) => run.status === "waiting")
-      .map((run) => ({
-        kind: "run",
-        key: `run:${run.id}`,
-        run,
-        title:
-          workflowState.workflows.find((w) => w.id === run.workflowId)?.name ??
-          "Workflow",
-        place: machineName(run.machineId),
-        href: runHref(run.id),
-        raisedAt: cawco.runAskRaisedAt(run.id),
-      }));
     const caps: NeedsItem[] = cawco.capped.flatMap((project) =>
       project.cap
         ? [
@@ -1435,7 +1404,6 @@ class Home {
       ...asks,
       ...artifacts,
       ...signIns,
-      ...runs,
       ...caps,
       ...actions,
       ...watched,
@@ -1457,11 +1425,10 @@ class Home {
   /**
    * Every session mid-turn, delegates included whatever the Delegates
    * switch says: work handed off is still work, and Caw only says "all
-   * quiet" when nothing at all is working. A running workflow run is one
-   * of them, its steps its delegates.
+   * quiet" when nothing at all is working.
    */
   readonly working = $derived.by(() => {
-    const rows = [...cawco.runningRows, ...cawco.runRows].filter(
+    const rows = cawco.runningRows.filter(
       (row) => cawco.activityOf(row.id) === "working"
     );
     // Ordered by when each joined Working this stint, newest first: a key
@@ -1491,7 +1458,7 @@ class Home {
    * Every session that has ended since it was last opened, delegates
    * included whatever the Delegates switch says: the list that shows them
    * (WorkTabs) decides which delegates it lists, so a failed one is never
-   * missed. A workflow run that has ended is one of them.
+   * missed.
    */
   readonly finished = $derived.by<BoardRow[]>(() => {
     if (choices.finished === "a") {
@@ -1499,7 +1466,7 @@ class Home {
     }
     return heldOrder(
       "home:finished",
-      [...cawco.listedRows, ...cawco.runRows]
+      cawco.listedRows
         .filter(endedUnseen)
         // The latest to end first. A failure says so on its own row (its
         // mark, its line, the tab's numeral), not by jumping the queue. Two
@@ -1628,7 +1595,6 @@ class Home {
 
   /** The stored half, named, in order. */
   readonly #stored = $derived.by<RecentItem[]>(() => {
-    // Runs are rows too, but under `run:` ids no stored session carries.
     const index = indexInstances(this.#namingRows);
     return this.#storedEntries.map((entry): RecentItem => ({
       ...entry,

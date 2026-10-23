@@ -47,7 +47,6 @@ function recordsOf(row: Row): Message[] {
     case "queued":
     case "question":
     case "delegate":
-    case "run":
       return [row.message];
     case "tools":
       return row.messages;

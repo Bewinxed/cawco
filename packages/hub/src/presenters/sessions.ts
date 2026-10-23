@@ -1,7 +1,6 @@
 /**
  * Sessions as an agent reads them: its delegates and their tree, a delegate
- * or session it started, the delegate types it can start, the workflows it
- * can run. Each session by its chip's link and the handle `handoff` and
+ * or session it started, the delegate types it can start. Each session by its chip's link and the handle `handoff` and
  * `stop_delegate` take; a spawn's own link carries its full id, which the
  * transcript's delegate card is keyed by (core transcript-rules.ts).
  */
@@ -10,9 +9,6 @@ import {
   type GeneratedImage,
   planLink,
   sessionLink,
-  type WorkflowInput,
-  type WorkflowListing,
-  workflowLink,
 } from "@cawco/core";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import type { DelegateList, DelegateNode } from "../delegation-tree";
@@ -179,42 +175,6 @@ export const delegateTypesWords = (catalog: {
         `${count(catalog.types.length, "delegate type")}; delegate's type takes the name:`,
         catalog.types.map(typeLine)
       );
-
-/** One workflow as a line: its name as its link, what it does, its inputs. */
-const workflowLine = (workflow: WorkflowListing, now: number): string => {
-  const inputs = workflow.inputs.map(
-    (input: WorkflowInput) =>
-      `${input.name}${input.required ? "" : "?"}${input.options?.length ? ` (${input.options.join(" | ")})` : ""}`
-  );
-  return `- ${workflowLink(workflow.id, workflow.slug)}: ${workflow.description.replace(/\s+/g, " ").trim() || "no description"} · inputs ${inputs.length > 0 ? inputs.join(", ") : "none"} · changed ${ago(workflow.updatedAt, now)}`;
-};
-
-/** `workflow_list`: each saved workflow, a line. */
-export const workflowsWords = (listed: {
-  workflows: WorkflowListing[];
-}): string => {
-  const now = Date.now();
-  return listed.workflows.length === 0
-    ? "No workflows are saved: write one with workflow_create."
-    : lines(
-        `${count(listed.workflows.length, "workflow")}; workflow_run takes the name:`,
-        listed.workflows.map((workflow) => workflowLine(workflow, now))
-      );
-};
-
-/** `workflow_create` and `workflow_update`: what was saved. */
-export const workflowSavedWords = (saved: WorkflowListing): string =>
-  `Saved workflow ${workflowLink(saved.id, saved.slug)}${saved.inputs.length > 0 ? `, inputs ${saved.inputs.map((input: WorkflowInput) => input.name).join(", ")}` : ", no inputs"}; workflow_run takes the name.`;
-
-/** `workflow_run`: the run started, its handle for workflow_read and workflow_steer. */
-export const runStartedWords = (run: { runId: string }): string =>
-  `Started run ${handle(run.runId)}, ${workflowLink(run.runId, `run ${handle(run.runId)}`)}; you supervise it, and a receipt arrives for each step. workflow_read and workflow_steer take the run's handle.`;
-
-/** `workflow_state_read`: the slot's value. */
-export const stateSlotWords = (slot: { value: unknown }): string =>
-  slot.value === undefined
-    ? "The slot holds nothing yet."
-    : JSON.stringify(slot.value);
 
 /** `generate_image`: where it is, how big. */
 export const imageWords = (image: GeneratedImage): string =>

@@ -33,7 +33,6 @@ nonisolated struct Item: Sendable {
         case question(Block)
         case subagent(Branch, spawn: Block)
         case delegate(Block)
-        case run(Block, runId: String?)
         case compaction(Compaction)
         case livetool(name: String, glance: String)
         case notice(String)

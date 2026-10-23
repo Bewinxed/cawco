@@ -1,7 +1,7 @@
 /**
  * The marker lines cawco opens every message it puts into a session with,
- * on someone else's behalf — another session's hand-off, a workflow's brief or
- * notice, a delegate's report or ask. (A rule's marker lives beside the rest
+ * on someone else's behalf — another session's hand-off, a delegate's report
+ * or ask. (A rule's marker lives beside the rest
  * of rules, in `rules.ts`.)
  *
  * A message's `origin` says who sent it while it streams, but storage strips
@@ -92,10 +92,6 @@ const tagOf = (text: string, kind: string): MarkerTag | null => {
 const handoffLine = (from: string, short: string): string =>
   `[Hand-off from the ${from}${short ? `#${short}` : ""} session — another agent, not the user]\n\n`;
 
-/** The words a workflow step's brief opens with. */
-const stepLine = (workflow: string, step: string): string =>
-  `[Hand-off from the ${workflow} workflow — step ${step}, not the user]\n\n`;
-
 /**
  * A hand-off from another session, named `<name>#<first 8 of its id>` as a
  * report names its delegate, so a reader can link, mark and relate the sender.
@@ -103,23 +99,17 @@ const stepLine = (workflow: string, step: string): string =>
 export const handoffMarker = (from: string, id: string): string =>
   `${markerTag("handoff", { from, short: id.slice(0, 8) })}${handoffLine(from, id.slice(0, 8))}`;
 
-/** A workflow step's brief, handed to the session that runs the step. */
-export const workflowStepMarker = (workflow: string, step: string): string =>
-  `${markerTag("workflow-step", { workflow, step })}${stepLine(workflow, step)}`;
-
 /**
  * Where a hand-off's marker ends, its tag and its line and the whitespace
  * after them; 0 for text that opens with none.
  */
 const handoffEnd = (text: string): number => {
-  const tag = readMarkerTag(text);
-  if (!(tag?.kind === "handoff" || tag?.kind === "workflow-step")) {
+  const tag = tagOf(text, "handoff");
+  if (!tag) {
     return 0;
   }
-  const { from = "", short = "", workflow = "", step = "" } = tag.fields;
-  const line = (
-    tag.kind === "handoff" ? handoffLine(from, short) : stepLine(workflow, step)
-  ).trimEnd();
+  const { from = "", short = "" } = tag.fields;
+  const line = handoffLine(from, short).trimEnd();
   const lineAt = text.length - tag.rest.length;
   const end = tag.rest.startsWith(line) ? lineAt + line.length : lineAt;
   return end + (LEADING_SPACE.exec(text.slice(end))?.[0].length ?? 0);
@@ -403,30 +393,22 @@ export const withPresenceLine = (text: string, said: PresenceSaid): string =>
 
 /**
  * A hand-off read back into who sent it and what it says. `from` names the
- * sending session, or the workflow and step for a step's brief; `short` is the
- * sending session's 8-character short id, which consumers pair with its full
- * id by prefix (none for a workflow's brief).
+ * sending session; `short` is its 8-character short id, which consumers pair
+ * with its full id by prefix (none on a hand-off stored before it was named).
  */
 export function parseHandoffMarker(
   text: string
 ): { from: string; short?: string; body: string } | null {
-  const tag = readMarkerTag(text);
-  if (tag?.kind === "handoff") {
-    const { from = "", short = "" } = tag.fields;
-    return {
-      from,
-      ...(short ? { short } : {}),
-      body: afterLine(tag.rest, handoffLine(from, short)),
-    };
+  const tag = tagOf(text, "handoff");
+  if (!tag) {
+    return null;
   }
-  if (tag?.kind === "workflow-step") {
-    const { workflow = "", step = "" } = tag.fields;
-    return {
-      from: `${workflow} workflow · ${step}`,
-      body: afterLine(tag.rest, stepLine(workflow, step)),
-    };
-  }
-  return null;
+  const { from = "", short = "" } = tag.fields;
+  return {
+    from,
+    ...(short ? { short } : {}),
+    body: afterLine(tag.rest, handoffLine(from, short)),
+  };
 }
 
 /** The words an undelivered notice opens with, before its reason. */
@@ -721,45 +703,6 @@ export function parseForkNotice(
   }
   const { line = "" } = tag.fields;
   return { line, body: afterLine(tag.rest, forkLine(line)) };
-}
-
-/** The words a workflow's notice opens with. */
-const workflowNoticeLine = (workflow: string, event: string): string =>
-  `[Workflow ${workflow} — ${event}]\n\n`;
-
-/**
- * A workflow telling its supervising session what happened: a step passed or
- * failed, the run finished, a question or checkpoint came up. `runId` is the
- * run it is about, which its reader links the note to.
- */
-export const workflowNoticeMarker = (
-  workflow: string,
-  event: string,
-  runId: string
-): string =>
-  `${markerTag("workflow-notice", { workflow, event, run: runId })}${workflowNoticeLine(workflow, event)}`;
-
-/**
- * A workflow notice read back into the workflow, the event, its run and the
- * detail. `runId` is absent on one stored before a notice named its run.
- */
-export function parseWorkflowNotice(text: string): {
-  workflow: string;
-  event: string;
-  runId?: string;
-  body: string;
-} | null {
-  const tag = tagOf(text, "workflow-notice");
-  if (!tag) {
-    return null;
-  }
-  const { workflow = "", event = "", run } = tag.fields;
-  return {
-    workflow,
-    event,
-    ...(run ? { runId: run } : {}),
-    body: afterLine(tag.rest, workflowNoticeLine(workflow, event)),
-  };
 }
 
 /** How a report's turn ended, as its tag says it. */

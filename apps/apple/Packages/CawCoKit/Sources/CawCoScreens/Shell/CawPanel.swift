@@ -454,12 +454,6 @@ private final class NeedRow: UIControl {
             }
             column.addArrangedSubview(actions)
             column.setCustomSpacing(Space.space2, after: ask)
-        case .run:
-            ask.text = "Waiting on your answer"
-            let actions = UIStackView(arrangedSubviews: [UIView(), KitButton.make("Open", variant: .secondary, height: .sm) { [weak self] in self?.choose() }])
-            actions.distribution = .equalSpacing
-            column.addArrangedSubview(actions)
-            column.setCustomSpacing(Space.space2, after: ask)
         case let .watch(notice):
             // What fleet watch saw, and where (NeedsCard.svelte `want`,
             // `meta`): the row itself opens the session; nothing is answered here.
@@ -520,15 +514,13 @@ private final class NeedRow: UIControl {
         }
         // Its mark centred in the panel's one 28pt lead column on the title's
         // line (NeedsCard.svelte `.lead`): the session's own mark, as the rail
-        // draws it, in the needs-you status; a run its workflow glyph.
+        // draws it, in the needs-you status.
         let mark: UIView
         switch item.kind {
         case .ask, .watch:
             let session = SessionMarkView()
             session.configure(id: item.instanceId ?? "", place: item.cwd.isEmpty ? item.machineId : item.cwd, status: .attn)
             mark = session
-        case .run:
-            mark = GlyphView(.workflow, size: Size.iconMd, tint: Palette.inkMuted)
         case .choice:
             mark = GlyphView(.shield, size: Size.iconMd, tint: Palette.inkMuted)
         case let .tailnet(_, done):

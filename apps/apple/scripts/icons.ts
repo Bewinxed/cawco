@@ -65,7 +65,7 @@ const SOLAR_ICONS = [
   "info-circle-bold-duotone", // IconInfo
   "stop-bold-duotone", // IconStop
   "record-circle-bold-duotone", // IconDot
-  // The workflow editor's node kinds (workflow-ui.ts `kinds`).
+  // Kinds of thing: hooks, subagents, Jev, windows, sheets, rules, reports, pipelines.
   "routing-2-bold-duotone", // IconHook
   "branching-paths-down-bold-duotone", // IconSubagent
   "scale-bold-duotone", // IconJev
@@ -74,7 +74,7 @@ const SOLAR_ICONS = [
   "shield-check-bold-duotone", // IconRules
   "clipboard-check-bold-duotone", // IconReport
   "clipboard-remove-bold-duotone", // IconReportFailed
-  "share-circle-bold-duotone", // IconWorkflow
+  "share-circle-bold-duotone", // IconPipeline
   "inbox-in-bold-duotone", // IconHandoff
   "check-read-bold-duotone", // IconCheck
   "arrow-down-bold-duotone", // Latest.svelte

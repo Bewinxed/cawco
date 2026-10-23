@@ -6,8 +6,7 @@
  * so the caller writes no scratch file of its own. Work-items writes them
  * into the receiving workspace's `$TMPDIR/inputs/` beside the path inputs
  * its machine copies (work-items.ts `readInputs`, `handIn`); `delegate` and
- * `handoff` hand through it now, a workflow step's inputs once steps hand
- * work on.
+ * `handoff` hand through it.
  *
  * Each kind is read under the rule its own tool reads it by: an artifact and
  * its pins as `artifact_read` and `comment_read` let the caller, a `find`

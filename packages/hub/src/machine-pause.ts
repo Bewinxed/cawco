@@ -13,7 +13,7 @@
  *   order taken once the pause ends (`releaseOwed`, `flushOwedStarts`);
  * - a keep-alive's ping: not sent;
  * - a command the hub runs there, a landing gate step (the iOS build among
- *   them) or a workflow's `w.exec` (`runOnMachine`): it waits for the
+ *   them) (`runOnMachine`): it waits for the
  *   pause's end, its item's status naming the pause and the time. One
  *   already running as the pause begins is cancelled on the machine (core
  *   `CONTROL_CANCEL_COMMAND`) and waits the same way, then runs again from

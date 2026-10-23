@@ -650,7 +650,7 @@ final class SessionRowView: UIView, HoverSessionRow {
         ContextMenuHost.attach(to: self) { [weak self] host in self?.menu?(host) }
     }
 
-    /// The session's menu, built as it opens from the fleet at that moment; nil where the row has none (a workflow run).
+    /// The session's menu, built as it opens from the fleet at that moment; nil where the row has none (a thread).
     var menu: ((MenuHost) -> UIMenu?)?
     /// The session drawn: a field renaming another one goes when the cell is given this one.
     private var drawnId: String?
@@ -699,10 +699,10 @@ final class SessionRowView: UIView, HoverSessionRow {
         var beat = 0
         var beats = 1
 
-        /// The session Peek shows: a live instance's. A workflow run has no
-        /// tail of its own (its card is its steps), and a stored session no instance.
-        // A run or a thread is opened, never peeked: it is the conversation itself.
-        var peek: String? { hover.flatMap { BoardRun.runId(of: $0) == nil && !ThreadTabs.isThread($0) ? $0 : nil } }
+        /// The session Peek shows: a live instance's. A stored session has no
+        /// instance.
+        // A thread is opened, never peeked: it is the conversation itself.
+        var peek: String? { hover.flatMap { !ThreadTabs.isThread($0) ? $0 : nil } }
     }
 
     /// HomeRow.svelte's `data-hover-session`: the rail's session card opens over the home's rows too.

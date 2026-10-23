@@ -77,7 +77,7 @@ public final class ScrimPresentation: UIPresentationController, UIGestureRecogni
 /// `kit-dialog-in` / `-out`: 6pt of rise and a fade.
 final class DialogAnimator: NSObject, UIViewControllerAnimatedTransitioning {
     private let presenting: Bool
-    /// The control the dialog grows from and goes back into (WorkflowLaunch.svelte `fromButton`).
+    /// The control the dialog grows from and goes back into.
     private weak var origin: UIView?
 
     init(presenting: Bool, origin: UIView? = nil) {

@@ -30,11 +30,8 @@
  * word (Chromium):
  * - readers: a delegate's row (it stopped; its harness) and a report's
  *   sender line (a link to it, by its short id).
- * - run step: a workflow run's step it ran, opened, names its speaker by
- *   its harness.
  * - own page: `/session/<id>`'s document title, its tab's name and its
  *   tab's state (Stopped).
- * - workflow runs: a run it supervised says "from <its title>".
  * - task attempt: a task's attempt on Details, and the session a Review is
  *   from, are named by its title.
  *
@@ -692,133 +689,6 @@ async function readers(kit: Kit, base: string): Promise<void> {
 }
 
 /**
- * A workflow run started from this transcript (RunBlock, RunSteps), whose
- * step the far session ran three days ago: opened, the step's transcript
- * names its speaker by the far session's harness. The run's detail is
- * answered as the hub would; the far session's transcript stands in the
- * client's state, as the bench's own do.
- */
-async function runStep(kit: Kit, base: string): Promise<void> {
-  const runId = "7c0ffee0-1111-4222-8333-444455556666";
-  const at = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString();
-  const run = {
-    id: runId,
-    workflowId: "wf-1",
-    status: "done",
-    startedAt: at,
-    endedAt: at,
-    failure: null,
-    machineId: "studio-machine",
-    parentRunId: null,
-    parentStepId: null,
-    seenAt: null,
-    supervisorInstanceId: null,
-    workspace: "/backlot",
-    edges: {},
-    graph: null,
-    inputs: {},
-    launchedBy: "owner",
-    loops: {},
-    planned: null,
-    program: "",
-    rerunOfRunId: null,
-    result: null,
-    state: {},
-    waiting: null,
-    steps: [
-      {
-        id: "step-1",
-        runId,
-        nodeId: "review",
-        kind: "run",
-        instanceId: FAR_ID,
-        status: "passed",
-        startedAt: at,
-        endedAt: at,
-        title: "Review the take view",
-        seq: 1,
-        mapIndex: null,
-        childRunId: null,
-        failure: null,
-        result: null,
-      },
-    ],
-    attempts: [],
-  };
-  const page = await benchWith(
-    kit,
-    base,
-    [
-      {
-        id: "far-run",
-        toolCallId: "call-far-run",
-        type: "tool.use",
-        content: "",
-        timestamp: new Date().toISOString(),
-        metadata: {
-          toolName: "mcp__cawco__workflow_run",
-          toolInput: { workflow: "nightly-review" },
-          toolResult: JSON.stringify({ runId }),
-          toolStatus: "success",
-        },
-      },
-    ],
-    { [`/api/workflow-runs/${runId}`]: run }
-  );
-  await page.evaluate(
-    ([shown, far]) => {
-      const debug = (
-        globalThis as unknown as {
-          __cawcoDebug: {
-            state: { sessions: Record<string, Record<string, unknown>> };
-          };
-        }
-      ).__cawcoDebug;
-      debug.state.sessions[far] = {
-        ...debug.state.sessions[shown],
-        instanceId: far,
-        machineId: "studio-machine",
-        cwd: "/backlot",
-        messages: [
-          {
-            id: "far-said",
-            instanceId: far,
-            type: "assistant",
-            content: "Reviewed the take view: the crop handles hold.",
-            timestamp: new Date(Date.now() - 3 * 24 * 3_600_000).toISOString(),
-          },
-        ],
-      };
-    },
-    [SHOWN, FAR_ID] as const
-  );
-  const step = `[data-pane="${SHOWN}"] button[aria-expanded]:has-text("Review the take view")`;
-  await page.waitForSelector(step, { timeout: 15_000 }).catch(async (error) => {
-    const drawn = await page.evaluate(
-      (p) =>
-        [...document.querySelectorAll(`[data-pane="${p}"] [data-tx-rail]`)]
-          .map((el) => el.textContent?.replace(/\s+/g, " ").trim())
-          .slice(-3),
-      SHOWN
-    );
-    kit.note(`run step, the rail rows drawn: ${JSON.stringify(drawn)}`);
-    throw error;
-  });
-  await page.locator(step).first().click();
-  const who = `[data-pane="${SHOWN}"] [data-slot="well"] [data-turn-who] [data-slot="role"]`;
-  await page.waitForSelector(who, { timeout: 15_000 });
-  await settle(page, 1500);
-  const name = await page.locator(who).first().textContent();
-  kit.note(`run step, the step's speaker reads: ${name}`);
-  kit.check(
-    "run step: opened, the far session's step names its speaker by its harness (claude), not agent",
-    name?.trim() === "claude",
-    JSON.stringify(name)
-  );
-  await page.close();
-}
-
-/**
  * The far session's own page, opened from its chip's "Open session": the
  * document's title, its tab's name and its tab's state, named by the hub's
  * answer (the dev server has no hub: its own reads of the session fail).
@@ -889,89 +759,6 @@ async function serverLog(base: string): Promise<() => Promise<string[]>> {
   const from = (await read()).length;
   return async () =>
     (await read()).subarray(from).toString("utf8").split("\n").filter(Boolean);
-}
-
-/**
- * A workflow's runs list (WorkflowEditor's Runs tab): a run the far session
- * supervised, three days ago, says it came from it. The workflow, its run
- * and the delegate types are answered as the hub would.
- */
-async function workflowRuns(kit: Kit, base: string): Promise<void> {
-  const page = await kit.page("desk", { engine: "chromium" });
-  await hubNames(page);
-  await page.routeWebSocket(
-    (url) => url.pathname === "/ws/dashboard",
-    (hubSide) => {
-      hubSide.send(JSON.stringify(BOARD));
-    }
-  );
-  const at = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString();
-  const listing = {
-    id: "wf-1",
-    name: "Nightly review",
-    description: "",
-    graph: null,
-    inputs: [],
-    origin: "code",
-    slug: "nightly-review",
-    createdAt: at,
-    updatedAt: at,
-  };
-  const run = {
-    id: "run-1",
-    workflowId: "wf-1",
-    status: "done",
-    startedAt: at,
-    endedAt: at,
-    failure: null,
-    machineId: "studio-machine",
-    parentRunId: null,
-    parentStepId: null,
-    seenAt: null,
-    supervisorInstanceId: FAR_ID,
-    workspace: "/backlot",
-    edges: {},
-    graph: null,
-    inputs: {},
-    launchedBy: "owner",
-    loops: {},
-    planned: null,
-    program: "",
-    rerunOfRunId: null,
-    result: null,
-    state: {},
-    waiting: null,
-  };
-  const answers: Record<string, unknown> = {
-    "/api/workflows": { workflows: [listing] },
-    "/api/workflows/wf-1": { ...listing, program: "", problems: [] },
-    "/api/workflows/wf-1/runs": { runs: [run] },
-    "/api/workflow-runs/run-1": { ...run, steps: [], attempts: [] },
-    "/api/workflow-runs/run-1/log": { log: [] },
-    "/api/delegate-types": { types: [] },
-  };
-  await page.route(
-    (url) => url.pathname in answers,
-    (route: Route) =>
-      route.fulfill({
-        json: answers[new URL(route.request().url()).pathname],
-      })
-  );
-  await open(page, `${base}/workflows/wf-1`, '[role="tab"]', 120_000);
-  await page.getByRole("tab", { name: "Runs" }).click();
-  await page.waitForSelector('[data-slot="run-entry"]', { timeout: 15_000 });
-  await settle(page, 1500);
-  const entry = await page
-    .locator('[data-slot="run-entry"]')
-    .first()
-    .evaluate((el) => el.textContent?.replace(/\s+/g, " ").trim() ?? "");
-  kit.note(`workflow runs, the run reads: ${entry}`);
-  kit.check(
-    "workflow runs: a run the far session supervised says it came from it, by its title",
-    entry.includes(`from ${FAR_TITLE}`),
-    entry
-  );
-  await page.close();
 }
 
 /**
@@ -1191,9 +978,7 @@ const spec: Spec = {
       ["transcript on chromium", (k, b) => transcript(k, b, "chromium")],
       ["transcript on webkit", (k, b) => transcript(k, b, "webkit")],
       ["readers", readers],
-      ["run step", runStep],
       ["own page", ownPage],
-      ["workflow runs", workflowRuns],
       ["task attempt", taskAttempt],
     ];
     for (const [name, scene] of scenes) {

@@ -366,7 +366,7 @@ async function run(kit: Kit): Promise<void> {
     const dashboard = await fleet.dashboard();
     const browser = await kit.page("desk");
     const codeAt =
-      'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code], [data-workflow-run-view-code])';
+      'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code])';
     await open(browser, `${dashboard}/`, codeAt, 60_000);
     const browserCode =
       CODE.exec(await browser.locator(codeAt).innerText())?.[0] ?? "";

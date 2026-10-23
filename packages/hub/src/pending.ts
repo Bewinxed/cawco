@@ -10,7 +10,7 @@ import { Db, type DbShape } from "./db";
  * they are kept in the database and read back as it boots, so the hub that
  * comes back holds them before any agent has replayed its own, and every
  * screen that reads `/api/pending` meanwhile still shows them. An ask the hub
- * raised itself (a workflow's question, an admin write) is answered by a
+ * raised itself (an admin write) is answered by a
  * waiter in this process, and goes with it.
  */
 export interface PendingShape {
@@ -87,25 +87,6 @@ export class Pending extends Context.Service<Pending, PendingShape>()(
   "Pending"
 ) {}
 
-const workflowAnswers = new WeakMap<
-  PendingShape,
-  (id: string, result: PermissionResult) => boolean
->();
-export const onWorkflowAnswer = (
-  pending: PendingShape,
-  handler: (id: string, result: PermissionResult) => boolean
-) => workflowAnswers.set(pending, handler);
-/**
- * Whether `id` was a workflow's question, which this answer then settles.
- * Throws, with the reason, when the question cannot take the answer — a typed
- * question given a reply that is not its JSON — and the question stays open.
- */
-export const answerWorkflow = (
-  pending: PendingShape,
-  id: string,
-  result: PermissionResult
-): boolean => workflowAnswers.get(pending)?.(id, result) ?? false;
-
 /** `from`: where the answer was given, said with the ask's end to every screen. */
 type AnswerHandler = (
   instanceId: string,
@@ -133,16 +114,6 @@ export const answerPermission = (
     return Promise.reject(new Error("Permission answering is not ready."));
   }
   return handler(instanceId, requestId, result, from);
-};
-
-/**
- * The run a workflow's question belongs to (runtime.ts `parkAsk`), or
- * undefined for any other ask: a session's own, or an admin write's.
- */
-export const workflowRunOf = (envelope: Envelope): string | undefined => {
-  const runId = (envelope.payload as { workflowRunId?: unknown } | undefined)
-    ?.workflowRunId;
-  return typeof runId === "string" ? runId : undefined;
 };
 
 /** The payload field the hub stamps; see `raisedAt` on `permission_request`. */
@@ -194,8 +165,8 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
      * payload, before the payload is relayed or replayed from `/api/pending`.
      * A daemon replay of the same request keeps the first stamp, so the wait
      * every device shows is the same wait, a replay after this hub restarted
-     * included. An ask the hub raises itself may carry its own first stamp
-     * (a workflow's question, re-parked off its step on boot), which stands.
+     * included. An ask the hub raises itself may carry its own first stamp,
+     * which stands.
      */
     remember: (requestId, envelope, outlivesHub = false) => {
       if (settledIds.has(requestId)) {

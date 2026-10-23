@@ -211,24 +211,13 @@ No abort or disposal of that other row's conversation is authorized. Both known-
 legacy runner reads refuse incomplete generation custody and pending ownership operations.
 Scratch cleanup uses creation provenance written by the agent and carried on the hub row;
 the shape of a directory's .git file never grants removal authority. A never-started discard
-still removes its recorded scratch tree before it is confirmed discarded.
-
-A refused workflow halt is a held stop, not a failed attempt. The running attempt and session
-remain owned, a receipt names the deadline and refusal, and no retry starts before positive end
-confirmation. Ordinary machine recovery and supervisor action re-evaluate the same deadline;
-deferred fail/retry is recorded and applied only afterwards. Cancel rewrites the run's state
-before requesting any session end, launches nothing further, and remains waiting until every
-session and child run has confirmed its end. Completed and failed programmes publish their
-outcome immediately; their step sessions' end decisions are cleanup and do not change that
-outcome. A late positive end event re-evaluates a held workflow stop immediately. Refusals use
-the existing supervisor notice and step receipt paths. Transcript cleanup accepts confirmed absence and otherwise records its
-error with durable exponential retry backoff.
+still removes its recorded scratch tree before it is confirmed discarded. Transcript cleanup
+accepts confirmed absence and otherwise records its error with durable exponential retry backoff.
 
 Both hub and agent declare the address contract during registration. An agent on a hub that
 has not declared it refuses acknowledgement-dependent OpenCode operations immediately and
 reports that reason through custody readiness. A later supporting hub registration heals
-readiness. Held workflow custody remains on its original attempt across agent restart; a
-resume joins its adoption claim before any absent-process spawn.
+readiness.
 
 ## Who writes what
 

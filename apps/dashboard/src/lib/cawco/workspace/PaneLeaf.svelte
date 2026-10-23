@@ -25,7 +25,6 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
-  import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
   import { browser } from "$app/env";
   import { page } from "$app/state";
   import type { ServerTail } from "../client.svelte";
@@ -35,7 +34,6 @@
   import Composer, { type TrayRow } from "../transcript/Composer.svelte";
   import { composerFleet } from "../transcript/composer-fleet";
   import TranscriptSkeleton from "../transcript/TranscriptSkeleton.svelte";
-  import { runIdOf } from "../workflow-runs";
   import {
     type ComposerBinding,
     composerBindings,
@@ -481,9 +479,7 @@
              PaneHost mounts the live pane into the slot. The server has no
              group composer to lend a session to, so its pane paints its own
              in the same place. -->
-        {#if !browser && runIdOf(paneId)}
-          <WorkflowRunView runId={runIdOf(paneId) ?? ""} />
-        {:else if !browser && isThreadTab(paneId)}
+        {#if !browser && isThreadTab(paneId)}
           <!-- A thread's messages are read by its pane, in the browser. -->
           <TranscriptSkeleton />
         {:else if !browser}

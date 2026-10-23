@@ -247,7 +247,7 @@ export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
 export { default as IconServerAlt } from "~icons/solar/server-bold-duotone";
 export { default as IconServerSquare } from "~icons/solar/server-square-bold-duotone";
 export { default as IconSettings } from "~icons/solar/settings-bold-duotone";
-export { default as IconWorkflow } from "~icons/solar/share-circle-bold-duotone";
+export { default as IconPipeline } from "~icons/solar/share-circle-bold-duotone";
 export { default as IconShield } from "~icons/solar/shield-bold-duotone";
 /** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
 export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";

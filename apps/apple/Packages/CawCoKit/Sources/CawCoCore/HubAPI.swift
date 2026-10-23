@@ -10,7 +10,6 @@ public struct HubAPI: Sendable {
     public var instances: Instances { Instances(client: client) }
     public var usage: Usage { Usage(client: client) }
     public var accounts: Accounts { Accounts(client: client) }
-    public var workflows: Workflows { Workflows(client: client) }
     public var fleet: Configuration { Configuration(client: client) }
     public var rules: Rules { Rules(client: client) }
     public var models: Models { Models(client: client) }
@@ -142,22 +141,6 @@ public struct HubAPI: Sendable {
         let client: Client
         public func list(_ input: Operations.GetApiAccounts.Input = .init()) async throws -> Operations.GetApiAccounts.Output { try await client.getApiAccounts(input) }
         public func placement(_ input: Operations.GetApiAccountsPlacement.Input) async throws -> Operations.GetApiAccountsPlacement.Output { try await client.getApiAccountsPlacement(input) }
-    }
-    public struct Workflows: Sendable {
-        let client: Client
-        public func list(_ input: Operations.GetApiWorkflows.Input = .init()) async throws -> Operations.GetApiWorkflows.Output { try await client.getApiWorkflows(input) }
-        public func create(_ input: Operations.PostApiWorkflows.Input) async throws -> Operations.PostApiWorkflows.Output { try await client.postApiWorkflows(input) }
-        public func read(_ input: Operations.GetApiWorkflowsById.Input) async throws -> Operations.GetApiWorkflowsById.Output { try await client.getApiWorkflowsById(input) }
-        public func update(_ input: Operations.PutApiWorkflowsById.Input) async throws -> Operations.PutApiWorkflowsById.Output { try await client.putApiWorkflowsById(input) }
-        public func delete(_ input: Operations.DeleteApiWorkflowsById.Input) async throws -> Operations.DeleteApiWorkflowsById.Output { try await client.deleteApiWorkflowsById(input) }
-        public func runs(_ input: Operations.GetApiWorkflowsByIdRuns.Input) async throws -> Operations.GetApiWorkflowsByIdRuns.Output { try await client.getApiWorkflowsByIdRuns(input) }
-        public func launch(_ input: Operations.PostApiWorkflowsByIdRuns.Input) async throws -> Operations.PostApiWorkflowsByIdRuns.Output { try await client.postApiWorkflowsByIdRuns(input) }
-        public func run(_ input: Operations.GetApiWorkflowRunsById.Input) async throws -> Operations.GetApiWorkflowRunsById.Output { try await client.getApiWorkflowRunsById(input) }
-        public func log(_ input: Operations.GetApiWorkflowRunsByIdLog.Input) async throws -> Operations.GetApiWorkflowRunsByIdLog.Output { try await client.getApiWorkflowRunsByIdLog(input) }
-        public func cancel(_ input: Operations.PostApiWorkflowRunsByIdCancel.Input) async throws -> Operations.PostApiWorkflowRunsByIdCancel.Output { try await client.postApiWorkflowRunsByIdCancel(input) }
-        public func answer(_ input: Operations.PostApiWorkflowRunsByIdAnswer.Input) async throws -> Operations.PostApiWorkflowRunsByIdAnswer.Output { try await client.postApiWorkflowRunsByIdAnswer(input) }
-        public func steer(_ input: Operations.PostApiWorkflowRunsByIdSteer.Input) async throws -> Operations.PostApiWorkflowRunsByIdSteer.Output { try await client.postApiWorkflowRunsByIdSteer(input) }
-        public func rerun(_ input: Operations.PostApiWorkflowRunsByIdRerun.Input) async throws -> Operations.PostApiWorkflowRunsByIdRerun.Output { try await client.postApiWorkflowRunsByIdRerun(input) }
     }
     public struct Configuration: Sendable {
         let client: Client

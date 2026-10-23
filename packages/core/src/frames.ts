@@ -38,12 +38,7 @@ import {
   type TailnetOrigin,
 } from "./tailnet-https";
 import type { ThreadMessage, ThreadSummary } from "./threads";
-import type {
-  AccountLimits,
-  MachineGoLimits,
-  UsageLimitsReading,
-  UsageSpend,
-} from "./usage";
+import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage";
 
 export interface FleetMcpFrame {
   kind: "fleet_mcp";
@@ -78,8 +73,6 @@ export interface PreviewFrame {
    * one is removed, so a panel's open list drops it at once.
    */
   artifacts?: string[];
-  /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it ({@link PreviewAddress}). */
-  host?: string;
   instanceId: string;
   kind: "preview";
   /**
@@ -98,7 +91,7 @@ export interface PreviewFrame {
    * The project whose origin serves what the panel shows: a project's page
    * (Projects spec §5.8), served on its project's origin alone, at
    * `/__cawco/page/<artifact id>/` there ({@link projectPagePlace}). Then
-   * `port`, `origin`, `host` and `tailnet` are that origin's. Absent for
+   * `port`, `origin` and `tailnet` are that origin's. Absent for
    * anything served on the session's own origin.
    */
   project?: string;
@@ -122,19 +115,8 @@ export interface PreviewFrame {
  * which the hub listens on in either mode, and in host mode the whole origin
  * the fleet's pattern names it by too. Which one a client loads is its own
  * choice, by where it reached the hub ({@link previewRoute}).
- *
- * `host` is a bridge, not part of the address: host mode's `name[:port]`,
- * the only host-mode field readers built before `origin` (8c9b79c37) decode,
- * nightly 3146's dashboard and TestFlight 20261015 among them. Those readers
- * take `host` over `port`, so they open host-mode names as they did. Every
- * reader now reads `origin`. It goes in the change that expires TestFlight
- * 20261015, once a TestFlight build that reads `origin` has shipped; the
- * wire check refuses it from the moment no shipped reader needs it (hub
- * scripts wire-compat.ts `BRIDGES`).
  */
 export interface PreviewAddress {
-  /** Host mode's `name[:port]`, beside `origin` alone: the bridge above. */
-  host?: string;
   /** Host mode's whole origin for the session. */
   origin?: string;
   /** The session's own preview port, listened on in either mode. */
@@ -547,8 +529,6 @@ export interface UsageFrame {
   /** Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend. */
   claude: AccountLimits[];
   kind: "usage";
-  /** BRIDGE (hub scripts/wire-compat.ts): limits per machine, for TestFlight builds that read them so. */
-  limits: UsageLimitsReading[];
   openCodeGo: MachineGoLimits[];
   spend: UsageSpend;
 }

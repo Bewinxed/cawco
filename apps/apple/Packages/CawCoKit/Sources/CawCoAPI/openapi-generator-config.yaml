@@ -157,7 +157,7 @@ typeOverrides:
     RelayStepFinding: OpenEnums.RelayStepFinding
     RelayStepHow: OpenEnums.RelayStepHow
     RestartHoldReason: OpenEnums.RestartHoldReason
-    RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
+    RoutineMadeInBy: OpenEnums.RoutineMadeInBy
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
     RoutineTarget: OpenEnums.RoutineTarget
@@ -200,14 +200,5 @@ typeOverrides:
     WaitReason: OpenEnums.WaitReason
     WaitingKind: OpenEnums.WaitingKind
     WorkItemState: OpenEnums.WorkItemState
-    WorkflowAskAnsweredBy: OpenEnums.WorkflowAskAnsweredBy
-    WorkflowEffectKind: OpenEnums.WorkflowEffectKind
-    WorkflowFailureName: OpenEnums.WorkflowFailureName
-    WorkflowInputType: OpenEnums.WorkflowInputType
-    WorkflowOrigin: OpenEnums.WorkflowOrigin
-    WorkflowRunStatus: OpenEnums.WorkflowRunStatus
-    WorkflowStepKind: OpenEnums.WorkflowStepKind
-    WorkflowStepStatus: OpenEnums.WorkflowStepStatus
-    WorkflowWhenOp: OpenEnums.WorkflowWhenOp
     WorkspaceState: OpenEnums.WorkspaceState
     WorkspaceToolNeed: OpenEnums.WorkspaceToolNeed

@@ -89,7 +89,6 @@
   import { startFork } from "./spawn/new-session.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
-  import { runIdOf } from "./workflow-runs";
 
   interface Props {
     /** Puts the peek away; the board keeps its place. */
@@ -171,11 +170,10 @@
   /**
    * A tool by the name the transcript gives it (@cawco/core `describeTool`'s
    * `tool-name` rule: an MCP tool's own name past its server, in words), not
-   * its identifier: "Ask user question", never "AskUserQuestion". A run's
-   * step is its title already.
+   * its identifier: "Ask user question", never "AskUserQuestion".
    */
   const toolWord = (name: string): string =>
-    runIdOf(target.viewId) ? name : humanize(mcpParts(name)?.tool ?? name);
+    humanize(mcpParts(name)?.tool ?? name);
 
   const machine = $derived.by(() => {
     const machineId = session?.machineId || row?.machineId || "";

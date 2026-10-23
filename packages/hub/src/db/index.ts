@@ -109,7 +109,6 @@ import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
 import type { StagesTemplate } from "../stages";
-import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb, projectPage } from "./artifacts";
@@ -237,16 +236,6 @@ import {
   upstreamSettings,
   usageBuckets,
   usageLimits,
-  workflowAttempts,
-  workflowHeldStops,
-  workflowNotices,
-  workflowRunLog,
-  workflowRunNotes,
-  workflowRunPendingEnds,
-  workflowRunSlots,
-  workflowRuns,
-  workflowSteps,
-  workflows,
   workItemGlobs,
   workItems,
   workspaceCreates,
@@ -419,19 +408,6 @@ export type MoveRow = Omit<
   typeof moves.$inferSelect,
   "state" | "sourceMachineId" | "targetMachineId" | "stopOn"
 > & { state: MoveState };
-export type WorkflowRow = typeof workflows.$inferSelect;
-export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
-/** A step's held stop (`workflow_held_stops`): when its attempt was due, why it ended, and what was decided. */
-export interface WorkflowHeldStop {
-  action?: "fail" | "retry";
-  deadline: number;
-  error?: string;
-  failure: string;
-}
-export type WorkflowStepRow = typeof workflowSteps.$inferSelect;
-export type WorkflowAttemptRow = typeof workflowAttempts.$inferSelect;
-export type WorkflowLogRow = typeof workflowRunLog.$inferSelect;
-export type WorkflowNoticeRow = typeof workflowNotices.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
 export type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 /**
@@ -651,8 +627,6 @@ export interface DbShape {
         >
       >
   ) => { thread: ThreadRow; message: ThreadMessageRow };
-  /** Appends a supervisor's note for a run. */
-  readonly addWorkflowNote: (runId: string, text: string) => void;
   /**
    * A session continued in a new session (`to`) hands it its live work, in
    * one transaction: its delegates that have not ended, and the sessions of
@@ -839,9 +813,6 @@ export interface DbShape {
   readonly deleteMove: (id: string) => void;
   /** The project and its places; the sessions started from it stay, unattached. */
   readonly deleteProject: (id: string) => void;
-  readonly deleteWorkflow: (id: string) => void;
-  /** A kept supervisor notice that has now been sent. */
-  readonly deleteWorkflowNotice: (id: number) => void;
   /** Design checks and design proposals (design-verify.ts, design-system.ts). */
   readonly designChecks: DesignChecksDb;
   /** Caw's one design-system offer per project (design-offers.ts). */
@@ -857,8 +828,6 @@ export interface DbShape {
   readonly dropTaskIndex: (projectId: string, paths: string[]) => void;
   /** Takes the session's notice down; true when it had one. */
   readonly dropWatchNotice: (instanceId: string) => boolean;
-  /** A step's stop is confirmed: it holds no more. */
-  readonly dropWorkflowHeldStop: (stepId: string) => void;
   /** Persist the decision before its reconciler may send anything. */
   readonly endInstance: (
     id: string,
@@ -1001,14 +970,6 @@ export interface DbShape {
     choicesSetAt: Date | null;
     updatedAt: Date;
   };
-  readonly getWorkflow: (id: string) => WorkflowRow | undefined;
-  /** One call's row in a run's log, by its effect sequence. */
-  readonly getWorkflowLog: (
-    runId: string,
-    seq: number
-  ) => WorkflowLogRow | undefined;
-  readonly getWorkflowRun: (id: string) => WorkflowRunRow | undefined;
-  readonly getWorkflowStep: (id: string) => WorkflowStepRow | undefined;
   /** A parent's items in one group that no combined report has carried yet, oldest first. */
   readonly groupWorkItems: (
     parentInstanceId: string,
@@ -1179,15 +1140,6 @@ export interface DbShape {
   /** {@link listInstances}, of one machine's sessions alone. */
   readonly listInstancesOn: (machineId: string) => PublicInstanceRow[];
   /**
-   * Runs not yet ended (running, waiting, or holding a stop: its
-   * `ending_status`), narrowed in SQL to one parent's children or one
-   * machine's runs; whole rows, because the engine writes them back.
-   */
-  readonly listLiveWorkflowRuns: (by: {
-    machineId?: string;
-    parentRunId?: string;
-  }) => WorkflowRunRow[];
-  /**
    * Every plugin row without its files, `error` and all. What the DASHBOARD
    * reads: {@link fleetConfig} answers the machines and deliberately carries
    * neither the bookkeeping nor the failure, so a plugin the hub could not
@@ -1204,31 +1156,6 @@ export interface DbShape {
   readonly listToolPolicies: () => ToolPolicy[];
   /** Every machine's latest OpenCode Go reading. */
   readonly listUsageLimits: () => UsageLimitRow[];
-  readonly listWorkflowAttempts: (stepId: string) => WorkflowAttemptRow[];
-  /** A run's log, in effect order. */
-  readonly listWorkflowLog: (runId: string) => WorkflowLogRow[];
-  /** Every supervisor notice still waiting to be sent, oldest first. */
-  readonly listWorkflowNotices: () => WorkflowNoticeRow[];
-  /** One workflow's runs, newest first, as its run list carries them: no JSON column, no log. */
-  readonly listWorkflowRunSummaries: (
-    workflowId: string
-  ) => Pick<
-    WorkflowRunRow,
-    | "endedAt"
-    | "failure"
-    | "id"
-    | "machineId"
-    | "parentRunId"
-    | "seenAt"
-    | "startedAt"
-    | "status"
-    | "supervisorInstanceId"
-    | "workflowId"
-    | "workspace"
-  >[];
-  readonly listWorkflowSteps: (runId: string) => WorkflowStepRow[];
-  /** Every workflow but its program, newest edit first: the list. */
-  readonly listWorkflows: () => Omit<WorkflowRow, "program">[];
   /** The listed sessions running or starting on one machine. */
   readonly liveInstancesOn: (machineId: string) => PublicInstanceRow[];
   /** Where each live top-level mainline session works, and no more of it. */
@@ -1296,19 +1223,15 @@ export interface DbShape {
    */
   readonly markInstanceLive: (id: string) => boolean;
   /**
-   * The owner looked at these sessions and runs (a tab in front) or archived
-   * them off Finished, at `at`; a null `at` clears the mark (unarchive), which
+   * The owner looked at these sessions (a tab in front) or archived them off
+   * Finished, at `at`; a null `at` clears the mark (unarchive), which
    * every reader counts as never seen. `updatedAt` stays: being looked at is not
    * the session moving. Returns the rows it changed, to publish.
    */
   readonly markSeen: (
     instanceIds: string[],
-    runIds: string[],
     at: Date | null
-  ) => {
-    instances: (typeof instances.$inferSelect)[];
-    runs: WorkflowRunRow[];
-  };
+  ) => (typeof instances.$inferSelect)[];
   /** A project's fact uses and declined rewrites (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /**
@@ -1486,8 +1409,6 @@ export interface DbShape {
     model?: string;
     /** `false` makes the row a leaf delegate; absent leaves the column alone. */
     canDelegate?: boolean;
-    workflowRunId?: string;
-    workflowStepId?: string;
     /** The work item the session runs; set once, at its spawn. */
     workItemId?: string;
     /** The toolset it runs in; set once, at its first spawn. */
@@ -1853,22 +1774,6 @@ export interface DbShape {
   readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
   /** Raises (or replaces) the session's notice. */
   readonly putWatchNotice: (notice: FleetWatchNotice) => void;
-  readonly putWorkflow: (row: typeof workflows.$inferInsert) => WorkflowRow;
-  /** Keeps a step's held stop as it stands now. */
-  readonly putWorkflowHeldStop: (
-    runId: string,
-    stepId: string,
-    stop: WorkflowHeldStop
-  ) => void;
-  /** Records a call in its run's log, or completes the row it already has. */
-  readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
-  /** Declares a run's state slot with `schema`, and with `set` gives it its value. */
-  readonly putWorkflowSlot: (
-    runId: string,
-    name: string,
-    schema: Record<string, unknown>,
-    set?: { value: unknown }
-  ) => void;
   /** Every hook start waiting for a slot in the project, oldest first (dispatch.ts). */
   readonly queuedTaskStarts: (projectId: string) => QueuedTaskStartRow[];
   /** `delegate` calls waiting for files a live item owns, oldest first. */
@@ -1880,10 +1785,6 @@ export interface DbShape {
       why?: QueuedTaskStartRow["why"];
     }
   ) => QueuedTaskStartRow;
-  /** A supervisor notice kept until its supervisor is live. */
-  readonly queueWorkflowNotice: (
-    row: typeof workflowNotices.$inferInsert
-  ) => void;
   readonly queueWorkItem: (
     row: Omit<QueuedWorkItemRow, "queuedAt">
   ) => QueuedWorkItemRow;
@@ -2268,11 +2169,6 @@ export interface DbShape {
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
   readonly setUpstreamPosts: (posts: UpstreamPosts) => void;
-  /** Replaces the sessions an ending run waits on; one the hub keeps no row for is not waited on. */
-  readonly setWorkflowPendingEnds: (
-    runId: string,
-    instanceIds: string[]
-  ) => void;
   /** Where the fleet's skill `name` comes from; undefined for none. */
   readonly skillSource: (name: string) => string | undefined;
   /** Names of fleet skills installed at or after `since`. */
@@ -2323,8 +2219,6 @@ export interface DbShape {
   readonly takeOwedSend: (uuid: string) => string | undefined;
   /** Takes one owed start off the books; true for exactly one caller. */
   readonly takeOwedSpawn: (id: string) => boolean;
-  /** A run's notes, oldest first, taken: none is handed out twice. */
-  readonly takeWorkflowNotes: (runId: string) => string[];
   /** The task a comment written under the id its device chose went on (`task_comment_ids`). */
   readonly taskCommentSaid: (
     id: string
@@ -2581,33 +2475,6 @@ export interface DbShape {
   readonly watchLinesOf: (id: string) => WatchLine[];
   /** Fleet watch's open needs-you notices, oldest first. */
   readonly watchNotices: () => FleetWatchNotice[];
-  /** A run's held stops, by step id. */
-  readonly workflowHeldStops: (
-    runId: string
-  ) => Record<string, WorkflowHeldStop>;
-  /** The sessions an ending run waits to see ended, in the order recorded. */
-  readonly workflowPendingEnds: (runId: string) => string[];
-  /**
-   * Each run's place in the tree and its status, nothing else (every run, or
-   * one workflow's): what the archive walk and a workflow's delete read.
-   * Ended runs too, since sessions under one may still work.
-   */
-  readonly workflowRunHeads: (
-    workflowId?: string
-  ) => Pick<
-    WorkflowRunRow,
-    "id" | "parentRunId" | "status" | "supervisorInstanceId"
-  >[];
-  /** A run's declared state slots, in the order declared: each one's schema, and its value once set. */
-  readonly workflowSlots: (
-    runId: string
-  ) => { name: string; schema: Record<string, unknown>; value?: unknown }[];
-  readonly workflowTransition: (
-    run: typeof workflowRuns.$inferInsert,
-    step?: typeof workflowSteps.$inferInsert,
-    attempt?: typeof workflowAttempts.$inferInsert,
-    steps?: WorkflowStepRow[]
-  ) => void;
   readonly workItem: (id: string) => WorkItemRow | undefined;
   /** The newest work item whose landing opened or found the pull request at `url`. */
   readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
@@ -3023,15 +2890,14 @@ export const hashHookMaterial = (hook: {
 const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
-  // EVERY WRITE WAITS ITS TURN. Another connection to this file (the
-  // workflow engine's, delegate-types.ts's, the CLI's `cawco pairing off`, a
+  // EVERY WRITE WAITS ITS TURN. Another connection to this file
+  // (delegate-types.ts's, the CLI's `cawco pairing off`, a
   // probe's writes, the sqlite3 shell) holds the write lock for a
   // statement's or a transaction's length, and the hub's write waits it out
   // rather than failing with "database is locked".
   // busy_timeout: a write that opens the file's lock waits up to 5 s for it
   // (0 ms and failed with none, 330 ms and done with it, against a writer in
-  // another process: workspace-retire, G, 2026-10-16). 5 s, as the workflow
-  // engine's own connection waits (@effect/sql-sqlite-bun's default).
+  // another process: workspace-retire, G, 2026-10-16).
   db.$client.run("PRAGMA busy_timeout = 5000");
   // BEGIN IMMEDIATE: that wait is only for a lock asked for with no read
   // open. drizzle's bun-sqlite `transaction` is DEFERRED unless told
@@ -3071,9 +2937,6 @@ const make = async (path: string): Promise<DbShape> => {
     commands: _ownCommands,
     ...ownedColumns
   } = getTableColumns(instances);
-  /** A workflow's columns but its program: what the list carries. */
-  const { program: _program, ...workflowListColumns } =
-    getTableColumns(workflows);
   /** Each message with the tasks it names, in the order it named them. */
   const withTasks = (
     rows: (typeof threadMessages.$inferSelect)[]
@@ -3615,15 +3478,7 @@ const make = async (path: string): Promise<DbShape> => {
       .where(inArray(fleetWatchNotices.instanceId, list))
       .run();
     // What only pointed at one keeps its own history, pointing nowhere: a
-    // workflow's step, a run's supervisor, a delegate whose parent went.
-    tx.update(workflowSteps)
-      .set({ instanceId: null })
-      .where(inArray(workflowSteps.instanceId, list))
-      .run();
-    tx.update(workflowRuns)
-      .set({ supervisorInstanceId: null })
-      .where(inArray(workflowRuns.supervisorInstanceId, list))
-      .run();
+    // delegate whose parent went.
     tx.update(instances)
       .set({ parentInstanceId: null })
       .where(inArray(instances.parentInstanceId, list))
@@ -3653,9 +3508,6 @@ const make = async (path: string): Promise<DbShape> => {
     ["delegate_events", "instance_id"],
     ["delegate_events", "parent_instance_id"],
     ["workspaces", "created_by_instance_id"],
-    ["workflow_runs", "supervisor_instance_id"],
-    ["workflow_steps", "instance_id"],
-    ["workflow_notices", "instance_id"],
     ["projects", "lead_instance_id"],
     ["limit_events", "instance_id"],
     ["turn_usage", "instance_id"],
@@ -3687,7 +3539,6 @@ const make = async (path: string): Promise<DbShape> => {
     ["instances", "machine_id"],
     ["workspaces", "machine_id"],
     ["workspace_creates", "machine_id"],
-    ["workflow_runs", "machine_id"],
     ["artifacts", "machine_id"],
     ["parked_asks", "machine_id"],
     ["moved_from_sessions", "machine_id"],
@@ -4124,22 +3975,6 @@ const make = async (path: string): Promise<DbShape> => {
     db.delete(table)
       .where(and(of, notInArray(id, keep)))
       .run();
-  };
-
-  /** A `wf-` skill a workflow owns is that workflow's to change, never a fleet write's. */
-  const refuseWorkflowSkill = (name: string): void => {
-    if (
-      name.startsWith("wf-") &&
-      db
-        .select({ id: workflows.id })
-        .from(workflows)
-        .where(eq(workflows.slug, name.slice("wf-".length)))
-        .get()
-    ) {
-      throw new Error(
-        `Skill ${name} is owned by a workflow; edit or delete that workflow instead.`
-      );
-    }
   };
 
   /** A skill's version, kept before it is replaced or destroyed: under its files' own hash. */
@@ -5103,286 +4938,6 @@ const make = async (path: string): Promise<DbShape> => {
           .run();
         return row;
       }),
-    listWorkflows: () =>
-      db
-        .select(workflowListColumns)
-        .from(workflows)
-        .orderBy(desc(workflows.updatedAt))
-        .all(),
-    getWorkflow: (id) =>
-      db
-        .select()
-        .from(workflows)
-        .where(
-          or(
-            eq(workflows.id, id),
-            eq(workflows.slug, id),
-            eq(workflows.name, id)
-          )
-        )
-        .get(),
-    putWorkflow: (row) =>
-      db
-        .insert(workflows)
-        .values(row)
-        .onConflictDoUpdate({
-          target: workflows.id,
-          set: { ...row, updatedAt: new Date() },
-        })
-        .returning()
-        .get(),
-    deleteWorkflow: (id) =>
-      db.transaction((tx) => {
-        for (const run of tx
-          .select({ id: workflowRuns.id })
-          .from(workflowRuns)
-          .where(eq(workflowRuns.workflowId, id))
-          .all()) {
-          tx.update(instances)
-            .set({ workflowRunId: null, workflowStepId: null })
-            .where(eq(instances.workflowRunId, run.id))
-            .run();
-          for (const step of tx
-            .select({ id: workflowSteps.id })
-            .from(workflowSteps)
-            .where(eq(workflowSteps.runId, run.id))
-            .all()) {
-            tx.delete(workflowAttempts)
-              .where(eq(workflowAttempts.stepId, step.id))
-              .run();
-          }
-          tx.delete(workflowSteps).where(eq(workflowSteps.runId, run.id)).run();
-          tx.delete(workflowRunLog)
-            .where(eq(workflowRunLog.runId, run.id))
-            .run();
-          tx.delete(workflowNotices)
-            .where(eq(workflowNotices.runId, run.id))
-            .run();
-        }
-        tx.delete(workflowRuns).where(eq(workflowRuns.workflowId, id)).run();
-        tx.delete(workflows).where(eq(workflows.id, id)).run();
-      }),
-    listWorkflowRunSummaries: (workflowId) =>
-      db
-        .select({
-          endedAt: workflowRuns.endedAt,
-          failure: workflowRuns.failure,
-          id: workflowRuns.id,
-          machineId: workflowRuns.machineId,
-          parentRunId: workflowRuns.parentRunId,
-          seenAt: workflowRuns.seenAt,
-          startedAt: workflowRuns.startedAt,
-          status: workflowRuns.status,
-          supervisorInstanceId: workflowRuns.supervisorInstanceId,
-          workflowId: workflowRuns.workflowId,
-          workspace: workflowRuns.workspace,
-        })
-        .from(workflowRuns)
-        .where(eq(workflowRuns.workflowId, workflowId))
-        .orderBy(desc(workflowRuns.startedAt))
-        .all(),
-    workflowRunHeads: (workflowId) =>
-      db
-        .select({
-          id: workflowRuns.id,
-          parentRunId: workflowRuns.parentRunId,
-          status: workflowRuns.status,
-          supervisorInstanceId: workflowRuns.supervisorInstanceId,
-        })
-        .from(workflowRuns)
-        .where(workflowId ? eq(workflowRuns.workflowId, workflowId) : undefined)
-        .all(),
-    listLiveWorkflowRuns: ({ machineId, parentRunId }) =>
-      db
-        .select()
-        .from(workflowRuns)
-        .where(
-          and(
-            parentRunId === undefined
-              ? undefined
-              : eq(workflowRuns.parentRunId, parentRunId),
-            machineId === undefined
-              ? undefined
-              : eq(workflowRuns.machineId, machineId),
-            or(
-              inArray(workflowRuns.status, ["running", "waiting"]),
-              isNotNull(workflowRuns.endingStatus)
-            )
-          )
-        )
-        .orderBy(desc(workflowRuns.startedAt))
-        .all(),
-    getWorkflowRun: (id) =>
-      db.select().from(workflowRuns).where(eq(workflowRuns.id, id)).get(),
-    workflowPendingEnds: (runId) =>
-      db
-        .select({ instanceId: workflowRunPendingEnds.instanceId })
-        .from(workflowRunPendingEnds)
-        .where(eq(workflowRunPendingEnds.runId, runId))
-        .orderBy(sql`rowid`)
-        .all()
-        .map(({ instanceId }) => instanceId),
-    setWorkflowPendingEnds: (runId, instanceIds) => {
-      db.transaction((tx) => {
-        tx.delete(workflowRunPendingEnds)
-          .where(eq(workflowRunPendingEnds.runId, runId))
-          .run();
-        const wanted = [...new Set(instanceIds)];
-        // A session the hub keeps no row for has nothing left to confirm.
-        const kept =
-          wanted.length === 0
-            ? []
-            : tx
-                .select({ id: instances.id })
-                .from(instances)
-                .where(inArray(instances.id, wanted))
-                .all()
-                .map(({ id }) => id);
-        const keptSet = new Set(kept);
-        const ordered = wanted.filter((id) => keptSet.has(id));
-        if (ordered.length > 0) {
-          tx.insert(workflowRunPendingEnds)
-            .values(ordered.map((instanceId) => ({ runId, instanceId })))
-            .run();
-        }
-      });
-    },
-    addWorkflowNote: (runId, text) => {
-      db.insert(workflowRunNotes).values({ runId, text, at: new Date() }).run();
-    },
-    takeWorkflowNotes: (runId) =>
-      db
-        .delete(workflowRunNotes)
-        .where(eq(workflowRunNotes.runId, runId))
-        .returning({ id: workflowRunNotes.id, text: workflowRunNotes.text })
-        .all()
-        .sort((a, b) => a.id - b.id)
-        .map(({ text }) => text),
-    workflowHeldStops: (runId) =>
-      Object.fromEntries(
-        db
-          .select()
-          .from(workflowHeldStops)
-          .where(eq(workflowHeldStops.runId, runId))
-          .all()
-          .map(({ stepId, deadline, failure, action, error }) => [
-            stepId,
-            {
-              deadline,
-              failure,
-              ...(action ? { action } : {}),
-              ...(error === null ? {} : { error }),
-            },
-          ])
-      ),
-    putWorkflowHeldStop: (runId, stepId, stop) => {
-      const values = {
-        deadline: stop.deadline,
-        failure: stop.failure,
-        action: stop.action ?? null,
-        error: stop.error ?? null,
-      };
-      db.insert(workflowHeldStops)
-        .values({ stepId, runId, ...values })
-        .onConflictDoUpdate({ target: workflowHeldStops.stepId, set: values })
-        .run();
-    },
-    dropWorkflowHeldStop: (stepId) => {
-      db.delete(workflowHeldStops)
-        .where(eq(workflowHeldStops.stepId, stepId))
-        .run();
-    },
-    workflowSlots: (runId) =>
-      db
-        .select()
-        .from(workflowRunSlots)
-        .where(eq(workflowRunSlots.runId, runId))
-        .orderBy(sql`rowid`)
-        .all()
-        .map(({ name, schema, value }) => ({
-          name,
-          schema: schema ?? {},
-          ...(value === null ? {} : { value: JSON.parse(value) as unknown }),
-        })),
-    putWorkflowSlot: (runId, name, schema, set) => {
-      const values = {
-        schema,
-        ...(set ? { value: JSON.stringify(set.value ?? null) } : {}),
-      };
-      db.insert(workflowRunSlots)
-        .values({ runId, name, ...values })
-        .onConflictDoUpdate({
-          target: [workflowRunSlots.runId, workflowRunSlots.name],
-          set: values,
-        })
-        .run();
-    },
-    listWorkflowSteps: (runId) =>
-      db
-        .select()
-        .from(workflowSteps)
-        .where(eq(workflowSteps.runId, runId))
-        .all(),
-    getWorkflowStep: (id) =>
-      db.select().from(workflowSteps).where(eq(workflowSteps.id, id)).get(),
-    listWorkflowAttempts: (stepId) =>
-      db
-        .select()
-        .from(workflowAttempts)
-        .where(eq(workflowAttempts.stepId, stepId))
-        .orderBy(workflowAttempts.number)
-        .all(),
-    getWorkflowLog: (runId, seq) =>
-      db
-        .select()
-        .from(workflowRunLog)
-        .where(
-          and(eq(workflowRunLog.runId, runId), eq(workflowRunLog.seq, seq))
-        )
-        .get(),
-    listWorkflowLog: (runId) =>
-      db
-        .select()
-        .from(workflowRunLog)
-        .where(eq(workflowRunLog.runId, runId))
-        .orderBy(workflowRunLog.seq)
-        .all(),
-    putWorkflowLog: (row) => {
-      db.insert(workflowRunLog)
-        .values(row)
-        .onConflictDoUpdate({
-          target: [workflowRunLog.runId, workflowRunLog.seq],
-          set: row,
-        })
-        .run();
-    },
-    listWorkflowNotices: () =>
-      db.select().from(workflowNotices).orderBy(workflowNotices.id).all(),
-    queueWorkflowNotice: (row) => {
-      db.insert(workflowNotices).values(row).run();
-    },
-    deleteWorkflowNotice: (id) => {
-      db.delete(workflowNotices).where(eq(workflowNotices.id, id)).run();
-    },
-    workflowTransition: (run, step, attempt, steps = []) =>
-      db.transaction((tx) => {
-        tx.insert(workflowRuns)
-          .values(run)
-          .onConflictDoUpdate({ target: workflowRuns.id, set: run })
-          .run();
-        for (const changed of [...(step ? [step] : []), ...steps]) {
-          tx.insert(workflowSteps)
-            .values(changed)
-            .onConflictDoUpdate({ target: workflowSteps.id, set: changed })
-            .run();
-        }
-        if (attempt) {
-          tx.insert(workflowAttempts)
-            .values(attempt)
-            .onConflictDoUpdate({ target: workflowAttempts.id, set: attempt })
-            .run();
-        }
-      }),
     upsertAgent: ({
       machineId,
       hostname,
@@ -5475,8 +5030,6 @@ const make = async (path: string): Promise<DbShape> => {
       permissionMode,
       model,
       canDelegate,
-      workflowRunId,
-      workflowStepId,
       workItemId,
       role,
       delegateType,
@@ -5550,8 +5103,6 @@ const make = async (path: string): Promise<DbShape> => {
           permissionMode,
           model,
           canDelegate,
-          workflowRunId,
-          workflowStepId,
           workItemId,
           role,
           delegateType: delegateType?.name,
@@ -5585,8 +5136,6 @@ const make = async (path: string): Promise<DbShape> => {
             ...(model ? { model } : {}),
             // Presence, not truth: a leaf's `false` has to land.
             ...(canDelegate === undefined ? {} : { canDelegate }),
-            ...(workflowRunId ? { workflowRunId } : {}),
-            ...(workflowStepId ? { workflowStepId } : {}),
             ...(threadId ? { threadId } : {}),
             // A session keeps the account it started on: its transcript and
             // its prompt cache are that account's.
@@ -6031,26 +5580,15 @@ const make = async (path: string): Promise<DbShape> => {
         // `foldContinued`).
         return foldInto(tx, to, [from], () => false);
       }),
-    markSeen: (instanceIds, runIds, at) => ({
-      instances:
-        instanceIds.length > 0
-          ? db
-              .update(instances)
-              .set({ seenAt: at })
-              .where(inArray(instances.id, instanceIds))
-              .returning()
-              .all()
-          : [],
-      runs:
-        runIds.length > 0
-          ? db
-              .update(workflowRuns)
-              .set({ seenAt: at })
-              .where(inArray(workflowRuns.id, runIds))
-              .returning()
-              .all()
-          : [],
-    }),
+    markSeen: (instanceIds, at) =>
+      instanceIds.length > 0
+        ? db
+            .update(instances)
+            .set({ seenAt: at })
+            .where(inArray(instances.id, instanceIds))
+            .returning()
+            .all()
+        : [],
     // `updatedAt` deliberately untouched: a reading is not the session moving.
     noteInstanceEffort: (id, effort) =>
       db
@@ -6683,16 +6221,6 @@ const make = async (path: string): Promise<DbShape> => {
                   ]
                 : [];
             }),
-          ...db
-            .select({
-              id: workflows.id,
-              name: workflows.name,
-              slug: workflows.slug,
-              inputs: workflows.inputs,
-            })
-            .from(workflows)
-            .all()
-            .map((workflow) => workflowSkill(workflow, workflow.inputs)),
           // CawCo's own; a fleet skill of the same name, on or off, is the operator's word on it.
           ...(() => {
             const named = new Set(
@@ -7089,7 +6617,6 @@ const make = async (path: string): Promise<DbShape> => {
       files,
       projectId,
     }) => {
-      refuseWorkflowSkill(name);
       const stored = db
         .select()
         .from(skills)
@@ -7156,7 +6683,6 @@ const make = async (path: string): Promise<DbShape> => {
       });
     },
     setSkillEnabled: (name, enabled) => {
-      refuseWorkflowSkill(name);
       const stored = db
         .select()
         .from(skills)
@@ -7169,7 +6695,6 @@ const make = async (path: string): Promise<DbShape> => {
       return skillMeta({ ...stored, enabled });
     },
     stageSkill: ({ name, source, enabled, projectId }) => {
-      refuseWorkflowSkill(name);
       const stored = db
         .select()
         .from(skills)
@@ -7716,7 +7241,6 @@ const make = async (path: string): Promise<DbShape> => {
             listedInstances(),
             eq(instances.kind, "mainline"),
             isNull(instances.parentInstanceId),
-            isNull(instances.workflowStepId),
             inArray(instances.status, ["running", "starting", "sleeping"])
           )
         )

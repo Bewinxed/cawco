@@ -1,7 +1,6 @@
 /**
  * What a session hands another as files in its `$TMPDIR/inputs/`: one entry
- * of `delegate`'s and `handoff`'s `inputs`, and of a workflow step's once
- * steps hand work on. A path string is a file on the caller's machine,
+ * of `delegate`'s and `handoff`'s `inputs`. A path string is a file on the caller's machine,
  * admitted and copied there (agent inputs.ts); every other entry names
  * something the hub already holds, or carries its bytes, and the hub writes
  * it as a file itself (hub handed-inputs.ts `createHandedInputs`), refused in

@@ -107,7 +107,6 @@
   import { cawOf, sessionStatus, statusWord } from "./session-status";
   import { isThreadTab } from "./thread-tabs";
   import AccountDot from "./usage/AccountDot.svelte";
-  import { runIdOf } from "./workflow-runs";
   import { dragSession } from "./workspace/dnd.svelte";
 
   let {
@@ -175,8 +174,6 @@
   );
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
-  /** The row is a workflow run (workflow-runs.ts), not a session. */
-  const run = $derived(instance ? runIdOf(instance.id) !== null : false);
   /** The row is a thread with the project's Caw (thread-tabs.ts), not a session. */
   const thread = $derived(instance ? isThreadTab(instance.id) : false);
   const status = $derived(sessionStatus(instance, done));
@@ -187,11 +184,11 @@
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
   /**
-   * Peek rises at the row's end: a live session's, not a workflow run's or
-   * a thread's (a thread is opened: it is the conversation itself), and
-   * only in the wide layout (peek.svelte.ts).
+   * Peek rises at the row's end: a live session's, not a thread's (a
+   * thread is opened: it is the conversation itself), and only in the wide
+   * layout (peek.svelte.ts).
    */
-  const peeks = $derived(peek && instance !== null && !run && !thread);
+  const peeks = $derived(peek && instance !== null && !thread);
   const showPeek = $derived(peeks && peekable());
   /**
    * The trailing column's width (the wider of the age and the count), on its
@@ -579,8 +576,7 @@
     {#if showPeek && instance}
       {@const live = instance}
       <!-- Glance → peek → dive: the tail of this one, without leaving the
-           list. A workflow run has no tail of its own: its card is its
-           steps. -->
+           list. -->
       <Tip disabled={peekTipOff()} label="Peek">
         {#snippet children(tip)}
           <!-- A fine pointer finds it on hover or focus; a touch screen
@@ -609,9 +605,8 @@
   </div>
 {/snippet}
 
-{#if run || thread}
-  <!-- A workflow run, or a thread, takes no session commands; archive is on
-       the row. -->
+{#if thread}
+  <!-- A thread takes no session commands; archive is on the row. -->
   {@render body({})}
 {:else if instance && isSessionRow(instance)}
   <LiveSessionMenu asker={asks} {instance} {onarchive} onrename={editTitle}>

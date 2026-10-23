@@ -20,9 +20,8 @@
  * (`<project>/<task>`: a task's id is its project's own number, `tsk-12`),
  * a task's to-do by those and its id (`<project>/<task>/<td-3>`), a
  * session's plan by the session (`<session>`), one of its steps by the
- * session and the step's id (`<session>/<step>`); a routine, a workflow
- * (or one run of it, by the run's id), a project and a machine each by its
- * own id.
+ * session and the step's id (`<session>/<step>`); a routine, a project and
+ * a machine each by its own id.
  */
 export const REFERENCE_KINDS = [
   "session",
@@ -34,7 +33,6 @@ export const REFERENCE_KINDS = [
   "plan",
   "step",
   "routine",
-  "workflow",
   "project",
   "machine",
 ] as const;
@@ -112,10 +110,6 @@ export const stepLink = (
 export const routineLink = (id: string, name: string): string =>
   referenceLink("routine", id, name);
 
-/** Workflow `id`, or one run of a workflow by the run's id, labelled by its name: its chip opens its page. */
-export const workflowLink = (id: string, name: string): string =>
-  referenceLink("workflow", id, name);
-
 /** Project `id`, labelled by its name: its chip opens the project. */
 export const projectLink = (id: string, name: string): string =>
   referenceLink("project", id, name);
@@ -188,4 +182,4 @@ export function parseReference(
  */
 export const REFERENCE_GUIDANCE =
   "To mention a session, delegate or Caw thread in anything you write, link it by the handle CawCo's tools name it by, or its id: `[its title](cawco:session/cockpit#5a167bde)`. CawCo shows the link as that session's chip; a bare id or handle stays plain text. CawCo's own tool results and reports name sessions this way. " +
-  'To point at a pin, a decision card, an artifact, a task or its to-do, a plan or its step, a routine, a workflow or its run, a project or a machine, write the link CawCo\'s tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`). CawCo draws each as a chip that opens it where it lives; a bare id or number ("tsk-12", "pin 12") stays plain text.';
+  'To point at a pin, a decision card, an artifact, a task or its to-do, a plan or its step, a routine, a project or a machine, write the link CawCo\'s tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`). CawCo draws each as a chip that opens it where it lives; a bare id or number ("tsk-12", "pin 12") stays plain text.';

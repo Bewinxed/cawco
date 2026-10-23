@@ -474,8 +474,7 @@ for (const { op, method, path } of operations) {
       untyped.push(description);
       continue;
     }
-    // One status can answer words (text/plain) or a body (JSON), as a
-    // workflow's 400 does: each part goes under its own content type.
+    // One status can answer words (text/plain) or a body (JSON): each part goes under its own content type.
     const parts = Array.isArray(schema.anyOf)
       ? (schema.anyOf as Schema[])
       : [schema];

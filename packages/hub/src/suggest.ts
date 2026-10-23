@@ -1,4 +1,4 @@
-import type { JevResult } from "@cawco/core/workflow-program";
+import type { JevResult } from "@cawco/core/jev";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";

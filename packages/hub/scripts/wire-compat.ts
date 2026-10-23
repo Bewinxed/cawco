@@ -108,40 +108,7 @@ export interface Bridge {
   /** What it is for and when it goes. */
   until: string;
 }
-export const BRIDGES: Bridge[] = [
-  {
-    property: "machines",
-    beside: "claude",
-    until:
-      "the per-machine Claude `limits` (in `/api/usage/limits`'s `machines`) before per-account `claude`; it goes in the change that expires TestFlight 20261017 and 20261018 (bash apps/apple/scripts/testflight.sh --expire 20261017, --expire 20261018), once a build from this change is installed",
-  },
-  {
-    property: "limits",
-    beside: "claude",
-    until:
-      "the per-machine Claude `limits` before per-account `claude`; it goes in the change that expires TestFlight 20261017 and 20261018 (bash apps/apple/scripts/testflight.sh --expire 20261017, --expire 20261018), once a build from this change is installed",
-  },
-  {
-    property: "host",
-    beside: "origin",
-    until:
-      "host mode's address before `origin` (core frames.ts PreviewAddress); it goes in the change that expires TestFlight 20261015",
-  },
-  {
-    property: "routineMade",
-    beside: "event",
-    holds: "routine-made",
-    until:
-      "the `routine-made` ThreadEvent kind (core threads.ts), sent as `routineMade` beside a null `event` (hub caw.ts `wireEvent`, dashboard thread-tabs.ts `routineMadeOf`) because TestFlight 20261015 reads `event` closed and would drop the note's thread read; it goes in the change that expires that build (bash apps/apple/scripts/testflight.sh --expire 20261015)",
-  },
-  {
-    property: "designOffer",
-    beside: "event",
-    holds: "design-offer",
-    until:
-      "the `design-offer` ThreadEvent kind (core threads.ts), sent as `designOffer` beside a null `event` (hub caw.ts `wireEvent`, dashboard thread-tabs.ts `designOfferOf`) because shipped apps read `event` closed and would drop the note's thread read; it goes once no installable app does",
-  },
-];
+export const BRIDGES: Bridge[] = [];
 
 /**
  * Whether `branch` is the union member tagged `tag` (its `kind` the one

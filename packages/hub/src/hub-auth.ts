@@ -102,8 +102,6 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["*", /^\/mcp\/fleet\/[^/]+$/, "tool"],
   ["GET", /^\/api\/delegation\/tools$/, "tool"],
   ["GET", /^\/api\/instances$/, "tool"],
-  ["POST", /^\/api\/workflow-steps\/[^/]+\/result$/, "tool"],
-  ["*", /^\/api\/workflow-runs\/[^/]+\/state\/[^/]+$/, "tool"],
   ["*", /^\/api\/work-items(?:\/.*)?$/, "session"],
   [
     "GET",

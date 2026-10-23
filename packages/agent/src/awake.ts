@@ -4,7 +4,7 @@
  *
  *  - a session's turn, every harness's (session.ts `turnsRunning`);
  *  - a command the hub asked of this machine, a landing gate's step among
- *    them (workflow-command.ts `commandsRunning`);
+ *    them (hub-command.ts `commandsRunning`);
  *  - a command in a workspace's boundary (boundary.ts
  *    `workspacesWithCommands`, its executors' marks);
  *  - a run a session's processes are working on past its turn (a probe kit
@@ -50,9 +50,9 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { workspacesWithCommands } from "./boundary";
+import { commandsRunning } from "./hub-command";
 import { runsWorking } from "./leak-watch";
 import { resolveBin, toolEnv } from "./tools";
-import { commandsRunning } from "./workflow-command";
 
 /**
  * How often live work is looked at. Our call: the shortest idle sleep macOS

@@ -4,7 +4,7 @@
    * no hub, over everything the shell draws (its hub banner included):
    *
    * - the session tabs (`data-strip="session"`): the real PaneTabs, six
-   *   tabs in mixed statuses (needs you, working, idle, done, failed,
+   *   tabs in mixed statuses (needs you, working, idle, stopped, failed,
    *   idle), the working one chosen; and the same tabs again with the idle
    *   one chosen (`data-strip="session-idle"`);
    * - three sliders over the rims' tokens, written live on the bench:
@@ -12,7 +12,7 @@
    *   unchosen tab's rim strength) and Thickness (`--tab-rim-width`, the
    *   rim's stroke, px); `?taper=`, `?subtle=` and `?width=` start them;
    * - the home's Working and Finished (`data-strip="work"`): the real
-   *   WorkTabs over twelve working runs and fourteen finished, hosted as
+   *   WorkTabs over twelve working sessions and fourteen finished, hosted as
    *   the shell hosts it, in the rail's 228px column on the desk and across
    *   the phone's home page under 900px.
    *
@@ -25,29 +25,25 @@
    * own choice goes to the workspace, which holds no such group and would
    * navigate to the session.
    */
-  import type { SessionPulse, Workflow, WorkflowRun } from "@cawco/core";
+  import type { InstanceRow, SessionPulse } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import WorkTabs from "#lib/cawco/home/WorkTabs.svelte";
   import { workTab } from "#lib/cawco/home/work-tab.svelte.js";
-  import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
-  const RUN = "0f1e2d3c-0000-4000-8000-0000000000aa";
-  const FAILED_RUN = "0f1e2d3c-0000-4000-8000-0000000000ab";
-  const WORKFLOW = "0f1e2d3c-0000-4000-8000-0000000000ff";
   const ids = [
     "0f1e2d3c-0000-4000-8000-000000000001",
     "0f1e2d3c-0000-4000-8000-000000000002",
     "0f1e2d3c-0000-4000-8000-000000000003",
-    `run:${RUN}`,
-    `run:${FAILED_RUN}`,
+    "0f1e2d3c-0000-4000-8000-000000000004",
+    "0f1e2d3c-0000-4000-8000-000000000005",
     "0f1e2d3c-0000-4000-8000-000000000006",
   ];
-  /** What each session's pulse says: needs you, working, idle, (the runs: done, failed), idle. */
+  /** What each session's pulse says: needs you, working, idle, (stopped, failed), idle. */
   const DOING: Record<string, SessionPulse["activity"]> = {
     [ids[0]]: "blocked",
     [ids[1]]: "working",
@@ -56,87 +52,75 @@
   };
 
   // The client's own state, as the hub's frames would have set it: the
-  // sessions' pulses (dev's `__cawcoDebug`, set when client.svelte.ts loads,
-  // which PaneTabs imports ahead of this script) and a run that ended done,
-  // with its workflow's name.
+  // sessions' rows and pulses (dev's `__cawcoDebug`, set when
+  // client.svelte.ts loads, which PaneTabs imports ahead of this script).
   const debug = (
     globalThis as unknown as {
-      __cawcoDebug: { state: { pulses: Record<string, SessionPulse> } };
+      __cawcoDebug: {
+        state: { pulses: Record<string, SessionPulse> };
+        adoptInstances: (rows: InstanceRow[]) => void;
+      };
     }
   ).__cawcoDebug;
   const now = Date.now();
-  for (const [instanceId, activity] of Object.entries(DOING)) {
-    debug.state.pulses[instanceId] = {
-      activity,
-      at: now,
-      busy: activity === "working",
-      currentTool: null,
-      instanceId,
-      runningSubagents: 0,
-    };
-  }
-  workflowState.workflows.push({
-    id: WORKFLOW,
-    name: "Release notes",
-  } as Workflow);
-  /** How a run that ended ended: done, or failed. */
-  const ENDED = ["done", "failed"] as const;
-  /** A run of the bench's workflow, working or ended `ago` ms back, done unless it `failed`. */
-  const runOf = (
-    id: string,
-    ago: number | null,
-    failed = false
-  ): WorkflowRun => ({
-    status: ago === null ? "running" : ENDED[Number(failed)],
-    edges: {},
-    endedAt: ago === null ? null : new Date(now - ago).toISOString(),
-    failure: null,
-    graph: null,
-    id,
-    inputs: {},
-    launchedBy: "bench",
-    loops: {},
-    machineId: "bench",
-    parentRunId: null,
-    parentStepId: null,
-    planned: null,
-    program: "",
-    rerunOfRunId: null,
-    result: null,
-    startedAt: new Date(now - 600_000).toISOString(),
-    state: {},
-    supervisorInstanceId: null,
-    waiting: null,
-    workflowId: WORKFLOW,
-    workspace: "/bench",
+  const pulse = (
+    instanceId: string,
+    activity: SessionPulse["activity"]
+  ): SessionPulse => ({
+    activity,
+    at: now,
+    busy: activity === "working",
+    currentTool: null,
+    instanceId,
+    runningSubagents: 0,
   });
-  workflowState.runs[RUN] = runOf(RUN, 60_000);
-  workflowState.runs[FAILED_RUN] = runOf(FAILED_RUN, 90_000, true);
+  for (const [instanceId, activity] of Object.entries(DOING)) {
+    debug.state.pulses[instanceId] = pulse(instanceId, activity);
+  }
+  /** A bench session's row: `status` as the hub files it, its turn ended `ago` ms back. */
+  const rowOf = (
+    id: string,
+    status: InstanceRow["status"],
+    ago: number | null
+  ): InstanceRow => ({
+    id,
+    cwd: "/bench",
+    harness: "claude",
+    kind: "mainline",
+    launchDir: "known",
+    machineId: "bench",
+    sessionId: null,
+    status,
+    turnEndedAt: ago === null ? null : now - ago,
+    updatedAt: ago === null ? now : now - ago,
+  });
 
-  // The home's Working and Finished (WorkTabs), fed the same way: runs that
-  // are working (their pulses say so) and runs that ended unseen, twelve
-  // and fourteen, so both counts take two figures, the tabs' widest.
+  // The home's Working and Finished (WorkTabs), fed the same way: sessions
+  // that are working (their pulses say so) and sessions whose turn ended
+  // unseen, twelve and fourteen with the strip's own four that ended, so
+  // both counts take two figures, the tabs' widest.
   const WORKING = 12;
   const FINISHED = 14;
-  const runId = (n: number) =>
+  const workId = (n: number) =>
     `0f1e2d3c-0000-4000-8000-0000000001${String(n).padStart(2, "0")}`;
-  const workRuns = Array.from({ length: WORKING + FINISHED - 1 }, (_, n) =>
-    runId(n)
+  const workRows = Array.from({ length: WORKING + FINISHED - 4 }, (_, n) =>
+    rowOf(workId(n), "running", n < WORKING ? null : 120_000 + n * 1000)
   );
-  for (const [n, id] of workRuns.entries()) {
-    const working = n < WORKING;
-    workflowState.runs[id] = runOf(id, working ? null : 120_000 + n * 1000);
-    if (working) {
-      debug.state.pulses[`run:${id}`] = {
-        activity: "working",
-        at: now,
-        busy: true,
-        currentTool: null,
-        instanceId: `run:${id}`,
-        runningSubagents: 0,
-      };
-    }
+  for (const row of workRows.slice(0, WORKING)) {
+    debug.state.pulses[row.id] = pulse(row.id, "working");
   }
+  debug.adoptInstances([
+    ...ids.map((id, n) => {
+      if (n === 3) {
+        return rowOf(id, "stopped", 60_000);
+      }
+      if (n === 4) {
+        return rowOf(id, "error", 90_000);
+      }
+      return rowOf(id, "running", DOING[id] === "working" ? null : 60_000);
+    }),
+    ...workRows,
+  ]);
   const WORK_IDS = ["working", "finished"] as const;
   workTab.set(
     page.url.searchParams.get("work") === "finished" ? "finished" : "working"
@@ -264,18 +248,12 @@
     Object.assign(window, { __ft: bench });
     return () => {
       Reflect.deleteProperty(window, "__ft");
-      for (const id of Object.keys(DOING)) {
+      for (const id of [
+        ...Object.keys(DOING),
+        ...workRows.map((row) => row.id),
+      ]) {
         delete debug.state.pulses[id];
       }
-      for (const id of workRuns) {
-        delete debug.state.pulses[`run:${id}`];
-        delete workflowState.runs[id];
-      }
-      delete workflowState.runs[RUN];
-      delete workflowState.runs[FAILED_RUN];
-      workflowState.workflows = workflowState.workflows.filter(
-        (one) => one.id !== WORKFLOW
-      );
     };
   });
 </script>

@@ -9,7 +9,7 @@
  * reset, merge, rebase, pull or stash that would change one fails on it, or
  * (a checkout without `--force`) prints "unable to create file" and exits 0
  * with the file gone or as it was. The hub's own moves run on the host when
- * they would (workflow-command.ts `movedCommand`); a session's go through
+ * they would (hub-command.ts `movedCommand`); a session's go through
  * {@link gitShim}: the same for Claude Code, OpenCode and pi, whose shell
  * commands all run through the workspace's executor, which puts the
  * workspace's read-only bin first on PATH (boundary.ts `execScript`).
@@ -52,7 +52,7 @@ export const denyPaths = async (
  * depth and in any letter case (`:(glob,icase)**\/<name>` and the tree
  * under it). srt binds literal paths alone, so a nested copy is writable
  * inside the boundary; it is kept out of every commit that lands or moves a
- * worktree instead ({@link gitShim}, workflow-command.ts `ownConfigChanges`).
+ * worktree instead ({@link gitShim}, hub-command.ts `ownConfigChanges`).
  * A leading `**\/` matches the root too (gitglossary(7) "pathspec": "A
  * leading `**` followed by a slash means match in all directories").
  */

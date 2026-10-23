@@ -17,7 +17,6 @@ import {
   type ProviderAccountReading,
   type SigninState,
   sameIdentity,
-  type UsageLimitsReading,
   type UsageLimitsResponse,
 } from "@cawco/core";
 import {
@@ -431,7 +430,6 @@ export const limitsOf = (
  * account there (its default model's catalog), out of sign-ins already read:
  * the first account signed in there.
  */
-// Also fills the per-machine `limits` BRIDGE (wire-compat.ts, {@link usageLimits}); the bridge's deletion takes that use, not this.
 const speakerAmong = (
   signins: readonly AccountSignin[],
   claude: ReadonlySet<string>,
@@ -512,24 +510,10 @@ export const sessionLimitsReader = (
   return (row) => (row.accountId ? view.limits(row.accountId, now) : undefined);
 };
 
-/** A machine's Claude line where no Claude account is signed in there (the BRIDGE's). */
-const notSignedIn = (now: number): ClaudeLimits => ({
-  extraUsage: null,
-  fetchedAt: now,
-  stale: false,
-  subscription: null,
-  windows: [],
-  error: "not signed in",
-  errorKind: "not-signed-in",
-});
-
 /**
  * What the usage screens read (`/api/usage/limits`): each Claude account's
  * own limits, by account; and each machine's OpenCode Go plan, read with its
- * own key. `machines` is a BRIDGE (scripts/wire-compat.ts) for TestFlight
- * builds that read limits per machine, Claude's there the first account
- * signed in on it ({@link machineAccount}). It goes in the change that
- * expires those builds; nothing on this build reads it.
+ * own key. A `kind: 'usage'` frame carries the same.
  */
 export const usageLimits = (
   db: DbShape,
@@ -539,8 +523,6 @@ export const usageLimits = (
   const goByMachine = new Map(
     db.listUsageLimits().map((row) => [row.machineId, row.openCodeGo])
   );
-  const signins = db.accounts.signins();
-  const claude = claudeAccounts(db);
   return {
     claude: db.accounts
       .list()
@@ -549,47 +531,12 @@ export const usageLimits = (
         accountId: account.id,
         limits: view.limits(account.id, now),
       })),
-    machines: db.listAgents().flatMap((agent) => {
-      const go = goByMachine.get(agent.machineId) ?? null;
-      const speaker = speakerAmong(signins, claude, agent.machineId);
-      if (!(go || speaker)) {
-        return [];
-      }
-      return [
-        {
-          machineId: agent.machineId,
-          hostname: agent.hostname,
-          limits: speaker ? view.limits(speaker, now) : notSignedIn(now),
-          openCodeGo: go,
-        },
-      ];
-    }),
     openCodeGo: db.listAgents().flatMap((agent) => {
       const plan = goByMachine.get(agent.machineId);
       return plan
         ? [{ machineId: agent.machineId, hostname: agent.hostname, plan }]
         : [];
     }),
-  };
-};
-
-/** The `kind: 'usage'` frame's limits: {@link usageLimits}, its machines in the frame's shape. */
-export const usageFrameLimits = (
-  db: DbShape,
-  now = Date.now()
-): Pick<UsageLimitsResponse, "claude" | "openCodeGo"> & {
-  limits: UsageLimitsReading[];
-} => {
-  const read = usageLimits(db, now);
-  return {
-    claude: read.claude,
-    openCodeGo: read.openCodeGo,
-    limits: read.machines.map((machine) => ({
-      machineId: machine.machineId,
-      payload: machine.limits,
-      openCodeGo: machine.openCodeGo,
-      fetchedAt: new Date(now),
-    })),
   };
 };
 

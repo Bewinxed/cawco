@@ -55,7 +55,7 @@ enum RailModel {
         let sessions = hub.fleet.rows
         var live = 0
         var blocked = 0
-        let rows = (sessions.map(BoardRow.session) + hub.fleet.runRows + hub.fleet.threadRows).enumerated().map { index, row in
+        let rows = (sessions.map(BoardRow.session) + hub.fleet.threadRows).enumerated().map { index, row in
             let watchesActivity = row.isLive || row.isStale || sort == .state
             let activity = watchesActivity ? home.activity(row.id) : .idle
             if index < sessions.count, row.isLive {
@@ -88,10 +88,9 @@ enum RailModel {
         // What is running now, and what rests but can be picked up again.
         // A project's threads with its Caw are rows of it (Sidebar.svelte): running while he works
         // on one or waits on you in it, resting otherwise.
-        let running = fleet.rows.filter(\.isLive).map(BoardRow.session) + fleet.runRows.filter { $0.status == .running }
-            + fleet.threadRows.filter { $0.status == .running }
+        let running = fleet.rows.filter(\.isLive).map(BoardRow.session) + fleet.threadRows.filter { $0.status == .running }
         let resting = fleet.rows.filter { $0.isListed && ($0.isResumable || $0.isStale || $0.isFailed) }.map(BoardRow.session)
-            + fleet.runRows.filter(\.isFailed) + fleet.threadRows.filter { $0.status != .running }
+            + fleet.threadRows.filter { $0.status != .running }
         /// The session a row's work belongs to (tree.ts `topsIn`): itself, or
         /// for a delegate the session at the top of its chain of parents,
         /// walked through the rows the rail lists.

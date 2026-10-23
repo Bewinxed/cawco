@@ -1719,7 +1719,7 @@
    control's centre to 22px after it, and two areas that meet at a midpoint
    meet there for the press too, instead of the later one taking the
    earlier one's last half pixel.
-   --hit-scale is the zoom of a scaled canvas (the workflow graph), so the
+   --hit-scale is the zoom of a scaled canvas (a graph), so the
    area stays 44px on screen there, as pointer-hit's stays 24px. */
 @utility touch-hit {
   @media (pointer: coarse) {
@@ -1750,7 +1750,7 @@
 
 /* Pointer hit area (DESIGN.md, The 24 Pointer Rule): the fine-pointer twin
    of touch-hit, reaching 24px. --hit-scale is the zoom of a scaled canvas
-   (the workflow graph), so the area stays 24px on screen. */
+   (a graph), so the area stays 24px on screen. */
 @utility pointer-hit {
   @media (pointer: fine) {
     :where(&) {

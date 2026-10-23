@@ -277,32 +277,10 @@ try {
     });
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(`Workflow API ${path}: ${response.status} ${text}`);
+      throw new Error(`Hub API ${path}: ${response.status} ${text}`);
     }
     return JSON.parse(text) as Record<string, unknown>;
   }
-  const workflow = await post("/api/workflows", {
-    name: "Binary Proof",
-    program:
-      'import { z } from "zod"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint("binary",w.inputs);return {name:w.inputs.name};}',
-  });
-  const launched = await post(`/api/workflows/${workflow.id}/runs`, {
-    inputs: { name: "standalone" },
-    workspace: { path: home, machineId: machine.machineId },
-    supervisor: null,
-  });
-  const done = await wait(
-    `http://127.0.0.1:43456/api/workflow-runs/${launched.runId}`,
-    watchChild("the agent", "up", agent),
-    (text) => JSON.parse(text).status === "done"
-  );
-  if (JSON.parse(done).result?.name !== "standalone") {
-    throw new Error("Real hub workflow returned wrong result");
-  }
-  writeFileSync(join(home, "workflow-result.json"), done);
-  console.log(
-    "real hub workflow API run completed and persisted its checkpoint/result"
-  );
   if (systemd) {
     await command(["systemctl", "start", "cawco-binary-dashboard.socket"]);
   } else {

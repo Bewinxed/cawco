@@ -7,9 +7,8 @@
  * the only writer its checkout has. Finished work takes another turn only
  * from the reader or the session that delegated it: that message reopens the
  * item and lands in the same session, on the transcript its provider still
- * has cached. A rule, the supervisor, a workflow or any other session is
- * refused — a standing instruction once woke a finished leaf into a checkout
- * a newer item owned.
+ * has cached. A rule or any other session is refused — a standing instruction
+ * once woke a finished leaf into a checkout a newer item owned.
  *
  * The hub is the one authority: `delegate` is a request to {@link start}, and
  * the frames that move a session move its item. It is `done` only when its
@@ -2561,16 +2560,14 @@ export const createWorkItems = ({
 
   /**
    * Whether a session's reports and asks go up to its parent at all: only
-   * delegated work's do (a work item; a workflow step, to its run's
-   * supervisor). A session another session started with `start_session`
+   * delegated work's do (a work item). A session another session started with `start_session`
    * nests under it and reports to no one, its asks the person's; a
    * routine's run reports to nobody either, as its routine reads how it
    * ended, and a run that answers NO_REPLY must wake no model, the lead's
    * included.
    */
   const reportsBack = (row: InstanceRow): boolean =>
-    !isHubParent(row.parentInstanceId) &&
-    !!(row.workItemId || row.workflowStepId);
+    !isHubParent(row.parentInstanceId) && !!row.workItemId;
 
   /**
    * Who hears a delegated session's reports and asks: the session that

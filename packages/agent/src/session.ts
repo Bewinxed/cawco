@@ -184,6 +184,7 @@ import {
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
+import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
@@ -219,7 +220,6 @@ import { stopStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
 import { installTool, probeTools } from "./tools";
-import { folderTurn, runWorkflowCommand } from "./workflow-command";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
 
 /**
@@ -587,17 +587,13 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
   const workspace = await cloneHolding(dir);
   const git = async (args: string) =>
     workspace
-      ? await runWorkflowCommand(
+      ? await runHubCommand(
           dir,
           `${SAFE_GIT_SHELL}git ${args}`,
           GIT_CHANGES_TIMEOUT_MS,
           workspace
         )
-      : await runWorkflowCommand(
-          dir,
-          `${SAFE_GIT} ${args}`,
-          GIT_CHANGES_TIMEOUT_MS
-        );
+      : await runHubCommand(dir, `${SAFE_GIT} ${args}`, GIT_CHANGES_TIMEOUT_MS);
   const status = await git("status --porcelain");
   if (status.exitCode !== 0) {
     return { repo: false };
@@ -1264,7 +1260,7 @@ export class SessionSupervisor {
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
     // A slow image request must not block machine busy probes or other
-    // controls. Nor may a command the hub runs (a check, a workflow exec, up
+    // controls. Nor may a command the hub runs (a check, a landing gate step, up
     // to an hour): commands in one directory run one after another, and
     // nothing else waits for them.
     let key = envelope.instanceId ?? "";

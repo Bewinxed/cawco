@@ -22,10 +22,6 @@ const BEFORE: readonly {
     tag: ([, from, short]) => markerTag("handoff", { from, short }),
   },
   {
-    line: /^\[Hand-off from the (.+?) workflow — step (.+?), not the user\]/,
-    tag: ([, workflow, step]) => markerTag("workflow-step", { workflow, step }),
-  },
-  {
     line: /^\[CawCo\] Your message to (.+?) was not delivered: /,
     tag: ([, to]) => markerTag("undelivered", { to }),
   },
@@ -61,11 +57,6 @@ const BEFORE: readonly {
   {
     line: /^\[Fork\] (.+)\n\n/,
     tag: ([, line]) => markerTag("fork", { line }),
-  },
-  {
-    line: /^\[Workflow (.+?) — (.+?)\]\n\n/,
-    tag: ([, workflow, event]) =>
-      markerTag("workflow-notice", { workflow, event }),
   },
   {
     line: /^\[Report from delegate (.+?)#([0-9a-f]{8}) — (turn complete|turn failed|notice)\]\n(?:Headline: ([^\n]+)\n)?\n/,

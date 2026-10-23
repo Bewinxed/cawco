@@ -17,6 +17,23 @@
  */
 const TESTFLIGHT_DAYS = 90;
 const DAY_MS = 86_400_000;
+/**
+ * TestFlight builds the hub no longer serves, `<platform> <build>`, though
+ * still inside their 90 days: no hub built from here is held to what they
+ * read. Each is expired on TestFlight once the app that reads the new wire
+ * ships (`testflight.sh --expire <build>`, the app's owed list).
+ *
+ * - ios 20261015, 20261015.3, 20261017, 20261018: they read a session row's
+ *   run and step and a transcript block's run event, which the hub stopped
+ *   sending when the multi-step run engine went (the owner's "The
+ *   delegation tree is the run"); until updated they show no runs.
+ */
+const UNSERVED_TESTFLIGHT = new Set([
+  "ios 20261015",
+  "ios 20261015.3",
+  "ios 20261017",
+  "ios 20261018",
+]);
 const NIGHTLY = /^nightly-(\d+)-[0-9a-f]+$/;
 /** A build number is its upload day, `yyyymmdd`, then `.2`, `.3` (testflight.py `next_number`). */
 const TESTFLIGHT = /^testflight-(ios|mac)-((\d{4})(\d{2})(\d{2})(?:\.\d+)?)$/;
@@ -124,6 +141,9 @@ export const installableTestFlight = (
       return [];
     }
     const [, platform, build, year, month, day] = match;
+    if (UNSERVED_TESTFLIGHT.has(`${platform} ${build}`)) {
+      return [];
+    }
     const uploaded = Date.UTC(Number(year), Number(month) - 1, Number(day));
     const train = platform === "mac" ? " --mac" : "";
     return now - uploaded <= (TESTFLIGHT_DAYS + 1) * DAY_MS

@@ -18,12 +18,8 @@ import {
 } from "./restart";
 
 const MCP_RELAY_PATH = /^\/mcp\/(?:cawco|fleet\/[^/]+)$/;
-const TOOL_READ_PATH =
-  /^\/api\/(?:instances|delegation\/tools|workflow-runs\/[^/]+\/state\/[^/]+)$/;
-const TOOL_WRITE_PATH =
-  /^\/api\/(?:delegation\/call\/[^/]+|workflow-steps\/[^/]+\/result|workflow-runs\/[^/]+\/state\/[^/]+)$/;
-const DELEGATION_CALL_PATH = /^\/api\/delegation\/call\//;
-const STEP_RESULT_PATH = /^\/api\/workflow-steps\//;
+const TOOL_READ_PATH = /^\/api\/(?:instances|delegation\/tools)$/;
+const TOOL_WRITE_PATH = /^\/api\/delegation\/call\/[^/]+$/;
 
 /** A shared fleet server's route on the hub, whose 502, 503 and 504 are the hub's own answers about that server. */
 const FLEET_PATH = /^\/mcp\/fleet\//;
@@ -254,11 +250,6 @@ function heldCall(
   }
   if (MCP_RELAY_PATH.test(pathname)) {
     return heldMcpCall(pathname, parsed(body));
-  }
-  if (!DELEGATION_CALL_PATH.test(pathname)) {
-    return STEP_RESULT_PATH.test(pathname)
-      ? "submit_result"
-      : "workflow_state_write";
   }
   const name = (parsed(body) as { name?: unknown } | undefined)?.name;
   if (typeof name !== "string") {

@@ -105,7 +105,6 @@ import type {
   TranscriptTail,
   UsageLimitsResponse,
   UsageSpend,
-  WorkflowRun,
   WorkItemSummary,
   WorkspaceHolding,
 } from "@cawco/core";
@@ -125,7 +124,6 @@ import {
   questionsOf,
   RESOLVE_PERMISSION,
   relaunchOf,
-  runDoing,
   WIRE_PROTOCOL,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -222,20 +220,6 @@ import { speakerName } from "./transcript/speaker";
 import type { DelegateAskEvent, Message } from "./types";
 import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
-import {
-  onBoard,
-  runIdOf,
-  runMovedAt,
-  runRowOf,
-  runSince,
-  stepTitle,
-  stepUnderRun,
-} from "./workflow-runs";
-import {
-  acceptWorkflowFrame,
-  refreshWorkflows,
-  workflowState,
-} from "./workflow-state.svelte";
 import { workspace } from "./workspace/workspace.svelte";
 
 export type ConnectionStatus =
@@ -778,26 +762,8 @@ const catalogsTried = $state<Record<string, true>>({});
  * lookup paid a proxy trap per row per field.
  */
 let hubRows = $state.raw<InstanceRow[]>([]);
-/** What a run is called: its workflow's name. */
-const runName = (runId: string): string | undefined => {
-  const run = workflowState.runs[runId];
-  return run
-    ? workflowState.workflows.find((each) => each.id === run.workflowId)?.name
-    : undefined;
-};
-/**
- * The hub's rows with each workflow step hung under its run and called by
- * its step (workflow-runs.ts), so every reader of the rows nests and names
- * it the one way. A row that is not a step is the hub's own object.
- */
-const instances = $derived(
-  hubRows.map((row) =>
-    stepUnderRun(
-      row,
-      row.workflowRunId ? runName(row.workflowRunId) : undefined
-    )
-  )
-);
+/** The hub's rows, as every reader of the rows reads them. */
+const instances = $derived(hubRows);
 
 /**
  * One child a session's tray lists (DelegateTray): a delegate, by its work
@@ -831,11 +797,10 @@ export interface TrayChild {
 /**
  * A session another one started with `start_session` (or a continuation
  * of one): it names its starter and runs no work item, the one thing that
- * tells it from a delegate (core `InstanceRow.workItemId`). A workflow's
- * step names its supervisor too, and lists under its run.
+ * tells it from a delegate (core `InstanceRow.workItemId`).
  */
 const isStarted = (row: InstanceRow): boolean =>
-  !!row.parentInstanceId && !row.workItemId && !row.workflowRunId;
+  !!row.parentInstanceId && !row.workItemId;
 
 /** The sessions each session started that run no work item, by their starter. */
 const startedBy = $derived.by(() => {
@@ -919,27 +884,11 @@ const sessionChild = (row: InstanceRow): TrayChild => {
   };
 };
 
-/**
- * Every workflow run as a session row (workflow-runs.ts): what the lists
- * nest, fold and archive it by, and what its tab is named and marked from.
- */
-const runRows = $derived(
-  Object.values(workflowState.runs).map((run) =>
-    runRowOf(run, runName(run.id) ?? "Workflow")
-  )
-);
-/** The runs the board lists, by the hub's window for sessions (`onBoard`). */
-const boardRuns = $derived(runRows.filter((row) => onBoard(row, Date.now())));
 /** What a thread's status says it is doing, in the fleet's words. */
 const THREAD_DOING: Record<ThreadSummary["status"], Activity> = {
   working: "working",
   "needs-you": "blocked",
   ready: "idle",
-};
-/** The run a `run:` id names, when it is one this browser has. */
-const runOf = (id: string): WorkflowRun | undefined => {
-  const runId = runIdOf(id);
-  return runId ? workflowState.runs[runId] : undefined;
 };
 /**
  * Every thread with a project's Caw as a session row (thread-tabs.ts): what
@@ -967,10 +916,8 @@ const threadOf = (id: string): ThreadSummary | undefined => {
   const threadId = threadIdOf(id);
   return threadId ? threadsById.get(threadId) : undefined;
 };
-/** The same rows looked up by id and by session, runs and threads among them, rebuilt once per change. */
-const instanceIndex = $derived(
-  indexInstances([...instances, ...runRows, ...threadRows])
-);
+/** The same rows looked up by id and by session, threads among them, rebuilt once per change. */
+const instanceIndex = $derived(indexInstances([...instances, ...threadRows]));
 const runningInstances = $derived(instances.filter(isLive));
 /**
  * What a list shows running: sessions (a lead is its threads, thread-tabs.ts
@@ -1132,12 +1079,6 @@ const state = $state({
    * it, so a session keeps its place for as long as it works.
    */
   turnSince: {} as Record<string, number>,
-  /**
-   * When the hub parked each waiting workflow run's question, keyed by run
-   * id: the `raisedAt` its ask carried. The run itself is the ask's only
-   * representation, so the moment it was raised is kept beside it here.
-   */
-  runAskRaisedAt: {} as Record<string, number>,
   /**
    * The line an ask leaves when it ends with no answer from this tab:
    * withdrawn before it was answered (the turn interrupted, the session
@@ -2798,13 +2739,12 @@ function adoptPending(
 /**
  * An ask the hub parked for no session it keeps a row for (a project's
  * memory proposal, hub memory.ts): its answer names the envelope's machine,
- * since no row says one. A workflow's question is its run's, not a session's.
+ * since no row says one.
  */
 function adoptAskMachine(envelope: Envelope<FramePayload>): void {
   const frame = envelope.payload;
   if (
     frame.kind !== "permission_request" ||
-    "workflowRunId" in frame ||
     !envelope.machineId ||
     instanceIndex.byId.has(frame.instanceId)
   ) {
@@ -2828,8 +2768,6 @@ function adoptAskMachine(envelope: Envelope<FramePayload>): void {
  * hub sends a row again only when it next changes, so nothing would correct it.
  */
 async function refresh(): Promise<boolean> {
-  // Registry hydration also recovers workflow transitions missed while disconnected.
-  refreshWorkflows();
   // Same reason as the limits below: the frames that carry spend come once a
   // minute per machine, and a dashboard opened between them has none yet.
   readSpend();
@@ -3113,16 +3051,6 @@ function handleFrame(frame: FramePayload): void {
     }
     return;
   }
-  if (frame.kind === "permission_request" && "workflowRunId" in frame) {
-    // A workflow question is represented once, by its waiting run, and is
-    // answered through the run view — not as a session permission prompt.
-    // Only the moment the hub parked it is kept, beside the run.
-    const runId = (frame as { workflowRunId?: unknown }).workflowRunId;
-    if (typeof runId === "string" && frame.raisedAt !== undefined) {
-      state.runAskRaisedAt[runId] = frame.raisedAt;
-    }
-    return;
-  }
   if (frame.kind === "permission_settled") {
     // The hub's word that the ask is over, whoever settled it: the card goes,
     // and a read already on its way cannot bring it back.
@@ -3166,10 +3094,6 @@ function handleFrame(frame: FramePayload): void {
         sayAskEnd(target, frame.requestId, note);
       }
     }
-    return;
-  }
-  if (frame.kind === "workflow") {
-    acceptWorkflowFrame(frame);
     return;
   }
   if (frame.kind === "preview") {
@@ -5050,10 +4974,9 @@ function subscriptionIds(): string[] {
   for (const id of watchedDelegates.keys()) {
     ids.add(id);
   }
-  // A run's tab streams no frames of its own: its run and steps come with
-  // the workflow frames every dashboard already receives. A thread's comes
-  // with the thread frames, which every dashboard receives too.
-  return [...ids].filter((id) => !(runIdOf(id) || isThreadTab(id)));
+  // A thread's tab streams no frames of its own: they come with the thread
+  // frames, which every dashboard receives.
+  return [...ids].filter((id) => !isThreadTab(id));
 }
 
 /** The last watched set synced, so an unchanged set of tabs stays quiet. */
@@ -5126,8 +5049,8 @@ export function setPeeked(id: string | null): void {
 
 /** One more reader of this delegate: its frames stream while any reader remains. */
 export function watchDelegate(instanceId: string): void {
-  // A workflow run or a thread streams no frames of its own (see `subscriptionIds`).
-  if (runIdOf(instanceId) || isThreadTab(instanceId)) {
+  // A thread streams no frames of its own (see `subscriptionIds`).
+  if (isThreadTab(instanceId)) {
     return;
   }
   watchedDelegates.set(instanceId, (watchedDelegates.get(instanceId) ?? 0) + 1);
@@ -7648,9 +7571,8 @@ export function readTranscript(
   cause: ReadCause = "open",
   fresh = false
 ): Promise<TranscriptOutcome> {
-  // A workflow run's tab has no transcript of its own: its steps' do. A
-  // thread's is its messages (`readThread`).
-  if (runIdOf(viewId) || isThreadTab(viewId)) {
+  // A thread's transcript is its messages (`readThread`).
+  if (isThreadTab(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
   }
   const target = session(viewId);
@@ -9068,13 +8990,6 @@ export const cawco = {
   get listedInstances(): InstanceRow[] {
     return listedInstances;
   },
-  /**
-   * Every workflow run as a session row (workflow-runs.ts), for the lists
-   * that show runs the way they show sessions: Working, Finished, projects.
-   */
-  get runRows(): BoardRow[] {
-    return boardRuns;
-  },
   /** Every thread with a project's Caw, as session rows (thread-tabs.ts). */
   get threadRows(): BoardRow[] {
     return threadRows;
@@ -9256,10 +9171,6 @@ export const cawco = {
   },
   /** What a session needs from you — `idle` for one nothing has been heard from. */
   activityOf: (instanceId: string): Activity => {
-    const run = runOf(instanceId);
-    if (run) {
-      return runDoing(run.status);
-    }
     const thread = threadOf(instanceId);
     if (thread) {
       return THREAD_DOING[thread.status];
@@ -9312,18 +9223,6 @@ export const cawco = {
   currentToolOf: (
     instanceId: string
   ): { name: string; glance: string } | null => {
-    const runId = runIdOf(instanceId);
-    if (runId) {
-      // A run is doing whichever of its steps is running.
-      const detail = workflowState.details[runId];
-      const step = detail?.steps.find((each) => each.status === "running");
-      return detail && step
-        ? {
-            name: stepTitle(detail, step),
-            glance: "",
-          }
-        : null;
-    }
     const target = state.sessions[instanceId];
     if (target && isSubscribed(instanceId)) {
       return target.currentTool;
@@ -9333,28 +9232,18 @@ export const cawco = {
   /**
    * When the daemon last pulsed a session, ms epoch — the freshest signal a
    * rail has for an unsubscribed session, since the pulse is broadcast for
-   * every session while its transcript frames only flow to a watcher. A
-   * run's is when it last moved.
+   * every session while its transcript frames only flow to a watcher.
    */
   pulseAt: (instanceId: string): number | undefined => {
-    const run = runOf(instanceId);
-    if (run) {
-      return runMovedAt(run, workflowState.details[run.id]?.steps);
-    }
     const thread = threadOf(instanceId);
     if (thread) {
       return thread.lastAt;
     }
     return pulseOf(instanceId)?.at;
   },
-  /** When the session's current turn began, ms epoch; `undefined` while it is idle. A run's turn is the run. */
-  turnSince: (instanceId: string): number | undefined => {
-    const run = runOf(instanceId);
-    return run ? runSince(run) : state.turnSince[instanceId];
-  },
-  /** When the hub parked a waiting workflow run's question, ms epoch. */
-  runAskRaisedAt: (runId: string): number | undefined =>
-    state.runAskRaisedAt[runId],
+  /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
+  turnSince: (instanceId: string): number | undefined =>
+    state.turnSince[instanceId],
   /** The line an ask left: withdrawn unanswered, or answered elsewhere; none for one answered here or still waiting. */
   askEnd: (requestId: string): Message | undefined => state.askEnds[requestId],
   /**
@@ -9422,11 +9311,6 @@ export const cawco = {
     return blockedRequests();
   },
   get blockedCount(): number {
-    return (
-      blockedRequests().length +
-      Object.values(workflowState.runs).filter(
-        (run) => run.status === "waiting"
-      ).length
-    );
+    return blockedRequests().length;
   },
 };

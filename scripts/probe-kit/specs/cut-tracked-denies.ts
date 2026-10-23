@@ -25,7 +25,7 @@
  * - (b) A second delegate commits a file; main then changes `.mcp.json` and
  *   drops `opencode.json`, and the delegate finishes. Its landing rebases
  *   onto that main and lands (hub landing.ts, the rebase a move, agent
- *   workflow-command.ts `movedCommand`): origin's main is its commit on
+ *   hub-command.ts `movedCommand`): origin's main is its commit on
  *   main's, with main's new `.mcp.json` and no `opencode.json`, and the
  *   agent's log says the rebase ran on the host with the sandbox down. The
  *   landed workspace retires at once, so its clone is read through its
@@ -46,7 +46,7 @@
  *   (`git update-index --cacheinfo`, no file written) and finishes: its
  *   landing is refused, its finish naming `.mcp.json` as harness project
  *   config no workspace's commit changes, and origin's main is as (b) left
- *   it (workflow-command.ts `ownConfigChanges`).
+ *   it (hub-command.ts `ownConfigChanges`).
  * - (f) In (d)'s boundary the session's own `git checkout --detach
  *   origin/main`, whose `.mcp.json` differs from HEAD's, exits non-zero
  *   naming `.mcp.json`, and the worktree is as it was: the same HEAD, the
@@ -110,13 +110,13 @@ const DELEGATE = "mcp__cawco__delegate";
 const BLOCKED = "The item failed as blocked";
 /** git's own words for a checkout's write the boundary refused (entry.c, unpack-trees.c). */
 const GIT_REFUSED = /unable to (create file|unlink old) /;
-/** What a refused move of config says (workflow-command.ts `ownConfigWords`). */
+/** What a refused move of config says (hub-command.ts `ownConfigWords`). */
 const CONFIG_REFUSED = "which no workspace's commit changes";
 /** The start of `ownConfigWords`, before the changed paths: where its excerpt begins, so it never opens inside a presence reminder's tail. */
 const CONFIG_CHANGE = "its commits change";
 /** What the boundary's git says of a move it refused before it ran (worktree-guard.ts `gitShim`). */
 const SHIM_REFUSED = "did not run, and the worktree is as it was";
-/** The agent's line for a move it ran on the host (workflow-command.ts `onHost`). */
+/** The agent's line for a move it ran on the host (hub-command.ts `onHost`). */
 const ON_HOST = "ran on the host, its sandbox down, as it writes";
 /** A held workspace's settle: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;
@@ -601,7 +601,7 @@ const landPhase = async (
     );
   const refused = refusedIn(log);
   check(
-    "(b) the agent ran the rebase on the host with its sandbox down, and no git write was refused: a move that left .mcp.json other than HEAD has it fails the landing (workflow-command.ts `movedCommand`)",
+    "(b) the agent ran the rebase on the host with its sandbox down, and no git write was refused: a move that left .mcp.json other than HEAD has it fails the landing (hub-command.ts `movedCommand`)",
     onHost && refused.length === 0,
     `on-host line ${onHost}; ${refused.join(" / ").slice(0, 600) || "no refusal"}`
   );

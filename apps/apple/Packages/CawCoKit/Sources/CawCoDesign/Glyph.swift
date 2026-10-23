@@ -56,7 +56,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case rules = "shield-check-bold-duotone"
     case report = "clipboard-check-bold-duotone"
     case reportFailed = "clipboard-remove-bold-duotone"
-    case workflow = "share-circle-bold-duotone"
+    case pipeline = "share-circle-bold-duotone"
     case handoff = "inbox-in-bold-duotone"
     case check = "check-read-bold-duotone"
     case arrowDown = "arrow-down-bold-duotone"

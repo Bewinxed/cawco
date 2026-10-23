@@ -100,7 +100,7 @@ if (!args.includes("--built")) {
   check("compile", /^BUILT iOS/m.test(text), "BUILT iOS");
 }
 
-/** A workflow step's prompt: its turn runs long, so the step stays running. */
+/** A prompt whose turn runs long, so its session stays running. */
 const SLOW = "PROBE-SLOW-STEP";
 const respond = (request: Seen): Reply =>
   request.all.includes(SLOW)
@@ -109,8 +109,6 @@ const respond = (request: Seen): Reply =>
 const fleet = await scratchFleet({ name: "probe-ios-ask-here", respond });
 let sim: MacSim | undefined;
 const GHOST = "ask-ghost";
-/** The workflow run Cancel run is asked of, once the app asked for one. */
-let runId = "";
 
 try {
   fleet.launch("sessiond");
@@ -279,26 +277,6 @@ try {
     );
     fleet.launch("agent");
     await fleet.agentUp();
-  }
-  // Cancel run: a workflow whose one step runs for minutes, started once the app asks.
-  await until(
-    "the app asks for a run",
-    log,
-    (text) =>
-      text.includes("ask-probe: start a run") ||
-      text.includes("ask-probe: done"),
-    300_000
-  );
-  if ((await log()).includes("ask-probe: start a run")) {
-    const workflow = await fleet.api<{ id: string }>("/api/workflows", {
-      name: "Probe slow run",
-      program: `import { z } from "zod"; export const inputs = z.object({}); export default async function(w: Workflow<typeof inputs>) { return await w.run({ title: "Probe slow step", harness: "claude", model: ${JSON.stringify(MODEL.claude)}, prompt: ${JSON.stringify(`${SLOW} take your time`)}, timeoutMinutes: 30, retries: 0, output: z.object({ ok: z.boolean() }) }); }`,
-    });
-    const started = await fleet.api<{ runId: string }>(
-      `/api/workflows/${workflow.id}/runs`,
-      { workspace: { machineId: MACHINE, path: fleet.workdir } }
-    );
-    ({ runId } = started);
   }
   await until(
     "the probe done",
@@ -497,33 +475,6 @@ try {
     "fullSend",
     "question: none on screen",
     "picked: fullSend"
-  );
-
-  // Cancel run.
-  const run = `run:${runId}`;
-  expect(
-    "Cancel run asks under the run's head, naming the step running now",
-    "workflow cancel asked",
-    run,
-    "'Cancel this run?' confirm 'Cancel run' cancel on",
-    /reaches \[[^\]]+\]/,
-    "under its head: yes",
-    free
-  );
-  expect(
-    "Cancel run pends in place",
-    "workflow cancel in flight",
-    run,
-    "confirm 'Cancelling…' spinning cancel off",
-    "under its head: yes",
-    free
-  );
-  expect(
-    "Cancel run answered: the run is cancelled and the question goes",
-    "workflow cancel answered",
-    run,
-    "question: none on screen",
-    /run: \S*cancel/
   );
 } catch (error) {
   check(

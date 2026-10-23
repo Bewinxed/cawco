@@ -122,7 +122,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         transcriptView.hub = hub
         transcriptView.onOpenSession = { [weak self] id in self?.onOpenSession(id) }
         transcriptView.onOpenTask = { [weak self] projectId, taskId in self?.onOpenTask(projectId, taskId) }
-        transcriptView.onOpenRun = { [weak self] runId in self?.onOpenSession(BoardRun.prefix + runId) }
         transcriptView.onReturnToFleet = { [weak self] in self?.onReturnToFleet() }
         view.hold(transcriptHost.view)
         transcriptHost.didMove(toParent: self)

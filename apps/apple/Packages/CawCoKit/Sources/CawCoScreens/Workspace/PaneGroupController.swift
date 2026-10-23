@@ -288,9 +288,9 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             return .idle
         }()
         let status = face == .idle || face == .stored ? "" : face.label
-        // A thread, like a run, has no session details behind its tab.
+        // A thread or an artifact has no session details behind its tab.
         return PaneTab(id: id, label: label, face: face, needs: activity == .blocked,
-                       isRun: BoardRun.runId(of: id) != nil || ThreadTabs.isThread(id) || ArtifactTabs.artifactId(of: id) != nil, status: status)
+                       noDetails: ThreadTabs.isThread(id) || ArtifactTabs.artifactId(of: id) != nil, status: status)
     }
 
     // MARK: Panes
@@ -516,8 +516,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     /// a tab's long press, its pull down and VoiceOver all offer (`TabAction`).
     private func actions(for id: String) -> [[TabAction]] {
         var first: [TabAction] = []
-        // A run, a Caw thread and an artifact's own tab are no harness session: no details, no continuing.
-        if BoardRun.runId(of: id) == nil, !ThreadTabs.isThread(id), ArtifactTabs.artifactId(of: id) == nil {
+        // A Caw thread and an artifact's own tab are no harness session: no details, no continuing.
+        if !ThreadTabs.isThread(id), ArtifactTabs.artifactId(of: id) == nil {
             first.append(TabAction(title: Words.Transcript.sessionDetails) { [weak self] in
                 guard let self else { return }
                 tabDetails.pin(id, tab: strip.tabView(id))

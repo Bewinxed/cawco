@@ -589,7 +589,6 @@ const calls = (
   { as: orch, name: "delegate_list", args: {}, shape: "live" },
   { as: orch, name: "list_sessions", args: {} },
   { as: orch, name: "list_delegate_types", args: {} },
-  { as: orch, name: "workflow_list", args: {} },
   { as: orch, name: "task_read", args: {} },
   { as: orch, name: "task_read", args: { id: "tsk-2" }, shape: "one task" },
   { as: orch, name: "find", args: { query: "settings", project: "all" } },

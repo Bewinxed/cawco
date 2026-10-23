@@ -90,6 +90,7 @@ import {
   noteRefused,
   undeclaredEndpoint,
 } from "./host-lfs";
+import { ownConfigChanges, ownConfigWords, runHubCommand } from "./hub-command";
 import {
   createdAt,
   cutMade,
@@ -113,11 +114,6 @@ import {
   withoutCredential,
 } from "./move";
 import { noRepositoryAt, straysIn } from "./stand-ins";
-import {
-  ownConfigChanges,
-  ownConfigWords,
-  runWorkflowCommand,
-} from "./workflow-command";
 import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
 
@@ -886,7 +882,7 @@ const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const insideGit =
   (workspace: WorkspaceRef) =>
   async (cmd: string): Promise<string> => {
-    const result: CommandResult = await runWorkflowCommand(
+    const result: CommandResult = await runHubCommand(
       workspace.path,
       `${SAFE_GIT_SHELL}${cmd}`,
       WORKSPACE_GIT_TIMEOUT_MS,
@@ -973,7 +969,7 @@ export const workspaceBundle = async (
  * commit could point it anywhere with the owner's credentials: a commit that
  * marks files for LFS has them pulled inside the boundary, where its
  * checkout smudged them before. A commit whose own commits change harness
- * project config (workflow-command.ts `ownConfigChanges`) is never checked
+ * project config (hub-command.ts `ownConfigChanges`) is never checked
  * out: the host would write it into a worktree a session's harness loads
  * outside any boundary.
  */

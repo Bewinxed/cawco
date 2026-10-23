@@ -19,7 +19,6 @@ enum RowFactory {
         case .question: QuestionCardView(env: env)
         case .subagent: SubagentView(env: env)
         case .delegate: DelegateView(env: env)
-        case .run: RunView(env: env)
         case .compaction: CompactionDividerView(env: env)
         case .livetool: LiveToolView(env: env)
         case .notice, .retry, .empty: NoticeView(env: env)
@@ -38,7 +37,6 @@ enum RowFactory {
         case .question: view is QuestionCardView
         case .subagent: view is SubagentView
         case .delegate: view is DelegateView
-        case .run: view is RunView
         case .compaction: view is CompactionDividerView
         case .livetool: view is LiveToolView
         case .notice, .retry, .empty: view is NoticeView
@@ -415,7 +413,7 @@ final class SubagentView: RailRow, RowContent, Disclosing {
         let rows = Fold.rows(branch.blocks, branches: [:], voices: &voices).compactMap { row -> Row? in
             switch row {
             case let .question(key, block): .tools(key: key, blocks: [block])
-            case .subagent, .delegate, .run, .harness: nil
+            case .subagent, .delegate, .harness: nil
             default: row
             }
         }
@@ -813,134 +811,6 @@ enum Asks {
         if let command = input["command"] as? String { return "\(tool) \(command.prefix(80))" }
         return tool
     }
-}
-
-/// A run's step, as the run's detail reads it (RunSteps.svelte).
-struct RunStep {
-    let id: String
-    let status: String
-    let title: String
-    let started: Date?
-    let ended: Date?
-}
-
-/// A workflow run where it was started (RunBlock.svelte): its status mark,
-/// its name, how far along, its failure, and its steps under it.
-final class RunView: RailRow, RowContent {
-    private let mark = UIView()
-    private let glyph = SessionStatusView(.unknown, compact: true)
-    private let name = LineLabel(hug: .defaultHigh, resist: .defaultLow)
-    private let progress = LineLabel(hug: .required, resist: .required)
-    private let failure = WrapLabel(wrap: .pretty) // RunBlock `p.failure`
-    private let steps = UIStackView()
-    private var runId: String?
-    private var ticker: Timer?
-
-    required init(env: RowEnv) {
-        super.init(env: env)
-        mark.translatesAutoresizingMaskIntoConstraints = false
-        glyph.translatesAutoresizingMaskIntoConstraints = false
-        mark.addSubview(glyph)
-        let spacer = UIView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let head = railLine([mark, name, spacer, progress])
-        NSLayoutConstraint.activate([
-            head.heightAnchor.constraint(greaterThanOrEqualToConstant: Columns.line),
-            mark.widthAnchor.constraint(equalToConstant: Size.txWGlyph), mark.heightAnchor.constraint(equalToConstant: Size.txWGlyph),
-            glyph.leadingAnchor.constraint(equalTo: mark.leadingAnchor), glyph.centerYAnchor.constraint(equalTo: mark.centerYAnchor),
-        ])
-        body.addArrangedSubview(head)
-        body.addArrangedSubview(hung(failure))
-        body.setCustomSpacing(Space.space1, after: head)
-        steps.axis = .vertical
-        steps.spacing = Space.spaceRow
-        body.addArrangedSubview(steps)
-        head.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(openRun)))
-        head.isAccessibilityElement = true
-        head.accessibilityTraits = .link
-    }
-
-    @objc private func openRun() { if let runId { env.openRun(runId) } }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        if window == nil { ticker?.invalidate(); ticker = nil }
-    }
-
-    func configure(_ item: Item) {
-        guard case let .run(block, anchored) = item.kind else { return }
-        place()
-        let runId = anchored ?? Fold.startedRun(block)
-        self.runId = runId
-        let fleet = env.hub?.fleet
-        let run = runId.flatMap { fleet?.runs[$0] }
-        let detail = runId.map { env.runSteps($0) } ?? []
-        let refused = runId == nil && block.toolStatus == "error"
-        let named = run.flatMap { fleet?.workflowNames[$0.workflowId] } ?? (block.toolInput["name"] as? String) ?? "Workflow"
-        name.attributedText = Styled.string(named, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
-        glyph.isHidden = run == nil
-        if let run { glyph.configure(Self.status(run.status.rawValue)) }
-        let going = run?.status == .running || run?.status == .waiting
-        let setProgress: @MainActor () -> Void = { [weak self] in
-            guard let self else { return }
-            var text = ""
-            if let run {
-                let end = run.endedAt ?? Date().timeIntervalSince1970 * 1000
-                let took = formatDuration(max(0, end - run.startedAt) / 1000)
-                let passed = detail.filter { $0.status == "passed" }.count
-                text = detail.isEmpty ? took : "\(passed)/\(detail.count) steps · \(took)"
-            } else if !refused { text = "starting" }
-            progress.attributedText = Styled.string(text, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingRoot, tabular: true)
-        }
-        setProgress()
-        ticker?.invalidate()
-        ticker = going ? Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in MainActor.assumeIsolated { setProgress() } } : nil
-        let failed = refused ? (block.toolResult ?? "The run did not start.") : run?.failure
-        failure.attributedText = failed.map { Styled.string($0, TypeScale.typeMeta, color: Palette.statusFailInk, leading: TypeScale.leadingBody, lineBreak: .byCharWrapping) }
-        failure.superview?.isHidden = failed == nil
-        steps.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for step in detail.sorted(by: { ($0.started ?? .distantFuture) < ($1.started ?? .distantFuture) }) {
-            steps.addArrangedSubview(StepLine(step, env: env))
-        }
-        steps.isHidden = steps.arrangedSubviews.isEmpty
-        body.arrangedSubviews.first?.accessibilityLabel = "\(named), \(progress.text ?? "")"
-    }
-
-    /// A step's or run's status on the session scale (SessionStatus.svelte `STEP`).
-    static func status(_ status: String) -> SessionStatusView.Face {
-        switch status {
-        case "running": .working
-        case "waiting": .needsYou
-        case "held": .held
-        case "failed": .failed
-        case "passed": .passed
-        case "done": .done
-        case "pending": .pending
-        case "skipped": .skipped
-        case "cancelled": .cancelled
-        default: .unknown
-        }
-    }
-}
-
-/// A run's step on the run's rail: its status glyph, title and time.
-final class StepLine: UIView {
-    init(_ step: RunStep, env: RowEnv) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        let glyph = SessionStatusView(RunView.status(step.status), compact: true)
-        let title = LineLabel(hug: .defaultLow, resist: .defaultLow)
-        title.attributedText = Styled.string(step.title, TypeScale.typeBody, color: step.status == "failed" ? Palette.statusFailInk : Palette.inkStrong)
-        let time = LineLabel(hug: .required, resist: .required)
-        let end = step.ended ?? Date()
-        time.attributedText = step.started.map { Styled.string(formatDuration(end.timeIntervalSince($0)), TypeScale.typeMeta, color: Palette.inkMuted, tabular: true) }
-        let row = railLine([glyph, title, time])
-        row.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.txLine).isActive = true
-        pin(row, insets: UIEdgeInsets(top: 0, left: env.columns.hang, bottom: 0, right: 0))
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("built in code") }
 }
 
 /// Where the list has nothing to draw: "Loading transcript…" while the read

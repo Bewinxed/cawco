@@ -1602,8 +1602,7 @@ export function createPreviewListeners(
           hostPattern,
           hostPattern.key === "port" ? port : labelOf(instanceId)
         );
-        // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
-        return { port, origin, host: new URL(origin).host, ...onTailnet };
+        return { port, origin, ...onTailnet };
       }
       return { port, ...onTailnet };
     },
@@ -1649,7 +1648,7 @@ export function createPreviewListeners(
           hostPattern,
           hostPattern.key === "port" ? port : labelOf(key)
         );
-        return { port, origin, host: new URL(origin).host, ...onTailnet };
+        return { port, origin, ...onTailnet };
       }
       return { port, ...onTailnet };
     },

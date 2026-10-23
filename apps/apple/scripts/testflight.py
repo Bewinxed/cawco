@@ -1,4 +1,4 @@
-"""Mac-side TestFlight workflow. Uses the existing local asc.py credential store."""
+"""Mac-side TestFlight upload steps. Uses the existing local asc.py credential store."""
 import datetime
 import fcntl
 import json

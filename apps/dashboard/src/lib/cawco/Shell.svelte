@@ -953,8 +953,6 @@
         return "Configure";
       case "usage":
         return "Usage";
-      case "workflows":
-        return "Workflows";
       // The MCP server sign-in's return (its page: "Finishing sign-in").
       case "oauth":
         return "MCP sign-in";

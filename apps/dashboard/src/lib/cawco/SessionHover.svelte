@@ -18,13 +18,8 @@
   import { Portal } from "bits-ui";
   import { cawco, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
-  import SessionCard, {
-    readThreadCard,
-    runningStep,
-    tailOf,
-  } from "./SessionCard.svelte";
+  import SessionCard, { readThreadCard, tailOf } from "./SessionCard.svelte";
   import { threadIdOf } from "./thread-tabs";
-  import { runIdOf } from "./workflow-runs";
 
   /** The rail whose session rows open the card. */
   let { within }: { within: HTMLElement | undefined } = $props();
@@ -55,11 +50,9 @@
       readThreadCard(threadId);
       return;
     }
-    // A workflow run's card reads its running step's tail, not its own.
-    const tail = runningStep(id) ?? (runIdOf(id) ? null : id);
-    if (tail && !cawco.session(tail)?.messages.length) {
+    if (!cawco.session(id)?.messages.length) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
-      void readTranscript(tail);
+      void readTranscript(id);
     }
   }
 

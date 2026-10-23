@@ -25,8 +25,7 @@
 <script lang="ts">
   /**
    * Caw's head in the top bar: the way into what needs the operator (the
-   * home's Needs you: every parked ask, a workflow run's question, a project
-   * past its cap; home-state `needs`, the rows Home's Needs you section shows).
+   * home's Needs you: every parked ask, a project past its cap; home-state `needs`, the rows Home's Needs you section shows).
    *
    * He is his compacted head (assets/mascot/README.md, `compacted`: a head
    * that fills its box, built for 18 px), the last item of the bar's icon

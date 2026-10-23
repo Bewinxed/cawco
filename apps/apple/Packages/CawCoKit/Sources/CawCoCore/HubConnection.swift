@@ -208,9 +208,6 @@ public final class HubConnection {
     public private(set) var sessions: SessionsStore!
     /// The delegates' work items their parents' trays read.
     public private(set) var workItems: WorkItemsStore!
-    public private(set) var workflowRuns: WorkflowRunsStore!
-    /// Every workflow, as the Workflows page lists and launches them.
-    public private(set) var workflows: WorkflowsStore!
     /// The fleet's setup as Configure reads it.
     public private(set) var configuration: FleetConfig!
     /// A count per project that moves each time the hub says its tasks
@@ -301,8 +298,6 @@ public final class HubConnection {
         sessions = SessionsStore(hub: self)
         configuration = FleetConfig(hub: self)
         workItems = WorkItemsStore(hub: self)
-        workflowRuns = WorkflowRunsStore(hub: self)
-        workflows = WorkflowsStore(hub: self)
         threads = ThreadsStore(hub: self)
         threads.onThreads = { [weak self] in
             guard let self else { return }
@@ -455,7 +450,6 @@ public final class HubConnection {
         restartDeadline?.cancel(); restartDeadline = nil
         sessions.reset()
         workItems.reset()
-        workflowRuns.reset()
         threads.reset()
         live = nil
         for waiter in waiters.values { waiter.resume(throwing: URLError(.cancelled)) }
@@ -481,8 +475,6 @@ public final class HubConnection {
         needs.parked = [:]
         sessions.reset()
         workItems.reset()
-        workflowRuns.reset()
-        workflows.reset()
         threads.reset()
     }
 
@@ -1098,7 +1090,6 @@ public final class HubConnection {
         guard adopt(self) else { return false }
         // Every project's threads, for the rail and the thread screens; frames keep them from here.
         await threads.readAll()
-        await workflows.refresh()
         return true
     }
 
@@ -1157,19 +1148,17 @@ public final class HubConnection {
         // The hub's whole list of asks: one settled while this device was away
         // sent its `permission_settled` to nobody listening.
         var asks: [(frame: AskFrame, routedTo: String?, machineId: String)] = []
-        var runAsks: [(String, Double?)] = []
         for envelope in readPending ?? [] where envelope.verb == .frames {
             guard let data = try? Wire.data(envelope.payload), let frame = try? Inbound.frame(data, machineId: envelope.machineId) else {
                 continue
             }
             switch frame {
             case let .permissionRequest(ask, routedTo, machineId): asks.append((ask, routedTo, machineId))
-            case let .runQuestion(runId, raisedAt): runAsks.append((runId, raisedAt))
             default: break
             }
         }
         let hasPending = readPending != nil
-        return { [asks, runAsks] hub in
+        return { [asks] hub in
             if let readLimits {
                 hub.fleet.adopt(claude: readLimits.claude, go: readLimits.openCodeGo)
             }
@@ -1197,7 +1186,6 @@ public final class HubConnection {
                 break
             }
             if hasPending {
-                for (runId, raisedAt) in runAsks { hub.fleet.runAskRaisedAt[runId] = raisedAt }
                 hub.needs.replace(with: asks, asOf: mark)
             }
             if let readCarried {
@@ -1581,16 +1569,8 @@ public final class HubConnection {
         case let .permissionSettled(settled):
             askEnded(settled)
             needs.settle(settled.instanceId, settled.requestId)
-        case let .runQuestion(runId, raisedAt):
-            // Represented once, by its waiting run; only the moment it was parked is kept.
-            if let raisedAt {
-                fleet.runAskRaisedAt[runId] = raisedAt
-            }
         case let .workItem(item):
             workItems.adopt(item)
-        case let .workflow(frame):
-            fleet.runs[frame.runId] = BoardRun(frame.run)
-            workflowRuns.read(frame.runId)
         case let .pulse(pulse):
             fleet.adopt(pulse: pulse.pulse)
         case let .controlResult(result):

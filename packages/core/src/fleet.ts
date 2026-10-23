@@ -341,8 +341,6 @@ export interface FleetSkillPayload extends FleetPlacement {
   force?: boolean;
   hash: string;
   name: string;
-  /** Hub-owned workflow stub; refuses to replace an operator's skill. */
-  workflowId?: string;
 }
 
 /**

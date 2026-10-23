@@ -2494,8 +2494,8 @@ export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
  * most ({@link CommandRun}), and each change of that wait goes to the hub as
  * a {@link CommandQueueFrame} under the run's id. A command that writes more than 8 MiB across
  * stdout and stderr is killed with its process group and the call fails with
- * an error naming the limit. The hub's one way to run something on a machine:
- * a workflow's `w.exec`, and a work item's landing gate. A
+ * an error naming the limit. The hub's one way to run something on a machine,
+ * a work item's landing gate among them. A
  * {@link WorkspaceRef} runs the command inside that workspace's boundary,
  * exactly as its sessions' shell commands run; a machine that cannot start the
  * boundary fails the call with its reason.
@@ -2534,7 +2534,7 @@ export const QUEUE_MARKER = "CAWCO-QUEUE";
  * are the runner's own, never a marker's: `folder`, a command waiting behind
  * the one running in its directory (the machine runs those one after
  * another), and `boundary`, one waiting for its workspace's boundary to start
- * (agent workflow-command.ts).
+ * (agent hub-command.ts).
  */
 export const QUEUE_SLOTS = {
   boundary: "its workspace's boundary to start",
@@ -2564,7 +2564,7 @@ export interface CommandRun {
    * The command moves the workspace's worktree to this commit: a rebase
    * onto it, a checkout of it. A move that would write a path the boundary
    * keeps from every command (core workspace-policy.ts `cloneDenies`) runs
-   * with git on the host, the sandbox down (agent workflow-command.ts
+   * with git on the host, the sandbox down (agent hub-command.ts
    * `movedCommand`); any move that leaves such a path other than its HEAD
    * has it fails. Given only with a workspace, and with a command that runs
    * git as safe-git.ts says.

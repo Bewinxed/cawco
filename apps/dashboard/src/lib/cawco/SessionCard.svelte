@@ -1,32 +1,13 @@
 <script lang="ts" module>
   import { cawco, readThread } from "./client.svelte";
   import { threadIdOf } from "./thread-tabs";
-  import { runIdOf } from "./workflow-runs";
-  import { workflowState } from "./workflow-state.svelte";
-
-  /** The session of a run's running step, whose tail is the run's live tail. */
-  export function runningStep(id: string): string | null {
-    const runId = runIdOf(id);
-    if (!runId) {
-      return null;
-    }
-    return (
-      workflowState.details[runId]?.steps.find(
-        (step) => step.status === "running" && step.instanceId
-      )?.instanceId ?? null
-    );
-  }
 
   /**
-   * The session whose live tail a card draws: a run's running step, the
-   * session itself, and none for a thread, whose card is its newest line.
+   * The session whose live tail a card draws: the session itself, and none
+   * for a thread, whose card is its newest line.
    */
-  export const tailOf = (id: string | null): string | null => {
-    if (!id || threadIdOf(id)) {
-      return null;
-    }
-    return runIdOf(id) ? runningStep(id) : id;
-  };
+  export const tailOf = (id: string | null): string | null =>
+    !id || threadIdOf(id) ? null : id;
 
   /** A thread's card reads its messages, so it opens on its newest line. */
   export function readThreadCard(threadId: string): void {
@@ -47,8 +28,8 @@
   /**
    * A session's card, as the house hover panel (HoverPanel) draws it: its
    * mark, title and state, then what its row cannot show: its live tail and
-   * the question it is waiting on or why it failed; a thread's newest line;
-   * a workflow run's steps over its running step's tail. The rail's session
+   * the question it is waiting on or why it failed; a thread's newest line.
+   * The rail's session
    * card (SessionHover) and a session's chip in written words
    * (SessionReference) both draw this. `open`, when given, is where the
    * card's "Open session" action goes.
@@ -60,7 +41,6 @@
   import { isFailed } from "./client.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
-  import RunSteps from "./RunSteps.svelte";
   import {
     type NamedSession,
     sessionAnswer,
@@ -116,10 +96,7 @@
     if (row?.status === "stopping") {
       return "stopping";
     }
-    if (
-      (runIdOf(of) && cawco.activityOf(of) === "blocked") ||
-      (cawco.session(of)?.pending ?? []).some((each) => !each.routedTo)
-    ) {
+    if ((cawco.session(of)?.pending ?? []).some((each) => !each.routedTo)) {
       return "needs";
     }
     if (cawco.activityOf(of) === "working") {
@@ -176,7 +153,6 @@
     thread?.status ?? (answer?.kind === "thread" ? answer.state : null)
   );
   const Sprite = $derived(sessionSprite(id));
-  const runId = $derived(runIdOf(id));
 </script>
 
 <div data-nest-host>
@@ -237,16 +213,6 @@
         >
         <span class="min-w-0 truncate">{line}</span>
       </p>
-    {/if}
-  {:else if runId}
-    <!-- A workflow run's card: its steps under it, then the live tail of
-         the one running, the way a session's card ends on its own. -->
-    {@const step = runningStep(id)}
-    <RunSteps glyph={'[data-slot="mark"]'} interactive={false} {runId} />
-    {#if step}
-      <DelegateTail instanceId={step} note={null} />
-    {:else if tone === "failed"}
-      <DelegateTail instanceId="" note={noteOf(id, tone)} />
     {/if}
   {:else}
     <DelegateTail instanceId={id} note={noteOf(id, tone)} />

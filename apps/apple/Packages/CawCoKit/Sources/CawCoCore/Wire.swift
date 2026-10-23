@@ -165,8 +165,6 @@ enum Inbound {
     fileprivate struct PayloadRoute: Decodable {
         /// A delegate's ask the hub sent to its parent.
         let routedTo: String?
-        /// A workflow run's question, answered in its run.
-        let workflowRunId: String?
         /// Board metadata uses the generated build type, just as each agent row does.
         let hubBuild: Components.Schemas.BuildInfo?
     }
@@ -232,13 +230,10 @@ enum Frame {
     case permissionRequest(AskFrame, routedTo: String?, machineId: String)
     /// An ask is over, whoever settled it.
     case permissionSettled(Components.Schemas.PermissionSettledFrame)
-    /// A workflow run's question: answered in its run, never parked as a session's ask.
-    case runQuestion(runId: String, raisedAt: Double?)
     case usage(Components.Schemas.UsageFrame)
     case controlResult(Components.Schemas.ControlResultFrame)
     case error(requestId: String?, message: String)
     case pulse(Components.Schemas.PulseFrame)
-    case workflow(Components.Schemas.WorkflowFrame)
     /// A delegate's work item changed: its parent's tray reads it.
     case workItem(Components.Schemas.WorkItemSummary)
     /// A Caw thread started, or its last message or status changed.
@@ -291,11 +286,7 @@ enum Frame {
         case .instancesDelta(let frame):
             self = .instancesDelta(frame, hubBuild: peek.hubBuild)
         case .permissionRequest(let frame):
-            if let runId = peek.workflowRunId {
-                self = .runQuestion(runId: runId, raisedAt: frame.raisedAt)
-            } else {
-                self = .permissionRequest(frame, routedTo: peek.routedTo, machineId: machineId)
-            }
+            self = .permissionRequest(frame, routedTo: peek.routedTo, machineId: machineId)
         case .permissionSettled(let frame):
             self = .permissionSettled(frame)
         case .usage(let frame):
@@ -306,8 +297,6 @@ enum Frame {
             self = .error(requestId: frame.requestId ?? answering, message: frame.message)
         case .pulse(let frame):
             self = .pulse(frame)
-        case .workflow(let frame):
-            self = .workflow(frame)
         case .workItem(let frame):
             self = .workItem(frame.item)
         case .thread_upsert(let frame):

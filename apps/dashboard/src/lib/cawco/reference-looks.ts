@@ -30,7 +30,6 @@ export const REFERENCE_LOOKS: Record<ThingKind, ReferenceLook> = {
   plan: SHARED,
   step: SHARED,
   routine: SHARED,
-  workflow: SHARED,
   project: SHARED,
   machine: SHARED,
 };

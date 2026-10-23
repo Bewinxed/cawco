@@ -137,7 +137,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         super.init(style: .doubleColumn)
         panes.onReturnToFleet = { [weak self] id in self?.returnToFleet(id) }
         panes.onOpen = { [weak self] id in self?.openSession(id) }
-        panes.onEditWorkflow = { [weak self] id in self?.go(.workflow(id: id, program: true)) }
         panes.continueHandler = { [weak self] id in self?.newSession.continueSession(id) }
         // A Caw thread's task cards, its way to the board, its machines line and its first message's new tab.
         panes.onOpenTask = { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId) }
@@ -367,7 +366,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The hub is connected and has answered for the fleet: a session's id
     /// can be told present or gone. An unreachable hub's `home.ready` is not this.
     private var routeReady: Bool {
-        hub.state == .connected && hub.fleet.fleetRead && hub.fleet.liveRead && hub.fleet.runsRead
+        hub.state == .connected && hub.fleet.fleetRead && hub.fleet.liveRead
     }
 
     private func applyRoute() {
@@ -378,7 +377,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             // An ask no session row stands behind (a memory proposal) opens
             // where it was made (`PushNote.route`), else as its own tab, its
             // card answerable there; the read above holds the hub's asks.
-            guard id.hasPrefix(BoardRun.prefix) || hub.fleet.byId[id] != nil || hub.needs.blocked(id)
+            guard hub.fleet.byId[id] != nil || hub.needs.blocked(id)
                 || !hub.needs.madeIn(id).isEmpty else {
                 Self.pushLog.notice("route session \(id, privacy: .public) is not on the hub")
                 Toast.show("That session isn't on the hub any more.", in: view.window)
@@ -1340,8 +1339,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private static func compactKey(_ destination: ShellDestination) -> ShellDestination {
         switch destination {
         case let .project(id): .project("compact:" + id)
-        case .workflows: .project("compact:workflows")
-        case let .workflow(id, program): .workflow(id: "compact:" + id, program: program)
         case .configure: .project("compact:configure")
         case .usage: .project("compact:usage")
         case .fleet: .fleet
@@ -1406,14 +1403,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// A Needs you row goes to what is waiting, never to a place: its
     /// session's tab comes to the front, the composer already holding the
-    /// parked ask, the transcript where it was left. A run is answered in its
-    /// run; a fleet-watch notice opens the session it is about. An ask opens
+    /// parked ask, the transcript where it was left. A fleet-watch notice opens the session it is about. An ask opens
     /// where it was made (NeedsCard.svelte `href`, ParkedAsk `paneId`): Caw's
     /// thread, the session that made it (a curator run's proposal), else its own.
     private func openWaiting(_ item: HomeModel.NeedsItem) {
         switch item.kind {
         case let .ask(ask): openSession(ask.paneId)
-        case let .run(run): openSession(run.rowId)
         case let .watch(notice): openSession(notice.instanceId)
         // Answered on its row; it opens nothing.
         case .choice, .tailnet: break

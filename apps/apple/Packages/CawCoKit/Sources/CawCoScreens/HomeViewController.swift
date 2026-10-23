@@ -469,7 +469,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.configure(depth: line.depth, first: line.first, last: line.last, through: entry.through)
             cell.row.mark.onToggle = { [weak self] in self?.toggleTree(id) }
             cell.row.configure(content)
-            // LiveSessionMenu, read from the fleet as it opens; a workflow run takes no session commands.
+            // LiveSessionMenu, read from the fleet as it opens; a thread takes no session commands.
             cell.row.menu = { [weak self] copy in
                 guard let self, let context = sessionMenus?()?.at(workPlace), let now = hub.fleet.byId[id]?.session else { return nil }
                 let archive: (() -> Void)? = content.archives ? { [weak self] in

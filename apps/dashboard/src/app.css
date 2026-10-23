@@ -550,10 +550,8 @@
     text-transform: uppercase;
     color: var(--ink-muted);
   }
-  /* The workflow editor's panes glide together while paneforge marks one
-     collapsing or expanding; a drag stays 1:1. Svelte Flow's handle on the
-     workflow canvas: its size, and its press in colour (it is placed by its
-     transform, so a scale would move it). */
+  /* A split's panes glide together while paneforge marks one collapsing or
+     expanding; a drag stays 1:1. */
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="pane"]
       [data-pane-group]:has(
@@ -563,13 +561,6 @@
       > [data-pane] {
       transition: flex-grow var(--dur-panel) var(--ease-in-out);
     }
-  }
-  [data-slot="workflow-canvas"] .svelte-flow__handle {
-    width: var(--c-graph-handle);
-    height: var(--c-graph-handle);
-  }
-  [data-slot="workflow-canvas"] .svelte-flow__handle:active {
-    --xy-handle-background-color: var(--brand-solid);
   }
 
   /* While a split's divider is dragged, no pane's iframe takes the pointer
@@ -1046,8 +1037,7 @@
   }
   /* The session hover card's identity tile (its head, beside its tone):
      the sprite in the mark glyph's ink on the tile's hue. Keyed on that
-     head alone, so another nest host's head mark (a run's status glyph,
-     RunBlock) keeps its own ink. */
+     head alone, so another nest host's head mark keeps its own ink. */
   [data-nest-host]
     > [data-slot="head"]:has(> [data-session-hover-tone])
     > [data-slot="mark"]
@@ -1378,7 +1368,6 @@
    its ring sits on its own box. @xyflow's sheet is in `vendor`, under this. */
 @layer components {
   :is(
-      [data-slot="workflow-canvas"],
       [data-slot="view-canvas"],
       [data-slot="decision-graph"],
       [data-slot="canvas-map"]

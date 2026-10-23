@@ -255,38 +255,6 @@ enum AskProbe {
         picker.dismiss(animated: true)
         _ = shown
         await wait(1)
-
-        // 7. Cancel a workflow run: under the run's head, naming the step running now.
-        log.notice("ask-probe: start a run")
-        // The run is found by its step: the session running it names its run.
-        let stepRun = { hub.fleet.rows.first { $0.workflowRunId != nil && $0.status == .running }?.workflowRunId }
-        guard await until(240, { stepRun() != nil }), let runId = stepRun() else {
-            log.error("ask-probe: no workflow run came")
-            return
-        }
-        let runRow = BoardRun.prefix + runId
-        shell.openSession(runRow)
-        let runViews = { controllers(WorkflowRunViewController.self, from: shell).filter { $0.view.window != nil } }
-        guard await until(30, { runViews().first?.probeStatus.contains("running") == true }), let runView = runViews().first else {
-            log.error("ask-probe: the run's page never showed it running")
-            return
-        }
-        await wait(2)
-        func runSay(_ step: String) {
-            log.notice("\(step, privacy: .public) [\(runRow, privacy: .public)] question: \(runView.probeAsk, privacy: .public) | under its head: \(runView.probeUnder ? "yes" : "no", privacy: .public) | over the page: \(modal(shell), privacy: .public) | run: \(runView.probeStatus, privacy: .public)")
-        }
-        runView.probeAskCancel()
-        await wait(1.2)
-        runSay("workflow cancel asked")
-        await holdingHub {
-            runView.probeConfirm()
-            await wait(1)
-            runSay("workflow cancel in flight")
-        }
-        await until(60) { !runView.probeRunning }
-        await until(30) { runView.probeStatus.contains("cancel") }
-        await wait(2)
-        runSay("workflow cancel answered")
     }
 }
 #endif

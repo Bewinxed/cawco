@@ -5,8 +5,7 @@
  * is refused by name. OpenCode's discovery is shared by every session of a
  * server, so it may list the superset; the call itself is where the role
  * holds. Within a role a session's own context still narrows what it gets
- * (a leaf gets no spawning tools, only a work item gets `finish_item`, only
- * a workflow step its step tools).
+ * (a leaf gets no spawning tools, only a work item gets `finish_item`).
  *
  * - **worker**: a session you started. Everything, fleet settings included
  *   (an `admin_*_write` waits for you to approve it, admin-asks.ts; in Full
@@ -48,17 +47,14 @@ import { ARTIFACT_TOOLS } from "./artifacts/tools";
 
 /**
  * The role a session's row runs in: the one its spawn named, else derived
- * from what it is. Delegated work (a work item, a workflow step) is a
- * delegate; a session another session started with `start_session` has a
+ * from what it is. Delegated work (a work item) is a delegate; a session another session started with `start_session` has a
  * parent and is still a worker, as one a person started is.
  */
 export const roleOf = (row: InstanceRow): SessionRole => {
   if (row.role) {
     return row.role;
   }
-  return row.workItemId || row.workflowStepId || row.canDelegate === false
-    ? "delegate"
-    : "worker";
+  return row.workItemId || row.canDelegate === false ? "delegate" : "worker";
 };
 
 /**
@@ -154,15 +150,6 @@ const CURATOR_OWN = ["memory_read", "memory_classify"] as const;
 
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
-  "workflow_create",
-  "workflow_update",
-  "workflow_state_read",
-  "workflow_state_write",
-  "submit_result",
-  "workflow_run",
-  "workflow_read",
-  "workflow_steer",
-  "workflow_list",
   "generate_image",
   // An issue, a pull or merge request or a comment on any forge, as its
   // machine's sign-in there (forge-posts.ts): what gh did inside a workspace.
@@ -304,7 +291,7 @@ export const refusal = (role: SessionRole, name: string): string => {
     case "overseer":
       return `${name} isn't available to fleet-watch triage: it reads the fleet and decides once with triage_decide.`;
     case "delegate":
-      return `${name} isn't available here: only sessions you started file, change or start tasks or change fleet settings, and this one is a delegate, work item or workflow step. Hand the change to the session that started it.`;
+      return `${name} isn't available here: only sessions you started file, change or start tasks or change fleet settings, and this one is a delegate or work item. Hand the change to the session that started it.`;
     case "curator":
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
     case "worker":

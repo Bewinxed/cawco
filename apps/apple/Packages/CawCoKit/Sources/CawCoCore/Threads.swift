@@ -72,7 +72,7 @@ public struct ThreadNote: Sendable, Equatable {
     /// A not-woken note's data: your words he has not read, and why.
     public let notWoken: ThreadNotWoken?
     /// Caw asking whether to build a design system: the project it is for
-    /// (EventThreadMessage `designOffer`, held beside a null `event`).
+    /// (its event, of kind `design-offer`).
     public let designOffer: String?
     /// What rode with your words, as a send's row carries it (`images`,
     /// `attachments`): the JSON of each, drawn on your row.
@@ -96,7 +96,8 @@ public struct ThreadNote: Sendable, Equatable {
         question = (raw["question"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         answer = (raw["answer"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         notWoken = ((raw["event"] as? [String: Any])?["notWoken"] as? [String: Any]).flatMap(ThreadNotWoken.init)
-        designOffer = (raw["designOffer"] as? [String: Any])?["projectId"] as? String
+        let event = raw["event"] as? [String: Any]
+        designOffer = event?["kind"] as? String == "design-offer" ? event?["projectId"] as? String : nil
         var carried: [String: Any] = [:]
         if let images = raw["images"] as? [[String: Any]], !images.isEmpty { carried["images"] = images }
         if let attachments = raw["attachments"] as? [[String: Any]], !attachments.isEmpty { carried["attachments"] = attachments }

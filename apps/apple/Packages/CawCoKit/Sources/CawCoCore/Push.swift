@@ -15,7 +15,7 @@ public import UserNotifications
 
 /// Where a push opens.
 public enum PushRoute: Sendable, Equatable {
-    /// A session's conversation, or a workflow run's (`run:<id>`), its parked ask in view.
+    /// A session's conversation, its parked ask in view.
     case session(String)
     /// A project's page.
     case project(String)
@@ -92,7 +92,6 @@ public struct PushNote: Sendable {
         let instanceId = fields["instanceId"]
         switch kind {
         case "ask":
-            if let runId = fields["workflowRunId"], !runId.isEmpty { return .session(BoardRun.prefix + runId) }
             // Caw's ask opens the thread it was made in, its card on the composer (push.ts `threadId`).
             if let threadId = fields["threadId"], !threadId.isEmpty { return .session(ThreadTabs.tabId(threadId)) }
             // Else where it was made: the session whose pane draws it (a
@@ -102,10 +101,6 @@ public struct PushNote: Sendable {
             return .board
         case "turn":
             if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
-            return .board
-        // A workflow run's note: the run's conversation.
-        case "run":
-            if let runId = fields["runId"], !runId.isEmpty { return .session(BoardRun.prefix + runId) }
             return .board
         case "task", "attempt":
             guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }

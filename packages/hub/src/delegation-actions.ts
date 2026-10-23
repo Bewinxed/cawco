@@ -21,9 +21,6 @@ import type {
   PermissionResult,
   SendPayload,
   SpawnPayload,
-  Workflow,
-  WorkflowAction,
-  WorkflowListing,
 } from "@cawco/core";
 import {
   delegateTypeProblem,
@@ -658,12 +655,6 @@ function resolve(peers: Peer[], target: string): Peer {
  * toolset). Fixed for the session's life, so the prompt cache is unaffected.
  */
 export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
-  "workflow_run",
-  "workflow_steer",
-  "workflow_read",
-  "workflow_list",
-  "workflow_create",
-  "workflow_update",
   "start_session",
   "continue_session",
   "delegate",
@@ -861,8 +852,6 @@ export interface HandoffDeps {
   ) => Promise<MachinePath>;
   /** Threads a mention may name, and the hand-off into one; absent where tools are only listed. */
   readonly threads?: HandoffThreads;
-  readonly workflowRunId?: string;
-  readonly workflowStepId?: string;
   /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
   readonly workItem?: boolean;
 }
@@ -916,7 +905,6 @@ export interface HandoffActions {
     targetInstanceId: string;
     text: string;
   }>;
-  readonly createWorkflow: (name: string, program: string) => Promise<Workflow>;
   /**
    * Starts a work item: a fresh session or a fork of this one in a new workspace, or the follow-up
    * in an existing one, on the session that workspace's last item ran. The
@@ -1011,7 +999,6 @@ export interface HandoffActions {
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): string;
-  readonly listWorkflows: () => Promise<{ workflows: WorkflowListing[] }>;
   /**
    * Pauses the machine `machine` names for `minutes` (machine-pause.ts), or
    * ends its pause (`resume`). Answers what the hub did, in a sentence.
@@ -1031,22 +1018,6 @@ export interface HandoffActions {
    */
   /** This session's Open items section, built by the hub from its records (open-items.ts). */
   readonly openItems: () => Promise<string>;
-  /** A window into one result of a run this session supervises. */
-  readonly readWorkflow: (
-    runId: string,
-    request: {
-      ref: number | "result";
-      path?: string;
-      offset?: number;
-      limit?: number;
-    }
-  ) => Promise<string>;
-  readonly readWorkflowState: (name: string) => Promise<{ value: unknown }>;
-  readonly runWorkflow: (
-    name: string,
-    inputs: Record<string, unknown>,
-    options?: { workspace?: { path: string; machineId: string } }
-  ) => Promise<{ runId: string }>;
   /** Shows the person a note in the transcript and pushes it to their devices — no peer, no ask. */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   sendToUser(message: string, attachments?: string[]): Promise<string>;
@@ -1073,20 +1044,9 @@ export interface HandoffActions {
       machine?: string;
     }
   ): Promise<HandoffResult>;
-  /** A supervisor's action on its run; answers one line saying what it did. */
-  readonly steerWorkflow: (
-    runId: string,
-    action: WorkflowAction
-  ) => Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   stopDelegate(target: string): Promise<string>;
-  readonly submitResult: (result: unknown) => Promise<string>;
-  readonly updateWorkflow: (name: string, program: string) => Promise<Workflow>;
   readonly waitItem: (minutes: number, reason: string) => Promise<string>;
-  readonly writeWorkflowState: (
-    name: string,
-    value: unknown
-  ) => Promise<string>;
 }
 
 /**
@@ -1228,31 +1188,6 @@ async function handInputs(
   return (
     (await response.json()) as { inputs: { from: string; name: string }[] }
   ).inputs;
-}
-
-async function saveWorkflowProgram(
-  method: string,
-  path: string,
-  body: { name?: string; program: string }
-): Promise<Workflow> {
-  const response = await fetch(`${hubHttpUrl()}${path}`, {
-    method,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    if (response.headers.get("content-type")?.includes("application/json")) {
-      const refused = JSON.parse(text) as { problems?: { message: string }[] };
-      if (refused.problems) {
-        throw new Error(
-          refused.problems.map((problem) => problem.message).join("\n")
-        );
-      }
-    }
-    throw new Error(text);
-  }
-  return (await response.json()) as Workflow;
 }
 
 const coldRefusals = new Map<string, string>();
@@ -1573,8 +1508,6 @@ export const handoffActions = ({
   instanceId,
   instanceById,
   formerIds,
-  workflowRunId,
-  workflowStepId,
   cwd,
   deliver,
   emit,
@@ -1682,114 +1615,6 @@ export const handoffActions = ({
         `It is the same session from here, under ${done.targetInstanceId}: the source's process is ended, its work item and delegates go on in the new one, and what is sent to the source's id reaches it. ` +
         `The new session opened with:\n\n${done.opening}`,
     };
-  },
-  createWorkflow(name, program) {
-    return saveWorkflowProgram("POST", "/api/workflows", { name, program });
-  },
-  updateWorkflow(name, program) {
-    return saveWorkflowProgram(
-      "PUT",
-      `/api/workflows/${encodeURIComponent(name)}`,
-      { program }
-    );
-  },
-  async readWorkflowState(name) {
-    if (!(workflowStepId && workflowRunId)) {
-      throw new Error("Workflow state is available only to workflow steps.");
-    }
-    const response = await fetch(
-      `${hubHttpUrl()}/api/workflow-runs/${encodeURIComponent(workflowRunId)}/state/${encodeURIComponent(name)}?instanceId=${encodeURIComponent(instanceId)}`
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return (await response.json()) as { value: unknown };
-  },
-  async writeWorkflowState(name, value) {
-    if (!(workflowStepId && workflowRunId)) {
-      throw new Error("Workflow state is available only to workflow steps.");
-    }
-    const response = await fetch(
-      `${hubHttpUrl()}/api/workflow-runs/${encodeURIComponent(workflowRunId)}/state/${encodeURIComponent(name)}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instanceId, value }),
-      }
-    );
-    return response.text();
-  },
-  async submitResult(result) {
-    if (!workflowStepId) {
-      throw new Error("submit_result is available only to workflow steps.");
-    }
-    const response = await fetch(
-      `${hubHttpUrl()}/api/workflow-steps/${encodeURIComponent(workflowStepId)}/result`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instanceId, result }),
-      }
-    );
-    return response.text();
-  },
-  async runWorkflow(name, inputs, options) {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/workflows/${encodeURIComponent(name)}/runs`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          instanceId,
-          inputs,
-          workspace: options?.workspace,
-        }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return (await response.json()) as { runId: string };
-  },
-  async readWorkflow(runId, { ref, path, offset, limit }) {
-    const query = new URLSearchParams({ instanceId, ref: String(ref) });
-    if (path) {
-      query.set("path", path);
-    }
-    if (offset !== undefined) {
-      query.set("offset", String(offset));
-    }
-    if (limit !== undefined) {
-      query.set("limit", String(limit));
-    }
-    const response = await fetch(
-      `${hubHttpUrl()}/api/workflow-runs/${encodeURIComponent(runId)}/read?${query}`
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return response.text();
-  },
-  async steerWorkflow(runId, action) {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/workflow-runs/${encodeURIComponent(runId)}/steer`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instanceId, action }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return ((await response.json()) as { message: string }).message;
-  },
-  async listWorkflows() {
-    const response = await fetch(`${hubHttpUrl()}/api/workflows`);
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return (await response.json()) as { workflows: WorkflowListing[] };
   },
   async generateImage(request) {
     const read = await readWithin(

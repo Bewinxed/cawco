@@ -113,9 +113,6 @@ export const artifactCollapseId = (artifactId: string): string =>
 /** A session's message to the person (`send_to_user`): one per session, a newer replaces the older. */
 export const messageCollapseId = (instanceId: string): string =>
   collapseOf("message", instanceId);
-/** A workflow run's note to the person: one per run, a newer replaces the older. */
-export const runCollapseId = (runId: string): string =>
-  collapseOf("run", runId);
 /** A task waiting on the owner: its move and its failed attempt are one notification. */
 export const taskCollapseId = (projectId: string, taskId: string): string =>
   collapseOf("task", `${projectId}:${taskId}`);

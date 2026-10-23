@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 /**
  * How a live doc's socket to the hub is kept, for the pane's link
  * (dashboard preview/artifact-doc.ts) and the page's overlay (agent

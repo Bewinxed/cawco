@@ -201,13 +201,6 @@ const INLINE_STYLES = {
   "src/lib/cawco/workspace/PaneTabs.svelte": ["height"],
   "src/lib/components/features/DiffView.svelte": ["height", "max-block-size"],
   "src/lib/components/features/tool-cards/OutputBlock.svelte": ["color"],
-  "src/lib/components/features/workflows/TemplateInput.svelte": [
-    "transform-origin",
-  ],
-  "src/lib/components/features/workflows/WorkflowEdge.svelte": [
-    "stroke",
-    "stroke-width",
-  ],
   "src/lib/components/ui/fluid-tabs/TabsList.svelte": [
     "height",
     "transform",

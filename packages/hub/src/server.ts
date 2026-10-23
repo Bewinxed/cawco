@@ -316,7 +316,6 @@ import {
   previewRoute,
   providerChoices,
   pushOnlyProvider,
-  QUESTION_DISMISSED,
   QUEUE_WAIT_MAX_MS,
   questionsOf,
   queueWords,
@@ -336,7 +335,6 @@ import {
   relaunchOf,
   reportMarker,
   ruleProblem,
-  runDoing,
   SESSION_DIR_READ,
   STREAM_SO_FAR,
   type StoppedCommands,
@@ -357,7 +355,6 @@ import {
   undeliveredNotice,
   unparked,
   unshownAskMessage,
-  validateWorkflow,
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
   WORK_ITEM_ORIGIN,
@@ -472,7 +469,6 @@ import {
   reconcileAccounts,
   sessionLimitsReader,
   uncompared,
-  usageFrameLimits,
   usageLimits,
   withOrgIdFrom,
 } from "./accounts";
@@ -730,19 +726,15 @@ import {
   createNotifications,
   messageCollapseId,
   notificationRoutes,
-  runCollapseId,
   turnCollapseId,
 } from "./notifications";
 import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
 import {
   type AnswerFrom,
   answerPermission,
-  answerWorkflow,
   onPermissionAnswer,
-  onWorkflowAnswer,
   outlivesSession,
   type PendingShape,
-  workflowRunOf,
 } from "./pending";
 import { createPlaceRepos } from "./place-repo";
 import {
@@ -920,8 +912,6 @@ import {
   WorkItemRefusal,
   type WorkItemStart,
 } from "./work-items";
-import { workflowRoutes } from "./workflows/routes";
-import { createWorkflowRuntime } from "./workflows/runtime";
 import { createWorkspaceRetire } from "./workspace-retire";
 
 /**
@@ -3159,8 +3149,8 @@ export const createServer = (
   };
 
   // An ask that leaves the hub's pending list is over on every screen: one
-  // frame, whichever path settled it (an answer from any device, a
-  // parent session or a workflow; a harness settling it itself; a timeout; its
+  // frame, whichever path settled it (an answer from any device or a
+  // parent session; a harness settling it itself; a timeout; its
   // process ending). Without it every other client kept a card nobody could
   // answer until it reconnected. An answer in flight carries what it says and
   // where it came from, which that frame tells every screen, whichever path
@@ -3196,8 +3186,7 @@ export const createServer = (
     task: (projectId, id) => tasks.get(projectId, id),
   });
   /**
-   * An ask the hub itself raises for the person — a workflow's question, an
-   * admin write — parked like a session's own: on the pending ledger, to every
+   * An ask the hub itself raises for the person — an admin write — parked like a session's own: on the pending ledger, to every
    * dashboard, and to push the first time.
    */
   const parkForPerson = (envelope: Envelope, outlivesHub = false): void => {
@@ -3669,47 +3658,30 @@ export const createServer = (
   const pulses = new Map<string, SessionPulse>();
   /**
    * What the hub knows for `archiveRefusal` (core archive.ts): a session's
-   * live pulse (a turn, or an ask on the owner), a run's status, and what
-   * hangs under each the way every list nests it — a session's delegates
-   * and the runs it supervises, a run's step sessions and child runs.
+   * live pulse (a turn, or an ask on the owner), and what hangs under it the
+   * way every list nests it: its delegates.
    */
   const archiveView = (): ArchiveView => {
     const rows = db.listInstances();
     const delegates = db.runningDelegateCounts();
-    const runs = db.workflowRunHeads();
     const children = new Map<string, string[]>();
-    const under = (parent: string | null, child: string) => {
-      if (parent) {
-        children.set(parent, [...(children.get(parent) ?? []), child]);
-      }
-    };
     for (const row of rows) {
-      under(
-        row.workflowRunId ? `run:${row.workflowRunId}` : row.parentInstanceId,
-        row.id
-      );
+      if (row.parentInstanceId) {
+        children.set(row.parentInstanceId, [
+          ...(children.get(row.parentInstanceId) ?? []),
+          row.id,
+        ]);
+      }
     }
-    for (const run of runs) {
-      under(
-        run.parentRunId ? `run:${run.parentRunId}` : run.supervisorInstanceId,
-        `run:${run.id}`
-      );
-    }
-    const runById = new Map(runs.map((run) => [run.id, run]));
     const starting = new Set(
       rows.filter((row) => row.status === "starting").map((row) => row.id)
     );
     return {
       childrenOf: (id) => children.get(id) ?? [],
-      doing: (id) => {
-        if (id.startsWith("run:")) {
-          const run = runById.get(id.slice("run:".length));
-          return run ? runDoing(run.status) : "idle";
-        }
-        return starting.has(id) || (delegates.get(id) ?? 0) > 0
+      doing: (id) =>
+        starting.has(id) || (delegates.get(id) ?? 0) > 0
           ? "working"
-          : (pulses.get(id)?.activity ?? "idle");
-      },
+          : (pulses.get(id)?.activity ?? "idle"),
     };
   };
   const heldSessions = new Map<
@@ -4909,7 +4881,7 @@ export const createServer = (
       machineId,
       payload: {
         kind: "usage",
-        ...usageFrameLimits(db),
+        ...usageLimits(db),
         spend: spendNow(),
       },
     });
@@ -7209,9 +7181,9 @@ export const createServer = (
   /**
    * The one rule for the permission mode a spawn runs in and records, applied
    * where every spawn leaves the hub (dashboard, delegate, start_session,
-   * workflow, continuation, revive, restore). A harness that reports modes
+   * continuation, revive, restore). A harness that reports modes
    * runs in one it offers: the one asked for, else `fallback` — the mode its
-   * starter declared (a work item's, a workflow's, Caw's, the caller's or the
+   * starter declared (a work item's, Caw's, the caller's or the
    * tree's own), or for a revive the row's last, else the one the person last
    * chose for that harness on that machine ({@link reviveMode}). With neither
    * nothing starts, and the refusal says a mode must be chosen: no mode goes
@@ -14634,8 +14606,6 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: payload.model,
       canDelegate: payload.canDelegate,
-      workflowRunId: payload.workflowRunId,
-      workflowStepId: payload.workflowStepId,
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
       ...(payload.role ? { role: payload.role } : {}),
@@ -14709,7 +14679,7 @@ export const createServer = (
   };
 
   /**
-   * Shared by session tools and trusted workflow callbacks; never an HTTP
+   * Shared by session tools and the hub's own starts; never an HTTP
    * door. Answers the folder the session runs in, as its row was filed
    * ({@link settleMode}'s settled cwd, a spin-off's worktree once made).
    */
@@ -15079,9 +15049,6 @@ export const createServer = (
     confirmed: (row) => {
       // A forget waiting on this session's end hears it now, not at the ask.
       projectStops.confirmed(row.id);
-      if (row.workflowStepId && row.workflowRunId) {
-        workflowRuntime.endConfirmed(row.workflowRunId);
-      }
       // Ended, it holds its finished item's workspace no longer.
       workItems.settleFor(row.id);
     },
@@ -15544,7 +15511,7 @@ export const createServer = (
         },
         "summariser",
         // The hub's own worker, which nobody watches: it never parks on a
-        // permission prompt, as workflow steps and supervisors never do.
+        // permission prompt.
         mode
       );
       if (cancelled()) {
@@ -17181,13 +17148,6 @@ export const createServer = (
     const launched = atLaunchDir(row.id, {
       instanceId: row.id,
       cwd: row.cwd,
-      ...(row.workflowStepId
-        ? {
-            workflowRunId: row.workflowRunId ?? undefined,
-            workflowStepId: row.workflowStepId,
-            ...workflowRuntime.specFor(row.workflowStepId),
-          }
-        : {}),
       ...(reattachOnly ? { reattachOnly } : {}),
       ...(row.sessionId ? { resume: { sessionKey: row.sessionId } } : {}),
       harness: row.harness,
@@ -20201,7 +20161,7 @@ export const createServer = (
     requestId: string,
     answer: PermissionResult,
     from: AnswerFrom
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, workflow answers, delivery receipts and concurrent process death before reporting success.
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, hub-raised answers, delivery receipts and concurrent process death before reporting success.
   ): Promise<void> => {
     const parked = pending.get(requestId);
     if (!parked || parked.instanceId !== instanceId) {
@@ -20247,10 +20207,9 @@ export const createServer = (
         }
         return;
       }
-      // A hub-raised ask is settled here, never delivered to a machine: a
-      // workflow's question, or an admin write waiting on the person.
+      // A hub-raised ask is settled here, never delivered to a machine: an
+      // admin write waiting on the person.
       if (
-        answerWorkflow(pending, requestId, result) ||
         adminAsks.answer(requestId, result) ||
         upstreamAsks.answer(requestId, result) ||
         moves.answer(requestId, result)
@@ -21796,8 +21755,8 @@ export const createServer = (
   /**
    * THE way the hub runs a command on a machine: in `cwd`, killed after
    * `timeoutMs` (the machine's default when not given), answering its
-   * complete stdout and stderr (past 8 MiB it fails). A workflow's `w.exec` and a work item's
-   * landing gate both go through it; a gate step names its workspace, so it
+   * complete stdout and stderr (past 8 MiB it fails). A work item's landing
+   * gate goes through it; a gate step names its workspace, so it
    * runs inside that workspace's boundary, as its delegate's commands do.
    * The machine's clock stands while the command waits for a shared slot,
    * up to QUEUE_WAIT_MAX_MS, so the hub waits that much longer; each change
@@ -22584,138 +22543,7 @@ export const createServer = (
       workItems.cancelled(row, null);
     }
   }
-  /** Who stops a workflow's step session: its workflow, when the step or its run ends. */
-  const WORKFLOW_STOP: EndedBy = {
-    kind: "hub",
-    why: "its workflow step is over, or its workflow run was stopped",
-  };
-  const workflowRuntime = createWorkflowRuntime({
-    lifetime,
-    custodyPending: (machineId, instanceId) => {
-      const custody = machineCustody.get(machineId);
-      return (
-        !registry.agent(machineId) ||
-        custody?.state !== "available" ||
-        custody.instances.includes(instanceId) ||
-        custody.pending?.includes(instanceId) === true ||
-        inCustody.has(instanceId) ||
-        heldSessions.has(instanceId)
-      );
-    },
-    db,
-    dbPath: DB_PATH,
-    cleanup: (_machineId, instanceId) =>
-      lifecycle.oweEndSession(instanceId, "stop"),
-    online: (machineId) => !!registry.agent(machineId),
-    emit: (envelope) => {
-      if (envelope.verb === "stop" && envelope.instanceId) {
-        endSession(envelope.instanceId, "stop", WORKFLOW_STOP);
-        return;
-      }
-      // A send waits wherever its session cannot take it yet ({@link deliverSend}).
-      if (envelope.verb === "send") {
-        deliverSend(envelope as Envelope<SendPayload>);
-        return;
-      }
-      const agent = registry.agent(envelope.machineId);
-      if (!agent) {
-        throw new Error(machineFault(envelope.machineId, "offline"));
-      }
-      sendFrame(agent, envelope);
-    },
-    spawn: async (machineId, payload, fallbackMode) => {
-      await spawnSession(machineId, payload, fallbackMode);
-    },
-    halt: (machineId, instanceId) =>
-      new Promise<void>((resolve, reject) => {
-        endSession(instanceId, "stop", WORKFLOW_STOP);
-        const deadline = Date.now() + 30_000;
-        const observe = () => {
-          const row = db.ownedInstance(instanceId, machineId);
-          if (!row || row.endConfirmedAt) {
-            resolve();
-          } else if (Date.now() >= deadline) {
-            reject(
-              new Error(
-                "Workflow stop is recorded and still awaiting its machine."
-              )
-            );
-          } else {
-            lifetime.after(100, observe);
-          }
-        };
-        observe();
-      }),
-    // A workflow's command on a paused machine waits for the pause's end.
-    command: (machineId, cwd, cmd, timeoutMs, onWait) =>
-      runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
-        onWait,
-        what: "workflow command",
-      }),
-    park: parkForPerson,
-    settle: (id) => {
-      pending.resolve(id);
-    },
-    broadcast: (frame) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: frame.run.machineId,
-        payload: { kind: "workflow", ...frame },
-      }),
-    problems: (graph, workflowId) =>
-      validateWorkflow(graph, {
-        workflowId,
-        resolveWorkflow: db.getWorkflow,
-      }),
-    notifyPerson: (runId, text) => push.workflowNote(runId, text),
-    supervisor: async (type, cwd, machineId, title, prompt) => {
-      const preset = delegateTypes.list().find((entry) => entry.name === type);
-      if (!preset) {
-        throw new Error(`No delegate type ${type}.`);
-      }
-      const instanceId = crypto.randomUUID();
-      await spawnSession(
-        machineId,
-        {
-          ...preset,
-          instanceId,
-          cwd,
-          title,
-          canDelegate: true,
-        },
-        // Spawned only for a run the owner launched or re-ran from the
-        // dashboard (a session's launch supervises it itself; a child run
-        // has its parent's supervisor or none): caused by no session.
-        unwatchedMode(undefined)
-      );
-      deliverSend({
-        verb: "send",
-        machineId,
-        instanceId,
-        payload: {
-          instanceId,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: prompt },
-            parent_tool_use_id: null,
-            origin: {
-              kind: "peer",
-              from: instanceId,
-              name: "workflow",
-              fromSession: instanceId,
-            },
-          },
-        },
-      });
-      return instanceId;
-    },
-  });
-  onWorkflowAnswer(pending, (id, result) =>
-    workflowRuntime.settleQuestion(id, result)
-  );
   offBoot.push(() => {
-    detach(workflowRuntime.resume(), "workflow resume");
     // Moves go on from their records: an approval is asked again, every
     // other step waits for its machine's register.
     moves.resume();
@@ -25308,8 +25136,8 @@ export const createServer = (
    *   which filed it asleep: the turn it had open, recorded, goes first,
    *   ahead of what the dead process never read.
    * And whichever way, what rules it out:
-   * - the session is being ended, or is a summariser or a workflow step
-   *   (a continuation and the workflow runtime run those);
+   * - the session is being ended, or is a summariser (a continuation runs
+   *   those);
    * - the at-limit controller has it, or its compaction after a move, or a
    *   continuation of it is under way, or it moves account at its turn's
    *   end: those send their own word;
@@ -25342,7 +25170,6 @@ export const createServer = (
     const ruledOut =
       !!owned?.endIntent ||
       row.kind === "summariser" ||
-      row.workflowStepId !== null ||
       atLimit.handling(row.id) ||
       db.atLimit.compaction(row.id) !== undefined ||
       owedMoves.has(row.id) ||
@@ -25505,7 +25332,6 @@ export const createServer = (
     turnWaiters.get(instanceId)?.reject(new Error(reason));
     db.failInstance(instanceId, reason, kind);
     sayNestedBoundaryFix(reason);
-    workflowRuntime.observe(instanceId, reason);
     losePending(instanceId, kind !== "conversation-gone", reason);
     // What it was told of the person's plan changes goes on to a new session.
     if (kind === "conversation-gone") {
@@ -25536,8 +25362,7 @@ export const createServer = (
    * kill cut is handed back once ({@link resumeCutTurn}'s path), which
    * starts that process. A session killed again within
    * {@link SIGNAL_REPEAT_MS} of its last kill fails as any dead process
-   * does, and so does a summariser or a workflow step, which the
-   * continuation and the workflow runtime run.
+   * does, and so does a summariser, which a continuation runs.
    */
   const diedOnSignal = (
     machineId: string,
@@ -25550,7 +25375,6 @@ export const createServer = (
     if (
       !row ||
       row.kind === "summariser" ||
-      row.workflowStepId !== null ||
       (last !== undefined && now - last < SIGNAL_REPEAT_MS)
     ) {
       signalDeaths.delete(instanceId);
@@ -26927,96 +26751,6 @@ export const createServer = (
         noticesSeen.routes,
         joinRoutes({ installs, offered: () => binaryUpdates.offered() }),
         binaryUpdates.routes,
-        workflowRoutes(
-          db,
-          workflowRuntime,
-          toolCallKeys,
-          (id) => withSessionPresence(db.getInstancesByIds([id]))[0]?.status,
-          {
-            changed: () => fleetChanged("a workflow changed"),
-            check: async (name, workflowId) => {
-              await Promise.all(
-                // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: verify discovery and the ownership marker before a workflow can claim a skill on each connected machine.
-                [...registry.machineIds()].map(async (machineId) => {
-                  const answer = await readAgent(
-                    machineId,
-                    INSPECT_CONFIG,
-                    [],
-                    READ_TIMEOUT_MS
-                  );
-                  switch (answer.kind) {
-                    case "unanswered":
-                      throw new Error(
-                        `Cannot check workflow skill ${name}: ${unansweredFault(machineId, answer)}`
-                      );
-                    case "answered":
-                      if (!answer.value.ok) {
-                        throw new Error(
-                          answer.value.error ??
-                            `Cannot inspect skills on ${machineName(machineId)}.`
-                        );
-                      }
-                      break;
-                    default:
-                      throw unreachable(answer);
-                  }
-                  const inspection = answer.value
-                    .result as import("@cawco/core").ConfigInspection;
-                  const matches = inspection.skills.filter(
-                    (skill) => skill.name === name
-                  );
-                  if (!matches.length) {
-                    return;
-                  }
-                  if (
-                    !workflowId ||
-                    matches.some(
-                      (skill) => !skill.managed || skill.scope !== "user"
-                    )
-                  ) {
-                    throw new Error(
-                      `Workflow slug collides with operator-installed skill ${name} on ${machineName(machineId)}.`
-                    );
-                  }
-                  const files = await readAgent(
-                    machineId,
-                    READ_SKILL_FILES,
-                    [name],
-                    READ_TIMEOUT_MS
-                  );
-                  switch (files.kind) {
-                    case "unanswered":
-                      throw new Error(
-                        `Cannot verify workflow skill ${name} ownership: ${unansweredFault(machineId, files)}`
-                      );
-                    case "answered":
-                      if (!files.value.ok) {
-                        throw new Error(
-                          `Cannot verify workflow skill ${name} ownership on ${machineName(machineId)}.`
-                        );
-                      }
-                      break;
-                    default:
-                      throw unreachable(files);
-                  }
-                  const markdown = (files.value.result as SkillFile[]).find(
-                    (file) => file.path === "SKILL.md"
-                  );
-                  if (!(
-                    markdown &&
-                    Buffer.from(markdown.contentBase64, "base64")
-                      .toString()
-                      .includes(`<!-- cawco-workflow:${workflowId} -->`)
-                  )) {
-                    throw new Error(
-                      `Workflow slug collides with operator-installed skill ${name} on ${machineName(machineId)}.`
-                    );
-                  }
-                })
-              );
-            },
-          }
-        ),
       ])
       .all("/mcp/cawco", hidden, ({ request, body, server }) => {
         // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
@@ -28484,11 +28218,9 @@ export const createServer = (
           return withKeepAlive([row])[0];
         }
       )
-      // The owner looked at these (a tab in front, after it ended) or
-      // archived them off Finished. Sessions by id, workflow runs as
-      // `run:<id>`, the dashboard's own address for a run. Every dashboard
-      // hears it on the frames it already reads: the instance list, a run's
-      // workflow frame.
+      // The owner looked at these sessions (a tab in front, after it ended)
+      // or archived them off Finished. Every dashboard hears it on the
+      // instance list it already reads.
       .post(
         "/api/seen",
         {
@@ -28522,10 +28254,7 @@ export const createServer = (
               );
             }
           }
-          const runIds = body.ids.flatMap((id) =>
-            id.startsWith("run:") ? [id.slice(4)] : []
-          );
-          const instanceIds = body.ids.filter((id) => !id.startsWith("run:"));
+          const instanceIds = body.ids;
           if (body.kind === "archive") {
             for (const id of instanceIds) {
               db.updateKeepAlive(id, {
@@ -28535,17 +28264,15 @@ export const createServer = (
             }
           }
           const at = body.kind === "unarchive" ? null : new Date();
-          const seen = db.markSeen(instanceIds, runIds, at);
+          const seen = db.markSeen(instanceIds, at);
           if (body.kind === "look") {
             // Looked at: a session's finished turn or failure, its message
-            // and its asks, and a run's note, are read, so their
-            // notifications come down.
+            // and its asks are read, so their notifications come down.
             const looked = new Set(instanceIds);
             notifications.clear(
               [
                 ...instanceIds.map((id) => turnCollapseId(id)),
                 ...instanceIds.map((id) => messageCollapseId(id)),
-                ...runIds.map((id) => runCollapseId(id)),
                 ...pending
                   .list()
                   .flatMap((parked) =>
@@ -28559,13 +28286,8 @@ export const createServer = (
               "look"
             );
           }
-          for (const machineId of new Set(
-            seen.instances.map((row) => row.machineId)
-          )) {
+          for (const machineId of new Set(seen.map((row) => row.machineId))) {
             publishInstances(machineId);
-          }
-          for (const run of seen.runs) {
-            workflowRuntime.announce(run);
           }
           return { at: at?.getTime() ?? null };
         }
@@ -32147,13 +31869,9 @@ export const createServer = (
               }
               // Catalog reconciliation can also retire an already failed row,
               // and stopped rows are deliberately outside the orphan list.
-              // A workflow's question names its run's machine but no session
-              // (its instance id is its step's): it is the run's, answered or
-              // ended with the run, and a daemon coming back has no say in it.
               for (const parked of pending.list()) {
                 const [owner] = db.getInstancesByIds([parked.instanceId ?? ""]);
                 if (
-                  !workflowRunOf(parked) &&
                   parked.machineId === message.machineId &&
                   custody.state === "available" &&
                   !(
@@ -32248,10 +31966,7 @@ export const createServer = (
               // needs one reads it or replaces it itself (advanceContinuation,
               // below). One still running that no unsettled continuation
               // names is nobody's, and is stopped.
-              const revivable = [
-                ...held,
-                ...fresh.filter(({ row }) => !row.workflowStepId),
-              ].filter(
+              const revivable = [...held, ...fresh].filter(
                 ({ row }) =>
                   !row.endIntent &&
                   row.kind !== "summariser" &&
@@ -32296,7 +32011,6 @@ export const createServer = (
                     row.machineId === message.machineId &&
                     !restoredIds.has(row.id) &&
                     !returningRemoved.has(row.id) &&
-                    !row.workflowStepId &&
                     row.kind !== "summariser" &&
                     row.harness === "opencode" &&
                     row.sessionId &&
@@ -32414,7 +32128,6 @@ export const createServer = (
               }
               // Reconnect retries overdue stored schedules right after the register ACK.
               detach(keepAliveScheduler.wake(), "keepalive wake");
-              workflowRuntime.recover(message.machineId);
               // Continuations waiting on this machine — for their summary, or
               // for their new session — go on from where their record says.
               for (const job of db.continuationRows()) {
@@ -32530,13 +32243,6 @@ export const createServer = (
               // turn a restart cut on the beat that lists it.
               for (const id of beat.promoted) {
                 resumeCutTurn(id);
-              }
-              if (
-                (message.payload as HeartbeatPayload).custodyComplete ===
-                  true &&
-                machineCustody.get(message.machineId)?.state === "available"
-              ) {
-                workflowRuntime.recover(message.machineId);
               }
               // A process the operator stopped that the machine still carries:
               // one the stop never reached (the agent was restarting), taken
@@ -33406,7 +33112,6 @@ export const createServer = (
                     // there; `markInstanceLive` only touches the states a live
                     // process can be wrongly filed under.
                     db.markInstanceLive(message.instanceId);
-                    workflowRuntime.instanceLive(message.instanceId);
                     const [live] = db.getInstancesByIds([message.instanceId]);
                     if (live) {
                       workItems.started(live);
@@ -33739,33 +33444,6 @@ export const createServer = (
                   ? db.listedInstancesByIds([message.instanceId])[0]
                   : undefined;
                 const parentId = sender?.parentInstanceId;
-                if (
-                  sender?.workflowStepId &&
-                  !parentId &&
-                  (message.payload as { requestKind?: string }).requestKind ===
-                    "question"
-                ) {
-                  const askerAgent = registry.agent(message.machineId);
-                  if (askerAgent) {
-                    sendFrame(askerAgent, {
-                      verb: "control",
-                      machineId: message.machineId,
-                      instanceId: sender.id,
-                      requestId: message.requestId,
-                      payload: {
-                        instanceId: sender.id,
-                        requestId: message.requestId,
-                        method: RESOLVE_PERMISSION,
-                        args: [
-                          message.requestId,
-                          { behavior: "deny", message: QUESTION_DISMISSED },
-                        ],
-                      },
-                    });
-                  }
-                  pending.resolve(message.requestId);
-                  break;
-                }
                 // A parent whose own work is finished cannot take the ask.
                 const takes = (row: InstanceRow): boolean =>
                   sender !== undefined &&
@@ -33881,33 +33559,25 @@ export const createServer = (
                   }
                 }
               }
-              // A provider refused a session's turn and waits to try again. For
-              // a workflow step's session its attempt decides whether that wait
-              // fits inside the attempt's deadline; any other session waits.
+              // A provider refused a session's turn and waits to try again.
               if (kind === "frame" && message.instanceId) {
                 const neutral = (
                   message.payload as FramePayload & { kind: "frame" }
                 ).message;
+                // A summariser whose provider refuses it at its usage limit
+                // is refused: its harness would retry until the limit resets
+                // (OpenCode answers Go's monthly limit with a `retry` status,
+                // never an error). Its wait ends on the provider's words and
+                // the run stops its scratch session, so the continuation's
+                // caller decides what is next.
                 if (
                   neutral.type === "system" &&
                   neutral.subtype === PROVIDER_RETRY &&
-                  neutral.retry
+                  neutral.retry?.atLimit
                 ) {
-                  workflowRuntime.providerRetry(
-                    message.instanceId,
-                    neutral.retry
-                  );
-                  // A summariser whose provider refuses it at its usage
-                  // limit is refused: its harness would retry until the
-                  // limit resets (OpenCode answers Go's monthly limit with a
-                  // `retry` status, never an error). Its wait ends on the
-                  // provider's words and the run stops its scratch session,
-                  // so the continuation's caller decides what is next.
-                  if (neutral.retry.atLimit) {
-                    turnWaiters
-                      .get(message.instanceId)
-                      ?.reject(new Error(neutral.retry.message));
-                  }
+                  turnWaiters
+                    .get(message.instanceId)
+                    ?.reject(new Error(neutral.retry.message));
                 }
               }
               // A turn's end, in this order: the standing instructions answer
@@ -34107,16 +33777,6 @@ export const createServer = (
                     // OpenCode's own word: its wait is over; whether it is
                     // held was the interrupt's to say ({@link noteInterrupt}).
                     workItems.interrupted(row.id, false);
-                  }
-                  if (row?.workflowStepId) {
-                    const workflowFailure = neutral.errors?.length
-                      ? neutral.errors.join("\n")
-                      : (neutral.result ??
-                        `Harness error (${neutral.subtype}).`);
-                    workflowRuntime.observe(
-                      row.id,
-                      neutral.is_error ? workflowFailure : undefined
-                    );
                   }
                   const turnId = message.instanceId;
                   const endedAt = new Date();

@@ -79,12 +79,11 @@ export const createAskPresenter = (
   /**
    * The session that asked, as the board names it (a project's lead is Caw;
    * any other its given title, else the title its first message gave it,
-   * else its folder), and its project by name. A workflow's question is its
-   * workflow's.
+   * else its folder), and its project by name.
    */
   const askerOf = (
     instanceId: string | undefined,
-    payload: { proposer?: unknown; workflowRunId?: unknown }
+    payload: { proposer?: unknown }
   ): { asker: string; project?: string } => {
     // A memory proposal (memory.ts) is no session's: it names who proposed
     // it and its project ("Memory curator · cawco").
@@ -94,13 +93,6 @@ export const createAskPresenter = (
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     if (row) {
       return sessionAsker(row);
-    }
-    const workflow =
-      typeof payload.workflowRunId === "string"
-        ? workflowName(payload.workflowRunId)
-        : undefined;
-    if (workflow) {
-      return { asker: `Workflow ${workflow}` };
     }
     return { asker: instanceId ? instanceId.slice(0, 8) : "A session" };
   };
@@ -114,12 +106,6 @@ export const createAskPresenter = (
       asker: row.role === "lead" ? "Caw" : boardTitle(row),
       ...(project ? { project } : {}),
     };
-  };
-
-  /** A workflow run's workflow, by name. */
-  const workflowName = (runId: string): string | undefined => {
-    const run = db.getWorkflowRun(runId);
-    return run ? db.getWorkflow(run.workflowId)?.name : undefined;
   };
 
   /** A setting as the fleet keeps it, under the names the write's input uses: what its before → after is read against. */
@@ -205,7 +191,6 @@ export const createAskPresenter = (
     const payload = envelope.payload as PermissionRequestFrame & {
       proposer?: unknown;
       sourceFacts?: SourceFacts;
-      workflowRunId?: unknown;
     };
     payload.presentation = presentPermission(payload.toolName, payload.input, {
       ...askerOf(envelope.instanceId ?? payload.instanceId, payload),

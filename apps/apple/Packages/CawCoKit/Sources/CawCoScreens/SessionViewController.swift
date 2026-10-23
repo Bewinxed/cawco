@@ -40,7 +40,7 @@ final class SessionViewController: ObservedViewController {
     private static let commandsLog = Logger(subsystem: "dev.cawco.app", category: "Commands")
     var onClose: () -> Void = {}
     var onReturnToFleet: () -> Void = {}
-    /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
+    /// Opens another session, as a board row opens.
     var onOpenSession: (String) -> Void = { _ in }
     /// A project's page: the one a "make this a project" answer joined.
     var onOpenProject: (String) -> Void = { _ in }
@@ -251,7 +251,6 @@ final class SessionViewController: ObservedViewController {
         transcriptView.translatesAutoresizingMaskIntoConstraints = false
         transcriptView.hub = hub
         transcriptView.onOpenSession = { [weak self] id in self?.onOpenSession(id) }
-        transcriptView.onOpenRun = { [weak self] runId in self?.onOpenSession(BoardRun.prefix + runId) }
         transcriptView.onReturnToFleet = { [weak self] in self?.onReturnToFleet() }
         transcriptView.canEditQueued = { [weak self] id in self?.canWithdraw(id) ?? false }
         transcriptView.onEditQueued = { [weak self] id in self?.liftQueued(id) }

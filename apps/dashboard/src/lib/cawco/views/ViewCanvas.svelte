@@ -2,7 +2,7 @@
   /**
    * The Canvas view (PRD §5.2): the project's tasks as the graph their files
    * draw — `after`, `parent`, `related`, `found_in` — on Svelte Flow, set up
-   * as the workflow editor's canvas is (its fit, zoom, theme and tools).
+   * as every graph canvas is (its fit, zoom, theme and tools).
    *
    * Only tasks that meet an edge are on it. dagre lays it out along `after`
    * (task-graph.ts) from the cards' measured sizes, left to right; top to
@@ -25,9 +25,9 @@
   import "#lib/vendor-css/xyflow.css";
   import { onMount, untrack } from "svelte";
   import type { StageKind, TaskSummary } from "#lib/cawco/project-tasks.js";
+  import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
-  import WorkflowCanvasTools from "#lib/components/features/workflows/WorkflowCanvasTools.svelte";
   import { theme } from "#lib/theme.svelte.js";
   import { frameSize } from "../frame-observer";
   import { numberOf } from "../motion/curves.svelte";
@@ -266,7 +266,7 @@
         }}
       />
       <Panel position="bottom-center"
-        ><WorkflowCanvasTools
+        ><FlowCanvasTools
           fit={() => fitter?.frame(true)}
           onfit={() => {
             held = false;

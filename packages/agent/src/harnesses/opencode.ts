@@ -5092,7 +5092,6 @@ export class OpencodeHarness implements Harness {
       model: spec.model,
       permissionMode: offeredMode(spec.permissionMode),
       effort: spec.effort,
-      workflowStepId: spec.workflowStepId,
       canDelegate: spec.canDelegate,
       instructions: spec.instructions,
       deniedRules,

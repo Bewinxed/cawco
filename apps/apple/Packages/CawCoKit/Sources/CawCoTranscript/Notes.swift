@@ -297,8 +297,8 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
 }
 
 /// What cawco put in on someone else's behalf (Peer.svelte): a rule that
-/// fired, a delegate's report or ask, another session's hand-off, a
-/// workflow's notice. One labelled line with the kind's glyph, folded to
+/// fired, a delegate's report or ask, another session's hand-off. One
+/// labelled line with the kind's glyph, folded to
 /// the first line of what it says; the body opens under it.
 final class PeerView: RailRow, RowContent, Disclosing {
     var disclosed: Bool { reveal.isOpen }
@@ -350,7 +350,6 @@ final class PeerView: RailRow, RowContent, Disclosing {
         guard case let .peer(block) = item.kind else { return }
         place()
         key = block.disclosureKey
-        let meta = block.meta
         let peer = block.string("peerName") ?? ""
         var lead = "Hand-off from", name = peer, failed = false, kind = Glyph.handoff
         if block.type == "user.rule" {
@@ -359,8 +358,6 @@ final class PeerView: RailRow, RowContent, Disclosing {
             lead = "Ask from"; name = block.string("askLabel") ?? ""; kind = .ask
         } else if let report = block.string("reportKind") {
             lead = "Report from"; failed = report == "failed"; kind = failed ? .reportFailed : .report
-        } else if let event = meta["workflowEvent"] as? String {
-            lead = "Workflow ·"; name = "\(peer) · \(event)"; failed = event.hasSuffix("failed"); kind = .workflow
         }
         glyph.glyph.glyph = kind
         glyph.glyph.tintColor = failed ? Palette.statusFailInk : Palette.brandInk

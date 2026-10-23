@@ -4,8 +4,7 @@
  * comes in by — MCP from any harness, the REST door, `cawco tool` — the hub
  * parks it as the calling session's ask: a `permission_request` naming the
  * exact tool and arguments, through the same pending ledger, dashboards
- * and push that a session's own asks and a workflow's questions go
- * through. The call waits, as a parked permission does. Approved, it runs
+ * and push that a session's own asks go through. The call waits, as a parked permission does. Approved, it runs
  * once, with the arguments that were shown; denied, the caller gets the
  * refusal with the person's reason; withdrawn (the session ended, the hub
  * let it go), the caller hears that.

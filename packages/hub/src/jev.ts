@@ -1,6 +1,6 @@
 /**
  * TypeSafe's Jev — the hub's one Jev client, for meaning rules, fleet watch,
- * suggestions, placement and workflow `w.jev` — and the one rule for which
+ * suggestions and placement — and the one rule for which
  * route it takes.
  *
  * Two routes reach the same System One API with the same body:
@@ -26,7 +26,7 @@ import type {
   JevQuestion,
   JevResult,
   JevText,
-} from "@cawco/core/workflow-program";
+} from "@cawco/core/jev";
 import type { DbShape } from "./db";
 import { TYPESAFE_URL } from "./upstreams";
 

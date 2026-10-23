@@ -135,12 +135,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    (`/api/fleet/items/retry` takes `ids`, where it took one `id`): the
  *    machines panel retries a cause's whole group at once. A page built for
  *    26 reloads first.
+ * 28: the multi-step run engine is gone: a session row names no run nor
+ *    step, a transcript block's metadata no run event, and no run frame is
+ *    sent. The bridges for the TestFlight builds the hub no longer serves
+ *    went with it: a usage frame carries no per-machine `limits`, a preview
+ *    no `host`, and a thread's note carries a made routine or a design offer
+ *    in its `event`. A page built for 27 reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 27;
+export const WIRE_PROTOCOL = 28;
 
 /**
  * What a session's stream carries: the changes each frame made to its

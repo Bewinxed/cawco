@@ -1,8 +1,7 @@
 /**
  * The things a written word names beyond sessions and artifacts (core
  * references.ts): a project, a task and its to-do, a session's plan and its
- * step, a routine, a workflow or one run of it, and a machine, as their
- * chips read them: what each is
+ * step, a routine, and a machine, as their chips read them: what each is
  * called, its state, the lines its peek says, and where a press opens it.
  *
  * What this browser holds is read at once (the store's projects, machines
@@ -16,27 +15,16 @@ import {
   planWords,
   referenceParts,
   type SessionPlan,
-  type Workflow,
-  type WorkflowRun,
-  type WorkflowRunStatus,
 } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
-import { runHref } from "./workflow-runs";
 
 /** The kinds this module names. */
 export type ThingKind =
-  | "task"
-  | "todo"
-  | "plan"
-  | "step"
-  | "routine"
-  | "workflow"
-  | "project"
-  | "machine";
+  "task" | "todo" | "plan" | "step" | "routine" | "project" | "machine";
 
 /** Where a press opens a thing: a page of the app, a session's plan (at a step), or the machines' list. */
 export type ThingPlace =
@@ -123,39 +111,6 @@ async function readJson<T>(path: string): Promise<T> {
   }
   return (await response.json()) as T;
 }
-
-/** A workflow by its id, or one run of a workflow by the run's, with its workflow's name. */
-type WorkflowRead =
-  | { kind: "workflow"; workflow: Workflow }
-  | { kind: "run"; name: string; run: WorkflowRun };
-
-const readWorkflow = async (id: string): Promise<WorkflowRead> => {
-  const path = encodeURIComponent(id);
-  try {
-    return {
-      kind: "workflow",
-      workflow: await readJson<Workflow>(`/api/workflows/${path}`),
-    };
-  } catch (error) {
-    if ((error as { status?: number }).status !== 404) {
-      throw error;
-    }
-  }
-  const run = await readJson<WorkflowRun>(`/api/workflow-runs/${path}`);
-  const workflow = await readJson<Workflow>(
-    `/api/workflows/${encodeURIComponent(run.workflowId)}`
-  ).catch(() => null);
-  return { kind: "run", run, name: workflow?.name ?? run.workflowId };
-};
-
-/** A run's status in words. */
-const RUN_WORDS: Record<WorkflowRunStatus, string> = {
-  running: "Running",
-  waiting: "Waiting",
-  done: "Done",
-  failed: "Failed",
-  cancelled: "Stopped",
-};
 
 const projectHref = (project: string) =>
   `/project/${encodeURIComponent(project)}`;
@@ -263,26 +218,6 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
           place: { plan: session, step: stepId },
         }
       : null;
-  },
-  workflow: (id) => {
-    const read = askOnce(`workflow:${id}`, () => readWorkflow(id));
-    if (!read) {
-      return read;
-    }
-    if (read.kind === "workflow") {
-      return {
-        label: read.workflow.name,
-        state: null,
-        peek: [read.workflow.description.split("\n")[0] ?? ""].filter(Boolean),
-        place: { href: `/workflows/${encodeURIComponent(id)}` },
-      };
-    }
-    return {
-      label: read.name,
-      state: RUN_WORDS[read.run.status],
-      peek: [read.run.failure ?? read.run.waiting ?? ""].filter(Boolean),
-      place: { href: runHref(id) },
-    };
   },
   routine: (id) => {
     const routine = askOnce(`routine:${id}`, () =>

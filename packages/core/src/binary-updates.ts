@@ -81,7 +81,7 @@ export interface BinaryUpdateLanding {
  * - `starting`: a session start the agent is in the middle of.
  * - `image`: an image generation the agent is running.
  * - `workspace`: a delegate's workspace the agent is cutting or archiving.
- * - `command`: a command the hub asked the agent to run (a landing gate step, a workflow step).
+ * - `command`: a command the hub asked the agent to run (a landing gate step).
  * - `tool-call`: a tool call the agent relays to its hub.
  * - `hub-tool-call`: a CawCo tool call the hub is answering, from any machine.
  * - `write`: a message or an answer the agent is handing to a harness.

@@ -4,7 +4,7 @@
  *
  *   bun scripts/build-binary.ts prepare
  *       The assets every target embeds, built once: the dashboard (its Vite
- *       build), the preview overlay, the workflow runtime, the stage host,
+ *       build), the preview overlay, the stage host,
  *       the dashboard's server, the canvas and decision hosts, a Linux
  *       target's boundary host. Left in `.context/binary-build/` with a record
  *       of them (`prepared.json`) that every compile reads.
@@ -48,7 +48,6 @@ export const TARGETS = [
 ] as const;
 const ROOT = resolve(import.meta.dir, "..");
 const requireAgent = createRequire(join(ROOT, "packages/agent/package.json"));
-const requireCore = createRequire(join(ROOT, "packages/core/package.json"));
 /** Where `prepare` leaves the assets every target shares, and each compile its own root. */
 const WORK = join(ROOT, ".context/binary-build");
 /** `prepare`'s record of what it left ({@link Prepared}). */
@@ -169,29 +168,9 @@ const writeBundle = async (
  * and the decision page's: `copies` (name, source) copied in, and the bundles
  * built, all at once.
  */
-const writeWorkFiles = async (
-  copies: [string, string][],
-  zod: string
-): Promise<void> => {
+const writeWorkFiles = async (copies: [string, string][]): Promise<void> => {
   await Promise.all([
     (async () => writeFile(join(WORK, "overlay.js"), await bundleOverlay()))(),
-    writeBundle("Workflow zod", join(WORK, "zod-runtime.js"), {
-      entrypoints: [join(zod, "index.js")],
-      target: "bun",
-      format: "esm",
-      minify: true,
-    }),
-    writeFile(
-      join(WORK, "zod-package.json"),
-      JSON.stringify({
-        name: "zod",
-        version: "4.6.5",
-        type: "module",
-        main: "./index.js",
-        types: "./index.d.ts",
-        exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
-      })
-    ),
     ...copies.map(async ([name, source]) =>
       writeFile(join(WORK, name), await Bun.file(join(ROOT, source)).bytes())
     ),
@@ -246,25 +225,8 @@ export async function prepareAssets(options: {
     ]);
   }
   const { pi, photon } = piPackages();
-  const zod = packageDir("zod", requireCore);
-  // The lib files beside the compiler the binary bundles, wherever its
-  // package keeps them: `typescript` is the @typescript/typescript6 shim,
-  // whose own lib/ holds no lib.*.d.ts (it re-exports @typescript/old).
-  const typescriptLib = dirname(
-    (
-      requireCore("typescript") as typeof import("typescript")
-    ).getDefaultLibFilePath({})
-  );
-  if (!existsSync(join(typescriptLib, "lib.es5.d.ts"))) {
-    throw new Error(
-      `No TypeScript lib files in ${typescriptLib}: workflow programs would typecheck without the standard library`
-    );
-  }
   const copies: [string, string][] = [
-    ["workflow-globals.d.ts", "packages/core/src/workflow-globals.d.ts"],
-    ["workflow-program.ts", "packages/core/src/workflow-program.ts"],
-    ["workflow.ts", "packages/core/src/workflow.ts"],
-    // Embedded from a copy, as the workflow files are: log-relay.ts imports
+    // Embedded from a copy: log-relay.ts imports
     // the source as a module, and a file the bundle also imports `with {
     // type: "file" }` is a file to every importer, so its named exports vanish.
     ["boundary-log-protocol.ts", "packages/agent/src/boundary-log-protocol.ts"],
@@ -277,7 +239,7 @@ export async function prepareAssets(options: {
     canvasHostAssets(join(WORK, "canvas"), filesUnder),
     // A decision page's host bundle and DialKit (core decision-host.ts).
     decisionHostAssets(join(WORK, "decision"), filesUnder),
-    writeWorkFiles(copies, zod),
+    writeWorkFiles(copies),
   ]);
   const playwright = packageDir("playwright-core", requireAgent);
   const shared: [string, string][] = [
@@ -288,14 +250,6 @@ export async function prepareAssets(options: {
       "dashboard/client"
     )),
     ["dashboard/handler.js", join(WORK, "dashboard-handler.js")],
-    ...(await filesUnder(typescriptLib, "workflow/lib")).filter(([name]) =>
-      name.endsWith(".d.ts")
-    ),
-    ...(await filesUnder(zod, "workflow/node_modules/zod")).filter(([name]) =>
-      name.endsWith(".d.ts")
-    ),
-    ["workflow/node_modules/zod/index.js", join(WORK, "zod-runtime.js")],
-    ["workflow/node_modules/zod/package.json", join(WORK, "zod-package.json")],
     ...(
       await filesUnder(join(pi, "dist/modes/interactive/theme"), "pi/theme")
     ).filter(([name]) => name.endsWith(".json")),
@@ -306,9 +260,6 @@ export async function prepareAssets(options: {
         name.includes("/vendor/") || /template\.(html|css|js)$/.test(name)
     ),
     ["pi/package.json", join(pi, "package.json")],
-    ["workflow/workflow-globals.d.ts", join(WORK, "workflow-globals.d.ts")],
-    ["workflow/workflow-program.ts", join(WORK, "workflow-program.ts")],
-    ["workflow/workflow.ts", join(WORK, "workflow.ts")],
     ["preview/overlay.js", join(WORK, "overlay.js")],
     ["stage/host.mjs", join(WORK, "stage-host.mjs")],
     ...canvas,
@@ -431,14 +382,12 @@ export async function compileBinary(options: {
             : "scripts/binary/entry.ts"
         ),
       ],
-      ...[
-        "workflow-worker.ts",
-        "transcript-worker.ts",
-        "process-table-worker.ts",
-      ].map((name): [string, string] => [
-        `scripts/binary/${name}`,
-        join(ROOT, "scripts/binary", name),
-      ]),
+      ...["transcript-worker.ts", "process-table-worker.ts"].map(
+        (name): [string, string] => [
+          `scripts/binary/${name}`,
+          join(ROOT, "scripts/binary", name),
+        ]
+      ),
       [
         "src/utils/image-resize-worker.ts",
         join(pi, "dist/utils/image-resize-worker.js"),

@@ -2,8 +2,7 @@
   import { commonWords } from "@cawco/core";
   /**
    * A session's transcript drawn inside another view, in a recessed well of
-   * its own: what a delegate's card opens onto in its parent's chat, and what
-   * a workflow step opens onto under its run. The rows come from the store
+   * its own: what a delegate's card opens onto in its parent's chat. The rows come from the store
    * (the host watches and reads the session as it opens), are drawn a unit
    * at a time as the panel opens (CollapsibleLazy), and a read that failed
    * is said, never drawn as an empty transcript.
@@ -29,7 +28,6 @@
   import CompactionDivider from "./CompactionDivider.svelte";
   import Delegate from "./Delegate.svelte";
   import MessageRow from "./MessageRow.svelte";
-  import RunBlock from "./RunBlock.svelte";
   import { foldMessages, newestCompaction, wellRuns } from "./rows";
   import Subagent from "./Subagent.svelte";
   import Thinking from "./Thinking.svelte";
@@ -201,8 +199,6 @@
           <ToolGroup messages={[r.message]} />
         {:else if r.kind === "delegate"}
           <Delegate message={r.message} />
-        {:else if r.kind === "run"}
-          <RunBlock message={r.message} runId={r.runId} />
         {:else if r.kind === "compaction"}
           <CompactionDivider row={r} />
         {:else if r.kind === "account"}

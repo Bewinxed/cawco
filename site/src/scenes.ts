@@ -38,8 +38,8 @@ function crossOver(timeline: Timeline, scope: ParentNode, at: string | number): 
 }
 
 /**
- * Loose terminals fold into the rows of one tree. A session's delegates and a
- * workflow run's steps open under them, then one row asks for you.
+ * Loose terminals fold into the rows of one tree. A session's delegates and an
+ * orchestrator's work items open under them, then one row asks for you.
  */
 function board(root: HTMLElement): Timeline {
   const rows = shown(all(root, '[data-row]'));

@@ -83,14 +83,11 @@ Session (hub — fleet board)
 └── Usage (spoke)
 ```
 
-**Sitemap on disk now.** The routes have since regrouped. Tools and Rules are sections of one **Configure** spoke, and a **Workflows** spoke has been added. The rail's spokes, top to bottom, are Fleet, Workflows, Usage, Configure (`lib/cawco/Sidebar.svelte`; `lib/cawco/motion/route.svelte.ts` `SPOKE_ORDER`). The specs below keep their original surface names; this is where each lives today:
+**Sitemap on disk now.** The routes have since regrouped. Tools and Rules are sections of one **Configure** spoke. The rail's spokes, top to bottom, are Fleet, Usage, Configure (`lib/cawco/Sidebar.svelte`; `lib/cawco/motion/route.svelte.ts` `SPOKE_ORDER`). The specs below keep their original surface names; this is where each lives today:
 ```
 /session                     Fleet board (hub)                    spec 1 `session`
 /session/[id]                Session transcript                   spec 2 `session/[id]` (one [[id]] route)
 /project/[id]                Project detail                       spec 3 `project/[id]`
-/workflows                   Workflows (spoke)
-  /workflows/[id]            Workflow editor
-    /runs/[run]              One run of it
 /usage                       Usage (spoke)                        spec 7 `usage`
 /config                      Configure (spoke; wide screens open on Rules)
   /config/rules              Rules                                spec 5 `rules`
@@ -440,7 +437,7 @@ Session (hub — fleet board)
 
 Seven entries, one per surface in the `## IA` sitemap. Each carries the six fields of the doctrine's page-spec template (Purpose, Entry points, Content blocks, States, Primary CTA, Exit/next), all five named states (Default, Loading, Empty, Error, Success), plus three fields this project requires of every surface: **Density**, **Narrow width**, and **Destructive separation**.
 
-**Sitemap reconciliation.** The `## IA` sitemap lists exactly seven pages — `session`, `session/[id]`, `project/[id]`, `tools`, `rules`, `rules/[id]`, `usage` — and when these specs were written there were exactly seven `+page.svelte` files on disk. There are now 25 (`find apps/dashboard/src/routes -name "+page.svelte" | wc -l` → `25`): the seven specs map onto them as `## IA` §"Sitemap on disk now" lists, the Workflows spoke and Configure's other sections have no spec here, and `/motion/*` are test benches. The mapping is not one-to-one and the difference is accounted for: the root `+page.svelte` renders nothing (`routes/+page.server.ts` is `redirect(307, '/session')`; the file's only content is the comment *"Never rendered: +page.server.ts redirects to the session index"*), and `session/[[id]]` is one route serving two surfaces — `routes/session/+layout.svelte` states this: *"The route under this is `[[id]]`, one route for both URLs, so moving between the board and a conversation is a parameter change the router swaps no components for."* Seven sitemap pages, seven specs.
+**Sitemap reconciliation.** The `## IA` sitemap lists exactly seven pages — `session`, `session/[id]`, `project/[id]`, `tools`, `rules`, `rules/[id]`, `usage` — and when these specs were written there were exactly seven `+page.svelte` files on disk. There are now 25 (`find apps/dashboard/src/routes -name "+page.svelte" | wc -l` → `25`): the seven specs map onto them as `## IA` §"Sitemap on disk now" lists, Configure's other sections have no spec here, and `/motion/*` are test benches. The mapping is not one-to-one and the difference is accounted for: the root `+page.svelte` renders nothing (`routes/+page.server.ts` is `redirect(307, '/session')`; the file's only content is the comment *"Never rendered: +page.server.ts redirects to the session index"*), and `session/[[id]]` is one route serving two surfaces — `routes/session/+layout.svelte` states this: *"The route under this is `[[id]]`, one route for both URLs, so moving between the board and a conversation is a parameter change the router swaps no components for."* Seven sitemap pages, seven specs.
 
 ### Density classes
 

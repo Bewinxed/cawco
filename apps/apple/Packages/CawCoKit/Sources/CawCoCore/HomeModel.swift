@@ -87,11 +87,11 @@ public final class HomeModel {
     /// The hub is live: only then can an empty group be believed.
     public var live: Bool { hub.state == .connected }
 
-    /// The first full read is in (machines, sessions, runs, every online
+    /// The first full read is in (machines, sessions, every online
     /// machine's stored sessions and the socket's own snapshot), or the hub is
     /// known to be unreachable.
     public var ready: Bool {
-        hub.state == .unreachable || (fleet.fleetRead && fleet.liveRead && fleet.runsRead && fleet.catalogsRead)
+        hub.state == .unreachable || (fleet.fleetRead && fleet.liveRead && fleet.catalogsRead)
     }
 
     /// What Caw says with nothing to count (NeedsCaw.svelte `quiet`): "All
@@ -101,7 +101,7 @@ public final class HomeModel {
     public var quiet: String {
         switch hub.state {
         case .connected:
-            fleet.fleetRead && fleet.liveRead && fleet.runsRead && fleet.catalogsRead ? "All caught up" : "Reading the fleet"
+            fleet.fleetRead && fleet.liveRead && fleet.catalogsRead ? "All caught up" : "Reading the fleet"
         case .connecting, .updating:
             "Connecting…"
         case .unreachable:
@@ -187,12 +187,9 @@ public final class HomeModel {
         }
     }
 
-    /// What a session needs from the operator: a run's own word, a parked
-    /// ask before anything else, then the daemon's pulse.
+    /// What a session needs from the operator: a parked ask before anything
+    /// else, then the daemon's pulse.
     public func activity(_ id: String) -> Activity {
-        if let run = fleet.run(id) {
-            return run.activity
-        }
         // A thread is what its status says (client.svelte.ts `THREAD_DOING`).
         if let thread = fleet.thread(id) {
             switch thread.status {
@@ -222,13 +219,11 @@ public final class HomeModel {
     // MARK: Groups
 
     /// One thing parked on the operator: a session's permission or question,
-    /// a workflow run's question, which is answered in its run, or fleet
-    /// watch telling you about a session (home-state.svelte.ts `WatchItem`),
+    /// or fleet watch telling you about a session (home-state.svelte.ts `WatchItem`),
     /// which opens the session and leaves once you write to it or it moves on.
     public struct NeedsItem: Identifiable {
         public enum Kind {
             case ask(ParkedAsk)
-            case run(BoardRun)
             case watch(Components.Schemas.FleetWatchNotice)
             /// An onboarding choice nobody answered: the fleet's upstream
             /// choice, its three answers on the row (NeedsCard.svelte `choice`).
@@ -243,7 +238,7 @@ public final class HomeModel {
         public let kind: Kind
         public let machineId: String
         public let title: String
-        /// machine · project (a run: its machine)
+        /// machine · project
         public let place: String
         /// When the hub parked it, ms epoch.
         public let raisedAt: Double?
@@ -251,7 +246,7 @@ public final class HomeModel {
         /// still stands, and answering it waits for the machine.
         public var stale = false
         /// Where its session runs, for its mark's hue (NeedsCard.svelte
-        /// `item.cwd || item.machineId`); empty for a run.
+        /// `item.cwd || item.machineId`).
         public var cwd = ""
 
         /// The session whose ask or notice it is, for a session's.
@@ -259,7 +254,7 @@ public final class HomeModel {
             switch kind {
             case let .ask(ask): ask.instanceId
             case let .watch(notice): notice.instanceId
-            case .run, .choice, .tailnet: nil
+            case .choice, .tailnet: nil
             }
         }
     }
@@ -302,16 +297,6 @@ public final class HomeModel {
                 item.cwd = row?.cwd ?? ""
                 items.append(item)
             }
-        }
-        for run in fleet.runs.values where run.status == .waiting {
-            items.append(NeedsItem(
-                id: run.rowId,
-                kind: .run(run),
-                machineId: run.machineId,
-                title: fleet.workflowNames[run.workflowId] ?? "Workflow",
-                place: fleet.machineName(run.machineId),
-                raisedAt: fleet.runAskRaisedAt[run.id]
-            ))
         }
         // Fleet watch's notices, each on its session (home-state.svelte.ts `watched`).
         for notice in fleet.watchNotices {
@@ -357,19 +342,10 @@ public final class HomeModel {
     /// The tool a post held for the person is parked under (core upstream-post.ts `UPSTREAM_POST_TOOL`).
     static let upstreamPostTool = "mcp__cawco__upstream_post"
 
-    /// How long a run that has ended stays on the board: the hub's own window
-    /// for a session that stopped moving (workflow-runs.ts `BOARD_MS`).
-    static let boardWindow = 24.0 * 60 * 60 * 1000
-
-    /// The runs the board lists: still going, or ended within the window (`onBoard`).
-    private var boardRuns: [BoardRow] {
-        fleet.runRows.filter { $0.status == .running || now - $0.updatedMs < Self.boardWindow }
-    }
-
-    /// Every session and run mid-turn, ordered by when it joined Working, newest first.
+    /// Every session mid-turn, ordered by when it joined Working, newest first.
     public var working: [BoardRow] {
         // A thread Caw is working on is working too (home-state.svelte.ts `runningRows`).
-        let rows = (fleet.rows.map(BoardRow.session) + boardRuns + fleet.threadRows).filter { $0.isLive && activity($0.id) == .working }
+        let rows = (fleet.rows.map(BoardRow.session) + fleet.threadRows).filter { $0.isLive && activity($0.id) == .working }
         let present = Set(rows.map(\.id))
         for id in enteredWorking.keys where !present.contains(id) {
             enteredWorking[id] = nil
@@ -384,19 +360,12 @@ public final class HomeModel {
         }
     }
 
-    /// When a session (or run) last ended, on the hub's clock as `seenMs` is,
+    /// When a session last ended, on the hub's clock as `seenMs` is,
     /// whatever it does since: a session's latest turn end as the hub took it
     /// (`turnEndedMs`), with its delegates still running or its next turn
     /// begun, or for a failed one the hub's last change to its row. A pulse's
-    /// time is its machine's clock, so it is never read here. A run: its own
-    /// last move, which the hub stamps, once it has stopped.
+    /// time is its machine's clock, so it is never read here.
     private func lastEnded(_ row: BoardRow) -> Double? {
-        if fleet.run(row.id) != nil {
-            if row.isFailed {
-                return fleet.lastAt(row)
-            }
-            return activity(row.id) == .idle ? fleet.pulseAt(row.id) : nil
-        }
         if row.isFailed {
             return row.updatedMs
         }
@@ -404,11 +373,11 @@ public final class HomeModel {
         return turnEnded > 0 ? turnEnded : nil
     }
 
-    /// When a session (or run) ended, as Finished counts it
+    /// When a session ended, as Finished counts it
     /// (home-state.svelte.ts `endedAt`): its last end, nil while it works or
     /// waits, delegates running under it included.
     private func endedAt(_ row: BoardRow) -> Double? {
-        if fleet.run(row.id) == nil, !row.isFailed, activity(row.id) != .idle {
+        if !row.isFailed, activity(row.id) != .idle {
             return nil
         }
         return lastEnded(row)
@@ -462,7 +431,7 @@ public final class HomeModel {
         let echoed = withObservationTracking {
             seenHere.compactMap { id, mark -> String? in
                 guard let at = mark.at else { return nil }
-                guard let row = fleet.byId[id] ?? fleet.runRows.first(where: { $0.id == id }) else { return id }
+                guard let row = fleet.byId[id] else { return id }
                 return row.seenMs >= at ? id : nil
             }
         } onChange: { [weak self] in
@@ -473,7 +442,7 @@ public final class HomeModel {
         }
     }
 
-    /// What hangs directly under each session and run.
+    /// What hangs directly under each session.
     private var children: [String: [String]] {
         var out: [String: [String]] = [:]
         for row in fleet.byId.values {
@@ -553,7 +522,7 @@ public final class HomeModel {
                     let at = try await hub.markSeen(asking, kind: .archive)
                     seenMarks += 1
                     for id in asking {
-                        let row = fleet.byId[id] ?? fleet.runRows.first { $0.id == id }
+                        let row = fleet.byId[id]
                         seenHere[id] = SeenMark(mark: seenMarks, through: row.flatMap { endedAt($0) } ?? 0, at: at)
                     }
                     hub.acts.settle(asking)
@@ -591,7 +560,7 @@ public final class HomeModel {
         seenMarks += 1
         let mark = seenMarks
         for id in ids {
-            let row = fleet.byId[id] ?? fleet.runRows.first { $0.id == id }
+            let row = fleet.byId[id]
             seenHere[id] = SeenMark(mark: mark, through: row.flatMap { lastEnded($0) } ?? 0)
         }
         let said = "\(kind.rawValue) \(ids.joined(separator: ","))"
@@ -625,10 +594,10 @@ public final class HomeModel {
         set { held.holding = newValue }
     }
 
-    /// Every session and run that ended since it was last opened, the latest
+    /// Every session that ended since it was last opened, the latest
     /// to end first; two that ended together by id, as on the web.
     public var finished: [BoardRow] {
-        let rows = (fleet.rows.filter(\.isListed).map(BoardRow.session) + boardRuns).filter(endedUnseen).sorted {
+        let rows = fleet.rows.filter(\.isListed).map(BoardRow.session).filter(endedUnseen).sorted {
             let a = fleet.lastAt($0)
             let b = fleet.lastAt($1)
             return a != b ? a > b : $0.id < $1.id

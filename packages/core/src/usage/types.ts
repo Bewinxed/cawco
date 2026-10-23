@@ -211,20 +211,6 @@ export interface UsageSpend {
   weekStart: number;
 }
 
-/**
- * One machine's line in a `kind: 'usage'` frame's `limits`, a BRIDGE (hub
- * scripts/wire-compat.ts) for TestFlight builds that read limits per
- * machine: its OpenCode Go plan, and the limits of the first Claude account
- * signed in there. Nothing on this build reads it: Claude's limits are each
- * account's ({@link AccountLimits}), Go's each machine's ({@link MachineGoLimits}).
- */
-export interface UsageLimitsReading {
-  fetchedAt: string | number | Date;
-  machineId: string;
-  openCodeGo: OpenCodeGoLimits | null;
-  payload: ClaudeLimits;
-}
-
 /** One Claude account's own limits, named by its account. */
 export interface AccountLimits {
   accountId: string;
@@ -242,18 +228,9 @@ export interface MachineGoLimits {
  * What `/api/usage/limits` returns: each Claude account's own limits, and
  * each machine's OpenCode Go plan. Claude's limits are an account's, never a
  * machine's: a machine signed in to several accounts has no one reading.
- * `machines` is a BRIDGE (hub scripts/wire-compat.ts) for TestFlight builds
- * that read limits per machine (Claude's there the first account signed in
- * on it); nothing on this build reads it.
  */
 export interface UsageLimitsResponse {
   claude: AccountLimits[];
-  machines: {
-    hostname: string;
-    limits: ClaudeLimits;
-    machineId: string;
-    openCodeGo: OpenCodeGoLimits | null;
-  }[];
   openCodeGo: MachineGoLimits[];
 }
 

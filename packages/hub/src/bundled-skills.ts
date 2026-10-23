@@ -1,7 +1,6 @@
 /**
  * The skills CawCo ships itself (Projects spec §5.4, D14), carried to every
- * machine by fleet sync like the workflow skills it makes
- * (workflows/skills.ts). Their files live in `packages/hub/skills/` and, in
+ * machine by fleet sync. Their files live in `packages/hub/skills/` and, in
  * the standalone binary, among its embedded assets (`build-binary.ts`).
  *
  * - {@link BUNDLED_SKILLS} reach every session on every machine: `show`

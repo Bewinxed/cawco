@@ -35,7 +35,7 @@ nonisolated struct Builder {
     static func railLed(_ row: Row) -> Bool {
         switch row {
         case let .single(_, block, _): !noRail.contains(block.type)
-        case .tools, .harness, .subagent, .delegate, .run: true
+        case .tools, .harness, .subagent, .delegate: true
         case .question, .queued, .compaction: false
         }
     }
@@ -64,8 +64,6 @@ nonisolated struct Builder {
                 items.append(Item(id: key, top: gap, kind: .subagent(branch, spawn: spawn), print: Self.print(spawn) + String(decoding: branch.signature, as: UTF8.self)))
             case let .delegate(key, block):
                 items.append(Item(id: key, top: gap, kind: .delegate(block), print: Self.print(block)))
-            case let .run(key, block, runId):
-                items.append(Item(id: key, top: gap, kind: .run(block, runId: runId), print: Self.print(block) + (runId ?? "")))
             case let .harness(key, note):
                 items.append(Item(id: key, top: gap, kind: .harness(note, key: key), print: note.title + note.status + note.body))
             case let .compaction(key, compaction):

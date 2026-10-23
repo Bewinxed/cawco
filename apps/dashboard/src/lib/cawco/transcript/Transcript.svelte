@@ -85,7 +85,6 @@
   import { openAt, rowHolding } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
-  import RunBlock from "./RunBlock.svelte";
   import {
     buildRowsFrom,
     called,
@@ -3389,8 +3388,7 @@
       (row.kind === "live" && !row.text) ||
       row.kind === "livetool" ||
       row.kind === "subagent" ||
-      row.kind === "delegate" ||
-      row.kind === "run"
+      row.kind === "delegate"
     );
   }
 
@@ -4071,8 +4069,6 @@
               <Subagent branch={row.branch} spawn={row.spawn} />
             {:else if row.kind === "delegate"}
               <Delegate message={row.message} />
-            {:else if row.kind === "run"}
-              <RunBlock message={row.message} runId={row.runId} />
             {:else if row.kind === "thinking"}
               <Thinking live={row.live} text={row.text} />
             {:else if row.kind === "livetool"}

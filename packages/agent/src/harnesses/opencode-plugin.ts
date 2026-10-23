@@ -30,8 +30,7 @@
  *   way. A nested call carries the program's own call id, so a program's
  *   calls are kept by tool name in the order they started, each matched to
  *   its answer by the very input object OpenCode hands both hooks.
- * - `ctx.tool.transform`: the workflow-step tools, and in a workspace's clone
- *   the `shell` that runs every command through the workspace's executor,
+ * - `ctx.tool.transform`: in a workspace's clone the `shell` that runs every command through the workspace's executor,
  *   inside its boundary, in place of the built-in (2.0's id for the shell
  *   tool is `shell`, settled #2). Each call is asked first as the built-in
  *   asks, through `ctx.permission.assert` (2.0.29, anomalyco/opencode#54930:
@@ -119,13 +118,6 @@ export const OPENCODE_PLACED_MCP = join(OPENCODE_DIR, "cawco-placed-mcp.json");
  */
 export const OPENCODE_QUIET_DIR = join(homedir(), ".cawco", "opencode-quiet");
 
-/** The plugin's own tools, which take no session credential: they ask the hub as the session's step. */
-const WORKFLOW_TOOLS = [
-  "cawco_submit_result",
-  "cawco_workflow_state_read",
-  "cawco_workflow_state_write",
-];
-
 /**
  * The data dir every shell and local MCP server of every server reads as
  * `XDG_DATA_HOME`: the machine's own. An account's server runs on the
@@ -160,7 +152,6 @@ const cawcoPlacedMcp = ${JSON.stringify(OPENCODE_PLACED_MCP)};
 const cawcoQuiet = ${JSON.stringify(OPENCODE_QUIET_DIR)};
 const machineData = ${JSON.stringify(machineDataHome())};
 const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
-const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
 // The fleet's servers as the agent's last sync wrote them (its fleet-mcp-set.ts),
 // and the host key its gateway's hosted servers answer to (its mcp-host.ts).
 const cawcoFleetMcp = ${JSON.stringify(fleetMcpSetFile())};
@@ -623,54 +614,7 @@ export default {
       }
       return undefined;
     };
-    const cawcoStep = async (sessionID) => {
-      const response = await fetch(cawcoBase + "/api/instances");
-      if (!response.ok) throw new Error(await response.text());
-      const rows = await response.json();
-      const actor = rows.find((row) => row.sessionId === sessionID && row.cwd === directory && row.workflowStepId);
-      if (!actor) throw new Error("This tool is available only to workflow steps.");
-      return actor;
-    };
-
     await ctx.tool.transform((editor) => {
-      editor.add({
-        name: "cawco_submit_result",
-        description: "Call exactly once with an object matching the schema in your instructions, then end your turn. The hub's validation message is returned verbatim on failure.",
-        input: { type: "object", properties: { result: { type: "object" } }, required: ["result"] },
-        options: { codemode: false },
-        async execute(input, context) {
-          const actor = await cawcoStep(context.sessionID);
-          const recorded = await fetch(cawcoBase + "/api/workflow-steps/" + encodeURIComponent(actor.workflowStepId) + "/result", {
-            method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instanceId: actor.id, result: input.result }),
-          });
-          return { content: await recorded.text() };
-        },
-      });
-      editor.add({
-        name: "cawco_workflow_state_read",
-        description: "Read a named slot of this workflow run's shared state. Only slots the run's program declared with w.state(name, schema) exist.",
-        input: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
-        options: { codemode: false },
-        async execute(input, context) {
-          const actor = await cawcoStep(context.sessionID);
-          const read = await fetch(cawcoBase + "/api/workflow-runs/" + encodeURIComponent(actor.workflowRunId) + "/state/" + encodeURIComponent(input.name) + "?instanceId=" + encodeURIComponent(actor.id));
-          if (!read.ok) throw new Error(await read.text());
-          return { content: await read.text() };
-        },
-      });
-      editor.add({
-        name: "cawco_workflow_state_write",
-        description: "Write a named slot of this workflow run's shared state. The value is validated against the schema the run's program declared; the validator's message comes back verbatim on failure.",
-        input: { type: "object", properties: { name: { type: "string" }, value: {} }, required: ["name"] },
-        options: { codemode: false },
-        async execute(input, context) {
-          const actor = await cawcoStep(context.sessionID);
-          const written = await fetch(cawcoBase + "/api/workflow-runs/" + encodeURIComponent(actor.workflowRunId) + "/state/" + encodeURIComponent(input.name), {
-            method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instanceId: actor.id, value: input.value }),
-          });
-          return { content: await written.text() };
-        },
-      });
       // In a place, the built-in runs a person's session's commands: taken
       // from the editor before it is replaced, each time it replays.
       if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, inPlace ? editor.get("shell")?.execute : undefined, ctx.permission));
@@ -763,7 +707,7 @@ export default {
       if (workspace && bounded(event.sessionID)) {
         await judgeIn(workspace, event.tool, event.input, directory);
       }
-      if (event.tool.startsWith("cawco_") && !workflowTools.includes(event.tool)) {
+      if (event.tool.startsWith("cawco_")) {
         const credential = sessionHeld(event.sessionID)?.credential;
         if (typeof credential !== "string" || !credential) {
           throw new Error("This OpenCode session holds no CawCo session credential, so it cannot call CawCo tools.");

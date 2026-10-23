@@ -28,10 +28,9 @@ public struct TrayChild: Equatable, Sendable {
 
     /// A session another one started with `start_session` (or a continuation
     /// of one): it names its starter and runs no work item, the one thing
-    /// that tells it from a delegate. A workflow's step names its supervisor
-    /// too, and lists under its run.
+    /// that tells it from a delegate.
     static func isStarted(_ row: InstanceRow) -> Bool {
-        row.parentInstanceId != nil && row.workItemId == nil && row.workflowRunId == nil
+        row.parentInstanceId != nil && row.workItemId == nil
     }
 
     init(item: WorkItem) {

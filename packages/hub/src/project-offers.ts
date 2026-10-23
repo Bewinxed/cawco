@@ -126,7 +126,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     !row.projectId &&
     !row.parentInstanceId &&
     !row.workItemId &&
-    !row.workflowStepId &&
     row.kind === "mainline" &&
     row.status !== "discarded";
 
@@ -370,10 +369,10 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
           "This session is already in a project; there is nothing to make."
         );
       }
-      if (row.parentInstanceId || row.workItemId || row.workflowStepId) {
+      if (row.parentInstanceId || row.workItemId) {
         throw new FolderRefusal(
           409,
-          "A delegate or a workflow step belongs to the session that started it. Make that session the project."
+          "A delegate belongs to the session that started it. Make that session the project."
         );
       }
       // Its `cwd` may be a folder its CLI wandered into, not its checkout.
@@ -498,9 +497,4 @@ const acceptedWords = (result: AcceptResult): string =>
 
 /** Whether a session may make itself a project: one you started, and in none yet. */
 export const mayMakeProject = (actor: InstanceRow): boolean =>
-  !(
-    actor.parentInstanceId ||
-    actor.workItemId ||
-    actor.workflowStepId ||
-    actor.projectId
-  );
+  !(actor.parentInstanceId || actor.workItemId || actor.projectId);

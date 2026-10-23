@@ -359,13 +359,8 @@ export const parentProblem = (
   if (row.projectId !== projectId) {
     return `${named(row)} is not a session of this project.`;
   }
-  if (
-    row.parentInstanceId ||
-    row.workItemId ||
-    row.workflowStepId ||
-    row.canDelegate === false
-  ) {
-    return `${named(row)} is a delegate, a work item or a workflow step; only a session you started takes a project's reports.`;
+  if (row.parentInstanceId || row.workItemId || row.canDelegate === false) {
+    return `${named(row)} is a delegate or a work item; only a session you started takes a project's reports.`;
   }
 };
 

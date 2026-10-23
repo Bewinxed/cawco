@@ -22,9 +22,9 @@
     SvelteFlow,
   } from "@xyflow/svelte";
   import { onMount, untrack } from "svelte";
+  import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
-  import WorkflowCanvasTools from "#lib/components/features/workflows/WorkflowCanvasTools.svelte";
   import { theme } from "#lib/theme.svelte.js";
   import DecisionEdge from "./DecisionEdge.svelte";
   import DecisionGraphFit from "./DecisionGraphFit.svelte";
@@ -229,7 +229,7 @@
       />
       <DecisionGraphFit bind:this={fitter} minZoom={floor} />
       <Panel position="bottom-center">
-        <WorkflowCanvasTools
+        <FlowCanvasTools
           fit={() => fitter?.fit()}
           onfit={() => undefined}
           onzoom={() => undefined}

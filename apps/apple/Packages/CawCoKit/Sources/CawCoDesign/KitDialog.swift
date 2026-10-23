@@ -31,8 +31,7 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
     /// While true the scrim, Escape and the close button leave it up.
     public var holdsOpen = false
     /// The control that opened it: the dialog grows out of it over `durPanel`
-    /// on the drawer curve and shrinks back into it over `durExit`
-    /// (WorkflowLaunch.svelte). Without one it rises 6pt as it fades in.
+    /// on the drawer curve and shrinks back into it over `durExit`. Without one it rises 6pt as it fades in.
     public weak var origin: UIView?
     /// Where the card stands in the dialog's view.
     var cardFrame: CGRect { frameView.frame }

@@ -635,7 +635,7 @@ final class ProjectViewController: ObservedViewController {
         let glyph: Glyph = switch page {
         case .board: .columns
         case .table: .fileTable
-        default: .workflow
+        default: .pipeline
         }
         var items = viewItems(on: page)
         items[page.rawValue] = BlockItem(title: page.title, glyph: glyph, meta: counted, content: content, measure: Size.cBlockView,

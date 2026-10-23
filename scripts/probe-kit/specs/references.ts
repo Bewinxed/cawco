@@ -1,26 +1,23 @@
 /**
  * The chips for what CawCo keeps beyond sessions and artifacts (core
  * references.ts; dashboard reference-things.svelte.ts, ThingReference): a
- * task and its to-do, a session's plan and its step, a routine, a workflow
- * and one run of it, a project and a machine. On a scratch fleet (real hub,
+ * task and its to-do, a session's plan and its step, a routine, a project
+ * and a machine. On a scratch fleet (real hub,
  * agent and sessiond; Claude Code against the mock model, calling the tools
  * each PROBE-CALL names) with a project and a session in it, and the built
  * dashboard at the desk and at 390:
  *
  * - links: task_create answers the task's link and each to-do's, todo_write
- *   the plan's and each step's, routine_create the routine's, workflow_list
- *   each workflow's, workflow_run the run's, list_sessions each online
- *   machine's, open_items its open steps', tasks' and to-dos'.
+ *   the plan's and each step's, routine_create the routine's, list_sessions
+ *   each online machine's, open_items its open steps', tasks' and to-dos'.
  * - chips: the agent names each by its link; each draws as its kind's chip
  *   on the shared inline look, its name and its state as the dashboard
  *   reads them now (the task's stage, the to-do untick'd, the plan k of n,
- *   the step under way, the routine on, the run's status, the machine
- *   online); a link to a task that isn't there is its label alone.
+ *   the step under way, the routine on, the machine online); a link to a task that isn't there is its label alone.
  * - peek: resting the pointer on each chip peeks its name under it.
  * - press, desk and phone: each opens where it lives: the task's pane, the
  *   task at its to-do (marked), the session's plan, the plan at its step
- *   (marked), the project's routine, the workflow's page, the run's tab, the
- *   project, the machines at its row.
+ *   (marked), the project's routine, the project, the machines at its row.
  * - long names: a 40-word task title draws its chip inside its line, its
  *   label at most `c-inline-chip-max-w` (32ch) and cut, at 1440 and 390.
  *
@@ -35,7 +32,6 @@ const SAY = /PROBE-SAY:(\d+)/;
 const LINK = /\[[^[\]]*\]\(cawco:[a-z]+\/[^)]+\)/g;
 /** A JSON string's escaped quote, read back as a quote. */
 const ESCAPED_QUOTE = /\\"/g;
-const WORKFLOW_ID = /cawco:workflow\/([^)]+)\)/;
 const ROUTINE_ID = /cawco:routine\/([^)]+)\)/;
 
 const asks = new Map<string, { input: object; name: string }>();
@@ -96,17 +92,6 @@ const FORTY_WORDS = Array.from(
       "over",
     ][i % 10]
 ).join(" ");
-
-/** A workflow that sleeps a second and ends: a run with no step of its own. */
-const NAP = `import { z } from "zod";
-
-export const inputs = z.object({});
-
-export default async function (w: Workflow<typeof inputs>) {
-  await w.sleep(1000);
-  return "rested";
-}
-`;
 
 interface On {
   call: (tool: string, input: object) => Promise<string>;
@@ -224,12 +209,6 @@ async function run(kit: Kit) {
     cron: "0 3 * * *",
     time_zone: "UTC",
   });
-  await on.fleet.api("/api/workflows", { name: "Nap", program: NAP });
-  const workflows = await on.call("mcp__cawco__workflow_list", {});
-  const ran = await on.call("mcp__cawco__workflow_run", {
-    name: "Nap",
-    inputs: {},
-  });
   const sessions = await on.call("mcp__cawco__list_sessions", {});
   const items = await on.call("mcp__cawco__open_items", {});
   const links = {
@@ -239,8 +218,6 @@ async function run(kit: Kit) {
     plan: linkIn(planned, `cawco:plan/${session}`),
     step: linkIn(planned, `cawco:step/${session}/2`),
     routine: linkIn(routine, "cawco:routine/"),
-    workflow: linkIn(workflows, "cawco:workflow/"),
-    run: linkIn(ran, "cawco:workflow/"),
     machine: linkIn(sessions, `cawco:machine/${MACHINE}`),
   };
   const openLinks = {
@@ -249,10 +226,9 @@ async function run(kit: Kit) {
     todo: linkIn(items, `cawco:todo/${project}/tsk-1/td-1`),
   };
   kit.check(
-    "links: task_create answers the task's link and its to-do's, todo_write the plan's and each step's, routine_create the routine's, workflow_list the workflow's, workflow_run the run's, list_sessions the machine's, open_items its open step's, task's and to-do's",
+    "links: task_create answers the task's link and its to-do's, todo_write the plan's and each step's, routine_create the routine's, list_sessions the machine's, open_items its open step's, task's and to-do's",
     Object.values(links).every(Boolean) &&
-      Object.values(openLinks).every(Boolean) &&
-      links.workflow !== links.run,
+      Object.values(openLinks).every(Boolean),
     JSON.stringify({ links, openLinks })
   );
 
@@ -261,11 +237,9 @@ async function run(kit: Kit) {
   const number = String(says.size + 1);
   says.set(
     number,
-    `Filed ${links.task} with ${links.todo}, and ${links.long}. Plan: ${links.plan}, now ${links.step}. Routine ${links.routine}; workflow ${links.workflow}, its run ${links.run}. In ${projectLink} on ${links.machine}. Not [Gone task](cawco:task/${project}/tsk-999).`
+    `Filed ${links.task} with ${links.todo}, and ${links.long}. Plan: ${links.plan}, now ${links.step}. Routine ${links.routine}. In ${projectLink} on ${links.machine}. Not [Gone task](cawco:task/${project}/tsk-999).`
   );
   await on.fleet.send(session, `PROBE-SAY:${number}`);
-  const runId = links.run?.match(WORKFLOW_ID)?.[1] ?? "";
-  const workflowId = links.workflow?.match(WORKFLOW_ID)?.[1] ?? "";
   const routineId = links.routine?.match(ROUTINE_ID)?.[1] ?? "";
   const wanted: Record<string, { label: string; state: string | null }> = {
     [`task:${project}/tsk-1`]: { label: "Fix the tray chip", state: null },
@@ -276,8 +250,6 @@ async function run(kit: Kit) {
     [`plan:${session}`]: { label: "Read the brief", state: "1 of 2" },
     [`step:${session}/2`]: { label: "Build the chips", state: "Under way" },
     [`routine:${routineId}`]: { label: "Nightly tray check", state: "On" },
-    [`workflow:${workflowId}`]: { label: "Nap", state: null },
-    [`workflow:${runId}`]: { label: "Nap", state: null },
     [`project:${project}`]: { label: "Tray work", state: null },
     [`machine:${MACHINE}`]: { label: "", state: "Online" },
   };
@@ -310,11 +282,10 @@ async function run(kit: Kit) {
     JSON.stringify({ drawn: drawn.filter((one) => !one.ok), gone })
   );
   const taskChip = chips[`task:${project}/tsk-1`];
-  const runChip = chips[`workflow:${runId}`];
   kit.check(
-    "chips: the task's chip carries its stage, and the run's its status, in words",
-    !!taskChip?.state && !!runChip?.state,
-    JSON.stringify({ task: taskChip, run: runChip })
+    "chips: the task's chip carries its stage, in words",
+    !!taskChip?.state,
+    JSON.stringify({ task: taskChip })
   );
 
   // Peek: resting on each chip peeks its name.
@@ -375,15 +346,6 @@ async function run(kit: Kit) {
         url.searchParams.get("routine") === routineId,
       shows: `[data-routine="${routineId}"]`,
     },
-    [`workflow:${workflowId}`]: {
-      at: (url) => url.pathname === `/workflows/${workflowId}`,
-      shows: "body",
-    },
-    [`workflow:${runId}`]: {
-      at: (url) =>
-        url.pathname.startsWith("/session/") && url.pathname.includes(runId),
-      shows: "body",
-    },
     [`project:${project}`]: {
       at: (url) => url.pathname === `/project/${project}`,
       shows: "body",
@@ -428,7 +390,7 @@ async function run(kit: Kit) {
   };
   const desk = await pressAll(on.page, "desk");
   kit.check(
-    "press (desk): each chip opens where it lives: the task's pane, the task at its to-do (marked), the session's plan, the plan at its step (marked), the project's routine, the workflow's page, the run's tab, the project, the machines at its row",
+    "press (desk): each chip opens where it lives: the task's pane, the task at its to-do (marked), the session's plan, the plan at its step (marked), the project's routine, the project, the machines at its row",
     Object.values(desk).every((one) => one === "landed"),
     JSON.stringify(desk)
   );

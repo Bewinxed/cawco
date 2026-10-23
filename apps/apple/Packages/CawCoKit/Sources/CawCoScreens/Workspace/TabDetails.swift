@@ -122,8 +122,7 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
     // MARK: The card
 
     private func show(_ id: String, from tab: UIView, pin: Bool) {
-        // A workflow run's tab is its own details: it has no session card.
-        guard BoardRun.runId(of: id) == nil, let presenter else { return }
+        guard let presenter else { return }
         // The card stands over the whole window, so the controller in it belongs
         // to the one whose view holds it.
         let owner = presenter.view.window?.rootViewController ?? presenter

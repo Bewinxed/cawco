@@ -383,14 +383,13 @@ export function createDelegationMcp(options: {
   /**
    * The tools a session is listed: its role's (roles.ts), narrowed by its own
    * context (a leaf gets no spawning tools, only a work item `finish_item`,
-   * only a workflow step its step tools, only a session in a project the
+   * only a session in a project the
    * project's tools, only one that may be made a project
    * `project_from_session`, only a design check's verifier
    * `design_verdict`). Without a session — OpenCode's shared
    * discovery — every role's, the superset; the call enforces.
    */
   const toolsFor = (actor: InstanceRow | undefined) => {
-    const workflowStepId = actor?.workflowStepId ?? undefined;
     const all = [
       ...tools({
         instanceId: "",
@@ -402,8 +401,6 @@ export function createDelegationMcp(options: {
         hasParent: !actor || !!actor.parentInstanceId,
         lands: landsOf(actor),
         workItem: !actor || !!actor.workItemId,
-        workflowStepId,
-        workflowRunId: workflowStepId ? "" : undefined,
         deliver: () => {
           throw new Error("Discovery cannot execute tools");
         },
@@ -866,8 +863,6 @@ export function createDelegationMcp(options: {
       ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
       forkOrigins: () => options.forkOrigins?.(actor.id) ?? [],
       workItem: !!actor.workItemId,
-      workflowStepId: actor.workflowStepId ?? undefined,
-      workflowRunId: actor.workflowRunId ?? undefined,
       projectId: actor.projectId ?? undefined,
       delegateList: tree ? (query) => tree(actor, query) : undefined,
       sendToUser: (message) => options.sendToUser(actor, message),

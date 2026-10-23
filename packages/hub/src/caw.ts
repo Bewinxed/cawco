@@ -68,7 +68,6 @@ import {
   type ConnectionView,
   CURATOR_DENIED_TOOLS,
   type Envelope,
-  type EventThreadMessage,
   type HarnessKind,
   handoffMarker,
   type InstanceRow,
@@ -382,28 +381,6 @@ const wordsOf = (content: SendPayload["message"]["message"]["content"]) =>
         .flatMap((block) => (block.type === "text" ? [block.text] : []))
         .join("\n");
 
-/**
- * A note's event as the wire carries it: as `event`, except a kind held
- * back from it while an installable app reads `event` closed and would
- * lose the note (core ThreadEvent `routine-made`, `design-offer`), which
- * rides beside a null `event`. The bridges' one place (scripts/
- * wire-compat.ts BRIDGES): once the guard says no shipped reader needs
- * them, this and `routineMade` and `designOffer` go.
- */
-const wireEvent = (
-  event: ThreadEvent | null
-): Pick<EventThreadMessage, "event" | "routineMade" | "designOffer"> => {
-  if (event?.kind === "routine-made") {
-    const { kind: _kind, ...made } = event;
-    return { event: null, routineMade: made };
-  }
-  if (event?.kind === "design-offer") {
-    const { kind: _kind, ...offer } = event;
-    return { event: null, designOffer: offer };
-  }
-  return { event };
-};
-
 const messageOf = (row: ThreadMessageRow): ThreadMessage => {
   const base = {
     id: row.id,
@@ -416,7 +393,7 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
         ...base,
         author: "event",
         noteTitle: row.noteTitle ?? "",
-        ...wireEvent(row.event),
+        event: row.event,
         ...(row.body ? { body: row.body } : {}),
       };
     case "caw":

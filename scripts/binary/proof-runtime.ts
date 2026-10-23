@@ -13,12 +13,6 @@ import {
 import { runtimeTree } from "../../packages/core/src/runtime";
 import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
 import { REPORT_PATH, type RenderReport } from "../../packages/core/src/stage";
-import {
-  programInputs,
-  typecheckProgram,
-  WORKER_URL,
-  writeProgram,
-} from "../../packages/core/src/workflow-sandbox";
 import { parseMany } from "../../packages/jsonl-parser/src/pool";
 import { welcomed } from "../lib/keeper-dial";
 
@@ -149,82 +143,6 @@ if (verb === "proof-stack") {
     throw new Error("Transcript worker failed");
   }
   console.log("transcript worker parsed two files");
-  // It leans on the standard library (Error, JSON, String, an array's
-  // push, Object.keys): a check missing the embedded lib files answers
-  // "Cannot find name 'Error'" for it.
-  const program =
-    'import { z } from "zod"; export const inputs = z.object({ name:z.string() }); export default async function(w: Workflow<typeof inputs>) { if (!w.inputs.name) { throw new Error("no name"); } const seen: string[] = []; seen.push(String(Object.keys(JSON.parse(JSON.stringify(w.inputs))).length)); await w.checkpoint("binary",w.inputs); return {name:w.inputs.name, seen}; }';
-  const errors = typecheckProgram(program);
-  if (errors.length) {
-    throw new Error(JSON.stringify(errors));
-  }
-  if (
-    !typecheckProgram(program.replace("w.inputs.name", "w.inputs.missing"))
-      .length
-  ) {
-    throw new Error(
-      "Embedded type declarations did not reject an invalid input property"
-    );
-  }
-  const inputs = await programInputs(program);
-  if (inputs.length !== 1) {
-    throw new Error("Workflow input worker failed");
-  }
-  const ran = await readWithin(
-    10_000,
-    (signal) =>
-      new Promise<void>((resolve, reject) => {
-        const worker = new Worker(WORKER_URL);
-        signal.addEventListener("abort", () => worker.terminate(), {
-          once: true,
-        });
-        worker.onmessage = (event) => {
-          const m = event.data;
-          if (m.type === "effect") {
-            worker.postMessage({
-              type: "effect-result",
-              id: m.id,
-              result: null,
-            });
-          }
-          if (m.type === "failed") {
-            worker.terminate();
-            reject(new Error(m.failure.message));
-          }
-          if (m.type === "done") {
-            worker.terminate();
-            if (m.result.name === "standalone") {
-              resolve();
-            } else {
-              reject(new Error("Wrong workflow result"));
-            }
-          }
-        };
-        worker.onerror = (event) => {
-          worker.terminate();
-          reject(new Error(event.message));
-        };
-        worker.postMessage({
-          mode: "run",
-          path: writeProgram(program),
-          runId: "binary-proof",
-          inputs: { name: "standalone" },
-        });
-      })
-  );
-  switch (ran.kind) {
-    case "answered":
-      break;
-    case "unanswered":
-      throw new Error(
-        `Workflow did not answer within ${ran.after} ms (${ran.reason})`
-      );
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-  console.log("workflow typecheck, input worker, effect and result passed");
 } else if (verb === "proof-render") {
   // The component canvas's renderer (agent stage-render.ts) driving the
   // machine's Chromium through the bundled playwright-core, on a loopback

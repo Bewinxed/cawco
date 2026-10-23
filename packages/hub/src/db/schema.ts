@@ -73,13 +73,6 @@ import type {
   ThreadMessage,
   ThreadQuestion,
   ToolStatus,
-  WorkflowEffectKind,
-  WorkflowFailure,
-  WorkflowGraph,
-  WorkflowInput,
-  WorkflowOrigin,
-  WorkflowRunStatus,
-  WorkflowStepStatus,
   WorkspaceCut,
   WorkspaceHolding,
 } from "@cawco/core";
@@ -158,228 +151,6 @@ export interface PriorConversation {
   sessionId: string;
 }
 
-export const workflows = sqliteTable("workflows", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  description: text("description").notNull().default(""),
-  graph: text("graph", { mode: "json" }).$type<WorkflowGraph>(),
-  program: text("program").notNull(),
-  origin: text("origin").$type<WorkflowOrigin>().notNull(),
-  /** The program's `inputs` export, evaluated once at save. */
-  inputs: text("inputs", { mode: "json" }).$type<WorkflowInput[]>().notNull(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-export const workflowRuns = sqliteTable(
-  "workflow_runs",
-  {
-    parentRunId: text("parent_run_id"),
-    parentStepId: text("parent_step_id"),
-    id: text("id").primaryKey(),
-    workflowId: text("workflow_id")
-      .notNull()
-      .references(() => workflows.id),
-    graph: text("graph", { mode: "json" }).$type<WorkflowGraph>(),
-    program: text("program").notNull(),
-    inputs: text("inputs", { mode: "json" })
-      .$type<Record<string, unknown>>()
-      .notNull(),
-    workspace: text("workspace").notNull(),
-    machineId: text("machine_id").notNull(),
-    supervisorInstanceId: text("supervisor_instance_id"),
-    status: text("status").$type<WorkflowRunStatus>().notNull(),
-    result: text("result", { mode: "json" }).$type<unknown>(),
-    failure: text("failure"),
-    /**
-     * A stop under way: what the run ends as once its sessions
-     * (`workflow_run_pending_ends`) and children are confirmed ended. Null
-     * while it is not ending; it launches nothing more while it is.
-     */
-    endingStatus: text("ending_status").$type<
-      "done" | "failed" | "cancelled"
-    >(),
-    endingFailure: text("ending_failure"),
-    /** The program's value it ends with: opaque. */
-    endingResult: text("ending_result", { mode: "json" }).$type<unknown>(),
-    /**
-     * A re-run from a step: every call before effect `rerunBefore` is
-     * answered with what run `rerunFromRunId` got there.
-     */
-    rerunFromRunId: text("rerun_from_run_id").references(
-      (): AnySQLiteColumn => workflowRuns.id,
-      { onDelete: "set null" }
-    ),
-    rerunBefore: integer("rerun_before"),
-    startedAt: timestamp("started_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
-    endedAt: timestamp("ended_at"),
-    rerunOfRunId: text("rerun_of_run_id"),
-    launchedBy: text("launched_by").notNull(),
-    /**
-     * When the owner last looked at the run (its tab in front) or archived it
-     * off Finished, on any device: a run that ended after this is news.
-     */
-    seenAt: timestamp("seen_at"),
-  },
-  (table) => [index("workflow_runs_parent").on(table.parentRunId)]
-);
-
-/** The sessions an ending run waits to see ended before it ends (`ending_status`). */
-export const workflowRunPendingEnds = sqliteTable(
-  "workflow_run_pending_ends",
-  {
-    runId: text("run_id")
-      .notNull()
-      .references(() => workflowRuns.id, { onDelete: "cascade" }),
-    instanceId: text("instance_id")
-      .notNull()
-      .references(() => instances.id, { onDelete: "cascade" }),
-  },
-  (table) => [primaryKey({ columns: [table.runId, table.instanceId] })]
-);
-
-/** A supervisor's notes for a run (`steer` note): the next step to start takes them, or the program with `w.notes()`. */
-export const workflowRunNotes = sqliteTable(
-  "workflow_run_notes",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    runId: text("run_id")
-      .notNull()
-      .references(() => workflowRuns.id, { onDelete: "cascade" }),
-    text: text("text").notNull(),
-    at: timestamp("at").notNull(),
-  },
-  (table) => [index("workflow_run_notes_run").on(table.runId, table.id)]
-);
-
-/** A run's named state slots: each one's schema as the program declared it, and its value once set. */
-export const workflowRunSlots = sqliteTable(
-  "workflow_run_slots",
-  {
-    runId: text("run_id")
-      .notNull()
-      .references(() => workflowRuns.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    /** The JSON Schema it was declared with: opaque. */
-    schema: text("schema", { mode: "json" }).$type<Record<string, unknown>>(),
-    /** Its value as JSON, the program's: null while never set. */
-    value: text("value"),
-  },
-  (table) => [primaryKey({ columns: [table.runId, table.name] })]
-);
-export const workflowSteps = sqliteTable("workflow_steps", {
-  childRunId: text("child_run_id"),
-  id: text("id").primaryKey(),
-  runId: text("run_id")
-    .notNull()
-    .references(() => workflowRuns.id),
-  nodeId: text("node_id").notNull(),
-  /** The effect sequence that owns this step: `ref` N in its run. */
-  seq: integer("seq").notNull(),
-  kind: text("kind").$type<WorkflowGraph["nodes"][number]["kind"]>().notNull(),
-  /**
-   * What the call that opened the step asked for: a `run`/`spawn` step's
-   * spec (prompt, schema, retries, timeout), an `ask`'s question. The attempt
-   * machinery reads it for every retry, timeout and result check.
-   */
-  spec: text("spec", { mode: "json" }).$type<Record<string, unknown>>(),
-  status: text("status").$type<WorkflowStepStatus>().notNull(),
-  instanceId: text("instance_id"),
-  result: text("result", { mode: "json" }).$type<unknown>(),
-  failure: text("failure"),
-  mapIndex: integer("map_index"),
-  startedAt: timestamp("started_at"),
-  endedAt: timestamp("ended_at"),
-});
-
-/**
- * A step whose stop is held: its attempt is over (it timed out, or its
- * supervisor said fail or retry) and its session is not yet confirmed
- * ended, so nothing it decided runs until it is.
- */
-export const workflowHeldStops = sqliteTable("workflow_held_stops", {
-  stepId: text("step_id")
-    .primaryKey()
-    .references(() => workflowSteps.id, { onDelete: "cascade" }),
-  runId: text("run_id")
-    .notNull()
-    .references(() => workflowRuns.id, { onDelete: "cascade" }),
-  /** When the attempt was due, ms. */
-  deadline: integer("deadline").notNull(),
-  failure: text("failure").notNull(),
-  /** What the supervisor decided, taking effect once the stop is confirmed. */
-  action: text("action").$type<"fail" | "retry">(),
-  /** Why its session could not be ended, last time it was asked. */
-  error: text("error"),
-});
-/**
- * A run's log: every `w.*` call its program made, what it asked and what it
- * came back with. Written by the engine's driver when a call is performed —
- * once, never on a replay — and completed when a step or question settles.
- * For the run view and `workflow_read` only: the workflow engine's own
- * storage is what a run replays from, never this.
- */
-export const workflowRunLog = sqliteTable(
-  "workflow_run_log",
-  {
-    runId: text("run_id")
-      .notNull()
-      .references(() => workflowRuns.id),
-    seq: integer("seq").notNull(),
-    kind: text("kind").$type<WorkflowEffectKind>().notNull(),
-    args: text("args", { mode: "json" }).$type<Record<string, unknown>>(),
-    result: text("result", { mode: "json" }).$type<unknown>(),
-    failure: text("failure", { mode: "json" }).$type<WorkflowFailure>(),
-    at: timestamp("at")
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (table) => [
-    primaryKey({ columns: [table.runId, table.seq] }),
-    index("workflow_run_log_run").on(table.runId),
-  ]
-);
-/**
- * Receipts and questions for a run's supervisor that found it not live: kept
- * here, in order, and sent when it next is. None is dropped for want of a
- * listener.
- */
-export const workflowNotices = sqliteTable(
-  "workflow_notices",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    instanceId: text("instance_id").notNull(),
-    runId: text("run_id")
-      .notNull()
-      .references(() => workflowRuns.id),
-    body: text("body").notNull(),
-    at: timestamp("at")
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (table) => [index("workflow_notices_instance").on(table.instanceId)]
-);
-export const workflowAttempts = sqliteTable("workflow_attempts", {
-  id: text("id").primaryKey(),
-  stepId: text("step_id")
-    .notNull()
-    .references(() => workflowSteps.id),
-  number: integer("number").notNull(),
-  renderedPrompt: text("rendered_prompt").notNull(),
-  result: text("result", { mode: "json" }).$type<unknown>(),
-  failure: text("failure"),
-  startedAt: timestamp("started_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-  endedAt: timestamp("ended_at"),
-});
-
 /** Machines running an agent daemon, keyed by their stable hardware fingerprint. */
 export const agents = sqliteTable("agents", {
   machineCapabilities: text("machine_capabilities", {
@@ -448,7 +219,7 @@ export const agents = sqliteTable("agents", {
 });
 
 /**
- * A machine's last-known workflow-tool status ({@link ToolStatus}), one row
+ * A machine's last-known tool status ({@link ToolStatus}), one row
  * per catalog id (NEW.md §10): what the daemon reported at register or after
  * an install, or the `installing` the hub writes itself while one is in
  * flight.
@@ -1047,8 +818,6 @@ export const instances = sqliteTable("instances", {
   modelUsageSeen: text("model_usage_seen", { mode: "json" }).$type<
     Record<string, ClaudeModelUsage>
   >(),
-  workflowRunId: text("workflow_run_id"),
-  workflowStepId: text("workflow_step_id"),
   /**
    * The thread with the project's Caw this session works for: an attempt at
    * a task, the thread that named the task; a session Caw started, the
@@ -1082,8 +851,7 @@ export const instances = sqliteTable("instances", {
    */
   forkedFrom: text("forked_from"),
   /**
-   * The session that started this one (`delegate`, `start_session`, a
-   * workflow's supervisor): nested under it in every rail. Null on a session
+   * The session that started this one (`delegate`, `start_session`): nested under it in every rail. Null on a session
    * a person started. Whether it is delegated work is {@link workItemId}'s.
    */
   parentInstanceId: text("parent_instance_id"),

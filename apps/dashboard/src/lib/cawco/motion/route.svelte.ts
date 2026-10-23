@@ -38,7 +38,7 @@ const nudge = (x: number, y: number): Travel => ({
 });
 
 /** The sidebar's spokes, top to bottom: a move between two slides that way. */
-const SPOKE_ORDER = ["session", "workflows", "usage", "config"];
+const SPOKE_ORDER = ["session", "usage", "config"];
 
 const spokeIndex = (pathname: string) =>
   SPOKE_ORDER.indexOf(pathname.split("/").find(Boolean) ?? "session");

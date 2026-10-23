@@ -95,14 +95,13 @@
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
   import { isThreadTab } from "../thread-tabs";
-  import { runIdOf } from "../workflow-runs";
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
   import { cardWidthIn, placeUnder } from "./hang-place";
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
-  import { type StatusTone, stepSessionStatus } from "./session-status";
+  import { type StatusTone, sessionStatusOf } from "./session-status";
   import { noNativeDrag, pressTab } from "./tab-drag.svelte";
   import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
@@ -182,7 +181,7 @@
           ? `${ACTIVITY_LABEL.working} — ${tool}`
           : ACTIVITY_LABEL[activity];
     }
-    const state = isThreadTab(id) ? null : stepSessionStatus(id);
+    const state = isThreadTab(id) ? null : sessionStatusOf(id);
     return {
       id,
       key: `${id}:${arrivals.get(id) ?? 0}`,
@@ -254,18 +253,16 @@
     attention: "var(--tab-rim-attn)",
     failed: "var(--status-fail-glyph)",
     quiet: "var(--ink-muted)",
-    done: "var(--ink-muted)",
   };
   /**
    * Each status's rim strength unchosen (`rest`) and chosen (`full`): an
    * idle tab wears none unchosen, every other status the subtle strength;
-   * chosen, idle and done wear the muted ink's own (`.tab`'s `--rim-*`).
+   * chosen, idle wears the muted ink's own (`.tab`'s `--rim-*`).
    */
   const RIM: Record<StatusTone, { full: string; rest: string }> = {
     working: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
     attention: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
     failed: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
-    done: { rest: "var(--rim-subtle)", full: "var(--rim-idle)" },
     quiet: { rest: "0", full: "var(--rim-idle)" },
   };
   /** A tab's place in the track's stack at rest, until the track ranks it (TabItem's own). */
@@ -337,9 +334,8 @@
     morphing = false;
   }
   function showDetails(id: string, anchor: HTMLElement, pin: boolean) {
-    // A workflow run's tab is its own details, and a thread's is its
-    // messages: neither has a session card.
-    if (runIdOf(id) || isThreadTab(id)) {
+    // A thread's tab is its messages: it has no session card.
+    if (isThreadTab(id)) {
       return;
     }
     clearTimeout(timer);
@@ -712,7 +708,7 @@
      The "+" after the last tab opens the New Session form at the "+" (the
      popover, the bottom sheet under 640px: spawn/NewSessionPopover), in the
      place of the tab in front: its machine, its folder and its project. A
-     tab with no place of its own (a thread, a workflow run) gives its
+     tab with no place of its own (a thread) gives its
      machine at most. Harness, model and mode are the form's own: the last
      start's, else none, and Start waits for a mode. The session it starts
      arrives as any started session does.
@@ -723,8 +719,7 @@
      only under the pointer. */
   function startHere(plus: HTMLElement) {
     const here = leaf.active;
-    const ctx =
-      here && !(runIdOf(here) || isThreadTab(here)) ? contextOf(here) : null;
+    const ctx = here && !isThreadTab(here) ? contextOf(here) : null;
     const projectId =
       here && ctx?.cwd
         ? cawco.instanceIndex.byId.get(here)?.projectId
@@ -1499,7 +1494,7 @@
         >
         <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
         {#snippet options()}
-          {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
+          {#if !isThreadTab(tab.id)}
             <ContextMenu.Item
               onSelect={() => {
                 const anchor = anchorOf(tab.id);
@@ -1656,13 +1651,13 @@
                 <!-- Every tab keeps the details slot, so choosing one never
                      changes its width; the chevron shows on the chosen tab
                      only. The empty slot on another tab is part of that
-                     tab, and a click there chooses it. A workflow run's tab
-                     has no details card, and so no slot. A phone draws no
+                     tab, and a click there chooses it. A thread's tab has
+                     no details card, and so no slot. A phone draws no
                      slot at all: the tab's menu is its long press. It is a
                      pointer's alone, as the close is: a tablist holds tabs
                      (axe, aria-required-children), and the tab itself opens
                      its details (ArrowDown or Space, and its name says so). -->
-                {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
+                {#if !isThreadTab(tab.id)}
                   <!-- The trailing controls sit 4px after the title and 4px
                        apart, on every pointer (owner: "a lot of wasted space
                        until the x button"); where the chevron stands beside

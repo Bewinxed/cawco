@@ -6,9 +6,9 @@ import {
 } from "@cawco/core";
 
 /**
- * A row the lists draw: a session's, or a workflow run's or a Caw thread's
- * drawn as one (workflow-runs.ts, thread-tabs.ts), which run on no harness of
- * their own and say so with a null `harness`.
+ * A row the lists draw: a session's, or a Caw thread's drawn as one
+ * (thread-tabs.ts), which runs on no harness of its own and says so with a
+ * null `harness`.
  */
 export type BoardRow = Omit<InstanceRow, "harness"> & {
   harness: HarnessKind | null;
@@ -115,8 +115,8 @@ export function conversationHref(
 
 /**
  * {@link conversationHref} for a row the instance index holds, by its id: a
- * hub row, or a workflow run's row under its `run:` id, is found in the
- * index under that id, so its address is always that id. It reads nothing:
+ * hub row, or a thread's under its `thread:` id, is found in the index
+ * under that id, so its address is always that id. It reads nothing:
  * a link drawn from it changes only when the row does, where one drawn
  * through the index was worked out again for every row on every
  * `instances` frame.

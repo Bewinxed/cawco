@@ -32,9 +32,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
     }
 
-    /// Opening another session or a run in its own view; the host routes it.
+    /// Opening another session in its own view; the host routes it.
     public var onOpenSession: (String) -> Void = { _ in }
-    public var onOpenRun: (String) -> Void = { _ in }
     /// A project's task, opened beside its board (a design offer's filed task); the host routes it.
     public var onOpenTask: (_ projectId: String, _ taskId: String) -> Void = { _, _ in }
     /// An artifact tool row's card was tapped: its input, the artifact to reveal once it is open.
@@ -205,7 +204,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             ObjectIdentifier(UICollectionView.CellRegistration<HostCell<QuestionCardView>, String>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<HostCell<SubagentView>, String>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<HostCell<DelegateView>, String>.self),
-            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<RunView>, String>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<HostCell<LiveToolView>, String>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<HostCell<NoticeView>, String>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<HostCell<CompactionDividerView>, String>.self),
@@ -393,7 +391,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         case .question: QuestionCardView.self
         case .subagent: SubagentView.self
         case .delegate: DelegateView.self
-        case .run: RunView.self
         case .compaction: CompactionDividerView.self
         case .livetool: LiveToolView.self
         case .notice, .retry, .empty: NoticeView.self
@@ -411,7 +408,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let piece = registration(PieceView.self), user = registration(UserTurnView.self), tool = registration(ToolLineView.self)
         let thinking = registration(ThinkingView.self), system = registration(SystemLineView.self), peer = registration(PeerView.self)
         let question = registration(QuestionCardView.self), subagent = registration(SubagentView.self)
-        let delegate = registration(DelegateView.self), run = registration(RunView.self), live = registration(LiveToolView.self)
+        let delegate = registration(DelegateView.self), live = registration(LiveToolView.self)
         let notice = registration(NoticeView.self), compaction = registration(CompactionDividerView.self)
         let voice = registration(VoiceExtrasView.self)
         dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { [weak self] view, index, id in
@@ -426,7 +423,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             case .question: return view.dequeueConfiguredReusableCell(using: question, for: index, item: id)
             case .subagent: return view.dequeueConfiguredReusableCell(using: subagent, for: index, item: id)
             case .delegate: return view.dequeueConfiguredReusableCell(using: delegate, for: index, item: id)
-            case .run: return view.dequeueConfiguredReusableCell(using: run, for: index, item: id)
             case .compaction: return view.dequeueConfiguredReusableCell(using: compaction, for: index, item: id)
             case .livetool: return view.dequeueConfiguredReusableCell(using: live, for: index, item: id)
             case .notice, .retry, .empty: return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id)
@@ -481,9 +477,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             if watch, !watchedDelegates.contains(id) { watchedDelegates.insert(id); _ = sessions.open(id) }
             if !watch, watchedDelegates.contains(id) { watchedDelegates.remove(id); sessions.close(id) }
         }
-        env.runSteps = { [weak self] id in self.map { $0.steps(id) } ?? [] }
         env.openSession = { [weak self] id in self?.onOpenSession(id) }
-        env.openRun = { [weak self] id in self?.onOpenRun(id) }
         env.openTask = { [weak self] projectId, taskId in self?.onOpenTask(projectId, taskId) }
         env.openPreview = { [weak self] input in self?.onOpenPreview(input) }
         env.isTaken = { [weak self] id in self?.liftedQueued == id }
@@ -500,28 +494,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         MainActor.assumeIsolated {
             for id in watchedDelegates { hub?.sessions.close(id) }
             leaveTray()
-        }
-    }
-
-    /// A run's steps off its detail (WorkflowRunsStore), schedule order.
-    private func steps(_ runId: String) -> [RunStep] {
-        guard let detail = hub?.workflowRuns.open(runId), let run = detail.run,
-              let data = try? JSONEncoder().encode(run),
-              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
-        let nodes = ((raw["graph"] as? [String: Any])?["nodes"] as? [[String: Any]]) ?? []
-        let parse = ISO8601DateFormatter()
-        parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        func date(_ value: Any?) -> Date? {
-            if let seconds = value as? Double { return Date(timeIntervalSinceReferenceDate: seconds) }
-            return (value as? String).flatMap { parse.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
-        }
-        return (raw["steps"] as? [[String: Any]] ?? []).map { step in
-            let node = step["nodeId"] as? String ?? ""
-            var title = nodes.first { $0["id"] as? String == node }?["title"] as? String
-                ?? step["title"] as? String ?? node
-            if let index = step["mapIndex"] as? Int { title += " [\(index)]" }
-            return RunStep(id: step["id"] as? String ?? node, status: step["status"] as? String ?? "", title: title,
-                           started: date(step["startedAt"]), ended: date(step["endedAt"]))
         }
     }
 
@@ -1246,7 +1218,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         settled = current
     }
 
-    /// What a delegate or run row reads off the fleet, so it redraws when that moves.
+    /// What a delegate row reads off the fleet, so it redraws when that moves.
     private func fleetPrint(_ item: Item, sessions: [String]) -> String {
         guard let fleet = hub?.fleet else { return "" }
         switch item.kind {
@@ -1257,10 +1229,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             let open = env.isOpen(block.disclosureKey)
             let inner = open ? (hub?.sessions.transcripts[id]).map { "\($0.blockRevision)\($0.loading)\($0.tail?.streaming.count ?? 0)" } ?? "" : ""
             return "\(row?.status.rawValue ?? "")\(row?.lastError ?? "")\(pulse?.activity.rawValue ?? "")\(pulse?.currentTool?.glance ?? "")\(open)\(inner)\(blocks.count)"
-        case let .run(block, anchored):
-            guard let id = anchored ?? Fold.startedRun(block), let run = fleet.runs[id] else { return "" }
-            let steps = hub?.workflowRuns.details[id]?.run.map { "\($0.steps.count)" } ?? ""
-            return "\(run.status.rawValue)\(run.endedAt ?? 0)\(run.failure ?? "")\(steps)"
         case let .peer(block) where block.string("reportKind") != nil:
             let peer = block.string("peerSession") ?? "-"
             return sessions.contains { $0.hasPrefix(peer) } ? "linked" : ""

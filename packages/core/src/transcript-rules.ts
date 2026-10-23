@@ -49,7 +49,6 @@ import {
   parseHandoffMarker,
   parseReportMarker,
   parseUndelivered,
-  parseWorkflowNotice,
 } from "./injected";
 import { invariant } from "./invariant";
 import { parseReference } from "./references";
@@ -1704,19 +1703,6 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
         peerSession: report.short,
         reportKind: report.failed ? "failed" : "report",
         ...(report.headline ? { reportHeadline: report.headline } : {}),
-      },
-    };
-  }
-  const notice = parseWorkflowNotice(text);
-  if (notice) {
-    return {
-      ...base,
-      type: "user.peer",
-      content: notice.body,
-      metadata: {
-        peerName: notice.workflow,
-        workflowEvent: notice.event,
-        ...(notice.runId ? { workflowRunId: notice.runId } : {}),
       },
     };
   }

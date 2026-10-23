@@ -2,8 +2,8 @@ import Foundation
 
 /// The transcript folded into render rows, as apps/dashboard/src/lib/cawco/
 /// transcript/rows.ts folds it: consecutive tool calls onto one rail, a Task
-/// call into the branch it spawned, a question, a delegate, a workflow run
-/// and harness plumbing into rows of their own. The live tail is not here;
+/// call into the branch it spawned, a question, a delegate and harness
+/// plumbing into rows of their own. The live tail is not here;
 /// TranscriptView draws it after these rows.
 nonisolated enum Row: Sendable {
     case single(key: String, block: Block, grouped: Bool)
@@ -11,7 +11,6 @@ nonisolated enum Row: Sendable {
     case question(key: String, block: Block)
     case subagent(key: String, branch: Branch, spawn: Block)
     case delegate(key: String, block: Block)
-    case run(key: String, block: Block, runId: String?)
     case harness(key: String, note: HarnessNote)
     case queued(key: String, block: Block, grouped: Bool)
     case compaction(key: String, compaction: Compaction)
@@ -19,7 +18,7 @@ nonisolated enum Row: Sendable {
     var key: String {
         switch self {
         case let .single(key, _, _), let .tools(key, _), let .question(key, _), let .subagent(key, _, _),
-             let .delegate(key, _), let .run(key, _, _), let .harness(key, _), let .queued(key, _, _),
+             let .delegate(key, _), let .harness(key, _), let .queued(key, _, _),
              let .compaction(key, _): key
         }
     }
@@ -153,27 +152,6 @@ nonisolated enum Fold {
         return block.type == "tool.handoff" && (kind == "delegate" || kind == "start")
     }
 
-    static func isRun(_ block: Block) -> Bool {
-        guard isTool(block), let name = block.toolName else { return false }
-        return name == "workflow_run" || name.hasSuffix("_workflow_run")
-    }
-
-    /// A literal, compiled with the app: built where it is read, as a Regex is not Sendable.
-    private static var runId: Regex<Substring> { /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
-
-    /// rows.ts `startedRunOf`: the run a `workflow_run` call's result names.
-    static func startedRun(_ block: Block) -> String? {
-        guard let result = block.meta["toolResult"] else { return nil }
-        let text = (result as? String) ?? (try? JSONSerialization.data(withJSONObject: result)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        guard let key = text.firstMatch(of: /runId[^0-9a-f]{0,6}/) else { return nil }
-        return text[key.range.upperBound...].firstMatch(of: runId).map { String($0.output) }
-    }
-
-    private static func noticeRun(_ block: Block) -> String? {
-        guard block.type == "user.peer", block.meta["workflowEvent"] != nil else { return nil }
-        return block.content.firstMatch(of: runId).map { String($0.output) }
-    }
-
     /// The summary a compaction wrote (`COMPACT_SUMMARY_KIND`): its brief.
     static func isCompactSummary(_ block: Block) -> Bool {
         block.type == "ui.system_note" && block.string("noteKind") == "Session continued"
@@ -217,45 +195,15 @@ nonisolated enum Fold {
         return (row, opening != nil ? 2 : 1)
     }
 
-    enum Receipt { case fold, anchor(String) }
-
-    /// rows.ts `receiptsOf`: how each workflow notice is told.
-    static func receipts(_ blocks: [Block]) -> (Block, Int) -> Receipt? {
-        var byCall = Set<String>()
-        var names = Set<String>()
-        var first: [String: Int] = [:]
-        for (i, block) in blocks.enumerated() {
-            if let notice = noticeRun(block), first[notice] == nil { first[notice] = i }
-            guard isRun(block) else { continue }
-            if let run = startedRun(block) { byCall.insert(run) }
-            if let name = block.toolInput["name"] as? String { names.insert(name.lowercased()) }
-        }
-        if first.isEmpty, names.isEmpty { return { _, _ in nil } }
-        return { block, i in
-            guard block.type == "user.peer", block.meta["workflowEvent"] != nil else { return nil }
-            guard let run = noticeRun(block) else {
-                return names.contains((block.string("peerName") ?? "").lowercased()) ? .fold : nil
-            }
-            if byCall.contains(run) || first[run] != i { return .fold }
-            return .anchor(run)
-        }
-    }
-
     /// rows.ts `foldRange`, from the top, voices marked.
     static func rows(_ blocks: [Block], branches: [String: Branch], voices: inout Voices) -> [Row] {
         var rows: [Row] = []
-        let receiptAt = receipts(blocks)
         func branchOf(_ block: Block) -> Branch? { block.toolId.flatMap { branches[$0] } }
         var i = 0
         while i < blocks.count {
             let block = blocks[i]
-            let receipt = receiptAt(block, i)
-            if case .fold = receipt { i += 1; continue }
             if let compaction = compaction(blocks, at: i) { rows.append(compaction.row); i += compaction.span; continue }
             if let continued = continuation(blocks, at: i) { rows.append(continued.row); i += continued.span; continue }
-            if case let .anchor(run) = receipt {
-                rows.append(.run(key: "r:\(block.id)", block: block, runId: run)); i += 1; continue
-            }
             if isHarnessNote(block) {
                 rows.append(.harness(key: "hn:\(block.id)", note: parseHarnessNote(block.content))); i += 1; continue
             }
@@ -264,11 +212,10 @@ nonisolated enum Fold {
             }
             if isQuestion(block) { rows.append(.question(key: "q:\(block.id)", block: block)); i += 1; continue }
             if isDelegate(block) { rows.append(.delegate(key: "d:\(block.id)", block: block)); i += 1; continue }
-            if isRun(block) { rows.append(.run(key: "r:\(block.id)", block: block, runId: nil)); i += 1; continue }
             if isTool(block) {
                 var run: [Block] = []
                 while i < blocks.count, isTool(blocks[i]), !isQuestion(blocks[i]), !isDelegate(blocks[i]),
-                      !isRun(blocks[i]), branchOf(blocks[i]) == nil {
+                      branchOf(blocks[i]) == nil {
                     run.append(blocks[i]); i += 1
                 }
                 rows.append(.tools(key: "tools:\(run[0].id)", blocks: run))

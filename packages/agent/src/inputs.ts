@@ -35,7 +35,7 @@ import {
   projectFolderOf,
   resolveAsFar,
 } from "@cawco/core/workspace-policy";
-import { isWorkspaceRef } from "./workflow-command";
+import { isWorkspaceRef } from "./hub-command";
 
 /** Inputs one delegation may name (the outputs' limit, work-items.ts `OUTPUTS_LIMIT`). */
 const INPUTS_COUNT_LIMIT = 50;

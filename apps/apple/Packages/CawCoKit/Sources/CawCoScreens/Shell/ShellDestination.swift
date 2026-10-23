@@ -2,13 +2,10 @@ import CawCoCore
 import UIKit
 
 /// The sidebar's places, one per web route the shell opens
-/// (Sidebar.svelte: Fleet `/session`, Workflows `/workflows`, a project
-/// `/project/[id]`, Configure `/config`, Usage `/usage`).
+/// (Sidebar.svelte: Fleet `/session`, a project `/project/[id]`, Configure
+/// `/config`, Usage `/usage`).
 public enum ShellDestination: Hashable, Sendable {
     case fleet
-    case workflows
-    /// A workflow's own page (`/workflows/[id]`), on its Program tab when asked (`?tab=program`).
-    case workflow(id: String, program: Bool)
     case project(String)
     case configure
     case usage
@@ -17,7 +14,6 @@ public enum ShellDestination: Hashable, Sendable {
     var crumb: String {
         switch self {
         case .fleet: "Fleet"
-        case .workflows, .workflow: "Workflows"
         case .project: "Project"
         case .configure: "Configure"
         case .usage: "Usage"
@@ -25,14 +21,11 @@ public enum ShellDestination: Hashable, Sendable {
     }
 
     /// The place as the web's path names it, which a scene keeps across a
-    /// relaunch (`ShellLanding`): `/session`, `/workflows`,
-    /// `/workflows/<id>` (`?tab=program` on its Program tab), `/project/<id>`,
-    /// `/config`, `/usage`.
+    /// relaunch (`ShellLanding`): `/session`, `/project/<id>`, `/config`,
+    /// `/usage`.
     var route: String {
         switch self {
         case .fleet: "/session"
-        case .workflows: "/workflows"
-        case let .workflow(id, program): "/workflows/\(id)" + (program ? "?tab=program" : "")
         case let .project(id): "/project/\(id)"
         case .configure: "/config"
         case .usage: "/usage"
@@ -40,18 +33,13 @@ public enum ShellDestination: Hashable, Sendable {
     }
 
     init?(route: String) {
-        let parts = route.split(separator: "?", maxSplits: 1)
-        let path = parts.first.map(String.init) ?? ""
-        let program = parts.count > 1 && parts[1] == "tab=program"
+        let path = route.split(separator: "?", maxSplits: 1).first.map(String.init) ?? ""
         switch path {
         case "/session": self = .fleet
-        case "/workflows": self = .workflows
         case "/config": self = .configure
         case "/usage": self = .usage
         default:
-            if path.hasPrefix("/workflows/"), path.count > "/workflows/".count {
-                self = .workflow(id: String(path.dropFirst("/workflows/".count)), program: program)
-            } else if path.hasPrefix("/project/"), path.count > "/project/".count {
+            if path.hasPrefix("/project/"), path.count > "/project/".count {
                 self = .project(String(path.dropFirst("/project/".count)))
             } else {
                 return nil
@@ -64,9 +52,8 @@ public enum ShellDestination: Hashable, Sendable {
     var spoke: Int? {
         switch self {
         case .fleet: 0
-        case .workflows, .workflow: 1
-        case .usage: 2
-        case .configure: 3
+        case .usage: 1
+        case .configure: 2
         case .project: nil
         }
     }
@@ -89,7 +76,7 @@ struct ShellLanding {
 public struct ShellContext {
     public let hub: HubConnection
     public let home: HomeModel
-    /// Opens a session (or a run, `run:<id>`) the way a row does.
+    /// Opens a session the way a row does.
     public let openSession: (String) -> Void
     /// Goes to another place in the shell.
     public let go: (ShellDestination) -> Void
@@ -115,10 +102,6 @@ enum ShellScreens {
             preconditionFailure("the fleet is the shell's own page")
         case let .project(id):
             ProjectViewController(projectId: id, context: context)
-        case .workflows:
-            WorkflowsViewController(context: context)
-        case let .workflow(id, program):
-            WorkflowEditorController(context: context, workflowId: id, program: program)
         case .configure:
             ConfigureController(context: context)
         case .usage:

@@ -2,7 +2,7 @@ import type { PermissionMode } from "@cawco/core";
 
 /**
  * The mode a session the hub starts on its own runs in — a work item's
- * session, a workflow step, a continuation's summariser, a run's supervisor —
+ * session, a continuation's summariser —
  * where nobody watches for a tool ask: Full Send when the session that caused
  * it is in Full Send, else plain bypass. `causeMode` is that session's mode as
  * stored, read when the new session starts; none when no session caused it

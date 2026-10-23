@@ -62,9 +62,9 @@ export function sessionStatus(
   if (isStale(instance)) {
     return "idle";
   }
-  // At rest with no process: a session put to sleep, or a workflow run
-  // that ended and stopped (or is stopping: ended, its word says the
-  // rest). Listed as finished, it is done.
+  // At rest with no process: a session put to sleep, or one that stopped
+  // (or is stopping: ended, its word says the rest). Listed as finished, it
+  // is done.
   if (
     instance.status === "sleeping" ||
     instance.status === "stopping" ||

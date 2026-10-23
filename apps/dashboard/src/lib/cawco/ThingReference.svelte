@@ -1,7 +1,6 @@
 <script lang="ts">
   /**
-   * A task, a to-do, a plan, a step, a routine, a workflow or its run, a
-   * project or a machine named in written words (`[label](cawco:<kind>/<id>)`,
+   * A task, a to-do, a plan, a step, a routine, a project or a machine named in written words (`[label](cawco:<kind>/<id>)`,
    * core references.ts), drawn as its chip: the inline chip (ui/chip
    * `inline`) in its kind's look (reference-looks.ts, the one place a kind's
    * look is written), its name as the dashboard reads it now

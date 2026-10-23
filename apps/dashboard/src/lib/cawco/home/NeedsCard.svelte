@@ -1,13 +1,12 @@
 <script lang="ts">
   /**
    * One thing parked on the operator, as a row of Caw's panel (NeedsCaw):
-   * a session's permission or question, a workflow run's question, a
-   * project past its spend cap, or a project's task waiting on you (its
-   * review, or a failed attempt), which opens the task with its deliverable
-   * and the way to act on it first. The session's mark leads (a run and a
-   * budget their glyphs), then the title and its wait, what it wants in the
-   * words it is asked, and the kind and where. The row itself opens it (the
-   * session at the request, the run, the project's spend) and the panel
+   * a session's permission or question, a project past its spend cap, or a
+   * project's task waiting on you (its review, or a failed attempt), which
+   * opens the task with its deliverable and the way to act on it first. The
+   * session's mark leads (a budget its glyph), then the title and its wait,
+   * what it wants in the words it is asked, and the kind and where. The row
+   * itself opens it (the session at the request, the project's spend) and the panel
    * closes (`onchoose`). In the wide layout (a desk, an iPad; not a phone)
    * a session's ask offers Peek at the title line's end, after its wait:
    * the session's tail, read before answering, and the panel closes as it
@@ -118,7 +117,6 @@
     IconTick,
     IconWarningTriangle,
     IconWindow,
-    IconWorkflow,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
   import CopyBox from "../CopyBox.svelte";
@@ -194,8 +192,6 @@
           ? (questionsOf(item.request.toolName, item.request.input)?.[0]
               ?.question ?? item.ask)
           : item.ask;
-      case "run":
-        return "Waiting on your answer";
       case "watch":
         return item.notice.title;
       case "choice":
@@ -320,14 +316,12 @@
     }
   }
   /**
-   * A run's, a watch notice's and a budget's last line: the kind, then where
+   * A watch notice's and a budget's last line: the kind, then where
    * it is. An ask's is drawn in the markup: its project, its kind, its
    * machine by its mark.
    */
   const meta = $derived.by(() => {
     switch (item.kind) {
-      case "run":
-        return `Workflow · ${item.place}`;
       case "watch":
         return `Fleet watch · ${item.place}`;
       case "choice":
@@ -724,8 +718,6 @@
           place={item.cwd || item.machineId}
           status="attn"
         />
-      {:else if item.kind === "run"}
-        <IconWorkflow aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "choice"}
         <IconShield aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "desk"}

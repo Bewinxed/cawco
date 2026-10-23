@@ -151,12 +151,10 @@ final class SessionHover: NSObject {
 
     // MARK: Watching
 
-    /// The session whose tail a card draws: its own, or for a workflow run its running step's.
+    /// The session whose tail a card draws: its own.
     private func tailId(of id: String) -> String? {
         // A thread's card has no tail: it is the conversation itself.
-        if ThreadTabs.isThread(id) { return nil }
-        guard let runId = BoardRun.runId(of: id) else { return id }
-        return hub.workflowRuns.details[runId]?.run?.steps.first { $0.status == "running" && $0.instanceId != nil }?.instanceId
+        ThreadTabs.isThread(id) ? nil : id
     }
 
     /// Follows `id`'s stream, and lets the last one go 2s later, so a pointer
@@ -189,7 +187,7 @@ final class SessionHover: NSObject {
         if row?.isFailed == true { return .failed }
         // Asked to end, its machine yet to confirm the process gone.
         if row?.status == .stopping { return .stopping }
-        if hub.needs.blocked(id) || (BoardRun.runId(of: id) != nil && home.activity(id) == .blocked) { return .needs }
+        if hub.needs.blocked(id) { return .needs }
         if home.activity(id) == .working { return .live }
         return row?.status == .stopped ? .done : .idle
     }
@@ -236,22 +234,7 @@ final class SessionHover: NSObject {
             view.note = note
             return view
         }
-        if let runId = BoardRun.runId(of: id) {
-            // A run's card: its steps under it, then the live tail of the one running.
-            if let run = hub.workflowRuns.details[runId]?.run {
-                let steps = RunStepsView()
-                steps.anchor = mark
-                steps.configure(RunModel(run, name: title.text ?? "Workflow"), going: true, live: false, interactive: false) { _ in }
-                column.addArrangedSubview(steps)
-            }
-            if let step = tailId(of: id) {
-                column.addArrangedSubview(tail(step, nil))
-            } else if tone == .failed {
-                column.addArrangedSubview(tail("", note(id, tone)))
-            }
-        } else {
-            column.addArrangedSubview(tail(id, note(id, tone)))
-        }
+        column.addArrangedSubview(tail(id, note(id, tone)))
         return column
     }
 

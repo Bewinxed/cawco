@@ -30,7 +30,7 @@
    * and its pending wording is its name alone, never drawn, so its label's
    * cell is the label's own and stands at the button's centre. The kit
    * Button draws it; a button in another skin (the
-   * new-session dialog, a workflow form) draws it in its own element, sets
+   * new-session dialog) draws it in its own element, sets
    * --btn-gap and --btn-icon to its gap and icon size, and takes presses
    * through `whileIdle`. An icon-only button passes no `label`: only its
    * icon slot changes, and its name stays its aria-label.

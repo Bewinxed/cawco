@@ -277,7 +277,7 @@ orchestrate() {
     fixture installer "$bins/keys/test-release-public.pem" "$out/shared/installer.sh" &&
       fixture broken-binary "$out/shared/broken-cawco" &&
       fixture broken-binary "$out/shared/migrating-cawco" migrates &&
-      bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))" &&
+      bun -e "await Bun.write('$out/shared/rule.json', JSON.stringify({name: 'kept-through-rollback', enabled: false, pattern: 'kept', matchKind: 'phrase', caseSensitive: false, wholeWord: false, watch: 'text', reply: 'kept', timing: 'turn', repeat: false, scope: {}}))" &&
       machine_helpers "$out/shared" &&
       write_machine_scripts "$out/shared"
   }
@@ -1860,17 +1860,17 @@ rolled_back() {
 migration_rolled_back() {
   need_hub
   # Data the hub holds before the update. Without -f, so a refusal shows the hub's own words instead of a bare 400.
-  saved=$(as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' http://127.0.0.1:3456/api/workflows -X POST -H 'content-type: application/json' -d @/shared/workflow.json)
-  echo "saving the workflow: $saved"
-  [[ "$saved" == *"HTTP 201" ]]
-  hub_api /api/workflows | grep -q kept-through-rollback
+  saved=$(as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' http://127.0.0.1:3456/api/rules -X POST -H 'content-type: application/json' -d @/shared/rule.json)
+  echo "saving the rule: $saved"
+  [[ "$saved" == *"HTTP 200" ]]
+  hub_api /api/rules | grep -q kept-through-rollback
   use_feed migrating
   learn
   put_policy stable true
   wait_until 360 '[[ "$(field $hid failedVersion)" == 0.0.1-test.8 && "$(phase $hid)" == failed-rolled-back ]]'
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   [[ "$(build_version $hid)" == $BASE ]]
-  hub_api /api/workflows | grep -q kept-through-rollback
+  hub_api /api/rules | grep -q kept-through-rollback
   # The migrated file is moved aside, not deleted, and the copy it was restored from is still there.
   as_user "$hubc" sh -c 'ls ~/.local/share/cawco/cawco.db.migrated-0.0.1-test.8 ~/.local/share/cawco/cawco.db.pre-'"$BASE"'.bak'
 }
@@ -2184,13 +2184,10 @@ rig_handover() {
 # The owner's Mac on 2026-10-13: Install now for a joined machine answered `installed`, and the machine then said
 # installing, with no helper and nothing applied, until its agent was restarted by hand. The command had landed while
 # the machine's own auto-update pass was draining for that build. That sweep runs on macOS only (proven there by
-# scripts/binary/probe-helper-jobs-launchd.ts); here the same interleaving runs on the joined machine, and the build
-# must apply on that command, its agent restarted only by the update's own helper. Then a download its hub cannot
-# supply leaves the machine failed, saying why, never installing, and the same command tries the build again by
-# itself once the hub can.
-STAGED=/home/cawco/.local/share/cawco/binary/versions/$NEXT/release.json
-STRAY_UNIT=/home/cawco/.config/systemd/user/cawco-sessiond-0.0.0-stray.service
-export STAGED STRAY_UNIT
+# scripts/binary/probe-helper-jobs-launchd.ts). Here the joined machine updates by its own pass, its agent restarted
+# only by the update's own helper; the drain itself is not held here, as nothing the hub runs on a machine outlasts
+# one now. Then a download its hub cannot supply leaves the machine failed, saying why, never installing, and the
+# same command tries the build again by itself once the hub can.
 # The new build installed on the hub's machine, one update asked for: once the hub runs it, its joined machine looks
 # at what its hub offers and is offered it.
 hub_installs_first() {
@@ -2203,71 +2200,18 @@ hub_installs_first() {
 }
 # How many helpers started applying build $2 on machine $1, as its apply.log says: 0 before any helper wrote one.
 apply_starts() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/apply.log 2> /dev/null | grep -c "start $1 keeperOnly=false" || true' sh "$2"; }
-# A workflow whose one step is a long command, `sleep $1`, on the machine it runs on: work in flight an agent's drain
-# waits on. Each is its own workflow, so each command is its own piece of work.
-hold_workflow() { printf '{"name":"hold-the-joined-drain-%s","program":"import { z } from \\"zod\\"; export const inputs = z.object({}); export default async function (w: Workflow<typeof inputs>) { await w.exec(\\"sleep %s\\"); return {}; }"}' "$1" "$1"; }
-# Saves the hold workflow for `sleep $1` and runs it on the joined machine in directory $2: prints the workflow's id,
-# then the run's.
-start_hold() {
-  local wf run
-  wf=$(hub_api /api/workflows -X POST -H 'content-type: application/json' -d "$(hold_workflow "$1")" | json 'd => d.id')
-  [[ -n $wf ]]
-  run=$(hub_api "/api/workflows/$wf/runs" -X POST -H 'content-type: application/json' -d "{\"inputs\":{},\"workspace\":{\"path\":\"$2\",\"machineId\":\"$jid\"}}" | json 'd => d.runId')
-  [[ -n $run ]]
-  echo "$wf $run"
-}
-joiner_command_mid_drain() {
+# The joined machine updates by its own auto-update pass, with the person's side of it under way
+# (update_outcomes_start): a session running before it, which its keeper before holds on, answering its listing late
+# once it retires; and the sign-in, with the machine's Claude Code answering late. No messages: a turn is work the
+# pass could wait on, and the checks after this read what the update left.
+joiner_auto_update() {
   need_hub
-  local held first second since answer
-  on_exit 'put_policy stable false > /dev/null; as_user "$joinerc" pkill -f "sleep 60[12]"; as_user "$joinerc" sh -c "rm -f $STRAY_UNIT && systemctl --user daemon-reload"'
+  on_exit 'put_policy stable false > /dev/null'
   hub_installs_first
-  # Work in flight on the joined machine, started before any fence: a workflow's command, run there by its agent.
-  held=$(start_hold 601 /home/cawco)
-  read -r -a first <<< "$held"
-  on_exit "hub_api /api/workflows/${first[0]} -X DELETE > /dev/null"
-  on_exit "hub_api /api/workflow-runs/${first[1]}/cancel -X POST > /dev/null"
-  wait_until 60 'as_user "$joinerc" pgrep -f "sleep 601" > /dev/null'
-  # The person's side of the joined machine's update (update_outcomes_start): a session running before it, which its
-  # keeper before holds on, answering its listing late once it retires; and the sign-in, with the machine's Claude
-  # Code answering late. No messages: a turn is work the pass could wait on, and this check times the pass's drain.
   start_session "$jid" outcome-1 > /dev/null
   wait_until 60 'session_running outcome-1'
   update_outcomes_start "$joinerc" "$jid" outcome-1 nosends
-  # Auto-update on: the joined machine's own pass stages the hub's build and drains on that command (agent
-  # binary-update.ts DRAIN_MS: 45 s, a sixth of it at the proof's pace). The command outlasts the drain, so the build
-  # waits, staged, for it to end.
   put_policy stable true
-  wait_until 200 '[[ "$(phase $jid)" == ready && -n "$(field $jid waitingOn)" ]]'
-  as_user "$joinerc" test -s "$STAGED"
-  # While it waits, a prune runs: a keeper unit no keeper runs from goes after its while, and what nothing needs goes
-  # with it (2026-10-14's run: a retiring keeper's removal mid-drain pruned the staged build, and the helper found no
-  # release.json). The staged build is not among what goes.
-  as_user "$joinerc" sh -c 'printf "[Unit]\nDescription=CawCo sessiond 0.0.0-stray\n[Service]\nExecStart=/bin/false\n" > "$1" && systemctl --user daemon-reload' sh "$STRAY_UNIT"
-  wait_until 90 'as_user "$joinerc" test ! -e "$STRAY_UNIT"'
-  as_user "$joinerc" test -s "$STAGED"
-  # Fresh work in flight, then the first command ends: the next pass drains on the new one for its DRAIN_MS, saying
-  # installing, before it starts any helper. The drain is the window Install now must land in, so from the moment the
-  # machine says installing the check asks the machine one thing (no helper has started) and then sends it.
-  held=$(start_hold 602 /tmp)
-  read -r -a second <<< "$held"
-  on_exit "hub_api /api/workflows/${second[0]} -X DELETE > /dev/null"
-  on_exit "hub_api /api/workflow-runs/${second[1]}/cancel -X POST > /dev/null"
-  wait_until 60 'as_user "$joinerc" pgrep -f "sleep 602" > /dev/null'
-  since=$(as_user "$joinerc" date +%s)
-  as_user "$joinerc" pkill -f "sleep 601"
-  # The next pass now, not at the poll a minute on: the hub's check has every online machine look (a pass like any).
-  learn
-  wait_until 150 '[[ "$(phase $jid)" == installing ]]'
-  as_user "$joinerc" sh -c 'b=/home/cawco/.local/share/cawco/binary; test ! -e "$b/apply.lock" && ! grep -q "start $1 keeperOnly=false" "$b/apply.log" 2> /dev/null' sh "$NEXT" \
-    || { echo "ASSERTION FAILED: a helper started applying $NEXT before Install now was sent"; return 1; }
-  # Install now lands in that pass's drain.
-  answer=$(install_now_request "$jid")
-  echo "the joined machine answered: $answer"
-  grep -q '"installed":true' <<< "$answer"
-  as_user "$joinerc" journalctl --user --no-pager -o cat -u cawco-agent.service --since "@$since" | grep "\[update\]" || true
-  as_user "$joinerc" journalctl --user --no-pager -o cat -u cawco-agent.service --since "@$since" | grep -q "arrived during an update pass, which takes it"
-  # One helper applies the build at once, from that command, with no agent restart by hand.
-  wait_until 60 '[[ "$(apply_starts "$joinerc" "$NEXT")" == 1 ]]'
   wait_until 300 '[[ "$(build_version $jid)" == $NEXT && "$(phase $jid)" == installed ]]'
   [[ "$(apply_starts "$joinerc" "$NEXT")" == 1 ]]
 }
@@ -2307,11 +2251,11 @@ joiner_install_retries() {
   wait_until 300 '[[ "$(build_version $jid)" == $NEXT && "$(phase $jid)" == installed ]]'
   [[ "$(apply_starts "$joinerc" "$NEXT")" == 1 ]]
 }
-export -f hub_installs_first apply_starts hold_workflow start_hold joiner_command_mid_drain retry_archive agent_pid joiner_install_retries
+export -f hub_installs_first apply_starts joiner_auto_update retry_archive agent_pid joiner_install_retries
 rig_drain() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
-  check "Install now sent while a joined machine's own auto-update pass drains for the build applies on that command: one helper, at once, with no agent restart by hand, and a prune while the build waits staged leaves it" joiner_command_mid_drain 900
+  check "a joined machine's own auto-update pass applies the hub's build with one helper, its agent restarted only by the update" joiner_auto_update 900
   check "a session running on the joined machine before its update, held on by the retiring keeper that answers its listing late, is the same process after it, reattached and running" update_session_reattached 300
   check "the joined machine's Claude account reads signed in all through its update, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }

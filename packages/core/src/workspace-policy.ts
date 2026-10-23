@@ -222,7 +222,7 @@ const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
 /**
  * {@link HARNESS_CONFIG_EMPTY}'s paths: the one list of harness config a
  * clone's root denies, and which no workspace's commit changes at any depth
- * or in any letter case (agent workflow-command.ts `ownConfigChanges`,
+ * or in any letter case (agent hub-command.ts `ownConfigChanges`,
  * worktree-guard.ts `gitShim`).
  */
 export const HARNESS_CONFIG: readonly string[] =

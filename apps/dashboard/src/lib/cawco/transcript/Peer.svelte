@@ -8,7 +8,6 @@
     IconReport,
     IconReportFailed,
     IconRules,
-    IconWorkflow,
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { conversationHref } from "../links";
@@ -16,8 +15,7 @@
   import { sessionNamed } from "../session-names.svelte";
   /**
    * What cawco put into this session on someone else's behalf: a rule that
-   * fired, a delegate's report or ask, another session's hand-off, a
-   * workflow's brief or notice.
+   * fired, a delegate's report or ask, another session's hand-off.
    * Never the reader's own words, so none of them is a turn. They share one
    * system row on the rail — a labelled line with the kind's glyph, then the
    * body — the same register as every other note the transcript carries.
@@ -55,14 +53,6 @@
         lead: "Report from",
         name: meta.peerName ?? "",
         failed: meta.reportKind === "failed",
-      };
-    }
-    if (meta.workflowEvent !== undefined) {
-      return {
-        kind: "workflow",
-        lead: "Workflow ·",
-        name: `${meta.peerName ?? ""} · ${meta.workflowEvent}`,
-        failed: meta.workflowEvent.endsWith("failed"),
       };
     }
     return {
@@ -141,8 +131,6 @@
           <IconReportFailed class="size-icon-md" />
         {:else if row.kind === "report"}
           <IconReport class="size-icon-md" />
-        {:else if row.kind === "workflow"}
-          <IconWorkflow class="size-icon-md" />
         {:else}
           <IconHandoff class="size-icon-md" />
         {/if}

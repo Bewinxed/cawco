@@ -273,7 +273,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   /** The fleet's switch, read once and kept in step by {@link switched}. */
   let on = db.fleetWatchOn();
   const watches = new Map<string, Watch>();
-  /** Sessions fleet watch never reads (its own triage runs, workflow steps), decided once. */
+  /** Sessions fleet watch never reads (its own triage runs), decided once. */
   const ignored = new Set<string>();
   /** Triage runs by their own session id. */
   const running = new Map<string, Triage>();
@@ -295,8 +295,8 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     if (!row) {
       return;
     }
-    // Its own triage runs, and a workflow step (its run supervises it).
-    if (row.role === "overseer" || row.workflowStepId) {
+    // Its own triage runs.
+    if (row.role === "overseer") {
       ignored.add(id);
       return;
     }
@@ -702,7 +702,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
           requestId: crypto.randomUUID(),
         },
         // The hub's own reader, which nobody watches: it never parks on a
-        // permission prompt, as workflow steps and summarisers never do.
+        // permission prompt, as summarisers never do.
         "bypassPermissions"
       )
       .then(() => {

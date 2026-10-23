@@ -10,13 +10,11 @@
    * measures a real viewport and not a zero one.
    */
   import { onMount, untrack } from "svelte";
-  import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
   import type { ServerTail } from "../client.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
   import ThreadPane from "../ThreadPane.svelte";
   import { isThreadTab } from "../thread-tabs";
-  import { runIdOf } from "../workflow-runs";
   import { dock, shownPanes, slots } from "./dock.svelte";
   import { contextOf, workspace } from "./workspace.svelte";
 
@@ -91,15 +89,11 @@
     {@const ctx = contextOf(id)}
     {@const leaf = workspace.leafOf(id)}
     {@const isActive = leaf?.active === id}
-    {@const runId = runIdOf(id)}
     <!-- The wrapper is a flex item of whichever slot it lands in, and the slot
          is the pane's whole box. -->
     <div class="flex min-h-0 min-w-0 flex-auto" use:dock={id}>
       <RegionBoundary region="conversation">
-        {#if runId}
-          <!-- A workflow run's tab: the run, as its own view. -->
-          <WorkflowRunView {runId} />
-        {:else if isThreadTab(id)}
+        {#if isThreadTab(id)}
           <!-- A thread with a project's Caw (ThreadPane). -->
           <ThreadPane
             active={isActive}

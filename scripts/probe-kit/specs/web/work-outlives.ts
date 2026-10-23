@@ -10,11 +10,6 @@
  *      machine's row in Configure › Updates, where it was asked; a reload
  *      says it in both again; Retry asks again; a refused setting (automatic
  *      updates, the check for new builds) is said under it, through a reload;
- *  (b) workflow launch: a reload keeps the form open with what was typed;
- *      a refusal is said in the form and, the form put away, under the
- *      workflow's row with Reopen, through a reload; Reopen brings the form
- *      back with the same words; put away mid-start, the start goes on with
- *      no navigation, and its run lands in the workflow's row;
  *  (c) a routine's Run now refused: said under its row in words, through a
  *      reload;
  *  (d) the forget tray: a reload mid-stop brings the tray back at the same
@@ -143,7 +138,6 @@ const respond = (seen: Seen) =>
   seen.last.includes("probe-slow")
     ? { everyMs: 1000, words: Array.from({ length: 90 }, () => "slowly") }
     : { everyMs: 0, words: ["ok."] };
-const REFUSED_LAUNCH = "The machine refused the directory probe-refused";
 const REFUSED_RUN = "The routine's machine is away right now";
 const STOP_FAILED = "The machine would not end the process";
 
@@ -589,164 +583,6 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
   );
   await page.unroute("**/api/binary-updates/settings");
   await page.unroute("**/api/binary-updates/channels");
-}
-
-/* ── (b) workflow launch ──────────────────────────────────────────── */
-
-async function launchLeg(
-  kit: Kit,
-  page: Page,
-  base: string,
-  workflow: { id: string; name: string },
-  repo: string,
-  pass: Pass
-) {
-  await page.goto(`${base}/workflows`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector(`[data-run-workflow="${workflow.id}"]`, {
-    timeout: 60_000,
-  });
-  await settle(page, 400);
-  // A popover at the desk, the house sheet on a phone.
-  const form = pass.phone
-    ? "[data-slot=drawer-content][data-state=open]"
-    : "[data-slot=popover-content][data-state=open]";
-  await page.locator(`[data-run-workflow="${workflow.id}"]`).click();
-  await page.waitForSelector(form);
-  await page.locator(form).getByLabel("Machine").selectOption(MACHINE);
-  await page
-    .locator(form)
-    .getByRole("textbox", { name: "Directory", exact: true })
-    .fill("probe-refused");
-  await settle(page, 300);
-  await reload(page);
-  // The form comes back once its workflow's row is read again.
-  const reopened = await until(() => shown(page, form), 10_000);
-  const typed = reopened
-    ? await page
-        .locator(form)
-        .getByRole("textbox", { name: "Directory", exact: true })
-        .inputValue()
-    : "";
-  kit.check(
-    "launch: a reload keeps the form open, with what was typed",
-    reopened && typed === "probe-refused",
-    JSON.stringify({
-      reopened,
-      typed,
-      kept: await page.evaluate(() =>
-        sessionStorage.getItem("cawco:workflow-launches")
-      ),
-    })
-  );
-
-  // A refusal: said in the form, then where the launch is parked.
-  const runs = `**/api/workflows/${workflow.id}/runs`;
-  await page.route(runs, (route) =>
-    route.request().method() === "POST"
-      ? route.fulfill({
-          status: 409,
-          contentType: "application/json",
-          body: JSON.stringify({ error: REFUSED_LAUNCH }),
-        })
-      : route.fallback()
-  );
-  await page.locator(form).getByRole("button", { name: "Start run" }).click();
-  const inForm = await until(
-    async () =>
-      (await textOf(page, '[data-slot="launch-refusal"]')).includes(
-        REFUSED_LAUNCH
-      ),
-    10_000
-  );
-  kit.check("launch: a refusal is said in the form", inForm);
-  const before = page.url();
-  await page.keyboard.press("Escape");
-  await page
-    .locator(form)
-    .waitFor({ state: "detached", timeout: 5000 })
-    .catch(() => undefined);
-  const parked = `[data-launch-parked="${workflow.id}"]`;
-  const parkedWords = await textOf(page, parked);
-  kit.check(
-    "launch: put away, the refusal stands under the workflow's row, with Reopen, and nothing navigated",
-    !(await shown(page, form)) &&
-      parkedWords.includes(REFUSED_LAUNCH) &&
-      parkedWords.includes("Reopen") &&
-      page.url() === before,
-    JSON.stringify({ parkedWords, before, now: page.url() })
-  );
-  await reload(page);
-  const kept = await textOf(page, parked);
-  kit.check(
-    "launch: a reload keeps the refusal under the row",
-    kept.includes(REFUSED_LAUNCH),
-    kept
-  );
-  await page.locator(parked).getByRole("button", { name: "Reopen" }).click();
-  await page.waitForSelector(form);
-  const back = await textOf(page, '[data-slot="launch-refusal"]');
-  const backTyped = await page
-    .locator(form)
-    .getByRole("textbox", { name: "Directory", exact: true })
-    .inputValue();
-  kit.check(
-    "launch: Reopen brings the form back where it was: the refusal and what was typed",
-    back.includes(REFUSED_LAUNCH) && backTyped === "probe-refused",
-    JSON.stringify({ back, backTyped })
-  );
-
-  // Put away mid-start: the start goes on, nothing navigates, the run lands in the row.
-  await page.unroute(runs);
-  let release: () => void = () => undefined;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route(runs, async (route) => {
-    if (route.request().method() !== "POST") {
-      return route.fallback();
-    }
-    await held;
-    return route.continue();
-  });
-  await page
-    .locator(form)
-    .getByRole("textbox", { name: "Directory", exact: true })
-    .fill(repo);
-  await page.locator(form).getByRole("button", { name: "Start run" }).click();
-  await settle(page, 200);
-  const at = page.url();
-  await page.keyboard.press("Escape");
-  await page
-    .locator(form)
-    .waitFor({ state: "detached", timeout: 5000 })
-    .catch(() => undefined);
-  const step = await page
-    .locator(parked)
-    .getAttribute("data-step")
-    .catch(() => null);
-  kit.check(
-    "launch: put away mid-start, it is parked under the row as starting",
-    step === "starting",
-    String(step)
-  );
-  release();
-  const landed = await until(
-    async () =>
-      !(await shown(page, parked)) &&
-      (
-        await textOf(
-          page,
-          `[data-slot="workflow-row"]:has([data-run-workflow="${workflow.id}"]) [data-slot="count"]`
-        )
-      ).startsWith("1"),
-    20_000
-  );
-  kit.check(
-    "launch: the start went on with no navigation, and its run is in the workflow's row",
-    landed && page.url() === at,
-    JSON.stringify({ at, now: page.url() })
-  );
-  await page.unroute(runs);
 }
 
 /* ── (c) a routine's Run now ──────────────────────────────────────── */
@@ -1939,9 +1775,7 @@ const spec: Spec = {
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    const program =
-      'import { z } from "zod";\n\nexport const inputs = z.object({});\n\nexport default async function () {\n  return {};\n}\n';
-    /** Each pass its own project, Caw's project, workflow and routine, so no pass reads another's. */
+    /** Each pass its own project, Caw's project and routine, so no pass reads another's. */
     const fixtures = async (n: number) => {
       const project = await fleet.api<{ id: string; name: string }>(
         "/api/projects",
@@ -1950,10 +1784,6 @@ const spec: Spec = {
       const cawProject = await fleet.api<{ id: string; name: string }>(
         "/api/projects",
         { name: `Probe Caw ${n}` }
-      );
-      const workflow = await fleet.api<{ id: string; name: string }>(
-        "/api/workflows",
-        { name: `Probe launch ${n}`, program }
       );
       const routine = { id: `routine-probe-${n}`, name: `Probe digest ${n}` };
       const now = Date.now();
@@ -1971,12 +1801,12 @@ const spec: Spec = {
         now
       );
       const chat = await fleet.spawn("claude", `Probe chat ${n}`, fleet.repo);
-      return { project, cawProject, workflow, routine, chat };
+      return { project, cawProject, routine, chat };
     };
 
     for (const [n, pass] of passes().entries()) {
       const k = named(kit, pass);
-      const { project, cawProject, workflow, routine, chat } =
+      const { project, cawProject, routine, chat } =
         // biome-ignore lint/performance/noAwaitInLoops: one pass after another, each on its own fixtures
         await fixtures(n);
       const page = await kit.page(pass.view, { engine: pass.engine });
@@ -1985,7 +1815,6 @@ const spec: Spec = {
       const { say } = socket;
       const legs: [string, () => Promise<void>][] = [
         ["updates", () => updatesLeg(k, page, base, fleet.base)],
-        ["launch", () => launchLeg(k, page, base, workflow, fleet.repo, pass)],
         ["routine", () => routineLeg(k, page, base, project.id, routine)],
         ["forget", () => forgetLeg(k, page, base, project, say, pass)],
         [

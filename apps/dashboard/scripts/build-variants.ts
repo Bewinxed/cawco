@@ -30,7 +30,7 @@ import { Glob } from "bun";
 import { formatText, formattedAlike } from "../../../scripts/fmt";
 
 const OUT = "src/lib/tokens/variants.css";
-/** The components, and the shared sheets beside them (spawn/ns-theme.css, workflows.css): every selector a state is read in. */
+/** The components, and the shared sheets beside them (spawn/ns-theme.css): every selector a state is read in. */
 const SOURCES = new Glob("src/lib/**/*.{svelte,css}");
 const ROUTES = new Glob("src/routes/**/*.svelte");
 const PAIR = /\[(data|aria)-([a-z-]+)=["']?([a-z0-9-]+)["']?\]/g;
@@ -241,10 +241,6 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 /* Under a theme switch (theme.svelte.ts marks the root): app.css stops the
    elements' transitions; a pseudo-element names it where it is styled. */
 @custom-variant theme-flip (:root[data-theme-flip] &);
-
-/* Inside a workflow node whose Svelte Flow wrapper holds keyboard focus
-   (WorkflowNodeCard draws the ring on the card). */
-@custom-variant node-focus-visible (:where(.svelte-flow__node:focus-visible) &);
 
 /* A <summary>'s marker in WebKit, which draws it as its own pseudo-element
    (Tailwind's \`marker:\` is ::marker). */

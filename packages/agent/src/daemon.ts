@@ -393,13 +393,9 @@ const takeSessionLimits = (
 };
 
 import { damagedRecords, sweepRecords } from "./damaged-records";
+import { cancelCommand, runHubCommand, setCommandQueue } from "./hub-command";
 import { onToolsMoved, probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
-import {
-  cancelCommand,
-  runWorkflowCommand,
-  setCommandQueue,
-} from "./workflow-command";
 import {
   archiveWorkspace,
   clearInterruptedCuts,
@@ -2237,14 +2233,13 @@ const attach = (
       if (socket.readyState !== WebSocket.OPEN) {
         return false;
       }
-      // Usage and workflow-run transitions originate at the hub, never at a
+      // Usage frames originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
       // without an instanceId. A move's progress, a command's slot wait, a
       // stage's and the browsers' frames go out on `emit`; the hub's
       // browser list goes hub → screens only.
       if (
         frame.kind === "usage" ||
-        frame.kind === "workflow" ||
         frame.kind === "fleet_mcp" ||
         frame.kind === "moves" ||
         frame.kind === "installs" ||
@@ -3394,7 +3389,7 @@ export const startDaemon = (rediscover = false) =>
       (cwd, cmd, timeoutMs, workspace, run) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : runWorkflowCommand(cwd, cmd, timeoutMs, workspace, run)
+          : runHubCommand(cwd, cmd, timeoutMs, workspace, run)
     );
     // A cancel ends a command already running, so it is taken behind a raised fence too.
     supervisor.registerDaemonFunction(CONTROL_CANCEL_COMMAND, async (runId) =>

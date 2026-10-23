@@ -69,11 +69,7 @@ import {
   delegateTypesWords,
   delegateWords,
   imageWords,
-  runStartedWords,
   startedWords,
-  stateSlotWords,
-  workflowSavedWords,
-  workflowsWords,
 } from "./presenters/sessions";
 import { budgetParameter, groupParameter, ownsParameter } from "./task-tools";
 import {
@@ -236,13 +232,6 @@ const READ_ONLY = {
   openWorldHint: false,
 } as const;
 
-/** Only a workflow step session gets these; they need its step and run. */
-const STEP_TOOLS: ReadonlySet<string> = new Set([
-  "submit_result",
-  "workflow_state_read",
-  "workflow_state_write",
-]);
-
 /** Hub-owned tool definitions; every harness discovers this same registry. */
 
 export type { HandoffDeps } from "./delegation-actions";
@@ -257,122 +246,6 @@ export const MCP_SERVER_NAME = "cawco";
 export function handoffTools(deps: HandoffDeps) {
   const actions = handoffActions(deps);
   const all = [
-    tool(
-      "workflow_create",
-      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A `w.run`/`w.spawn` step that runs out of attempts in a supervised run is held for the supervisor to retry or fail; give it `onExhausted: "fail"` when the program handles its StepError itself. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. A run replays its program after a restart, so zod is the only import and the program must be deterministic.',
-      { name: z.string(), program: z.string() },
-      ({ name, program }) => actions.createWorkflow(name, program),
-      workflowSavedWords
-    ),
-    tool(
-      "workflow_update",
-      "Replace a saved workflow, by name, slug or id, with a whole TypeScript program.",
-      { name: z.string(), program: z.string() },
-      ({ name, program }) => actions.updateWorkflow(name, program),
-      workflowSavedWords
-    ),
-    tool(
-      "workflow_state_read",
-      "Read a named slot of this workflow run's shared state. Only slots the run's program declared with w.state(name, schema) exist.",
-      { name: z.string() },
-      ({ name }) => actions.readWorkflowState(name),
-      stateSlotWords
-    ),
-    tool(
-      "workflow_state_write",
-      "Write a named slot of this workflow run's shared state. The value is validated against the schema the run's program declared with w.state(name, schema); the validator's message comes back verbatim on failure.",
-      { name: z.string(), value: z.unknown() },
-      ({ name, value }) => actions.writeWorkflowState(name, value),
-      sentence
-    ),
-    tool(
-      "submit_result",
-      "Call exactly once with an object matching the schema in your instructions, then end your turn. The hub's validation message is returned verbatim on failure.",
-      { result: z.record(z.string(), z.unknown()) },
-      ({ result }) => actions.submitResult(result),
-      sentence
-    ),
-    tool(
-      "workflow_run",
-      "Run a saved workflow by name or slug. You supervise it: a receipt reaches you for each step, checkpoint and its end, with a `ref` workflow_read takes. A step out of attempts is held for your workflow_steer.",
-      {
-        name: z.string(),
-        inputs: z.record(z.string(), z.unknown()),
-        workspace: z
-          .object({ path: z.string(), machineId: z.string() })
-          .optional(),
-      },
-      ({ name, inputs, workspace }) =>
-        actions.runWorkflow(name, inputs, { workspace }),
-      runStartedWords
-    ),
-    tool(
-      "workflow_read",
-      "Read part of a result of a run you supervise, by the `ref` its receipt named. To hand a result to a later step unread, put `{{ref:N.path}}` in what you give the program.",
-      {
-        runId: z.string(),
-        ref: z
-          .union([z.number().int().min(0), z.literal("result")])
-          .describe("A receipt's ref, or `result`."),
-        path: z.string().optional().describe("Like `queries[2].query`."),
-        offset: z.number().int().min(0).optional().describe("Default 0."),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(20_000)
-          .optional()
-          .describe("Default 4,000."),
-      },
-      ({ runId, ref, path, offset, limit }) =>
-        actions.readWorkflow(runId, {
-          ref,
-          path,
-          offset,
-          limit,
-        }),
-      sentence
-    ),
-    tool(
-      "workflow_steer",
-      "Steer a run you supervise: a note for the next step, `retry` or `fail` a held step (held up to an hour), answer a question routed to you (`choice` its option label, or a typed `value`), or cancel.",
-      {
-        runId: z.string(),
-        action: z.discriminatedUnion("type", [
-          z.object({ type: z.literal("note"), text: z.string() }),
-          z.object({
-            type: z.literal("retry"),
-            stepId: z.string().describe("A held step."),
-          }),
-          z.object({
-            type: z.literal("fail"),
-            stepId: z.string().describe("A held step."),
-          }),
-          z.object({
-            type: z.literal("answer"),
-            stepId: z.string(),
-            choice: z.string().optional(),
-            value: z
-              .unknown()
-              .optional()
-              .describe(
-                "The typed answer, for a question that declared an answer schema."
-              ),
-            note: z.string().optional(),
-          }),
-          z.object({ type: z.literal("cancel") }),
-        ]),
-      },
-      ({ runId, action }) => actions.steerWorkflow(runId, action),
-      sentence
-    ),
-    tool(
-      "workflow_list",
-      "The fleet's saved workflows and their inputs.",
-      {},
-      () => actions.listWorkflows(),
-      workflowsWords
-    ),
     tool(
       "generate_image",
       IMAGE_GENERATION_DESCRIPTION,
@@ -1189,7 +1062,6 @@ export function handoffTools(deps: HandoffDeps) {
   ];
   return all.filter(
     (entry) =>
-      (!STEP_TOOLS.has(entry.name) || !!deps.workflowStepId) &&
       (deps.canDelegate !== false || !SPAWNING_TOOLS.has(entry.name)) &&
       (!["finish_item", "wait_item"].includes(entry.name) || !!deps.workItem)
   );
@@ -1253,7 +1125,6 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
     ],
     what: "project automation",
   },
-  { prefixes: ["workflow_", "submit_result"], what: "workflows" },
   {
     prefixes: ["artifact_", "comment_", "design_map"],
     what: "what you open in the person's panel for them to pick, judge, try or draw on (show skill first), their pins on it; design_map the component library",

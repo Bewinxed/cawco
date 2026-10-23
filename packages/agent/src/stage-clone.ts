@@ -71,7 +71,7 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { cloneDenies, stageCloneId } from "@cawco/core/workspace-policy";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
-import { runWorkflowCommand } from "./workflow-command";
+import { runHubCommand } from "./hub-command";
 import { copyOwnSecrets, gitUntil } from "./workspace";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
@@ -570,7 +570,7 @@ const installAt = async (
     return kept;
   }
   const where = join(kept.repo, relative(boundary.path, install.dir));
-  const result = await runWorkflowCommand(
+  const result = await runHubCommand(
     install.dir,
     `command -v ${install.manager} >/dev/null 2>&1 || { echo '${NO_MANAGER}'; exit 127; }\n${command}`,
     STAGE_CLONE_INSTALL_MS,

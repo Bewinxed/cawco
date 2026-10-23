@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 /**
  * Why a browser can't load a preview, told by its own cause: one classifier
  * and one set of words for every place that loads one (the dashboard's

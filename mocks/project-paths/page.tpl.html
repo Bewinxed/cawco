@@ -638,7 +638,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     {id:"act",band:"hub",grp:"Work",kind:"code",t:"Approved actions",s:"exact call, once, on time",d:"You approve one exact tool call; code runs it once at its time. Never a model.",talks:["cred","x","gh","ios"]},
     {id:"rout",band:"hub",grp:"Time and events",kind:"code",t:"Routines",s:"Effect Cron, run per slot",d:"Each slot fires once; a fresh session or a message to the lead.",talks:["wf","sess","lead","ingress"]},
     {id:"ingress",band:"hub",grp:"Time and events",kind:"code",t:"Ingress",s:"pollers + optional relay",d:"Polls GitHub and any connector; an optional relay reaches a one-route listener.",talks:["gh","x","rout","cred"],jev:"Which routine or project is this event for? (choice)",fb:"Matcher filters; unmatched events go to Caw's next wake as one batch."},
-    {id:"wf",band:"hub",grp:"Time and events",kind:"code",t:"Workflow engine",s:"durable runs, replay",d:"Effect's durable engine under routines and multi-step runs.",talks:["rout","disp"]},
+    {id:"wf",band:"hub",grp:"Time and events",kind:"code",t:"Delegation tree",s:"briefs, items that land",d:"An orchestrator's brief, each step a work item in its own workspace that lands.",talks:["rout","disp"]},
     {id:"folder",band:"hub",grp:"Knowledge",kind:"store",t:"Project folder",s:"git, synced as files",d:"AGENTS.md, tasks, knowledge, assets, memory, routines, skills, delegates.",talks:["proj","board","mem","sess","brief","assets"]},
     {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"The curator decides on its next run with its own model; rules filter first."},
     {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"Caw picks files when it writes the brief; else the whole brand kit and the newest notes."},
@@ -847,7 +847,7 @@ The tray chip overflows at 320px wide…</pre>
           <li>With GitHub as the tracker: tasks are issues, a spec is a parent with sub-issues, to-dos are the issue's task list.</li>
         </ul></div>
         <div><b>Who sees progress</b><ul>
-          <li>Today, barely: a session sees its own plan, its work item, its own delegates and workflow state. There is no project board to read.</li>
+          <li>Today, barely: a session sees its own plan, its work item, its own delegates. There is no project board to read.</li>
           <li>Every brief says where its task sits: the spec, what landed upstream, what waits on it.</li>
           <li><code>board_read</code> by role (D7): a worker reads its project's board and its task's to-dos; Caw reads everything, plus each attempt's plan ring.</li>
           <li>Progress is derived, never stored: to-dos ticked for a task, tasks landed along the edges for a spec. Ticking every to-do never makes a task done; checks and landing do.</li>
@@ -1611,13 +1611,13 @@ views
         <tr><td>See an HTML exploration</td><td><code>show_preview</code> with a folder</td><td><span class="st2 has">exists</span></td></tr>
         <tr><td>See an export</td><td><code>show_image</code></td><td><span class="st2 has">exists</span></td></tr>
         <tr><td>Point at an element</td><td>The preview picker: file:line and notes go to the session</td><td><span class="st2 has">exists</span></td></tr>
-        <tr><td>Results side by side</td><td>A project canvas on Svelte Flow, which already draws the workflow canvas</td><td><span class="st2 gap">build · small</span></td></tr>
+        <tr><td>Results side by side</td><td>A project canvas on Svelte Flow, which already draws the decision graph</td><td><span class="st2 gap">build · small</span></td></tr>
         <tr><td>Pick a variant</td><td>Variants are attempts (D3); a pick keeps one and archives the rest</td><td><span class="st2 gap">build · small</span></td></tr>
         <tr><td>Contrast, tokens, diff</td><td>Commands the attempt runs and quotes in its report: axe-core, a lint against literal colours, Playwright screenshot compare</td><td><span class="st2 plan">borrow</span></td></tr>
         <tr><td>On brand?</td><td>Jev scores each variant against <code>DESIGN.md</code>; with Jev off, you look at all of them</td><td><span class="st2 plan">planned · P4</span></td></tr>
         <tr><td>Components</td><td>The project's own code, shown from its Storybook build with <code>show_preview</code>. Storybook's MCP is React-only for now.</td><td><span class="st2 has">exists</span></td></tr>
       </tbody></table></div>
-    <p class="a">Most of it exists or is borrowed. Two small builds: the canvas (on Svelte Flow, which already draws the workflow canvas) and the pick. Everything a design tool does stays in that tool, reached through its own MCP.</p>
+    <p class="a">Most of it exists or is borrowed. Two small builds: the canvas (on Svelte Flow, which already draws the decision graph) and the pick. Everything a design tool does stays in that tool, reached through its own MCP.</p>
   </article>
   <article class="ans wide" id="graphical">
     <header><span class="did">Borrow</span><h3>What Graphical does that we can use</h3></header>
@@ -1785,7 +1785,7 @@ read_choices("hero options")
     </div>
     <div class="foot">
       <details class="more"><summary>Details</summary><div class="in">
-        <p><b>Why a page first.</b> It has a reading order, room for prose and mockups, and it works on a phone. Agents write HTML well, and it's what worked here. A canvas earns its place when the content is spatial: decisions that depend on each other, an architecture map, a task graph, variants side by side. Svelte Flow already draws the workflow canvas, and automatic layout means Caw never places nodes by hand.</p>
+        <p><b>Why a page first.</b> It has a reading order, room for prose and mockups, and it works on a phone. Agents write HTML well, and it's what worked here. A canvas earns its place when the content is spatial: decisions that depend on each other, an architecture map, a task graph, variants side by side. Svelte Flow already draws the decision graph, and automatic layout means Caw never places nodes by hand.</p>
         <p><b>The kit.</b> <code>mocks/project-paths/</code> in this repo is already a small version of it: a contract for mockups, the tokens, a build, and preview and record scripts. It becomes a <code>decision-page</code> skill, written with writing-for-agents, plus CawCo's own components so decision pages look like CawCo.</p>
         <p><b>How Caw edits one.</b> On a page, Caw edits the file and the preview shows the new revision, with your picks kept because each choice keeps its id. On a canvas, Caw writes <code>decisions.json</code> (cards, edges, groups) or calls <code>decision_add</code>, <code>decision_link</code> and <code>decision_group</code>; your drags save back to the same file.</p>
         <p><b>Done means tasks.</b> "Make tasks" runs to-tasks over your picks and notes. Each task links back to its card, and the page writes a short decision log so later sessions can read why.</p>

@@ -1,22 +1,18 @@
 <script lang="ts">
-  import type { WorkflowStep } from "@cawco/core";
   import type { TransitionConfig } from "svelte/transition";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { dur, easeOut, motionOk, popScale } from "../motion/curves.svelte";
-  import { stepSessionStatus } from "./session-status";
+  import { sessionStatusOf } from "./session-status";
 
   let {
     sessionId = "",
-    step,
     compact = false,
   }: {
     sessionId?: string;
-    /** A workflow step's status, read in the session glyphs instead of a session's. */
-    step?: WorkflowStep["status"];
     compact?: boolean;
   } = $props();
-  const status = $derived(stepSessionStatus(sessionId, step));
+  const status = $derived(sessionStatusOf(sessionId));
 
   /**
    * A new glyph cross-fades over the old one at the control tier, coming up
@@ -58,7 +54,6 @@
       status.tone === "attention" && "text-status-attn-glyph",
       status.tone === "failed" && "text-status-fail-glyph",
       status.tone === "quiet" && "text-status-idle-glyph",
-      status.tone === "done" && "text-status-done-glyph",
     ]}
     data-box
   >

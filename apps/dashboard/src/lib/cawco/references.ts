@@ -41,8 +41,8 @@ interface ReferenceElement {
 }
 
 /**
- * A task, a to-do, a plan, a step, a routine, a workflow or its run, a
- * project or a machine (reference-things.svelte.ts): drawn as its chip
+ * A task, a to-do, a plan, a step, a routine, a project or a machine
+ * (reference-things.svelte.ts): drawn as its chip
  * (ThingReference) once the dashboard holds it or the hub named it.
  */
 const thing = (kind: ThingKind): ReferenceElement => ({
@@ -58,7 +58,7 @@ const ofArtifact = (id: string, artifact: string | undefined): string | null =>
 
 export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
   /**
-   * A session, delegate, workflow run or Caw thread, by its full id, a
+   * A session, delegate or Caw thread, by its full id, a
    * short one or its handle (session-names.svelte.ts): a row of the
    * instance index, else the session the hub's names hold. A thread is
    * written by its own id (hub caw.ts) and listed by its tab's,
@@ -98,7 +98,6 @@ export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
   plan: thing("plan"),
   step: thing("step"),
   routine: thing("routine"),
-  workflow: thing("workflow"),
   project: thing("project"),
   machine: thing("machine"),
 };

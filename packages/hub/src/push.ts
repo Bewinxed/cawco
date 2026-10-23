@@ -112,7 +112,6 @@ import {
   type Notifications,
   needsCollapseId,
   pairingCollapseId,
-  runCollapseId,
   taskCollapseId,
   turnCollapseId,
 } from "./notifications";
@@ -183,8 +182,6 @@ const TURN_ENDED = "Finished its turn";
 const SENT_YOU = "Sent you a message";
 /** A failed session's visible body: the reason goes sealed. */
 const FAILED = "Failed";
-/** A workflow run's note's visible body: the note itself goes sealed. */
-const NOTE = "Note";
 /** A memory proposal's visible title (memory.ts): what it is, its project under it. */
 const MEMORY_PROPOSAL_NAME = "Memory proposal";
 /** Caw's delegate type proposal's visible title (memory.ts): what it is, its project under it. */
@@ -219,7 +216,6 @@ export type PushData =
       requestId: string;
       /** The Caw thread the ask was made in: a tap opens it at the card. Null otherwise. */
       threadId: string | null;
-      workflowRunId: string | null;
     }
   | {
       /** A session the owner started finished its turn and waits on them. */
@@ -287,14 +283,6 @@ export type PushData =
       kind: "action";
       actionId: string;
       projectId: string;
-    }
-  | {
-      /**
-       * A workflow run with no supervisor left a note (`notify`): opens the
-       * run. The app opens the board for a kind it does not know.
-       */
-      kind: "run";
-      runId: string;
     }
   | {
       /** Several things need you at once (a burst): opens Needs you. */
@@ -698,14 +686,14 @@ const askCategory = (
  * to be answered: a session's AskUserQuestion (core `questionsOf`, the
  * reading the app's card and the dashboard share) of one single-choice
  * question with one to {@link MAX_INLINE_OPTIONS} options. Several questions,
- * a multi-select (one tap can't say several picks), more options, or a
- * workflow run's question (answered on its run's page) stay Open only.
+ * a multi-select (one tap can't say several picks), or more options stay
+ * Open only.
  */
 const inlineOptions = (
-  payload: Partial<PermissionRequestFrame> & { workflowRunId?: string },
+  payload: Partial<PermissionRequestFrame>,
   instanceId: string
 ): PushOption[] | undefined => {
-  if (!instanceId || payload.workflowRunId) {
+  if (!instanceId) {
     return undefined;
   }
   const questions = questionsOf(payload.toolName ?? "", payload.input ?? {});
@@ -1526,33 +1514,23 @@ export const createPush = ({
     return host ? `${harness} on ${machineLabel(host)}` : harness;
   };
 
-  /** An ask's visible name: Caw for a project's lead, the owner's title for its session, its workflow's name, else {@link sessionName}. */
-  const askName = (
-    row: AskRow | undefined,
-    workflowRunId: string | undefined,
-    instanceId: string
-  ): string => {
+  /** An ask's visible name: Caw for a project's lead, the owner's title for its session, else {@link sessionName}. */
+  const askName = (row: AskRow | undefined, instanceId: string): string => {
     if (row?.role === "lead") {
       return "Caw";
     }
     const owned = row?.titleSource === "owner" ? row.title?.trim() : undefined;
-    const run = workflowRunId ? db.getWorkflowRun(workflowRunId) : undefined;
-    return (
-      owned ||
-      (run ? db.getWorkflow(run.workflowId)?.name : undefined) ||
-      sessionName(instanceId) ||
-      "A session"
-    );
+    return owned || sessionName(instanceId) || "A session";
   };
 
   /**
    * An ask's visible title: a memory proposal and a project setting by what
    * they are ("Memory proposal", "Project setting"), never by what they say;
-   * any other by its session or workflow ({@link askName}).
+   * any other by its session ({@link askName}).
    */
   const askTitle = (
     row: AskRow | undefined,
-    payload: Partial<PermissionRequestFrame> & { workflowRunId?: string },
+    payload: Partial<PermissionRequestFrame>,
     instanceId: string
   ): string => {
     if (payload.toolName === MEMORY_PROPOSAL_TOOL) {
@@ -1567,7 +1545,7 @@ export const createPush = ({
     if (payload.toolName === PROJECT_SETTINGS_TOOL) {
       return PROJECT_SETTING_NAME;
     }
-    return askName(row, payload.workflowRunId, instanceId);
+    return askName(row, instanceId);
   };
 
   /** How many of an artifact's pins ask the person, as its Needs-you item counts them. */
@@ -1660,7 +1638,7 @@ export const createPush = ({
 
   return {
     /**
-     * A session (or a workflow) is blocked on you: a permission or a question.
+     * A session is blocked on you: a permission or a question.
      * Call wherever the ask reaches the operator; a request is pushed once
      * however often it is called.
      */
@@ -1669,7 +1647,6 @@ export const createPush = ({
         /** An ask no session row stands behind names its project itself (a memory proposal, memory.ts). */
         projectId?: string;
         routedTo?: string;
-        workflowRunId?: string;
       };
       const requestId = envelope.requestId ?? payload.requestId;
       if (
@@ -1720,7 +1697,6 @@ export const createPush = ({
             projectId,
             requestId,
             threadId: payload.threadId ?? null,
-            workflowRunId: payload.workflowRunId ?? null,
           },
         },
       });
@@ -1789,8 +1765,7 @@ export const createPush = ({
      * A session's turn ended with its result, and no standing instruction
      * answered it (server.ts, at the turn's end; a turn cut by a restart has
      * no result and never comes here). Pushes when the session is one the
-     * owner started: top level, not a delegate, a workflow's step, a
-     * project's lead or a continuation's worker; not stopped by them; and
+     * owner started: top level, not a delegate, a project's lead or a continuation's worker; not stopped by them; and
      * waiting on them, not on work of its own ({@link ownWork}, read as the
      * turn ends): that work's end starts its next turn, and the end of the
      * turn that leaves it waiting on nothing pushes.
@@ -1818,7 +1793,6 @@ export const createPush = ({
         if (
           !row ||
           row.parentInstanceId ||
-          row.workflowStepId ||
           row.workItemId ||
           row.kind === "summariser" ||
           row.role === "lead"
@@ -2161,7 +2135,6 @@ export const createPush = ({
       if (
         !row ||
         row.parentInstanceId ||
-        row.workflowStepId ||
         row.workItemId ||
         row.kind === "summariser" ||
         row.role === "lead"
@@ -2200,39 +2173,6 @@ export const createPush = ({
         false
       );
       console.log(`[push] session ${instanceId}: failed`);
-    },
-
-    /**
-     * A workflow run with no supervisor said `notify` (workflows/runtime.ts):
-     * its words are in the run's log, and this tells the person they are
-     * there. Open only, to the run. The visible words say the workflow's name
-     * and "Note", the sealed ones the note's first line. A newer note from
-     * the same run replaces the older; a look at the run takes it down.
-     */
-    workflowNote(runId: string, text: string): void {
-      const run = db.getWorkflowRun(runId);
-      if (!run) {
-        return;
-      }
-      const name = db.getWorkflow(run.workflowId)?.name ?? "A workflow";
-      arrive(
-        {
-          ask: false,
-          instanceId: null,
-          landedAt: new Date(),
-          still: () => true,
-          notification: {
-            shown: alertOf(name, null, NOTE),
-            sealed: alertOf(name, null, firstLine(text) ?? NOTE),
-            category: PUSH_CATEGORIES.taskOpenOnly,
-            collapseId: runCollapseId(runId),
-            threadId: runId,
-            data: { kind: "run", runId },
-          },
-        },
-        false
-      );
-      console.log(`[push] workflow run ${runId}: note`);
     },
 
     /**

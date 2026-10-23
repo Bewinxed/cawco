@@ -30,7 +30,7 @@ struct Travel {
         }
         // A project home is a step deeper than the spoke it was opened from.
         let deeper: Bool = switch to {
-        case .project, .workflow: true
+        case .project: true
         default: false
         }
         let x = deeper ? 0.08 : -0.08

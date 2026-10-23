@@ -104,7 +104,7 @@ const PRICING = "pricing-notes";
 const BROKEN = "broken-picture";
 const UNPICTURED = ["never-pictured", "also-unpictured"];
 const ATTACHMENT_SENDS = 3;
-/** A picture taller than the cards' 3:4: the owner's "What workflows become", 305×656. */
+/** A picture taller than the cards' 3:4: the owner's "What routines become", 305×656. */
 const TALL = "tall-decision-picture";
 /** A picture five times wider than tall. */
 const WIDE = "wide-picture";
@@ -120,7 +120,7 @@ const FORTY_WORDS = Array.from(
   (_, i) =>
     [
       "what",
-      "workflows",
+      "routines",
       "become",
       "once",
       "a",
@@ -134,9 +134,9 @@ const FORTY_WORDS = Array.from(
 /** Decision pages no pane has drawn: Files draws them unseen, through the overlay's own picture. */
 const DECISIONS = [
   {
-    name: "what-workflows-become",
+    name: "what-routines-become",
     program: `root = Decisions("${FORTY_WORDS}", [shape])
-shape = Decision("shape", "A saved program that runs real delegates", [saved, adhoc], "Today a workflow is a script in the session.")
+shape = Decision("shape", "A saved program that runs real delegates", [saved, adhoc], "Today a routine is a brief in the session.")
 saved = Option("saved", "A saved program", "Runs again from the project, with its own name.", true, [], "One more thing to keep.")
 adhoc = Option("adhoc", "As it is", "Nothing new to learn.", false, [], "Nothing to run again.")`,
   },

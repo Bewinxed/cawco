@@ -350,7 +350,7 @@ const lines = (each: (line: string) => void) => {
  * machine cannot start rejects with its reason; the command never runs
  * outside it.
  */
-export async function runWorkflowCommand(
+export async function runHubCommand(
   cwd: unknown,
   cmd: unknown,
   timeoutMs: unknown,
@@ -402,7 +402,7 @@ const CANCELLED: CommandResult = {
   stderr: "",
 };
 
-/** One command as {@link runWorkflowCommand} runs it: `file` and `args` in `cwd`, `env` over the host's. */
+/** One command as {@link runHubCommand} runs it: `file` and `args` in `cwd`, `env` over the host's. */
 interface Spawned {
   readonly args: readonly string[];
   readonly cmd: string;
@@ -414,7 +414,7 @@ interface Spawned {
   readonly workspace: unknown;
 }
 
-/** {@link runWorkflowCommand}'s run of one process, its clock, limits and cancel as it says. */
+/** {@link runHubCommand}'s run of one process, its clock, limits and cancel as it says. */
 const spawned = ({
   args,
   cmd,
@@ -645,7 +645,7 @@ const insideRead = async (
   workspace: WorkspaceRef,
   cmd: string
 ): Promise<{ ok: true; out: string } | { ok: false; why: string }> => {
-  const read = await runWorkflowCommand(
+  const read = await runHubCommand(
     workspace.path,
     `${SAFE_GIT_SHELL}${cmd}`,
     READ_TIMEOUT_MS,
@@ -725,7 +725,7 @@ const movedCommand = async (
   const { moves: _moved, ...plain } = run;
   const ran =
     writes.length === 0
-      ? await runWorkflowCommand(cwd, cmd, timeoutMs, workspace, plain)
+      ? await runHubCommand(cwd, cmd, timeoutMs, workspace, plain)
       : await onHost(cwd, cmd, timeoutMs, workspace, run, writes);
   if (ran.exitCode !== 0 || ran.cancelled) {
     return ran;

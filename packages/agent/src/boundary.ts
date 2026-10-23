@@ -36,7 +36,7 @@
  * workspace's `claude-prefix` script, {@link claudePrefixScript}), which the
  * CLI applies after its permission rules have judged the command as the
  * model wrote it; OpenCode by its plugin's `shell` tool, pi by its bash
- * tool's operations, a workflow's `runCommand`. A workspace holds no credential of any host: its git reaches
+ * tool's operations, the hub's commands by `runHubCommand`. A workspace holds no credential of any host: its git reaches
  * its clone's origin, on any host and over any transport, through the git
  * door (hub-git.ts), which signs in on the host with the host's own. Its
  * `gh` reaches GitHub's API through the workspace's GitHub door
@@ -44,7 +44,7 @@
  * and signs in on the host to what goes, whatever the rule: no forge's token
  * ever enters a workspace ({@link commandEnv}). The hub lands a workspace's
  * commits through the same door: its `git push` is a command the workspace's
- * agent runs through this executor (`runWorkflowCommand`). `cawco tools` reaches the hub's tools through the
+ * agent runs through this executor (`runHubCommand`). `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
  *
  * sessiond holds the boundary and the workspace's judge, so an agent restart
@@ -3864,7 +3864,7 @@ const COMMAND_DRAIN_LOOK_MS = 100;
  * meanwhile waits at the gate with no mark ({@link execScript}), so only
  * those marked are waited on, for {@link COMMAND_DRAIN_MS} at most. It stops
  * waiting at once when an executor this agent started waits at the gate (a
- * preview's server the stage starts, a workflow's step): a command past the
+ * preview's server the stage starts): a command past the
  * gate may be waiting on it (the tool call that serves the preview), and
  * neither would end. Answers the commands still running then; none once
  * they all ended.
@@ -4028,8 +4028,8 @@ interface Worker {
 
 /**
  * The executors of the agent's own commands running in each workspace now,
- * by pid (workflow-command.ts `runWorkflowCommand`: a landing's push and
- * gate steps, the hub's checks and git reads, a workflow's command): none is
+ * by pid (hub-command.ts `runHubCommand`: a landing's push and
+ * gate steps, the hub's checks and git reads): none is
  * a session's ({@link agentWork}).
  */
 const agentExecutors = new Map<string, Set<number>>();
@@ -5755,7 +5755,7 @@ const recentlyHeld = (id: string): boolean =>
  * record goes (`boundary.json`), so a judge's exit arms nothing again
  * ({@link watchJudge}) and its executor, until the next start, says the
  * boundary is not running. Its next {@link ensureBoundary} (a session's
- * spawn or wake, the hub's land or check, a workflow's command) starts a new
+ * spawn or wake, the hub's land or check) starts a new
  * one and arms it. The gate is up while it closes, and an executor already on
  * its way in leaves the boundary as it is. Never rejects.
  */
