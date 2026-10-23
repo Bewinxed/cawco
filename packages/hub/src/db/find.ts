@@ -100,6 +100,14 @@ export interface FindRoutineRow {
 export interface FindDb {
   /** Every artifact: what it is, whose, and whether the person changed any of its keys. */
   readonly artifacts: () => FindArtifactRow[];
+  /**
+   * Every conversation the hub made for its own use that holds no one's own
+   * words, as `machineId:sessionId` (find.ts `purgedKey`): a continuation's
+   * summariser (kind `summariser`), its prompt the hub's and its answer a
+   * model's summary of a session found by its own words. By each harness
+   * session id it went by.
+   */
+  readonly hubMade: () => Set<string>;
   /** The ids of the sessions find holds whose id starts with `prefix` (hex and dashes only). */
   readonly idsByPrefix: (prefix: string) => string[];
   /** The conversations find reads ({@link findColumns}): every one, or these ids'. */
@@ -172,6 +180,36 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         .all()
         .map((row) => `${row.machineId}:${row.sessionId}`)
     ),
+  hubMade: () => {
+    const made = db
+      .select({
+        id: instances.id,
+        machineId: instances.machineId,
+        sessionId: instances.sessionId,
+      })
+      .from(instances)
+      .where(eq(instances.kind, "summariser"))
+      .all();
+    const machineOf = new Map(made.map((row) => [row.id, row.machineId]));
+    const keys = new Set(
+      made.flatMap((row) =>
+        row.sessionId ? [`${row.machineId}:${row.sessionId}`] : []
+      )
+    );
+    if (made.length > 0) {
+      for (const { instanceId, sessionId } of db
+        .select({
+          instanceId: instanceConversations.instanceId,
+          sessionId: instanceConversations.sessionId,
+        })
+        .from(instanceConversations)
+        .where(inArray(instanceConversations.instanceId, [...machineOf.keys()]))
+        .all()) {
+        keys.add(`${machineOf.get(instanceId)}:${sessionId}`);
+      }
+    }
+    return keys;
+  },
   artifacts: () =>
     db
       .select({

@@ -6,7 +6,9 @@
  * Seeded: a session where the person types a sentence of their own, with a
  * made-up password in it far from the word "password"; a second session
  * handed the hub's summariser prompt (hub continuation.ts
- * `summariserPrompt`) that quotes the same sentence. Then the first
+ * `summariserPrompt`) that quotes the same sentence; a third handed it
+ * too, then made the hub's own summariser (its row's kind `summariser`, as
+ * a continuation's `summariserRun` starts one). Then the first
  * session's stored transcript loses the person's turn (its line cut out, as
  * a compaction or an account move leaves a transcript), and the machine's
  * agent restarts.
@@ -18,6 +20,9 @@
  *    `around`, which reads the turn from the index: the turn is the centre.
  * c. After the agent's restart the machine says nothing of indexing (no
  *    "catching up", no "indexed through") within {@link INDEXED_WITHIN_MS}.
+ * d. The summariser session is no hit of an agent's find, with `by` or
+ *    without, nor of the person's (`GET /api/find`), though its machine's
+ *    index holds the sentence (db find.ts `hubMade`).
  *
  *   bun scripts/probe-kit/run.ts find-index
  */
@@ -105,9 +110,11 @@ const run = async (kit: Kit) => {
   };
   const talker = await session("Heron log");
   const summariser = await session("Summary stand-in");
+  const hubs = await session("Summary of Heron log");
   const asker = await session("Asker");
   await say(talker.id, MINE);
   await say(summariser.id, SUMMARISER);
+  await say(hubs.id, SUMMARISER);
   const find = async (args: Record<string, unknown>) => {
     const read = await toolRecord<Answer>(
       { base: fleet.base, id: asker.id, credential: asker.credential },
@@ -120,19 +127,28 @@ const run = async (kit: Kit) => {
   };
   const everyone = () => find({ query: WORDS, project: "all", limit: 20 });
   const held = await until(
-    "both sessions' turns in the machine's index",
+    "the three sessions' turns in the machine's index",
     everyone,
     ({ answer }) =>
-      [talker.id, summariser.id].every((id) =>
+      [talker.id, summariser.id, hubs.id].every((id) =>
         (answer.hits ?? []).some((hit) => hit.id === id && hit.ref)
       ),
     HELD_MS
   ).catch(() => undefined);
   kit.check(
-    `the machine's index holds both turns within ${HELD_MS / 1000} s`,
+    `the machine's index holds the three turns within ${HELD_MS / 1000} s`,
     held !== undefined,
     held ? held.text.slice(0, 900) : (await everyone()).text.slice(0, 900)
   );
+  // The third, the hub's own summariser from here on.
+  fleet.write("UPDATE instances SET kind = 'summariser' WHERE id = ?", hubs.id);
+  const [made] = fleet.query<{ session_id: string | null }>(
+    "SELECT session_id FROM instances WHERE id = ?",
+    hubs.id
+  );
+  /** Whether `id` names the summariser session: as the hub holds it, or as a session it never started. */
+  const isHubs = (id: string) =>
+    id === hubs.id || id.endsWith(`:${made?.session_id ?? hubs.id}`);
 
   // The person's turn, gone from the stored transcript.
   const [row] = fleet.query<{ session_id: string | null }>(
@@ -208,6 +224,20 @@ const run = async (kit: Kit) => {
       Boolean(here?.text.includes("[redacted]")) &&
       !around?.text.includes(PASSWORD),
     `hit: ${top?.excerpt}\naround: ${around?.text.slice(0, 900)}`
+  );
+  const route = (await (
+    await fetch(
+      `${fleet.base}/api/find?${new URLSearchParams({ q: WORDS, limit: "50" })}`
+    )
+  ).json()) as { results: { id: string; kind: string }[] };
+  kit.check(
+    "d: the hub's summariser session is no hit of an agent's find, by person or not, nor of the person's GET /api/find, while the same words in a session of its own are",
+    at(summariser.id) >= 0 &&
+      !all.some((hit) => isHubs(hit.id)) &&
+      !hits.some((hit) => isHubs(hit.id)) &&
+      route.results.some((result) => result.id === talker.id) &&
+      !route.results.some((result) => isHubs(result.id)),
+    `summariser ${hubs.id} (session ${made?.session_id})\nagent: ${JSON.stringify(all.map((hit) => hit.id))}\nby person: ${JSON.stringify(hits.map((hit) => hit.id))}\nroute: ${JSON.stringify(route.results.map((result) => `${result.kind}:${result.id}`))}`
   );
 };
 

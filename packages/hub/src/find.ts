@@ -360,6 +360,14 @@ interface Names {
   bySessionId: Map<string, string>;
   conversations: Map<string, Held>;
   entries: Entry[];
+  /**
+   * The hub's own conversations, by `machineId:sessionId` (db find.ts
+   * `hubMade`): a summariser's, whose words are the hub's prompt quoting a
+   * session and a model's summary of it. No find answers with them, the
+   * person's nor an agent's: the session they quote is found by its own
+   * words, and they are hidden from every board and catalog besides.
+   */
+  hubMade: ReadonlySet<string>;
   leads: ReadonlySet<string>;
   machines: Map<string, AgentRow>;
   /** Each session a machine keeps that the hub never started, by `machineId:sessionId`. */
@@ -783,10 +791,12 @@ export const createFind = (deps: FindDeps) => {
         : [];
     });
     const bySessionId = sessionIdsOf(held);
-    const stored = storedOf(machines, bySessionId, now);
+    const hubMade = db.find.hubMade();
+    const stored = storedOf(machines, bySessionId, hubMade, now);
     names = {
       at: now,
       bySessionId,
+      hubMade,
       stored,
       conversations,
       leads,
@@ -836,6 +846,7 @@ export const createFind = (deps: FindDeps) => {
   const storedOf = (
     machines: Map<string, AgentRow>,
     bySessionId: Map<string, string>,
+    hubMade: ReadonlySet<string>,
     now: number
   ): Map<string, Entry> => {
     const stored = new Map<string, Entry>();
@@ -845,9 +856,11 @@ export const createFind = (deps: FindDeps) => {
         name: machineLabel(machine.hostname),
       };
       for (const info of catalogOf(machine, now)) {
-        const entry = bySessionId.has(info.sessionId)
-          ? null
-          : storedEntry(info, where);
+        const entry =
+          bySessionId.has(info.sessionId) ||
+          hubMade.has(purgedKey(machine.machineId, info.sessionId))
+            ? null
+            : storedEntry(info, where);
         if (entry) {
           stored.set(entry.result.id, entry);
         }
@@ -1056,7 +1069,8 @@ export const createFind = (deps: FindDeps) => {
    * Folds the machines' moments into conversations: a session the hub holds
    * gains them; one it never started (a stored CLI session) is a
    * conversation of its own, named by its folder; Caw's lead session and a
-   * session find leaves out (a discarded one) are left out. Every machine's
+   * session find leaves out (a discarded one) and the hub's own (a
+   * summariser's, {@link Names.hubMade}) are left out. Every machine's
    * relevance is read against the best of all of them, weighed by whose
    * words the best moment is.
    */
@@ -1067,15 +1081,19 @@ export const createFind = (deps: FindDeps) => {
     needsYou: ReadonlySet<string>,
     now: number
   ) => {
+    // The hub's own conversations are no hit, nor the measure of one.
+    const hits = asked.map(({ coverage, answer }) => ({
+      machine: { id: coverage.machineId, name: coverage.name },
+      conversations: (answer?.conversations ?? []).filter(
+        (hit) => !held.hubMade.has(purgedKey(coverage.machineId, hit.sessionId))
+      ),
+    }));
     const top = Math.max(
       0,
-      ...asked.flatMap((each) =>
-        (each.answer?.conversations ?? []).map((hit) => hit.score)
-      )
+      ...hits.flatMap((each) => each.conversations.map((hit) => hit.score))
     );
-    for (const { coverage, answer } of asked) {
-      const machine = { id: coverage.machineId, name: coverage.name };
-      for (const hit of answer?.conversations ?? []) {
+    for (const { machine, conversations } of hits) {
+      for (const hit of conversations) {
         foldHit(found, hit, machine, top, held, needsYou, now);
       }
     }
