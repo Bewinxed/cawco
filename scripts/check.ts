@@ -55,8 +55,13 @@ const STAMPS = join(ROOT, "node_modules/.cache/cawco");
 mkdirSync(STAMPS, { recursive: true });
 const DASHBOARD = "apps/dashboard";
 /**
- * `golar tsc -b`'s threads, measured by cgroup CPU over every project, cold
- * and warm (scripts/check.ts's commit says the numbers).
+ * `golar tsc -b`'s threads. Measured 2026-10-23 by this workspace's cgroup
+ * CPU, every project rebuilt (`--force`), on 48 cores at load 50–66: the
+ * default 44.9, 44.8, 49.0, 53.2 CPU-s (5.4–8.7 s); `--builders 8
+ * --checkers 1` 36.3, 45.8, 42.3, 39.6 (8.0–19.3 s); `--builders 16
+ * --checkers 2` 45.4, 43.2; `--singleThreaded` 33.3, 33.5 but 25.9–28.4 s,
+ * longer than the check's longest step (openapi:check, ~20 s). Nothing
+ * changed: 1.7–1.8 CPU-s for each.
  */
 const TSC_FLAGS = ["--builders", "8", "--checkers", "1"];
 
