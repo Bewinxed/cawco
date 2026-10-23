@@ -2491,6 +2491,7 @@ export interface DbShape {
         | "waitResumeBy"
         | "waitHistory"
         | "heldAt"
+        | "heldAsleepAt"
         | "prUrl"
         | "groupReportedAt"
         | "digest"

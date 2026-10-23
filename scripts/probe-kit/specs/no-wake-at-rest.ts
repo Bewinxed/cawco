@@ -21,6 +21,9 @@
  * - (w1) One of the September sessions is a delegate of L1's whose work
  *   item is still open: the work-item sweep holds the item (blocked, not
  *   failed), tells you in Needs you, and never wakes its session.
+ * - (w2) Last, the hub restarts with that item held: its hold and notice
+ *   stand (a stored row), and its parent's word then ends the hold and
+ *   takes the notice down.
  * - (n1) The hub's own words reach each of the 35 as their senders send
  *   them (a browser take-over's notice, a rule's reply, a leak notice, a
  *   pause's carry-on, a containers notice): each is kept at the hub, owed.
@@ -488,6 +491,77 @@ const asleepItemLeg = async (run: Run, sessionId: string, item: string) => {
   );
 };
 
+/** The September item's hold and its notice, as the hub stores them. */
+const holdOf = (fleet: KitFleet, item: string, sessionId: string) => {
+  const [row] = fleet.query<{
+    held_asleep_at: number | null;
+    held_at: number | null;
+    state: string;
+  }>(
+    "SELECT held_at, held_asleep_at, state FROM work_items WHERE id = ?",
+    item
+  );
+  const [told] = fleet.query<{ title: string }>(
+    "SELECT title FROM fleet_watch_notices WHERE instance_id = ?",
+    sessionId
+  );
+  return { ...row, notice: told?.title ?? null };
+};
+
+/**
+ * (w2) The held September item across a hub restart: its hold is a stored
+ * row (`held_asleep_at`), so after the restart its parent's word ends the
+ * hold and takes its notice down.
+ */
+const heldAcrossRestartLeg = async (
+  run: Run,
+  sessionId: string,
+  item: string
+) => {
+  const { fleet } = run;
+  const before = holdOf(fleet, item, sessionId);
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  const restarted = holdOf(fleet, item, sessionId);
+  // The parent's word, as its handoff carries it.
+  await fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "send",
+    machineId: MACHINE,
+    sessionId,
+    payload: {
+      instanceId: sessionId,
+      message: {
+        type: "user",
+        uuid: crypto.randomUUID(),
+        message: { role: "user", content: "Carry the September work on." },
+        parent_tool_use_id: null,
+        origin: { kind: "peer", fromSession: run.l1 },
+      },
+    },
+  });
+  const after = await until(
+    "the parent's word ends the hold",
+    () => holdOf(fleet, item, sessionId),
+    (hold) => hold.held_at === null && hold.notice === null,
+    30_000
+  ).catch(() => holdOf(fleet, item, sessionId));
+  run.check(
+    "w2: held across a hub restart, the September item's hold and notice stand; after the restart its parent's word ends the hold and takes the notice down",
+    before.held_asleep_at !== null &&
+      before.notice !== null &&
+      restarted.held_asleep_at !== null &&
+      restarted.notice !== null &&
+      after.held_at === null &&
+      after.held_asleep_at === null &&
+      after.notice === null,
+    `before the restart: ${JSON.stringify(before)}; after it: ${JSON.stringify(restarted)}; after the parent's word: ${JSON.stringify(after)}`
+  );
+};
+
 /** (r1) The hub and agent start on the seeded rows, then each restarts again. */
 const restartLeg = async (run: Run) => {
   const { fleet } = run;
@@ -836,6 +910,8 @@ async function runSpec(kit: Kit): Promise<void> {
     await leakLeg(state);
     await sampler.stop();
     wholeRun(state, sampler.samples(), before);
+    // Last: the parent's word wakes the delegate, which ends the 35's quiet.
+    await heldAcrossRestartLeg(state, delegate, item);
   } finally {
     await sampler.stop();
     for (const pid of await pidsOf(`sleep ${LEFTOVER}`)) {

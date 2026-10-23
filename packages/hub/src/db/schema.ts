@@ -1610,12 +1610,20 @@ export const workItems = sqliteTable(
     /** Deadline plus grace while awaiting the harness's next turn read. */
     waitResumeBy: timestamp("wait_resume_by"),
     /**
-     * When an interrupt stopped its turn, while that holds it: nothing the
-     * hub sends on its own (a quiet turn's reminder, a wait's end, a landing
-     * gate's outcome, a rule's reply, another session's report) wakes it until its
+     * When an interrupt stopped its turn, or the sweep found its session
+     * asleep past its limit, while that holds it: nothing the hub sends on
+     * its own (a quiet turn's reminder, a wait's end, a landing gate's
+     * outcome, a rule's reply, another session's report) wakes it until its
      * parent, its project's lead or the reader sends it something.
      */
     heldAt: timestamp("held_at"),
+    /**
+     * Set with {@link heldAt} when the hold is the sweep's, for a session
+     * asleep past its limit (work-items.ts `blockAsleep`): its notice stands
+     * in Needs you, and the word that ends the hold takes it down, across a
+     * hub restart. Null for an interrupt's hold, and once the hold ends.
+     */
+    heldAsleepAt: timestamp("held_asleep_at"),
     /** Routine waits since the last message handed to the parent. */
     waitHistory: text("wait_history", { mode: "json" }).$type<{
       count: number;

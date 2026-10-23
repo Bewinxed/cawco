@@ -2038,6 +2038,13 @@
       "when": 1792785920303,
       "tag": "0298_mcp_oauth_ended",
       "breakpoints": true
+    },
+    {
+      "idx": 299,
+      "version": "6",
+      "when": 1792786774873,
+      "tag": "0299_work_item_held_asleep",
+      "breakpoints": true
     }
   ]
 }

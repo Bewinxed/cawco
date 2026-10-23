@@ -2199,13 +2199,6 @@ export const createWorkItems = ({
    * counts from none.
    */
   const woken = new Map<string, { count: number; turns: number }>();
-  /**
-   * Items the sweep held because their session slept past its limit
-   * ({@link blockAsleep}): the hold's end takes its notice down. In memory:
-   * after a hub start, the notice goes when you write to the session or
-   * the item ends.
-   */
-  const asleepHeld = new Set<string>();
   const waitTimers = new Map<string, HubTimer>();
   /**
    * Waits whose declaring turn ended. From then on a tool call of the
@@ -2902,8 +2895,10 @@ export const createWorkItems = ({
   ): void => {
     quiet.delete(item.id);
     woken.delete(item.id);
-    update(item.id, { heldAt: new Date() });
-    asleepHeld.add(item.id);
+    // Stored, not kept in memory: the word that ends the hold takes the
+    // notice down after a hub restart too (`unhold`).
+    const now = new Date();
+    update(item.id, { heldAt: now, heldAsleepAt: now });
     const why = workWords.heldAsleep(
       `${new Date(since).toISOString().slice(0, 16).replace("T", " ")} UTC`,
       limit.words
@@ -5936,6 +5931,7 @@ export const createWorkItems = ({
         endedAt: null,
         dismissedAt: null,
         heldAt: null,
+        heldAsleepAt: null,
       }) ?? item
     );
   };
@@ -8128,8 +8124,8 @@ export const createWorkItems = ({
       if (!(item?.heldAt && mayReopen(item, origin))) {
         return false;
       }
-      update(item.id, { heldAt: null });
-      if (asleepHeld.delete(item.id)) {
+      update(item.id, { heldAt: null, heldAsleepAt: null });
+      if (item.heldAsleepAt) {
         untellYou(instanceId);
       }
       console.log(`[work-items] ${item.id}: woken from its hold`);
@@ -8294,7 +8290,10 @@ export const createWorkItems = ({
       db.carryWorkItem(item.id, item.instanceId, to);
       quiet.delete(item.id);
       if (LIVE.has(item.state)) {
-        update(item.id, { heldAt: null });
+        update(item.id, { heldAt: null, heldAsleepAt: null });
+        if (item.heldAsleepAt) {
+          untellYou(item.instanceId);
+        }
       } else {
         rerun(item);
       }
