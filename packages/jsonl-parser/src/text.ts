@@ -41,6 +41,12 @@ export interface TranscriptDoc {
   thinking?: string;
   /** Names of tools invoked in this record, space-joined (searchable facet). */
   tools?: string;
+  /**
+   * What the tools answered in this record (a tool result's words), each cut
+   * to {@link ExtractOptions.toolOutputChars}: searched only when a search
+   * asks for it (an agent's `find`).
+   */
+  output?: string;
   cwd?: string;
   model?: string;
   /** True for sidechain/subagent records. */
@@ -54,6 +60,32 @@ export interface ExtractOptions {
   toolInputBytes?: number;
   /** Skip system-injected user records (isMeta) (default true). */
   skipMeta?: boolean;
+  /** How much of each tool result's words is kept, characters (default {@link TOOL_OUTPUT_CHARS}; 0 = none). */
+  toolOutputChars?: number;
+}
+
+/**
+ * How much of one tool result's words the index keeps. Tool results are most
+ * of a transcript's bytes (a file read, a build log), and the index holds a
+ * copy of what it searches: the head of each result is where a command's
+ * error, a test's failure or a value it printed stands, and a search past it
+ * is a read of the transcript. Our own call.
+ */
+export const TOOL_OUTPUT_CHARS = 4000;
+
+/** A tool result's words: its text, or its text parts' (an image is no words). */
+function resultWords(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .flatMap((part: { text?: unknown; type?: unknown }) =>
+      part?.type === "text" && typeof part.text === "string" ? [part.text] : [],
+    )
+    .join("\n");
 }
 
 /**
@@ -108,16 +140,18 @@ export function userAuthor(text: string): { author: DocAuthor; text: string } {
 function blocksToText(
   content: string | ContentBlock[] | undefined,
   options: ExtractOptions,
-): { text: string; thinking: string; tools: string[] } {
+): { output: string; text: string; thinking: string; tools: string[] } {
   const tools: string[] = [];
   if (typeof content === "string") {
-    return { text: content, thinking: "", tools };
+    return { text: content, thinking: "", tools, output: "" };
   }
   if (!Array.isArray(content)) {
-    return { text: "", thinking: "", tools };
+    return { text: "", thinking: "", tools, output: "" };
   }
   const parts: string[] = [];
   const thoughts: string[] = [];
+  const outputs: string[] = [];
+  const outputCap = options.toolOutputChars ?? TOOL_OUTPUT_CHARS;
   for (const block of content) {
     switch (block.type) {
       case "text":
@@ -140,11 +174,24 @@ function blocksToText(
         }
         break;
       }
+      case "tool_result": {
+        const words =
+          outputCap > 0 ? resultWords(block.content).replace(SYSTEM_REMINDER, "").trim() : "";
+        if (words) {
+          outputs.push(words.slice(0, outputCap));
+        }
+        break;
+      }
       default:
         break;
     }
   }
-  return { text: parts.join("\n"), thinking: thoughts.join("\n"), tools };
+  return {
+    text: parts.join("\n"),
+    thinking: thoughts.join("\n"),
+    tools,
+    output: outputs.join("\n"),
+  };
 }
 
 /**
@@ -206,11 +253,12 @@ export function extractDoc(
     return null;
   }
   const words = blocksToText(message.content, options);
+  // A user record of tool results alone is the agent's tools answering, never the person.
   const said =
-    record.type === "user"
+    record.type === "user" && (words.text.trim() || !words.output)
       ? userAuthor(words.text)
       : { author: "agent" as const, text: words.text.trim() };
-  if (!said.text && !words.thinking && words.tools.length === 0) {
+  if (!said.text && !words.thinking && words.tools.length === 0 && !words.output) {
     return null;
   }
   return {
@@ -223,6 +271,7 @@ export function extractDoc(
     text: said.text,
     ...(words.thinking ? { thinking: words.thinking } : {}),
     tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
+    ...(words.output ? { output: words.output } : {}),
     cwd: r.cwd,
     model: record.type === "assistant" ? (message as { model?: string }).model : undefined,
     sidechain: r.isSidechain === true ? true : undefined,

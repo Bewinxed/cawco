@@ -264,12 +264,14 @@ export class TranscriptSearchService {
         limit: Math.min(options?.limit ?? MAX_LISTED_DOCS, MAX_LISTED_DOCS),
         ...narrowed,
         ...(options?.since ? { since: options.since } : {}),
+        ...(options?.toolOutput ? { toolOutput: true } : {}),
       });
     }
     return this.#index.search(query, {
       limit,
       ...(author ? { author } : {}),
       ...narrowed,
+      ...(options?.toolOutput ? { toolOutput: true } : {}),
     });
   }
 

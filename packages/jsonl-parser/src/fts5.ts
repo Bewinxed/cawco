@@ -56,6 +56,8 @@ import {
  * "said by me" is only the person, and a search weighs the person's words and
  * a delegate's report over the rest. `thinking` is apart from `text`, so a
  * match in what a model thought weighs less than one in what it said.
+ * `output` is what the tools answered (text.ts `TOOL_OUTPUT_CHARS` of each
+ * result), searched only when a search asks for it ({@link SearchOptions.toolOutput}).
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS strings (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE);
@@ -72,20 +74,21 @@ CREATE TABLE IF NOT EXISTS docs (
   sidechain INTEGER NOT NULL DEFAULT 0,
   tools TEXT,
   thinking TEXT,
-  text TEXT NOT NULL
+  text TEXT NOT NULL,
+  output TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS docs_key ON docs(coalesce(ts, ''), doc_id, harness);
 CREATE INDEX IF NOT EXISTS docs_author_ts ON docs(author, ts);
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
-  text, thinking, tools,
+  text, thinking, tools, output,
   content='docs', content_rowid='id',
   tokenize='porter unicode61'
 );
 CREATE TRIGGER IF NOT EXISTS docs_ai AFTER INSERT ON docs BEGIN
-  INSERT INTO docs_fts(rowid, text, thinking, tools) VALUES (new.id, new.text, new.thinking, new.tools);
+  INSERT INTO docs_fts(rowid, text, thinking, tools, output) VALUES (new.id, new.text, new.thinking, new.tools, new.output);
 END;
 CREATE TRIGGER IF NOT EXISTS docs_ad AFTER DELETE ON docs BEGIN
-  INSERT INTO docs_fts(docs_fts, rowid, text, thinking, tools) VALUES ('delete', old.id, old.text, old.thinking, old.tools);
+  INSERT INTO docs_fts(docs_fts, rowid, text, thinking, tools, output) VALUES ('delete', old.id, old.text, old.thinking, old.tools, old.output);
 END;
 CREATE TABLE IF NOT EXISTS files (
   path TEXT PRIMARY KEY,
@@ -128,10 +131,14 @@ const AUTHOR_WEIGHT: Record<DocAuthor, number> = {
 
 /**
  * BM25's weight of each FTS column, in the table's order (text, thinking,
- * tools): what a model thought counts for less than what was said, and a tool's
- * name for less still. Our own call.
+ * tools, output): what a model thought counts for less than what was said, a
+ * tool's name for less still, and what a tool answered least: it is long and
+ * repeats what was said about it. Our own call.
  */
-const COLUMN_WEIGHTS = "1.0, 0.35, 0.25";
+const COLUMN_WEIGHTS = "1.0, 0.35, 0.25, 0.2";
+
+/** The columns a search reads unless it asks for what tools answered too. */
+const SAID_COLUMNS = "{text thinking tools}";
 
 /**
  * The tiers a search ranks in, newest first: the newest 2,000 documents,
@@ -177,6 +184,8 @@ export interface SearchOptions {
   sessions?: readonly string[];
   /** Only documents written at or before this ISO time; one with no time is left out. */
   before?: string;
+  /** Match what tools answered too (`output`); otherwise only what was said, thought and called. */
+  toolOutput?: boolean;
 }
 
 /** What a listing with no words asks for: one author's documents, newest first. */
@@ -190,6 +199,8 @@ export interface ListOptions {
   since?: string;
   /** Only documents written at or before this ISO time. */
   before?: string;
+  /** What tools answered is listed too; otherwise a document of a tool's answer alone is left out. */
+  toolOutput?: boolean;
 }
 
 /** One place in a conversation that matched: where to open it, and why it matched. */
@@ -401,19 +412,20 @@ export class TranscriptIndex {
   /**
    * Whether `docs` is an older index's: one without `author`, which cannot
    * tell the person's words from what was put under their role, nor a model's
-   * thinking from what it said.
+   * thinking from what it said; or one without `output`, which never took in
+   * what the tools answered.
    */
   #olderLayout(): boolean {
     const docs = this.db.query("SELECT 1 FROM sqlite_master WHERE name = 'docs'").get();
-    return (
-      docs !== null &&
-      this.db.query("SELECT 1 FROM pragma_table_info('docs') WHERE name = 'author'").get() === null
-    );
+    const has = (column: string) =>
+      this.db.query("SELECT 1 FROM pragma_table_info('docs') WHERE name = ?").get(column) !== null;
+    return docs !== null && !(has("author") && has("output"));
   }
 
   /**
    * An older index, deleted and begun again empty: its rows hold neither who
-   * said them nor thinking apart, which only the transcripts can tell, so
+   * said them, thinking apart nor what the tools answered, which only the
+   * transcripts can tell, so
    * every transcript is read again by the next sync (a catch-up, which
    * {@link WRITE_BATCH_BYTES} and {@link FULL_PARSE_BATCH_BYTES} bound). The
    * index is a copy of the transcripts; nothing in it is lost. Once per index.
@@ -482,8 +494,8 @@ export class TranscriptIndex {
   /** Inserts `docs` in the caller's transaction; answers how many were new. */
   #insertDocs(docs: TranscriptDoc[]): number {
     const insert = this.db.query(
-      `INSERT OR IGNORE INTO docs (harness, doc_id, session, role, author, ts, cwd, model, sidechain, tools, thinking, text)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT OR IGNORE INTO docs (harness, doc_id, session, role, author, ts, cwd, model, sidechain, tools, thinking, text, output)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
     let added = 0;
     for (const doc of docs) {
@@ -500,6 +512,7 @@ export class TranscriptIndex {
         doc.tools ?? null,
         doc.thinking ?? null,
         doc.text,
+        doc.output ?? null,
       );
       if (row) {
         added += 1;
@@ -723,7 +736,7 @@ export class TranscriptIndex {
       .prepare(
         `SELECT d.id, h.value AS harness, d.doc_id, s.value AS session_id, r.value AS role,
                 a.value AS author, d.ts, c.value AS cwd, m.value AS model, d.sidechain,
-                substr(d.text, 1, ${GIST_CHARS}) AS gist
+                substr(coalesce(nullif(d.text, ''), d.output, ''), 1, ${GIST_CHARS}) AS gist
          FROM json_each(?) AS k
          JOIN docs d ON d.id = k.value
          JOIN strings h ON h.id = d.harness
@@ -761,7 +774,8 @@ export class TranscriptIndex {
    * The conversations whose words match `query` (every word, in any order;
    * the last also as the start of longer ones), best first, each with its
    * best {@link MOMENTS_PER_CONVERSATION} moments: BM25 over what was said,
-   * thought and called ({@link COLUMN_WEIGHTS}), weighed by whose words they
+   * thought and called, and what tools answered when `toolOutput` asks
+   * ({@link COLUMN_WEIGHTS}), weighed by whose words they
    * are ({@link AUTHOR_WEIGHT}), the newest documents ranked first
    * ({@link RECENT_TIERS}). Moments of a conversation that open with the same
    * words are one moment (a line said again and again). Ranked on ids and
@@ -770,10 +784,16 @@ export class TranscriptIndex {
    * cost, and the answer keeps a few.
    */
   search(query: string, options: SearchOptions = {}): ConversationHit[] {
-    const { whole, typing } = matchQueries(query);
-    if (whole.length === 0) {
+    const queries = matchQueries(query);
+    if (queries.whole.length === 0) {
       return [];
     }
+    // What tools answered is matched only when asked for: else every phrase
+    // reads what was said, thought and called alone.
+    const scoped = (match: string) =>
+      options.toolOutput ? match : `${SAID_COLUMNS} : (${match})`;
+    const whole = scoped(queries.whole);
+    const typing = queries.typing === null ? null : scoped(queries.typing);
     const limit = options.limit ?? 20;
     const params: (string | number)[] = [];
     let filters = "";
@@ -853,7 +873,9 @@ export class TranscriptIndex {
       return [];
     }
     const params: (string | number)[] = [author];
-    let filters = "";
+    let filters = options.toolOutput
+      ? ""
+      : " AND NOT (d.output IS NOT NULL AND d.text = '' AND d.thinking IS NULL AND d.tools IS NULL)";
     if (options.since !== undefined) {
       filters += " AND d.ts >= ?";
       params.push(options.since);

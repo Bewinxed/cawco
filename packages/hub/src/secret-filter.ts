@@ -3,8 +3,10 @@
  * said, nor a project's git. Every text an agent's `find` answers with
  * (find-tool.ts: excerpts, detailed turns, `around`'s turns) and every
  * `memory_note` before it is written (memory.ts) pass {@link redactSecrets}
- * first; each match is said as {@link REDACTED_SECRET}. The dashboard's own
- * Find, the person's, is not filtered. Two kinds of match:
+ * first; each match is said as {@link REDACTED_SECRET}. The person's own Find
+ * is not filtered: while "Hide secrets in Find" is on, its answer names where
+ * each secret stands ({@link secretRangesOf}, find-secrets.ts), and their
+ * screen draws it as dots until they show it. The kinds of match:
  *
  * - **Credentials by shape**: secretlint's recommended preset
  *   (@secretlint/secretlint-rule-preset-recommend: AWS, GCP, private keys,
@@ -100,10 +102,16 @@ const shapedCredentials = async (text: string): Promise<Range[]> => {
   return messages.map(({ range }) => range);
 };
 
-/** `text` with every secret found (module header) replaced by {@link REDACTED_SECRET}, overlapping finds as one. */
-export const redactSecrets = async (text: string): Promise<string> => {
+/**
+ * Where every secret found (module header) stands in `text`, in order,
+ * overlapping finds as one: the one recognizer both the agent's redaction
+ * and the person's masked Find read.
+ */
+export const secretRanges = async (
+  text: string
+): Promise<[start: number, end: number][]> => {
   if (!text.trim()) {
-    return text;
+    return [];
   }
   const ranges = [
     ...(await shapedCredentials(text)),
@@ -121,9 +129,43 @@ export const redactSecrets = async (text: string): Promise<string> => {
       merged.push([start, end]);
     }
   }
+  return merged;
+};
+
+/**
+ * Where the secrets stand in each of `texts`, read in one pass of the
+ * recognizer: the texts joined a blank line apart (a sentence never runs
+ * across one), each find cut back to the text it is in.
+ */
+export const secretRangesOf = async (
+  texts: readonly string[]
+): Promise<[start: number, end: number][][]> => {
+  const starts: number[] = [];
+  let joined = "";
+  for (const text of texts) {
+    if (joined) {
+      joined += "\n\n";
+    }
+    starts.push(joined.length);
+    joined += text;
+  }
+  const found = await secretRanges(joined);
+  return texts.map((text, index) => {
+    const from = starts[index] as number;
+    const to = from + text.length;
+    return found.flatMap(([start, end]): [number, number][] =>
+      end > from && start < to
+        ? [[Math.max(start, from) - from, Math.min(end, to) - from]]
+        : []
+    );
+  });
+};
+
+/** `text` with every secret found (module header) replaced by {@link REDACTED_SECRET}, overlapping finds as one. */
+export const redactSecrets = async (text: string): Promise<string> => {
   let out = "";
   let at = 0;
-  for (const [start, end] of merged) {
+  for (const [start, end] of await secretRanges(text)) {
     out += `${text.slice(at, start)}${REDACTED_SECRET}`;
     at = end;
   }

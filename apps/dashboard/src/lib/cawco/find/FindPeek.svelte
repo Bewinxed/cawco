@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { FindMoment, MomentAuthor } from "./find-client";
   /**
    * A row unfolded in place (→, or ⌄ on a phone): what tells it apart from a
    * sibling with the same title before he commits. Purpose, the last report,
@@ -7,8 +6,11 @@
    * session at that line), and its delegates. Each moment is an option of
    * the finder's listbox, so ↑↓ walk into it and ↵ opens there.
    */
-  import { age, excerptParts } from "./find-rows";
+  import { hiddenAt } from "./FindRow.svelte";
+  import type { FindMoment, MomentAuthor } from "./find-client";
+  import { age, momentParts, ownParts } from "./find-rows";
   import type { Spoken } from "./finder-state.svelte";
+  import Said from "./Said.svelte";
 
   let {
     id,
@@ -20,8 +22,10 @@
     keyOf,
     momentsState,
     phone = false,
+    shown,
     onopen,
     onretry,
+    onsecret,
   }: {
     /** The row names it as its description: `${rowId}-peek`. */
     id: string;
@@ -38,8 +42,12 @@
       | { state: "asking"; machine: string }
       | { state: "missing"; machine: string };
     phone?: boolean;
+    /** The secrets the person showed, by key; the rest are dots. */
+    shown: ReadonlySet<string>;
     onopen: (moment: FindMoment) => void;
     onretry: () => void;
+    /** A press on a hidden secret: show it, rather than opening there. */
+    onsecret: (key: string) => void;
   } = $props();
 
   const AUTHOR: Record<MomentAuthor, string> = {
@@ -51,6 +59,7 @@
   };
 
   const conversation = $derived(result.kind === "conversation" ? result : null);
+  const owner = $derived(`${result.kind}:${result.id}`);
 </script>
 
 <div
@@ -64,15 +73,23 @@
   {#if conversation?.purpose}
     <span data-slot="find-peek-label" class="text-ink-subtle">purpose</span>
     <span data-slot="value" class="min-w-0 text-ink-row"
-      >{conversation.purpose}</span
+      ><Said
+        runs={ownParts(conversation, "purpose", conversation.purpose)}
+        {shown}
+      /></span
     >
   {/if}
   {#if conversation?.lastReport}
     <span data-slot="find-peek-label" class="text-ink-subtle">last</span>
     <span data-slot="value" class="min-w-0 text-ink-row"
-      >report “{conversation.lastReport.headline}”<span class="px-space-1"
-        >·</span
-      ><span data-slot="num" class="num"
+      >report “<Said
+        runs={ownParts(
+          conversation,
+          "report",
+          conversation.lastReport.headline
+        )}
+        {shown}
+      />”<span class="px-space-1">·</span><span data-slot="num" class="num"
         >{age(conversation.lastReport.at, now)}</span
       ></span
     >
@@ -90,7 +107,14 @@
           aria-selected={activeKey === key}
           data-active={activeKey === key ? "" : undefined}
           data-find-row
-          onclick={() => onopen(moment)}
+          onclick={(event) => {
+            const secret = hiddenAt(event);
+            if (secret) {
+              onsecret(secret);
+              return;
+            }
+            onopen(moment);
+          }}
           role="option"
           tabindex="-1"
           type="button"
@@ -99,11 +123,10 @@
             >{AUTHOR[moment.author]}{#if moment.at !== null}<span
                 class="px-space-1">·</span
               ><span data-slot="num" class="num">{age(moment.at, now)}</span
-              >{/if}<span class="px-space-1">·</span
-            >“{#each excerptParts(moment.excerpt) as part, j (j)}{#if part.matched}<mark
-                  class="bg-transparent text-ink-strong font-medium"
-                  >{part.text}</mark
-                >{:else}{part.text}{/if}{/each}”</span
+              >{/if}<span class="px-space-1">·</span>“<Said
+              runs={momentParts(owner, moment)}
+              {shown}
+            />”</span
           >
           <span
             data-slot="enter"

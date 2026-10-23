@@ -233,6 +233,7 @@ import {
   ENDED_STATUSES,
   type EndedBy,
   estimateTokens,
+  type FindSettings,
   FLEET_DELTA,
   FLEET_WATCH,
   FLEET_WATCH_LIMITS,
@@ -628,6 +629,7 @@ import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
+import { withSecrets } from "./find-secrets";
 import { createFindTool } from "./find-tool";
 import {
   type FleetChoicesStore,
@@ -28281,10 +28283,25 @@ export const createServer = (
       // The fleet's one finding engine (find.ts): names and transcripts under
       // one ranking, and what waits on your eyes: read from the looks
       // (`/api/seen`) and the `shown` acks the screens already send.
-      .get("/api/find", { query: FIND_QUERY }, ({ query }) =>
-        answerFind(find, query)
-      )
+      // While "Hide secrets in Find" is on, each answer names where its
+      // secrets stand (find-secrets.ts), for every screen to draw as dots.
+      .get("/api/find", { query: FIND_QUERY }, async ({ query }) => {
+        const answer = await answerFind(find, query);
+        return db.findSettings.hideSecrets() ? withSecrets(answer) : answer;
+      })
       .get("/api/find/waiting", () => find.waiting())
+      // The person's Find settings, the same on every screen: kept at the hub.
+      .get("/api/find/settings", (): FindSettings => ({
+        hideSecrets: db.findSettings.hideSecrets(),
+      }))
+      .put(
+        "/api/find/settings",
+        { body: t.Object({ hideSecrets: t.Boolean() }) },
+        ({ body }): FindSettings => {
+          db.findSettings.setHideSecrets(body.hideSecrets, new Date());
+          return { hideSecrets: db.findSettings.hideSecrets() };
+        }
+      )
       // What a delegate and its parent said to each other, oldest first. Broadcast
       // as it happens *and* readable here, for the same reason the hand-offs are:
       // an exchange that finished before this tab opened is still the record.

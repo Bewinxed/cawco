@@ -1,3 +1,15 @@
+<script lang="ts" module>
+  const NONE: ReadonlySet<string> = new Set();
+
+  /** The hidden secret a press landed on, by key; null for anywhere else. */
+  export const hiddenAt = (event: MouseEvent): string | null =>
+    event.target instanceof Element
+      ? (event.target
+          .closest("[data-secret]:not([data-shown])")
+          ?.getAttribute("data-secret") ?? null)
+      : null;
+</script>
+
 <script lang="ts">
   /**
    * The one finder row (find-rows.ts `Row`): glyph, title, age; the state
@@ -12,6 +24,7 @@
    */
   import { IconChevronDown as ChevronDown } from "#lib/icons.js";
   import { age, type Row } from "./find-rows";
+  import Said from "./Said.svelte";
 
   let {
     row,
@@ -21,9 +34,11 @@
     phone = false,
     peekable = false,
     peeked = false,
+    shown = NONE,
     onpick,
     onpeek,
     onhover,
+    onsecret,
   }: {
     row: Row;
     id: string;
@@ -33,9 +48,13 @@
     /** A ⌄ that unfolds the peek (a phone's touch target; the desk peeks with →). */
     peekable?: boolean;
     peeked?: boolean;
+    /** The secrets the person showed, by key; the rest are dots. */
+    shown?: ReadonlySet<string>;
     onpick: () => void;
     onpeek?: () => void;
     onhover?: () => void;
+    /** A press on a hidden secret: show it, rather than opening the row. */
+    onsecret?: (key: string) => void;
   } = $props();
 
   const ago = $derived(age(row.at, now));
@@ -64,7 +83,14 @@
     data-has-reason={row.reason === null ? undefined : ""}
     data-peekable={peekable || undefined}
     data-phone={phone || undefined}
-    onclick={onpick}
+    onclick={(event) => {
+      const secret = hiddenAt(event);
+      if (secret && onsecret) {
+        onsecret(secret);
+        return;
+      }
+      onpick();
+    }}
     onpointermove={onhover}
     role="option"
     tabindex="-1"
@@ -87,7 +113,10 @@
     <span
       data-slot="title"
       class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-ink-row group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
-      >{row.title}</span
+      >{#if row.titleParts.some((part) => part.secret)}<Said
+          runs={row.titleParts}
+          {shown}
+        />{:else}{row.title}{/if}</span
     >
     {#if ago}
       <span
@@ -120,10 +149,7 @@
         <span class="truncate"
           ><span class="pe-space-1">↳</span>
           {row.reason.source}
-          “{#each row.reason.parts as part, i (i)}{#if part.matched}<mark
-                class="bg-transparent text-ink-strong font-medium"
-                >{part.text}</mark
-              >{:else}{part.text}{/if}{/each}”</span
+          “<Said runs={row.reason.parts} {shown} />”</span
         >
       </span>
     {/if}

@@ -4,7 +4,8 @@
  * OpenCode 2.0 keeps sessions in SQLite (`<data>/opencode/opencode.db`, one
  * database per server): `session_message` rows with a JSON `data` column (a
  * user message's `text`; an assistant message's `content` of text,
- * reasoning and tool items) and `session_v2` with each session's directory.
+ * reasoning and tool items, each tool's answer in its `state`) and
+ * `session_v2` with each session's directory.
  * No JSONL is involved — this adapter reads the db and emits the same
  * normalized TranscriptDoc shape the Claude Code parser produces, so both
  * harnesses feed one index.
@@ -14,13 +15,34 @@
  */
 
 import { Database } from "bun:sqlite";
-import { type DocAuthor, type TranscriptDoc, userAuthor } from "./text.ts";
+import { type DocAuthor, TOOL_OUTPUT_CHARS, type TranscriptDoc, userAuthor } from "./text.ts";
+
+/** What a tool block answered, as 2.0 keeps it: its content's text parts, or its error. */
+interface ToolState {
+  content?: { type?: string; text?: string }[];
+  error?: { message?: string };
+  status?: string;
+}
 
 interface MessageData {
   time?: { created?: number; completed?: number };
   text?: string;
   model?: { id?: string };
-  content?: { type?: string; text?: string; name?: string }[];
+  content?: { type?: string; text?: string; name?: string; state?: ToolState }[];
+}
+
+/** A settled tool block's words: its content's text, or its error's message, cut to `cap`. */
+function toolOutputOf(state: ToolState | undefined, cap: number): string {
+  if (cap <= 0 || !state) {
+    return "";
+  }
+  const words =
+    state.status === "error"
+      ? (state.error?.message ?? "")
+      : (state.content ?? [])
+          .flatMap((part) => (part.type === "text" && typeof part.text === "string" ? [part.text] : []))
+          .join("\n");
+  return words.trim().slice(0, cap);
 }
 
 export interface ReadOpenCodeOptions {
@@ -28,6 +50,8 @@ export interface ReadOpenCodeOptions {
   since?: number;
   /** Include reasoning (default true). */
   reasoning?: boolean;
+  /** How much of each tool's answer is kept, characters (default text.ts `TOOL_OUTPUT_CHARS`). */
+  toolOutputChars?: number;
 }
 
 export interface OpenCodeReadResult {
@@ -46,18 +70,19 @@ interface Row {
   type: "user" | "assistant";
 }
 
-/** A message's words, its reasoning and the tools it called; null for one with none, or an answer still streaming. */
+/** A message's words, its reasoning, the tools it called and what they answered; null for one with none, or an answer still streaming. */
 function wordsOf(
   row: Row,
   message: MessageData,
   reasoning: boolean,
-): { author: DocAuthor; text: string; thinking: string; tools: string[] } | null {
+  outputCap: number,
+): { author: DocAuthor; output: string; text: string; thinking: string; tools: string[] } | null {
   if (row.type === "user") {
     if (typeof message.text !== "string") {
       return null;
     }
     const said = userAuthor(message.text);
-    return said.text ? { ...said, thinking: "", tools: [] } : null;
+    return said.text ? { ...said, thinking: "", tools: [], output: "" } : null;
   }
   if (message.time?.completed === undefined) {
     return null;
@@ -65,6 +90,7 @@ function wordsOf(
   const texts: string[] = [];
   const thoughts: string[] = [];
   const tools: string[] = [];
+  const outputs: string[] = [];
   for (const item of message.content ?? []) {
     if (typeof item.text === "string" && item.type === "text") {
       texts.push(item.text);
@@ -72,10 +98,20 @@ function wordsOf(
       thoughts.push(item.text);
     } else if (item.type === "tool" && typeof item.name === "string") {
       tools.push(item.name);
+      const output = toolOutputOf(item.state, outputCap);
+      if (output) {
+        outputs.push(output);
+      }
     }
   }
   return texts.length > 0 || thoughts.length > 0 || tools.length > 0
-    ? { author: "agent", text: texts.join("\n"), thinking: thoughts.join("\n"), tools }
+    ? {
+        author: "agent",
+        text: texts.join("\n"),
+        thinking: thoughts.join("\n"),
+        tools,
+        output: outputs.join("\n"),
+      }
     : null;
 }
 
@@ -116,7 +152,12 @@ export function readOpenCodeDocs(
       } catch {
         continue;
       }
-      const words = wordsOf(row, message, options.reasoning !== false);
+      const words = wordsOf(
+        row,
+        message,
+        options.reasoning !== false,
+        options.toolOutputChars ?? TOOL_OUTPUT_CHARS,
+      );
       if (!words) {
         continue;
       }
@@ -130,6 +171,7 @@ export function readOpenCodeDocs(
         text: words.text,
         ...(words.thinking ? { thinking: words.thinking } : {}),
         tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
+        ...(words.output ? { output: words.output } : {}),
         cwd: row.directory,
         model: message.model?.id,
       });

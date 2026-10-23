@@ -150,6 +150,7 @@ import {
   dataMigrations,
   delegateEvents,
   eventRoutes,
+  findSettings,
   fleetAgents,
   fleetDeniedTools,
   fleetHookHistory,
@@ -865,6 +866,11 @@ export interface DbShape {
   ) => void;
   /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
+  /** The person's Find settings (find-secrets.ts): "Hide secrets in Find", on until they turn it off. */
+  readonly findSettings: {
+    readonly hideSecrets: () => boolean;
+    readonly setHideSecrets: (on: boolean, at: Date) => void;
+  };
   /** Transcript deletion follows confirmed process exit, never precedes it. */
   readonly finishTranscriptDelete: (id: string) => void;
   readonly finishWorkspaceCreate: (id: string) => void;
@@ -2903,7 +2909,7 @@ const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
 /** The one {@link upstreamSettings} row's key. */
 const UPSTREAM_ID = "upstream";
-/** The one {@link presenceSettings} row's key. */
+/** The one {@link presenceSettings} row's key, and the one {@link findSettings} row's. */
 const PRESENCE_ID = "person";
 
 /**
@@ -9731,6 +9737,21 @@ const make = async (path: string): Promise<DbShape> => {
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db),
     find: findDb(db),
+    findSettings: {
+      hideSecrets: () =>
+        db
+          .select({ hideSecrets: findSettings.hideSecrets })
+          .from(findSettings)
+          .where(eq(findSettings.id, PRESENCE_ID))
+          .get()?.hideSecrets ?? true,
+      setHideSecrets: (on, at) => {
+        const set = { hideSecrets: on, changedAt: at };
+        db.insert(findSettings)
+          .values({ id: PRESENCE_ID, ...set })
+          .onConflictDoUpdate({ target: findSettings.id, set })
+          .run();
+      },
+    },
     previews: previewsDb(db),
     moveEndings: moveEndingsDb(db),
     owedMoves: owedMovesDb(db),

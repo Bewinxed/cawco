@@ -23,6 +23,11 @@
  * every answer bounded under Claude Code's 25,000-token cap, and refusals
  * that name what was wrong and give one correct call.
  *
+ * It searches everything (the owner's pick, 2026-10-22): what was said,
+ * thought and called, and what tools returned, in every session
+ * (`toolOutput`, the index's `output` column, jsonl-parser fts5.ts); a hit in
+ * a tool's output is the agent's words, its excerpt cut from that output.
+ *
  * Every text it answers an agent with (a hit's title, excerpts, purpose and
  * report; every turn, detailed or `around`) passes the secret filter
  * (secret-filter.ts) before it is cut to length, so a password a person
@@ -174,7 +179,7 @@ export type FindInput = z.infer<typeof SCHEMA> & {
 };
 
 const DESCRIPTION =
-  "Find anything said or made across the fleet, as the dashboard's Find does, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
+  "Find anything said or made across the fleet, and what tools returned in any session, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
 
 /** A refusal: what was wrong, and one call that works. */
 export class FindToolRefusal extends Error {}
@@ -417,6 +422,15 @@ const entryWho = (
 ): string => {
   if (entry.type === "assistant") {
     return "agent";
+  }
+  // A user entry of tool results alone is what the agent's tools answered.
+  const content = (entry.message as { content?: unknown } | null)?.content;
+  if (
+    Array.isArray(content) &&
+    content.length > 0 &&
+    content.every((block: { type?: unknown }) => block.type === "tool_result")
+  ) {
+    return "tool";
   }
   const origin = (entry.sends ?? [])
     .map((uuid) => records[uuid]?.body.origin?.kind)
@@ -1215,6 +1229,8 @@ export const createFindTool = (deps: FindToolDeps) => {
       q: query,
       limit,
       transcripts: true,
+      // Everything: what was said, and what tools returned in any session.
+      toolOutput: true,
       where,
       ...(input.cursor ? { cursor: input.cursor } : {}),
       ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),

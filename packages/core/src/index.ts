@@ -2109,6 +2109,7 @@ export * from "./words/containers";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
 export * from "./words/files";
+export * from "./words/find-secrets";
 export * from "./words/harness";
 export * from "./words/helpers";
 export * from "./words/leaks";

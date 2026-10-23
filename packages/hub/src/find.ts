@@ -183,6 +183,12 @@ export interface FindRequest {
   kinds?: FindKind[];
   limit?: number;
   q: string;
+  /**
+   * The machines match what tools answered too (core `TranscriptQuery`
+   * `toolOutput`): an agent's `find` asks it (find-tool.ts); the person's
+   * Find matches what was said, thought and called.
+   */
+  toolOutput?: true;
   /** Whether to ask the machines' transcripts; false answers from names alone. */
   transcripts: boolean;
   where?: FindWhere;
@@ -1126,6 +1132,7 @@ export const createFind = (deps: FindDeps) => {
     const asked = await askMachines(
       query.words.join(" "),
       request.author,
+      request.toolOutput,
       request.where,
       matched.held,
       limit
@@ -1146,6 +1153,7 @@ export const createFind = (deps: FindDeps) => {
   const askMachines = (
     words: string,
     author: TranscriptQuery["author"],
+    toolOutput: true | undefined,
     where: FindWhere | undefined,
     held: Names,
     limit: number
@@ -1166,6 +1174,7 @@ export const createFind = (deps: FindDeps) => {
         askOne(machine, words, {
           limit,
           ...(author ? { author } : {}),
+          ...(toolOutput ? { toolOutput } : {}),
           ...(where?.projectId
             ? { sessions: sessionsOn(machine.machineId) }
             : {}),
@@ -1249,7 +1258,7 @@ export const createFind = (deps: FindDeps) => {
       author !== "caw" &&
       (!kinds || kinds.has("conversation"));
     const asked = transcripts
-      ? await askMachines("", author, where, held, LISTED_DOCS)
+      ? await askMachines("", author, undefined, where, held, LISTED_DOCS)
       : [];
     foldTranscripts(found, asked, held, deps.needsYou(), now);
     const purged = where.unpurged ? deps.purged() : new Set<string>();
@@ -1348,6 +1357,7 @@ export const createFind = (deps: FindDeps) => {
       request.kinds ?? [],
       request.author ?? "",
       request.transcripts,
+      request.toolOutput ?? false,
       request.where ?? {},
     ]);
     const kept = paging ? pages.get(key) : undefined;

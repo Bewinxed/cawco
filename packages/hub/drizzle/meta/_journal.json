@@ -2010,6 +2010,13 @@
       "when": 1792751218508,
       "tag": "0294_host_workspaces",
       "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "6",
+      "when": 1792753254713,
+      "tag": "0295_find_settings",
+      "breakpoints": true
     }
   ]
 }

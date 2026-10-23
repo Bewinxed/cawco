@@ -17,6 +17,7 @@
  * - when the hub-side section is empty, the first row of "Where it was
  *   said" is active the moment it lands.
  */
+import { findSecretWords } from "@cawco/core";
 import { SvelteSet } from "svelte/reactivity";
 import {
   type FindAnswer,
@@ -33,6 +34,7 @@ import {
   type WaitingAnswer,
   type WaitingItem,
 } from "./find-client";
+import { momentParts, rowOf, secretsIn } from "./find-rows";
 
 /** After the last keystroke, how long before every machine is asked (ms). The critique's call, under the 1 s wait grace. */
 export const SETTLE_MS = 250;
@@ -202,6 +204,13 @@ export class FinderState {
   chosen = $state<string | null>(null);
   peeked = $state<string | null>(null);
   unfolded = new SvelteSet<string>();
+  /**
+   * The secrets the person showed, by key (find-rows.ts `secretKey`): each
+   * hides again when the list changes, an answer landing in its place.
+   */
+  shownSecrets = new SvelteSet<string>();
+  /** What the screen reader hears once a secret is shown; cleared as they hide again. */
+  secretNote = $state("");
   now = $state(Date.now());
   /**
    * How many machines a full find asks, from the names answer (which lists
@@ -599,6 +608,9 @@ export class FinderState {
   }
 
   #land<T>(read: Read<T>, key: string): Answer<T> {
+    // The list changes: every secret shown hides again.
+    this.shownSecrets.clear();
+    this.secretNote = "";
     if (read.ok) {
       return { state: "ok", for: key, value: read.value };
     }
@@ -725,6 +737,33 @@ export class FinderState {
     }
     this.text = out.join(" ");
     this.ask();
+  }
+
+  /** Shows one secret in place, by key. */
+  showSecret(key: string) {
+    this.shownSecrets.add(key);
+    this.secretNote = findSecretWords.shown;
+  }
+
+  /**
+   * The first secret `stop` draws still hidden: ↵ shows it before it opens
+   * anything. A row draws its title's and its reason line's; a moment its
+   * excerpt's.
+   */
+  hiddenSecret(stop: Stop | null): string | null {
+    let drawn: string[] = [];
+    if (stop?.type === "row") {
+      drawn = rowOf(
+        stop.result,
+        this.now,
+        stop.section === "said" ? "moment" : "name"
+      ).secrets;
+    } else if (stop?.type === "goto") {
+      drawn = rowOf(stop.result, this.now).secrets;
+    } else if (stop?.type === "moment") {
+      drawn = secretsIn(momentParts(keyOf(stop.result), stop.moment));
+    }
+    return drawn.find((key) => !this.shownSecrets.has(key)) ?? null;
   }
 
   /** What ↵ on the active stop opens, or null when ↵ does something in place. */

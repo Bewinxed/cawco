@@ -23,6 +23,7 @@
    * The field keeps the focus (a WAI-ARIA combobox over a listbox): ↑↓ move
    * the active row, ↵ opens it, → peeks it in place, ← folds, Escape closes.
    */
+  import { findSecretWords } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -127,10 +128,17 @@
           event.preventDefault();
         }
         break;
-      case "Enter":
+      case "Enter": {
         event.preventDefault();
-        commit(finder.active);
+        // A secret the active stop draws still hidden is shown first, one per ↵.
+        const secret = finder.hiddenSecret(finder.active);
+        if (secret) {
+          finder.showSecret(secret);
+        } else {
+          commit(finder.active);
+        }
         break;
+      }
       case "Escape":
         event.preventDefault();
         if (!finder.fold()) {
@@ -401,6 +409,9 @@
   /** What the footer says ↵ does on the active row. */
   const enterHint = $derived.by(() => {
     const stop = finder.active;
+    if (finder.hiddenSecret(stop)) {
+      return findSecretWords.enter;
+    }
     if (
       (stop?.type === "row" && stop.section === "said") ||
       stop?.type === "moment"
@@ -551,14 +562,17 @@
       onhover={() => hover(item.key)}
       onpeek={() => finder.togglePeek(item.key)}
       onpick={() => pick(item.key)}
+      onsecret={(key) => finder.showSecret(key)}
       peekable={phone}
       peeked={finder.peeked === item.key}
       {phone}
       row={rowOf(
         item.result,
         finder.now,
-        item.section === "said" ? "moment" : "name"
+        item.section === "said" ? "moment" : "name",
+        finder.shownSecrets
       )}
+      shown={finder.shownSecrets}
     />
   {:else if item.t === "peek"}
     <div data-slot="peek-slot" class="flex-none" data-flip>
@@ -572,8 +586,10 @@
         now={finder.now}
         onopen={(moment) => openMoment(item.result, moment)}
         onretry={() => finder.retry()}
+        onsecret={(key) => finder.showSecret(key)}
         {phone}
         result={item.result}
+        shown={finder.shownSecrets}
       />
     </div>
   {:else if item.t === "goto"}
@@ -584,10 +600,12 @@
       onhover={() => hover(item.key)}
       onpeek={() => finder.togglePeek(item.key)}
       onpick={() => pick(item.key)}
+      onsecret={(key) => finder.showSecret(key)}
       peekable={phone && item.result.kind === "machine"}
       peeked={finder.peeked === item.key}
       {phone}
-      row={rowOf(item.result, finder.now)}
+      row={rowOf(item.result, finder.now, "name", finder.shownSecrets)}
+      shown={finder.shownSecrets}
     />
   {:else if item.t === "acts"}
     {@const row = stopKey(item.result)}
@@ -935,4 +953,5 @@
     </div>
   {/if}
   <p class="sr-only" aria-live="polite">{announce}</p>
+  <p class="sr-only" aria-live="polite">{finder.secretNote}</p>
 </div>

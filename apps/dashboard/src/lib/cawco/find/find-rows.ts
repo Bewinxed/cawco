@@ -10,7 +10,14 @@
  * Stopped, Failed, Unreachable) and WORDS.md's nouns (session, delegate,
  * thread, task, routine, preview, decision, report, machine, project).
  */
-import { type ArtifactKind, workWords } from "@cawco/core";
+import {
+  type ArtifactKind,
+  type FindSecrets,
+  findSecretWords,
+  type SecretSpan,
+  workWords,
+} from "@cawco/core";
+import { markedRuns } from "@cawco/core/find-match";
 import type { Component } from "svelte";
 import {
   IconGlobe as Browser,
@@ -51,11 +58,29 @@ import type {
 /** How a word on line 2 is tinted: only a state that asks something takes a hue. */
 export type Tone = "live" | "attn" | "fail" | "quiet";
 
+/**
+ * One run of words a row draws: matched ones strong; one that is part of a
+ * secret names it by its key ({@link secretKey}), and is drawn as dots
+ * until the person shows that secret (Said.svelte).
+ */
+export interface Run {
+  matched: boolean;
+  secret?: string;
+  text: string;
+}
+
 export interface Excerpt {
   /** Plain runs and matched runs, in order: matched ones are drawn strong. */
-  parts: { matched: boolean; text: string }[];
+  parts: Run[];
   /** Who said it, or what matched: "you", "report", "purpose", … */
   source: string;
+}
+
+/** A row's words, as a run of its own: a secret's or the plain words between them. */
+export interface Piece {
+  runs: Run[];
+  /** The secret these runs are, by key; null for plain words. */
+  secret: string | null;
 }
 
 export interface Row {
@@ -69,11 +94,15 @@ export interface Row {
   /** Line 2's words, the state word first. */
   meta: string[];
   reason: Excerpt | null;
-  /** Read out whole by a screen reader. */
+  /** The secrets its title and reason draw, by key, in drawn order: ↵ shows the first still hidden. */
+  secrets: string[];
+  /** Read out whole by a screen reader; a hidden secret said as such. */
   spoken: string;
   /** The state word (or a thing's own first word) and its tone. */
   state: { tone: Tone; word: string };
   title: string;
+  /** Its title's runs: a secret in it drawn as dots. */
+  titleParts: Run[];
 }
 
 interface Shape {
@@ -98,33 +127,83 @@ const THREAD: Record<FindThread["state"], Shape> = {
   ready: STATE.idle,
 };
 
-const OPEN = "「";
-const CLOSE = "」";
 const WENT_WRONG = /fail|error/i;
 
-/** An excerpt's matched terms, from the engine's 「 」 marks. */
-export function excerptParts(text: string): Excerpt["parts"] {
-  const parts: Excerpt["parts"] = [];
-  let rest = text;
-  while (rest.length > 0) {
-    const open = rest.indexOf(OPEN);
-    if (open === -1) {
-      parts.push({ matched: false, text: rest });
-      break;
-    }
-    const close = rest.indexOf(CLOSE, open + 1);
-    if (close === -1) {
-      parts.push({ matched: false, text: rest.replace(OPEN, "") });
-      break;
-    }
-    if (open > 0) {
-      parts.push({ matched: false, text: rest.slice(0, open) });
-    }
-    parts.push({ matched: true, text: rest.slice(open + 1, close) });
-    rest = rest.slice(close + 1);
+/** No secret shown: what a row is drawn with when nothing says otherwise. */
+const NONE_SHOWN: ReadonlySet<string> = new Set();
+
+/**
+ * A secret's key: the result it is in (`kind:id`), the words it is in
+ * (`title`, `purpose`, `report`, or `m:<docId>` for a moment) and its place
+ * among their secrets. A moment's secret has one key in its row and its
+ * peek, so showing it in one shows it in both.
+ */
+export const secretKey = (owner: string, field: string, index: number) =>
+  `${owner}|${field}|${index}`;
+
+/**
+ * `runs` cut at each of `spans`' edges (counted in the runs' joined words),
+ * each run inside a span naming its secret by `keyOf` its index.
+ */
+export function withSecrets(
+  runs: readonly { matched: boolean; text: string }[],
+  spans: readonly SecretSpan[] | undefined,
+  keyOf: (index: number) => string
+): Run[] {
+  if (!spans?.length) {
+    return [...runs];
   }
-  return parts;
+  const out: Run[] = [];
+  let at = 0;
+  for (const run of runs) {
+    const end = at + run.text.length;
+    const cuts = new Set([at, end]);
+    for (const [start, stop] of spans) {
+      for (const edge of [start, stop]) {
+        if (edge > at && edge < end) {
+          cuts.add(edge);
+        }
+      }
+    }
+    const edges = [...cuts].sort((a, b) => a - b);
+    for (let i = 0; i + 1 < edges.length; i += 1) {
+      const from = edges[i] as number;
+      const to = edges[i + 1] as number;
+      const secret = spans.findIndex(
+        ([start, stop]) => from >= start && to <= stop
+      );
+      out.push({
+        matched: run.matched,
+        text: run.text.slice(from - at, to - at),
+        ...(secret >= 0 ? { secret: keyOf(secret) } : {}),
+      });
+    }
+    at = end;
+  }
+  return out;
 }
+
+/** `runs` as pieces: each secret's runs together, the plain words between. */
+export function piecesOf(runs: readonly Run[]): Piece[] {
+  const pieces: Piece[] = [];
+  for (const run of runs) {
+    const secret = run.secret ?? null;
+    const last = pieces.at(-1);
+    if (last && last.secret === secret) {
+      last.runs.push(run);
+    } else {
+      pieces.push({ secret, runs: [run] });
+    }
+  }
+  return pieces;
+}
+
+/** An excerpt's matched terms, from the engine's 「 」 marks; its secrets named when `spans` are given. */
+export const excerptParts = (
+  text: string,
+  spans?: readonly SecretSpan[],
+  keyOf: (index: number) => string = String
+): Run[] => withSecrets(markedRuns(text), spans, keyOf);
 
 const AUTHOR: Record<FindMoment["author"], string> = {
   owner: "you",
@@ -134,14 +213,41 @@ const AUTHOR: Record<FindMoment["author"], string> = {
   caw: "Caw",
 };
 
-export const momentReason = (moment: FindMoment): Excerpt => ({
+/** A moment's excerpt as runs, its secrets keyed by the result it is in (`kind:id`). */
+export const momentParts = (owner: string, moment: FindMoment): Run[] =>
+  excerptParts(moment.excerpt, moment.secrets, (i) =>
+    secretKey(owner, `m:${moment.docId}`, i)
+  );
+
+export const momentReason = (owner: string, moment: FindMoment): Excerpt => ({
   source: AUTHOR[moment.author],
-  parts: excerptParts(moment.excerpt),
+  parts: momentParts(owner, moment),
 });
 
+/** The words `runs` read as: a secret not shown said as hidden, once. */
+export function spokenOf(
+  runs: readonly Run[],
+  shown: ReadonlySet<string> = NONE_SHOWN
+): string {
+  return piecesOf(runs)
+    .map((piece) =>
+      piece.secret && !shown.has(piece.secret)
+        ? findSecretWords.hidden
+        : piece.runs.map((run) => run.text).join("")
+    )
+    .join("");
+}
+
+/** The secrets `runs` hold, by key, in order. */
+export const secretsIn = (runs: readonly Run[]): string[] => [
+  ...new Set(runs.flatMap((run) => (run.secret ? [run.secret] : []))),
+];
+
 /** The plain words an excerpt reads as. */
-export const excerptText = (excerpt: Excerpt): string =>
-  excerpt.parts.map((p) => p.text).join("");
+export const excerptText = (
+  excerpt: Excerpt,
+  shown: ReadonlySet<string> = NONE_SHOWN
+): string => spokenOf(excerpt.parts, shown);
 
 /** Who started it, in the row's words. */
 function roleOf(c: FindConversation): string {
@@ -158,10 +264,25 @@ function roleOf(c: FindConversation): string {
   return "yours";
 }
 
-const plain = (source: string, text: string): Excerpt => ({
-  source,
-  parts: [{ matched: false, text }],
-});
+/** A result's key, which its secrets' keys begin with. */
+const ownerOf = (result: FindResult | WaitingItem) =>
+  `${result.kind}:${result.id}`;
+
+/** One of a result's own words (`title`, `purpose`, `report`) as runs, its secrets named. */
+export const ownParts = (
+  result: FindResult,
+  field: keyof FindSecrets,
+  text: string
+): Run[] =>
+  withSecrets([{ matched: false, text }], result.secrets?.[field], (i) =>
+    secretKey(ownerOf(result), field, i)
+  );
+
+const plain = (
+  result: FindConversation,
+  source: "purpose" | "report",
+  text: string
+): Excerpt => ({ source, parts: ownParts(result, source, text) });
 
 /**
  * Why a hub-side match is here, when its title alone does not say it: its
@@ -172,13 +293,13 @@ function nameReason(c: FindConversation): Excerpt | null {
     return null;
   }
   if (c.matched.includes("purpose") && c.purpose) {
-    return plain("purpose", c.purpose);
+    return plain(c, "purpose", c.purpose);
   }
   if (c.matched.includes("report") && c.lastReport) {
-    return plain("report", c.lastReport.headline);
+    return plain(c, "report", c.lastReport.headline);
   }
   const [moment] = c.moments;
-  return moment ? momentReason(moment) : null;
+  return moment ? momentReason(ownerOf(c), moment) : null;
 }
 
 /** Ages as the board says them: 2m, 41m, 3h, 6d, then the date. */
@@ -208,23 +329,33 @@ export function age(at: number | null, now: number): string {
 const words = (...all: (string | null | undefined)[]): string[] =>
   all.filter((w): w is string => Boolean(w));
 
-type Drawn = Omit<Row, "spoken" | "key" | "at">;
+type Drawn = Omit<Row, "spoken" | "key" | "at" | "secrets" | "titleParts">;
 
 function finish(
   result: FindResult | WaitingItem,
   at: number | null,
   drawn: Drawn,
-  now: number
+  now: number,
+  shown: ReadonlySet<string> = NONE_SHOWN
 ): Row {
-  const row = { ...drawn, key: `${result.kind}:${result.id}`, at };
+  // The hub's spans count in its own title: a row that draws other words
+  // there (a task's id before it, a waiting item) draws them plainly.
+  const titleParts =
+    "score" in result && drawn.title === result.title
+      ? ownParts(result, "title", drawn.title)
+      : [{ matched: false, text: drawn.title }];
+  const row = { ...drawn, key: ownerOf(result), at, titleParts };
   return {
     ...row,
+    secrets: secretsIn([...titleParts, ...(row.reason?.parts ?? [])]),
     spoken: [
-      row.title,
+      spokenOf(titleParts, shown),
       row.state.word,
       ...row.meta,
       at === null ? "" : `${age(at, now)} ago`,
-      row.reason ? `${row.reason.source}: ${excerptText(row.reason)}` : "",
+      row.reason
+        ? `${row.reason.source}: ${excerptText(row.reason, shown)}`
+        : "",
     ]
       .filter(Boolean)
       .join(", "),
@@ -277,7 +408,9 @@ function conversationRow(r: FindConversation, reason: Reason): Drawn {
       r.machine.name
     ),
     reason:
-      reason === "moment" && moment ? momentReason(moment) : nameReason(r),
+      reason === "moment" && moment
+        ? momentReason(ownerOf(r), moment)
+        : nameReason(r),
   };
 }
 
@@ -291,7 +424,9 @@ function threadRow(r: FindThread): Drawn {
     state: { word: s.word, tone: s.tone },
     meta: words(r.project?.name, "Caw thread"),
     reason:
-      !r.matched.includes("title") && moment ? momentReason(moment) : null,
+      !r.matched.includes("title") && moment
+        ? momentReason(ownerOf(r), moment)
+        : null,
   };
 }
 
@@ -413,13 +548,16 @@ function drawnOf(result: FindResult, reason: Reason): Drawn {
 /**
  * A result as a row. `reason` is the ↳ line a section asks for: a hub-side
  * match explains itself (purpose, report), a transcript match leads with
- * its first moment.
+ * its first moment. `shown` are the secrets the person showed: its spoken
+ * words say those, and say the rest as hidden.
  */
 export const rowOf = (
   result: FindResult,
   now: number,
-  reason: Reason = "name"
-): Row => finish(result, result.lastActivity, drawnOf(result, reason), now);
+  reason: Reason = "name",
+  shown: ReadonlySet<string> = NONE_SHOWN
+): Row =>
+  finish(result, result.lastActivity, drawnOf(result, reason), now, shown);
 
 /** A report's why as its row's word; an artifact's is already its words (Needs you's line). */
 const WHY_WORD: Record<string, string> = {

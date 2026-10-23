@@ -196,3 +196,46 @@ export const excerptOf = (body: string, words: string[]): string => {
     );
   return `${from > 0 ? "…" : ""}${marked.trim()}${to < body.length ? "…" : ""}`;
 };
+
+/** One run of an excerpt's words: matched ones were between 「 and 」. */
+export interface MarkedRun {
+  matched: boolean;
+  text: string;
+}
+
+const MARK_OPEN = "「";
+const MARK_CLOSE = "」";
+
+/**
+ * An excerpt's runs, its 「 」 marks read and left out: the words its runs
+ * join to are the ones a moment's secret spans count in (core find.ts
+ * `FindMoment.secrets`), at the hub and on every screen alike.
+ */
+export const markedRuns = (text: string): MarkedRun[] => {
+  const runs: MarkedRun[] = [];
+  let rest = text;
+  while (rest.length > 0) {
+    const open = rest.indexOf(MARK_OPEN);
+    if (open === -1) {
+      runs.push({ matched: false, text: rest });
+      break;
+    }
+    const close = rest.indexOf(MARK_CLOSE, open + 1);
+    if (close === -1) {
+      runs.push({ matched: false, text: rest.replace(MARK_OPEN, "") });
+      break;
+    }
+    if (open > 0) {
+      runs.push({ matched: false, text: rest.slice(0, open) });
+    }
+    runs.push({ matched: true, text: rest.slice(open + 1, close) });
+    rest = rest.slice(close + 1);
+  }
+  return runs;
+};
+
+/** An excerpt's words, its marks left out. */
+export const unmarked = (text: string): string =>
+  markedRuns(text)
+    .map((run) => run.text)
+    .join("");

@@ -59,9 +59,11 @@
     key: "bench-working",
     meta: ["Working", "cockpit"],
     reason: null,
+    secrets: [],
     spoken: "Plan view build, Working",
     state: { tone: "live", word: "Working" },
     title: "Plan view build",
+    titleParts: [{ matched: false, text: "Plan view build" }],
   };
 </script>
 

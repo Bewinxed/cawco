@@ -7,8 +7,16 @@
    *
    * Turning it on or off asks first, in place, and says plainly what each
    * other device will see: nobody is locked out by surprise.
+   *
+   * And what every screen of yours shows: "Hide secrets in Find" (hub
+   * find-secrets.ts), on unless you turn it off, kept at the hub so a reload
+   * and every other device read the same.
    */
-  import type { OwnerDevice } from "@cawco/core";
+  import {
+    type FindSettings,
+    findSecretWords,
+    type OwnerDevice,
+  } from "@cawco/core";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
@@ -28,7 +36,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconClock, IconLaptop, IconLock } from "#lib/icons.js";
+  import { IconClock, IconLaptop, IconLock, IconSearch } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
 
   const section = sectionOf("devices");
@@ -61,6 +69,43 @@
       loaded = true;
     } catch (error) {
       readError = `Could not read the paired devices — ${failureClause(error)}.`;
+    }
+  }
+
+  /** "Hide secrets in Find", as the hub keeps it for every screen; null until read. */
+  let hideSecrets = $state<boolean | null>(null);
+  let findProblem = $state<string | null>(null);
+  let findSaving = $state(false);
+
+  async function readFind() {
+    try {
+      const response = await fetch("/api/find/settings");
+      if (!response.ok) {
+        throw await hubRefusal(response);
+      }
+      ({ hideSecrets } = (await response.json()) as FindSettings);
+    } catch (error) {
+      findProblem = findSecretWords.unread(failureClause(error));
+    }
+  }
+
+  async function setHideSecrets(next: boolean) {
+    findSaving = true;
+    findProblem = null;
+    try {
+      const response = await fetch("/api/find/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ hideSecrets: next } satisfies FindSettings),
+      });
+      if (!response.ok) {
+        throw await hubRefusal(response);
+      }
+      ({ hideSecrets } = (await response.json()) as FindSettings);
+    } catch (error) {
+      findProblem = failureWords(error);
+    } finally {
+      findSaving = false;
     }
   }
 
@@ -115,6 +160,8 @@
   onMount(() => {
     // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
     void read();
+    // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
+    void readFind();
   });
 </script>
 
@@ -222,6 +269,29 @@
           />
         </div>
       </div>
+    {/if}
+  </div>
+
+  <div data-slot="group" class="mt-space-6 flex flex-col gap-space-2">
+    <SectionHeader hue={HUE} icon={IconSearch} label={findSecretWords.group} />
+    <SwitchField
+      checked={hideSecrets ?? true}
+      disabled={hideSecrets === null || findSaving}
+      hint={(hideSecrets ?? true)
+        ? findSecretWords.settingOn
+        : findSecretWords.settingOff}
+      id="hide-secrets-in-find"
+      label={findSecretWords.setting}
+      onchange={setHideSecrets}
+    />
+    {#if findProblem}
+      <p
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >
+        {findProblem}
+      </p>
     {/if}
   </div>
 

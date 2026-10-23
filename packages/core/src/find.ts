@@ -31,6 +31,12 @@ export interface TranscriptQuery {
   sessions?: string[];
   /** Only words said at or after this ISO time: a listing's window start. */
   since?: string;
+  /**
+   * Match what tools returned too (the index's `output`): an agent's `find`
+   * asks for it, so it finds a command's output or an error another session
+   * saw; the person's Find matches what was said, thought and called.
+   */
+  toolOutput?: boolean;
 }
 
 /** One place in a machine's transcript that matched. */
@@ -124,6 +130,37 @@ export interface FindMoment {
   docId: string;
   /** The matching words, terms between 「 and 」. */
   excerpt: string;
+  /**
+   * The secrets its excerpt holds, in the excerpt's words with its 「 」
+   * marks left out: present only while "Hide secrets in Find" is on, so the
+   * person's Find draws each as dots until they show it.
+   */
+  secrets?: SecretSpan[];
+}
+
+/**
+ * Where a secret stands in a text: its first character's index and the one
+ * after its last, as the hub's secret filter recognises one (hub
+ * secret-filter.ts).
+ */
+export type SecretSpan = [start: number, end: number];
+
+/**
+ * The secrets a result's own words hold, by the field they are in: present
+ * only while "Hide secrets in Find" is on (`GET /api/find/settings`).
+ */
+export interface FindSecrets {
+  /** A conversation's purpose. */
+  purpose?: SecretSpan[];
+  /** A conversation's last report's headline. */
+  report?: SecretSpan[];
+  title?: SecretSpan[];
+}
+
+/** `GET /api/find/settings`: the person's Find settings, the same on every screen. */
+export interface FindSettings {
+  /** A secret in Find's results is drawn as dots until the person shows it; on unless they turn it off. */
+  hideSecrets: boolean;
 }
 
 /** What every result carries: its kind, what to call it, where it stands. */
@@ -145,6 +182,8 @@ interface FindBase {
   project: { id: string; name: string } | null;
   /** Its rank among this answer's results; higher first. */
   score: number;
+  /** The secrets its own words hold; absent when none, or while secrets are not hidden. */
+  secrets?: FindSecrets;
   /** What it is called, in its own words (a title, a name, a hostname). */
   title: string;
 }

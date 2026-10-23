@@ -21631,6 +21631,66 @@
         }
       }
     },
+    "/api/find/settings": {
+      "get": {
+        "operationId": "getApiFindSettings",
+        "responses": {
+          "200": {
+            "description": "getApiFindSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hideSecrets": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "hideSecrets"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiFindSettings",
+        "responses": {
+          "200": {
+            "description": "putApiFindSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiFindSettings 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/delegate-events": {
       "get": {
         "parameters": [
@@ -52001,6 +52061,10 @@
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
           },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
+          },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
             "type": "string"
@@ -52048,6 +52112,26 @@
           "excerpt": {
             "description": "The matching words, terms between 「 and 」.",
             "type": "string"
+          },
+          "secrets": {
+            "description": "The secrets its excerpt holds, in the excerpt's words with its 「 」\nmarks left out: present only while \"Hide secrets in Find\" is on, so the\nperson's Find draws each as dots until they show it.",
+            "type": "array",
+            "items": {
+              "description": "Where a secret stands in a text: its first character's index and the one\nafter its last, as the hub's secret filter recognises one (hub\nsecret-filter.ts).",
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "title": "start"
+                },
+                {
+                  "type": "number",
+                  "title": "end"
+                }
+              ]
+            }
           }
         },
         "required": [
@@ -52095,6 +52179,71 @@
           "title",
           "transcript"
         ]
+      },
+      "FindSecrets": {
+        "description": "The secrets a result's own words hold, by the field they are in: present\nonly while \"Hide secrets in Find\" is on (`GET /api/find/settings`).",
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "description": "A conversation's purpose.",
+            "type": "array",
+            "items": {
+              "description": "Where a secret stands in a text: its first character's index and the one\nafter its last, as the hub's secret filter recognises one (hub\nsecret-filter.ts).",
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "title": "start"
+                },
+                {
+                  "type": "number",
+                  "title": "end"
+                }
+              ]
+            }
+          },
+          "report": {
+            "description": "A conversation's last report's headline.",
+            "type": "array",
+            "items": {
+              "description": "Where a secret stands in a text: its first character's index and the one\nafter its last, as the hub's secret filter recognises one (hub\nsecret-filter.ts).",
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "title": "start"
+                },
+                {
+                  "type": "number",
+                  "title": "end"
+                }
+              ]
+            }
+          },
+          "title": {
+            "type": "array",
+            "items": {
+              "description": "Where a secret stands in a text: its first character's index and the one\nafter its last, as the hub's secret filter recognises one (hub\nsecret-filter.ts).",
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "title": "start"
+                },
+                {
+                  "type": "number",
+                  "title": "end"
+                }
+              ]
+            }
+          }
+        }
       },
       "FindThread": {
         "type": "object",
@@ -52169,6 +52318,10 @@
           "score": {
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
+          },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
           },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
@@ -52268,6 +52421,10 @@
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
           },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
+          },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
             "type": "string"
@@ -52361,6 +52518,10 @@
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
           },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
+          },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
             "type": "string"
@@ -52434,6 +52595,10 @@
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
           },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
+          },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
             "type": "string"
@@ -52505,6 +52670,10 @@
           "score": {
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
+          },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
           },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
@@ -52607,6 +52776,10 @@
           "score": {
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
+          },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
           },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
@@ -52713,6 +52886,10 @@
           "score": {
             "description": "Its rank among this answer's results; higher first.",
             "type": "number"
+          },
+          "secrets": {
+            "$ref": "#/components/schemas/FindSecrets",
+            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
           },
           "title": {
             "description": "What it is called, in its own words (a title, a name, a hostname).",
@@ -52839,6 +53016,19 @@
           "decision",
           "report",
           "task"
+        ]
+      },
+      "FindSettings": {
+        "description": "`GET /api/find/settings`: the person's Find settings, the same on every screen.",
+        "type": "object",
+        "properties": {
+          "hideSecrets": {
+            "description": "A secret in Find's results is drawn as dots until the person shows it; on unless they turn it off.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hideSecrets"
         ]
       },
       "DelegateEvent": {

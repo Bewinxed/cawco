@@ -3516,6 +3516,19 @@ export const presenceSettings = sqliteTable("presence_settings", {
 });
 
 /**
+ * The person's Find settings (find-secrets.ts), one row keyed `'person'`,
+ * following the {@link presenceSettings} precedent. No row reads as the
+ * default: secrets hidden until the person turns it off.
+ */
+export const findSettings = sqliteTable("find_settings", {
+  /** Always `'person'`. */
+  id: text("id").primaryKey(),
+  /** A secret in Find's results is drawn as dots until the person shows it. */
+  hideSecrets: integer("hide_secrets", { mode: "boolean" }).notNull(),
+  changedAt: timestamp("changed_at").notNull(),
+});
+
+/**
  * A machine whose desktop counts toward whether the person is here
  * (notifications.ts): the person turned it on in the presence menu. No row
  * is off: a machine's activity counts only once they opt it in.
