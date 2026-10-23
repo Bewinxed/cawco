@@ -431,11 +431,18 @@ export async function passPage(
 ): Promise<Page> {
   const w = WIDTHS[pass.width];
   // Rastered whole, so a picture is the same whatever order the page
-  // changed in (kit `wholeRaster`).
+  // changed in (kit `wholeRaster`). Its preview drawn in the page's own
+  // process (kit `oneProcess`): drawn in a process of its own, artifact
+  // in-session at the tablet, light, gave one of two pictures over walks
+  // whose every element read the same (4 of 12 the second, its pin's
+  // antialiasing a level apart on a few pixels), and the capture's repaint
+  // (specs/web/surfaces.ts `repaint`) reaches only the page's own layers.
+  // In one process, 20 walks of 20 gave one picture, the first.
   const page = await kit.page(w.view, {
     theme: pass.theme,
     scale: 1,
     wholeRaster: true,
+    oneProcess: true,
   });
   await page.setViewportSize({ width: w.width, height: w.height });
   if (pass.reduced) {
