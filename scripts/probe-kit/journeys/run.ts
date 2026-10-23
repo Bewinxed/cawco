@@ -43,7 +43,7 @@ export async function runJourneys(rest: string[]): Promise<number> {
       const journey = (await import(join(import.meta.dir, `${name}.ts`)))
         .default as Journey;
       console.log(`… ${journey.name}: ${journey.flow}`);
-      await run.spec(journeySpec(journey, narrow), null);
+      await run.spec(journeySpec(journey, narrow));
     }
   } finally {
     await run.close();

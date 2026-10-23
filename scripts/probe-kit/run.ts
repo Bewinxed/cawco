@@ -2,8 +2,8 @@
 /**
  * The probe kit: every web UI proof, read from the engine, not the picture.
  *
- *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review] [--<option> <value>…]
- *   bun scripts/probe-kit/run.ts <spec>… [--approve <spec>[:<entry>,…]] [--review] [--<option> <value>…]
+ *   bun scripts/probe-kit/run.ts web [spec…] [--<option> <value>…]
+ *   bun scripts/probe-kit/run.ts <spec>… [--<option> <value>…]
  *   bun scripts/probe-kit/run.ts journeys [name…] [--engine chromium|webkit|firefox] [--size phone|tablet|desk]
  *
  * `PROBE_ENGINE=webkit` (or `firefox`) before either of the first two opens
@@ -35,26 +35,9 @@
  * line for the whole run: `ALL PASS (N specs, …)` or `N FAILED: <spec>, …`,
  * naming each spec that failed. Exits 0 only when every assertion passed.
  *
- * `--approve <spec>` writes every baseline that spec keeps from this run
- * (diff.ts's captures, a spec's own file of legs);
- * `--approve <spec>:<entry>,…` writes only the entries named (a capture's
- * name, or a leg's as a slug: `<spec>:phone-390`), every other entry
- * left as it is to the byte. Only after the owner has approved what they
- * show. `PROBE_BASELINES=<dir>` reads and writes the baselines under `<dir>`
- * instead: a scratch copy, to prove an approve on.
- *
- * `--review` writes the owner's review page (review.ts,
- * `scripts/probe-review/`) when a capture differs from its baseline: the new
- * captures as candidate baselines, apart from the approved set, one Approve
- * or Reject per surface, and approve-review.ts to move the approved ones.
- * The folder is build output, never in the repository:
- * `$XDG_CACHE_HOME/cawco/probe-review/<specs>-<head>` (`~/.cache` when
- * unset), or the folder `PROBE_REVIEW_DIR=<dir>` names.
- *
- * What each level proves is the fleet's rule 7: state and geometry first
- * (geom.ts), motion by seeking the clock (anim.ts), regressions by pixel
- * diff against an approved baseline (diff.ts), and ink (ink.ts) only for
- * what drawing alone decides. Runtime cadence (long tasks, painted frames)
+ * What each level proves: state and geometry first (geom.ts), motion by
+ * seeking the clock (anim.ts), and ink (ink.ts) only for what drawing alone
+ * decides. Nothing is held to a stored picture or style dump. Runtime cadence (long tasks, painted frames)
  * is frames.ts.
  */
 import "../../packages/core/src/no-huge-pages";
@@ -64,7 +47,7 @@ import { join } from "node:path";
 import { ensureDeps } from "../lib/deps";
 import { holdAwake } from "../lib/hold-awake";
 import { runTied } from "../lib/tied-child";
-import type { Approval, Spec } from "./kit";
+import type { Spec } from "./kit";
 
 // The dependencies first (lib/deps.ts): the kit and the fleet load after them.
 // The machine stays awake for the whole run (lib/hold-awake.ts).
@@ -83,35 +66,12 @@ const web = args[0] === "web";
 const rest = web ? args.slice(1) : args;
 if (!(web || rest[0]) || rest[0]?.startsWith("--")) {
   console.error(
-    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review] [--<option> <value>…]\n       bun scripts/probe-kit/run.ts <spec>… [--<option> <value>…]  (specs in specs/, or in specs/web/; every other --<option> <value> is the specs' own)"
+    "usage: bun scripts/probe-kit/run.ts web [spec…] [--<option> <value>…]\n       bun scripts/probe-kit/run.ts <spec>… [--<option> <value>…]  (specs in specs/, or in specs/web/; every other --<option> <value> is the specs' own)"
   );
   process.exit(2);
 }
-const approveAt = rest.indexOf("--approve");
-const approveArg = approveAt === -1 ? null : (rest[approveAt + 1] ?? null);
-// `<spec>` approves every baseline it writes; `<spec>:<entry>,…` those named.
-const colon = approveArg?.indexOf(":") ?? -1;
-const approve =
-  approveArg === null || colon === -1 ? approveArg : approveArg.slice(0, colon);
-const entries =
-  approveArg === null || colon === -1
-    ? null
-    : approveArg
-        .slice(colon + 1)
-        .split(",")
-        .filter((entry) => entry.length > 0);
-if (entries?.length === 0) {
-  console.error(
-    `--approve ${approveArg}: name an entry after the colon, or none and no colon for all`
-  );
-  process.exit(2);
-}
-const approval: Approval | null = approve === null ? null : (entries ?? "all");
-/** `--review`, a flag with no value: the review folder is review.ts `reviewDir`'s. */
-const reviewing = rest.includes("--review");
 /**
- * The specs' own options: every `--<option>` but `--approve` and `--review`,
- * each with the value after it (none when the next is an option too or
+ * The specs' own options: every `--<option>`, each with the value after it (none when the next is an option too or
  * there is no next), left in `process.argv` for the specs to read.
  */
 const options: string[] = [];
@@ -122,17 +82,12 @@ for (const [i, one] of rest.entries()) {
     continue;
   }
   taken.add(i);
-  if (one === "--review") {
-    continue;
-  }
   const value = rest[i + 1];
   const hasValue = value !== undefined && !value.startsWith("--");
   if (hasValue) {
     taken.add(i + 1);
   }
-  if (one !== "--approve") {
-    options.push(one, ...(hasValue ? [value] : []));
-  }
+  options.push(one, ...(hasValue ? [value] : []));
 }
 const named = rest.filter((_, i) => !taken.has(i));
 const specsDir = join(import.meta.dir, "specs");
@@ -154,9 +109,7 @@ const pathOf = (name: string): string | null => {
   const inWeb = join(webDir, `${name}.ts`);
   return existsSync(inWeb) ? inWeb : null;
 };
-const unknown = [...chosen, ...(approve ? [approve] : [])].filter(
-  (one) => pathOf(one) === null || (approve === one && !chosen.includes(one))
-);
+const unknown = chosen.filter((one) => pathOf(one) === null);
 if (unknown.length > 0) {
   console.error(
     `no such spec in this run: ${unknown.join(", ")} (have ${(web ? listed(webDir) : [...listed(specsDir), ...listed(webDir)]).join(", ")})`
@@ -179,13 +132,6 @@ for (const name of chosen) {
   specs.set(name, spec);
 }
 /**
- * The review's folder, outside the repository (review.ts `reviewDir`), named
- * once here so a spec run in a process of its own writes into the same one.
- */
-const { REVIEW_DIR_ENV, reviewDir, writeReview } = await import("./review");
-const review = reviewing ? reviewDir(named.length > 0 ? named : ["web"]) : null;
-
-/**
  * A spec of its own that stands up its own git and HOME (kit.ts
  * `Spec.ownHome`) runs in a process of its own: a scratch HOME set as it
  * starts, and none of an enclosing workspace's git or gh settings. Its
@@ -205,20 +151,8 @@ const runOwnHome = async (spec: Spec): Promise<number> => {
   const removeHome = () => rmSync(home, { recursive: true, force: true });
   process.once("exit", removeHome);
   const code = await runTied(
-    [
-      process.execPath,
-      import.meta.path,
-      spec.name,
-      ...(approve === spec.name && approveArg ? ["--approve", approveArg] : []),
-      ...(review === null ? [] : ["--review"]),
-      ...options,
-    ],
-    {
-      ...env,
-      HOME: home,
-      [OWN_HOME_ENV]: home,
-      ...(review === null ? {} : { [REVIEW_DIR_ENV]: review }),
-    }
+    [process.execPath, import.meta.path, spec.name, ...options],
+    { ...env, HOME: home, [OWN_HOME_ENV]: home }
   );
   process.off("exit", removeHome);
   removeHome();
@@ -252,7 +186,7 @@ try {
       continue;
     }
     const failuresBefore = run.failures;
-    await run.spec(spec, approve === name ? approval : null);
+    await run.spec(spec);
     if (run.failures > failuresBefore) {
       failedSpecs.push(spec.name);
     }
@@ -263,13 +197,6 @@ try {
   // Closing the run's shared browsers is checked too: one left a process behind.
   if (run.failures > failuresBefore) {
     failedSpecs.push("the run's browsers");
-  }
-}
-if (review !== null) {
-  if (run.changed.length === 0) {
-    console.log(`REVIEW: no baseline differs; nothing written to ${review}`);
-  } else {
-    await writeReview(review, run.changed);
   }
 }
 const seconds = ((performance.now() - started) / 1000).toFixed(0);

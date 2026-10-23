@@ -19,10 +19,6 @@ site/art/
 site/src/assets/
 site/wrangler.jsonc
 site/scripts/deploy.mjs
-# Review folders as scripts/probe-kit/review.ts writes them (its JSON, its copy of the page, pictures).
-scripts/probe-review/runs/
-# The coverage map as `style-snapshot --coverage` writes it.
-scripts/probe-kit/style-snapshot-coverage.json
 # Pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
 scripts/probe-kit/fixtures/
 

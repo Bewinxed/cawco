@@ -246,15 +246,12 @@ export interface PageOptions {
   scrollbars?: boolean;
   theme?: Theme;
   /**
-   * Chromium only: every tile rastered whole whenever it changes
-   * (`--disable-partial-raster`), on a browser of its own. Partial raster
-   * redraws only what was invalidated into a tile it keeps, so the
-   * antialiasing at those rects' edges follows the order the page changed
-   * in: bench-usage-relay at the desk gave two pictures of one state, 5
-   * pixels apart on Caw's rim, its dumps identical. The surfaces' walk
-   * (walk.ts `passPage`) takes it; a spec timing the raster does not.
+   * The WebKit build a WebKit page runs on, by its Playwright revision,
+   * where a spec reads a bug a phone's Safari still has and a newer build
+   * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
+   * expects, or the one `PROBE_WEBKIT` names.
    */
-  wholeRaster?: boolean;
+  webkit?: string;
 }
 
 /** What a page's context takes of `options` on how it reaches its origins: a certificate of the run's own, a proxy. */
@@ -275,7 +272,7 @@ export interface Spec {
    * runs on the host, with its command.
    */
   host?: string;
-  /** The spec's name: its file's, its baselines' folder. */
+  /** The spec's name: its file's, and its output folder's. */
   name: string;
   /**
    * Why the spec stands up its own git and HOME, when it does: it runs in a
@@ -317,14 +314,8 @@ export const BOUNDARY_INSIDE =
   "a workspace boundary cannot start inside another (bwrap on Linux is refused its namespaces, macOS's Seatbelt does not nest)";
 
 /**
- * What `--approve` asks of one spec: every baseline it writes
- * (`--approve <spec>`), or the entries named (`--approve <spec>:<entry>,…`).
- */
-export type Approval = "all" | readonly string[];
-
-/**
- * A baseline entry's name as `--approve` names it: lower case, every run of
- * other characters one dash ("phone 390" is `phone-390`).
+ * An entry's name as a file takes it: lower case, every run of other
+ * characters one dash ("phone 390" is `phone-390`).
  */
 export const entrySlug = (entry: string): string =>
   entry
@@ -332,48 +323,7 @@ export const entrySlug = (entry: string): string =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-/**
- * Where approved baselines live: `baselines/` beside the kit, or the folder
- * `PROBE_BASELINES` names (a scratch copy, to prove an approve on).
- */
-const BASELINES_ROOT =
-  process.env.PROBE_BASELINES ?? join(import.meta.dir, "baselines");
-
-/** A capture that differs from its approved baseline, for the owner's review page. */
-export interface Changed {
-  /** The approved baseline's png; null where none is approved yet. */
-  baseline: string | null;
-  /** The region that changed with room round it, device px; null when the sizes differ. */
-  box: { height: number; width: number; x: number; y: number } | null;
-  /** This run's capture's png: the candidate baseline. */
-  capture: string;
-  /** pixelmatch's picture of what changed, cut to `box`; null when the sizes differ. */
-  diff: string | null;
-  /** The capture's name, as `--approve <spec>:<entry>` names it. */
-  entry: string;
-  /** Pixels that differ; null when the sizes differ. */
-  pixels: number | null;
-  spec: string;
-  /** The catalogue surface it shows (surfaces/catalogue.ts): the review page's one decision. */
-  surface: string;
-}
-
 export interface Kit {
-  /**
-   * Whether `--approve` names this spec: this run writes baselines, the
-   * entries `approves` names, and a spec skips what reads against them.
-   */
-  approve: boolean;
-  /**
-   * Whether this run writes `entry`'s baseline (a capture's name, or a
-   * spec's own entry such as a leg): every one for `--approve <spec>`, only
-   * those named for `--approve <spec>:<entry>,…`, matched by `entrySlug`.
-   * A spec asks it of every entry it could write: a name it never asks of
-   * fails the run, so a misspelt entry never passes as approved.
-   */
-  approves: (entry: string) => boolean;
-  /** This spec's approved baselines: `baselines/web/<spec>/`. */
-  baselines: string;
   /** The dev server against no hub: the `/motion/` benches, which need none. */
   bench: () => Promise<string>;
   /**
@@ -391,8 +341,6 @@ export interface Kit {
    * rendering included): its address. It stops when the spec ends.
    */
   builtFor: (hub: string) => Promise<string>;
-  /** A capture that differs from its approved baseline: kept for `--review`. */
-  changed: (change: Omit<Changed, "spec">) => void;
   /** One assertion: a PASS or FAIL line. Returns `ok`. */
   check: (assertion: string, ok: boolean, detail?: string) => boolean;
   /**
@@ -406,7 +354,7 @@ export interface Kit {
     respond: (request: Seen) => Reply | Promise<Reply>,
     hub?: HubAddress
   ) => Promise<KitFleet>;
-  /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */
+  /** A line that is neither a pass nor a fail. */
   note: (line: string) => void;
   /** Where the spec writes what a reviewer reads after a failure. */
   out: string;
@@ -529,7 +477,7 @@ const viteBuild = async (): Promise<void> => {
  * checkout: the second's build took the first's server chunks and fonts away
  * (`ERR_MODULE_NOT_FOUND …/chunks/sr-only-styles.js`, then an `ENOENT` on a
  * woff2 nothing handled ended `vite preview`) and every state after was
- * refused. A surfaces walk beside a style-snapshot's build in the converted
+ * refused. A run beside another run's build in the converted
  * checkout lost nine pages to reloads ("Execution context was destroyed,
  * most likely because of a navigation"): a build names its chunks anew.
  *
@@ -584,8 +532,7 @@ const gitSays = async (args: string[], input?: string): Promise<string> => {
  * had changed. The build writes HEAD's short hash as its version
  * (vite.config.ts `BUILD_VERSION`), which a page only compares with the
  * version the server it came from serves (served-build.svelte.ts), the same
- * build's, and draws nowhere. The baselines a run writes are not in it, so
- * an approve never makes the next run's tree another.
+ * build's, and draws nowhere.
  */
 const treeKey = async (): Promise<string> => {
   const hash = new Bun.CryptoHasher("sha256");
@@ -740,7 +687,7 @@ const tailOf = async (file: string): Promise<string> => {
  *
  * What it prints goes to files of its own beside the run's output
  * (`probe-kit/vite-<how>-<port>.err.log`, `.out.log`), and an end its run did not ask for is
- * `lost`, with that file's last lines: two style-snapshot approves' servers
+ * `lost`, with that file's last lines: two surface walks' servers
  * stopped a few minutes into their walks, every state after was refused at
  * `goto`, and each run still read ALL PASS, its server's own words thrown
  * away.
@@ -848,8 +795,6 @@ export class Run {
   notes = 0;
   /** The specs not run here, each with where it runs: on the host ({@link Spec.host}) or in a workspace ({@link Spec.workspace}). */
   readonly notHere: string[] = [];
-  /** Every capture this run that differs from its baseline, in run order. */
-  readonly changed: Changed[] = [];
   private devServer: Promise<Served> | null = null;
   private builtServer: Promise<Served> | null = null;
   private built: Promise<void> | null = null;
@@ -927,14 +872,12 @@ export class Run {
     engine: Engine,
     oneProcess = false,
     own?: string,
-    wholeRaster = false,
     hostRules?: string,
     scrollbars = false
   ): Promise<Browser> {
     const key = [
       engine,
       oneProcess && "one-process",
-      wholeRaster && "whole-raster",
       own,
       hostRules && `hosts:${hostRules}`,
       scrollbars && "scrollbars",
@@ -981,7 +924,6 @@ export class Run {
             args: [
               "--no-sandbox",
               "--disable-gpu",
-              ...(wholeRaster ? ["--disable-partial-raster"] : []),
               ...(oneProcess
                 ? [
                     "--disable-site-isolation-trials",
@@ -1047,7 +989,7 @@ export class Run {
   }
 
   /** Runs one spec with its own pages and fleets, closed after it however it ends. */
-  async spec(spec: Spec, approval: Approval | null): Promise<void> {
+  async spec(spec: Spec): Promise<void> {
     const command = spec.command ?? `bun scripts/probe-kit/run.ts ${spec.name}`;
     if (spec.host && process.env.CAWCO_WORKSPACE) {
       this.notHere.push(`${spec.name} (on the host)`);
@@ -1063,10 +1005,6 @@ export class Run {
       );
       return;
     }
-    const named = approval === null || approval === "all" ? [] : approval;
-    const asked = named.map(entrySlug);
-    /** Every entry the spec asked `approves` of: what it could write. */
-    const offered = new Set<string>();
     const contexts: BrowserContext[] = [];
     const ends: (() => Promise<void>)[] = [];
     /** The run's failures before this spec: more after it, and it failed. */
@@ -1083,17 +1021,7 @@ export class Run {
     const failedHere = () => this.failures > failedBefore;
     const kit: Kit = {
       spec: spec.name,
-      approve: approval !== null,
-      approves: (entry) => {
-        const slug = entrySlug(entry);
-        offered.add(slug);
-        return approval === "all" || asked.includes(slug);
-      },
-      baselines: join(BASELINES_ROOT, "web", spec.name),
       out,
-      changed: (change) => {
-        this.changed.push({ ...change, spec: spec.name });
-      },
       check: (assertion, ok, detail) => {
         const line = `${ok ? "PASS" : "FAIL"} ${spec.name}: ${assertion}${detail ? ` (${detail})` : ""}`;
         console.log(line);
@@ -1183,7 +1111,6 @@ export class Run {
           engine,
           options.oneProcess,
           options.browser,
-          options.wholeRaster,
           options.hostRules,
           options.scrollbars
         );
@@ -1271,14 +1198,6 @@ export class Run {
     const started = performance.now();
     try {
       await spec.run(kit);
-      const unknown = asked.filter((entry) => !offered.has(entry));
-      if (unknown.length > 0) {
-        kit.check(
-          "--approve names entries this spec writes",
-          false,
-          `no ${unknown.join(", ")}; it writes ${[...offered].join(", ") || "none"}`
-        );
-      }
     } catch (error) {
       kit.check(
         "runs to its end",

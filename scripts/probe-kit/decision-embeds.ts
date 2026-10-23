@@ -48,7 +48,7 @@ import {
 import { until } from "../scratch-fleet";
 import { type ShotRead, shootEmbedded } from "./canvas-shots";
 import { ROOT, settle, type Theme } from "./kit";
-import { reachOf } from "./surfaces/reach";
+import { reachOf } from "./reach";
 
 declare global {
   interface Window {
@@ -1237,7 +1237,7 @@ export async function capturePage(page: Page, path: string): Promise<Capture> {
   return { files, paints: await embedPaints(page, out), picture: out, wholes };
 }
 
-/** One control of a page as the probe kit's reach reader read it (surfaces/reach.ts `reachOf`). */
+/** One control of a page as the probe kit's reach reader read it (reach.ts `reachOf`). */
 export interface ControlReach {
   /** Its drawn box, CSS px. */
   h: number;
@@ -1289,7 +1289,7 @@ function reachesPointer(sides: string[], w: number, h: number): boolean {
 
 /**
  * Every control of the page open in `page`, read by the probe kit's reach
- * reader (surfaces/reach.ts `reachOf`: a press through its centre 0.5px
+ * reader (reach.ts `reachOf`: a press through its centre 0.5px
  * inside its 44px box lands on it, one 0.5px past it does not, the midpoint
  * standing in where a neighbour is nearer), a window at a time down the
  * page. A control is read in a window where its whole 44px box stands clear
@@ -1513,16 +1513,15 @@ export async function embedPaints(page: Page, png: PNG): Promise<EmbedPaint[]> {
   });
 }
 
-// ---- Decision pages for the capture (surfaces/catalogue.ts `decision-host`)
+// ---- Decision pages on an origin of their own (specs/web/decision-review.ts)
 
 /**
  * The origin a capture's decision pages stand on: no network behind it,
- * every request to it answered on the page (`openCapturePage`). The hub tape
- * holds no program page and none of the host's files, so these are served
- * as the hub serves them, from this tree.
+ * every request to it answered on the page (`openCapturePage`): its program
+ * pages and the host's files served as the hub serves them, from this tree.
  */
 export const CAPTURE_ORIGIN = "http://decisions.test";
-/** A dev server's preview origin that never answers its ping: Preview's wait (the catalogue holds it unanswered). */
+/** A dev server's preview origin that never answers its ping: Preview's wait. */
 export const SILENT_ORIGIN = "http://decisions-site.test";
 /** A capture page's own path, and a file beside it. */
 const CAPTURE_PATH = /^\/page\/([a-z]+)\/(.*)$/;

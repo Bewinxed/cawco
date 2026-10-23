@@ -1,13 +1,14 @@
 # Probe kit
 
-Every UI and fleet proof runs here, read from the engine, not the picture
-(the fleet's rule 7): state and geometry first (`geom.ts`), motion by seeking
-the clock (`anim.ts`), regressions by pixel diff against an approved baseline
-(`diff.ts`), ink (`ink.ts`) only for what drawing alone decides.
+Every UI and fleet proof runs here, read from the engine, not the picture:
+state and geometry first (`geom.ts`), motion by seeking the clock
+(`anim.ts`), ink (`ink.ts`) only for what drawing alone decides. A proof
+holds what it reads to what is correct, never to a stored picture or style
+dump of an earlier run.
 
 ```sh
-bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review]   # specs/web/
-bun scripts/probe-kit/run.ts <spec>…                                                       # specs/<spec>.ts, each in order
+bun scripts/probe-kit/run.ts web [spec…]   # specs/web/
+bun scripts/probe-kit/run.ts <spec>…       # specs/<spec>.ts, each in order
 ```
 
 Each assertion prints `PASS <spec>: …` or `FAIL <spec>: …`; the run ends with
@@ -107,76 +108,6 @@ The kit's Chromium pages run the headless shell, which starts no crash
 reporter; full Chromium (`channel: "chromium"`, a hand-spawned
 `chromium.executablePath()`) always starts one, and no switch stops it
 without breaking its renderers.
-
-## Approving a baseline
-
-Only after the owner has approved what it shows. `--approve <spec>` writes
-every baseline the spec keeps from this run. `--approve <spec>:<entry>,…`
-writes the entries named and leaves every other one as it is, to the byte:
-a capture by its name (`--approve <spec>:rest-light,rest-dark`), a leg by
-its name as a slug (`--approve <spec>:phone-390` for "phone 390"). An
-entry the spec doesn't write fails the run. `PROBE_BASELINES=<dir>` reads and
-writes the baselines under `<dir>/web/<spec>/` instead of `baselines/`: a
-scratch copy, to prove an approve on.
-
-## Showing the owner what changed
-
-A capture that differs from its approved baseline FAILs the run.
-`--review` also writes the owner's review page into a folder outside the
-repository, `$XDG_CACHE_HOME/cawco/probe-review/<specs>-<head>` (`~/.cache`
-when unset), or the folder `PROBE_REVIEW_DIR=<dir>` names; the run prints it.
-A review run is build output, never source: nothing of it is committed. It
-holds the new captures as candidate baselines under `<dir>/candidates/`, apart
-from the approved set, and one page grouped by surface, each capture as its
-approved baseline, its new capture and the crop of what changed, with one
-Approve or Reject per surface (`review.ts`, `scripts/probe-review/README.md`).
-The orchestrator opens it with `artifact_create(kind: "preview", dir: <dir>)`; the page's
-`artifact_read` answer, saved as JSON, goes to
-`bun scripts/probe-kit/approve-review.ts <dir> <picks.json>`, which moves only
-the approved surfaces' candidates over the approved baselines.
-
-## The style snapshot and the hub tape
-
-```sh
-bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] [--approve]   # computed styles, boxes, overflow, forced states
-bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b] [--approve surfaces]   # the same surfaces' pixels
-bun scripts/probe-kit/run.ts style-snapshot --coverage [--surfaces=a,b]     # style-snapshot-coverage.json: the states that render each .svelte file
-bun scripts/probe-kit/run.ts style-snapshot --record                        # the hub tape, again (on the host)
-bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate     # in a workspace: no delegate
-```
-
-The scene's delegate needs a workspace of its own, which only the host can
-make (a workspace has no user namespaces), and pairing a machine needs an
-address the hub lists for it, which a workspace's machine (loopback alone)
-has none of. A tape recorded in a workspace (`--without-delegate`) holds
-neither, and every walk over it leaves out the states that stand on them
-(`hostOnly: "delegate" | "join"` in the catalogue), each said once in a
-`NOTE`: `session/delegate: host only, not in this tape: it holds no delegate
-(recorded --without-delegate)`. The tape the repository keeps is
-a host's.
-
-`style-snapshot` reads every element of every surface (`surfaces/catalogue.ts`)
-at desk 1440, tablet 820 and phone 390, light and dark, and the desk once
-with reduced motion: its computed style, its box to 0.5px, its
-`::before`/`::after`, its look under `:hover` and `:focus-visible` (forced
-through CDP), and whether it spills or stands outside what holds it. Each
-element is keyed by its DOM path from the surface's root, never a class.
-`PASS style-snapshot: 0 differences`, or one `FAIL` line per difference.
-
-Both read a hub on tape (`hub-tape.ts`, `fixtures/style-snapshot/hub-tape.json.gz`):
-a scratch fleet's hub (`surfaces/scene.ts`) recorded once and answered back
-byte for byte, with the page's clock held at the recording's moment. No
-fleet stands up, so both run inside any workspace, and two runs read the
-same. A request the tape never saw is answered 404 and named in a `NOTE`.
-Record again (`--record`) when the scene or the dashboard's reads change,
-then approve again.
-
-Every spec that walks the surfaces (`walkTapes`) FAILs a state the
-catalogue lists and the walk does not open: `<surface>/<state> · <pass>:
-opens`, with what stopped it. A tape that falls behind the scene or the
-hub's answers shows there, never as a skipped state. A state left out on
-purpose is left out by the catalogue itself, with its reason: its `widths`,
-`hostOnly`, or a sheet tape not recorded here.
 
 ## A spec that delegates runs on the host
 

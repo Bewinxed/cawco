@@ -24,10 +24,9 @@
  * by a part placed on purpose, as a hit area's `::after` or an absolutely
  * placed handle is, or by what a part of it clips, a scroller's content).
  *
- * `reachOf` runs in the page (`page.evaluate`): self-contained. Written by
- * capture.ts `--reach`, a TSV per capture.
+ * `reachOf` runs in the page (`page.evaluate`): self-contained.
  */
-// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the page's reader is one function `page.evaluate` sends whole (it runs in the page and can import nothing), as read.ts's is, read in the order the page is pressed.
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the page's reader is one function `page.evaluate` sends whole (it runs in the page and can import nothing), read in the order the page is pressed.
 export function reachOf(): string {
   const CONTROLS =
     "button, a[href], input:not([type=hidden]), select, textarea, [role=button], [role=tab], [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [role=option], [role=switch], [role=checkbox], [role=radio], [role=slider]";

@@ -25,36 +25,33 @@ const stopped = new Promise<void>((done) => {
 process.on("SIGINT", () => stop());
 process.on("SIGTERM", () => stop());
 
-await run.spec(
-  {
-    name: "decisions-preview",
-    async run(kit) {
-      const fleet = await kit.fleet(() => ({ everyMs: 20, words: ["Ready."] }));
-      fleet.launch("sessiond");
-      await fleet.sessiondUp();
-      fleet.launch("hub");
-      await fleet.hubUp();
-      fleet.fileAccount();
-      fleet.launch("agent");
-      await fleet.agentUp();
-      await fleet.accountSignedIn();
-      const seeded = await seedDecisions(fleet, {
-        name: "launch-q4",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-      });
-      const base = await fleet.dashboard();
-      const tab = `${base}/project/${seeded.projectId}?view=decisions`;
-      console.log("\nThe Decisions tab, seeded:");
-      console.log(`  list:      ${tab}`);
-      console.log(`  picking:   ${tab}&page=landing`);
-      console.log(`  decided:   ${tab}&page=pricing`);
-      console.log(`  graph:     ${tab}&mode=graph`);
-      console.log("\nCtrl-C stops the fleet.");
-      await stopped;
-    },
+await run.spec({
+  name: "decisions-preview",
+  async run(kit) {
+    const fleet = await kit.fleet(() => ({ everyMs: 20, words: ["Ready."] }));
+    fleet.launch("sessiond");
+    await fleet.sessiondUp();
+    fleet.launch("hub");
+    await fleet.hubUp();
+    fleet.fileAccount();
+    fleet.launch("agent");
+    await fleet.agentUp();
+    await fleet.accountSignedIn();
+    const seeded = await seedDecisions(fleet, {
+      name: "launch-q4",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+    });
+    const base = await fleet.dashboard();
+    const tab = `${base}/project/${seeded.projectId}?view=decisions`;
+    console.log("\nThe Decisions tab, seeded:");
+    console.log(`  list:      ${tab}`);
+    console.log(`  picking:   ${tab}&page=landing`);
+    console.log(`  decided:   ${tab}&page=pricing`);
+    console.log(`  graph:     ${tab}&mode=graph`);
+    console.log("\nCtrl-C stops the fleet.");
+    await stopped;
   },
-  null
-);
+});
 await run.close();
 process.exit(run.failures > 0 ? 1 : 0);

@@ -60,7 +60,7 @@
    * everything under the editor moved up while the press was down: the
    * release landed on what moved in under the pointer and the click went to
    * their common ancestor. A chip of an empty prompt's form never opened,
-   * nor a harness under it (style-snapshot, new-session · desk light reduced,
+   * nor a harness under it (new session at the desk, reduced motion:
    * "pointerdown span … at 573,283.87", "pointerup p.type-meta.m-0"), and
    * with motion the row slid away under a person's press. Focus that goes
    * nowhere (a press on the form's own words) takes nothing from it.

@@ -72,11 +72,6 @@ build.bak.*/
 
 # Probe captures and scratch hubs/agents for live checks
 .probe/
-# The owner's review pages a probe run writes (`--review`) are build output,
-# written under the user's cache (scripts/probe-kit/review.ts `reviewDir`);
-# never tracked, wherever an older run left them.
-.probe-review/
-scripts/probe-review/runs/
 # Captures a delegate leaves for its parent's screenshot review.
 .captures/
 

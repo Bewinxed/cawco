@@ -573,10 +573,6 @@
     "wasn't removed": 1,
     "were not read": 1
   },
-  "scripts/probe-kit/specs/web/workflows.ts": {
-    "Run workflow": 1,
-    "Workflow settings": 2
-  },
   "scripts/probe-kit/specs/workspace-excluded.ts": {
     "nothing was deleted": 2
   },
@@ -587,19 +583,5 @@
     "cutting its clone again": 4,
     "it runs again to land it": 1,
     "nothing was deleted": 1
-  },
-  "scripts/probe-kit/surfaces/catalogue.ts": {
-    "Add task": 1,
-    "Caw, lead of": 1,
-    "CawCo saves the folder": 1,
-    "Expand diff (full view)": 1,
-    "fleet memory": 1,
-    "Its element is gone from the page": 1,
-    "New workflow": 1,
-    "Other people's repositories": 1,
-    "Pairing didn't start": 1,
-    "Reading what runs in": 1,
-    "Show every limit": 1,
-    "Sign-in didn't finish": 1
   }
 }
