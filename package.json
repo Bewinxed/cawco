@@ -93,7 +93,8 @@
     "openai@7.19.0": "patches/openai@7.19.0.patch",
     "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch",
     "postcss-selector-parser@7.1.6": "patches/postcss-selector-parser@7.1.6.patch",
-    "ultracite@8.0.2": "patches/ultracite@8.0.2.patch"
+    "ultracite@8.0.2": "patches/ultracite@8.0.2.patch",
+    "@golar/svelte@https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.1/golar-svelte-0.1.11-cawco.1.tgz": "patches/@golar%2Fsvelte@0.1.11-cawco.1.patch"
   },
   "trustedDependencies": [
     "socket-activation"
