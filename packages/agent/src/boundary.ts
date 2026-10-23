@@ -3026,18 +3026,20 @@ const FORM_GENERATION = "form";
  * restoring … nothing there resolves (absent, dangling or unreadable)", its
  * linux-sandbox-utils.js 0.0.81), so a boundary started before one was made
  * has none of it. Made since, it is a later form, and the boundary is handed
- * over to it ({@link rearmMoved}). Each is named by its inode, not only by
- * being there: a bind holds the inode it was made over, so one taken away
- * and made again is a later form too. Seatbelt grants by path rule, there or
- * not.
+ * over to it ({@link rearmMoved}). Each is named by what its bind holds:
+ * srt binds the path's resolved target (its `unit.resolve`, the canonical
+ * source), and a bind keeps the device and inode it was made over, so one
+ * taken away and made again, or pointed at another target, is a later form
+ * too. `stat` follows the path to that target. Seatbelt grants by path rule,
+ * there or not.
  */
 const syncedPresence = async (): Promise<string> =>
   (
     await Promise.all(
-      fleetSyncedPaths().map(
-        async (path) =>
-          `${path} ${(await stat(path).catch(() => undefined))?.ino ?? "none"}`
-      )
+      fleetSyncedPaths().map(async (path) => {
+        const held = await stat(path).catch(() => undefined);
+        return `${path} ${held ? `${held.dev}:${held.ino}` : "none"}`;
+      })
     )
   ).join("\n");
 

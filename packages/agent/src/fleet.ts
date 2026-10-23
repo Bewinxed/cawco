@@ -2668,12 +2668,18 @@ const syncHooks = async (
     // never equals a hash of the file alone; drift is read off the script's
     // own bytes, the same thing {@link fleetStatus} hashes on disk.
     const scriptHash = hashText(hook.script);
-    const plan = memoryPlan(
-      { hash: scriptHash, force: hook.force },
-      // biome-ignore lint/performance/noAwaitInLoops: the write two branches below depends on this hook's own drift check; scripts are written one hook at a time
-      await fileHashAt(path),
-      managed[hook.id]?.hash
-    );
+    // biome-ignore lint/performance/noAwaitInLoops: the write two branches below depends on this hook's own drift check; scripts are written one hook at a time
+    const onDisk = await fileHashAt(path);
+    // A script that is gone was edited by nobody: it is written again, as
+    // the hooks dir is made again (a hand edit is drift, kept as it is).
+    const plan =
+      onDisk === null
+        ? "write"
+        : memoryPlan(
+            { hash: scriptHash, force: hook.force },
+            onDisk,
+            managed[hook.id]?.hash
+          );
     // What would run once registered: the machine's own edit when it drifted,
     // the fleet's script otherwise. One that does not parse is neither written
     // nor registered, and whatever this file registered for it before comes
