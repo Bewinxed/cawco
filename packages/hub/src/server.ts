@@ -12996,6 +12996,16 @@ export const createServer = (
     acknowledged: () => noticesSeen.ids(),
     askThread: (instance) => caw.askThread(instance),
     needsMoved: () => artifactLane.moved(),
+    // A pin's reply that asks: the artifact's item as the lane reads it now
+    // (its count), pushed unless it is put away with Not now or not in the lane.
+    pinAsked: (artifactId, text) => {
+      const need = unparked(artifactLane.now().needs).find(
+        (one) => one.artifactId === artifactId
+      );
+      if (need) {
+        push.pinAsked(need, text);
+      }
+    },
     // A look at the artifact takes its push down.
     looked: (id) => {
       notifications.clear([artifactCollapseId(id)], "look");

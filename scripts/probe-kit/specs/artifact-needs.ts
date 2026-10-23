@@ -28,6 +28,12 @@
  *   a pin goes by itself and asks nothing.
  * - an agent's reply on a pin of a page already answered asks nothing: it
  *   stays out of Needs you.
+ * - a pin reply that asks (`comment_reply`'s `asks`) stands the artifact's
+ *   row by itself: a plain reply adds no row and no push; one asking reply
+ *   is the row "1 new answer on pin N" and one push under `artifact-<id>`,
+ *   its `thread-id` the artifact's id, its sealed body the reply; three
+ *   asking replies in a burst's window are the row "3 new answers" and one
+ *   push saying so; the person's reply on one makes it 2, a resolve 1.
  *
  * Retirement:
  * - answered: a partial Send leaves the picks not made, once the session
@@ -251,7 +257,11 @@ const madeNamed = async (
 interface Pushed {
   collapseId?: string;
   payload: {
-    aps?: { category?: string };
+    aps?: {
+      alert?: { body?: string; title?: string };
+      category?: string;
+      "thread-id"?: string;
+    };
     cawco?: { artifactId?: string; instanceId?: string; kind?: string };
     e?: string;
   };
@@ -913,6 +923,241 @@ const onHarness = async (
     before === "0 of 1 picked" && turned === null,
     `before the next turn: ${before}; after it: ${turned}`
   );
+};
+
+/**
+ * A pin reply that asks reaches the person through Needs you, grouped per
+ * artifact; one that doesn't stays on the page. On the judged page `id`,
+ * opened and answered already (it asks nothing of its own), with three more
+ * of the person's pins: a plain reply adds no row and no push; one asking
+ * reply is the row with 1 and one push (`artifact-<id>`, `thread-id` the
+ * artifact's id, the reply sealed); the person's reply clears it; three
+ * asking replies in one burst's window are one row with 3 and one push
+ * saying so; the person's reply on one makes it 2, a resolve 1.
+ */
+const pinAsks = async (
+  at: At,
+  session: string,
+  id: string,
+  phone: ReturnType<typeof standInPhone>
+) => {
+  const { fleet, kit } = at;
+  const reply = (pin: string, words: string, asking?: true) =>
+    fleet.api(`/api/instances/${session}/artifacts/comments/${pin}/reply`, {
+      text: words,
+      ...(asking ? { asks: asking } : {}),
+    });
+  const ours = (from: number) =>
+    phone.pushed
+      .slice(from)
+      .filter((one) => one.collapseId === `artifact-${id}`);
+  let page = await ownTab(at, id);
+  await inDoc(page, (doc) => {
+    const now = new Date().toISOString();
+    doc.transact(() => {
+      for (const [n, line, words] of [
+        [2, "line-2", "Is this the run line you meant?"],
+        [3, "line-3", "Who owns it?"],
+        [4, "line-1", "Which time zone?"],
+      ] as const) {
+        doc.getMap("pins").set(`probe-pin-${n}`, {
+          id: `probe-pin-${n}`,
+          number: n,
+          kind: "comment",
+          anchor: { selector: `#${line}` },
+          at: now,
+          by: "person",
+          elements: [],
+          point: { x: 0.5, y: 0.5 },
+          thread: [
+            { id: `probe-entry-${n}`, by: "person", text: words, at: now },
+          ],
+        });
+      }
+    });
+  });
+  // Delivered by themselves; the tab closed, so no look stands past a reply.
+  await Bun.sleep(4500);
+  await page.close();
+  await Bun.sleep(BURST_QUIET_MS);
+
+  const plainFrom = phone.pushed.length;
+  await reply("probe-pin-2", "Fixed: the run line now says nine.");
+  await Bun.sleep(BURST_QUIET_MS);
+  const plain = await lineOf(fleet, id);
+  kit.check(
+    "a plain pin reply adds no Needs you row and sends no push",
+    plain === null && ours(plainFrom).length === 0,
+    `line ${plain}; pushes under artifact-<id> since: ${ours(plainFrom).length}`
+  );
+
+  const oneFrom = phone.pushed.length;
+  const question = "Nine in the morning or nine at night?";
+  await reply("probe-pin-2", question, true);
+  const single = await lineIs(fleet, id, artifactWords.newAnswerOn(2));
+  const onePush = await until(
+    "the asking reply's push",
+    () => ours(oneFrom)[0],
+    Boolean,
+    PUSH_MS
+  ).catch(() => undefined);
+  await Bun.sleep(BURST_QUIET_MS);
+  const oneSealed = onePush?.payload.e
+    ? await phone.open(onePush.payload.e)
+    : null;
+  const oneNeed = await needOf(fleet, id);
+  kit.check(
+    "an asking reply stands the artifact's row with the count 1 ('1 new answer on pin 2'), its stop the pin",
+    single === artifactWords.newAnswerOn(2) &&
+      oneNeed?.pending.length === 1 &&
+      oneNeed.pending[0]?.kind === "answer" &&
+      oneNeed.pending[0].count === 1 &&
+      oneNeed.href.endsWith("&stop=pin:2"),
+    `${single}; ${JSON.stringify(oneNeed?.pending)}; ${oneNeed?.href}`
+  );
+  kit.check(
+    "an asking reply is one push under artifact-<id>, its thread-id the artifact's id, its shown body the count, its sealed body the reply, cawco.kind artifact",
+    ours(oneFrom).length === 1 &&
+      onePush?.payload.aps?.["thread-id"] === id &&
+      onePush.payload.aps.alert?.body === artifactWords.newAnswers(1) &&
+      oneSealed?.body === question &&
+      onePush.payload.cawco?.kind === "artifact" &&
+      onePush.payload.cawco.artifactId === id,
+    JSON.stringify({
+      pushes: ours(oneFrom).length,
+      aps: onePush?.payload.aps,
+      cawco: onePush?.payload.cawco,
+      sealed: oneSealed,
+    })
+  );
+
+  // The person answers it: the row goes.
+  page = await ownTab(at, id);
+  await inDoc(page, (doc) => {
+    const marks = doc.getMap("pins");
+    const pin = marks.get("probe-pin-2") as { thread: object[] };
+    doc.transact(() =>
+      marks.set("probe-pin-2", {
+        ...pin,
+        thread: [
+          ...pin.thread,
+          {
+            id: "probe-entry-2b",
+            by: "person",
+            text: "In the morning.",
+            at: new Date().toISOString(),
+          },
+        ],
+      })
+    );
+  });
+  const cleared = await lineIs(fleet, id, null);
+  kit.check(
+    "the person's reply on the asking pin answers it: the row leaves Needs you",
+    cleared === null,
+    String(cleared)
+  );
+  await Bun.sleep(4500);
+  await page.close();
+  await Bun.sleep(BURST_QUIET_MS);
+
+  const manyFrom = phone.pushed.length;
+  await reply("probe-pin-2", "Morning it is. Every weekday, or daily?", true);
+  await reply("probe-pin-3", "Should it be you or the team?", true);
+  await reply("probe-pin-4", "Your time zone, or the server's?", true);
+  const three = await lineIs(fleet, id, artifactWords.newAnswers(3));
+  const threeRows = (await lane(fleet)).needs.filter(
+    (need) => need.artifactId === id
+  ).length;
+  await until(
+    "the three asking replies' push",
+    () => ours(manyFrom)[0],
+    Boolean,
+    PUSH_MS
+  ).catch(() => undefined);
+  await Bun.sleep(BURST_QUIET_MS);
+  const many = ours(manyFrom);
+  const manySealed = many[0]?.payload.e
+    ? await phone.open(many[0].payload.e)
+    : null;
+  kit.check(
+    "three asking replies in quick succession are one row with the count 3 ('3 new answers')",
+    three === artifactWords.newAnswers(3) && threeRows === 1,
+    `${three}; rows ${threeRows}`
+  );
+  kit.check(
+    "the three asking replies' pushes collapse into one under artifact-<id>, thread-id the artifact's id, saying how many (shown and sealed)",
+    many.length === 1 &&
+      many[0]?.payload.aps?.["thread-id"] === id &&
+      many[0].payload.aps.alert?.body === artifactWords.newAnswers(3) &&
+      manySealed?.body === artifactWords.newAnswers(3),
+    JSON.stringify({
+      pushes: many.length,
+      aps: many.map((one) => one.payload.aps),
+      sealed: manySealed,
+    })
+  );
+
+  page = await ownTab(at, id);
+  await inDoc(page, (doc) => {
+    const marks = doc.getMap("pins");
+    const pin = marks.get("probe-pin-3") as { thread: object[] };
+    doc.transact(() =>
+      marks.set("probe-pin-3", {
+        ...pin,
+        thread: [
+          ...pin.thread,
+          {
+            id: "probe-entry-3b",
+            by: "person",
+            text: "The team.",
+            at: new Date().toISOString(),
+          },
+        ],
+      })
+    );
+  });
+  const two = await lineIs(fleet, id, artifactWords.newAnswers(2));
+  kit.check(
+    "the person replies to one of the three: the row's count is 2",
+    two === artifactWords.newAnswers(2),
+    String(two)
+  );
+  await inDoc(page, (doc) => {
+    const marks = doc.getMap("pins");
+    const pin = marks.get("probe-pin-4") as object;
+    const now = new Date().toISOString();
+    doc.transact(() =>
+      marks.set("probe-pin-4", {
+        ...pin,
+        resolvedAt: now,
+        resolvedBy: "person",
+        seenAt: now,
+      })
+    );
+  });
+  const resolved = await lineIs(fleet, id, artifactWords.newAnswerOn(2));
+  kit.check(
+    "the person resolves one: the row's count is 1, on the pin still asking",
+    resolved === artifactWords.newAnswerOn(2),
+    String(resolved)
+  );
+  // The last one resolved too, so the legs after this find the lane as they left it.
+  await inDoc(page, (doc) => {
+    const marks = doc.getMap("pins");
+    const pin = marks.get("probe-pin-2") as object;
+    const now = new Date().toISOString();
+    doc.transact(() =>
+      marks.set("probe-pin-2", {
+        ...pin,
+        resolvedAt: now,
+        resolvedBy: "person",
+        seenAt: now,
+      })
+    );
+  });
+  await lineIs(fleet, id, null);
+  await page.close();
 };
 
 /* ── The dashboard: the count and arcs, Files' dot, the row's boxes ─────── */
@@ -1589,6 +1834,7 @@ const run = async (kit: Kit) => {
   }
   await picks(at, picking);
   await pins(at, judging, judge);
+  await pinAsks(at, judging, judge, phone);
   const writing = await fleet.spawn("claude", "Writing", fleet.repo);
   await movedOn(at, writing);
   const parking = await fleet.spawn("claude", "Parking", fleet.repo);

@@ -273,6 +273,12 @@ export interface CommentAttachment {
 export const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/;
 
 export interface ThreadEntry {
+  /**
+   * An agent's reply that needs the person's answer or pick
+   * (`comment_reply`'s `asks`): its pin waits on them in Needs you until
+   * they reply or resolve it ({@link pinAsks}). Never on a person's entry.
+   */
+  asks?: true;
   at: string;
   /** What a person's entry carries, in the order attached. */
   attachments?: CommentAttachment[];
@@ -337,6 +343,16 @@ export const newAnswer = (pin: Pin): boolean => {
   const resolved =
     pin.resolvedBy === "agent" && pin.resolvedAt ? pin.resolvedAt : undefined;
   return (!!answered && answered > seen) || (!!resolved && resolved > seen);
+};
+
+/**
+ * Whether pin `pin` waits on the person: open, and the last entry of its
+ * thread is an agent's reply that asks them something. Their reply after it,
+ * or a resolve, answers it; a look does not.
+ */
+export const pinAsks = (pin: Pin): boolean => {
+  const last = pin.thread.at(-1);
+  return !pin.resolvedAt && last?.by === "agent" && last.asks === true;
 };
 
 /** Pin `pin` as looked at, at `at`: what {@link newAnswer} reads it by. */

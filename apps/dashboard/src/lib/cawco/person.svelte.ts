@@ -300,10 +300,13 @@ export function showDeskAlert(
     answerDesk(frame.collapseId, "page");
     return;
   }
+  // MDN: `renotify` "specifying whether the user should be notified after a
+  // new notification replaces an old one"; it needs the tag, which is always set.
   const shown = new Notification(frame.title, {
     body: frame.body,
     tag: frame.collapseId,
-  });
+    renotify: frame.renotify,
+  } as NotificationOptions & { renotify: boolean });
   answerDesk(frame.collapseId, "notification");
   shown.onclick = () => {
     window.focus();

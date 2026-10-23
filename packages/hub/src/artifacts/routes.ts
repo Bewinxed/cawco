@@ -699,16 +699,12 @@ export const artifactRoutes = (artifacts: Artifacts) =>
               { maxItems: COMMENT_LIMITS.files }
             )
           ),
+          asks: t.Optional(t.Boolean()),
         }),
       },
       ({ params, body }) => {
         try {
-          return artifacts.commentReply(
-            params.id,
-            params.pin,
-            body.text,
-            body.files
-          );
+          return artifacts.commentReply(params.id, params.pin, body);
         } catch (error) {
           return refused(error);
         }

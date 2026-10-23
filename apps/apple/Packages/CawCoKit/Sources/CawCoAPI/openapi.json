@@ -6638,6 +6638,9 @@
                       "maxLength": 300,
                       "type": "string"
                     }
+                  },
+                  "asks": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -40509,6 +40512,11 @@
       "ThreadEntry": {
         "type": "object",
         "properties": {
+          "asks": {
+            "description": "An agent's reply that needs the person's answer or pick\n(`comment_reply`'s `asks`): its pin waits on them in Needs you until\nthey reply or resolve it ({@link pinAsks}). Never on a person's entry.",
+            "const": true,
+            "type": "boolean"
+          },
           "at": {
             "type": "string"
           },
@@ -51519,7 +51527,7 @@
             ]
           },
           "raisedAt": {
-            "description": "When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest answer.",
+            "description": "When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest reply that asks.",
             "type": "number"
           },
           "stop": {
@@ -61512,6 +61520,10 @@
               "desk_alert"
             ]
           },
+          "renotify": {
+            "description": "A newer alert under its tag alerts again rather than replacing the older\nin silence: an artifact's (one tag per artifact, hub push.ts `pinAsked`).",
+            "type": "boolean"
+          },
           "session": {
             "description": "Where it opens: the session it is about; null opens Needs you.",
             "type": [
@@ -61531,6 +61543,7 @@
           "body",
           "collapseId",
           "kind",
+          "renotify",
           "session",
           "title",
           "to"

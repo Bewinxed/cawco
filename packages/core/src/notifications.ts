@@ -183,6 +183,11 @@ export interface DeskAlertFrame {
   collapseId: string;
   instanceId?: undefined;
   kind: "desk_alert";
+  /**
+   * A newer alert under its tag alerts again rather than replacing the older
+   * in silence: an artifact's (one tag per artifact, hub push.ts `pinAsked`).
+   */
+  renotify: boolean;
   /** Where it opens: the session it is about; null opens Needs you. */
   session: string | null;
   title: string;

@@ -70,6 +70,7 @@
  */
 import {
   type ArtifactNeed,
+  artifactWords,
   BROWSER_ASK_TOOL,
   causeLine,
   DELEGATE_TYPE_PROPOSAL_TOOL,
@@ -1187,6 +1188,8 @@ export const createPush = ({
       kind: "desk_alert",
       to: tab,
       collapseId: id,
+      // An artifact's alerts share its tag: a later one alerts again in the earlier's place.
+      renotify: item.notification.data.kind === "artifact",
       title: sealed.title,
       body: sealed.subtitle
         ? `${sealed.subtitle} · ${sealed.body}`
@@ -1606,6 +1609,62 @@ export const createPush = ({
           },
         },
       });
+    },
+
+    /**
+     * The agent's reply on a pin of an artifact asks the person something
+     * (artifacts service `commentReply`, `asks`), and `need` is the
+     * artifact's Needs-you item now. One notification per artifact: under
+     * its collapse id (the desk tab's tag, `renotify` set) and with its id as
+     * APNs' `thread-id`, so its pushes group per artifact and a later one
+     * takes the earlier's place. Replies landing within the burst's window
+     * ({@link QUIET_MS} after the last, at most {@link BURST_MS}) are one
+     * arrival, the newest, saying how many pins ask; one reply alone says
+     * its first line, sealed. Routed as any item: the person gate shows it on
+     * their desk tab while they are at one. About no session for the gate,
+     * as {@link artifactLeft}: a look at the artifact, or every pin
+     * answered, takes it down.
+     */
+    pinAsked(need: ArtifactNeed, text: string): void {
+      const reason = need.pending.find((one) => one.kind === "answer");
+      const count = reason?.kind === "answer" ? reason.count : 1;
+      const many = artifactWords.newAnswers(count);
+      const project = projectName(need.project);
+      const collapseId = artifactCollapseId(need.artifactId);
+      console.log(
+        `[push] ${collapseId}: a pin asks the person (${count} asking), arrives`
+      );
+      arrive(
+        {
+          ask: false,
+          instanceId: null,
+          landedAt: new Date(),
+          still: () => artifactWaiting(need.artifactId, need.raisedAt),
+          notification: {
+            shown: alertOf(
+              sessionName(need.instanceId) ?? "A session",
+              project,
+              many
+            ),
+            sealed: alertOf(
+              need.name,
+              project,
+              count === 1 ? (firstLine(text) ?? many) : many
+            ),
+            category: PUSH_CATEGORIES.taskOpenOnly,
+            collapseId,
+            threadId: need.artifactId,
+            data: {
+              kind: "artifact",
+              artifactId: need.artifactId,
+              instanceId: need.instanceId,
+              machineId: need.machineId,
+              projectId: need.project,
+            },
+          },
+        },
+        false
+      );
     },
 
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */

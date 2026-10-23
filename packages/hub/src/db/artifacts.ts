@@ -9,7 +9,6 @@ import {
   gt,
   gte,
   isNull,
-  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -137,8 +136,8 @@ export interface ArtifactsDb {
   ) => number;
   /**
    * Every artifact the person may be asked on (Needs you, artifacts/needs.ts),
-   * oldest first: none a held next version, a draft's or a `try` preview's
-   * aside, which never asks.
+   * oldest first: none a held next version. A `try` preview is among them:
+   * a pin on it can ask.
    */
   readonly asking: () => ArtifactRow[];
   readonly byName: (
@@ -312,7 +311,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
     db
       .select()
       .from(artifacts)
-      .where(and(isNull(artifacts.heldFor), ne(artifacts.does, "try")))
+      .where(isNull(artifacts.heldFor))
       .orderBy(asc(artifacts.createdAt))
       .all()
       .map(artifactOf),

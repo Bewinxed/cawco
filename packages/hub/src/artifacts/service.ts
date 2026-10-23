@@ -71,6 +71,7 @@ import {
   type MarkPictures,
   newAnswer,
   type Pin,
+  pinAsks,
   pinDelivery,
   pinHeard,
   pinSaid,
@@ -1485,6 +1486,12 @@ export interface ArtifactServiceDeps {
    * since. An agent's show never changes it.
    */
   personShown: (instanceId: string) => string | undefined;
+  /**
+   * The agent's reply `text` on a pin of artifact `artifactId` asks the
+   * person something (`comment_reply`'s `asks`): its push, grouped per
+   * artifact (push.ts `pinAsked`).
+   */
+  pinAsked: (artifactId: string, text: string) => void;
   /**
    * Session `instanceId`'s preview origin (preview.ts), its listener started
    * when it has none; throws a refusal when every port is taken.
@@ -5075,14 +5082,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const pins = Object.values(
       doc.getMap("pins").toJSON() as Record<string, Pin>
     ).sort((a, b) => a.number - b.number);
-    const answered = pins.filter((pin) => !pin.resolvedAt && newAnswer(pin));
+    const asking = pins.filter(pinAsks);
     const facts: ArtifactFacts = {
       ...picksFacts(row, state),
-      answeredAt: answered
+      asked: (meta.get("asked") as ArtifactAsked | undefined) ?? null,
+      asking: asking.map((pin) => pin.number),
+      askingAt: asking
         .map(answeredOn)
         .reduce<string | null>((a, b) => (a !== null && a > b ? a : b), null),
-      answers: answered.map((pin) => pin.number),
-      asked: (meta.get("asked") as ArtifactAsked | undefined) ?? null,
       changes: changesFacts(doc),
       closed: pins
         .filter((pin) => pin.resolvedAt && newAnswer(pin))
@@ -6740,12 +6747,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /** The agent answers a pin: an entry in its thread, by the agent, shown at once wherever the artifact is open. */
+    /**
+     * The agent answers a pin in its thread. One that `asks` waits on the
+     * person in Needs you (core `pinAsks`) and pushes; one that doesn't
+     * stays on the page.
+     */
     commentReply: (
       instanceId: string,
       pinId: string,
-      text: string,
-      files?: string[]
+      reply: { asks?: boolean; files?: string[]; text: string }
     ): { entry: ThreadEntry; link: string; number: number; pin: string } => {
+      const { asks, files, text } = reply;
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       if (pin.thread.length >= COMMENT_LIMITS.entries) {
         throw new ArtifactRefusal(
@@ -6759,6 +6771,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         text,
         at: new Date().toISOString(),
         ...(files && files.length > 0 ? { files } : {}),
+        ...(asks ? { asks: true as const } : {}),
       };
       // An answer means everything before it was heard (core `pinHeard`).
       const before = pinHeard(pin, pin, entry.at);
@@ -6767,6 +6780,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           .getMap("pins")
           .set(pin.id, { ...before, thread: [...before.thread, entry] })
       );
+      if (asks) {
+        deps.pinAsked(row.id, text);
+      }
       return {
         pin: pin.id,
         number: pin.number,

@@ -365,8 +365,9 @@ export const commentRead = {
 export const commentReply = {
   name: "comment_reply",
   description:
-    "Answer a pin in its thread. After a change, name the files changed; ask here and leave it " +
-    "open. Answers its link: name it by that.",
+    "Answer a pin in its thread; after a change, name the files changed. `asks: true` when the reply " +
+    "needs their answer or pick: it reaches them in Needs you until they reply or resolve, so leave the pin " +
+    "open. A fix, a done or an FYI goes without it and stays on the page. Answers its link: name it by that.",
   input: {
     pin,
     text: z.string().min(1).max(COMMENT_LIMITS.text),
@@ -374,6 +375,7 @@ export const commentReply = {
       .array(z.string().min(1).max(COMMENT_LIMITS.file))
       .max(COMMENT_LIMITS.files)
       .optional(),
+    asks: z.boolean().optional(),
   },
 };
 

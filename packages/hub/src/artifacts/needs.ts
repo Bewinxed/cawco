@@ -16,10 +16,13 @@
  * folder is gone from its machine. Its ask is open while (a reason
  * each, strongest first) a canvas to judge was never opened; a decision
  * page has a card not picked; picks and notes are written and not sent
- * (comments go by themselves). An agent's answer on an open pin newer than
- * the person's look (core comments.ts `newAnswer`) joins an open ask's
- * line, and asks nothing by itself. Never: a `try` preview, a `draw`
- * canvas, a page or preview with no ask, an answered one. Picks sent that
+ * (comments go by themselves). Any artifact of its session's that is the
+ * person's (not a draft, not handed up or held), a `try` preview and a
+ * `draw` canvas too, also asks while an open pin's last entry is the agent's
+ * reply marked as asking (`comment_reply`'s `asks`, core comments.ts
+ * `pinAsks`): the person's reply there or resolve answers it, a look does
+ * not. A reply that asks nothing reaches the person only on the page.
+ * Never: a page or preview with no ask and no pin asking, an answered one. Picks sent that
  * the session hasn't read yet are its move, and ask nothing more of the
  * person; what is still unpicked is still theirs (rule 1).
  *
@@ -72,11 +75,11 @@ export interface ArtifactAsked {
 
 /** What an artifact's doc and row say, read once per change of either. */
 export interface ArtifactFacts {
-  /** The agent's newest answer on an open pin, ISO; null when it has none. */
-  answeredAt: string | null;
-  /** Open pins with an answer newer than the person's look, by number. */
-  answers: number[];
   asked: ArtifactAsked | null;
+  /** Open pins whose agent's reply asks the person something (core `pinAsks`), by number. */
+  asking: number[];
+  /** The newest of those replies, ISO; null when no pin asks. */
+  askingAt: string | null;
   /** The latest revision's changes the person hasn't looked at. */
   changes: { count: number; revision: number } | null;
   /** Resolved pins whose closing answer is newer than the person's look, by number. */
@@ -131,6 +134,11 @@ const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
     row.heldFor !== null
   );
 
+/** Whether `row` has a pin asking the person, and is theirs to be asked on: not a draft, not handed up or held. */
+const pinsAsk = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
+  facts.asking.length > 0 &&
+  !(facts.draft || facts.handed || row.heldFor !== null);
+
 /** A canvas to judge no view has had on screen yet (rule 6). */
 const unjudged = (row: ArtifactRow): boolean =>
   row.does === "judge" && row.openedRevision === null;
@@ -145,16 +153,17 @@ const unpicked = (facts: ArtifactFacts): boolean =>
  * their turns, whether they ended), read only for these.
  */
 export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
-  !facts.draft &&
-  row.heldFor === null &&
-  row.does !== "try" &&
-  ((asks(row, facts) &&
-    (unjudged(row) || unpicked(facts) || facts.unsent > 0)) ||
-    facts.closed.length > 0 ||
-    (facts.changes !== null &&
-      facts.changes.count > 0 &&
-      row.openedRevision !== null &&
-      row.openedRevision < row.revision));
+  pinsAsk(row, facts) ||
+  (!facts.draft &&
+    row.heldFor === null &&
+    row.does !== "try" &&
+    ((asks(row, facts) &&
+      (unjudged(row) || unpicked(facts) || facts.unsent > 0)) ||
+      facts.closed.length > 0 ||
+      (facts.changes !== null &&
+        facts.changes.count > 0 &&
+        row.openedRevision !== null &&
+        row.openedRevision < row.revision)));
 
 /**
  * Rule 2: the writer moved on. A step of its plan waiting on the artifact
@@ -179,42 +188,39 @@ export const movedOn = (
   return asked.step !== undefined || asked.movedAt !== undefined;
 };
 
-/** What `row`'s open ask waits on the person for, its rules 1, 2 and 6 applied; strongest first, none when its ask is answered or it has none. */
+/**
+ * What `row` waits on the person for, strongest first: its open ask's
+ * reasons, rules 1, 2 and 6 applied, then its pins asking (only a reply or a
+ * resolve answers those); none when nothing is asked of them.
+ */
 export const reasonsOf = (
   row: ArtifactRow,
   facts: ArtifactFacts,
   steps: readonly PlanStep[]
 ): ArtifactReason[] => {
-  if (!asks(row, facts)) {
-    return [];
-  }
-  const retired = movedOn(row.id, facts.asked, steps);
   const reasons: ArtifactReason[] = [];
-  if (!retired && unjudged(row)) {
-    reasons.push({ kind: "unopened" });
+  if (asks(row, facts)) {
+    const retired = movedOn(row.id, facts.asked, steps);
+    if (!retired && unjudged(row)) {
+      reasons.push({ kind: "unopened" });
+    }
+    if (!retired && facts.picks && unpicked(facts)) {
+      reasons.push({ kind: "picks", ...facts.picks });
+    }
+    if (facts.unsent > 0) {
+      reasons.push({ kind: "unsent", count: facts.unsent });
+    }
   }
-  if (!retired && facts.picks && unpicked(facts)) {
-    reasons.push({ kind: "picks", ...facts.picks });
-  }
-  if (facts.unsent > 0) {
-    reasons.push({ kind: "unsent", count: facts.unsent });
-  }
-  if (reasons.length === 0) {
-    return reasons;
-  }
-  const [pin] = facts.answers;
-  if (pin !== undefined) {
-    reasons.push({ kind: "answer", count: facts.answers.length, pin });
+  const [pin] = facts.asking;
+  if (pin !== undefined && pinsAsk(row, facts)) {
+    reasons.push({ kind: "answer", count: facts.asking.length, pin });
   }
   return reasons;
 };
 
-/** When it became pending: its publish, or the agent's newest answer on an open pin; ms epoch. */
+/** When it became pending: its publish, or the agent's newest reply that asks; ms epoch. */
 export const raisedAtOf = (row: ArtifactRow, facts: ArtifactFacts): number =>
-  Math.max(
-    ms(facts.revisedAt) || row.createdAt.getTime(),
-    ms(facts.answeredAt)
-  );
+  Math.max(ms(facts.revisedAt) || row.createdAt.getTime(), ms(facts.askingAt));
 
 /** Where its panel opens it: at its strongest reason's first stop. */
 export const stopOf = (
@@ -299,7 +305,11 @@ export const noticeOf = (
   facts: ArtifactFacts,
   sessions: ArtifactSessions
 ): ArtifactNeedNotice | null => {
-  if (facts.draft || row.heldFor !== null || row.does === "try") {
+  if (
+    facts.draft ||
+    row.heldFor !== null ||
+    (row.does === "try" && !pinsAsk(row, facts))
+  ) {
     return null;
   }
   const reasons = reasonsOf(row, facts, sessions.steps);

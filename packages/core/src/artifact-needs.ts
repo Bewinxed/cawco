@@ -8,10 +8,11 @@
  * `GET /api/artifact-needs`, the `artifact.needs` frame, and `/api/pending`.
  *
  * One item per artifact with an open ask (a page to pick on or a canvas to
- * judge, its ask line set, its session not ended), its reasons strongest
- * first: not opened, picks not made, marks written and not sent, and with
- * any of those an agent's answer on an open pin the person hasn't looked
- * at. A page or preview with no ask is never one. A revision with nothing asked, a resolved pin's
+ * judge, its ask line set, its session not ended) or an open pin whose
+ * agent's reply asks the person something (core comments.ts `pinAsks`), its
+ * reasons strongest first: not opened, picks not made, marks written and not
+ * sent, pins asking. A reply that asks nothing stays on the page. A page or
+ * preview with no ask and no pin asking is never one. A revision with nothing asked, a resolved pin's
  * closing answer and a session that ended with its ask unanswered are
  * notices, never needs: a notice never outranks an ask.
  */
@@ -28,7 +29,11 @@ export type ArtifactReason =
   | { asked: number; kind: "picks"; made: number }
   /** Picks and notes written and not sent (the panel's Send count); comments go by themselves. */
   | { count: number; kind: "unsent" }
-  /** Open pins with an agent's answer newer than the person's look; `pin` the first by number. */
+  /**
+   * Open pins whose agent's reply asks the person something, not yet
+   * replied to or resolved (core comments.ts `pinAsks`); `pin` the first by
+   * number. It stands an artifact's row by itself.
+   */
   | { count: number; kind: "answer"; pin: number };
 
 /** The reasons' order, strongest first: what the row line leads with. */
@@ -78,7 +83,7 @@ export interface ArtifactNeed {
   pending: ArtifactReason[];
   /** The project it was made in; null outside one. */
   project: string | null;
-  /** When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest answer. */
+  /** When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest reply that asks. */
   raisedAt: number;
   stop: ArtifactStop;
   /** What Send sends now; 0 when nothing is written and unsent. */
