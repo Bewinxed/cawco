@@ -24,6 +24,10 @@
  *   main in one request, nothing filed.
  * - h6/h7. The same reading (h1, h2) from a host-scope delegate on OpenCode
  *   and on pi, each one's report reaching the parent.
+ * - h8. host refuses a cwd inside a clone, in host's words naming the clone,
+ *   filing nothing: (a) a folder inside a clone only the machine's own
+ *   records hold (agent workspace-records.ts `cloneHolding`), and (b) the
+ *   clone of the live workspace delegate of w1, as the hub files it.
  * - w1. A workspace delegate in the same run is bounded: PID 1 is bwrap, its
  *   PID namespace is not the host's.
  * - t1. `delegate` offers `host`, and its description says when to pick it.
@@ -34,9 +38,10 @@
  *   bun scripts/probe-kit/run.ts host-delegates
  */
 import { readFileSync, readlinkSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sessionEnv } from "../../../packages/agent/src/harnesses/claude";
+import { workWords } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
   type Harness,
@@ -56,6 +61,12 @@ const REPORT = "[Report from delegate ";
 
 /** Runs of whitespace between `ss`'s columns. */
 const SPACES = /\s+/;
+/** How host's refusal opens, for one field and for several (core `workWords.hostRefused`). */
+const HEADING = {
+  one: workWords.hostRefused(["x"]).split("\n")[0] ?? "",
+  many: workWords.hostRefused(["x", "y"]).split("\n")[0] ?? "",
+};
+
 /** A tool text that names the `host` parameter. */
 const NAMES_HOST = /\bhost\b/;
 /** Where a summary's reading ends. */
@@ -281,7 +292,9 @@ const probe = async (
   parent: string,
   harness: Harness,
   tag: string,
-  how: { host: true } | { cwd: string }
+  how: { host: true } | { cwd: string },
+  /** Run as soon as the item is filed, while it is live. */
+  live?: (started: Started) => Promise<void>
 ): Promise<{ reading?: Reading; started: Started; state?: string }> => {
   const started = await fleet.api<Started>("/api/work-items", {
     parentInstanceId: parent,
@@ -291,6 +304,7 @@ const probe = async (
     model: MODEL[harness],
     ...("host" in how ? { host: true } : { cwd: how.cwd, lands: "none" }),
   });
+  await live?.(started);
   const state = await until(
     `${tag}'s item ended`,
     () => itemOf(fleet, started.workItemId)?.state,
@@ -420,7 +434,7 @@ const claudeHost = async (
   kit.check(
     "h5: host refuses from, owns and lands main, one line each, and files nothing",
     refused.includes("400") &&
-      refused.includes("Host scope refuses these:") &&
+      refused.includes(HEADING.many) &&
       refused.includes("- from:") &&
       refused.includes("- owns:") &&
       refused.includes("- lands main:") &&
@@ -430,6 +444,85 @@ const claudeHost = async (
       ).length === 0,
     refused
   );
+};
+
+/** What a host request with `cwd` is answered: the refusal's words, or "filed". */
+const hostIn = (
+  fleet: KitFleet,
+  parent: string,
+  title: string,
+  cwd: string
+): Promise<string> =>
+  fleet
+    .api("/api/work-items", {
+      parentInstanceId: parent,
+      title,
+      prompt: "never runs",
+      harness: "claude",
+      model: MODEL.claude,
+      host: true,
+      cwd,
+    })
+    .then(
+      () => "filed",
+      (error: unknown) =>
+        error instanceof Error ? error.message : String(error)
+    );
+
+/** h8's rule: refused in host's words, naming the clone `id` holds, nothing filed. */
+const refusedInClone = (
+  kit: Kit,
+  fleet: KitFleet,
+  leg: string,
+  said: string,
+  title: string,
+  id: string
+): void => {
+  kit.check(
+    leg,
+    said.includes("400") &&
+      said.includes(HEADING.one) &&
+      said.includes("- cwd ") &&
+      said.includes(id.slice(0, 8)) &&
+      fleet.query("SELECT id FROM work_items WHERE title = ?", title).length ===
+        0,
+    said
+  );
+};
+
+/**
+ * h8 (a): a clone only the machine's records hold (`create.json` under
+ * `~/.cawco/workspaces/<id>/`, which the hub has no row for), refused for a
+ * folder inside it; the record goes again after.
+ */
+const recordedClone = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string,
+  home: string
+): Promise<void> => {
+  const id = crypto.randomUUID();
+  const clone = join(fleet.sandbox, "recorded-clone");
+  const records = join(home, ".cawco", "workspaces", id);
+  await mkdir(join(clone, "deep"), { recursive: true });
+  await mkdir(records, { recursive: true });
+  await writeFile(
+    join(records, "create.json"),
+    `${JSON.stringify({ path: clone })}\n`
+  );
+  try {
+    const title = "Refused host probe in a recorded clone";
+    refusedInClone(
+      kit,
+      fleet,
+      "h8 (a): host refuses a cwd inside a clone the machine's records hold, naming it, filing nothing",
+      await hostIn(fleet, parent, title, join(clone, "deep")),
+      title,
+      id
+    );
+  } finally {
+    await rm(records, { recursive: true, force: true });
+  }
 };
 
 /** t1: the tool surface. */
@@ -535,9 +628,29 @@ const spec: Spec = {
       const host = await hostReading();
       sameMachine(kit, leg, harness, read, host, before, host.listen);
     }
-    const bounded = await probe(fleet, parent, "claude", TAGS.workspace, {
-      cwd: src,
-    });
+    await recordedClone(kit, fleet, parent, home);
+    const bounded = await probe(
+      fleet,
+      parent,
+      "claude",
+      TAGS.workspace,
+      { cwd: src },
+      async ({ workspaceId }) => {
+        const [row] = fleet.query<{ path: string }>(
+          "SELECT path FROM workspaces WHERE id = ?",
+          workspaceId
+        );
+        const title = "Refused host probe in a live clone";
+        refusedInClone(
+          kit,
+          fleet,
+          "h8 (b): host refuses a cwd inside the live workspace delegate's clone, naming it, filing nothing",
+          await hostIn(fleet, parent, title, `${row?.path}/src`),
+          title,
+          workspaceId
+        );
+      }
+    );
     const host = await hostReading();
     kit.check(
       "w1: a workspace delegate in the same run is bounded: PID 1 is bwrap and its PID namespace is not the host's",

@@ -72,6 +72,7 @@ import type {
 import {
   byPerson,
   CODE_MODE_TOOL,
+  CONTROL_CLONE_HOLDING,
   CONTROL_INPUTS_ADMIT,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
@@ -1426,9 +1427,7 @@ const hostProblem = (request: WorkItemRequest): string | undefined => {
     (request.reuse !== undefined || request.task !== undefined) &&
       "a task's attempt runs in a clone of its project.",
   ].filter((line): line is string => typeof line === "string");
-  return refused.length > 0
-    ? `Host scope refuses ${refused.length === 1 ? "this" : "these"}:\n${refused.map((line) => `- ${line}`).join("\n")}`
-    : undefined;
+  return refused.length > 0 ? workWords.hostRefused(refused) : undefined;
 };
 
 /** Why a request's title, owned files, budget, group, `from` or host scope cannot stand; nothing when they can. */
@@ -5078,7 +5077,7 @@ export const createWorkItems = ({
       }
     }
     if (request.host) {
-      return startHost(request, parent);
+      return await startHost(request, parent);
     }
     return request.workspace
       ? await startFollowUp(request.workspace, request, parent, inputs)
@@ -5086,22 +5085,58 @@ export const createWorkItems = ({
   };
 
   /**
+   * Why a host-scope delegate may not run in `path` on `machineId`, in the
+   * words {@link hostProblem} refuses with, or nothing: a folder inside a
+   * clone is bounded to that clone's boundary whatever the spawn names (agent
+   * session.ts `#sessionContext`, workspace-records.ts `cloneHolding`), so
+   * host scope there would silently be no host scope. Inside a workspace the
+   * hub holds a clone of on that machine (active or held), or one the
+   * machine's own records hold ({@link CONTROL_CLONE_HOLDING}).
+   */
+  const hostFolderProblem = async (
+    machineId: string,
+    path: MachinePath
+  ): Promise<string | undefined> => {
+    const inside = (root: string): boolean =>
+      path === root || path.startsWith(`${root}/`);
+    const filed = [
+      ...db.activeWorkspacesOn(machineId),
+      ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
+    ].find((one) => inside(one.path));
+    const held =
+      filed ??
+      ((await call(machineId, CONTROL_CLONE_HOLDING, [
+        path,
+      ])) as WorkspaceRef | null);
+    return held
+      ? workWords.hostRefused([
+          `cwd ${path}: it is inside workspace ${handle(held.id)}'s clone ${held.path} on ${machineName(machineId)}, where a session runs inside that workspace's boundary. Name a folder outside every clone, or leave cwd out for the agent user's home.`,
+        ])
+      : undefined;
+  };
+
+  /**
    * A host-scope item ({@link WorkItemRequest.host}): its row of the host
    * kind filed for the folder it runs in (`cwd` on its machine, the agent
    * user's home by default), with nothing cut, then its session spawned
    * there with no boundary ({@link spawnOf}). Its machine and model are
-   * checked as a new workspace's are; the folder is the machine's own, so
-   * no project place, repository or clone is recorded for it.
+   * checked as a new workspace's are, and its folder refused inside a clone
+   * ({@link hostFolderProblem}); the folder is the machine's own, so no
+   * project place, repository or clone is recorded for it.
    */
-  const startHost = (
+  const startHost = async (
     request: WorkItemRequest,
     parent: Parent
-  ): WorkItemStart => {
+  ): Promise<WorkItemStart> => {
     const machineId = targetMachine(request, parent);
     notPaused(machineId);
     const settings = settingsOf(request, parent);
     modelOffered(machineId, settings);
     const path = cwdOn(machineId, request.cwd?.trim() || "~");
+    const cloned = await hostFolderProblem(machineId, path);
+    if (cloned) {
+      throw new WorkItemRefusal(400, cloned);
+    }
     const workspace = db.createWorkspace({
       id: crypto.randomUUID(),
       machineId,

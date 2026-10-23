@@ -2020,6 +2020,16 @@ export const CONTROL_PLACE_REPO = "placeRepo";
  */
 export const CONTROL_REPO_ROOT = "repoRoot";
 
+/**
+ * The delegation workspace whose clone holds a folder, by the machine's own
+ * workspace records: the boundary a spawn naming no workspace would run in
+ * there (agent workspace-records.ts `cloneHolding`), or null when none
+ * does. What a host-scope delegate's folder is refused for (hub
+ * work-items.ts `startHost`). Reads only. Args `[path]`. Answers
+ * `WorkspaceRef | null`. Machine-scoped.
+ */
+export const CONTROL_CLONE_HOLDING = "cloneHolding";
+
 /** The most a place's first commit may weigh; a place past it stays a folder. */
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 

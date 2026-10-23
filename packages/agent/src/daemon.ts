@@ -31,6 +31,7 @@ import {
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
   CONTROL_CANCEL_COMMAND,
+  CONTROL_CLONE_HOLDING,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_INPUTS_ADMIT,
@@ -406,7 +407,7 @@ import {
   workspaceBundle,
 } from "./workspace";
 import { workspaceNeeds } from "./workspace-needs";
-import { workspaceRefs } from "./workspace-records";
+import { cloneHolding, workspaceRefs } from "./workspace-records";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
@@ -3403,6 +3404,13 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(CONTROL_REPO_ROOT, (path) =>
       repoRoot(path)
     );
+    // The clone a folder is inside, as a spawn there would be bounded to it: read only.
+    supervisor.registerDaemonFunction(CONTROL_CLONE_HOLDING, async (path) => {
+      if (typeof path !== "string" || !path) {
+        throw new Error("cloneHolding names no folder");
+      }
+      return (await cloneHolding(path)) ?? null;
+    });
     // A place's left-out large files through Git LFS, once the person accepted: a second commit.
     supervisor.registerDaemonFunction(CONTROL_PLACE_LFS, (path, rows) =>
       fenced()

@@ -6,4 +6,10 @@
 export const workWords = {
   /** A work item whose commits the hub pushed to `base`. */
   landedOn: (base: string) => `Landed on ${base}`,
+  /**
+   * A host-scope delegation refused (hub work-items.ts `hostProblem`,
+   * `hostFolderProblem`): each `line` names a field and why it cannot go.
+   */
+  hostRefused: (lines: readonly string[]) =>
+    `Host scope refuses ${lines.length === 1 ? "this" : "these"}:\n${lines.map((line) => `- ${line}`).join("\n")}`,
 };
