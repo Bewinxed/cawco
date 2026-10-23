@@ -1644,6 +1644,13 @@ const acquire = async (): Promise<boolean> => {
 
 /** What the build running now has learned: its draft, for a stop to remove. */
 let learnedNow: Learned | undefined;
+/**
+ * The lock being taken, once it is asked for: a stop waits for it to settle,
+ * so it never lets go of a lock before the claim lands (the claim would then
+ * outlive the run, a holder.json for the next run's stale takeover) and never
+ * leaves a stale generation half taken over.
+ */
+let acquiring: Promise<boolean> | undefined;
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 // A stop (SIGTERM from a unit stop, which ship.sh hands on, or SIGINT) is the
@@ -1656,6 +1663,9 @@ const stop = async (signal: "SIGTERM" | "SIGINT"): Promise<never> => {
   console.log(`Release build stopped by ${signal}: clearing its work`);
   // Every spawn from here runs from the main checkout, whatever became of this one.
   process.chdir(mainRepo);
+  // A lock still being taken is taken, or refused, before anything is let go;
+  // whatever it holds then, `release` below lets go of.
+  await acquiring?.catch(() => false);
   await Promise.all([endGroups(me.groups), endCalls()]);
   await Promise.all([...running].map((child) => child.exited));
   const cleared: string[] = [];
@@ -1692,7 +1702,19 @@ process.on("SIGTERM", () => {
 process.on("SIGINT", () => {
   stopped ??= stop("SIGINT");
 });
-if (!(await acquire())) {
+acquiring = acquire();
+const acquired = await acquiring.catch(async (error: unknown) => {
+  // A claim that failed under a stop is the stop's to finish: it exits.
+  if (stopped) {
+    await stopped;
+  }
+  throw error;
+});
+// Stopped while the lock was being taken: the stop clears and lets it go.
+if (stopped) {
+  await stopped;
+}
+if (!acquired) {
   console.log(
     superseded
       ? `Superseded by newer queued commit ${previous?.commit}; one build is already running`

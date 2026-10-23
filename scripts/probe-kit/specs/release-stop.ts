@@ -22,6 +22,12 @@
  *   which the old `--stale` stop sweep took and an exact-key sweep leaves.
  * - drafting: while gh is still making the draft (the release exists on the
  *   host, its client not back yet).
+ * - acquiring: while the release is still taking its build lock. A stale
+ *   generation stands in the lock before the run (its holder gone, one of its
+ *   command groups alive and ending 5 s after its SIGTERM), so the release's
+ *   takeover holds `acquire()` open while it ends that group; the stop lands
+ *   as the takeover is said. It must wait for the claim to settle, then let it
+ *   go: no generation keeps a holder.json, the stale one included.
  *
  * After each: ship.sh exits 143; git records no worktree but the clone's own;
  * ~/.worktrees is empty; no release is left at the gh stand-in; no staging is
@@ -161,6 +167,8 @@ interface Leg {
   name: string;
   /** Plants a proof instance and a decoy in the staging once the point is reached. */
   plant?: boolean;
+  /** Puts a stale generation in the build lock before the run, one of its groups still running. */
+  stale?: boolean;
   /** Whether the release has started by the stop, so it says what it cleared. */
   started: boolean;
 }
@@ -168,6 +176,7 @@ interface Leg {
 interface Where {
   ghState: string;
   home: string;
+  log: string;
   main: string;
   sha: string;
 }
@@ -210,6 +219,14 @@ const LEGS: Leg[] = [
       readFileSync(join(ghState, "calls.log"), "utf8").includes(
         "release create"
       ),
+  },
+  {
+    name: "acquiring",
+    started: true,
+    stale: true,
+    at: ({ log }) =>
+      existsSync(log) &&
+      readFileSync(log, "utf8").includes("Took over a stale build lock"),
   },
 ];
 
@@ -291,6 +308,30 @@ const runLeg = async (
       .map((name) => `${name}=${junk}\n`)
       .join("")
   );
+  const locks = join(home, ".cache", "cawco", "release-pipeline", "build-lock");
+  if (leg.stale) {
+    // A command group of a gone holder: it shrugs off the first SIGTERM and ends 5 s after it.
+    const group = Bun.spawn(
+      [
+        "bash",
+        "-c",
+        "trap 'sleep 5; exit 0' TERM; while :; do sleep 1; done",
+        join(dir, "stale-holder"),
+      ],
+      { detached: true, stdio: ["ignore", "ignore", "ignore"] }
+    );
+    group.unref();
+    const started = await run(["ps", "-o", "lstart=", "-p", String(group.pid)]);
+    await mkdir(join(locks, "1"), { recursive: true });
+    await writeFile(
+      join(locks, "1", "holder.json"),
+      JSON.stringify({
+        pid: group.pid,
+        started: "not this process's start",
+        groups: [{ pid: group.pid, started }],
+      })
+    );
+  }
   const notes = join(dir, "notes.md");
   await writeFile(notes, "A stopped release's notes.\n");
   const log = join(dir, "ship.log");
@@ -319,7 +360,7 @@ const runLeg = async (
   ship.exited.then(() => {
     end = String(ship.signalCode ?? ship.exitCode);
   });
-  const where: Where = { ghState, home, main, sha };
+  const where: Where = { ghState, home, log, main, sha };
   const reached = await until(
     () => leg.at(where) || end !== undefined,
     POINT_MS
@@ -428,7 +469,6 @@ const runLeg = async (
   );
   // What a failed leg left is ended here, so no run of this spec outlives it.
   endAll(running.map(({ pid }) => pid));
-  const locks = join(home, ".cache", "cawco", "release-pipeline", "build-lock");
   const holders = listed(locks).filter((name) =>
     existsSync(join(locks, name, "holder.json"))
   );
@@ -450,6 +490,15 @@ const runLeg = async (
       cleared.join(" / ") || "no such line"
     );
     kit.note(`release-stop ${leg.name}: ${cleared[0] ?? "(none)"}`);
+  }
+  if (leg.stale) {
+    const takeover = said.indexOf("Took over a stale build lock");
+    const stop = said.indexOf("Release build stopped by SIGTERM: clearing");
+    kit.check(
+      `release-stop ${leg.name}: the stop landed while the lock was being taken over, and the stale generation is gone`,
+      takeover >= 0 && stop > takeover && !existsSync(join(locks, "1")),
+      `takeover at ${takeover}, stop at ${stop}; generations ${listed(locks).join(", ")}`
+    );
   }
   endAll(spare);
 };
