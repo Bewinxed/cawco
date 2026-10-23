@@ -15,8 +15,8 @@ export default {
   decorators: [paneFrame],
 };
 
-/** Desk: the mirror beside the inspector, its Needs you element picked with pin 1. */
+/** Desk: the mirror, marked Agent-written, beside the inspector; its Needs you element picked with pin 1. */
 export const Desk = { parameters: { viewport: 720 } };
 
-/** Phone: the mirror takes the width, the picked element in the sheet over its foot. */
+/** Phone: the band says Agent-written; the mirror whole above its caption; the picked element in a sheet docked under it. */
 export const Phone = { parameters: { viewport: 390 } };

@@ -19,7 +19,7 @@
     wire = false,
     drawn = true,
   }: {
-    /** The section says when and where its stills were drawn (the panel's head says it otherwise). */
+    /** The section says when its stills were drawn (the panel's head says it otherwise); it always says where. */
     drawn?: boolean;
     /** Every box of each still's tree drawn, the stills dimmed. */
     wire?: boolean;
@@ -76,28 +76,43 @@
       <span class="type-code liga-none"
         >ios/CawCo/ProjectViewController.swift</span
       >
-      {#if drawn}· drawn <span class="num">12 s</span> ago on {DEVICE.machine}{/if}
+      · {#if drawn}drawn <span class="num">12 s</span> ago
+      {/if}on {DEVICE.machine}
     </span>
     <span class="text-ink-muted type-meta">Stand-ins for the app's screens</span
     >
   </header>
   <div class="flex flex-wrap items-start gap-space-6">
-    <!-- Default, the tap, Pressed: one flow, kept together. -->
+    <!-- Default, the tap, Pressed: one flow, kept together, the edge a
+         line from one still to the other with its label on it; it runs
+         down between them where they stack. -->
     <div
-      class="flex flex-wrap items-center gap-space-3 @max-phone/stills:flex-col @max-phone/stills:items-start"
+      class="flex w-full items-center @max-phone/stills:flex-col @max-phone/stills:items-start"
     >
       {@render still("Default")}
-      <span
-        class="mark-line flex items-center gap-space-1 text-ink-muted type-meta @max-phone/stills:ps-space-8"
+      <div
+        class="mark-line flex min-w-space-8 flex-1 items-center self-center text-ink-strong @max-phone/stills:min-h-space-8 @max-phone/stills:w-auto @max-phone/stills:flex-col @max-phone/stills:ms-space-8"
         data-edge="tap"
       >
         <span
-          class="rounded-pill border border-border-control bg-surface-raised px-space-2"
+          class="h-px flex-1 bg-border-control-strong @max-phone/stills:h-auto @max-phone/stills:min-h-space-4 @max-phone/stills:w-px"
+          data-box
+        ></span>
+        <span
+          class="rounded-pill border border-border-control-strong bg-surface-raised px-space-2 type-label"
           data-box>tap</span
         >
-        <IconArrowRight class="size-icon-md @max-phone/stills:hidden" />
-        <IconArrowDown class="hidden size-icon-md @max-phone/stills:block" />
-      </span>
+        <span
+          class="h-px flex-1 bg-border-control-strong @max-phone/stills:h-auto @max-phone/stills:min-h-space-4 @max-phone/stills:w-px"
+          data-box
+        ></span>
+        <IconArrowRight
+          class="-ms-space-1 size-icon-md flex-none text-border-control-strong @max-phone/stills:hidden"
+        />
+        <IconArrowDown
+          class="-mt-space-1 hidden size-icon-md flex-none text-border-control-strong @max-phone/stills:block"
+        />
+      </div>
       {@render still("Pressed")}
     </div>
     {@render still("Dark")}

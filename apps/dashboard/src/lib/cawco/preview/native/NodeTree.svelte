@@ -47,10 +47,34 @@
       return;
     }
     const at = layer.getBoundingClientRect();
+    const meets = (a: DOMRect, b: DOMRect) =>
+      a.right > b.left &&
+      a.left < b.right &&
+      a.bottom > b.top &&
+      a.top < b.bottom;
+    // A node hidden by a box that clips it (a card past the screen's foot)
+    // has no box: the tree is of what is shown.
+    const shown = (node: HTMLElement) => {
+      const box = node.getBoundingClientRect();
+      for (
+        let up: HTMLElement | null = node;
+        up && up !== root.parentElement;
+        up = up.parentElement
+      ) {
+        if (
+          up !== node &&
+          getComputedStyle(up).overflow !== "visible" &&
+          !meets(box, up.getBoundingClientRect())
+        ) {
+          return false;
+        }
+      }
+      return true;
+    };
     const nodes = [
       root,
       ...root.querySelectorAll<HTMLElement>("[data-node]"),
-    ].filter((node) => node.dataset.node);
+    ].filter((node) => node.dataset.node && shown(node));
     boxes = nodes.map((node, id) => {
       const box = node.getBoundingClientRect();
       if (node.hasAttribute("data-node-picked") && chosen === null) {
@@ -105,7 +129,7 @@
     <button
       aria-label={`${box.kind} “${box.label}”`}
       aria-pressed={isPicked}
-      class="pointer-events-auto absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-1 -outline-offset-1 outline-transparent outline-solid transition-[outline-color] duration-(--dur-control) ease-out focus-visible:ring-2 focus-visible:ring-focus-ring not-aria-pressed:can-hover:hover:outline-2 not-aria-pressed:can-hover:hover:outline-action-solid border border-transparent in-data-wire:border-border-control-strong aria-pressed:outline-2 aria-pressed:outline-action-solid data-window:pointer-events-none"
+      class="pointer-events-auto absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-1 outline-offset-(--space-1) outline-transparent outline-solid transition-[outline-color] duration-(--dur-control) ease-out focus-visible:ring-2 focus-visible:ring-focus-ring not-aria-pressed:can-hover:hover:outline-2 not-aria-pressed:can-hover:hover:outline-action-solid border border-transparent in-data-wire:border-border-control-strong aria-pressed:outline-2 aria-pressed:outline-action-solid data-window:pointer-events-none"
       data-window={box.depth < 0 || undefined}
       data-node-box={box.kind}
       onclick={() => {

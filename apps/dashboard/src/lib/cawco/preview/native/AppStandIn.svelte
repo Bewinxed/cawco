@@ -108,7 +108,7 @@
       </span>
     </div>
     <h2
-      class="m-0 truncate type-title"
+      class="m-0 flex-none truncate type-title"
       data-node="UILabel"
       data-node-label="CawCo iOS"
     >
@@ -122,8 +122,13 @@
     >
       <NeedsYouChip count={3} on={pressed} ontoggle={noop} />
     </span>
+    <!-- The list fills the screen to its foot; a card that would cross the
+         foot wraps into a column past the screen's edge, so the screen ends
+         on whole cards, never on a sliced line. -->
     <!-- mark-line: a column of a heading over task cards; no mark stands beside its words -->
-    <div class="flex min-h-0 flex-col gap-space-2">
+    <div
+      class="flex min-h-0 flex-1 flex-col flex-wrap content-start gap-space-2 overflow-hidden *:w-full"
+    >
       <span
         class="border-b border-b-border-hairline pb-space-1 text-ink-muted type-label"
         data-node="UILabel"

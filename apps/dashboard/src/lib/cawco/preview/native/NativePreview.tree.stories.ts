@@ -20,5 +20,5 @@ export default {
 /** Desk: the four stills in the panel's canvas, Default picked with pin 1. */
 export const Desk = { parameters: { viewport: 720 } };
 
-/** Phone: the stills stacked, the tap running down from Default to Pressed. */
+/** Phone: Wire stays in the head as its glyph; the stills stack, the tap running down from Default to Pressed. */
 export const Phone = { parameters: { viewport: 390 } };

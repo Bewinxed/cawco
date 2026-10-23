@@ -12,26 +12,25 @@
   let wire = $state(false);
 </script>
 
-<div
-  class="@container/both grid min-w-0 gap-space-5 p-space-4 @wide/both:grid-cols-2"
-  data-slot="native-both"
->
-  <div class="grid min-w-0 content-start gap-space-2">
-    <span class="text-ink-muted type-label"
-      >In the preview panel: the running app</span
-    >
-    <div class="relative h-c-bench-phone-h min-w-0">
-      <NativePane bind:wire kind="stream" still />
+<div class="@container/both min-w-0" data-slot="native-both">
+  <div class="grid min-w-0 gap-space-5 p-space-4 @wide/both:grid-cols-2">
+    <div class="grid min-w-0 content-start gap-space-2">
+      <span class="text-ink-muted type-label"
+        >In the preview panel: the running app</span
+      >
+      <div class="relative h-c-bench-phone-h min-w-0">
+        <NativePane bind:wire kind="stream" still />
+      </div>
     </div>
-  </div>
-  <div class="grid min-w-0 content-start gap-space-2">
-    <span class="text-ink-muted type-label"
-      >On the canvas: a still per state</span
-    >
-    <div
-      class="min-w-0 rounded-lg border border-border-hairline bg-surface-page"
-    >
-      <NativeStills {wire} />
+    <div class="grid min-w-0 content-start gap-space-2">
+      <span class="text-ink-muted type-label"
+        >On the canvas: a still per state</span
+      >
+      <div
+        class="min-w-0 rounded-lg border border-border-hairline bg-surface-page"
+      >
+        <NativeStills {wire} />
+      </div>
     </div>
   </div>
 </div>

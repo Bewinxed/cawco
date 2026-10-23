@@ -10,6 +10,7 @@
    *
    * The app's pixels here are a stand-in (AppStandIn), captioned so.
    */
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -18,6 +19,7 @@
     IconFileCode,
     IconLayers,
     IconPhone,
+    IconToolCode,
   } from "#lib/icons.js";
   import AppStandIn, { screenShape } from "./AppStandIn.svelte";
   import { DEVICE, type NativeNode, PICKED, PIN } from "./fixture";
@@ -50,12 +52,7 @@
   };
 </script>
 
-<NativeSurface
-  subtitle={kind === "stream"
-    ? "Pin what reads wrong on the running app"
-    : "Pin what reads wrong on the mirror"}
-  title="Project page · CawCo iOS"
->
+<NativeSurface subtitle="Pin what reads wrong" title="CawCo iOS">
   <div
     class="@container/pane absolute inset-0 flex flex-col"
     data-slot="native-pane"
@@ -106,36 +103,42 @@
           <span class="mark-cell flex-none text-ink-muted"
             ><IconFileCode /></span
           >
-          <span class="min-w-0 type-code liga-none wrap-anywhere"
+          <span
+            class="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap type-code liga-none"
             >mirror/ProjectPage.svelte</span
           >
         </span>
-        <span class="min-w-0 text-ink-muted text-pretty"
-          >Written by the agent to look like the app; not read from it.</span
+        <Badge class="flex-none" data-slot="agent-written" variant="secondary"
+          ><IconToolCode /><span>Agent-written</span></Badge
         >
       {/if}
     </div>
-    <div class="relative flex min-h-0 flex-1">
-      <!-- The well: the screen letterboxed whole, its caption at the foot. -->
+    <div class="relative flex min-h-0 flex-1 @max-phone/pane:flex-col">
+      <!-- The well: the screen letterboxed whole, its caption under it. -->
       <div
-        class="@container-size relative grid min-w-0 flex-1 place-items-center bg-surface-recess px-space-4 pt-space-6 pb-space-8"
+        class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-2 bg-surface-recess px-space-4 pt-space-5 pb-space-3"
         data-slot="native-well"
       >
         <div
-          class="relative aspect-(--shape) w-(--fit)"
-          style:--fit={`min(100cqi, 100cqb * ${shape})`}
-          style:--shape={shape}
+          class="@container-size relative grid min-h-0 flex-1 place-items-center"
         >
           <div
-            class="size-full overflow-hidden rounded-lg border border-border-well shadow-tile transition-opacity duration-(--dur-control) ease-out data-wire:opacity-40"
-            data-wire={wire || undefined}
+            class="relative aspect-(--shape) w-(--fit)"
+            style:--fit={`min(100cqi, 100cqb * ${shape})`}
+            style:--shape={shape}
           >
-            <AppStandIn bind:root={screen} />
+            <div
+              class="size-full overflow-hidden rounded-lg border border-border-well shadow-tile transition-opacity duration-(--dur-control) ease-out data-wire:opacity-40"
+              data-wire={wire || undefined}
+            >
+              <AppStandIn bind:root={screen} />
+            </div>
+            <NodeTree bind:picked pin={PIN.number} root={screen} {wire} />
           </div>
-          <NodeTree bind:picked pin={PIN.number} root={screen} {wire} />
         </div>
         <p
-          class="absolute inset-x-0 bottom-0 m-0 px-space-4 py-space-2 text-center text-ink-muted type-meta text-pretty"
+          class="m-0 flex-none text-center text-ink-muted type-meta text-pretty"
+          data-slot="native-caption"
         >
           {kind === "stream"
             ? "Stand-in for the app's screen"

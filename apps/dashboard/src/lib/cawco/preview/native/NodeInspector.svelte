@@ -3,8 +3,8 @@
    * The picked node in the panel's inspector (the sheet inspector's frame,
    * DESIGN.md "A sheet's inspector"): beside the well on a pane 640px or
    * wider, `c-sheet-inspector-w` on the raised surface with a hairline seam;
-   * narrower, the sheet over the well's foot, edge to edge, at most 60% of
-   * it. It says the node's class and label, where its view is made when the
+   * narrower, a sheet docked under the well, edge to edge, at most 40% of
+   * the pane, so nothing on the app's screen stands under it. It says the node's class and label, where its view is made when the
    * build stamps it, its frame, and its type, ink, fill and radius by the
    * design system's token names; under them, the comment pinned on it.
    */
@@ -41,13 +41,19 @@
 
 <aside
   aria-label="Picked"
-  class="absolute inset-x-0 bottom-0 z-2 flex max-h-3/5 flex-col rounded-t-lg border-t border-t-border-hairline bg-surface-raised shadow-drawer @phone/pane:static @phone/pane:max-h-none @phone/pane:w-c-sheet-inspector-w @phone/pane:flex-none @phone/pane:rounded-none @phone/pane:border-t-0 @phone/pane:border-s @phone/pane:border-s-border-hairline @phone/pane:shadow-none"
+  class="z-2 flex max-h-2/5 flex-none flex-col rounded-t-lg border-t border-t-border-hairline bg-surface-raised shadow-drawer @phone/pane:max-h-none @phone/pane:w-c-sheet-inspector-w @phone/pane:rounded-none @phone/pane:border-t-0 @phone/pane:border-s @phone/pane:border-s-border-hairline @phone/pane:shadow-none"
   data-slot="node-inspector"
 >
   <header
     class="flex min-h-c-sheet-inspector-head-h flex-none items-center gap-space-2 border-b border-b-border-hairline ps-space-4 pe-space-2"
   >
-    <h2 class="m-0 flex-1 text-ink-strong type-label">Picked</h2>
+    <h2
+      class="mark-line m-0 flex flex-1 items-center gap-space-2 text-ink-strong type-label"
+    >
+      {#if pin}<span class="mark-cell"
+          ><PinMark number={pin.number} state="sent" tail="none" /></span
+        >{/if}<span>Picked</span>
+    </h2>
     <Button
       aria-label="Close"
       class="touch-hit"
@@ -83,7 +89,12 @@
       {/if}
     </div>
     {#if note}
-      <p class="m-0 text-ink-muted type-meta text-pretty">{note}</p>
+      <p
+        class="m-0 rounded-sm border border-border-hairline bg-surface-recess px-space-3 py-space-2 text-ink-strong type-label text-pretty"
+        data-slot="written-note"
+      >
+        {note}
+      </p>
     {/if}
     <dl class="m-0 grid gap-y-space-1 type-meta">
       {#each rows as [name, value] (name)}
