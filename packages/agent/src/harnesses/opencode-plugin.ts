@@ -518,7 +518,16 @@ const verdictOf = (ran) => {
     : specific.permissionDecision === "deny" ? said(specific.permissionDecisionReason) ?? "A fleet hook refused it."
     : parsed.continue === false ? said(parsed.stopReason) ?? "A fleet hook stopped it." : undefined;
   const context = said(specific.additionalContext);
-  return { ...(block ? { block } : {}), ...(context ? { context } : {}) };
+  const updated = specific.updatedInput;
+  const rewrite = updated && typeof updated === "object" && !Array.isArray(updated) ? updated : undefined;
+  return { ...(block ? { block } : {}), ...(context ? { context } : {}), ...(rewrite ? { updatedInput: rewrite } : {}) };
+};
+// A rewrite in Claude Code's keys back in OpenCode's (core hookToolInputBack).
+const ownInput = (tool, input) => {
+  const keys = hookTools[tool]?.input;
+  if (!keys) return input;
+  const back = Object.fromEntries(Object.entries(keys).map(([own, claude]) => [claude, own]));
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [back[key] ?? key, value]));
 };
 
 // The project MCP servers CawCo placed at the deepest place holding
@@ -543,25 +552,6 @@ export default {
   id: ${JSON.stringify(CAWCO_PLUGIN_ID)},
   async setup(ctx) {
     const directory = ctx.location.directory;
-    // The fleet's OpenCode plugins and its project's, each set up first, with
-    // this location's ctx: a plugin handed another's ctx registers its hooks
-    // and tools as that one does (observed on 2.0.29: a plugin's
-    // \`ctx.shell.hook("create.before")\`, registered through CawCo's ctx,
-    // fired for the location's shell). CawCo's own register after them. One
-    // that fails to load or set up is said on the server's log, and CawCo's
-    // plugin goes on. The location the agent reads through runs none.
-    if (realOf(directory) !== realOf(cawcoQuiet)) {
-      for (const row of fleetPlugins(directory)) {
-        try {
-          const loaded = await import(row.entry);
-          const plugin = loaded.default ?? loaded;
-          if (typeof plugin?.setup !== "function") throw new Error("its module exports no { setup }");
-          await plugin.setup(ctx);
-        } catch (error) {
-          console.error("cawco: the fleet's OpenCode plugin " + row.name + " (" + row.entry + ") did not load: " + said(error));
-        }
-      }
-    }
     // A session anywhere inside a workspace's clone is that workspace's.
     const holding = workspaceOf(directory);
     const workspace = holding?.id;
@@ -577,6 +567,42 @@ export default {
       return !held || held.workspace === workspace;
     };
 
+    // The fleet's OpenCode plugins and its project's, each set up first, with
+    // this location's ctx: a plugin handed another's ctx registers its hooks
+    // and tools as that one does (observed on 2.0.29: a plugin's
+    // \`ctx.shell.hook("create.before")\`, registered through CawCo's ctx,
+    // fired for the location's shell). CawCo's own register after them. One
+    // that fails to load or set up is said on the server's log, and CawCo's
+    // plugin goes on. The location the agent reads through runs none.
+    //
+    // Each is handed this ctx with one change: in a bounded session its
+    // execute.before hooks get a copy of the call, so an input they change
+    // is dropped (the workspace's judge judged the call as asked, below); a
+    // refusal they throw still refuses.
+    const placedCtx = {
+      ...ctx,
+      tool: {
+        ...ctx.tool,
+        hook: (name, fn) => ctx.tool.hook(name, name !== "execute.before" ? fn : async (event) => {
+          if (!bounded(event.sessionID)) return fn(event);
+          let input;
+          try { input = structuredClone(event.input); } catch { input = JSON.parse(JSON.stringify(event.input ?? null)); }
+          await fn({ ...event, input });
+        }),
+      },
+    };
+    if (realOf(directory) !== realOf(cawcoQuiet)) {
+      for (const row of fleetPlugins(directory)) {
+        try {
+          const loaded = await import(row.entry);
+          const plugin = loaded.default ?? loaded;
+          if (typeof plugin?.setup !== "function") throw new Error("its module exports no { setup }");
+          await plugin.setup(placedCtx);
+        } catch (error) {
+          console.error("cawco: the fleet's OpenCode plugin " + row.name + " (" + row.entry + ") did not load: " + said(error));
+        }
+      }
+    }
     // Each session's parent, as its server keeps it: a subagent's outputs are
     // the CawCo session's that started it. A session's parent never changes.
     const parents = new Map();
@@ -712,17 +738,21 @@ export default {
       const stdin = JSON.stringify({ session_id: sessionID, transcript_path: "", cwd: directory, hook_event_name: event, tool_name: call.name, tool_input: call.input, ...extra });
       const prefix = holding && bounded(sessionID) ? boundaryOf(holding.id, holding.root).prefix : undefined;
       const env = { ...cleanEnv({ ...process.env }), ...sessionEnv(sessionID) };
-      const verdicts = await Promise.all(due.map(async (hook) => {
+      // In the order each finished: the last rewrite to finish is the one
+      // taken, as Claude Code takes it, and a bounded session takes none.
+      const finished = [];
+      await Promise.all(due.map(async (hook) => {
         const running = runHook(hook.handler, stdin, directory, prefix, env);
         if (hook.handler.async) {
           running.catch(() => {});
-          return {};
+          return;
         }
-        return verdictOf(await running);
+        finished.push(verdictOf(await running));
       }));
-      const blocks = verdicts.flatMap((one) => (one.block ? [one.block] : []));
-      const contexts = verdicts.flatMap((one) => (one.context ? [one.context] : []));
-      return { ...(blocks.length > 0 ? { block: blocks.join("\\n") } : {}), ...(contexts.length > 0 ? { context: contexts.join("\\n\\n") } : {}) };
+      const blocks = finished.flatMap((one) => (one.block ? [one.block] : []));
+      const contexts = finished.flatMap((one) => (one.context ? [one.context] : []));
+      const rewrite = prefix ? undefined : finished.findLast((one) => one.updatedInput)?.updatedInput;
+      return { ...(blocks.length > 0 ? { block: blocks.join("\\n") } : {}), ...(contexts.length > 0 ? { context: contexts.join("\\n\\n") } : {}), ...(rewrite ? { updatedInput: rewrite } : {}) };
     };
 
     // Judges the call and stamps a CawCo call with its session's credential.
@@ -751,6 +781,12 @@ export default {
         // block refuses it.
         const verdict = await fleetHooksOn("PreToolUse", event.sessionID, event.tool, event.input, { tool_use_id: event.id });
         if (verdict.block) throw new Error(verdict.block);
+        // A rewrite, outside a bounded session only, in OpenCode's keys, the
+        // credential stamp kept.
+        if (verdict.updatedInput) {
+          const stamp = event.input?.__cawco;
+          event.input = { ...ownInput(event.tool, verdict.updatedInput), ...(stamp ? { __cawco: stamp } : {}) };
+        }
       } catch (error) {
         if (program) program.calls[slot] = { ...program.calls[slot], content: [{ type: "text", text: said(error) }], isError: true };
         throw error;
