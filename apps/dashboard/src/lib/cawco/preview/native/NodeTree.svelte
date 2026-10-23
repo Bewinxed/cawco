@@ -37,6 +37,13 @@
     picked?: boolean;
   } = $props();
 
+  interface Rect {
+    bottom: number;
+    left: number;
+    right: number;
+    top: number;
+  }
+
   interface Box {
     depth: number;
     h: number;
@@ -60,6 +67,8 @@
       null
   );
   let tag = $state<HTMLSpanElement>();
+  /** Each box's node in the picture, by the box's id. */
+  let elements: HTMLElement[] = [];
   /** Where the tag stands in the layer, once placed. */
   let spot = $state<{ x: number; y: number } | null>(null);
   /**
@@ -93,63 +102,109 @@
   }
 
   /**
-   * The tag's place for box `box`: above it, then below it, each at its
-   * start and then its end, clamped inside the picture (as DevTools keeps
-   * its tooltip inside the viewport); the first that covers no glyph and
-   * stays off the box, else the one that covers least.
+   * The tag's place for box `box`, clamped inside the picture (as DevTools
+   * keeps its tooltip inside the viewport): the first that covers no glyph
+   * and stands nearer this box than any other, outside it where it can be
+   * (above, below, beside), else in one of its own corners.
    */
   function place(box: Box) {
     if (!(tag && layer)) {
       return;
     }
-    const gap = numberOf("--space-2") || 8;
+    const gap = numberOf("--space-1") || 4;
     const { width: w, height: h } = tag.getBoundingClientRect();
     const room = layer.getBoundingClientRect();
     const words = root ? glyphs(root, room) : [];
     const clamp = (value: number, most: number) =>
       Math.max(0, Math.min(value, Math.max(0, most)));
-    const tries = [
-      [box.x, box.y - h - gap],
-      [box.x, box.y + box.h + gap],
-      [box.x + box.w - w, box.y - h - gap],
-      [box.x + box.w - w, box.y + box.h + gap],
-    ].map(([x, y]) => ({
-      x: clamp(x, room.width - w),
-      y: clamp(y, room.height - h),
-    }));
-    const area = (
-      x: number,
-      y: number,
-      r: { left: number; right: number; top: number; bottom: number }
-    ) => {
-      const across = Math.min(x + w, r.right) - Math.max(x, r.left);
-      const down = Math.min(y + h, r.bottom) - Math.max(y, r.top);
-      return across > 0 && down > 0 ? across * down : 0;
-    };
     const own = {
       left: box.x,
       right: box.x + box.w,
       top: box.y,
       bottom: box.y + box.h,
     };
-    // Text covered, and the box's own room (a spot clamped onto the box is
-    // inside it): the tag stands outside its box wherever it can.
-    const covers = ({ x, y }: { x: number; y: number }) =>
-      words.reduce((sum, word) => sum + area(x, y, word), 0) +
-      area(x, y, own) * w * h;
-    let best = tries.at(0) ?? { x: 0, y: 0 };
-    let least = Number.POSITIVE_INFINITY;
+    // The boxes the tag could be taken for: every node but this one, the
+    // nodes holding it and the nodes it holds.
+    const self = elements[box.id];
+    const others = boxes
+      .filter((one) => {
+        const el = elements[one.id];
+        return (
+          one.id !== box.id &&
+          el &&
+          self &&
+          !el.contains(self) &&
+          !self.contains(el)
+        );
+      })
+      .map((one) => ({
+        left: one.x,
+        right: one.x + one.w,
+        top: one.y,
+        bottom: one.y + one.h,
+      }));
+    const at = (x: number, y: number): Rect => ({
+      left: x,
+      right: x + w,
+      top: y,
+      bottom: y + h,
+    });
+    const meets = (a: Rect, b: Rect) =>
+      Math.min(a.right, b.right) > Math.max(a.left, b.left) &&
+      Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top);
+    const apart = (a: Rect, b: Rect) =>
+      Math.hypot(
+        Math.max(0, Math.max(a.left, b.left) - Math.min(a.right, b.right)),
+        Math.max(0, Math.max(a.top, b.top) - Math.min(a.bottom, b.bottom))
+      );
+    const middle = box.y + (box.h - h) / 2;
+    // Outside first, as DevTools stands its tooltip: above, below, then
+    // beside; then, where every outside place stands nearer another box,
+    // inside the box's own corners.
+    const tries = [
+      [box.x, box.y - h - gap],
+      [box.x + box.w - w, box.y - h - gap],
+      [box.x, box.y + box.h + gap],
+      [box.x + box.w - w, box.y + box.h + gap],
+      [box.x - w - gap, middle],
+      [box.x + box.w + gap, middle],
+      [box.x + box.w - w - gap, box.y + gap],
+      [box.x + gap, box.y + gap],
+      [box.x + box.w - w - gap, box.y + box.h - h - gap],
+      [box.x + gap, box.y + box.h - h - gap],
+    ].map(([x, y]) => at(clamp(x, room.width - w), clamp(y, room.height - h)));
+    // A place covers no glyph, and stands nearer its own box than any other
+    // box (it is read as that box's); off the box itself is better still.
+    const rank = (candidate: Rect) => {
+      const text = words.some((word) => meets(candidate, word));
+      const near = others.every(
+        (other) => apart(candidate, own) < apart(candidate, other)
+      );
+      const inside = meets(candidate, own);
+      if (!text && near && !inside) {
+        return 0;
+      }
+      if (!text && near) {
+        return 1;
+      }
+      if (!text) {
+        return 2;
+      }
+      return 3;
+    };
+    let best = tries.at(0) ?? at(0, 0);
+    let bestRank = Number.POSITIVE_INFINITY;
     for (const one of tries) {
-      const over = covers(one);
-      if (over < least) {
-        least = over;
+      const value = rank(one);
+      if (value < bestRank) {
+        bestRank = value;
         best = one;
       }
-      if (over === 0) {
+      if (value === 0) {
         break;
       }
     }
-    spot = best;
+    spot = { x: best.left, y: best.top };
   }
 
   $effect(() => {
@@ -195,6 +250,7 @@
       root,
       ...root.querySelectorAll<HTMLElement>("[data-node]"),
     ].filter((node) => node.dataset.node && shown(node));
+    elements = nodes;
     boxes = nodes.map((node, id) => {
       const box = node.getBoundingClientRect();
       if (node.hasAttribute("data-node-picked") && chosen === null) {
@@ -291,10 +347,12 @@
   {#if active !== null}
     {@const box = boxes.find((one) => one.id === active)}
     {#if box}
-      <!-- The one class tag, for the node under the pointer, placed by place(). -->
+      <!-- The one class tag, for the node under the pointer, placed by
+           place(): the house tooltip's chip (DESIGN.md, Tooltip; The Ink
+           Stays Ink Rule): ink-solid, on-ink, meta, radius sm. -->
       <span
         bind:this={tag}
-        class="pointer-events-none absolute start-(--tag-x) top-(--tag-y) whitespace-nowrap rounded-xs bg-surface-raised px-space-1 text-ink-strong type-code liga-none shadow-xs not-data-placed:invisible"
+        class="pointer-events-none absolute start-(--tag-x) top-(--tag-y) whitespace-nowrap rounded-sm bg-ink-solid px-space-2 py-space-1 text-on-ink type-meta not-data-placed:invisible"
         data-placed={spot ? "" : undefined}
         data-slot="node-kind"
         style:--tag-x={`${spot?.x ?? 0}px`}

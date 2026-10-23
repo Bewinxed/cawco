@@ -24,13 +24,13 @@ export const Desk = { parameters: { viewport: 720 } };
 /** Phone: the app whole above its caption; the picked node in a sheet docked under it, its pin first and its rows scrolling under a fade. */
 export const Phone = { parameters: { viewport: 390 } };
 
-/** Desk: the pointer over one card: its box drawn, its class named once above it, clear of the text around it. */
+/** Desk: the pointer over one card: its box drawn, its class named once in the tooltip's chip, nearer that card than any other box and clear of every word. */
 export const Hover = {
   args: { hover: "Pair the phone by QR" },
   parameters: { viewport: 720 },
 };
 
-/** Desk: the pointer over the top row's More button: no room above it inside the screen, so its class is named below it, clear of the page's title. */
+/** Desk: the pointer over the top row's More button: no room above it inside the screen, so its class is named beside it, nearer it than any other box. */
 export const HoverTop = {
   args: { hover: "More" },
   parameters: { viewport: 720 },
