@@ -961,6 +961,36 @@ const settleGonePlace = async (ref: WorkspaceRef): Promise<boolean> => {
 };
 
 /**
+ * What still holds workspace `ref` on this machine, in words, or nothing:
+ * a live work item of the hub's ({@link hubLive}; not known until the hub
+ * answers a beat, and then everything holds it), a boundary of it alive on
+ * any keeper, a session process in its clone ({@link attachedIn}), or a
+ * command on its way in ({@link executors}). For a folder the agent would
+ * take away without the hub asking.
+ */
+export const heldBy = async (
+  ref: WorkspaceRef
+): Promise<string | undefined> => {
+  if (!hubLive) {
+    return "the hub has not said yet which workspaces have a live work item";
+  }
+  if (hubLive.has(ref.id)) {
+    return "its work item is live on the hub";
+  }
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  if (procs.some((proc) => isBoundaryOf(proc.procId, ref.id))) {
+    return "a boundary of it runs";
+  }
+  const commands = await commandsNow();
+  if (attachedIn(ref.id, ref.path, procs, commands)) {
+    return "a session's process runs in it";
+  }
+  return executors(commands.lines, ref.id).length > 0
+    ? "a command is on its way into it"
+    : undefined;
+};
+
+/**
  * At this agent's start: each place on record here ({@link readHeld})
  * whose folder is gone, settled ({@link settleGonePlace}), so no handover,
  * look or restart starts its boundary only to see its folder gone (exit

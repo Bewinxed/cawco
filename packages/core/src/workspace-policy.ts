@@ -578,7 +578,8 @@ const foundProtected = async (root: string): Promise<string[]> =>
  * The clone-side denies a workspace's boundary keeps ({@link cloneDenies}).
  * A place keeps only the protected config it has
  * ({@link protectedIn}), each with nothing to stand in for it: a person's own
- * folder is never written into.
+ * folder is never written into. At most {@link PROTECTED_MAX}, the config
+ * that crowds past it denied as the dirs that hold it ({@link collapsed}).
  */
 export const workspaceDenies = async (
   workspace: WorkspaceRef
@@ -587,10 +588,12 @@ export const workspaceDenies = async (
   if (!isPlace(workspace.id)) {
     return cloneDenies(clone);
   }
-  return (await protectedIn(clone)).map((path) => ({
-    path,
-    empty: { kind: "none" },
-  }));
+  return collapsed(await protectedIn(clone), clone, PROTECTED_MAX).map(
+    (path) => ({
+      path,
+      empty: { kind: "none" },
+    })
+  );
 };
 
 /**
@@ -635,16 +638,31 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
  */
 const BWRAP_MAX_ARGS = 9000;
 const BWRAP_ARGS_PER_PATH = 3;
+/** The paths srt's cap holds: 3,000. */
+const SRT_PATHS = BWRAP_MAX_ARGS / BWRAP_ARGS_PER_PATH;
 
 /**
- * The most entries {@link linkedIn} answers: a third of the 3,000 paths srt's
- * cap holds, so the place's linked files take at most 3,000 of its 9,000
- * words and the rest of the profile keeps 6,000. The rest ran to 1,320 words
- * on obelisk's cockpit place on 2026-10-23 (14,370 in all, 4,350 of them
- * linked files' denies, the profile srt refused), so a place keeps four
- * times that in hand. Our call, from srt's cap and that profile.
+ * THE ONE BUDGET for what a place's denies take of srt's cap, whatever its
+ * folder holds: two thirds of srt's 3,000 paths, 2,000 (6,000 words), for the
+ * three lists read off the folder; the rest of the profile, which no folder
+ * grows (allows, credential stores, the host's private paths), keeps 1,000
+ * paths (3,000 words). That rest ran to 1,320 words on obelisk's cockpit
+ * place on 2026-10-23 (14,370 in all, 4,350 of them linked files' denies,
+ * the profile srt refused), so it has more than twice that in hand.
+ *
+ * The split, in paths: protected config ({@link protectedIn}) 500, denied
+ * for writing; owner-only entries ({@link ownerOnlyIn}) 500, each denied for
+ * reading and for writing, so 1,000 paths; linked files ({@link linkedIn})
+ * 500, denied for writing. Owner-only entries get the most because each
+ * costs two paths and a tool's data dirs hold many; past its share each
+ * list is denied by the dirs that hold its entries ({@link collapsed}), which
+ * only denies more, so a share decides how coarse a list becomes, never
+ * what it protects. Our call, from srt's cap and that profile.
  */
-export const LINKED_MAX = BWRAP_MAX_ARGS / BWRAP_ARGS_PER_PATH / 3;
+const PLACE_PATHS = (SRT_PATHS * 2) / 3;
+export const PROTECTED_MAX = PLACE_PATHS / 4;
+export const OWNER_ONLY_MAX = PLACE_PATHS / 4;
+export const LINKED_MAX = PLACE_PATHS / 4;
 
 const depthOf = (path: string): number => path.split("/").length;
 
@@ -1270,7 +1288,10 @@ export const workspacePolicy = async (
   // A place: what only its owner may read in it is hidden from the
   // shell and file tools in it, for reading and writing (`ownerOnlyIn`).
   const lead = isPlace(workspace.id);
-  const ownerOnly = lead ? await ownerOnlyIn(clone) : [];
+  // At most `OWNER_ONLY_MAX`, past it denied as the dirs that hold them.
+  const ownerOnly = lead
+    ? collapsed(await ownerOnlyIn(clone), clone, OWNER_ONLY_MAX)
+    : [];
   // What shares an inode with a file elsewhere is only read (`linkedIn`).
   const linked = lead ? await linkedIn(clone) : [];
   const denyRead = unique([

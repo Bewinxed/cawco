@@ -36,6 +36,10 @@
  *     workspace's `create.json` naming the path, and at the path a `git
  *     clone --no-checkout` of the repository, a `.git` alone. A handoff
  *     clears it and reaches the session in a clone cut whole.
+ * (4b) The same husk with no handoff to clear it: at the agent's start,
+ *     once the hub has said which workspaces are live, it is cleared and
+ *     the agent says so (workspace.ts `clearUnmarkedHusks`); one holding a
+ *     commit of its own is kept, the agent saying why.
  * (5) The agent raises its restart fence, as `cawco service restart agent`
  *     does before it restarts: a handoff then is kept at the hub, not
  *     failed, the hub saying the cut waits for the agent. The agent is
@@ -307,9 +311,10 @@ const cutShortPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   )
     .split("\n")
     .filter(Boolean);
+  // Linux only: a macOS clone's linked files stay linked (`ownInodes` runs on Linux).
   kit.check(
-    "(1) the cut held in its checkout shares no object file's inode with the repository it was cut from",
-    listed > 0 && shared.length === 0,
+    "(1) the cut held in its checkout shares no object file's inode with the repository it was cut from (Linux; on macOS its files stay linked)",
+    listed > 0 && (process.platform !== "linux" || shared.length === 0),
     `${listed} object files, ${shared.length} sharing an inode${shared.length > 0 ? `: ${shared.slice(0, 3).join(", ")}` : ""}`
   );
 
@@ -374,6 +379,80 @@ const legacyPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `${handed.status} ${handed.text.slice(0, 300)}; send ${JSON.stringify(handed.row ?? "none")}`
   );
   await reached(kit, scene, "(4)", [LEGACY]);
+};
+
+/** The agent restarted, and what it logged since, once `line` is there or a minute passed. */
+const restartSaying = async (
+  scene: Scene,
+  line: string,
+  done: () => boolean
+): Promise<string> => {
+  const { fleet } = scene;
+  await fleet.stop("agent");
+  const mark = await fleet.logMark("agent");
+  fleet.launch("agent");
+  await fleet.agentUp();
+  return await until(
+    `the agent said: ${line}`,
+    async () => await mark.since(),
+    (logged) => logged.includes(line) && done(),
+    60_000
+  ).catch(() => mark.since());
+};
+
+/** The lines of `logged` that name `id`, for a check's detail. */
+const naming = (logged: string, id: string): string =>
+  logged
+    .split("\n")
+    .filter((line) => line.includes(id))
+    .slice(-8)
+    .join(" | ") || "no line naming the workspace";
+
+/**
+ * (4b) A husk as a build before the mark left one, with no handoff to clear
+ * it: the agent's start clears it once the hub has said which workspaces
+ * are live, when it holds nothing that is not on its remote, and keeps one
+ * that holds a commit of its own, saying why.
+ */
+const unmarkedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { workspace, stateDir } = scene;
+  const plantHusk = async (): Promise<void> => {
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(
+      join(stateDir, "create.json"),
+      JSON.stringify({ path: workspace.path })
+    );
+    await Bun.$`git clone --quiet --no-checkout ${scene.repoRoot} ${workspace.path}`
+      .env({ ...process.env, HOME: scene.home })
+      .quiet();
+  };
+  await plantHusk();
+  await Bun.$`git -c user.name=Someone -c user.email=s@probe.test commit -q --allow-empty -m 'Their own'`
+    .cwd(workspace.path)
+    .env({ ...process.env, HOME: scene.home })
+    .quiet();
+  const keptLine = `[workspace] ${workspace.id}: ${workspace.path} was left by a cut of an earlier build, and is kept: its .git holds 1 commit on no branch of origin`;
+  const keptLog = await restartSaying(scene, keptLine, () => true);
+  kit.check(
+    "(4b) at the agent's start, a husk of an earlier build's cut that holds a commit on no branch of origin is kept, and the agent says why",
+    keptLog.includes(keptLine) && existsSync(join(workspace.path, ".git")),
+    `${existsSync(workspace.path) ? "stands" : "gone"}; ${naming(keptLog, workspace.id)}`
+  );
+  await rm(workspace.path, { recursive: true, force: true });
+  await plantHusk();
+  const clearedLine = `[workspace] ${workspace.id}: ${workspace.path}, left by a cut of an earlier build and holding nothing that is not on its remote, is cleared`;
+  const cleared = await restartSaying(
+    scene,
+    clearedLine,
+    () => !existsSync(workspace.path)
+  );
+  kit.check(
+    "(4b) at the agent's start, with no handoff, a husk of an earlier build's cut (create.json naming the path, a .git alone, no mark) that holds nothing not on its remote is cleared, and the agent says so",
+    cleared.includes(clearedLine) &&
+      !existsSync(workspace.path) &&
+      scene.workspaceOf().state === "archived",
+    `${existsSync(workspace.path) ? "stands" : "gone"}; ${scene.workspaceOf().state}; ${naming(cleared, workspace.id)}`
+  );
 };
 
 /** (5) A handoff behind the agent's restart fence, and one while it is down: both kept, both delivered once it is back. */
@@ -618,6 +697,7 @@ const spec: Spec = {
     );
     await reached(kit, scene, "(3)", [AGAIN]);
     await legacyPhase(kit, scene);
+    await unmarkedPhase(kit, scene);
     await restartPhase(kit, scene);
     await strangerPhase(kit, scene);
   },

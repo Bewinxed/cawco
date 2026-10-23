@@ -1,15 +1,16 @@
 /**
- * A place's boundary starts however many of its files share an inode, and
- * srt's refusal reaches the person in srt's own words (core
- * workspace-policy.ts `linkedIn`, `LINKED_MAX`; agent boundary-host.ts
- * `srtRefused`, boundary.ts `ready`, `settleGonePlaces`). On 2026-10-23
- * the owner's Caw for cockpit would not start: two clones left behind had
- * hard-linked 4,342 of `~/cockpit/.git/objects`' files, `linkedIn` denied
- * each one for writing, srt refused the profile (14,370 bwrap words, its cap
- * 9,000), and the person read only "the boundary exited (code 1) as it
- * started". On a scratch fleet (real hub, agent and sessiond; Claude Code
- * against the mock model), boundaries included: Caw's place starts one, so
- * it runs on the host, outside every workspace.
+ * A place's boundary starts whatever its folder holds, and srt's refusal
+ * reaches the person in srt's own words (core workspace-policy.ts, the one
+ * budget: `PROTECTED_MAX`, `OWNER_ONLY_MAX`, `LINKED_MAX`; agent
+ * boundary-host.ts and core srt-refusal.ts, boundary.ts `ready`,
+ * `settleGonePlaces`). On 2026-10-23 the owner's Caw for cockpit would not
+ * start: two clones left behind had hard-linked 4,342 of
+ * `~/cockpit/.git/objects`' files, `linkedIn` denied each one for writing,
+ * srt refused the profile (14,370 bwrap words, its cap 9,000), and the
+ * person read only "the boundary exited (code 1) as it started". On a
+ * scratch fleet (real hub, agent and sessiond; Claude Code against the mock
+ * model), boundaries included: Caw's place starts one, so it runs on the
+ * host, outside every workspace.
  *
  * - A: project "Bound", Caw on, its place a repository holding 3,100 files
  *   in 31 dirs, each hard-linked to a copy outside it, all committed, and a
@@ -18,11 +19,20 @@
  *   wake Caw: his place's boundary starts and runs, and the policy it started
  *   with denies at most `LINKED_MAX` linked entries, none under
  *   `.git/objects`, the 31 dirs standing for their files.
- * - B: project "Refused", Caw on, its place holding 3,100 files only their
- *   owner may read (0600), which the place hides for reading and writing:
- *   past srt's cap. Your words do not wake Caw, and the note says why in
- *   srt's own words: its profile's size and bwrap's cap.
- * - C: a place on record naming a folder that is gone (a `boundary.json`
+ * - B: project "Crowded", Caw on, its place holding 3,100 files only their
+ *   owner may read (0600) and 3,100 protected config folders (`.vscode`),
+ *   each list past srt's cap alone. Your words wake Caw: his boundary starts
+ *   and runs, the policy's denies in the place within the budget (at most
+ *   `OWNER_ONLY_MAX` for reading; protected, owner-only and linked for
+ *   writing), and every list under srt's 3,000 paths together.
+ * - C: project "Spilled", Caw on, a plain place, and his place's record of
+ *   spill folders (`spills.json`, which the agent writes as sessions save
+ *   tool results there) crafted to name 3,200 of them before he starts: a
+ *   profile past srt's cap that no folder makes. Your words do not wake him,
+ *   and the note says why in srt's own words, after the host's line
+ *   (`SRT_REFUSED`): its profile's size and bwrap's cap. Linux only: on
+ *   macOS the boundary is Seatbelt's, with no such cap.
+ * - D: a place on record naming a folder that is gone (a `boundary.json`
  *   left in its state dir). At the agent's next start it is settled: its
  *   state dir goes, and the agent says so.
  *
@@ -30,9 +40,22 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, link, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  link,
+  mkdir,
+  readFile,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
-import { LINKED_MAX } from "../../../packages/core/src/workspace-policy";
+import { isAlive, listedPid } from "../../../packages/core/src/signal";
+import { SRT_REFUSED } from "../../../packages/core/src/srt-refusal";
+import {
+  LINKED_MAX,
+  OWNER_ONLY_MAX,
+  PROTECTED_MAX,
+} from "../../../packages/core/src/workspace-policy";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -41,6 +64,8 @@ const DIRS = 31;
 const FILES = 100;
 /** srt's cap on one profile's paths (`BWRAP_MAX_ARGS / 3`, srt 0.0.81). */
 const SRT_PATHS = 3000;
+/** C's spill folders: each one srt binds back, past its cap with nothing else. */
+const SPILLS = 3200;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -49,11 +74,11 @@ const pad = (n: number, width: number): string =>
 
 /**
  * {@link DIRS} dirs under `root` (`dNN`), each made, then `make` run on each
- * of its {@link FILES} files (`dNN/fNNN`), a dir at a time.
+ * of its {@link FILES} entries (`dNN/fNNN`), a dir at a time.
  */
 const plant = async (
   root: string,
-  make: (file: string, dir: string, index: number) => Promise<void>
+  make: (file: string, dir: string, index: number) => Promise<unknown>
 ): Promise<void> => {
   for (const dir of Array.from({ length: DIRS }, (_, d) => `d${pad(d, 2)}`)) {
     // biome-ignore lint/performance/noAwaitInLoops: one dir's hundred files at a time
@@ -91,30 +116,97 @@ const repository = async (
     .quiet();
 };
 
-/** A project with Caw on over `cwd`, and a thread opened with your words. */
+/** A project with Caw on over `cwd`; no thread yet, so Caw has not started. */
 const cawProject = async (
   fleet: KitFleet,
   name: string,
   cwd: string
-): Promise<{ id: string; thread: string }> => {
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name,
-    machineId: MACHINE,
-    cwd,
-    caw: true,
-  });
-  const opened = await fleet.api<{ thread: { id: string } }>(
-    `/api/projects/${project.id}/threads`,
-    { body: `PROBE-${name.toUpperCase()}: hello Caw.` }
-  );
-  return { id: project.id, thread: opened.thread.id };
-};
+): Promise<string> =>
+  (
+    await fleet.api<{ id: string }>("/api/projects", {
+      name,
+      machineId: MACHINE,
+      cwd,
+      caw: true,
+    })
+  ).id;
+
+/** A thread of project `id` opened with your words, which wake Caw. */
+const openThread = async (
+  fleet: KitFleet,
+  id: string,
+  name: string
+): Promise<string> =>
+  (
+    await fleet.api<{ thread: { id: string } }>(`/api/projects/${id}/threads`, {
+      body: `PROBE-${name.toUpperCase()}: hello Caw.`,
+    })
+  ).thread.id;
+
+/** Caw's place id for project `project` over `cwd` on `machine` (hub caw.ts `leadPlaceRef`). */
+const placeIdOf = (project: string, machine: string, cwd: string): string =>
+  `${createHash("sha256")
+    .update(`${project}\0${machine}\0${cwd}`)
+    .digest("hex")
+    .slice(0, 8)}-caw`;
 
 interface Held {
   gen?: string;
   path?: string;
   pid?: number;
 }
+
+interface Started {
+  answered: number;
+  denyRead: string[];
+  denyWrite: string[];
+  held: Held;
+  placeId: string;
+  running: boolean;
+}
+
+/** Your words wake Caw in project `project`: his answer, and the boundary his place started with its policy. */
+const wokenPlace = async (
+  fleet: KitFleet,
+  home: string,
+  project: string,
+  name: string
+): Promise<Started> => {
+  const thread = await openThread(fleet, project, name);
+  const answered = await until(
+    `${name}: Caw answered`,
+    () =>
+      fleet.query<{ n: number }>(
+        "SELECT count(*) AS n FROM thread_messages WHERE thread_id = ? AND author = 'caw'",
+        thread
+      )[0]?.n ?? 0,
+    (count) => count > 0,
+    240_000
+  ).catch(() => 0);
+  const [lead] = fleet.query<{ cwd: string; machine_id: string }>(
+    "SELECT i.cwd, i.machine_id FROM projects p JOIN instances i ON i.id = p.lead_instance_id WHERE p.id = ?",
+    project
+  );
+  const placeId = lead ? placeIdOf(project, lead.machine_id, lead.cwd) : "";
+  const state = join(home, ".cawco", "workspaces", placeId);
+  const held = JSON.parse(
+    await readFile(join(state, "boundary.json"), "utf8").catch(() => "{}")
+  ) as Held;
+  const policy = JSON.parse(
+    await readFile(
+      join(state, "boundaries", held.gen ?? "none", "policy.json"),
+      "utf8"
+    ).catch(() => "{}")
+  ) as { denyRead?: string[]; denyWrite?: string[] };
+  return {
+    answered,
+    denyRead: policy.denyRead ?? [],
+    denyWrite: policy.denyWrite ?? [],
+    held,
+    placeId,
+    running: held.pid !== undefined && isAlive(listedPid(held.pid)),
+  };
+};
 
 /** A: linked files past srt's cap, and a git object tree linked whole. */
 const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
@@ -141,37 +233,8 @@ const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
   );
 
   const project = await cawProject(fleet, "Bound", place);
-  const answered = await until(
-    "A: Caw answered",
-    () =>
-      fleet.query<{ n: number }>(
-        "SELECT count(*) AS n FROM thread_messages WHERE thread_id = ? AND author = 'caw'",
-        project.thread
-      )[0]?.n ?? 0,
-    (count) => count > 0,
-    240_000
-  ).catch(() => 0);
-  const [lead] = fleet.query<{ cwd: string; machine_id: string }>(
-    "SELECT i.cwd, i.machine_id FROM projects p JOIN instances i ON i.id = p.lead_instance_id WHERE p.id = ?",
-    project.id
-  );
-  const placeId = lead
-    ? `${createHash("sha256")
-        .update(`${project.id}\0${lead.machine_id}\0${lead.cwd}`)
-        .digest("hex")
-        .slice(0, 8)}-caw`
-    : "";
-  const state = join(home, ".cawco", "workspaces", placeId);
-  const held = JSON.parse(
-    await readFile(join(state, "boundary.json"), "utf8").catch(() => "{}")
-  ) as Held;
-  const policy = JSON.parse(
-    await readFile(
-      join(state, "boundaries", held.gen ?? "none", "policy.json"),
-      "utf8"
-    ).catch(() => "{}")
-  ) as { denyWrite?: string[] };
-  const denyWrite = policy.denyWrite ?? [];
+  const started = await wokenPlace(fleet, home, project, "Bound");
+  const { denyWrite } = started;
   const inPlace = denyWrite.filter((path) => path.startsWith(`${place}/`));
   const underObjects = inPlace.filter((path) =>
     path.startsWith(join(place, ".git", "objects"))
@@ -179,47 +242,106 @@ const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
   const sharedDirs = Array.from({ length: DIRS }, (_, d) =>
     join(place, "shared", `d${pad(d, 2)}`)
   );
-  const sharedFiles = inPlace.filter((path) =>
+  const sharedEntries = inPlace.filter((path) =>
     path.startsWith(join(place, "shared", "d"))
   );
-  const running =
-    held.pid !== undefined && existsSync(`/proc/${held.pid}/status`);
   kit.check(
     "A: your words wake Caw, his place's boundary starts and runs",
-    answered > 0 && running,
-    `Caw's messages ${answered}; place ${placeId || "unknown"}; boundary ${JSON.stringify(held)} ${running ? "running" : "not running"}`
+    started.answered > 0 && started.running,
+    `Caw's messages ${started.answered}; place ${started.placeId || "unknown"}; boundary ${JSON.stringify(started.held)} ${started.running ? "running" : "not running"}`
   );
   kit.check(
-    `A: the policy it started with denies at most ${LINKED_MAX} entries in the place, ${denyWrite.length} in all (under srt's ${SRT_PATHS}); none under .git/objects; the ${DIRS} shared dirs stand for their ${DIRS * FILES} files`,
+    `A: the policy it started with denies at most ${LINKED_MAX + PROTECTED_MAX} entries in the place for writing, ${denyWrite.length} in all (under srt's ${SRT_PATHS}); none under .git/objects; the ${DIRS} shared dirs stand for their ${DIRS * FILES} files`,
     denyWrite.length > 0 &&
       denyWrite.length < SRT_PATHS &&
-      inPlace.length <= LINKED_MAX &&
+      inPlace.length <= LINKED_MAX + PROTECTED_MAX &&
       underObjects.length === 0 &&
       sharedDirs.every((dir) => denyWrite.includes(dir)) &&
-      sharedFiles.length === DIRS,
-    `${denyWrite.length} denied for writing, ${inPlace.length} in the place, ${underObjects.length} under .git/objects; shared: ${sharedFiles.slice(0, 4).join(", ")}${sharedFiles.length > 4 ? ` and ${sharedFiles.length - 4} more` : ""}`
+      sharedEntries.length === DIRS,
+    `${denyWrite.length} denied for writing, ${inPlace.length} in the place, ${underObjects.length} under .git/objects; shared: ${sharedEntries.slice(0, 4).join(", ")}${sharedEntries.length > 4 ? ` and ${sharedEntries.length - 4} more` : ""}`
   );
 };
 
-/** B: owner-only files past srt's cap; the refusal's note in srt's own words. */
-const refusedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
-  const place = join(fleet.sandbox, "refused");
+/** B: owner-only files and protected config, each past srt's cap alone; Caw still wakes. */
+const crowdedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
+  const place = join(fleet.sandbox, "crowded");
   await repository(place, home, {
-    "README.md": "refused\n",
+    "README.md": "crowded\n",
     ".gitignore": "vault/\n",
   });
   await plant(join(place, "vault"), async (file) => {
     await writeFile(file, "only mine\n");
     await chmod(file, 0o600);
   });
-  const project = await cawProject(fleet, "Refused", place);
+  // Each with a file: an empty one reads as a stand-in an earlier build
+  // made, which a place leaves unbound (workspace-policy.ts `standInAsMade`).
+  await plant(join(place, "pkgs"), async (dir) => {
+    await mkdir(join(dir, ".vscode"), { recursive: true });
+    await writeFile(join(dir, ".vscode", "settings.json"), "{}\n");
+  });
+  const project = await cawProject(fleet, "Crowded", place);
+  const started = await wokenPlace(fleet, home, project, "Crowded");
+  const readInPlace = started.denyRead.filter((path) =>
+    path.startsWith(`${place}/`)
+  );
+  const writeInPlace = started.denyWrite.filter((path) =>
+    path.startsWith(`${place}/`)
+  );
+  const paths = started.denyRead.length + started.denyWrite.length;
+  kit.check(
+    `B: with ${DIRS * FILES} owner-only files and ${DIRS * FILES} protected config folders in his place, your words wake Caw, and his place's boundary starts and runs`,
+    started.answered > 0 && started.running,
+    `Caw's messages ${started.answered}; place ${started.placeId || "unknown"}; boundary ${JSON.stringify(started.held)} ${started.running ? "running" : "not running"}`
+  );
+  kit.check(
+    `B: the policy denies at most ${OWNER_ONLY_MAX} entries in the place for reading and ${PROTECTED_MAX + OWNER_ONLY_MAX + LINKED_MAX} for writing, every one of them under vault/ or pkgs/ covered, ${paths} denies in all (under srt's ${SRT_PATHS})`,
+    readInPlace.length > 0 &&
+      readInPlace.length <= OWNER_ONLY_MAX &&
+      writeInPlace.length <= PROTECTED_MAX + OWNER_ONLY_MAX + LINKED_MAX &&
+      paths < SRT_PATHS &&
+      readInPlace.every((path) => path.startsWith(join(place, "vault"))) &&
+      writeInPlace.some((path) => path.startsWith(join(place, "pkgs"))),
+    `${readInPlace.length} denied for reading in the place (${readInPlace.slice(0, 3).join(", ")}…), ${writeInPlace.length} for writing (${writeInPlace.slice(0, 3).join(", ")}…); ${started.denyRead.length} + ${started.denyWrite.length} in all`
+  );
+};
+
+/** C: a profile past srt's cap no folder makes; the refusal's note in srt's own words. */
+const refusedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
+  const place = join(fleet.sandbox, "spilled");
+  await repository(place, home, { "README.md": "spilled\n" });
+  const project = await cawProject(fleet, "Spilled", place);
+  // Before he starts, at the place his session will have, as the lead row
+  // will name its folder (as given, or as its real path).
+  const ids = [
+    ...new Set(
+      [place, await realpath(place)].map((cwd) =>
+        placeIdOf(project, MACHINE, cwd)
+      )
+    ),
+  ];
+  await Promise.all(
+    ids.map(async (id) => {
+      const state = join(home, ".cawco", "workspaces", id);
+      await mkdir(state, { recursive: true });
+      const spills = Array.from({ length: SPILLS }, (_, n) =>
+        join(state, "spills", `probe-${pad(n, 4)}`)
+      );
+      // Made as the agent makes each before a start (boundary.ts `keepSpills`).
+      await Promise.all(spills.map((dir) => mkdir(dir, { recursive: true })));
+      await writeFile(
+        join(state, "spills.json"),
+        `${JSON.stringify(spills)}\n`
+      );
+    })
+  );
+  const thread = await openThread(fleet, project, "Spilled");
   const note = await until(
-    "B: the note that Caw was not woken",
+    "C: the note that Caw was not woken",
     () =>
       fleet
         .query<{ event: string | null }>(
           "SELECT event FROM thread_messages WHERE thread_id = ? AND author = 'event'",
-          project.thread
+          thread
         )
         .map(
           (row) =>
@@ -234,21 +356,21 @@ const refusedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
   const words = note?.words ?? "";
   const caw = fleet.query<{ n: number }>(
     "SELECT count(*) AS n FROM thread_messages WHERE thread_id = ? AND author = 'caw'",
-    project.thread
+    thread
   )[0]?.n;
   kit.check(
-    "B: past srt's cap, your words do not wake Caw, and the note names why in srt's own words: its profile's size and bwrap's cap",
+    "C: past srt's cap, your words do not wake Caw, and the note names why in srt's own words after the host's line: its profile's size and bwrap's cap",
     // "place" when his session runs and its boundary is read again,
     // "could-not-start" when his session's own start needs it (caw.ts `deliver`).
     ["place", "could-not-start"].includes(note?.reason ?? "") &&
       caw === 0 &&
-      words.includes("Sandbox profile has") &&
+      words.includes(`${SRT_REFUSED}: Sandbox profile has`) &&
       words.includes("bwrap accepts at most 9000"),
-    `${JSON.stringify(note ?? "no note")}; Caw's messages ${caw}`
+    `${JSON.stringify(note ?? "no note")}; Caw's messages ${caw}; places ${ids.join(", ")}`
   );
 };
 
-/** C: a place on record whose folder is gone is settled at the agent's start. */
+/** D: a place on record whose folder is gone is settled at the agent's start. */
 const goneLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
   const id = "0badf01d-caw";
   const state = join(home, ".cawco", "workspaces", id);
@@ -264,13 +386,13 @@ const goneLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
   await fleet.agentUp();
   const said = `[workspace] ${id}: its folder ${gone} is gone, so the place is settled`;
   const logged = await until(
-    "C: the agent settled the place",
+    "D: the agent settled the place",
     async () => await mark.since(),
     (text) => text.includes(said) && !existsSync(state),
     60_000
   ).catch(() => mark.since());
   kit.check(
-    "C: a place on record whose folder is gone is settled at the agent's start: its state dir goes, and the agent says so",
+    "D: a place on record whose folder is gone is settled at the agent's start: its state dir goes, and the agent says so",
     logged.includes(said) && !existsSync(state),
     `state dir ${existsSync(state) ? "stands" : "gone"}; ${
       logged
@@ -300,7 +422,11 @@ const spec: Spec = {
       "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
     );
     await boundLeg(kit, fleet, home);
-    await refusedLeg(kit, fleet, home);
+    await crowdedLeg(kit, fleet, home);
+    // srt builds a bwrap profile on Linux alone; macOS's Seatbelt has no such cap.
+    if (process.platform === "linux") {
+      await refusedLeg(kit, fleet, home);
+    }
     await goneLeg(kit, fleet, home);
   },
 };

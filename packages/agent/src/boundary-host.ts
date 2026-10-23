@@ -41,8 +41,8 @@
  * (`boundary-nesting.ts`, with the host environment it reads,
  * `session-env.ts`, and CawCo's variable names, `cawco-env.ts`), socat
  * backlog (`socat.ts`), hub preview origins (`hub-previews.ts`), git dir
- * test (`git-dir.ts`), safe git (`safe-git.ts`) and state files
- * (`state-file.ts`), the signal wall's sending half (`signal-wall.ts`, through
+ * test (`git-dir.ts`), safe git (`safe-git.ts`), srt's refusal line
+ * (`srt-refusal.ts`) and state files (`state-file.ts`), the signal wall's sending half (`signal-wall.ts`, through
  * sandbox-end.ts and state-file.ts), and the agent's own proxy relay
  * (`proxy-relay.ts`) and sandbox end (`sandbox-end.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
@@ -77,6 +77,7 @@ import { isGitDirSync } from "@cawco/core/git-dir";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { srtRefusedLine } from "@cawco/core/srt-refusal";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 import {
@@ -293,23 +294,17 @@ if (goneAtStart) {
 // scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
 process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
 
-/** What this boundary exits with when srt refuses to build its sandbox ({@link srtRefused}). */
-const SRT_REFUSED_STATUS = 1;
-
 /**
- * srt's refusal, said on stdout as a line, as the host's other refusals
- * are: the agent names a boundary that did not start by what it heard
- * (`ready` in boundary.ts), and srt throws its reasons (a profile past
- * bwrap's cap, `LinuxSandboxProfileError`; dependencies missing) where they
- * would reach stderr alone.
+ * What this boundary exits with when srt refuses to build its sandbox,
+ * having said so on stdout as a line, as its other refusals are
+ * (`srtRefusedLine`, srt-refusal.ts).
  */
-const srtRefused = (error: unknown): string =>
-  `cawco: srt refused to build the sandbox: ${error instanceof Error ? error.message : String(error)}`;
+const SRT_REFUSED_STATUS = 1;
 
 try {
   await SandboxManager.initialize(settings, ask);
 } catch (error) {
-  console.log(srtRefused(error));
+  console.log(srtRefusedLine(error));
   await SandboxManager.reset();
   process.exit(SRT_REFUSED_STATUS);
 }
@@ -709,7 +704,7 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
     // No sandbox was started and srt holds no profile of it open, so the
     // boundary closes without the loop's per-command cleanup, which srt
     // says never to run for a wrap that threw (`LinuxSandboxProfileError`).
-    console.log(srtRefused(error));
+    console.log(srtRefusedLine(error));
     current = undefined;
     return await finish({ status: SRT_REFUSED_STATUS });
   }

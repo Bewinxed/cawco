@@ -57,11 +57,16 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
+import {
+  excludedPaths,
+  IGNORED_STATUS,
+  isPlace,
+} from "@cawco/core/workspace-policy";
 import {
   addAccount,
   closeBoundary,
   ensureBoundary,
+  heldBy,
   ownInodes,
   setProject,
   shellQuote,
@@ -75,7 +80,7 @@ import {
   copyStrays,
   ownFilesOnly,
 } from "./carry";
-import { prepareClone } from "./clone";
+import { hostGit, prepareClone } from "./clone";
 import { placedAsMade } from "./fleet";
 import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
@@ -481,6 +486,107 @@ const clearInterrupted = async (id: string): Promise<void> => {
   } satisfies WorkspaceArchive);
   console.info(
     `[workspace] ${id}: its cut at ${mark.path}, cut short when this agent's last process ended, is cleared; its next cut is made whole`
+  );
+};
+
+/** Whether {@link clearUnmarkedHusks}' one pass has begun. */
+let unmarkedSwept = false;
+
+/**
+ * Once per agent, at the hub's first answer to a beat that names its live
+ * workspaces (`liveWorkspaces`, so they are known, boundary.ts `heldBy`):
+ * each clone a cut of a build before the cut mark (bada22d43) left behind, `create.json` naming its path and no
+ * `cut.json`, cleared as a failed cut is (an `unmade` archive), when all of
+ * these hold: its path is where a delegate's cut goes
+ * (`~/.worktrees/<repo>-<id8>`, never a stage clone's); its HEAD is not on
+ * `ws/<id8>`, the branch every whole cut checks out last, so it never got
+ * that far; nothing holds it (no live work item, boundary, session process
+ * or command: `heldBy`); and it holds nothing that is not on its remote
+ * ({@link ownCutProblem} with its own `origin` as the source and a first
+ * cut's start: no commit on a branch or stash past origin, and beside `.git`
+ * only files of `origin/HEAD` as checkout writes them, or CawCo's). Such a
+ * husk links the source's object files (git-clone(1) `--local`), and the
+ * source's place denied each one: 4,342 of them stopped cockpit's Caw on
+ * 2026-10-23. Anything else is kept, and said with why. Never throws.
+ */
+export const clearUnmarkedHusks = (liveWorkspaces: unknown): void => {
+  // Only once the hub's answer names the live workspaces (`heldBy`).
+  if (Array.isArray(liveWorkspaces) && !unmarkedSwept) {
+    unmarkedSwept = true;
+    sweepUnmarked();
+  }
+};
+
+/** {@link clearUnmarkedHusks}' pass; never throws. */
+const sweepUnmarked = async (): Promise<void> => {
+  try {
+    await interruptedCleared;
+    const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+    for (const id of ids) {
+      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each its own folder to read and clear
+      await clearUnmarked(id);
+    }
+  } catch (error) {
+    console.warn(
+      `[workspace] the clones that cuts of an earlier build left behind could not all be looked at: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+
+/** Workspace `id`'s clone, when a cut of a build before the mark left it ({@link clearUnmarkedHusks}). */
+const clearUnmarked = async (id: string): Promise<void> => {
+  if (isPlace(id) || (await cutMark(id).catch(() => undefined))) {
+    return;
+  }
+  const path = await createdAt(id);
+  const id8 = id.slice(0, 8);
+  const name = path ? basename(path) : "";
+  if (
+    !path ||
+    dirname(path) !== expandHome("~/.worktrees") ||
+    !name.endsWith(`-${id8}`) ||
+    name.endsWith(`-stage-${id8}`) ||
+    !(await lstat(path).catch(() => undefined))?.isDirectory()
+  ) {
+    return;
+  }
+  const head = await hostGit(path, ["symbolic-ref", "-q", "HEAD"]).catch(
+    () => undefined
+  );
+  if (head?.exitCode === 0 && head.text().trim() === `refs/heads/ws/${id8}`) {
+    return;
+  }
+  const keep = (why: string): void =>
+    console.warn(
+      `[workspace] ${id}: ${path} was left by a cut of an earlier build, and is kept: ${why}`
+    );
+  const held = await heldBy({ id, path });
+  if (held) {
+    keep(held);
+    return;
+  }
+  const origin = await hostGit(path, [
+    "config",
+    "--get",
+    "remote.origin.url",
+  ]).catch(() => undefined);
+  const source = origin?.exitCode === 0 ? origin.text().trim() : "";
+  if (!source) {
+    keep("its .git names no origin to hold its work");
+    return;
+  }
+  const problem = await ownCutProblem({ path, source, at: null });
+  if (problem) {
+    keep(problem);
+    return;
+  }
+  await archiveWorkspace({
+    id,
+    path,
+    unlanded: "unmade",
+  } satisfies WorkspaceArchive);
+  console.info(
+    `[workspace] ${id}: ${path}, left by a cut of an earlier build and holding nothing that is not on its remote, is cleared`
   );
 };
 

@@ -401,6 +401,7 @@ import {
 import {
   archiveWorkspace,
   clearInterruptedCuts,
+  clearUnmarkedHusks,
   createWorkspace,
   discardWorkspace,
   workspaceAt,
@@ -2891,6 +2892,10 @@ const attach = (
           Partial<HeartbeatAckPayload> | undefined;
         supervisor.keepAwake(beat?.keepAwake);
         liveWorkItems(beat?.liveWorkspaces);
+        // Once the hub has said which workspaces are live: the clones cuts of
+        // an earlier build left behind are cleared (workspace.ts). Once per
+        // agent; it never throws.
+        clearUnmarkedHusks(beat?.liveWorkspaces);
         takeSessionLimits(beat?.sessionLimits);
         takeUpstream(beat?.upstream);
         followHub(beat?.tailnetHttps);

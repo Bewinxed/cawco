@@ -89,6 +89,7 @@
     "./claude-dirs": "./src/claude-dirs.ts",
     "./boundary-nesting": "./src/boundary-nesting.ts",
     "./git-dir": "./src/git-dir.ts",
+    "./srt-refusal": "./src/srt-refusal.ts",
     "./mount-table": "./src/mount-table.ts",
     "./socat": "./src/socat.ts",
     "./safe-git": "./src/safe-git.ts",
