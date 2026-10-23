@@ -22,11 +22,12 @@
  *
  *   bun run variants
  *   bun scripts/build-variants.ts --check   (part of `bun run lint`: writes
- *     nothing, and fails when the committed file is not byte for byte what
- *     the build makes, naming each variant it would add or drop)
+ *     nothing, and fails when the committed file, formatted alike on this
+ *     machine's bun (fmt.ts `formattedAlike`), is not what the build makes,
+ *     naming each variant it would add or drop)
  */
 import { Glob } from "bun";
-import { formatText } from "../../../scripts/fmt";
+import { formatText, formattedAlike } from "../../../scripts/fmt";
 
 const OUT = "src/lib/tokens/variants.css";
 /** The components, and the shared sheets beside them (spawn/ns-theme.css, workflows.css): every selector a state is read in. */
@@ -360,9 +361,9 @@ const made = await formatText(
 );
 if (process.argv.includes("--check")) {
   const committed = await Bun.file(OUT).text();
-  if (committed === made) {
+  if (await formattedAlike(OUT, committed, made)) {
     console.log(
-      `variants: ${pairs.size} named variants, byte for byte the committed file`
+      `variants: ${pairs.size} named variants, as the committed file says them`
     );
     process.exit(0);
   }

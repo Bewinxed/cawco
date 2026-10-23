@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { create, type Font } from "fontkit";
 import subsetFont from "subset-font";
-import { formatText } from "../../../scripts/fmt";
+import { formatText, formattedAlike } from "../../../scripts/fmt";
 import {
   cutHouseFaces,
   type FaceCoverage,
@@ -160,7 +160,7 @@ if (!(sans && mono && wordmark)) {
 }
 
 const coverage: HouseCoverage = { faces: { sans, mono, wordmark }, from };
-// Formatted as the repository's formatter writes it, so the check compares bytes.
+// Formatted as the repository's formatter writes it; the check formats the committed file alike.
 const text = await formatText(OUT, `${JSON.stringify(coverage)}\n`);
 
 if (process.argv.includes("--check")) {
@@ -171,7 +171,7 @@ if (process.argv.includes("--check")) {
       return "";
     }
   })();
-  if (kept !== text) {
+  if (!(await formattedAlike(OUT, kept, text))) {
     fail(
       "src/house-faces.json is stale; run `bun run faces` in packages/core."
     );

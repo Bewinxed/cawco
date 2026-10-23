@@ -13,7 +13,11 @@
  * - `formatText(path, text)`: the same formatter over text in memory, as it
  *   would write a file at `path` (that path's options and ignores; a file no
  *   parser reads comes back as given). A generator formats what it makes
- *   with it, so what it writes is final and its check compares bytes.
+ *   with it, so what it writes is final. CSS numbers and hex colours are
+ *   printed as Prettier prints them first ({@link cssCanonical}), as no Bun's printer may.
+ * - `formattedAlike(path, committed, made)`: a generator's check. Both sides
+ *   go through `formatText` on this machine's bun, so a file another Bun
+ *   formatted reads the same as long as what it says is the same.
  *
  * It runs on the bun that runs it, the machine's own: `bun fmt` ships in
  * Bun's stable releases from 1.4.4 on, older ones lack it and are refused
@@ -78,12 +82,62 @@ async function formatOne(file: string, text: string): Promise<string> {
   throw new Error(`fmt ${file}: ${err.trim() || `exited ${code}`}`);
 }
 
+/** What {@link cssCanonical} leaves as written: a comment, or a quoted string. */
+const CSS_AS_WRITTEN =
+  /\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g;
+
+/** A decimal number in CSS: not part of a name, an escape or a longer number. */
+const CSS_DECIMAL = /(?<![\w.\\])(\d*)\.(\d+)(?![\d.])/g;
+
+/** A fraction's trailing zeros. */
+const TRAILING_ZEROS = /0+$/;
+
+/** One decimal as Prettier prints it: no trailing zeros, no bare dot, a leading zero. */
+const cssDecimal = (_: string, whole: string, fraction: string): string => {
+  const kept = fraction.replace(TRAILING_ZEROS, "");
+  return kept ? `${whole || "0"}.${kept}` : whole || "0";
+};
+
+/** A declaration's value: after its colon, up to its `;` or the block's `}` (a selector runs to a `{`). */
+const CSS_VALUE = /:[^;{}]*(?=[;}])/g;
+
+/** A hex colour, which Prettier prints in lower case. */
+const CSS_HEX = /#[\da-fA-F]{3,8}\b/g;
+
+/** CSS outside comments and strings as Prettier prints its numbers and its values' hex colours. */
+const cssPlain = (css: string): string =>
+  css
+    .replace(CSS_DECIMAL, cssDecimal)
+    .replace(CSS_VALUE, (value) =>
+      value.replace(CSS_HEX, (hex) => hex.toLowerCase())
+    );
+
+/**
+ * `css` with every decimal outside comments and strings as Prettier prints
+ * it (`0.010` is `0.01`, `1.50px` is `1.5px`, `.5em` is `0.5em`), and every
+ * hex colour in a value in lower case (`#F2D36B` is `#f2d36b`). Bun 1.4.4's
+ * `bun fmt` prints both as written, where the canary before it printed them
+ * as Prettier does, so a generator's CSS printed differently on each Bun.
+ * Given them already canonical, every Bun prints them alike.
+ */
+const cssCanonical = (css: string): string => {
+  let out = "";
+  let at = 0;
+  for (const kept of css.matchAll(CSS_AS_WRITTEN)) {
+    out += cssPlain(css.slice(at, kept.index));
+    out += kept[0];
+    at = kept.index + kept[0].length;
+  }
+  return out + cssPlain(css.slice(at));
+};
+
 /**
  * `text` as the formatter writes the file at `path` (the caller's, like the
  * command line's): its options, `.prettierignore`, and a file no parser
- * reads left as given.
+ * reads left as given; a CSS file's numbers and colours as {@link cssCanonical} prints them.
  */
 export async function formatText(path: string, text: string): Promise<string> {
+  const given = path.endsWith(".css") ? cssCanonical(text) : text;
   if (running < AT_ONCE) {
     running += 1;
   } else {
@@ -91,7 +145,7 @@ export async function formatText(path: string, text: string): Promise<string> {
     await new Promise<void>((go) => waiting.push(go));
   }
   try {
-    return await formatOne(resolve(process.cwd(), path), text);
+    return await formatOne(resolve(process.cwd(), path), given);
   } finally {
     const next = waiting.shift();
     if (next) {
@@ -100,6 +154,24 @@ export async function formatText(path: string, text: string): Promise<string> {
       running -= 1;
     }
   }
+}
+
+/**
+ * Whether a generator's output `made` says what the committed file at `path`
+ * says: both formatted by {@link formatText} on this machine's bun, then
+ * compared. A file committed from another Bun, whose printer laid it out or
+ * wrote its numbers otherwise, passes; one whose content differs fails.
+ */
+export async function formattedAlike(
+  path: string,
+  committed: string,
+  made: string
+): Promise<boolean> {
+  const [was, now] = await Promise.all([
+    formatText(path, committed),
+    formatText(path, made),
+  ]);
+  return was === now;
 }
 
 async function main(): Promise<number> {

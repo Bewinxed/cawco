@@ -30,8 +30,10 @@
  *
  * `--check` builds the same and writes nothing: it fails on a value its type
  * refuses (dtcg-validate.ts, before anything evaluates one), on any output
- * whose bytes differ from the committed file (a source file that would
- * settle included, and a committed colour set no token makes), and on a
+ * that says otherwise than the committed file, both formatted on this
+ * machine's bun (fmt.ts `formattedAlike`, so a file another Bun printed
+ * passes; a source file that would settle included, and a committed colour
+ * set no token makes), and on a
  * `font` shorthand utility (a type role, `font-inherit` …) that Tailwind
  * sorts after a font longhand utility (role-order.ts).
  */
@@ -45,7 +47,7 @@ import {
   cssLeafName,
   tailwindThemeCss,
 } from "../../../packages/hub/src/design-tokens";
-import { formatText } from "../../../scripts/fmt";
+import { formatText, formattedAlike } from "../../../scripts/fmt";
 import {
   COLOUR_CATALOG,
   colourSetFiles,
@@ -63,8 +65,8 @@ let made = 0;
 
 /**
  * An output as the build leaves it: formatted as `bun fmt` writes that file,
- * so the bytes are final. The build writes them; check mode holds them to the
- * committed file, byte for byte.
+ * so the bytes are final. The build writes them; check mode holds the
+ * committed file to them, both formatted alike (fmt.ts `formattedAlike`).
  */
 async function emit(path: string, content: string): Promise<void> {
   made += 1;
@@ -75,7 +77,7 @@ async function emit(path: string, content: string): Promise<void> {
     await Bun.write(path, formatted);
   } else if (!(await file.exists())) {
     drift.push(`${path}: not committed`);
-  } else if ((await file.text()) !== formatted) {
+  } else if (!(await formattedAlike(path, await file.text(), formatted))) {
     drift.push(`${path}: unlike the committed file`);
   }
 }
@@ -520,7 +522,7 @@ if (CHECK) {
   }
   console.log(
     drift.length === 0
-      ? `tokens: the token source conforms and every output is byte for byte the committed file (${made} files)`
+      ? `tokens: the token source conforms and every output says what the committed file does (${made} files)`
       : `tokens: ${drift.length} output(s) unlike the committed files (run bun run tokens):\n  ${drift.join("\n  ")}`
   );
   process.exit(drift.length === 0 ? 0 : 1);

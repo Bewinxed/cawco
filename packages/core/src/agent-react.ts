@@ -4,9 +4,9 @@
  * (decision-host.ts) and the standalone binary's compile
  * (scripts/build-binary.ts) each take this plugin, so a page or the binary
  * runs one React. Excalidraw's `tunnel-rat` imports `react` without
- * declaring it (pmndrs/tunnel-rat#24, open; 0.1.2 is its latest), and the
- * isolated install leaves it no shared fallback to reach one through
- * (bunfig.toml `hoist = false`), so unpinned a bundle fails ("Could not
+ * declaring it (pmndrs/tunnel-rat#24, open; 0.1.2 is its latest), and from
+ * bun's global store, which a workspace installs from, nothing of ours lies
+ * above it to reach one through, so unpinned a bundle fails ("Could not
  * resolve: \"react\""). Bun has no `packageExtensions` to declare it
  * (oven-sh/bun#40053), and a root package.json declaration never reaches a
  * package in bun's global store, which a workspace installs from, so the
