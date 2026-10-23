@@ -16,8 +16,8 @@
  * project (its `src/`, and the files at its top). A file belongs to the
  * project whose folder holds it most closely. What a change affects is read
  * off the imports as they stand, on every run: each changed file, every
- * file that imports it (a relative path, `$lib/`, or `@cawco/<name>` through
- * that package's `exports`), every file that imports one of those, and so
+ * file that imports it (a relative path, `#name` through its package's
+ * `imports`, or `@cawco/<name>` through that package's `exports`), every file that imports one of those, and so
  * on; the projects those files belong to are checked, declared dependencies
  * or not. A change to any tsconfig, the lockfile, the root manifest, a
  * patch or this runner affects every project.
@@ -162,33 +162,59 @@ const rootManifest = (await Bun.file(join(ROOT, "package.json")).json()) as {
   workspaces: string[];
 };
 type Entry = string | { types?: string; default?: string };
-const packages = new Map<
-  string,
-  { dir: string; exports?: Record<string, Entry>; main?: string }
->(
+interface Manifest {
+  dir: string;
+  exports?: Record<string, Entry>;
+  imports?: Record<string, string>;
+  main?: string;
+}
+const packages = new Map<string, Manifest>(
   await Promise.all(
     rootManifest.workspaces
       .flatMap((pattern) => [
         ...new Bun.Glob(`${pattern}/package.json`).scanSync({ cwd: ROOT }),
       ])
       .map(async (path) => {
-        const pkg = (await Bun.file(join(ROOT, path)).json()) as {
-          name: string;
-          exports?: Record<string, Entry>;
-          main?: string;
-        };
-        return [
-          pkg.name,
-          { dir: dirname(path), exports: pkg.exports, main: pkg.main },
-        ] as const;
+        const pkg = (await Bun.file(join(ROOT, path)).json()) as Omit<
+          Manifest,
+          "dir"
+        > & { name: string };
+        return [pkg.name, { ...pkg, dir: dirname(path) }] as const;
       })
   )
 );
 
+/**
+ * The path a `#name` import in `file` names, through the `imports` of the
+ * package that holds the file (the dashboard's `#lib/*`).
+ */
+const subpathImport = (file: string, specifier: string): string | undefined => {
+  const [holder] = [...packages.values()]
+    .filter((pkg) => holds(pkg.dir, file))
+    .sort((a, b) => depth(b.dir) - depth(a.dir));
+  for (const [key, path] of Object.entries(holder?.imports ?? {})) {
+    if (key === specifier) {
+      return normalize(join(holder.dir, path));
+    }
+    const star = key.indexOf("*");
+    if (
+      star >= 0 &&
+      specifier.startsWith(key.slice(0, star)) &&
+      specifier.endsWith(key.slice(star + 1))
+    ) {
+      const matched = specifier.slice(
+        star,
+        specifier.length - (key.length - star - 1)
+      );
+      return normalize(join(holder.dir, path.replace("*", matched)));
+    }
+  }
+};
+
 /** The repository path `specifier` in `file` names, when TypeScript reads it. */
 const targetOf = (file: string, specifier: string): string | undefined => {
-  if (specifier.startsWith("$lib/")) {
-    return join(DASHBOARD, "src/lib", specifier.slice("$lib/".length));
+  if (specifier.startsWith("#")) {
+    return subpathImport(file, specifier);
   }
   if (specifier.startsWith(".")) {
     const path = normalize(join(dirname(file), specifier));
