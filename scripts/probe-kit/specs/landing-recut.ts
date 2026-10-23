@@ -45,6 +45,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { movedLine } from "../../../packages/core/src/injected";
+import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
@@ -413,7 +414,7 @@ const leg = async (
     first.refused === undefined &&
       first.row?.state === "done" &&
       declaredPassed(firstResult) &&
-      firstResult.includes("Landed on main at"),
+      firstResult.includes(`${workWords.landedOn("main")} at`),
     `${first.row?.state} ${first.row?.error ?? ""}\n${refusal(first.refused) || firstResult.slice(0, 1500)}`
   );
   if (first.row?.state !== "done") {
@@ -469,7 +470,7 @@ const leg = async (
       second.row?.state === "done" &&
       result.includes(`Delegate commit again_${tag}`) &&
       declaredPassed(result) &&
-      result.includes("Landed on main at"),
+      result.includes(`${workWords.landedOn("main")} at`),
     `${second.row?.state} ${second.row?.error ?? ""}\n${refusal(second.refused) || result.slice(0, 1500)}`
   );
 };
@@ -556,7 +557,8 @@ const moveLeg = async (
   const result = landed.row?.result ?? "";
   check(
     `${tag}: its first hand-in lands${tag === "M" ? ", rebased onto the main that moved past its cut" : ""}`,
-    landed.row?.state === "done" && result.includes("Landed on main at"),
+    landed.row?.state === "done" &&
+      result.includes(`${workWords.landedOn("main")} at`),
     `${landed.row?.state} ${landed.row?.error ?? ""}\n${refusal(landed.refused) || result.slice(0, 1500)}`
   );
   if (landed.row?.state !== "done") {

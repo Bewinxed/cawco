@@ -3,6 +3,7 @@ import { CAWCO_ENV, CAWCO_HUB_PORT, CAWCO_LOCAL_DASHBOARD_PORT } from "./index";
 import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { RELEASE_PUBLIC_KEY } from "./release-key";
+import { connectWords } from "./words/connect";
 
 /** What a hub's script installs: the hub it joins, the build it offers its fleet, and the command route's code. */
 export interface InstallJoin {
@@ -205,7 +206,7 @@ ${
 `
     : `    channel="$(sed -n 's/.*"channel":"\\([^"]*\\)".*/\\1/p' "$ROOT/update-state.json" 2>/dev/null || :)"
     printf 'CawCo %s is already installed on this machine (channel: %s).\\n' "\${installed:-unknown}" "\${channel:-not reported yet}"
-    printf 'Updates are installed from the CawCo app, automatically when this machine is idle or with Install now. Nothing was changed.\\n'
+    printf '${connectWords.alreadyInstalled}\\n'
     return 0
 `
 }  fi

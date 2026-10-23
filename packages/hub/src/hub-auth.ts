@@ -32,6 +32,7 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import {
   type CallerKind,
+  connectWords,
   type DeviceKind,
   type HubAuthFrame,
   type HubAuthMode,
@@ -184,8 +185,6 @@ const POLL_INTERVAL_S = 5;
 const PAIRINGS_HELD = 20;
 /** How often a device's last use is written, at most. */
 const TOUCH_EVERY_MS = 60_000;
-/** What a machine the person refused hears, then and at every register after. */
-const MACHINE_REFUSED = "The person refused this machine.";
 /** How long one approved CLI run may act as the person. */
 const CLI_RUN_MS = 15 * 60_000;
 
@@ -877,8 +876,8 @@ export const createHubAuth = ({
       return false;
     }
     waiting.delete(machineId);
-    refusals.set(machineId, MACHINE_REFUSED);
-    entry.refuse(MACHINE_REFUSED);
+    refusals.set(machineId, connectWords.machineRefused);
+    entry.refuse(connectWords.machineRefused);
     console.log(`[hub-auth] machine ${machineId} refused`);
     changed();
     return true;

@@ -14,7 +14,7 @@
    * output (installs.svelte.ts `closeOutput`); with no window to come back
    * to, focus goes to where the install is parked (`parkedAt`).
    */
-  import { causeLine, type Install } from "@cawco/core";
+  import { causeLine, connectWords, type Install } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
@@ -75,7 +75,7 @@
       at: "stop-output",
       ...stopQuestion(install),
       cancelLabel: "Cancel",
-      confirmLabel: "Stop install",
+      confirmLabel: connectWords.stopInstall,
       pendingLabel: "Stopping…",
       destructive: true,
       run: () => connect.stop(install.id),
@@ -142,7 +142,7 @@
     {#if install.state === "running"}
       <Button
         data-box
-        label="Stop install"
+        label={connectWords.stopInstall}
         onclick={askStop}
         size="sm"
         variant="destructive"
@@ -150,8 +150,8 @@
     {/if}
     <button
       type="button"
-      aria-label="Close output"
-      title="Close output"
+      aria-label={connectWords.closeOutput}
+      title={connectWords.closeOutput}
       class="pressable touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
       onclick={() => connect.closeOutput()}
     >

@@ -95,6 +95,7 @@ import {
   withInputsLine,
   withLandingLine,
   withWorkspaceLine,
+  workWords,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { type HeldInput, handedInputs } from "@cawco/core/handed-input";
@@ -1782,7 +1783,7 @@ const landedLine = (
     steps.length > 0
       ? `; it stepped out of its turn ${steps.length === 1 ? "once" : `${steps.length} times`} to gate again, the last time because ${steps.at(-1)}`
       : "";
-  return `Landed on ${base} at ${landed.sha.slice(0, 9)}, gated on top of ${base}; ${after}${stepped}.`;
+  return `${workWords.landedOn(base)} at ${landed.sha.slice(0, 9)}, gated on top of ${base}; ${after}${stepped}.`;
 };
 
 /** The findings, numbered; nothing when there are none. */

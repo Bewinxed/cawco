@@ -99,6 +99,7 @@ import type { AuthContext } from "ssh2";
 import type { InstallsRead } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { commonWords } from "../../../packages/core/src/words/common";
+import { connectWords } from "../../../packages/core/src/words/connect";
 import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import {
@@ -1055,7 +1056,7 @@ async function walk(
       "The hub's addresses couldn't be read: The hub is starting"
     ) &&
       waiting.tryAgain &&
-      waiting.well.includes("No command until the hub's addresses are read") &&
+      waiting.well.includes(connectWords.noCommandYet) &&
       waiting.copyDisabled &&
       waiting.copyWaits === "Waits for the hub's addresses" &&
       pressed >= 1,
@@ -1186,7 +1187,7 @@ async function walk(
   // Stop asks in the page, under the footer.
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Stop install" })
+    .getByRole("button", { name: connectWords.stopInstall })
     .first()
     .click();
   await page.waitForSelector(
@@ -1212,7 +1213,7 @@ async function walk(
   }, WINDOW);
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Open output" })
+    .getByRole("button", { name: connectWords.openOutput })
     .click();
   await page.waitForSelector(`${OUTPUT}[data-state=open]`);
   // The window's park into its row (--dur-panel) has played by now.
@@ -1224,7 +1225,7 @@ async function walk(
   );
   await page
     .locator(OUTPUT)
-    .getByRole("button", { name: "Stop install" })
+    .getByRole("button", { name: connectWords.stopInstall })
     .click();
   await page.waitForSelector(
     `${OUTPUT} [data-ask="stop-output"] [data-ask-cancel]`
@@ -1250,7 +1251,7 @@ async function walk(
   );
   await page
     .locator(OUTPUT)
-    .getByRole("button", { name: "Close output" })
+    .getByRole("button", { name: connectWords.closeOutput })
     .click();
   await page.waitForFunction((sel) => !document.querySelector(sel), OUTPUT, {
     timeout: 10_000,
@@ -1545,7 +1546,7 @@ async function walk(
   // Remove install: the outcome goes from the band.
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Remove install" })
+    .getByRole("button", { name: connectWords.removeInstall })
     .click();
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
@@ -1557,18 +1558,18 @@ async function walk(
   await settled(page, "running", "Fetching the signed build");
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Stop install" })
+    .getByRole("button", { name: connectWords.stopInstall })
     .first()
     .click();
   await page
     .locator(`${WINDOW} [data-ask="stop-install"] button`, {
-      hasText: "Stop install",
+      hasText: connectWords.stopInstall,
     })
     .click();
   note("stopped", await settled(page, "outcome", "Stopped after it signed in"));
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Remove install" })
+    .getByRole("button", { name: connectWords.removeInstall })
     .click();
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
@@ -1589,7 +1590,7 @@ async function walk(
   );
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Remove install" })
+    .getByRole("button", { name: connectWords.removeInstall })
     .click();
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
@@ -1645,7 +1646,7 @@ async function walk(
       .click();
     const copied = await page
       .locator(WINDOW)
-      .getByText("Copied · Listening for it")
+      .getByText(connectWords.copiedListening)
       .waitFor({ timeout: 1000 })
       .then(() => true)
       .catch(() => false);
@@ -1774,12 +1775,12 @@ async function walk(
   await settled(page, "running", "Waiting for the command to run on it");
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Stop install" })
+    .getByRole("button", { name: connectWords.stopInstall })
     .first()
     .click();
   await page
     .locator(`${WINDOW} [data-ask="stop-install"] button`, {
-      hasText: "Stop install",
+      hasText: connectWords.stopInstall,
     })
     .click();
   note(
@@ -1788,7 +1789,7 @@ async function walk(
   );
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Remove install" })
+    .getByRole("button", { name: connectWords.removeInstall })
     .click();
   await page.unroute(isJoinRead);
 

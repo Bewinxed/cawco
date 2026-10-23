@@ -21,7 +21,7 @@
    * Retry keeps every detail; a password sign-in asks for its password
    * again, which was used once and forgotten.
    */
-  import { type Install, installerRan } from "@cawco/core";
+  import { connectWords, type Install, installerRan } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
@@ -258,12 +258,12 @@
           data-connect-keep
           data-output-opener
           onclick={() => connect.openOutput()}
-          variant="outline">Open output</Button
+          variant="outline">{connectWords.openOutput}</Button
         >
       {/if}
       <span class="flex-1"></span>
       <Button
-        label="Remove install"
+        label={connectWords.removeInstall}
         onclick={remove}
         pending={removing}
         pendingLabel="Removing…"

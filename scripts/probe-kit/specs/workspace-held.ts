@@ -41,6 +41,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { workWords } from "../../../packages/core/src/words/work";
 import { type ToolRecord, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -362,7 +363,8 @@ const rebasedPhase = async (
   const xItem = await scene.ended(x);
   check(
     "(a) X lands a commit of its own while A waits: main moved under A's commit",
-    xItem?.state === "done" && (xItem.result ?? "").includes("Landed on main"),
+    xItem?.state === "done" &&
+      (xItem.result ?? "").includes(workWords.landedOn("main")),
     `${xItem?.state} ${xItem?.error ?? ""} ${(xItem?.result ?? "").slice(0, 400)}`
   );
   await writeFile(join(wa.tmp ?? "", goFile("A")), "go\n");
@@ -394,7 +396,7 @@ const rebasedPhase = async (
   check(
     "(a) T, cut from S's held workspace, lands S's commit rebased onto main as it moved",
     tItem?.state === "done" &&
-      (tItem.result ?? "").includes("Landed on main") &&
+      (tItem.result ?? "").includes(workWords.landedOn("main")) &&
       (tItem.result ?? "").includes("Delegate commit S"),
     `${tItem?.state} ${tItem?.error ?? ""} ${(tItem?.result ?? "").slice(0, 800)}`
   );
@@ -433,7 +435,7 @@ const leftoversPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(b) the item did not end on it: U finished once more, after moving them to $TMPDIR, and that landed",
     (steps.U?.finishes ?? 0) === 2 &&
       item?.state === "done" &&
-      (item.result ?? "").includes("Landed on main"),
+      (item.result ?? "").includes(workWords.landedOn("main")),
     `${steps.U?.finishes ?? 0} finishes; ${item?.state} ${item?.error ?? ""} ${(item?.result ?? "").slice(0, 400)}`
   );
   const wu = workspaceOf(u.workspaceId);

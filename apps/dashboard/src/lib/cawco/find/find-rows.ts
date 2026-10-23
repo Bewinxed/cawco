@@ -10,7 +10,7 @@
  * Stopped, Failed, Unreachable) and WORDS.md's nouns (session, delegate,
  * thread, task, routine, preview, decision, report, machine, project).
  */
-import type { ArtifactKind } from "@cawco/core";
+import { type ArtifactKind, workWords } from "@cawco/core";
 import type { Component } from "svelte";
 import {
   IconGlobe as Browser,
@@ -376,7 +376,7 @@ const changeRow = (r: FindChange): Drawn => ({
   glyph: r.kind === "commit" ? Commit : File,
   breathes: false,
   state: {
-    word: r.landed ? "Landed on main" : "Not landed",
+    word: r.landed ? workWords.landedOn("main") : "Not landed",
     tone: "quiet",
   },
   meta: words(r.project?.name, r.branch, `from ${r.conversation.title}`),

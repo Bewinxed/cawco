@@ -1,0 +1,816 @@
+{
+  "scripts/probe-kit/forge-legs.ts": {
+    "` did not run": 1,
+    "more than one forge": 1,
+    "Name the repository by its URL": 1,
+    "opened the": 1,
+    "opened the issue:": 1,
+    "waits in the owner's Needs you": 1
+  },
+  "scripts/probe-kit/journeys/j1-check-in.ts": {
+    "Permission request from": 1
+  },
+  "scripts/probe-kit/journeys/j10-rules.ts": {
+    "Delete rule": 1,
+    "More for": 1,
+    "Nothing is watching yet": 1,
+    "Rule name": 1,
+    "Starter rules": 1
+  },
+  "scripts/probe-kit/journeys/j11-plugin-update.ts": {
+    "More for": 1
+  },
+  "scripts/probe-kit/journeys/j3-spawn.ts": {
+    "Ask first": 1,
+    "Full Send": 1,
+    "in its own view": 1,
+    "Permission mode:": 1,
+    "Send message": 1,
+    "Session details": 1,
+    "Switch to Full Send": 1
+  },
+  "scripts/probe-kit/journeys/j5-task-review.ts": {
+    "Send back": 1,
+    "Send back →": 1,
+    "What should change": 1
+  },
+  "scripts/probe-kit/journeys/j6-decisions.ts": {
+    "Caw, lead of": 1,
+    "Decision page:": 1
+  },
+  "scripts/probe-kit/journeys/j7-comments.ts": {
+    "Comments on": 1,
+    "Preview mode": 1,
+    "Session transcript": 1
+  },
+  "scripts/probe-kit/journeys/j8-routines.ts": {
+    "More for": 1
+  },
+  "scripts/probe-kit/journeys/j9-jump.ts": {
+    "Jump to session": 1,
+    "Session transcript": 1
+  },
+  "scripts/probe-kit/specs/account-join.ts": {
+    "didn't answer": 1,
+    "There is no account": 2
+  },
+  "scripts/probe-kit/specs/account-move-asleep.ts": {
+    "[carry] started": 1,
+    "is connected again": 1,
+    "is connected again.": 1,
+    "not carried": 1
+  },
+  "scripts/probe-kit/specs/account-signin-lands.ts": {
+    "Something went wrong": 1
+  },
+  "scripts/probe-kit/specs/admin-ergonomics.ts": {
+    "[claude] permission asked:": 1,
+    "[full send: answered]": 2,
+    "asks the person": 1,
+    "asks to run": 1,
+    "Change MCP server": 1,
+    "needs a `reason`": 1,
+    "project only": 1,
+    "sessions in": 1
+  },
+  "scripts/probe-kit/specs/artifact-needs.ts": {
+    "changed since you looked": 1,
+    "Needs you,": 1
+  },
+  "scripts/probe-kit/specs/artifact-orphan-delete.ts": {
+    "Discarded workspace": 1,
+    "its workspace": 1,
+    "Their sessions can no longer act, so artifact_delete removes them from here.": 1,
+    "you, up its delegation tree, can delete it": 1,
+    "Your panel": 1
+  },
+  "scripts/probe-kit/specs/artifact-resize-loop-thread.ts": {
+    "Event setup:": 2
+  },
+  "scripts/probe-kit/specs/artifact-responses.ts": {
+    "Responses on": 1,
+    "waiting for the agent": 1
+  },
+  "scripts/probe-kit/specs/artifacts.ts": {
+    "): your panel keeps the version you opened": 1,
+    "artifact_create takes kind, name, does (pick | judge | try | draw), ask": 1,
+    "changed the": 1,
+    "Dark mode": 1,
+    "did not answer: nothing is listening on that port.": 2,
+    "Handed to your parent, not opened": 2,
+    "It wasn't handed to your parent.": 1,
+    "Light mode": 1,
+    "Nothing is running on port": 1,
+    "only that session changes it": 3,
+    "The server on port": 2,
+    "This session has no artifact": 3,
+    "waits as its next version": 1
+  },
+  "scripts/probe-kit/specs/attach-continue.ts": {
+    ": it continues compressed:": 1
+  },
+  "scripts/probe-kit/specs/binary-prune.ts": {
+    "[updates] no update": 1,
+    "[updates] no update policy at": 1
+  },
+  "scripts/probe-kit/specs/binary-update-found.ts": {
+    "could not supply the build": 1,
+    "signed release": 1
+  },
+  "scripts/probe-kit/specs/boundary-handover.ts": {
+    "its boundary": 2,
+    "its older boundary": 1,
+    "Start it again": 2
+  },
+  "scripts/probe-kit/specs/browser-cutover.ts": {
+    "still running": 1
+  },
+  "scripts/probe-kit/specs/browser-gate.ts": {
+    "isn't answering": 1
+  },
+  "scripts/probe-kit/specs/browser-shield.ts": {
+    "isn't answering": 1
+  },
+  "scripts/probe-kit/specs/canvas-design.ts": {
+    "Canvas view": 1,
+    "Close comments": 1,
+    "does not exist": 1,
+    "does not exist in": 1,
+    "Hide details": 1,
+    "isn't answering": 1,
+    "No states file": 1,
+    "Not drawn yet": 1,
+    "Show details": 2,
+    "The canvas draws it once its session writes it.": 1,
+    "Verify against the design system": 1
+  },
+  "scripts/probe-kit/specs/canvas.ts": {
+    "The canvas is empty": 1
+  },
+  "scripts/probe-kit/specs/caw-edits.ts": {
+    "withdrawn while gate.md was read": 2
+  },
+  "scripts/probe-kit/specs/claude-effort.ts": {
+    "effort read failed": 1
+  },
+  "scripts/probe-kit/specs/claude-update.ts": {
+    ": lost, and": 1,
+    "came from none of the ways CawCo installs": 1,
+    "Claude Code": 3,
+    "is in the fleet": 1,
+    "No Claude account is signed in": 1,
+    "on this machine isn't one CawCo runs (": 2,
+    "this session didn't start again": 1,
+    "Update Claude Code": 2,
+    "Update it on the machine the way it was installed": 1
+  },
+  "scripts/probe-kit/specs/comment-delivery.ts": {
+    "- I wrote:": 6,
+    "Add a note for the agent": 1,
+    "Caw couldn't take them": 1,
+    "Comments aren't reaching the agent": 1,
+    "Comments on": 2,
+    "gone from the page": 1,
+    "marks reached no one": 1,
+    "No artifact of this session holds pin": 1,
+    "not sent": 1,
+    "the project's Caw couldn't take them": 1
+  },
+  "scripts/probe-kit/specs/comment-link.ts": {
+    "Comments aren't reaching the agent": 1
+  },
+  "scripts/probe-kit/specs/comments.ts": {
+    "## The person's note on this Send": 1,
+    "Add a note for the agent": 1,
+    "Attach a file or image": 2,
+    "Attached file:": 1,
+    "Delete comment": 6,
+    "Draft comment, not sent": 1,
+    "Element gone": 2,
+    "Its element is gone from the page": 1,
+    "Newest first": 1,
+    "Not sent:": 5,
+    "Pin it somewhere else": 1,
+    "Reply to reopen": 1,
+    "Send again": 7,
+    "Tap the page where it goes": 1,
+    "This pin is gone from the page already, so there was nothing to delete.": 1,
+    "This pin is gone from the page, so the reply wasn't kept.": 1,
+    "Top of page first": 1,
+    "Turn off": 3,
+    "What should change?": 2,
+    "Whole page": 2
+  },
+  "scripts/probe-kit/specs/component-canvas.ts": {
+    "Hide details": 2,
+    "Show details": 1
+  },
+  "scripts/probe-kit/specs/composer-canvas.ts": {
+    "didn't open": 1,
+    "Send message": 4
+  },
+  "scripts/probe-kit/specs/config-undo.ts": {
+    "More for": 1,
+    "No rule is waiting on an answer": 1
+  },
+  "scripts/probe-kit/specs/connect-machine.ts": {
+    "Add machine": 4,
+    "By a command": 1,
+    "couldn't be read": 1,
+    "Fetching the signed build": 2,
+    "Open navigation": 1,
+    "Over SSH": 4,
+    "reload forgets": 1,
+    "removes what it created": 1,
+    "the install may be part-way in": 1,
+    "Then Retry": 3,
+    "Waits for the hub's addresses": 1,
+    "Waits for the hub's SSH key": 1
+  },
+  "scripts/probe-kit/specs/connections-server-address.ts": {
+    "Sign in to": 1
+  },
+  "scripts/probe-kit/specs/context-read-slow.ts": {
+    "asked again when its turn ends": 1,
+    "Export CSV": 1,
+    "may be offline": 1,
+    "Nothing recorded in this range.": 1,
+    "this session didn't report its context": 1
+  },
+  "scripts/probe-kit/specs/continued-line.ts": {
+    "from the person's messages": 1
+  },
+  "scripts/probe-kit/specs/decision-pages.ts": {
+    "Figtree Variable": 1,
+    "Open to draw": 1
+  },
+  "scripts/probe-kit/specs/delegate-inputs.ts": {
+    "a credential store no workspace reads": 1,
+    "there's no file": 1,
+    "there's no file at": 1,
+    "Your parent's inputs are in $TMPDIR/inputs/:": 1
+  },
+  "scripts/probe-kit/specs/delegate-lifecycle.ts": {
+    "delegate with from: \"": 1,
+    "Handed to": 1
+  },
+  "scripts/probe-kit/specs/design-approve.ts": {
+    "approved your design proposal": 2,
+    "declined your design proposal": 3,
+    "must be fixed before your result reaches review": 1,
+    "Not finished": 1,
+    "Not finished:": 1,
+    "stays landed": 1
+  },
+  "scripts/probe-kit/specs/design-brief.ts": {
+    "## Project context": 1
+  },
+  "scripts/probe-kit/specs/design-flow.ts": {
+    "Build a design system": 4,
+    "color-scheme: light;": 1,
+    "decision page": 1,
+    "design offer declined": 1,
+    "design-system skill": 1,
+    "not DTCG 2025.10": 2
+  },
+  "scripts/probe-kit/specs/design-offers.ts": {
+    "Build the design system": 1,
+    "design-system skill": 1,
+    "the repository's styles and components": 1,
+    "This work needs a design system": 1
+  },
+  "scripts/probe-kit/specs/extra-usage-setting.ts": {
+    "its extra usage is used only when no account has plan room": 1,
+    "moves whole to": 1,
+    "says to keep going on extra usage at a plan limit": 1
+  },
+  "scripts/probe-kit/specs/fallback-refusals.ts": {
+    "could not parse": 1
+  },
+  "scripts/probe-kit/specs/find-tool.ts": {
+    "Example: {\"query\"": 1,
+    "is deferred:": 1,
+    "query is empty": 1
+  },
+  "scripts/probe-kit/specs/fleet-mcp-install.ts": {
+    "[fleet-mcp] installed": 1,
+    "[fleet-mcp] retired": 1
+  },
+  "scripts/probe-kit/specs/fleet-mcp-parity.ts": {
+    ": fleet MCP": 1,
+    "[fleet] sync →": 1,
+    "[fleet] sync from the hub": 1,
+    "a place changed": 1,
+    "applied via process restart": 2,
+    "fleet MCP pass: generation": 1,
+    "fleet MCP read again later": 1,
+    "OpenCode held it failed": 1
+  },
+  "scripts/probe-kit/specs/fleet-sync-refused.ts": {
+    "[fleet] sync from the hub refused:": 1,
+    "fleet sync was not applied there": 1,
+    "none came within": 1,
+    "not this machine's agent": 2,
+    "refused the hub's sync": 1,
+    "sync from the hub refused": 1
+  },
+  "scripts/probe-kit/specs/fork-ownership.ts": {
+    "Restarting session": 1
+  },
+  "scripts/probe-kit/specs/fsevents-scope.ts": {
+    ": attached to its live process": 1
+  },
+  "scripts/probe-kit/specs/gate-row.ts": {
+    "Edit gate.md": 1,
+    "Landing checks": 1
+  },
+  "scripts/probe-kit/specs/git-door.ts": {
+    "cawco: git over ssh did not run here": 1,
+    "it serves this workspace's clone": 1,
+    "this machine's git sign-in": 1,
+    "version https://git-lfs.github.com/spec/v1": 1,
+    "would wait in the owner's Needs you": 1
+  },
+  "scripts/probe-kit/specs/handed-inputs.ts": {
+    "a workspace's boundary reaches public hosts only": 1
+  },
+  "scripts/probe-kit/specs/heavy-gate-order.ts": {
+    "a landing gate waits for a heavy-run slot, and takes the next free one before any other run:": 1,
+    "landing gates take heavy-run slots in the order they came, and an earlier one waits:": 1
+  },
+  "scripts/probe-kit/specs/heavy-peak.ts": {
+    "holds a reservation since": 1,
+    "so it holds a reservation since": 2,
+    "this machine's measured room:": 1
+  },
+  "scripts/probe-kit/specs/host-lfs.ts": {
+    "Project details › Large files": 1
+  },
+  "scripts/probe-kit/specs/hub-auth.ts": {
+    "[admission] admitted": 1,
+    "another hub": 1,
+    "Require paired devices": 1,
+    "this request came from another page": 2
+  },
+  "scripts/probe-kit/specs/hub-local-name.ts": {
+    "On this network": 1
+  },
+  "scripts/probe-kit/specs/hub-lock.ts": {
+    "is held by the hub in process": 1
+  },
+  "scripts/probe-kit/specs/hub-loopback-relay.ts": {
+    "is this computer's own address": 1,
+    "the hub says this is its own computer": 1
+  },
+  "scripts/probe-kit/specs/hub-loopback.ts": {
+    "dev server": 1,
+    "it is this computer's loopback": 1,
+    "the hub at": 1,
+    "the hub says this is its own computer": 1
+  },
+  "scripts/probe-kit/specs/ios-hub-update.ts": {
+    "CawCo updated": 1,
+    "Hub unreachable": 1
+  },
+  "scripts/probe-kit/specs/ios-long-ask.ts": {
+    "'s sessions": 2,
+    "Open navigation": 1,
+    "Show the whole command": 1
+  },
+  "scripts/probe-kit/specs/ios-parity.ts": {
+    "Reduced motion": 2
+  },
+  "scripts/probe-kit/specs/ios-project-offer.ts": {
+    "project offer": 1
+  },
+  "scripts/probe-kit/specs/ios-scroll-up.ts": {
+    "in place": 1,
+    "Session transcript": 1
+  },
+  "scripts/probe-kit/specs/ios-seen.ts": {
+    "active on": 2,
+    "landed late": 1,
+    "landed late; dropped": 1,
+    "Session details": 1
+  },
+  "scripts/probe-kit/specs/ios-send-outbox.ts": {
+    "Send again": 1
+  },
+  "scripts/probe-kit/specs/ios-unreadable-event.ts": {
+    "backlog for": 1
+  },
+  "scripts/probe-kit/specs/ios-web-gaps.ts": {
+    "couldn't list": 1,
+    "didn't answer": 1
+  },
+  "scripts/probe-kit/specs/keeper-custody-stall.ts": {
+    "[opencode] retire": 1,
+    "not listed": 3,
+    "retirement deferred": 1
+  },
+  "scripts/probe-kit/specs/keychain-unlock.ts": {
+    "Copy machine id": 1,
+    "Unlock keychain": 1
+  },
+  "scripts/probe-kit/specs/landing-cutoff.ts": {
+    "Nothing to land": 2
+  },
+  "scripts/probe-kit/specs/landing-gate.ts": {
+    "clears the hub's landing gate": 1,
+    "Landing gate, run by the hub:": 2
+  },
+  "scripts/probe-kit/specs/landing-recut.ts": {
+    "Landing gate, run by the hub:": 1,
+    "Nothing was sent": 1,
+    "Run the repo's install before you build or test.": 1
+  },
+  "scripts/probe-kit/specs/landing-stop.ts": {
+    "a landing gate waits for a heavy-run slot, and takes the next free one before any other run:": 1
+  },
+  "scripts/probe-kit/specs/limit-pick.ts": {
+    "No other account has room": 1,
+    "Stopped at": 1,
+    "Stopped at its limit": 1,
+    "Waiting for": 1
+  },
+  "scripts/probe-kit/specs/limit-stall.ts": {
+    "[hub] send": 1,
+    "at the latest": 2,
+    "moves to": 1,
+    "Stopped at": 4,
+    "when its work in flight ends": 1
+  },
+  "scripts/probe-kit/specs/link-under-load.ts": {
+    "input(s) written": 1
+  },
+  "scripts/probe-kit/specs/mac-wait.ts": {
+    "This item changes": 1
+  },
+  "scripts/probe-kit/specs/mcp-slow-start.ts": {
+    "fleet MCP read again later:": 1
+  },
+  "scripts/probe-kit/specs/memory-facts.ts": {
+    ", replaced by": 2,
+    "(before facts)": 2,
+    "(not yet fact lines)": 1,
+    "[jev off]": 1,
+    "## Project context": 2,
+    "## The inbox": 2,
+    "## What the files ask": 1,
+    "fall under two descriptions": 1,
+    "Jev is off": 1,
+    "Jev is off: sort each note against its lines yourself.": 1,
+    "only splits": 1
+  },
+  "scripts/probe-kit/specs/move-settled.ts": {
+    ", and none was. Choose one, then start it again. Nothing was started.": 1,
+    "git init": 1
+  },
+  "scripts/probe-kit/specs/native-compact.ts": {
+    "Open items": 1,
+    "was interrupted": 1,
+    "What was sent to it meanwhile goes now": 1
+  },
+  "scripts/probe-kit/specs/own-lane.ts": {
+    "earlier commit": 1,
+    "its text holds": 1
+  },
+  "scripts/probe-kit/specs/page-marks.ts": {
+    "Open navigation": 1,
+    "Permission mode:": 1
+  },
+  "scripts/probe-kit/specs/place-repo-home.ts": {
+    "is the home folder on this machine, which holds far more than one project, so CawCo won't make it a git repository.": 1,
+    "Make a folder for the project": 1,
+    "Workspace create on": 1
+  },
+  "scripts/probe-kit/specs/plan-changes-host.ts": {
+    "your delegate": 1
+  },
+  "scripts/probe-kit/specs/plan-changes.ts": {
+    "cannot go on": 1,
+    "Open items": 1
+  },
+  "scripts/probe-kit/specs/presence.ts": {
+    ": held at the desk, not sent": 1,
+    ": held, the person is at a desk": 2,
+    ": shown on tab": 1,
+    "[CawCo presence]": 1,
+    "did not answer its desk alert": 2,
+    "no narration": 1,
+    "no tab at the desk can show it, so it goes to the phone": 1,
+    "Open navigation": 1
+  },
+  "scripts/probe-kit/specs/preview-burst.ts": {
+    "<meta name=\"": 1
+  },
+  "scripts/probe-kit/specs/preview-reach.ts": {
+    "listener didn't answer the hub": 1,
+    "Previews need": 1,
+    "The hub reaches": 1,
+    "This preview can't be reached": 1,
+    "Trying again on its own.": 2
+  },
+  "scripts/probe-kit/specs/preview-socket.ts": {
+    "CawCo refused": 1,
+    "CawCo refused this request": 1,
+    "that its hub didn't relay": 1
+  },
+  "scripts/probe-kit/specs/project-origin.ts": {
+    "What this card showed is gone.": 1
+  },
+  "scripts/probe-kit/specs/relay-journey.ts": {
+    "Proven from outside by": 1,
+    "Works from here": 1
+  },
+  "scripts/probe-kit/specs/resend-once.ts": {
+    "Added to AGENTS.md": 1
+  },
+  "scripts/probe-kit/specs/restart-rules.ts": {
+    ": attached to its live process": 2,
+    "[full send: answered]": 2
+  },
+  "scripts/probe-kit/specs/room-held.ts": {
+    ": start waits:": 2,
+    "did not start within": 1,
+    "stopped while it waited for its machine's memory": 2
+  },
+  "scripts/probe-kit/specs/send-once.ts": {
+    "handed over again, taken already: no turn": 1
+  },
+  "scripts/probe-kit/specs/session-sheet.ts": {
+    "code other stories may share": 1,
+    "does not exist in": 1,
+    "is outside": 1,
+    "is the hub's to send": 1,
+    "Light mode": 1,
+    "sheet stage": 1,
+    "The ask is in the person's words: no file, path or id in it. Name the thing as they call it.": 1
+  },
+  "scripts/probe-kit/specs/setup-on-ask.ts": {
+    "decision page named": 1,
+    "in thread": 1
+  },
+  "scripts/probe-kit/specs/skill-updates.ts": {
+    ": the fleet's copy changed": 1,
+    "More for": 1
+  },
+  "scripts/probe-kit/specs/source-burst.ts": {
+    "launch credential installed": 1,
+    "Named this session": 1,
+    "Unknown tool": 1
+  },
+  "scripts/probe-kit/specs/ssh-password-join.ts": {
+    "Hide password": 2,
+    "Show password": 2
+  },
+  "scripts/probe-kit/specs/ssh-reach.ts": {
+    "'s connection held since": 2,
+    "[fleet] sync from the hub:": 1,
+    "[hub] machine": 1,
+    "carrying this hub to the machine": 1,
+    "connects again once it is given a key": 2,
+    "could not send this machine its fleet sync": 1,
+    "ended the stale session holding port": 3,
+    "fleet sync was not applied there": 1,
+    "joining the hub at": 2,
+    "not this machine's agent": 1,
+    "Nothing joined.": 1,
+    "proved no key": 1,
+    "proved the key its SSH add gave it: admitted": 1,
+    "register refused: the person refused machine": 1,
+    "sync from the hub refused": 1,
+    "this hub:": 1,
+    "this machine holds a new key: connecting again": 2,
+    "waiting for the hub to list this machine online": 1,
+    "waits to be admitted": 2
+  },
+  "scripts/probe-kit/specs/state-records.ts": {
+    "damaged record(s) on this machine": 1,
+    "is damaged (": 1,
+    "This workspace's record is damaged:": 1
+  },
+  "scripts/probe-kit/specs/tab-return.ts": {
+    "Nothing has been said here yet": 1
+  },
+  "scripts/probe-kit/specs/tailnet-https.ts": {
+    "Run it once in a terminal on": 1
+  },
+  "scripts/probe-kit/specs/template-types.ts": {
+    "Can't start": 2,
+    "No delegate type": 1
+  },
+  "scripts/probe-kit/specs/tracker-sync.ts": {
+    "GitHub Issues": 1,
+    "PRIVATE KEY": 1,
+    "Sync now": 1
+  },
+  "scripts/probe-kit/specs/two-pane-perf.ts": {
+    "the frame": 4
+  },
+  "scripts/probe-kit/specs/typed-causes.ts": {
+    "connection refused": 1,
+    "git push origin": 1,
+    "signed out": 1,
+    "signing in over SSH": 1
+  },
+  "scripts/probe-kit/specs/unchosen-defaults.ts": {
+    "A permission mode must be chosen": 1,
+    "couldn't read its models": 1,
+    "Permission mode:": 1
+  },
+  "scripts/probe-kit/specs/upstream-guard.ts": {
+    "git push": 1,
+    "on GitHub": 1,
+    "Onboarding · each project can change it": 1,
+    "The owner approved": 1,
+    "The owner denied": 1,
+    "this machine's git sign-in": 1
+  },
+  "scripts/probe-kit/specs/usage-accounts.ts": {
+    "At its limit": 2,
+    "Hasn’t reported": 1,
+    "Moved to": 1
+  },
+  "scripts/probe-kit/specs/web/blocks.ts": {
+    "More for": 1
+  },
+  "scripts/probe-kit/specs/web/browser-ask-card.ts": {
+    "Browser ask": 1,
+    "Browser ask from": 1,
+    "Couldn't take over.": 1,
+    "Take over": 2,
+    "Taking over…": 1,
+    "Your answer to:": 1,
+    "Your answer…": 1
+  },
+  "scripts/probe-kit/specs/web/caw-guided.ts": {
+    "Caw · could not start": 1,
+    "First prompt": 1,
+    "Message Caw…": 1,
+    "Spin off": 1,
+    "What’s next for": 2
+  },
+  "scripts/probe-kit/specs/web/composer-layers.ts": {
+    "Switch to Full Send": 1
+  },
+  "scripts/probe-kit/specs/web/control-select.ts": {
+    "Search models": 1,
+    "Use custom model id": 1
+  },
+  "scripts/probe-kit/specs/web/files-panel.ts": {
+    "Couldn't read": 1,
+    "Couldn't read this session's attachments": 1,
+    "No artifacts match": 1,
+    "No attachments match": 1
+  },
+  "scripts/probe-kit/specs/web/hub-states.ts": {
+    "Hub unreachable": 1,
+    "Searching the hub…": 1,
+    "The hub didn't answer (502).": 2
+  },
+  "scripts/probe-kit/specs/web/layer-stack.ts": {
+    "Open session": 1
+  },
+  "scripts/probe-kit/specs/web/machine-away.ts": {
+    "Current context": 1,
+    "Fetched. The machines": 1
+  },
+  "scripts/probe-kit/specs/web/own-message-actions.ts": {
+    "Cancel edit": 1,
+    "Copy message": 2,
+    "Couldn't send that message.": 1,
+    "Edit message": 4,
+    "Fork from here": 1,
+    "Send again": 1,
+    "Send edited message": 2
+  },
+  "scripts/probe-kit/specs/web/parked-start.ts": {
+    "Choose a mode": 1,
+    "Continue in new session…": 1,
+    "Continue session": 3,
+    "Started on": 2
+  },
+  "scripts/probe-kit/specs/web/project-details.ts": {
+    "can't be removed": 1,
+    "From the folder's remote": 1,
+    "Let him finish": 1,
+    "no longer recorded": 2,
+    "Project details…": 1,
+    "Pull request": 2
+  },
+  "scripts/probe-kit/specs/web/safari-blurs.ts": {
+    "How long is the trial?": 1,
+    "Unlock keychain…": 1
+  },
+  "scripts/probe-kit/specs/web/session-mention.ts": {
+    "[cawco] naming": 1,
+    "Report from": 2
+  },
+  "scripts/probe-kit/specs/web/ssr-hub-reads.ts": {
+    "[cawco] reading artifact": 1
+  },
+  "scripts/probe-kit/specs/web/stream-relay-step.ts": {
+    "(DNS only, no proxy)": 1
+  },
+  "scripts/probe-kit/specs/web/strip-new-session.ts": {
+    "A permission mode must be chosen": 3,
+    "Choose a mode": 6,
+    "Couldn't send that message": 1,
+    "Fork from here": 2,
+    "Fork session": 2,
+    "Nothing was started": 2,
+    "Send message": 1,
+    "Start session": 1
+  },
+  "scripts/probe-kit/specs/web/tabs-region-errors.ts": {
+    "[object Error]": 1
+  },
+  "scripts/probe-kit/specs/web/thinking-traffic.ts": {
+    "0px 0px 0px 0px": 1
+  },
+  "scripts/probe-kit/specs/web/thumbnail-schemes.ts": {
+    "Light mode": 1
+  },
+  "scripts/probe-kit/specs/web/work-outlives.ts": {
+    "Caw is off": 2,
+    "Caw settings…": 1,
+    "Copy link": 1,
+    "Delete hook": 1,
+    "did not answer": 2,
+    "did not run": 1,
+    "didn't allow": 1,
+    "Forget project…": 1,
+    "is not connected": 2,
+    "is not connected, so nothing was installed": 1,
+    "is ready": 1,
+    "It stays a draft": 1,
+    "More for": 6,
+    "No new builds could be looked for": 1,
+    "Show details": 1,
+    "Start run": 2,
+    "stays as it was": 1,
+    "The turn was not stopped:": 1,
+    "was not installed": 2,
+    "was not kept": 1,
+    "was not shown": 1,
+    "wasn't removed": 1,
+    "were not read": 1
+  },
+  "scripts/probe-kit/specs/web/workflows.ts": {
+    "Run workflow": 1,
+    "Workflow settings": 2
+  },
+  "scripts/probe-kit/specs/workspace-excluded.ts": {
+    "nothing was deleted": 2
+  },
+  "scripts/probe-kit/specs/workspace-held.ts": {
+    "ISO date or datetime": 1
+  },
+  "scripts/probe-kit/specs/workspace-retire.ts": {
+    "cutting its clone again": 4,
+    "it runs again to land it": 1,
+    "nothing was deleted": 1
+  },
+  "scripts/probe-kit/surfaces/catalogue.ts": {
+    "Add machine": 2,
+    "Add task": 1,
+    "By a command": 1,
+    "cannot read its logins": 1,
+    "Catching up…": 1,
+    "Caw, lead of": 1,
+    "CawCo saves the folder": 1,
+    "Choose a mode": 1,
+    "Connect a machine to run sessions": 1,
+    "Expand diff (full view)": 1,
+    "First prompt": 2,
+    "fleet memory": 1,
+    "is unlocked": 1,
+    "It reaches the hub at": 1,
+    "Its element is gone from the page": 1,
+    "Last activity": 1,
+    "Login password for": 1,
+    "Move & start": 1,
+    "New workflow": 1,
+    "No open comments": 1,
+    "None of your machines are online": 1,
+    "Nothing resolved yet": 1,
+    "Open navigation": 2,
+    "Other people's repositories": 1,
+    "Page not found": 1,
+    "Pairing didn't start": 1,
+    "Pause until": 1,
+    "Permission mode:": 1,
+    "Pick stages": 1,
+    "Pin it somewhere else": 2,
+    "Reading what runs in": 1,
+    "Show every limit": 1,
+    "Show the whole error": 1,
+    "Sign-in didn't finish": 1,
+    "Sort sessions": 1,
+    "Switch to Full Send": 1,
+    "Tap the page where it goes": 1,
+    "This project has no stages of its own yet": 2,
+    "Unlock keychain…": 1
+  }
+}

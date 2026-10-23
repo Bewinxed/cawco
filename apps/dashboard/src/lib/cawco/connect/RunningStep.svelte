@@ -16,7 +16,7 @@
    * page under the footer, with what stopping leaves on the machine.
    */
   import type { Install } from "@cawco/core";
-  import { commonWords } from "@cawco/core";
+  import { commonWords, connectWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
@@ -64,7 +64,7 @@
       at: "stop-install",
       ...stopQuestion(install),
       cancelLabel: "Cancel",
-      confirmLabel: "Stop install",
+      confirmLabel: connectWords.stopInstall,
       pendingLabel: "Stopping…",
       destructive: true,
       run: () => connect.stop(install.id),
@@ -163,9 +163,11 @@
         data-connect-keep
         data-output-opener
         onclick={() => connect.openOutput()}
-        variant="outline">Open output</Button
+        variant="outline">{connectWords.openOutput}</Button
       >
-      <Button onclick={askStop} variant="destructive">Stop install</Button>
+      <Button onclick={askStop} variant="destructive"
+        >{connectWords.stopInstall}</Button
+      >
     </div>
   {:else}
     {#if install.command}
@@ -177,7 +179,9 @@
       />
     {/if}
     <div class="flex justify-end">
-      <Button onclick={askStop} variant="destructive">Stop install</Button>
+      <Button onclick={askStop} variant="destructive"
+        >{connectWords.stopInstall}</Button
+      >
     </div>
   {/if}
   <AskHere asker={asks} at="stop-install" />

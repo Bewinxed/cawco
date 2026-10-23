@@ -125,6 +125,7 @@ import {
   spawnedPid,
 } from "../../../packages/core/src/signal";
 import type { RelayAnswer } from "../../../packages/core/src/stream-relay";
+import { connectWords } from "../../../packages/core/src/words/connect";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
@@ -835,7 +836,9 @@ async function heldAgentAdd(
         job.lines.some((line) =>
           line.endsWith(`joining the hub at ${job.hubUrl} again`)
         ) &&
-        !job.lines.some((line) => line.includes("Nothing was changed")) &&
+        !job.lines.some((line) =>
+          line.includes(connectWords.alreadyInstalled)
+        ) &&
         job.lines.some((line) => line.includes("is left running")) &&
         (await status()) === "online" &&
         after.length === 0 &&
@@ -934,9 +937,9 @@ async function refusalEnds(
       refused === 200 &&
       ended.code === 1 &&
       ended.out.includes("cawco-install: waiting to be admitted") &&
-      ended.err.includes("The person refused this machine.") &&
+      ended.err.includes(connectWords.machineRefused) &&
       ended.err.includes("Nothing joined.") &&
-      stored.includes("The person refused this machine."),
+      stored.includes(connectWords.machineRefused),
     `held ${JSON.stringify(held)}; the wait asked the hub: ${polling}; refuse answered ${refused}; the wait ${JSON.stringify(ended)}; kept ${JSON.stringify(stored)}`
   );
 
@@ -971,7 +974,7 @@ async function refusalEnds(
           line.includes("waits to be admitted")
       ) &&
       agentLog.includes("connects again once it is given a key") &&
-      words[0] === "refused The person refused this machine." &&
+      words[0] === `refused ${connectWords.machineRefused}` &&
       words.at(-1) === "closed 4403" &&
       after.some((line) =>
         line.includes(`register refused: the person refused machine ${BOX}`)
@@ -1106,7 +1109,7 @@ async function strangerHeld(
     row?.address === "ssh-reach-box" &&
       refused === 200 &&
       words[0]?.startsWith("waiting ") === true &&
-      words.includes("refused The person refused this machine.") &&
+      words.includes(`refused ${connectWords.machineRefused}`) &&
       words.at(-1) === "closed 4403" &&
       !(await waiting()).some((one) => one.machineId === STRANGER),
     `held ${JSON.stringify(held)}; refuse answered ${refused}; the knock heard ${JSON.stringify(heard)}`
@@ -1667,7 +1670,7 @@ async function keylessJoin(box: Box, { check, add }: Readers): Promise<void> {
           "waiting for the hub to list this machine online" &&
         last.startsWith(`this hub: ${hostname()}'s agent, CawCo `) &&
         last.includes("proved no key") &&
-        last.includes("Configure → Updates") &&
+        last.includes(connectWords.updatesPlace) &&
         stackless(job),
       seen(job)
     );

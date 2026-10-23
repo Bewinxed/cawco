@@ -93,6 +93,7 @@ import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
+import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -982,7 +983,7 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(q) with its gate sped up on top of Q's commit there, Q's reopened item lands on main and is done",
     ended?.state === "done" &&
       (ended.result ?? "").includes("Q gate passes") &&
-      (ended.result ?? "").includes("Landed on main"),
+      (ended.result ?? "").includes(workWords.landedOn("main")),
     `${ended?.state} ${ended?.error ?? ""} ${(ended?.result ?? "").slice(0, 1200)}`
   );
 };
@@ -1015,7 +1016,7 @@ const followUpPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(o) its follow-up commit, made after the item was done, lands on a second finish_item: the item ran again and its report lists the second commit",
     landed?.state === "done" &&
       (landed.result ?? "").includes("Delegate commit O2") &&
-      (landed.result ?? "").includes("Landed on main") &&
+      (landed.result ?? "").includes(workWords.landedOn("main")) &&
       reran.length === 1,
     `${landed?.state} ${landed?.error ?? ""}; ${reran.join(" | ") || "no rerun line"}; ${(landed?.result ?? "").slice(0, 1200)}`
   );

@@ -23,6 +23,7 @@
    */
   import {
     commonWords,
+    connectWords,
     DRAFT_LIMITS,
     type InstallRoute,
     type InstallSignIn,
@@ -621,7 +622,7 @@
             lines={[
               line ||
                 (connect.joinFailed
-                  ? "No command until the hub's addresses are read"
+                  ? connectWords.noCommandYet
                   : "Reading the hub's addresses…"),
             ]}
           />
@@ -657,7 +658,7 @@
             <Button
               aria-describedby={copyWaits ? "connect-copy-waits" : undefined}
               aria-label={copied
-                ? "Copied. Listening for it"
+                ? connectWords.copiedListeningLabel
                 : commonWords.copyCommand}
               class="flex-none"
               data-copied={copied || undefined}
@@ -678,7 +679,8 @@
                     "col-start-1 row-start-1 transition-opacity duration-(--dur-morph) ease-out",
                     !copied && "opacity-0",
                   ]}
-                  >Copied · Listening for it<span class="breathe loops">…</span
+                  >{connectWords.copiedListening}<span class="breathe loops"
+                    >…</span
                   ></span
                 >
               </span>
