@@ -40,18 +40,22 @@
  * MemAvailable now says on its own: a full swap beside room is pages nothing
  * uses (obelisk's 0.5 GiB, all of it in use).
  *
- * macOS has no PSI, so the Mac reads its own counterparts from the kernel
- * ({@link macReadings}), each over the same last 10 s: the pages read back in
- * from swap, how full swap is against the Mac's memory, and its pressure
- * level, refused only at critical. On 2026-10-19 the Mac had 29.6 GiB swapped
- * out of 32 GiB of memory at a load of 800.
+ * A keeper whose cgroup, or one above it, has a memory limit is read under
+ * that limit too: a start there gets no more than the limit leaves, however
+ * much the machine has ({@link cgroupReading}).
+ *
+ * macOS reads the kernel's own answer too: `kern.memorystatus_vm_pressure_level`,
+ * and a start waits only at critical ({@link macReadings}). Swap read back
+ * and swap out held a start before 2026-10-23; neither is the kernel saying
+ * memory is out, and the Mac rests with swap in use.
  */
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { readFileSync } from "node:fs";
-import { totalmem } from "node:os";
+import { dirname, join, relative } from "node:path";
 
 /**
- * Linux: the least MemAvailable, in MiB, that lets a session start. Our
+ * Linux: the least room, in MiB, that lets a session start: MemAvailable,
+ * and the room left under its keeper's cgroup limit when it has one. Our
  * call: a session's first process (its harness's runtime and the MCP
  * servers it launches) takes some hundreds of MiB, so 1 GiB is what one
  * start can be given without the kernel taking it from another's working
@@ -59,44 +63,39 @@ import { totalmem } from "node:os";
  */
 const MEMORY_AVAILABLE_MIN_MIB = 1024;
 /**
- * macOS: `kern.memorystatus_vm_pressure_level` 4, critical (1 is normal, 2
- * warn), holds a start whatever the other readings say. Level 2 is this
- * Mac's resting state (35% of memory available, 2026-10-17), so it holds
- * nothing.
+ * macOS: the `kern.memorystatus_vm_pressure_level` a start waits at. The
+ * sysctl answers the dispatch level (XNU bsd/kern/kern_memorystatus_notify.c,
+ * `sysctl_memorystatus_vm_pressure_level`: "uint32_t dispatch_level =
+ * convert_internal_pressure_level_to_dispatch_level(memorystatus_vm_pressure_level)"),
+ * one of `NOTE_MEMORYSTATUS_PRESSURE_NORMAL` 0x1, `_WARN` 0x2 (the kernel's
+ * Warning and Urgent both) and `_CRITICAL` 0x4 (bsd/sys/event_private.h). XNU's
+ * doc/vm/memorystatus_notify.md: Warning, "Device is beginning to experience
+ * memory pressure. Consider relaxing caching policy"; Critical, "Device is in
+ * a critical memory state. Expect latencies and consider dropping all
+ * caches", entered when memory neither wired nor compressed falls under 1.2
+ * times the threshold that unthrottles the swapper
+ * (https://github.com/apple-oss-distributions/xnu/blob/main/doc/vm/memorystatus_notify.md).
+ * Warn is this Mac's resting state (35% of memory available, 2026-10-17), so
+ * only critical holds a start.
  */
 const MAC_PRESSURE_CRITICAL = 4;
-/**
- * macOS: the most memory read back in from swap over the last 10 s that
- * still lets a start go, in MiB: the Mac's reading of thrashing (Linux's
- * memory stall). Our call: at rest, with 9 GiB of 10 GiB swap in use and
- * pressure at level 2, six 10 s windows read 0 to 4 swap-ins (64 KiB at
- * most); 128 MiB in 10 s is the kernel reading back what it pushed out as
- * fast as work needs it, which no resting window comes near.
- */
-const MAC_SWAPIN_MAX_MIB = 128;
-/** macOS: the window every rate reading spans, as Linux's PSI avg10 does. */
-const MAC_WINDOW_MS = 10_000;
-/**
- * macOS: the most swap in use (`vm.swapusage` used), as a percent of the
- * Mac's memory, that still lets a start go. macOS adds swap files as it needs
- * them, so what tells rest from paging is how much is swapped out against
- * the memory there is to bring it back into: 9 GiB of 32 (28%) at rest, 29.6
- * GiB of 32 (93%) with the Mac paging at a load of 800. Our call: half of
- * memory, between the two.
- */
-const MAC_SWAP_USED_MAX_PCT = 50;
 
 /**
- * Overrides of the thresholds above, for proving a start waits and goes (set
- * Linux's least available above the machine's memory, or a Mac's most to 0,
- * and a start waits, naming the numbers; unset it and it starts). Each is a
- * number; one that is not is no room, with its name.
+ * Overrides, for proving a start waits and goes: Linux's least room set past
+ * the machine's memory, or the Mac's waiting level set to 1 (normal), and a
+ * start waits, naming the numbers; unset it and it starts. Each is a number;
+ * one that is not is no room, with its name. `cgroupRoot` reads a scratch
+ * tree in place of the cgroup v2 mount, so a limit can be shown where the
+ * proof cannot make a cgroup.
  */
 const ROOM_ENV = {
   memoryAvailableMin: "CAWCO_ROOM_MEMORY_AVAILABLE_MIN_MIB",
-  swapInMib: "CAWCO_ROOM_SWAPIN_MAX_MIB",
-  swapUsedMax: "CAWCO_ROOM_SWAP_USED_MAX_PCT",
+  pressureLevel: "CAWCO_ROOM_PRESSURE_LEVEL",
+  cgroupRoot: "CAWCO_ROOM_CGROUP_ROOT",
 } as const;
+
+/** Where the cgroup v2 hierarchy is mounted. */
+const CGROUP_ROOT = "/sys/fs/cgroup";
 
 const GIB = 1024 ** 3;
 
@@ -185,45 +184,132 @@ const meminfoBytes = (meminfo: string, line: RegExp, name: string): number => {
   return Number(found[1]) * 1024;
 };
 
+/** The least room a start needs, in bytes. */
+const leastRoom = (): number =>
+  threshold(ROOM_ENV.memoryAvailableMin, MEMORY_AVAILABLE_MIN_MIB) * 1024 ** 2;
+
+/** A cgroup file's one value, or a flat-keyed file's `key`, read as bytes. */
+const cgroupBytes = (dir: string, file: string, key?: string): number => {
+  const text = readFileSync(join(dir, file), "utf8");
+  const raw = key
+    ? text
+        .split("\n")
+        .find((row) => row.startsWith(`${key} `))
+        ?.slice(key.length + 1)
+    : text;
+  const value = Number(raw?.trim());
+  if (raw === undefined || !Number.isFinite(value)) {
+    throw new Error(`${join(dir, file)} has no ${key ?? "value"} in bytes`);
+  }
+  return value;
+};
+
 /**
- * Linux's one reading: MemAvailable, the kernel's estimate of what a new
- * program can be given without swapping, against
- * {@link MEMORY_AVAILABLE_MIN_MIB}.
+ * A group's `memory.max` in bytes; undefined where it sets no limit: "max",
+ * or no file, which is a group whose parent does not give the memory
+ * controller to its children ("enabling it creates the controller's
+ * interface files in the child cgroups … disabling "memory" from B would
+ * remove the "memory." prefixed controller interface files from C and D",
+ * cgroup-v2.html, Enabling and Disabling).
  */
-const linuxReadings = (): Reading[] => {
+const limitAt = (dir: string): number | undefined => {
+  let max: string;
+  try {
+    max = readFileSync(join(dir, "memory.max"), "utf8").trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+  if (max === "max") {
+    return;
+  }
+  const bytes = Number(max);
+  if (!Number.isFinite(bytes)) {
+    throw new Error(`${join(dir, "memory.max")} reads "${max}"`);
+  }
+  return bytes;
+};
+
+/**
+ * The room left under the tightest memory limit at or above the keeper's
+ * cgroup (`keeperCgroup`, as `/proc/<pid>/cgroup` names it), where a start's
+ * process is placed. Each group's limit holds everything below it: the
+ * kernel's cgroup v2 document (https://docs.kernel.org/admin-guide/cgroup-v2.html)
+ * has `memory.max` "Memory usage hard limit … If a cgroup's memory usage
+ * reaches this limit and can't be reduced, the OOM killer is invoked in the
+ * cgroup", and `memory.current` "The total amount of memory currently being
+ * used by the cgroup and its descendants". What the limit leaves is
+ * `memory.max` less `memory.current`, with the group's `inactive_file`
+ * (memory.stat: file-backed memory "on the internal memory management lists
+ * used by the page reclaim algorithm") given back, as the kubelet reads a
+ * cgroup's room ("The kubelet excludes inactive_file … from its calculation,
+ * as it assumes that memory is reclaimable under pressure",
+ * https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/):
+ * a group whose limit is full of cache it can drop has room. No reading where
+ * no group above the keeper has a limit.
+ */
+const cgroupReading = (keeperCgroup: string): Reading | undefined => {
+  const root = process.env[ROOM_ENV.cgroupRoot] || CGROUP_ROOT;
+  let tightest: { dir: string; max: number; room: number } | undefined;
+  for (
+    let dir = join(root, keeperCgroup);
+    dir.startsWith(`${root}/`);
+    dir = dirname(dir)
+  ) {
+    const max = limitAt(dir);
+    if (max === undefined) {
+      continue;
+    }
+    const used =
+      cgroupBytes(dir, "memory.current") -
+      cgroupBytes(dir, "memory.stat", "inactive_file");
+    const room = Math.max(0, max - used);
+    if (!tightest || room < tightest.room) {
+      tightest = { dir, max, room };
+    }
+  }
+  if (!tightest) {
+    return;
+  }
+  const min = leastRoom();
+  return {
+    ok: tightest.room >= min,
+    words: `${gib(tightest.room)} left under the memory limit of ${gib(tightest.max)} on /${relative(root, tightest.dir)} (a start needs ${gib(min)})`,
+  };
+};
+
+/**
+ * Linux's readings: MemAvailable, the kernel's estimate of what a new
+ * program can be given without swapping, and the room under the keeper's
+ * cgroup limit when it has one, each against {@link MEMORY_AVAILABLE_MIN_MIB}.
+ * A keeper that named no cgroup (one on cgroup v1) is read on the machine
+ * alone.
+ */
+const linuxReadings = (keeperCgroup: string | undefined): Reading[] => {
   const meminfo = readFileSync("/proc/meminfo", "utf8");
   const available = meminfoBytes(meminfo, MEM_AVAILABLE, "MemAvailable");
   const total = meminfoBytes(meminfo, MEM_TOTAL, "MemTotal");
-  const min =
-    threshold(ROOM_ENV.memoryAvailableMin, MEMORY_AVAILABLE_MIN_MIB) *
-    1024 ** 2;
+  const min = leastRoom();
+  const limited =
+    keeperCgroup === undefined ? undefined : cgroupReading(keeperCgroup);
   return [
     {
       ok: available >= min,
       words: `${gib(available)} of ${gib(total)} memory available (a start needs ${gib(min)})`,
     },
+    ...(limited ? [limited] : []),
   ];
 };
 
 /**
- * The Mac's readings, from the kernel through libSystem with no spawn (a
+ * The Mac's reading, from the kernel through libSystem with no spawn (a
  * synchronous spawn under Bun can wedge its caller's loop, process-identity.ts
- * says why): `host_statistics64`'s `HOST_VM_INFO64` (`struct vm_statistics64`,
- * 38 integers, `swapins` at byte 112; <mach/vm_statistics.h>, checked against
- * `vm_stat` on 2026-10-17), `host_page_size`, and `sysctlbyname` for
- * `vm.swapusage` and `kern.memorystatus_vm_pressure_level`.
+ * says why): `sysctlbyname` for `kern.memorystatus_vm_pressure_level`.
  */
-const openMach = () =>
+const openSystem = () =>
   dlopen("/usr/lib/libSystem.B.dylib", {
-    mach_host_self: { args: [], returns: FFIType.u32 },
-    host_statistics64: {
-      args: [FFIType.u32, FFIType.i32, FFIType.ptr, FFIType.ptr],
-      returns: FFIType.i32,
-    },
-    host_page_size: {
-      args: [FFIType.u32, FFIType.ptr],
-      returns: FFIType.i32,
-    },
     sysctlbyname: {
       args: [
         FFIType.cstring,
@@ -235,49 +321,14 @@ const openMach = () =>
       returns: FFIType.i32,
     },
   });
-let mach: { host: number; lib: ReturnType<typeof openMach> } | undefined;
-const machHost = () => {
-  if (!mach) {
-    const lib = openMach();
-    // One send right for the process's life: each call of mach_host_self adds a reference.
-    mach = { lib, host: lib.symbols.mach_host_self() };
-  }
-  return mach;
-};
-const HOST_VM_INFO64 = 4;
-const VM_INFO64_COUNT = 38;
-const VM_SWAPINS = 112;
-
-/** One reading of the Mac's counter: pages swapped in since boot. */
-interface MacSample {
-  at: number;
-  swapins: bigint;
-}
-
-const macSample = (): MacSample => {
-  const { lib, host } = machHost();
-  const vm = new BigUint64Array(VM_INFO64_COUNT / 2);
-  const vmCount = new Uint32Array([VM_INFO64_COUNT]);
-  const code = lib.symbols.host_statistics64(
-    host,
-    HOST_VM_INFO64,
-    ptr(vm),
-    ptr(vmCount)
-  );
-  if (code !== 0) {
-    throw new Error(`host_statistics64 answered ${code} (VM), not 0`);
-  }
-  return {
-    at: Date.now(),
-    swapins: new DataView(vm.buffer).getBigUint64(VM_SWAPINS, true),
-  };
-};
+let system: ReturnType<typeof openSystem> | undefined;
 
 /** A 32-bit integer sysctl, by name. */
 const sysctlInt = (name: string): number => {
+  system ??= openSystem();
   const value = new Int32Array(1);
   const size = new BigUint64Array([4n]);
-  const code = machHost().lib.symbols.sysctlbyname(
+  const code = system.symbols.sysctlbyname(
     new TextEncoder().encode(`${name}\0`),
     ptr(value),
     ptr(size),
@@ -290,109 +341,42 @@ const sysctlInt = (name: string): number => {
   return value[0] ?? 0;
 };
 
-/**
- * `vm.swapusage`, as `sysctl vm.swapusage` prints it: `struct xsw_usage`
- * (<sys/sysctl.h>: `xsu_total`, `xsu_avail`, `xsu_used`, each a u_int64_t,
- * then `xsu_pagesize` and `xsu_encrypted`), in bytes.
- */
-const macSwapUsage = (): { free: number; total: number; used: number } => {
-  const usage = new BigUint64Array(4);
-  const size = new BigUint64Array([BigInt(usage.byteLength)]);
-  const code = machHost().lib.symbols.sysctlbyname(
-    new TextEncoder().encode("vm.swapusage\0"),
-    ptr(usage),
-    ptr(size),
-    null,
-    0
-  );
-  if (code !== 0) {
-    throw new Error(`sysctlbyname vm.swapusage answered ${code}`);
-  }
-  return {
-    total: Number(usage[0]),
-    free: Number(usage[1]),
-    used: Number(usage[2]),
-  };
+const LEVEL_NAMES: Record<number, string> = {
+  1: "normal",
+  2: "warn",
+  4: "critical",
 };
-
-/** The page size the VM counters count in. */
-const macPageSize = (): number => {
-  const size = new BigUint64Array(1);
-  const code = machHost().lib.symbols.host_page_size(
-    machHost().host,
-    ptr(size)
-  );
-  if (code !== 0) {
-    throw new Error(`host_page_size answered ${code}`);
-  }
-  return Number(size[0]);
-};
-
-/** This process's samples of the Mac's counter, the last minute of them. */
-const macSamples: MacSample[] = [];
-
-/** Records a sample; keeps those within six windows of it. */
-const recordMacSample = (): MacSample => {
-  const now = macSample();
-  macSamples.push(now);
-  while ((macSamples[0]?.at ?? now.at) < now.at - 6 * MAC_WINDOW_MS) {
-    macSamples.shift();
-  }
-  return now;
-};
-
-/** The newest sample at least a window before `now`, if this process has one. */
-const windowStart = (now: number): MacSample | undefined =>
-  macSamples.findLast((sample) => now - sample.at >= MAC_WINDOW_MS);
 
 const macReadings = (): Reading[] => {
-  const swapInMax = threshold(ROOM_ENV.swapInMib, MAC_SWAPIN_MAX_MIB);
-  const swapUsedMax = threshold(ROOM_ENV.swapUsedMax, MAC_SWAP_USED_MAX_PCT);
-  const now = recordMacSample();
-  const then = windowStart(now.at);
-  if (!then) {
-    throw new Error(
-      `its readings span less than the last ${MAC_WINDOW_MS / 1000} s so far`
-    );
-  }
-  const swappedIn =
-    (Number(now.swapins - then.swapins) * macPageSize()) / 1024 ** 2;
-  const swap = macSwapUsage();
-  const swapShare = (100 * swap.used) / totalmem();
+  const waitsAt = threshold(ROOM_ENV.pressureLevel, MAC_PRESSURE_CRITICAL);
   const level = sysctlInt("kern.memorystatus_vm_pressure_level");
   return [
     {
-      ok: swappedIn < swapInMax,
-      words: `${swappedIn.toFixed(1)} MiB read back from swap (under ${swapInMax})`,
-    },
-    {
-      ok: swapShare < swapUsedMax,
-      words: `${gib(swap.used)} swapped out, ${swapShare.toFixed(0)}% of memory (under ${swapUsedMax}%; ${gib(swap.free)} free of ${gib(swap.total)} in its swap files)`,
-    },
-    {
-      ok: level < MAC_PRESSURE_CRITICAL,
-      words: `memory pressure level ${level} (refused at ${MAC_PRESSURE_CRITICAL}, critical)`,
+      ok: level < waitsAt,
+      words: `memory pressure ${LEVEL_NAMES[level] ?? "level"} (${level}; a start waits at ${LEVEL_NAMES[waitsAt] ?? "level"}, ${waitsAt})`,
     },
   ];
 };
 
 /**
  * This machine's room on memory, measured now: what a session start waits
- * on (Linux's memory available; the Mac's swap read back, swap out and
- * pressure level). A reading that cannot be taken is no room, in words
- * naming why: a start is never let go on what could not be measured.
+ * on. Linux: memory available, and the room under the memory limit at or
+ * above `keeperCgroup`, the cgroup the keeper starts its children under
+ * (sessiond's welcome). macOS: the kernel's pressure level. A reading that
+ * cannot be taken is no room, in words naming why: a start is never let go
+ * on what could not be measured.
  */
-export const measureMemoryRoom = (): Room => {
+export const measureMemoryRoom = (keeperCgroup?: string): Room => {
   try {
     if (process.platform === "linux") {
-      return roomOf(linuxReadings());
+      return roomOf(linuxReadings(keeperCgroup));
     }
     if (process.platform === "darwin") {
       return roomOf(macReadings());
     }
     return {
       ok: false,
-      words: `this machine's room cannot be measured on ${process.platform}: it reads Linux's PSI or macOS's sysctl`,
+      words: `this machine's room cannot be measured on ${process.platform}: it reads Linux's /proc/meminfo or macOS's sysctl`,
     };
   } catch (error) {
     return {
@@ -400,20 +384,4 @@ export const measureMemoryRoom = (): Room => {
       words: `this machine's room could not be measured: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
-};
-
-/**
- * Keeps this process's Mac readings a window deep, so {@link
- * measureMemoryRoom} answers at once in a process that measures now and then
- * (the agent, at each session start). Nothing elsewhere: Linux's kernel keeps
- * its own windows. Answers the stop.
- */
-export const keepRoomSampled = (): (() => void) => {
-  if (process.platform !== "darwin") {
-    return () => undefined;
-  }
-  recordMacSample();
-  const timer = setInterval(recordMacSample, MAC_WINDOW_MS / 2);
-  timer.unref();
-  return () => clearInterval(timer);
 };

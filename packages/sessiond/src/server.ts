@@ -28,7 +28,7 @@ import {
   type Server,
   type Socket,
 } from "node:net";
-import { dirname } from "node:path";
+import { dirname, relative } from "node:path";
 import {
   type BuildInfo,
   type ChildLimit,
@@ -52,6 +52,7 @@ import {
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
+  type SessiondWelcome,
 } from "@cawco/core/sessiond";
 import {
   listedPid,
@@ -504,6 +505,25 @@ export class SessiondServer {
 
   // ---------------------------------------------------------------- connections
 
+  /**
+   * The welcome, and the answer to a listing: with the cgroup a child starts
+   * under, its `children` group or the keeper's own, which a start's room is
+   * read under (agent session.ts `#roomForStart`).
+   */
+  #welcomeOf(): SessiondWelcome {
+    const cgroup = this.#children
+      ? `/${relative(this.#children.root, this.#children.group)}`
+      : this.#ownCgroup;
+    return {
+      type: "welcome",
+      epoch: this.epoch,
+      capabilities: CAPABILITIES,
+      build: this.#build,
+      procs: this.procs(),
+      ...(cgroup ? { cgroup } : {}),
+    };
+  }
+
   #accept(socket: Socket): void {
     const conn: Conn = {
       socket,
@@ -519,13 +539,7 @@ export class SessiondServer {
     // the ring. That is the whole tmux property, and it needs no code here.
     socket.on("error", () => this.#conns.delete(conn));
     socket.on("close", () => this.#conns.delete(conn));
-    this.#send(conn, {
-      type: "welcome",
-      epoch: this.epoch,
-      capabilities: CAPABILITIES,
-      build: this.#build,
-      procs: this.procs(),
-    });
+    this.#send(conn, this.#welcomeOf());
     // A connection the listener took in just as the drain began.
     // biome-ignore lint/suspicious/noUnnecessaryConditions: set true by drain() at runtime; biome's inference sees only the initializer
     if (this.#draining) {
@@ -575,14 +589,7 @@ export class SessiondServer {
       return;
     }
     if (type === "list") {
-      const answer = () =>
-        this.#send(conn, {
-          type: "welcome",
-          epoch: this.epoch,
-          capabilities: CAPABILITIES,
-          build: this.#build,
-          procs: this.procs(),
-        });
+      const answer = () => this.#send(conn, this.#welcomeOf());
       paceList(answer);
       return;
     }

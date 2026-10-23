@@ -128,7 +128,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
-import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/machine-room";
+import { measureMemoryRoom } from "@cawco/core/machine-room";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -180,7 +180,7 @@ import {
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
-import { type KeeperReading, withKeepers } from "./keepers";
+import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
@@ -825,8 +825,6 @@ export class SessionSupervisor {
       tell: (instanceIds, id, content) =>
         this.#leakFound(instanceIds, id, content),
     });
-    // The Mac's readings kept a window deep, so a start reads the room at once.
-    keepRoomSampled();
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
         warn(`the idle sweep failed: ${error}`)
@@ -957,6 +955,8 @@ export class SessionSupervisor {
    * instance id: a stop for it ends the wait ({@link dispatch}).
    */
   readonly #roomWaits = new Map<string, AbortController>();
+  /** The keepers a start's room is read under: the current one names where its children start ({@link #roomForStart}). */
+  readonly #keepers = new KeeperPool();
   /** The fleet MCP heal passes, one session after another ({@link #healFleetMcp}). */
   #healing: Promise<void> = Promise.resolve();
   /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
@@ -2557,15 +2557,23 @@ export class SessionSupervisor {
 
   /**
    * A launch waits here while its machine's room on memory fails (core
-   * machine-room.ts `measureMemoryRoom`: Linux's memory available; the Mac's
-   * swap read back, swap out or pressure level), measured again every
-   * {@link ROOM_POLL_MS}. Never
-   * refused: the session's transcript says once why it waits, in the
-   * machine's readings ({@link ROOM_HELD}), and the hub waits on its start
-   * as long as that line stands. A stop ends the wait ({@link dispatch}).
+   * machine-room.ts `measureMemoryRoom`: Linux's memory available and the
+   * room under the memory limit above the cgroup the current keeper starts
+   * its children in, as its welcome names it; the Mac's pressure level),
+   * measured again every {@link ROOM_POLL_MS}. Never refused: the session's
+   * transcript says once why it waits, in the machine's readings
+   * ({@link ROOM_HELD}), and the hub waits on its start as long as that line
+   * stands. A stop ends the wait ({@link dispatch}). A keeper that cannot be
+   * reached fails the start, as its spawn would.
    */
   async #roomForStart(instanceId: string, harness: HarnessKind): Promise<void> {
-    let room = measureMemoryRoom();
+    const measure = async () =>
+      measureMemoryRoom(
+        process.platform === "linux"
+          ? (await this.#keepers.current()).cgroup
+          : undefined
+      );
+    let room = await measure();
     if (room.ok) {
       return;
     }
@@ -2600,7 +2608,7 @@ export class SessionSupervisor {
             { once: true }
           );
         });
-        room = measureMemoryRoom();
+        room = await measure();
       }
       console.info(
         `[session] ${instanceId}: starts after ${Math.round((Date.now() - began) / 1000)} s waiting for memory`

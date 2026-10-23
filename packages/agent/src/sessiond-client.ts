@@ -449,6 +449,8 @@ const hearLimit = (message: SessiondLimit): void => {
 /** What the agent learns the moment it attaches (design §7's epoch and heads). */
 export interface SessiondWelcomeInfo {
   capabilities: readonly string[];
+  /** Where the keeper starts its children ({@link SessiondWelcome.cgroup}). */
+  cgroup?: string;
   epoch: string;
   procs: SessiondProcInfo[];
 }
@@ -655,6 +657,11 @@ export class SessiondClient {
     return this.#welcome?.epoch;
   }
 
+  /** The cgroup the keeper this client attached to starts its children under, as its welcome names it. */
+  get cgroup(): string | undefined {
+    return this.#welcome?.cgroup;
+  }
+
   /** What the keeper this client attached to says it speaks. */
   get capabilities(): readonly string[] {
     return this.#welcome?.capabilities ?? [];
@@ -698,6 +705,7 @@ export class SessiondClient {
           epoch: message.epoch,
           capabilities: message.capabilities,
           procs: message.procs,
+          ...(message.cgroup ? { cgroup: message.cgroup } : {}),
         };
         // A child that died before its listener subscribed had its `proc.exit`
         // broadcast to nobody, and sessiond answers a subscribe to a dead
