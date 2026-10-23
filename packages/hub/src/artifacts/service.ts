@@ -2665,10 +2665,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Writes the doc's meta for the artifact as the hub keeps it: what the
    * person does there and its ask, which every open view's head reads, and
    * when the session last changed it (`revisedAt`), which a Send answers.
+   * A page that asks choices (a decision page: a program's, or a kit page's
+   * `[data-cawco-choice]`) carries its own Send at its foot, `ownSend`: the
+   * panel's head stands none for it (the owner's pick, "Only the page's own
+   * Send").
    */
   const stampMeta = (row: ArtifactRow, hash: string | null) => {
+    const ownSend = row.kind === "page" && choicesAsked(row).length > 0;
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
+      meta.set("ownSend", ownSend);
       meta.set("kind", row.kind);
       meta.set("name", row.name);
       meta.set("does", row.does);

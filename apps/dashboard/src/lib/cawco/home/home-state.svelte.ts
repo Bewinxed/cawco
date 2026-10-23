@@ -532,6 +532,8 @@ export interface ArtifactItem {
   name: string;
   /** The notice id its Not now acknowledges. */
   notNow: string;
+  /** A decision page: its Send is its own, at its foot, and the row stands none. */
+  ownSend: boolean;
   /** Its reasons, strongest first. */
   pending: ArtifactReason[];
   place: string;
@@ -1369,6 +1371,7 @@ class Home {
           pending: need.pending,
           stop: need.stop,
           unsent: need.unsent,
+          ownSend: need.ownSend,
           notNow: need.notNow,
           raisedAt: need.raisedAt,
           href: need.href,

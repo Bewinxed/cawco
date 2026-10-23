@@ -277,6 +277,7 @@ export const needOf = (
     notNow: notNowId(row.id, raisedAt),
     parked: false,
     unsent: facts.unsent,
+    ownSend: facts.picks !== null,
   };
 };
 

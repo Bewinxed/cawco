@@ -6035,14 +6035,6 @@
       },
       "$description": "A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between."
     },
-    "c-decision-question-basis": {
-      "$type": "dimension",
-      "$value": {
-        "value": 240,
-        "unit": "px"
-      },
-      "$description": "The least a decision card's question takes beside its decided line before that line wraps under it."
-    },
     "c-decision-meter-w": {
       "$type": "dimension",
       "$value": {

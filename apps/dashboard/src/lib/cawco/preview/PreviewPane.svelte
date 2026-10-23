@@ -2829,7 +2829,9 @@
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
-    if (artifact && unsentCount > 0) {
+    // A decision page's one Send is its own, at its foot (its doc's
+    // `ownSend`): the head stands none for it.
+    if (artifact && unsentCount > 0 && !view?.ownSend) {
       all.push({
         key: "send",
         priority: HEAD_PRIORITY.send,

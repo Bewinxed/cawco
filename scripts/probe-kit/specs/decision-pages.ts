@@ -35,17 +35,16 @@
  * (f) An HTML decision page (a pick the person operates: a range) still
  *     works: its option's pick and its range's value are kept, and the
  *     Decisions tab reads its card from the built page.
- * (g) A pick selects and the card stays open with Continue; Continue folds
- *     it to one line (the chosen option's chip, named "Decided: Astro", and
- *     Change), its body and the turned-down option folded away, focus on
- *     the next open card's first option, or Send with none left; in light
- *     and dark, Change reopens it with focus on the pick and the hub's
- *     picks the same as before, and Continue folds it again. A finger's tap
- *     on the artifact's own route picks and Continue folds; a tap on the
- *     chosen option of a reopened card clears it. At 390 under a finger Change's hit
- *     area reaches 44px; at 320 a several-pick card of three long unbroken
- *     labels folds inside its card. A click inside an option's embed
- *     reaches the embed and picks nothing.
+ * (g) A press picks and the card stays open: the option marked, every
+ *     option showing, no Continue, Change, Clear or fold (the owner: "The
+ *     done and continue are useless buttons that break the flow of how this
+ *     form should work"; a picked card "Stays open"); in light and dark, a
+ *     picked card loads open with its pick marked and the hub's picks the
+ *     same. A finger's tap on the artifact's own route picks and the card
+ *     stays open; a tap on the chosen option clears it, and a tap on another
+ *     moves the pick. At 320 a several-pick card of three long unbroken
+ *     labels, all picked, stays inside its card. A click inside an option's
+ *     embed reaches the embed and picks nothing.
  * (h) Draw and Comment land where the person makes them over an option's
  *     live embed: a loop that crosses into the embed keeps every move made
  *     inside it, and marks an element inside the embed; a Comment tap inside
@@ -230,57 +229,32 @@ wide = Option("wide", "${FIT_LABEL}", "Closer to readers.", true, [embed], "${FI
 plain = Option("plain", "The hub", "Nothing new to run.", false, [], "Readers far from the hub wait longer.")
 embed = Preview("${mockup}", "How it moves")`;
 
-/** A card's fold as the frame draws it: its mark, its line, its button, what of it shows, and where focus is. */
-const foldOf = (frame: Frame, id: string) =>
+/** A card as the frame draws it: whether it stands open (every option showing, nothing folded), any of the old flow's controls, its options showing and marked, and where focus is. */
+const cardOf = (frame: Frame, id: string) =>
   frame.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
-    // A folded body stands at no height and no opacity (motion/fold), so
-    // what shows is read with its opacity.
     const seen = (el: Element | null | undefined) =>
       !!el?.checkVisibility({ opacityProperty: true });
+    const all = [
+      ...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? []),
+    ];
     const active = document.activeElement as HTMLElement | null;
-    const holder = active?.closest<HTMLElement>("[data-cawco-choice]");
     return {
-      decided: !!root?.hasAttribute("data-decided"),
-      // A decided card's line is its chosen options, named "Decided: …" for
-      // a screen reader; an open card's head is its question alone.
-      line:
-        root
-          ?.querySelector("header [data-slot=decided]")
-          ?.getAttribute("aria-label") ?? "",
-      chips: [
-        ...(root?.querySelectorAll<HTMLElement>("header [data-pick]") ?? []),
-      ].map((one) => one.dataset.pick ?? ""),
-      // Change as it stands: one fading out of an opening card is leaving.
-      button:
-        root
-          ?.querySelector("[data-leaves]:not([data-leaving]) [data-change]")
-          ?.textContent?.trim() ?? "",
-      next: !!root?.querySelector("[data-continue]"),
-      body: seen(root?.querySelector("[data-slot=options]")),
-      options: [...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? [])]
-        .filter(seen)
-        .map((one) => one.dataset.option ?? ""),
+      open:
+        all.length > 0 &&
+        all.every(seen) &&
+        !root?.hasAttribute("data-decided"),
+      old: [
+        ...(root?.querySelectorAll(
+          "[data-continue], [data-clear], [data-change], [data-slot=decided], [data-slot=decision-foot]"
+        ) ?? []),
+      ].length,
+      options: all.filter(seen).map((one) => one.dataset.option ?? ""),
       marked: [
         ...(root?.querySelectorAll<HTMLElement>("[data-cawco-picked]") ?? []),
       ].map((one) => one.dataset.option ?? ""),
       height: Math.round(root?.getBoundingClientRect().height ?? 0),
-      focus: {
-        option: active?.dataset.option ?? "",
-        button: active?.hasAttribute("data-change")
-          ? (active.textContent?.trim() ?? "")
-          : "",
-        inCard: !!(active && root?.contains(active)),
-        // Where a fold the person made sends focus: the next open card's
-        // first option, or Send with none left.
-        onward:
-          !!active &&
-          (active.matches("[data-send]") ||
-            (!!holder &&
-              holder !== root &&
-              !holder.hasAttribute("data-decided") &&
-              holder.querySelector("[data-option]") === active)),
-      },
+      focus: active?.dataset.option ?? "",
     };
   }, id);
 
@@ -291,13 +265,6 @@ const inCard = (frame: Frame, selector: string | undefined, id: string) =>
       !!named && !!document.querySelector(named)?.closest(`#decision-${card}`),
     [selector ?? "", id] as const
   );
-
-/** A card folded by a pick opened again with Change, so its media can be reached. */
-const unfold = async (_page: Page, frame: Frame, id: string) => {
-  if ((await foldOf(frame, id)).decided) {
-    await pressIn(frame, `#decision-${id} [data-change] >> nth=0`);
-  }
-};
 
 /** The frame `selector` names on `page`, once it is there; null until then. */
 const frameAt = async (page: Page, selector: string): Promise<Frame | null> => {
@@ -1016,32 +983,18 @@ const marks = async (on: On, frame: Frame) => {
   ).catch(() => null);
   const first = sha256(kept(on.program));
   const chosen = await until(
-    "the stack card holding astro, open with Continue",
-    () => foldOf(frame, "stack"),
-    (fold) => fold.next && JSON.stringify(fold.marked) === '["astro"]',
+    "the stack card holding astro",
+    () => cardOf(frame, "stack"),
+    (card) => JSON.stringify(card.marked) === '["astro"]',
     10_000
   ).catch(() => null);
   kit.check(
-    "(g) a pick selects: astro marked, the card open with Continue, never folded",
-    !!chosen && !chosen.decided && chosen.body,
+    "(g) a press picks: astro marked, the card open with both options showing, no Continue, Change, Clear or fold",
+    !!chosen &&
+      chosen.open &&
+      chosen.old === 0 &&
+      JSON.stringify([...chosen.options].sort()) === '["astro","svelte"]',
     JSON.stringify(chosen)
-  );
-  await pressIn(frame, "#decision-stack [data-continue] >> nth=0");
-  const folded = await until(
-    "the stack card folded",
-    () => foldOf(frame, "stack"),
-    (fold) => fold.decided && !fold.body,
-    10_000
-  ).catch(() => null);
-  kit.check(
-    "(g) Continue folds its card to one line, the chosen option's chip (named Decided: Astro) and Change, its body and the turned-down option hidden, focus on the next open card's first option or Send",
-    !!folded &&
-      folded.line === "Decided: Astro" &&
-      JSON.stringify(folded.chips) === '["astro"]' &&
-      folded.button === "Change" &&
-      folded.options.length === 0 &&
-      folded.focus.onward,
-    JSON.stringify(folded)
   );
   kit.check(
     "(b) a pick writes state.stack with the program's hash",
@@ -1411,11 +1364,12 @@ const insertAhead = async (on: On, first: string) => {
   );
   const after = await frameWith(desk, 4);
   await settle(desk, 600);
-  // The stack card in view: a pin stands drawn only where its element is
-  // seen (pins.ts, clipped to the scroll containers round it), and the
-  // page's cards scroll in its first row.
+  // The stack card's question in view, where the pin stands: a pin stands
+  // drawn only where its element is seen (pins.ts, clipped to the scroll
+  // containers round it), and the page's cards scroll in its first row. An
+  // open card runs taller than the window, so its question, not its middle.
   await after
-    .locator("#decision-stack")
+    .locator("#decision-stack h2")
     .evaluate((el) => el.scrollIntoView({ block: "center" }));
   await settle(desk, 400);
   const placed = await after.evaluate(() => {
@@ -1752,7 +1706,7 @@ const htmlPage = async (on: On) => {
   );
 };
 
-/** (g) in one theme: a picked card opens with Change and folds with Continue, the hub's picks untouched. */
+/** (g) in one theme: a picked card loads open with its pick marked, the hub's picks untouched. */
 const foldLeg = async (on: On, theme: "light" | "dark") => {
   const { kit } = on;
   const shown = await kit.page("desk", { theme });
@@ -1760,60 +1714,27 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
   const frame = await frameWith(shown, 4);
   const before = (await on.read()).state.stack;
   const loaded = await until(
-    `${theme}: the stack card folded on load`,
-    () => foldOf(frame, "stack"),
-    (fold) => fold.decided,
+    `${theme}: the stack card loaded with astro marked`,
+    () => cardOf(frame, "stack"),
+    (card) => JSON.stringify(card.marked) === '["astro"]',
     10_000
   ).catch(() => null);
-  // The page's media are still loading in: the tap waits for the layout to stand still.
   await settle(shown, 800);
-  await pressIn(frame, "#decision-stack [data-change] >> nth=0");
-  // Read once it has unfolded: mid-unfold its options are still fading in
-  // (a read at 70px of a card folded at 68 showed svelte alone).
-  const opened = await until(
-    `${theme}: the stack card open again`,
-    () => foldOf(frame, "stack"),
-    (fold) => !fold.decided && fold.body && fold.options.length === 2,
-    10_000
-  ).catch(() => foldOf(frame, "stack"));
   const after = (await on.read()).state.stack;
   kit.check(
-    `(g) ${theme}: a card loads folded; Change opens it, both options showing, astro still marked, Continue standing, focus on astro`,
-    !!loaded?.decided &&
-      loaded.line === "Decided: Astro" &&
-      !!opened &&
-      JSON.stringify(opened.options.toSorted()) ===
-        JSON.stringify(["astro", "svelte"]) &&
-      JSON.stringify(opened.marked) === '["astro"]' &&
-      opened.next &&
-      opened.focus.option === "astro" &&
-      opened.height > (loaded?.height ?? 0),
-    JSON.stringify({ loaded, opened })
-  );
-  kit.check(
-    `(g) ${theme}: the hub's picks read the same after the fold and Change`,
-    !!before && JSON.stringify(after) === JSON.stringify(before),
-    JSON.stringify({ before, after })
-  );
-  await pressIn(frame, "#decision-stack [data-continue] >> nth=0");
-  const again = await until(
-    `${theme}: the stack card folded by Continue`,
-    () => foldOf(frame, "stack"),
-    (fold) => fold.decided && !fold.body,
-    10_000
-  ).catch(() => null);
-  kit.check(
-    `(g) ${theme}: Continue folds it again, focus on the next open card's first option or Send`,
-    !!again &&
-      again.line === "Decided: Astro" &&
-      !again.body &&
-      again.focus.onward,
-    JSON.stringify(again)
+    `(g) ${theme}: a picked card loads open, both options showing, astro marked, no Continue, Change or fold; the hub's picks the same`,
+    !!loaded &&
+      loaded.open &&
+      loaded.old === 0 &&
+      JSON.stringify([...loaded.options].sort()) === '["astro","svelte"]' &&
+      !!before &&
+      JSON.stringify(after) === JSON.stringify(before),
+    JSON.stringify({ loaded, before, after })
   );
   await shown.close();
 };
 
-/** (g) on a phone: Change's 44px hit area at 390, and a long several-pick fold inside its card at 320. */
+/** (g) at 320 under a finger: a several-pick card of three long unbroken labels, all picked, stays inside its card and open. */
 const reachLeg = async (on: On) => {
   const { fleet, kit, writer } = on;
   await fleet.api(`/api/instances/${writer}/artifacts`, {
@@ -1847,65 +1768,38 @@ const reachLeg = async (on: On) => {
     ).cawco.choose("reach", ["mail", "feed", "talk"])
   );
   await until(
-    "the reach card folded",
-    () => foldOf(frame, "reach"),
-    (fold) => fold.decided,
+    "the reach card holding all three",
+    () => cardOf(frame, "reach"),
+    (now) => now.marked.length === 3,
     10_000
   ).catch(() => undefined);
-  const reach = () =>
-    frame.evaluate(() => {
-      const card = document.getElementById("decision-reach");
-      const change = card?.querySelector<HTMLElement>("[data-change]");
-      const box = change?.getBoundingClientRect();
-      const hit = change ? getComputedStyle(change, "::after") : null;
-      const px = (value: string | undefined) => Number.parseFloat(value ?? "0");
-      const cardBox = card?.getBoundingClientRect();
-      return {
-        width: document.documentElement.clientWidth,
-        coarse: matchMedia("(pointer: coarse)").matches,
-        box: box && { w: box.width, h: box.height, right: box.right },
-        hit: hit && { w: px(hit.width), h: px(hit.height) },
-        card: card && {
-          scroll: card.scrollWidth,
-          client: card.clientWidth,
-          right: cardBox?.right ?? 0,
-        },
-        line:
-          card
-            ?.querySelector("header [data-slot=decided]")
-            ?.getAttribute("aria-label") ?? "",
-        chipsRight: Math.max(
-          0,
-          ...[...(card?.querySelectorAll("header [data-pick]") ?? [])].map(
-            (one) => one.getBoundingClientRect().right
-          )
-        ),
-      };
-    });
-  const wide = await reach();
-  kit.check(
-    "(g) 390 under a finger: Change's hit area reaches 44px each way, its drawn box smaller",
-    wide.coarse &&
-      !!wide.box &&
-      !!wide.hit &&
-      wide.hit.w >= 44 &&
-      wide.hit.h >= 44 &&
-      wide.box.h < 44,
-    JSON.stringify(wide)
-  );
   await phone.setViewportSize({ width: 320, height: 844 });
   await settle(phone, 400);
-  const narrow = await reach();
+  const narrow = await frame.evaluate(() => {
+    const card = document.getElementById("decision-reach");
+    const box = card?.getBoundingClientRect();
+    return {
+      scroll: card?.scrollWidth ?? 0,
+      client: card?.clientWidth ?? 0,
+      right: box?.right ?? 0,
+      chipsRight: Math.max(
+        0,
+        ...[...(card?.querySelectorAll("[data-option]") ?? [])].map(
+          (one) => one.getBoundingClientRect().right
+        )
+      ),
+    };
+  });
+  const card = await cardOf(frame, "reach");
   kit.check(
-    "(g) 320: a fold of three long unbroken labels stays inside its card, its chosen chips and Change on it",
-    !!narrow.card &&
-      !!narrow.box &&
-      narrow.line.includes("Theweeklynewsletter") &&
+    "(g) 320: a several-pick card of three long unbroken labels, all picked, stays open and inside its card",
+    card.open &&
+      card.old === 0 &&
+      card.marked.length === 3 &&
       narrow.chipsRight > 0 &&
-      narrow.chipsRight <= narrow.card.right &&
-      narrow.card.scroll <= narrow.card.client &&
-      narrow.box.right <= narrow.card.right,
-    JSON.stringify(narrow)
+      narrow.chipsRight <= narrow.right &&
+      narrow.scroll <= narrow.client,
+    JSON.stringify({ card, narrow })
   );
   await phone.close();
 };
@@ -2041,15 +1935,6 @@ const openAsCanvas = async (on: On) => {
     kit.check("(d) the decision page is back in the panel", false, "no frame");
     return;
   }
-  await unfold(desk, back, "stack");
-  // The tap lands where the button stands once the card has opened and the
-  // layout stopped moving: measured mid-unfold, it lands beside it.
-  await until(
-    "the stack card open",
-    () => foldOf(back, "stack"),
-    (fold) => !fold.decided,
-    10_000
-  ).catch(() => null);
   await settle(desk, 300);
   // The page's foot holds the DialKit panel, floating: the button goes to the view's top, clear of it.
   await back
@@ -2230,16 +2115,14 @@ const openToDraw = async (on: On) => {
   await fleet
     .api(`/api/instances/${on.writer}/artifacts/${on.page}/show`, {})
     .catch(() => undefined);
-  // The show draws the page at a new revision: the pane swaps its frame, and
-  // a card unfolded in the frame on its way out is folded in the one that
-  // stays. Found again and opened until its Open to draw stands in view.
+  // The show draws the page at a new revision: the pane swaps its frame.
+  // Found again until its Open to draw stands in view.
   const OPEN =
     "#decision-host [data-slot=media] :is([data-open-canvas], [data-open-draw])";
   const frame = (await until(
     "the host card open, its Open to draw in view",
     async () => {
       const now = await frameWith(desk, 4);
-      await unfold(desk, now, "host").catch(() => undefined);
       const shows = await now
         .evaluate(
           (selector) =>
@@ -2762,8 +2645,7 @@ lead = Option("lead", "The lead", "One gate.", false, [], "A queue at the lead."
  * (g) A finger's pick on the phone, on the artifact's own route (the live
  * dashboard's `/artifact/<id>`): a real tap (`locator.tap()`, touch input in
  * a touch context) on an option picks it and the card stays open; a tap on
- * Continue folds it with the pointer's flow, the chosen option standing in
- * the head and focus going on to the next open card.
+ * it again clears it, and a tap on another moves the pick.
  * Every press event the tap makes is heard at the window, first, and at the
  * option, with whether it was cancelled, so a tap that never picks says
  * where it went.
@@ -2863,81 +2745,39 @@ const tapLeg = async (on: On) => {
   await pressIn(frame, '#decision-tall [data-option="stages"]', { tap: true });
   const tapped = await until(
     "the tall card holding the tap's pick",
-    () => foldOf(frame, "tall"),
-    (fold) => fold.next && JSON.stringify(fold.marked) === '["stages"]',
+    () => cardOf(frame, "tall"),
+    (card) => JSON.stringify(card.marked) === '["stages"]',
     5000
   ).catch(() => null);
   const heard = await frame.evaluate(
     () => (window as unknown as { kitHeard: string[] }).kitHeard
   );
   kit.check(
-    "(g) 390 dark, a finger: a tap on an option on the artifact's own route picks it and the card stays open, Continue standing in it",
-    under?.top === "stages" && !!tapped && !tapped.decided && tapped.body,
+    "(g) 390 dark, a finger: a tap on an option on the artifact's own route picks it and the card stays open, no Continue, Change or fold",
+    under?.top === "stages" && !!tapped && tapped.open && tapped.old === 0,
     JSON.stringify({ under, tapped, heard })
   );
-  await pressIn(frame, "#decision-tall [data-continue]", { tap: true });
-  const folded = await until(
-    "the tall card folded by Continue",
-    () => foldOf(frame, "tall"),
-    (fold) => fold.decided && !fold.body,
-    5000
-  ).catch(() => null);
-  kit.check(
-    "(g) 390 dark, a finger: a tap on Continue folds the card, the chosen option in the head (named Decided: …), focus on the next open card's first option",
-    !!folded &&
-      folded.line === "Decided: Three stages: skim, read, merge" &&
-      JSON.stringify(folded.chips) === '["stages"]' &&
-      folded.focus.onward,
-    JSON.stringify(folded)
-  );
-
-  // The card opened again by Change keeps its pick, and a tap on the
-  // chosen option clears it (the overlay's pick, preview-overlay pick.ts),
-  // for a finger as for a mouse.
-  await pressIn(frame, "#decision-tall [data-change]", { tap: true });
-  await until(
-    "the tall card open again",
-    () => foldOf(frame, "tall"),
-    (fold) => !fold.decided && fold.body,
-    5000
-  ).catch(() => null);
+  // A tap on the chosen option clears it (the overlay's pick, preview-overlay
+  // pick.ts), for a finger as for a mouse; a tap on another moves the pick.
   await settle(phone, 600);
-  const reopened = await foldOf(frame, "tall");
   await pressIn(frame, '#decision-tall [data-option="stages"]', { tap: true });
-  await settle(phone, 600);
-  const stayed = await foldOf(frame, "tall");
-  kit.check(
-    "(g) 390 dark, a finger: on a card opened again by Change, a tap on its chosen option clears it: nothing marked, the card open with no Continue",
-    JSON.stringify(reopened.marked) === '["stages"]' &&
-      reopened.next &&
-      stayed.marked.length === 0 &&
-      !stayed.decided &&
-      !stayed.next,
-    JSON.stringify({ reopened, stayed })
-  );
+  const cleared = await until(
+    "the tall card's pick cleared by a tap",
+    () => cardOf(frame, "tall"),
+    (card) => card.marked.length === 0,
+    5000
+  ).catch(() => null);
   await pressIn(frame, '#decision-tall [data-option="skim"]', { tap: true });
   const moved = await until(
     "the tall card's pick moved by a tap",
-    () => foldOf(frame, "tall"),
-    (fold) => JSON.stringify(fold.marked) === '["skim"]',
-    5000
-  ).catch(() => null);
-  await pressIn(frame, "#decision-tall [data-continue]", { tap: true });
-  const other = await until(
-    "the tall card folded again by Continue",
-    () => foldOf(frame, "tall"),
-    (fold) => fold.decided && !fold.body,
+    () => cardOf(frame, "tall"),
+    (card) => JSON.stringify(card.marked) === '["skim"]',
     5000
   ).catch(() => null);
   kit.check(
-    "(g) 390 dark, a finger: a tap on another option moves the pick, the card open; Continue folds it, the chip in the head, focus on the next open card's first option",
-    !!moved &&
-      !moved.decided &&
-      !!other &&
-      other.line === "Decided: One pass" &&
-      JSON.stringify(other.chips) === '["skim"]' &&
-      other.focus.onward,
-    JSON.stringify({ moved, other })
+    "(g) 390 dark, a finger: a tap on the chosen option clears it, and a tap on another picks it, the card open throughout",
+    !!cleared && cleared.open && !!moved && moved.open && moved.old === 0,
+    JSON.stringify({ cleared, moved })
   );
   await phone.close();
 };

@@ -1,11 +1,14 @@
 /**
  * A decision card's pick is only ever what the person means (the owner: "i
  * didn't pick anything yet, i'm still commenting and discussing with you
- * and i have no way to deselect"), on a scratch fleet (real hub, agent and
- * sessiond; the writer a Claude Code session against the mock model) and
- * the built dashboard, read from the hub: its read of the artifact, which
- * `artifact_read` presents (hub presenters/artifacts.ts `artifactReadWords`,
- * applied here to the same read), and its journal.
+ * and i have no way to deselect"), and the card has nothing to press but
+ * its options and its note (his: "The done and continue are useless buttons
+ * that break the flow of how this form should work"; a picked card "Stays
+ * open"), on a scratch fleet (real hub, agent and sessiond; the writer a
+ * Claude Code session against the mock model) and the built dashboard,
+ * read from the hub: its read of the artifact, which `artifact_read`
+ * presents (hub presenters/artifacts.ts `artifactReadWords`, applied here to
+ * the same read), and its journal.
  *
  *   bun scripts/probe-kit/run.ts decision-unpick
  *
@@ -16,26 +19,37 @@
  *     itself, its thread opened from its pill in Interact and a reply sent:
  *     the read holds no pick and no Send. A note from the Decisions tab's
  *     composer is said to the session and is no Send either.
- * (b) A pointer's un-pick: a press on lint's option picks it, a press on it
- *     again clears it (no Continue, "Cleared …" said); a pick let go by the
- *     card's Clear the same. The read: picked, then cleared, nothing picked.
+ * (b) A pointer's pick stays open: a press on lint's option picks it, and
+ *     the card stands open with every option showing and no Continue,
+ *     Clear, Change or Done (its only buttons its options and "Add a note"),
+ *     nothing past the frame's width; a press on it again clears it
+ *     ("Cleared …" said). The read: picked, then cleared, nothing picked.
  * (c) Reading picks nothing (a mouse): words dragged over on an option's
  *     line select them, and the card holds no pick.
  * (d) The keyboard's un-pick: Space picks the focused option and Space
- *     again clears it; its digit picks, and Enter on Clear clears.
- * (e) After Send: lint picked, Continue, the page's Send (the journal names
- *     it: the page's Send, through the page's own route); Change opens the
- *     card with its pick, a press on it clears it, and the read says picked,
- *     then cleared, the Send's time standing.
+ *     again clears it; its digit picks, the digit again clears, and no
+ *     comment's thread opens.
+ * (e) After Send: lint picked, the page's Send (the journal names it: the
+ *     page's Send, through the page's own route); the card still open, a
+ *     press on its pick clears it, and the read says picked, then cleared,
+ *     the Send's time standing.
  * (f) Once: a Send from the panel head's route and the Decisions tab's I'm
  *     done picking each leave one journal line naming its route and control.
+ * (g) Once: a note on a card with no pick, kept as it is typed (no Done; its
+ *     field stays open while it holds words, and folds back once emptied
+ *     and left), then Send: the read, whole and since a seq, lists the card
+ *     once with its note under its Choices, no `note-<id>` value; a plain
+ *     page's named field is kept as its own value.
+ * (h) Once, at 1440: the page's own Send is its only one (the owner's
+ *     pick, "Only the page's own Send"): with a pick unsent, the panel's
+ *     head stands no Send for the decision page and its Needs you row none,
+ *     while a plain page with a field typed in keeps both.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import type { Frame, Page } from "playwright-core";
 import { SEND_CONTROLS } from "../../../packages/core/src/comments";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { commentWords } from "../../../packages/core/src/words/comments";
-import { decisionHostWords } from "../../../packages/core/src/words/decision-host";
 import type { ArtifactRead } from "../../../packages/hub/src/artifacts/service";
 import { artifactReadWords } from "../../../packages/hub/src/presenters/artifacts";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -155,22 +169,64 @@ const answered = async (
     10_000
   ).catch(() => hear(on, page));
 
-/** A card as the page draws it: its options picked, whether its foot (Clear, Continue) stands, folded or not. */
+/**
+ * A card as the page draws it: its options picked, whether it stands open
+ * (every option showing, nothing folded), the names of its buttons that are
+ * not options, any of the old flow's controls, and what the page said.
+ */
 const cardOf = (frame: Frame, id: string) =>
   frame.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
+    const seen = (el: Element) => el.checkVisibility({ opacityProperty: true });
+    const options = [
+      ...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? []),
+    ];
     return {
-      picked: [
-        ...(root?.querySelectorAll<HTMLElement>("[data-cawco-picked]") ?? []),
-      ].map((one) => one.dataset.option ?? ""),
-      next: !!root?.querySelector("[data-continue]"),
-      clear: !!root?.querySelector("[data-clear]"),
-      decided: !!root?.hasAttribute("data-decided"),
+      picked: options
+        .filter((one) => one.hasAttribute("data-cawco-picked"))
+        .map((one) => one.dataset.option ?? ""),
+      open:
+        options.length > 0 &&
+        options.every(seen) &&
+        !root?.hasAttribute("data-decided"),
+      buttons: [...(root?.querySelectorAll("button") ?? [])]
+        .filter((one) => !one.hasAttribute("data-option") && seen(one))
+        .map((one) => one.textContent?.trim() ?? ""),
+      old: [
+        ...(root?.querySelectorAll(
+          "[data-continue], [data-clear], [data-change], [data-slot=decided], [data-slot=decision-foot]"
+        ) ?? []),
+      ].length,
       said:
         document.querySelector("[data-slot=page-said]")?.textContent?.trim() ??
         "",
     };
   }, id);
+
+/** Elements whose box runs past the frame's width, outside a box that scrolls or clips its own. */
+const overflowIn = (frame: Frame) =>
+  frame.evaluate(() => {
+    const width = document.documentElement.clientWidth;
+    const clipped = (el: Element): boolean => {
+      for (let at = el.parentElement; at; at = at.parentElement) {
+        const x = getComputedStyle(at).overflowX;
+        if (x === "auto" || x === "scroll" || x === "hidden" || x === "clip") {
+          return true;
+        }
+      }
+      return false;
+    };
+    return [...document.querySelectorAll("body *")]
+      .filter((el) => {
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.right > width + 0.5 && !clipped(el);
+      })
+      .slice(0, 6)
+      .map((el) => `${el.tagName.toLowerCase()}.${el.className}`);
+  });
+
+/** The one button a card stands beside its options: its note's opener. */
+const ONLY_NOTE = '["Add a note"]';
 
 /** The panel's frame once it draws the page titled `title`. */
 const frameOf = async (page: Page, title: string): Promise<Frame> =>
@@ -371,7 +427,7 @@ const commentLeg = async (
   );
 };
 
-/** (b) A pointer's pick, pressed again, cleared; then Clear. */
+/** (b) A pointer's pick: the card stays open with nothing to press but its options; pressed again, cleared. */
 const pointerLeg = async (
   on: On,
   frame: Frame,
@@ -382,81 +438,31 @@ const pointerLeg = async (
   const { kit } = on;
   await pressIn(frame, '#decision-lint [data-option="biome"]', { tap });
   const picked = await answered(on, id, "lint", "picked");
+  await settle(frame.page(), 800);
   const drawn = await cardOf(frame, "lint");
-  await settle(frame.page(), 600);
-  // The foot as drawn: Clear and Continue on one line, one height, Clear the
-  // ghost before the coral Continue, each reaching its pointer's area.
-  const foot = await frame.evaluate(() => {
-    const box = (el: Element | null) => el?.getBoundingClientRect();
-    const reach = (el: Element | null) => {
-      const after = el ? getComputedStyle(el, "::after") : null;
-      const own = box(el);
-      const w = Number.parseFloat(after?.width ?? "") || own?.width || 0;
-      const h = Number.parseFloat(after?.height ?? "") || own?.height || 0;
-      return {
-        w: Math.round(Math.max(w, own?.width ?? 0)),
-        h: Math.round(Math.max(h, own?.height ?? 0)),
-      };
-    };
-    const clear = document.querySelector("#decision-lint [data-clear]");
-    const next = document.querySelector("#decision-lint [data-continue]");
-    const a = box(clear);
-    const b = box(next);
-    return {
-      words: clear?.textContent?.trim() ?? "",
-      sameLine: !!a && !!b && Math.abs(a.top - b.top) < 0.5,
-      sameHeight: !!a && !!b && Math.abs(a.height - b.height) < 0.5,
-      before: !!a && !!b && a.right <= b.left,
-      gap: a && b ? Math.round(b.left - a.right) : -1,
-      clearReach: reach(clear),
-      clearBg: clear ? getComputedStyle(clear).backgroundColor : "",
-      nextBg: next ? getComputedStyle(next).backgroundImage : "",
-    };
-  });
-  const least = tap ? 44 : 24;
-  on.kit.check(
-    `(b) ${label}: a pick's foot stands Clear pick, the ghost, before the coral Continue on one line at one height, Clear reaching ${least}px`,
-    foot.words === decisionHostWords.clearPick(false) &&
-      foot.sameLine &&
-      foot.sameHeight &&
-      foot.before &&
-      foot.clearReach.w >= least &&
-      foot.clearReach.h >= least,
-    JSON.stringify(foot)
+  const spill = await overflowIn(frame);
+  kit.check(
+    `(b) ${label}: a press picks and the card stays open: every option showing, biome chosen, no Continue, Clear, Change or Done (its one other button "Add a note"), nothing past the frame's width`,
+    picked.answers.lint === "picked" &&
+      JSON.stringify(drawn.picked) === '["biome"]' &&
+      drawn.open &&
+      drawn.old === 0 &&
+      JSON.stringify(drawn.buttons) === ONLY_NOTE &&
+      spill.length === 0,
+    JSON.stringify({ drawn, spill })
   );
   await pressIn(frame, '#decision-lint [data-option="biome"]', { tap });
   const cleared = await answered(on, id, "lint", "cleared");
   const gone = await cardOf(frame, "lint");
   kit.check(
-    `(b) ${label}: a press on the picked option clears it: the hub's record cleared, artifact_read saying picked, then cleared, the card open with no Clear or Continue, "Cleared Move the rules into Biome" said`,
-    picked.answers.lint === "picked" &&
-      JSON.stringify(drawn.picked) === '["biome"]' &&
-      drawn.next &&
-      drawn.clear &&
-      cleared.answers.lint === "cleared" &&
+    `(b) ${label}: a press on the picked option clears it: the hub's record cleared, artifact_read saying picked, then cleared, the card open, "Cleared Move the rules into Biome" said`,
+    cleared.answers.lint === "cleared" &&
       CLEARED_NOW.test(cleared.words) &&
       !cleared.words.includes("picked biome") &&
       gone.picked.length === 0 &&
-      !(gone.next || gone.clear || gone.decided) &&
+      gone.open &&
       gone.said === "Cleared Move the rules into Biome",
-    JSON.stringify({ drawn, gone, words: cleared.words.split("\n") })
-  );
-  await pressIn(frame, '#decision-lint [data-option="cache"]', { tap });
-  await answered(on, id, "lint", "picked");
-  await pressIn(frame, "#decision-lint [data-clear]", { tap });
-  const byClear = await answered(on, id, "lint", "cleared");
-  const after = await cardOf(frame, "lint");
-  const focused = await frame.evaluate(
-    () => (document.activeElement as HTMLElement | null)?.dataset.option ?? ""
-  );
-  kit.check(
-    `(b) ${label}: Clear lets the pick go: cleared on the hub, nothing marked, focus on the option that held it, "Cleared Cache the heavy checks" said`,
-    byClear.answers.lint === "cleared" &&
-      after.picked.length === 0 &&
-      !after.next &&
-      focused === "cache" &&
-      after.said === "Cleared Cache the heavy checks",
-    JSON.stringify({ answer: byClear.answers.lint, after, focused })
+    JSON.stringify({ gone, words: cleared.words.split("\n") })
   );
 };
 
@@ -498,7 +504,7 @@ const readingLeg = async (
   await frame.evaluate(() => getSelection()?.removeAllRanges());
 };
 
-/** (d) Space picks and Space clears; the digit picks and Enter on Clear clears. */
+/** (d) Space picks and Space clears; the digit picks and the digit again clears. */
 const keyLeg = async (
   on: On,
   page: Page,
@@ -510,22 +516,23 @@ const keyLeg = async (
   await frame.locator('#decision-types [data-option="single"]').focus();
   await page.keyboard.press("Space");
   const picked = await answered(on, id, "types", "picked");
+  const standing = await cardOf(frame, "types");
   await page.keyboard.press("Space");
   const cleared = await answered(on, id, "types", "cleared");
   const card = await cardOf(frame, "types");
   kit.check(
-    `(d) ${label}: Space picks the focused option and Space again clears it, on the hub and on the card`,
+    `(d) ${label}: Space picks the focused option, the card open, and Space again clears it, on the hub and on the card`,
     picked.answers.types === "picked" &&
+      standing.open &&
+      standing.old === 0 &&
       cleared.answers.types === "cleared" &&
       card.picked.length === 0 &&
-      !card.next &&
       card.said === "Cleared One thread per tsc",
-    JSON.stringify({ picked: picked.answers, cleared: cleared.answers, card })
+    JSON.stringify({ picked: picked.answers, standing, card })
   );
   await page.keyboard.press("2");
   const digit = await answered(on, id, "types", "picked");
-  await frame.locator("#decision-types [data-clear]").focus();
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("2");
   const byKey = await answered(on, id, "types", "cleared");
   const after = await cardOf(frame, "types");
   await settle(page, 400);
@@ -534,7 +541,7 @@ const keyLeg = async (
     .count()
     .catch(() => 0);
   kit.check(
-    `(d) ${label}: the digit 2 picks golar; Enter on Clear clears it, on the hub and on the card, and opens no comment's thread`,
+    `(d) ${label}: the digit 2 picks golar and 2 again clears it, on the hub and on the card, and opens no comment's thread`,
     JSON.stringify(entryOf(digit.read, "types")?.options) === '["golar"]' &&
       byKey.answers.types === "cleared" &&
       after.picked.length === 0 &&
@@ -564,7 +571,7 @@ const sendLine = (
     ""
   );
 
-/** (e) Picked, Continue, the page's Send; Change, and a press on the pick clears it. */
+/** (e) Picked, the page's Send; the card still open, and a press on the pick clears it. */
 const sentLeg = async (
   on: On,
   frame: Frame,
@@ -576,13 +583,6 @@ const sentLeg = async (
   const { kit } = on;
   await pressIn(frame, '#decision-lint [data-option="cache"]', { tap });
   await answered(on, id, "lint", "picked");
-  await pressIn(frame, "#decision-lint [data-continue]", { tap });
-  await until(
-    "the lint card folded",
-    () => cardOf(frame, "lint"),
-    (now) => now.decided,
-    10_000
-  ).catch(() => null);
   await settle(frame.page(), 800);
   await pressIn(frame, "[data-send]", { tap });
   const sent = await until(
@@ -605,28 +605,22 @@ const sentLeg = async (
       journal.some((line) => line.includes(pageLine)),
     JSON.stringify({ sentAt: sent.sentAt, journal })
   );
-  await pressIn(frame, "#decision-lint [data-change]", { tap });
-  const reopened = await until(
-    "the lint card open again with its pick",
-    () => cardOf(frame, "lint"),
-    (now) => !now.decided && now.next,
-    10_000
-  ).catch(() => cardOf(frame, "lint"));
-  await settle(frame.page(), 600);
+  const standing = await cardOf(frame, "lint");
   await pressIn(frame, '#decision-lint [data-option="cache"]', { tap });
   const cleared = await answered(on, id, "lint", "cleared");
   const card = await cardOf(frame, "lint");
   kit.check(
-    `(e) ${label}: after Send, Change reopens the card with its pick standing; a press on it clears it: the record cleared, artifact_read saying picked, then cleared, the Send's time standing`,
-    JSON.stringify(reopened.picked) === '["cache"]' &&
+    `(e) ${label}: after Send the card stands open with its pick; a press on it clears it: the record cleared, artifact_read saying picked, then cleared, the Send's time standing`,
+    JSON.stringify(standing.picked) === '["cache"]' &&
+      standing.open &&
       cleared.answers.lint === "cleared" &&
       CLEARED.test(cleared.words) &&
       cleared.sentAt !== null &&
       cleared.sentAt === sent.sentAt &&
       card.picked.length === 0 &&
-      !card.decided,
+      card.open,
     JSON.stringify({
-      reopened,
+      standing,
       card,
       sentAt: [sent.sentAt, cleared.sentAt],
       words: cleared.words.split("\n"),
@@ -712,13 +706,27 @@ const noteLeg = async (on: On) => {
   const words = "is there a better thing than Podman, like OrbStack?";
   await pressIn(frame, "#decision-pods [data-slot=note] button >> nth=0");
   await frame.locator("#decision-pods textarea:not([aria-hidden])").fill(words);
-  await until(
+  const typedIn = await until(
     "the note on the hub",
     () => hear(on, made.id),
     (now) => entryOf(now.read, "pods")?.note === words,
     10_000
   ).catch(() => null);
   await settle(page, 1200);
+  // Typed, the note is kept with nothing pressed, and its field stands open
+  // with no Done: the card's only buttons are its options.
+  const writing = await cardOf(frame, "pods");
+  const fieldShown = await frame
+    .locator("#decision-pods textarea:not([aria-hidden])")
+    .evaluate((el) => el.checkVisibility({ opacityProperty: true }));
+  kit.check(
+    "(g) a note is kept as it is typed, with nothing pressed: its field open, no Done, the card's only buttons its options",
+    !!typedIn &&
+      fieldShown &&
+      writing.buttons.length === 0 &&
+      writing.old === 0,
+    JSON.stringify({ kept: !!typedIn, fieldShown, writing })
+  );
   await pressIn(frame, "[data-send]");
   await until(
     "the page's Send on the hub",
@@ -758,6 +766,22 @@ const noteLeg = async (on: On) => {
       whole: whole.words.split("\n"),
       since: sinceWords.split("\n"),
     })
+  );
+  // Emptied and left, the field folds back into "Add a note", and the note goes.
+  await frame.locator("#decision-pods textarea:not([aria-hidden])").fill("");
+  await frame.locator("#decision-pods h2").click();
+  const emptied = await until(
+    "the emptied note let go on the hub",
+    () => hear(on, made.id),
+    (now) => !entryOf(now.read, "pods")?.note,
+    10_000
+  ).catch(() => null);
+  await settle(page, 800);
+  const folded = await cardOf(frame, "pods");
+  kit.check(
+    '(g) emptied and left, the note goes from the hub and its field folds back into "Add a note"',
+    !!emptied && JSON.stringify(folded.buttons) === ONLY_NOTE,
+    JSON.stringify({ emptied: !!emptied, folded })
   );
   const named = await fleet.api<{ id: string }>(
     `/api/instances/${writer}/artifacts`,
@@ -799,6 +823,103 @@ const noteLeg = async (on: On) => {
         .split("\n")
         .some((line) => line.startsWith("- budget: ") && line.includes('"60"')),
     JSON.stringify({ state: kept.read.state, words: kept.words.split("\n") })
+  );
+  await page.close();
+};
+
+/** A plain page with a field and no choice: no Send of its own, so the panel's head and Needs you keep theirs. */
+const FIELD_TITLE = "Name the release";
+const FIELD_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${FIELD_TITLE}</title></head>
+<body><main><h1>${FIELD_TITLE}</h1><label>Its name <input name="release" value=""></label></main></body></html>`;
+
+/** One card, for (h): a pick on it stands unsent. */
+const SENDS_TITLE = "Pick the host";
+const SENDS_PROGRAM = `root = Decisions("${SENDS_TITLE}", [host])
+host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.")
+hub = Option("hub", "The hub", "Nothing new to run.", true, [], "Readers far away wait longer.")
+edge = Option("edge", "An edge host", "Closer to readers.", false, [], "One more host to run.")`;
+
+/** The panel head's Send as drawn (its bar's button), or its More entry. */
+const headSend = (page: Page) =>
+  page.evaluate((pane) => {
+    const head = document.querySelector(pane);
+    return !!head?.querySelector('[data-slot="send"]');
+  }, PANE);
+
+/** The Needs you row of artifact `id` in Caw's panel, and whether it stands a Send. */
+const needsRow = async (page: Page, id: string) => {
+  const row = page.locator(
+    `[aria-labelledby="caw-needs"] [data-slot="row"][data-kind="artifact"][data-artifact="${id}"]`
+  );
+  const there = await row
+    .waitFor({ timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  return {
+    there,
+    send: there
+      ? (await row.locator("[data-needs-card-send]").count()) > 0
+      : false,
+  };
+};
+
+/** (h) The page's own Send is its only one: no head or Needs you Send on a decision page; a plain page keeps both. */
+const sendsLeg = async (on: On) => {
+  const { fleet, kit, writer } = on;
+  const decision = await fleet.api<{ id: string }>(
+    `/api/instances/${writer}/artifacts`,
+    {
+      kind: "page",
+      does: "pick",
+      ask: "Pick where the page runs",
+      name: "sends-decision",
+      program: SENDS_PROGRAM,
+    }
+  );
+  const page = await kit.page("desk", { theme: "light" });
+  await open(page, `${on.base}/session/${writer}`, '[data-slot="pane"]');
+  const frame = await frameOf(page, SENDS_TITLE);
+  await settle(page, 800);
+  await pressIn(frame, '#decision-host [data-option="edge"]');
+  await answered(on, decision.id, "host", "picked");
+  await settle(page, 1200);
+  const decisionHead = await headSend(page);
+  const field = await fleet.api<{ id: string }>(
+    `/api/instances/${writer}/artifacts`,
+    {
+      kind: "page",
+      does: "pick",
+      ask: "Name the release",
+      name: "sends-field",
+      html: FIELD_PAGE,
+    }
+  );
+  const plain = await frameOf(page, FIELD_TITLE);
+  await plain.locator('input[name="release"]').fill("Harbour");
+  await until(
+    "the field on the hub",
+    () => hear(on, field.id),
+    (now) => String(entryOf(now.read, "release")?.value) === "Harbour",
+    10_000
+  ).catch(() => null);
+  const fieldHead = await until(
+    "the plain page's head Send",
+    () => headSend(page),
+    Boolean,
+    10_000
+  ).catch(() => false);
+  await page.locator("[data-needs-caw]").first().click();
+  const decisionRow = await needsRow(page, decision.id);
+  const fieldRow = await needsRow(page, field.id);
+  kit.check(
+    "(h) a decision page's only Send is its own: with a pick unsent, the panel's head stands no Send and its Needs you row none; a plain page with a field typed in keeps its head Send and its row's Send",
+    !decisionHead &&
+      decisionRow.there &&
+      !decisionRow.send &&
+      fieldHead &&
+      fieldRow.there &&
+      fieldRow.send,
+    JSON.stringify({ decisionHead, decisionRow, fieldHead, fieldRow })
   );
   await page.close();
 };
@@ -853,6 +974,7 @@ const run = async (kit: Kit) => {
     await page.close();
   }
   await noteLeg(on);
+  await sendsLeg(on);
 };
 
 const spec: Spec = { name: "decision-unpick", run };

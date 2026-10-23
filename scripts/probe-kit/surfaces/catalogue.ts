@@ -3428,8 +3428,8 @@ export const SURFACES: Surface[] = [
     // (decision-embeds.ts `openCapturePage`): the hub tape holds no program
     // page and none of the host's files. The decisions project's three
     // programs as the scratch fleet publishes them (decisions-preview
-    // seed.ts) with the picks the hub holds for them, then a pick, its
-    // Continue, a note, a send, the page offline, every media piece but a
+    // seed.ts) with the picks the hub holds for them, then a pick, a note,
+    // a send, the page offline, every media piece but a
     // canvas, Preview's wait and pieces whose artifacts are gone. Each state
     // opens its page from a route the tape loads.
     name: "decision-host",
@@ -3437,7 +3437,7 @@ export const SURFACES: Surface[] = [
     route: () => "/usage",
     states: [
       {
-        // 5 of 12 decided, each on its line; the rest open.
+        // 5 of 12 picked, every card open.
         name: "landing",
         act: hostPage("landing"),
         root: "body",
@@ -3451,14 +3451,14 @@ export const SURFACES: Surface[] = [
         ready: { shows: HOST_METER, says: /\b2 of 5 picked\b/ },
       },
       {
-        // All but one decided, one with a diagram, notes and a dial's values held.
+        // All but one picked, one with a diagram, notes and a dial's values held.
         name: "pricing",
         act: hostPage("pricing"),
         root: "body",
         ready: { shows: HOST_METER, says: /\b5 of 6 picked\b/ },
       },
       {
-        // An option pressed: chosen, its card's Continue the one coral act.
+        // An option pressed: chosen where it stands, the card open.
         name: "pick",
         act: async (page) => {
           await hostPage("landing")(page);
@@ -3468,23 +3468,9 @@ export const SURFACES: Surface[] = [
             .click();
         },
         root: "body",
-        inView: `${HOST_CARD("under-hero")} [data-continue]`,
-        ready: { shows: `${HOST_CARD("under-hero")} [data-continue]` },
-      },
-      {
-        // Continue pressed: the card folded to its decided line, the next one working.
-        name: "continue",
-        act: async (page) => {
-          await hostPage("landing")(page);
-          const card = HOST_CARD("under-hero");
-          await page.locator(`${card} [data-option]`).first().click();
-          await page.locator(`${card} [data-continue]`).click();
-          await page.locator(`${card}[data-decided]`).waitFor();
-        },
-        root: "body",
-        inView: HOST_CARD("under-hero"),
+        inView: `${HOST_CARD("under-hero")} [data-option][data-cawco-picked]`,
         ready: {
-          shows: `${HOST_CARD("under-hero")}[data-decided] [data-slot=decided]`,
+          shows: `${HOST_CARD("under-hero")} [data-option][data-cawco-picked]`,
         },
       },
       {

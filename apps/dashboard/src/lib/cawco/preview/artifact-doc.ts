@@ -59,6 +59,8 @@ export const LINK_DROPPED = `${NOT_REACHING}. The link to the hub dropped.`;
 export interface ArtifactView extends ArtifactChoices {
   /** What the latest revision changed, as the hub read it (`meta.changes`); null before any revision did. */
   changes: ArtifactChanges | null;
+  /** A decision page, carrying its own Send at its foot (`meta.ownSend`): the panel's head stands none for it. */
+  ownSend: boolean;
   /** The pins, by number. */
   pins: Pin[];
   /** When the session last changed it, a revision or a new ask (`meta.revisedAt`): a Send after it is unanswered. */
@@ -146,6 +148,7 @@ const viewOf = (doc: Doc): ArtifactView => {
     choices: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
     pageHash: (meta.get("pageHash") as string | undefined) ?? null,
     sentAt: (meta.get("sentAt") as string | undefined) ?? null,
+    ownSend: meta.get("ownSend") === true,
     pins: pins.sort((a, b) => a.number - b.number),
     revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
     stage: (meta.get("stage") as StageState | undefined) ?? null,

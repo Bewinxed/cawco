@@ -56,6 +56,8 @@
    * Canvas, Components) by its glyph, and its machine. The row opens its
    * session with the artifact in its panel at its first pending stop. Send
    * stands at the meta line's end while something is written and not sent,
+   * except on a decision page, whose one Send is its own at its foot (the
+   * owner's pick, "Only the page's own Send"),
    * and the first line's ✕ is Not now: it leaves Needs you, stays in Files
    * with its dot, and comes back when it is raised again.
    */
@@ -411,6 +413,11 @@
       sendingArtifact = false;
     }
   }
+
+  /** Send stands on the row: something is written and unsent, on an artifact whose Send is not its page's own. */
+  const sends = $derived(
+    item.kind === "artifact" && item.unsent > 0 && !item.ownSend
+  );
 
   /** The row was chosen: it opens, the panel closes; an artifact opens in its panel at its first pending stop. */
   function chosen(): void {
@@ -950,7 +957,7 @@
         data-slot="meta"
         class={[
           "mark-line pointer-events-none relative col-start-2 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
-          item.unsent > 0 ? "col-end-3" : "col-end-4",
+          sends ? "col-end-3" : "col-end-4",
         ]}
       >
         {#if item.project}
@@ -1007,7 +1014,7 @@
           <span class="flex-none">machine offline</span>
         {/if}
       </span>
-      {#if item.unsent > 0}
+      {#if sends}
         <!-- Send: the kit's sm ghost over the row's cover, its last figure's
              ink on the trailing edge: it hangs past by what stands between
              its box and that ink (the kit's 1px transparent border, its

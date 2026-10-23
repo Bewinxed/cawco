@@ -61,6 +61,12 @@ export interface ArtifactNeed {
    */
   notNow: string;
   /**
+   * A decision page (one that asks choices): it carries its own Send at its
+   * foot, so its row stands none (the owner's pick, "Only the page's own
+   * Send").
+   */
+  ownSend: boolean;
+  /**
    * Put away with Not now at this raise or a later one: out of Needs you
    * (its count, its rows, the push, the phone's list), still waiting in
    * Files with its dot. Carried so every screen hears it move.
