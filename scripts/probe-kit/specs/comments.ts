@@ -953,6 +953,8 @@ const runOn = async (kit: Kit, on: On) => {
     () => changedChecks(on),
     // The Work Outlives Its Surface Rule on the composer.
     () => draftChecks(on),
+    // A press on Comment always sends, however its draft folds.
+    () => pressSendChecks(on),
     // A pin stays on its element while a page draws it again.
     () => redrawChecks(on),
     // A pin stays on an element whose words change in place (tsk-22).
@@ -9345,6 +9347,92 @@ const draftPillOf = (frame: Frame) =>
  * parked; one press on the pill opens the composer again with the words and
  * the chip.
  */
+/** Words that run past one line of the comment's composer. */
+const LONG_COMMENT_WORDS =
+  "This paragraph reads too long for the card it stands in, and its last line runs under the next heading.";
+
+/**
+ * A press on Comment always sends (the composer's fold): a draft of more
+ * than one line, written in the composer at an element, its Comment pressed
+ * with the mouse (down, then up where the button stood) and with no motion
+ * (every fold at once), is written to the page's doc and its composer goes;
+ * the press never lands where a folding draft moved the button from.
+ */
+const pressSendChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "press-send",
+    html: DRAFT_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(
+    on.page,
+    id,
+    "the press-send page in the pane"
+  );
+  const pane = await on.page.locator(FRAME).boundingBox();
+  if (!(frame && pane)) {
+    on.kit.check("press send: the page is in the pane", false, "not shown");
+    return;
+  }
+  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  const target = await boxIn(frame, "#target");
+  const before = Object.keys((await docOf(frame)).pins);
+  await commentAt(
+    on,
+    frame,
+    pane.x + target.x + target.w * 0.3,
+    pane.y + target.y + target.h / 2,
+    null
+  );
+  const composer = on.page.locator(COMPOSE);
+  await composer.getByRole("combobox").fill(LONG_COMMENT_WORDS);
+  await on.page.emulateMedia({ reducedMotion: "reduce" });
+  await settle(on.page, 300);
+  const button = await composer
+    .getByRole("button", { name: "Comment", exact: true })
+    .boundingBox();
+  const lines = await composer
+    .getByRole("combobox")
+    .evaluate((el) =>
+      Math.round(
+        el.scrollHeight / Number.parseFloat(getComputedStyle(el).lineHeight)
+      )
+    )
+    .catch(() => 0);
+  if (button) {
+    await on.page.mouse.move(
+      button.x + button.width / 2,
+      button.y + button.height / 2
+    );
+    await on.page.mouse.down();
+    await on.page.mouse.up();
+  }
+  const written = await until(
+    "the pressed comment in the doc",
+    async () => (await docOf(frame)).pins,
+    (pins) => Object.keys(pins).some((one) => !before.includes(one)),
+    8000
+  ).catch(() => null);
+  const gone = await composer
+    .waitFor({ state: "detached", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  await on.page.emulateMedia({ reducedMotion: null });
+  on.kit.check(
+    "press send: a draft of more than one line, its Comment pressed with the mouse (down, up where the button stood) with no motion, is written to the page's doc and its composer goes",
+    !!button && lines > 1 && !!written && gone,
+    JSON.stringify({ lines, written: !!written, composerGone: gone })
+  );
+  if (!gone) {
+    await on.page.keyboard.press("Escape");
+  }
+  await interactTab(on).click();
+};
+
 const draftChecks = async (on: On) => {
   const { origin } = new URL(on.page.url());
   const made = await on.call(CREATE, {

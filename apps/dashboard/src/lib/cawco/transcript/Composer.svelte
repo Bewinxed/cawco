@@ -3119,7 +3119,10 @@
    * over the transcript, when the field takes focus. Folding and opening
    * run over --dur-morph (autosize's `data-folding`, on the field while
    * that height change runs); a typed line grows over the field's own
-   * --dur-control.
+   * --dur-control. A press on the pill's own send or attach leaves the
+   * focus in the field (`ctrls`): taken from it as the press went down, the
+   * draft folded, the button moved from under the press, its up landed off
+   * it, and nothing was sent.
    */
   let focused = $state(false);
   const folds = (whole: number) => !focused && whole > floor + 0.5;
@@ -3929,10 +3932,20 @@
              opens to a step more (space-3), so each 34px control's touch area
              reaches 44px before meeting its neighbour's: the touch areas' gap
              (`--hit-gap-x`, which .touch-hit reads) switches with it. -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the controls only keeps the field's focus; the controls are buttons -->
+        <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the controls only keeps the field's focus; the controls are buttons -->
         <div
           data-slot="ctrls"
           class="group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
           inert={!!recall}
+          onmousedown={(event) => {
+            // The field keeps the focus through a press here (`focused`):
+            // the draft stays as tall as it is, so the press stays on its button.
+            if (field && document.activeElement === field) {
+              event.preventDefault();
+            }
+          }}
           bind:this={ctrls}
         >
           {#if attach}
