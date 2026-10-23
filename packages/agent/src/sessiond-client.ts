@@ -471,7 +471,9 @@ interface ProcListener {
     exitCode: number | null,
     signal: NodeJS.Signals | null,
     /** The process that exited, when its keeper says (what {@link SessiondClient.release} names). */
-    pid: number | undefined
+    pid: number | undefined,
+    /** The last of what it wrote on stderr, when it wrote any and its keeper kept it (core sessiond.ts `SessiondExit.stderr`). */
+    stderr?: string
   ) => void;
   /**
    * The keeper holds no child under the id: the listing that answers this
@@ -717,7 +719,8 @@ export class SessiondClient {
               proc.procId,
               proc.exitCode ?? null,
               proc.signal ?? null,
-              proc.pid
+              proc.pid,
+              proc.stderr
             );
           }
         }
@@ -755,7 +758,8 @@ export class SessiondClient {
           message.procId,
           message.exitCode,
           message.signal,
-          message.pid
+          message.pid,
+          message.stderr
         );
         return;
       case "proc.limit":
@@ -784,10 +788,11 @@ export class SessiondClient {
     procId: string,
     exitCode: number | null,
     signal: NodeJS.Signals | null,
-    pid: number | undefined
+    pid: number | undefined,
+    stderr: string | undefined
   ): void {
     for (const { listener } of this.#subscriptions.get(procId) ?? []) {
-      this.#exit(listener, exitCode, signal, pid);
+      this.#exit(listener, exitCode, signal, pid, stderr);
     }
   }
 
@@ -813,13 +818,14 @@ export class SessiondClient {
     listener: ProcListener,
     exitCode: number | null,
     signal: NodeJS.Signals | null,
-    pid: number | undefined
+    pid: number | undefined,
+    stderr: string | undefined
   ): void {
     if (this.#toldExit.has(listener)) {
       return;
     }
     this.#toldExit.add(listener);
-    listener.exit?.(exitCode, signal, pid);
+    listener.exit?.(exitCode, signal, pid, stderr);
   }
 
   #send(message: SessiondClientMessage): void {
@@ -1178,6 +1184,8 @@ export interface BridgeRing {
 export interface ProcessExit {
   code: number | null;
   signal: NodeJS.Signals | null;
+  /** The last of what it said on stderr, as its keeper kept it; absent when it said nothing there. */
+  stderr?: string;
 }
 
 /** The previous host's control traffic, which an attach does not replay. */
@@ -1375,11 +1383,15 @@ export const sessiondBridge = (
       }
       stdout.push(`${event.data}\n`);
     },
-    exit: (code, sig, pid) => {
+    exit: (code, sig, pid, stderr) => {
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
-      end(code === null && sig === null ? undefined : { code, signal: sig });
+      end(
+        code === null && sig === null
+          ? undefined
+          : { code, signal: sig, ...(stderr ? { stderr } : {}) }
+      );
       // This transport is what follows its child: its end is read now.
       client.release(procId, pid);
       // An `exit` with neither a code nor a signal is not one a process can

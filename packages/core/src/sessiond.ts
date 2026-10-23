@@ -158,6 +158,8 @@ export interface SessiondProcInfo {
    * else to say it is over.
    */
   signal?: NodeJS.Signals;
+  /** A dead child's last words on stderr ({@link SessiondExit.stderr}). */
+  stderr?: string;
 }
 
 /**
@@ -231,6 +233,13 @@ export interface SessiondExit {
   pid?: number;
   procId: string;
   signal: NodeJS.Signals | null;
+  /**
+   * The last of what the child wrote on stderr, as bytes the keeper never
+   * read (sessiond server.ts `STDERR_TAIL_BYTES`): what a process that
+   * refused to start said about why. Absent when it wrote nothing there, and
+   * from a keeper that predates it.
+   */
+  stderr?: string;
   type: "proc.exit";
 }
 

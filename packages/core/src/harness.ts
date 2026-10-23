@@ -21,6 +21,7 @@
  */
 
 import { CLAUDE_PROVIDER } from "./accounts";
+import { harnessWords } from "./words/harness";
 
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = "claude" | "opencode" | "pi";
@@ -113,6 +114,66 @@ export type PermissionMode =
   | "dontAsk"
   | "auto"
   | "fullSend";
+
+/**
+ * The permission modes CawCo offers: the one list every machine reports for
+ * each harness that has modes (agent claude.ts `CLAUDE_CAPABILITIES`,
+ * opencode.ts `OPENCODE_CAPABILITIES`; pi has none), and so the one list
+ * every tool schema and picker takes its modes from. Claude Code's
+ * `dontAsk` and `auto` are not among them: no harness here is offered either.
+ *
+ * {@link PermissionMode} stays wider, as the wire names a mode: a CLI may
+ * report `dontAsk` or `auto` as its mode, and the TestFlight builds still
+ * installable (20261015 to 20261018) were built to send either (hub
+ * scripts/wire-compat.ts). The hub refuses a start in one with the
+ * machine's own list (hub server.ts `modeRefusal`), and an agent refuses one
+ * that reaches it ({@link offeredMode}).
+ */
+export const PERMISSION_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "bypassPermissions",
+  "fullSend",
+] as const satisfies readonly PermissionMode[];
+
+export type OfferedMode = (typeof PERMISSION_MODES)[number];
+
+/**
+ * The modes one session may start or continue another in: every
+ * {@link PERMISSION_MODES} but `fullSend`, which only the owner chooses. A
+ * session in Full Send passes it on by naming none.
+ */
+export const SESSION_CHOSEN_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "bypassPermissions",
+] as const satisfies readonly OfferedMode[];
+
+export type SessionChosenMode = (typeof SESSION_CHOSEN_MODES)[number];
+
+/** `value` as an {@link OfferedMode}, when it is one CawCo offers. */
+export const permissionModeNamed = (value: unknown): OfferedMode | undefined =>
+  PERMISSION_MODES.find((mode) => mode === value);
+
+/**
+ * `mode` as one CawCo offers, or none when none was named. One it does not
+ * offer throws, in words that list what it does: a session is never started
+ * in a mode other than the one asked for.
+ */
+export const offeredMode = (
+  mode: PermissionMode | undefined
+): OfferedMode | undefined => {
+  if (mode === undefined) {
+    return;
+  }
+  const offered = permissionModeNamed(mode);
+  if (!offered) {
+    throw new Error(harnessWords.modeNotOffered(mode, PERMISSION_MODES));
+  }
+  return offered;
+};
 
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's

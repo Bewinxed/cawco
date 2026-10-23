@@ -301,6 +301,7 @@ import {
   parseArtifactComments,
   parseArtifactResponses,
   pauseClock,
+  permissionModeNamed,
   previewEnterUrl,
   previewRoute,
   providerChoices,
@@ -1450,7 +1451,12 @@ const harnessSchema = t.Union([
   t.Literal("opencode"),
   t.Literal("pi"),
 ]);
-/** Continue in new session: every field of the summariser and target is the caller's to name. */
+/**
+ * A permission mode as a route takes it: core's `PermissionMode`, the
+ * offered `PERMISSION_MODES` and the two the installable TestFlight builds
+ * were built to send. `settleMode` refuses a mode the machine does not
+ * report, in the machine's own list.
+ */
 const permissionModeSchema = t.Union([
   t.Literal("default"),
   t.Literal("acceptEdits"),
@@ -1461,6 +1467,7 @@ const permissionModeSchema = t.Union([
   t.Literal("fullSend"),
 ]);
 
+/** Continue in new session: every field of the summariser and target is the caller's to name. */
 const continueBody = t.Object({
   // Who writes the summary; left out with `asksOnly`, which writes none.
   summarizer: t.Optional(
@@ -17700,12 +17707,9 @@ export const createServer = (
     // A move is a New session the person started on another place: its mode
     // is the one the form chose.
     spawn: async (machineId, payload) => {
-      if (payload.permissionMode) {
-        db.chooseMode(
-          machineId,
-          payload.harness ?? "claude",
-          payload.permissionMode
-        );
+      const chosen = permissionModeNamed(payload.permissionMode);
+      if (chosen) {
+        db.chooseMode(machineId, payload.harness ?? "claude", chosen);
       }
       await spawnSession(machineId, payload);
     },
@@ -26080,8 +26084,9 @@ export const createServer = (
     asked: SpawnPayload,
     known: boolean
   ): void => {
-    if (asked.permissionMode && !(known && !asked.relaunch)) {
-      db.chooseMode(machineId, asked.harness ?? "claude", asked.permissionMode);
+    const chosen = permissionModeNamed(asked.permissionMode);
+    if (chosen && !(known && !asked.relaunch)) {
+      db.chooseMode(machineId, asked.harness ?? "claude", chosen);
     }
   };
 

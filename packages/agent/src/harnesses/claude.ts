@@ -88,12 +88,17 @@ import {
   configurePage,
   conversationGone,
   EFFORT_READ,
+  harnessWords,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
   identityOf,
   LEAD_GATED_TOOLS,
   MESSAGES_HELD,
   MESSAGES_READ,
+  type OfferedMode,
+  offeredMode,
+  PERMISSION_MODES,
+  type PermissionMode,
   RATE_LIMIT_READ,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
@@ -102,6 +107,7 @@ import {
   SESSION_DIR_READ,
   SESSION_STOPPED,
   settledQuestionResult,
+  spawnWords,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -194,6 +200,7 @@ import {
 } from "../move-login";
 import { probeStarted } from "../probe-count";
 import { parseProcId, procIdFor } from "../proc-id";
+import { redactText } from "../redaction";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
 import type { SessiondAwareContext } from "../session";
@@ -249,13 +256,33 @@ export const signalOfExit = ({
   )?.[0];
 };
 
+/** How much of what a CLI said on stderr its row quotes: its last lines, up to this many characters. Ours: a sentence or three. */
+const STDERR_QUOTED_CHARS = 600;
+
 /**
- * A CLI that ended on its own. Its stderr is drained by sessiond, never
- * carried (sessiond server.ts), so there is nothing of its own to quote;
- * never a bare exit code, and what starts it again.
+ * What a CLI that ended said last on stderr, as its row quotes it: the tail
+ * its keeper kept (sessiond server.ts `STDERR_TAIL_BYTES`), its last lines
+ * up to {@link STDERR_QUOTED_CHARS}, on one line, and redacted as everything
+ * the agent says is (redaction.ts `redactText`). Undefined when it said
+ * nothing there.
  */
-export const CRASHED =
-  "Claude Code stopped on its own and said nothing about why. A message to it starts it again.";
+export const stderrSaid = (stderr: string | undefined): string | undefined => {
+  const lines = (stderr ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const kept: string[] = [];
+  let length = 0;
+  for (const line of lines.reverse()) {
+    if (kept.length > 0 && length + line.length > STDERR_QUOTED_CHARS) {
+      break;
+    }
+    kept.unshift(line);
+    length += line.length + 1;
+  }
+  const said = kept.join(" ").slice(-STDERR_QUOTED_CHARS);
+  return said ? redactText(said) : undefined;
+};
 
 /**
  * A Claude Code process's end told to its session, read off how sessiond
@@ -264,8 +291,10 @@ export const CRASHED =
  * attributes, to its own stop or to something outside CawCo; any other exit
  * of a resumed conversation whose transcript is no longer there
  * (`conversationKept`) is that conversation gone; any other is the CLI ending
- * on its own. An error with no exit behind it (a keeper's refusal, a lost
- * ring, a spawn that never ran) is not a process end, and is said as it is.
+ * on its own, in the last of what it said on stderr (`exit.stderr`, which
+ * its keeper kept), or as one that said nothing. Never a bare exit code. An
+ * error with no exit behind it (a keeper's refusal, a lost ring, a spawn
+ * that never ran) is not a process end, and is said as it is.
  */
 export const processEnded = async (
   ctx: Pick<HarnessContext, "died" | "failed">,
@@ -290,7 +319,14 @@ export const processEnded = async (
     ctx.failed(conversationGone());
     return;
   }
-  ctx.failed(new Error(CRASHED));
+  const said = stderrSaid(exit.stderr);
+  ctx.failed(
+    new Error(
+      said && exit.code !== null
+        ? harnessWords.claudeExited(exit.code, said)
+        : harnessWords.claudeCrashed
+    )
+  );
 };
 
 /**
@@ -842,13 +878,7 @@ const missing = (error: unknown): boolean =>
 
 export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
-  permissionModes: [
-    "default",
-    "acceptEdits",
-    "plan",
-    "bypassPermissions",
-    "fullSend",
-  ],
+  permissionModes: [...PERMISSION_MODES],
   setModel: true,
   effort: true,
   contextUsage: true,
@@ -1183,17 +1213,60 @@ const sessionEnv = (
   ...(ctx.sessionCredential
     ? { [CAWCO_ENV.sessionCredential]: ctx.sessionCredential }
     : {}),
+  // Said true only where it is, whatever the agent's own env says
+  // ({@link claudeRootRefusal}).
+  IS_SANDBOX: ctx.boundary && runsAsRoot() ? "1" : undefined,
   // Last: the silent-turn reminder stays off whatever the spec or the
   // person's env says.
   ...CLAUDE_QUIET_ENV,
 });
+
+/** Whether this agent, and so every CLI it starts, runs as root ({@link claudeRootRefusal}). */
+const runsAsRoot = (): boolean =>
+  process.platform !== "win32" && process.getuid?.() === 0;
+
+/**
+ * CLAUDE CODE'S ROOT RULE. The CLI exits at once as root when it is launched
+ * in bypass or with bypass allowed: "if(s==="bypassPermissions"||r){if(
+ * typeof process.getuid==="function"&&process.getuid()===0&&
+ * process.env.IS_SANDBOX!=="1"&&!a.CLAUDE_CODE_BUBBLEWRAP)console.error(
+ * "--dangerously-skip-permissions cannot be used with root/sudo privileges
+ * for security reasons")…process.exit(1)}" (Claude Code 2.1.302's setup;
+ * `r` is the launch's `allowDangerouslySkipPermissions`, which every launch
+ * here passed). Its docs: "On Linux and macOS, Claude Code refuses to start
+ * with this flag when running as root"
+ * (code.claude.com/docs/en/sandbox-environments). `IS_SANDBOX=1` is its
+ * undocumented word that the process is sandboxed ("`export IS_SANDBOX=1`
+ * works, although it's not documented", github.com/anthropics/claude-code
+ * issue 3490), and it lifts the rule.
+ *
+ * A session in a workspace's boundary is sandboxed: its shell runs in the
+ * boundary's bwrap and every other tool it calls is judged by the
+ * boundary's hook (boundary.ts `claudeBoundaryOptions`). As root its CLI is
+ * told so ({@link sessionEnv}) and runs in every mode. On the host, as root,
+ * nothing sandboxes it: a start in Bypass or Full Send is refused here, in
+ * these words, before any process is made, and every other start launches
+ * without bypass allowed ({@link allowsBypass}), so it starts. Undefined
+ * when the start may go ahead.
+ */
+export const claudeRootRefusal = (
+  mode: OfferedMode | undefined,
+  bounded: boolean,
+  root: boolean = runsAsRoot()
+): string | undefined =>
+  root && !bounded && (mode === "bypassPermissions" || mode === "fullSend")
+    ? harnessWords.claudeRootBypass(spawnWords.modes[mode])
+    : undefined;
+
+/** Whether a CLI is launched with bypass allowed, so a mode switch can move it there: everywhere but on the host as root ({@link claudeRootRefusal}). */
+const allowsBypass = (bounded: boolean): boolean => bounded || !runsAsRoot();
 
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
 /** CawCo's `fullSend` is the CLI's `bypassPermissions`: the SDK never sees CawCo's own mode. */
 const sdkMode = (
-  mode: import("@cawco/core").PermissionMode
+  mode: PermissionMode
 ): import("@anthropic-ai/claude-agent-sdk").PermissionMode =>
   mode === "fullSend" ? "bypassPermissions" : mode;
 
@@ -1253,7 +1326,7 @@ class SessionMode {
   }
 
   /** The mode said outward: Full Send while it holds, else the CLI's own. */
-  get reported(): import("@cawco/core").PermissionMode | undefined {
+  get reported(): PermissionMode | undefined {
     return this.#fullSend ? "fullSend" : this.#cli;
   }
 
@@ -1635,7 +1708,7 @@ interface SessionSpec {
   lead: boolean;
   model: string | undefined;
   options: CallerOptions;
-  permissionMode: import("@cawco/core").PermissionMode | undefined;
+  permissionMode: OfferedMode | undefined;
   persistSession: boolean | undefined;
   resume: SpawnPayload["resume"];
   skills: string[] | undefined;
@@ -1666,7 +1739,7 @@ const sessionSpecOf = (
             }),
       },
     },
-    permissionMode: spec.permissionMode,
+    permissionMode: offeredMode(spec.permissionMode),
     persistSession: spec.persistSession,
     resume: spec.resume,
     skills: spec.skills,
@@ -2091,8 +2164,12 @@ class ClaudeSession implements HarnessSession {
         // model's, and writing a level here would put cawco's guess in its
         // place on every model whose scale we cannot see.
         ...(effort && { effort }),
-        // Enables switching into bypass through the mode picker; does not select it.
-        allowDangerouslySkipPermissions: true,
+        // Enables switching into bypass through the mode picker; does not
+        // select it. Never on the host as root, where the CLI refuses it
+        // ({@link claudeRootRefusal}).
+        allowDangerouslySkipPermissions: allowsBypass(
+          ctx.boundary !== undefined
+        ),
         ...(cliMode === "bypassPermissions" && {
           // Bypass mode must also let the model run commands outside the sandbox
           // via `dangerouslyDisableSandbox` — otherwise the SDK auto-denies such
@@ -3126,6 +3203,26 @@ class ClaudeSession implements HarnessSession {
     this.#input.push(outgoing);
   }
 
+  /**
+   * Moves the CLI into `asked`, one CawCo offers, unless its root rule
+   * refuses it ({@link claudeRootRefusal}); the session takes it once the
+   * CLI is in it.
+   */
+  async #setMode(asked: PermissionMode | undefined): Promise<void> {
+    const mode = offeredMode(asked);
+    if (!mode) {
+      throw new Error(
+        `${CONTROL_SET_PERMISSION_MODE} names no permission mode`
+      );
+    }
+    const refused = claudeRootRefusal(mode, this.#ctx.boundary !== undefined);
+    if (refused) {
+      throw new Error(refused);
+    }
+    await this.#handle.setPermissionMode(sdkMode(mode));
+    this.#mode.choose(mode);
+  }
+
   async control(method: string, args: unknown[]): Promise<unknown> {
     if (method === CONTROL_WITHDRAW_SEND) {
       if (typeof args[0] !== "string" || !args[0]) {
@@ -3182,9 +3279,7 @@ class ClaudeSession implements HarnessSession {
     // The CLI is told its own mode (`fullSend` is its bypass); the session
     // takes the mode CawCo was asked for once the CLI is in it.
     if (method === CONTROL_SET_PERMISSION_MODE) {
-      const mode = args[0] as import("@cawco/core").PermissionMode;
-      await this.#handle.setPermissionMode(sdkMode(mode));
-      this.#mode.choose(mode);
+      await this.#setMode(args[0] as PermissionMode | undefined);
       return undefined;
     }
     // The session's own interrupt, never the `Query`'s alone: it stops the
@@ -4159,6 +4254,15 @@ export class ClaudeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {
+    // Before anything is made for it: a start its CLI is sure to refuse
+    // is refused here, in words that name why.
+    const rootRefused = claudeRootRefusal(
+      offeredMode(spec.permissionMode),
+      ctx.boundary !== undefined
+    );
+    if (rootRefused) {
+      throw new Error(rootRefused);
+    }
     // THE VERSION FLOOR: no Claude Code below it starts a session here, on
     // a start, a wake or a relaunch alike (all of them come through here).
     const executable = await claudeToStart();

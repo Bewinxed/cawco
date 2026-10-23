@@ -36,6 +36,7 @@ import {
   pauseClock,
   QUESTION_DISMISSED,
   relaunchOf,
+  type SessionChosenMode,
   sessionLink,
   withInputsLine,
 } from "@cawco/core";
@@ -908,7 +909,7 @@ export interface HandoffActions {
     summarizer_model?: string;
     target_harness: "claude" | "opencode" | "pi";
     target_model: string;
-    target_permission_mode?: Exclude<PermissionMode, "fullSend">;
+    target_permission_mode?: SessionChosenMode;
     note?: string;
   }) => Promise<{
     summariserInstanceId: string | null;
@@ -1064,8 +1065,8 @@ export interface HandoffActions {
       model?: string;
       /** The account it runs on, by label or id; placed by the hub when omitted. */
       account?: string;
-      /** This session's own mode when omitted. */
-      permissionMode?: PermissionMode;
+      /** This session's own mode when omitted; never Full Send, which only the owner chooses. */
+      permissionMode?: SessionChosenMode;
       /** The machine it runs on, by hostname or machineId; the caller's by default. */
       machine?: string;
     }

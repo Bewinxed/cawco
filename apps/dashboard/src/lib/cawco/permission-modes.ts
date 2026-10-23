@@ -4,15 +4,20 @@
  * Send confirmation all read it.
  *
  * A mode's name is the product's; what it does is its harness's, so every
- * description is written for one harness. A harness is offered the modes it
- * has a description for, in {@link ORDER}: from the one that asks the most to
- * the one that asks the least. pi reports no modes and is offered none. The
- * SDK has more (`dontAsk`, `auto`); a session that reports one is named by it.
+ * description is written for one harness. A harness with modes is offered
+ * every one of core's `PERMISSION_MODES`, the list each machine reports for
+ * it, each described for it, in {@link ORDER}: from the one that asks the
+ * most to the one that asks the least. pi reports no modes and is offered
+ * none. Claude Code has more (`dontAsk`, `auto`) that no harness here is
+ * offered; a session that reports one is named by it.
  */
 import {
   type HarnessKind,
   type HarnessReport,
+  type OfferedMode,
+  PERMISSION_MODES,
   type PermissionMode,
+  permissionModeNamed,
   spawnWords,
 } from "@cawco/core";
 import { speakerName } from "./transcript/speaker";
@@ -23,15 +28,18 @@ export interface PermissionModeOption {
   value: PermissionMode;
 }
 
-const ORDER: PermissionMode[] = [
-  "default",
-  "plan",
-  "acceptEdits",
-  "bypassPermissions",
-  "fullSend",
-];
+/** Where each of core's modes stands in a picker: every one has a place. */
+const RANK: Record<OfferedMode, number> = {
+  default: 0,
+  plan: 1,
+  acceptEdits: 2,
+  bypassPermissions: 3,
+  fullSend: 4,
+};
 
-const LABELS: Partial<Record<PermissionMode, string>> = spawnWords.modes;
+const ORDER = [...PERMISSION_MODES].sort((a, b) => RANK[a] - RANK[b]);
+
+const LABELS: Record<OfferedMode, string> = spawnWords.modes;
 
 /**
  * What each mode does on each harness that has modes, in a line the picker's
@@ -41,28 +49,28 @@ const LABELS: Partial<Record<PermissionMode, string>> = spawnWords.modes;
  * Bypass already allows every one of them. On both, Bypass still asks you
  * before CawCo's fleet changes; Full Send approves everything but questions.
  */
-const DESCRIPTIONS: Partial<
-  Record<HarnessKind, Partial<Record<PermissionMode, string>>>
-> = {
-  claude: {
-    default: "Reads and allow-listed tools run; others ask.",
-    plan: "Read-only until you approve a plan.",
-    acceptEdits: "File edits run without asking.",
-    bypassPermissions: "Tools run unasked; safety checks still ask.",
-    fullSend: "Everything is approved; only questions ask.",
-  },
-  opencode: {
-    default: "OpenCode's permission asks come to you.",
-    plan: "Runs OpenCode's plan agent.",
-    acceptEdits: "Edit asks are allowed; the rest come to you.",
-    bypassPermissions: "Every permission ask is allowed.",
-    fullSend: "Bypass, and fleet changes are approved too.",
-  },
-};
+const DESCRIPTIONS: Partial<Record<HarnessKind, Record<OfferedMode, string>>> =
+  {
+    claude: {
+      default: "Reads and allow-listed tools run; others ask.",
+      plan: "Read-only until you approve a plan.",
+      acceptEdits: "File edits run without asking.",
+      bypassPermissions: "Tools run unasked; safety checks still ask.",
+      fullSend: "Everything is approved; only questions ask.",
+    },
+    opencode: {
+      default: "OpenCode's permission asks come to you.",
+      plan: "Runs OpenCode's plan agent.",
+      acceptEdits: "Edit asks are allowed; the rest come to you.",
+      bypassPermissions: "Every permission ask is allowed.",
+      fullSend: "Bypass, and fleet changes are approved too.",
+    },
+  };
 
-/** What a mode is called, including one the SDK named but the product does not offer. */
+/** What a mode is called, including one a harness named but the product does not offer. */
 export function permissionModeLabel(mode: PermissionMode): string {
-  return LABELS[mode] ?? mode;
+  const offered = permissionModeNamed(mode);
+  return offered ? LABELS[offered] : mode;
 }
 
 /** What `mode` does on `harness`; empty for a harness with no modes. */
@@ -70,20 +78,22 @@ export function permissionModeDescription(
   mode: PermissionMode,
   harness: HarnessKind | undefined
 ): string {
-  return (harness && DESCRIPTIONS[harness]?.[mode]) || "";
+  const offered = permissionModeNamed(mode);
+  return (harness && offered && DESCRIPTIONS[harness]?.[offered]) || "";
 }
 
 /** The modes a person picks between on `harness`, each described for it. */
 export function permissionModesFor(
   harness: HarnessKind
 ): PermissionModeOption[] {
-  const described = DESCRIPTIONS[harness] ?? {};
-  return ORDER.flatMap((value) => {
-    const description = described[value];
-    return description === undefined
-      ? []
-      : [{ value, label: permissionModeLabel(value), description }];
-  });
+  const described = DESCRIPTIONS[harness];
+  return described
+    ? ORDER.map((value) => ({
+        value,
+        label: LABELS[value],
+        description: described[value],
+      }))
+    : [];
 }
 
 /** Whether the CLI runs in its bypass mode: Bypass, and Full Send on top of it. */

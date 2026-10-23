@@ -360,8 +360,29 @@ export interface RoleSize {
   tools: number;
 }
 
+/** One role's tools, as a session of it is listed them on Claude Code: their definitions, as the model reads them. */
+export interface RoleTools {
+  role: SessionRole;
+  tools: { name: string; inputSchema: unknown }[];
+}
+
 /** Each role's listed tools, their count and size against its budget, on Claude Code. */
-export const measureRoles = (): RoleSize[] => {
+export const measureRoles = (): RoleSize[] =>
+  listRoleTools().map(({ role, tools }) => ({
+    role,
+    tools: tools.length,
+    tokens: estimateTokens(JSON.stringify(tools).length),
+    budget: ROLE_TOOL_BUDGET[role],
+    byTool: tools
+      .map((tool) => ({
+        name: tool.name,
+        tokens: estimateTokens(JSON.stringify(tool).length),
+      }))
+      .toSorted((a, b) => b.tokens - a.tokens),
+  }));
+
+/** Every role's tools as a session of it is listed them ({@link RoleTools}), from one stood-up delegation MCP whose tools are read, never called. */
+export const listRoleTools = (): RoleTools[] => {
   const rows = SESSION_ROLES.map((role): InstanceRow => ({
     id: role,
     machineId: "machine",
@@ -550,18 +571,9 @@ export const measureRoles = (): RoleSize[] => {
       }
       // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
       // Claude Code's to act on, never part of the definition it sends.
-      const tools = listed.tools.map(({ _meta, ...tool }) => tool);
       return {
         role,
-        tools: tools.length,
-        tokens: estimateTokens(JSON.stringify(tools).length),
-        budget: ROLE_TOOL_BUDGET[role],
-        byTool: tools
-          .map((tool) => ({
-            name: tool.name,
-            tokens: estimateTokens(JSON.stringify(tool).length),
-          }))
-          .toSorted((a, b) => b.tokens - a.tokens),
+        tools: listed.tools.map(({ _meta, ...tool }) => tool),
       };
     });
   } finally {

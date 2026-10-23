@@ -2225,6 +2225,7 @@ export * from "./words/connections";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
 export * from "./words/files";
+export * from "./words/harness";
 export * from "./words/helpers";
 export * from "./words/leaks";
 export * from "./words/lfs";

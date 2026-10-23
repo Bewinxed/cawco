@@ -3,6 +3,7 @@ import {
   LANDS_MODES,
   type LandsMode,
   REFERENCE_GUIDANCE,
+  SESSION_CHOSEN_MODES,
 } from "@cawco/core";
 import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
 import type { DesignMap } from "@cawco/core/stage";
@@ -525,14 +526,7 @@ export function handoffTools(deps: HandoffDeps) {
         // Never `fullSend`: only the owner puts a session in Full Send. A
         // session that is in it passes it on by leaving this out.
         permissionMode: z
-          .enum([
-            "default",
-            "acceptEdits",
-            "bypassPermissions",
-            "plan",
-            "dontAsk",
-            "auto",
-          ])
+          .enum(SESSION_CHOSEN_MODES)
           .optional()
           .describe(
             "Default this session's; a pi session must name one for a harness that has modes. Omit for pi."
@@ -800,14 +794,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe("The model the new session runs on."),
         // Never `fullSend`: only the owner puts a session in Full Send.
         target_permission_mode: z
-          .enum([
-            "default",
-            "acceptEdits",
-            "bypassPermissions",
-            "plan",
-            "dontAsk",
-            "auto",
-          ])
+          .enum(SESSION_CHOSEN_MODES)
           .optional()
           .describe(
             "Default this session's; a pi session must name one for a harness that has modes."

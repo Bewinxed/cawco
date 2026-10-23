@@ -57,7 +57,9 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
   mcpFleetState,
+  offeredMode,
   opencodeSignInFaultWords,
+  PERMISSION_MODES,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -1056,13 +1058,7 @@ export const removeCawcoSessionConfigs = async (): Promise<void> => {
 
 export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
-  permissionModes: [
-    "default",
-    "acceptEdits",
-    "plan",
-    "bypassPermissions",
-    "fullSend",
-  ],
+  permissionModes: [...PERMISSION_MODES],
   setModel: true,
   effort: true,
   contextUsage: true,
@@ -5101,7 +5097,7 @@ export class OpencodeHarness implements Harness {
       sessionId,
       directory: ctx.cwd,
       model: spec.model,
-      permissionMode: spec.permissionMode,
+      permissionMode: offeredMode(spec.permissionMode),
       effort: spec.effort,
       workflowStepId: spec.workflowStepId,
       canDelegate: spec.canDelegate,

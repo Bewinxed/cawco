@@ -31,6 +31,7 @@ import type {
   ModelInfo,
   ModelTurnUsage,
   NeutralContentBlock,
+  PermissionMode,
   PermissionResult,
   ProviderRefusal,
   SentMessage,
@@ -63,6 +64,7 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   mcpNotConnectedLine,
+  offeredMode,
   PROVIDER_RETRY,
   pricedRequest,
   REPEATED_FAILURE,
@@ -3199,7 +3201,7 @@ export class OpencodeSession implements HarnessSession {
         this.sayEffort();
         return;
       case CONTROL_SET_PERMISSION_MODE:
-        this.#permissionMode = args[0] as string;
+        this.#permissionMode = offeredMode(args[0] as PermissionMode);
         return;
       case CONTROL_CONTEXT_USAGE: {
         const tokens = this.#lastTokens;

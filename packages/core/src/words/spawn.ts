@@ -7,6 +7,8 @@
  * draws none of it, so it is not written into it (scripts/words-swift.ts).
  */
 
+import type { OfferedMode } from "../harness";
+
 /** The mode chip's name, before the mode it names. */
 const PERMISSION_MODE = "Permission mode:";
 
@@ -22,7 +24,7 @@ export const spawnWords = {
     acceptEdits: "Accept edits",
     bypassPermissions: "Bypass",
     fullSend: "Full Send",
-  },
+  } satisfies Record<OfferedMode, string>,
   /** The mode chip while no mode is picked: Start waits on one. */
   unchosenMode: "Choose a mode",
   /** The mode chip's accessible name: "Permission mode: Ask first". */
