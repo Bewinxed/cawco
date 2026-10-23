@@ -26,9 +26,10 @@
  * 2. The hub answers 503 for its health, through one update tick (60 s): it
  *    still waits, now for the hub to answer, and nothing is downloaded.
  * 3. The hub restarts into a build that speaks N+1's protocol, its trial
- *    open: at its register with the restarted hub the machine looks at once
- *    and waits for the trial (`hubWait` trial), and through one more tick it
- *    still waits, nothing downloaded.
+ *    open: at its register with the restarted hub the machine looks at once,
+ *    waits for the trial (`hubWait` trial) and tells the hub so then, not at
+ *    its next beat; through one more tick it still waits, nothing
+ *    downloaded.
  * 4. The trial is confirmed: at its next tick the machine asks for N+1's
  *    archive, through the hub, from the mirror.
  *
@@ -275,18 +276,18 @@ const spec: Spec = {
       const onTrial = await until(
         machineState,
         (state) => state?.hubWait === "trial",
-        45_000
+        20_000
       );
-      // When the machine wrote it, not when its next beat carried it to the hub.
-      const looked =
-        (onTrial?.updatedAt ?? Number.POSITIVE_INFINITY) - answered;
+      // On the hub's record, as the person's row reads it: told at once, not
+      // at the machine's next beat (a hub's trial is shorter than a beat).
+      const seen = Date.now() - answered;
       check(
-        "within 20 s of the restarted hub answering, mid-trial, the machine looks at once (its register with the hub) and waits for the trial",
+        "within 10 s of the restarted hub answering, mid-trial, the hub's record of the machine says it waits for the trial (its register with the hub, told at once)",
         onTrial?.phase === "waiting-for-hub" &&
           onTrial.hubWait === "trial" &&
           onTrial.error === undefined &&
-          looked <= 20_000,
-        `written ${looked} ms after the hub answered; ${JSON.stringify(onTrial)}`
+          seen <= 10_000,
+        `seen on the hub ${seen} ms after it answered, written ${(onTrial?.updatedAt ?? 0) - answered} ms after; ${JSON.stringify(onTrial)}`
       );
       await Bun.sleep(65_000);
       const held = await machineState();

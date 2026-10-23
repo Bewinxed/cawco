@@ -644,7 +644,7 @@ export class BinaryUpdater {
   }
 
   /** {@link #set}, only when a value it names changes: every write moves `updatedAt`, which the board reads as news. */
-  async #setChanged(update: Partial<BinaryUpdateState>): Promise<void> {
+  async #setChanged(update: Partial<BinaryUpdateState>): Promise<boolean> {
     const changed = Object.entries(update).some(
       ([key, value]) =>
         JSON.stringify(this.#state[key as keyof BinaryUpdateState]) !==
@@ -653,6 +653,7 @@ export class BinaryUpdater {
     if (changed) {
       await this.#set(update);
     }
+    return changed;
   }
 
   /** The keeper watchdog restarted a wedged keeper: the dashboard says so once. */
@@ -1306,7 +1307,7 @@ export class BinaryUpdater {
     const attempt =
       this.#flags.commanded || (this.#policy.autoUpdate && !failedBefore);
     if (attempt && hubWait) {
-      await this.#setChanged({
+      const moved = await this.#setChanged({
         phase: "waiting-for-hub",
         hubWait,
         availableVersion: version,
@@ -1315,6 +1316,12 @@ export class BinaryUpdater {
         heldChildren: undefined,
         waitingOn: undefined,
       });
+      // What it waits for reaches the machine's row now, not at the next
+      // beat: a hub's trial is over in less than a beat's interval, and a
+      // row still saying `behind` through it says the wrong wait.
+      if (moved) {
+        await this.#tellHub().catch(logFailure);
+      }
       return;
     }
     const failure = attempt ? await readFailure(version) : undefined;

@@ -82,6 +82,20 @@ const hubOrigin = (): string => {
 };
 
 /**
+ * Why a request did not reach the hub, in one line: its error's name, code
+ * and message. An Error object handed to the console is printed with its
+ * stack and the source around it, dozens of lines for each request a hub's
+ * restart refuses.
+ */
+const unreachedWords = (error: unknown): string => {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const code = "code" in error ? ` ${String(error.code)}` : "";
+  return `${error.name}${code}: ${error.message}`;
+};
+
+/**
  * Proxy all API requests to the hub server
  */
 async function proxyToHub(
@@ -202,7 +216,9 @@ async function proxyToHub(
       },
     });
   } catch (error) {
-    console.error(`[Proxy] Error forwarding to ${targetUrl}:`, error);
+    console.warn(
+      `[Proxy] ${request.method} ${targetUrl} did not reach the hub: ${unreachedWords(error)}`
+    );
     // The dashboard's own word, marked as such: the hub never answered, and
     // the page says so in its one wording (hub-read.ts `HUB_UNREACHABLE`).
     // Plain text, which every reader of a refusal takes as its sentence.
