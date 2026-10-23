@@ -425,6 +425,8 @@ addEventListener("cawco:hmr", (event) => {
   if (typeof hash === "string" && PAGE_HASH.test(hash)) {
     pageHash = hash;
   }
+  // Drawn again by its own framework: a node may hold another part now.
+  lastFound.clear();
   reflect();
   told();
   pins.draw();
@@ -772,6 +774,8 @@ let latest = "";
 
 function morphTo(html: string) {
   const held = morphPage(html, kept);
+  // A morph keeps nodes by their place, whatever they hold now.
+  lastFound.clear();
   pageHash = html.match(SERVED_HASH)?.[1] ?? pageHash;
   filled();
   told();
@@ -1568,16 +1572,67 @@ function waiting(anchor: PageAnchor): boolean {
   return false;
 }
 
+/** The most anchors {@link locate} keeps the last-found element of. Our call: every pin a page may hold, and a draft. */
+const FOUND_MOST = 512;
+/** The element each anchor last found, by the anchor as kept: its frames, its selector and its words. */
+const lastFound = new Map<string, WeakRef<Element>>();
+const foundKey = (anchor: PageAnchor) =>
+  JSON.stringify([anchor.frames ?? [], anchor.selector, anchor.text ?? ""]);
+
+/**
+ * The element `anchor` last found, while it is still in its document and
+ * its selector still names that very element: its words changed in place
+ * (a live count, a clock, a status line inside a chosen card), which the
+ * anchor's text test cannot tell from another element standing in its
+ * place, but the same node at the same place is the mark's. A node taken
+ * out, or another put where it stood, is not.
+ */
+function stillThere(anchor: PageAnchor): Element | null {
+  const el = lastFound.get(foundKey(anchor))?.deref();
+  if (!el?.isConnected) {
+    return null;
+  }
+  let named: Element | null = null;
+  try {
+    named = el.ownerDocument.querySelector(anchor.selector);
+  } catch {
+    return null;
+  }
+  return named === el ? el : null;
+}
+
 /**
  * Where a page's anchor stands now (core `findAnchor`: down its frames, then
- * file:line, then selector, then text); one that leads into a frame of
- * another origin, where its embed found it (embeds.ts).
+ * file:line, then selector, then text, else the element it last found, still
+ * at its place: {@link stillThere}); one that leads into a frame of another
+ * origin, where its embed found it (embeds.ts). What it finds is kept for
+ * the next look, which is how a pin's anchor is written again with its
+ * element's words as they read now (pins.ts `reanchor`).
  */
 function locate(anchor: PageAnchor) {
   const remote = embeds.find(anchor);
   if (remote) {
     return remote.state === "found" ? { by: remote.by, el: remote.el } : null;
   }
+  const found = findAnchorHere(anchor);
+  const key = foundKey(anchor);
+  if (found) {
+    lastFound.delete(key);
+    lastFound.set(key, new WeakRef(found.el));
+    if (lastFound.size > FOUND_MOST) {
+      const [oldest] = lastFound.keys();
+      if (oldest !== undefined) {
+        lastFound.delete(oldest);
+      }
+    }
+    return found;
+  }
+  const standing = stillThere(anchor);
+  return standing ? { by: "selector" as const, el: standing } : null;
+}
+
+/** {@link locate} in this page and its same-origin frames: core `findAnchor` alone. */
+function findAnchorHere(anchor: PageAnchor) {
   return findAnchor<Element, Document>(anchor, {
     top: document,
     frame: frameIn,

@@ -957,6 +957,8 @@ const runOn = async (kit: Kit, on: On) => {
     () => draftChecks(on),
     // A pin stays on its element while a page draws it again.
     () => redrawChecks(on),
+    // A pin stays on an element whose words change in place (tsk-22).
+    () => liveWordsChecks(on),
     // Comments go by themselves, and why one wasn't sent.
     () => pinSendChecks(on),
     // Delete, one press in the thread's head.
@@ -9730,6 +9732,208 @@ const redrawChecks = async (on: On) => {
     "redraw: its element drawn back, the pin comes out of the moved tray and its pill stands on the value again",
     !!back && !back.movedAt && (await pillOn(frame, 1, REDRAWN)) === true,
     `movedAt ${String(back?.movedAt)}; on ${await pillOn(frame, 1, REDRAWN)}`
+  );
+  await shutList(on);
+};
+
+/**
+ * A card whose count changes in place every 300 ms (a live page's counter,
+ * clock or status line), named only by its place (no id); `probeLive.stop()`
+ * sets its last words and keeps them through a reload; `remove()` takes the
+ * card out.
+ */
+const LIVE_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  main { padding: 24px; }
+  .card { display: flex; gap: 16px; width: 360px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+</style></head>
+<body><main>
+  <div class="card"><span class="title">Nightly build</span><span class="count">Runs: 0</span></div>
+</main>
+<script>
+  const count = document.querySelector(".count");
+  let n = 0;
+  let timer = 0;
+  if (sessionStorage.getItem("probeLive") === "stopped") {
+    count.textContent = "Runs: done";
+  } else {
+    timer = setInterval(() => {
+      n += 1;
+      count.textContent = "Runs: " + n;
+    }, 300);
+  }
+  window.probeLive = {
+    stop: () => {
+      clearInterval(timer);
+      count.textContent = "Runs: done";
+      sessionStorage.setItem("probeLive", "stopped");
+    },
+    remove: () => {
+      clearInterval(timer);
+      document.querySelector(".card").remove();
+    },
+  };
+</script>
+</body></html>`;
+/** The count the live-words leg pins. */
+const LIVE_COUNT = "main .card .count";
+
+/**
+ * A pin says its element is gone only when it is (the owner's tsk-22:
+ * "elements i select still dismiss their elements saying 'element is
+ * gone'"): a comment on a count whose words change in place every 300 ms,
+ * named by its place alone, is never moved aside through 4 s of changes,
+ * its pill on the count, and its anchor's words follow the count's; its
+ * last words set and the page reloaded, it stands on the count, never
+ * moved aside; the card taken out, it is moved aside, its row Element gone.
+ */
+const liveWordsChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "live-words",
+    html: LIVE_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(on.page, id, "the live page in the pane");
+  if (!frame) {
+    on.kit.check(
+      "live words: the page is in the pane",
+      false,
+      made.slice(0, 300)
+    );
+    return;
+  }
+  await frame.waitForSelector(LIVE_COUNT);
+  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  const count = await until(
+    "the count drawn, in the pane's current frame",
+    async () => {
+      const current = await (
+        await frame.frameElement()
+      )
+        .evaluate(
+          (el) =>
+            !(el as HTMLIFrameElement).inert &&
+            (el as HTMLIFrameElement).hasAttribute("data-ready")
+        )
+        .catch(() => false);
+      return current
+        ? await screenBox(on, frame, LIVE_COUNT).catch(() => undefined)
+        : undefined;
+    },
+    Boolean,
+    15_000
+  );
+  await commentAt(
+    on,
+    frame,
+    count.x + count.w * 0.5,
+    count.y + count.h / 2,
+    "The count reads wrong."
+  );
+  const written = await until(
+    "the live page's pin",
+    async () => pinNumbered((await docOf(frame)).pins, 1),
+    Boolean,
+    10_000
+  ).catch(() => undefined);
+  const first = written?.anchor as
+    { selector?: string; text?: string } | undefined;
+  await on.page.keyboard.press("Escape");
+
+  // 4 s of its words changing: never moved aside, its pill on the count.
+  const watched: { moved: boolean; on: boolean | null; text: string }[] = [];
+  const until4 = Date.now() + 4000;
+  while (Date.now() < until4) {
+    // biome-ignore lint/performance/noAwaitInLoops: one read every 200 ms, in order
+    const pin = pinNumbered((await docOf(frame)).pins, 1);
+    watched.push({
+      moved: !!pin?.movedAt,
+      on: await pillOn(frame, 1, LIVE_COUNT),
+      text: (pin?.anchor as { text?: string } | undefined)?.text ?? "",
+    });
+    await on.page.waitForTimeout(200);
+  }
+  const texts = new Set(watched.map((one) => one.text));
+  on.kit.check(
+    "live words: a comment on a count whose words change in place every 300 ms (named by its place alone) is never moved aside through 4 s of changes, its pill stands on the count, and its anchor's words follow the count's",
+    !!first?.selector &&
+      !first.selector.startsWith("#") &&
+      watched.length > 10 &&
+      watched.every((one) => !one.moved && one.on === true) &&
+      texts.size > 1,
+    `first ${JSON.stringify(first)}; reads ${watched.length}; moved ${watched.filter((one) => one.moved).length}; off ${watched.filter((one) => one.on !== true).length}; words ${[...texts].slice(0, 4).join(" | ")}`
+  );
+
+  // Its last words, kept through a reload: it stands on the count, never moved aside.
+  await frame.evaluate(() =>
+    (window as unknown as { probeLive: { stop: () => void } }).probeLive.stop()
+  );
+  const settled = await until(
+    "the anchor's words the count's last",
+    async () => pinNumbered((await docOf(frame)).pins, 1),
+    (pin) =>
+      (pin?.anchor as { text?: string } | undefined)?.text === "Runs: done",
+    8000
+  ).catch(() => undefined);
+  const { origin } = new URL(on.page.url());
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const again = await frameHolding(on.page, id, "the live page after a reload");
+  const reloaded: { moved: boolean; on: boolean | null }[] = [];
+  if (again) {
+    await again.waitForSelector(LIVE_COUNT);
+    const until3 = Date.now() + 3000;
+    while (Date.now() < until3) {
+      // biome-ignore lint/performance/noAwaitInLoops: one read every 200 ms, in order
+      const pin = pinNumbered((await docOf(again)).pins, 1);
+      reloaded.push({
+        moved: !!pin?.movedAt,
+        on: await pillOn(again, 1, LIVE_COUNT),
+      });
+      await on.page.waitForTimeout(200);
+    }
+  }
+  on.kit.check(
+    "live words: its last words set and the page reloaded, the pin stands on the count, never moved aside",
+    !!settled &&
+      reloaded.length > 5 &&
+      reloaded.every((one) => !one.moved) &&
+      reloaded.at(-1)?.on === true,
+    `words ${JSON.stringify((settled?.anchor as { text?: string } | undefined)?.text)}; reads ${reloaded.length}; moved ${reloaded.filter((one) => one.moved).length}; last on ${reloaded.at(-1)?.on}`
+  );
+
+  // The card taken out: the pin is moved aside, its row Element gone.
+  const live = again ?? frame;
+  await live.evaluate(() =>
+    (
+      window as unknown as { probeLive: { remove: () => void } }
+    ).probeLive.remove()
+  );
+  const gone = await until(
+    "the pin moved aside",
+    async () => pinNumbered((await docOf(live)).pins, 1),
+    (pin) => !!pin?.movedAt,
+    10_000
+  ).catch(() => undefined);
+  const row = (await rowsOf(on)).locator(
+    '[data-slot="pin-row"][data-pin-row="1"][data-moved]'
+  );
+  await row.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const said = (
+    await row
+      .locator('[data-slot="title"]')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  on.kit.check(
+    "live words: the card taken out of the page, the pin is moved aside, its row saying Element gone",
+    !!gone?.movedAt && said === commentWords.elementGone,
+    `movedAt ${String(gone?.movedAt)}; row ${JSON.stringify(said)}`
   );
   await shutList(on);
 };
