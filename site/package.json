@@ -6,7 +6,6 @@
     "dev": "vite",
     "build": "node scripts/build.mjs",
     "check": "bun ../scripts/fmt.ts --check . && biome check . && tsc --noEmit",
-    "typecheck": "tsc -b",
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
@@ -21,7 +20,6 @@
     "@iconify/types": "^2.0.0",
     "@iconify/utils": "^3.1.7",
     "@types/node": "^26.6.4",
-    "@typescript/native": "npm:typescript@~7.0.2",
     "esbuild": "^0.28.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vite": "^8.3.2"

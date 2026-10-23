@@ -44,7 +44,7 @@ export function patterns(entries) {
       )
   );
   return (token) => {
-    const base = splitVariants(token).base;
+    const { base } = splitVariants(token);
     return compiled.some((p) => p.test(base) || p.test(normalizeClass(token)));
   };
 }
@@ -57,6 +57,8 @@ const styleClasses = (model) =>
     ? classSelectors(model.text.slice(model.ast.css.start, model.ast.css.end))
     : new Set();
 
+const MODIFIER = /\/[\w.%]+$/;
+
 /** Each class no CSS is written for. */
 export function unknownClasses(model, { allow = [] } = {}) {
   const allowed = patterns(allow);
@@ -66,7 +68,7 @@ export function unknownClasses(model, { allow = [] } = {}) {
     for (const entry of site.entries) {
       const token = entry.name;
       const base = normalizeClass(token);
-      const bare = base.replace(/\/[\w.%]+$/, "");
+      const bare = base.replace(MODIFIER, "");
       if (
         !base ||
         base.startsWith("[") ||
@@ -78,7 +80,8 @@ export function unknownClasses(model, { allow = [] } = {}) {
       ) {
         continue;
       }
-      const variantOnly = token.includes(":") && knows(splitVariants(token).base);
+      const variantOnly =
+        token.includes(":") && knows(splitVariants(token).base);
       findings.push({
         start: entry.start,
         end: entry.end,
@@ -203,7 +206,7 @@ export function restyle(model, { allowClasses = [] } = {}) {
     if (!site.component) {
       continue;
     }
-    const name = site.component.name;
+    const { name } = site.component;
     for (const entry of site.entries) {
       if (entry.directive || placesOnly(entry.name, allowedClass)) {
         continue;
@@ -250,6 +253,8 @@ const NAMED_COLORS = new Set(
   )
 );
 
+const LEAVES = /[\s,()/]+/;
+
 /** Whether a CSS value names a colour outright (not through a variable). */
 export function hasRawColor(value) {
   const text = value
@@ -266,7 +271,7 @@ export function hasRawColor(value) {
     return true;
   }
   return text
-    .split(/[\s,()/]+/)
+    .split(LEAVES)
     .some((leaf) => NAMED_COLORS.has(leaf.toLowerCase()));
 }
 
@@ -314,7 +319,9 @@ export function inlineStyles(model, { allow = [] } = {}) {
   if (model.kind !== "svelte") {
     return [];
   }
-  const allowed = allow.map((entry) => new RegExp(`^${cssName(entry).replace(/\*/g, ".*")}$`));
+  const allowed = allow.map(
+    (entry) => new RegExp(`^${cssName(entry).replace(/\*/g, ".*")}$`)
+  );
   const exempt = (property) => allowed.some((p) => p.test(cssName(property)));
   const findings = [];
   const report = (node, message) =>
@@ -344,7 +351,10 @@ export function inlineStyles(model, { allow = [] } = {}) {
       case "TemplateLiteral":
         return hasRawColor(n.quasis.map((q) => q.value.cooked ?? "").join(" "));
       case "ConditionalExpression":
-        return carriesRawColor(n.consequent, seen) || carriesRawColor(n.alternate, seen);
+        return (
+          carriesRawColor(n.consequent, seen) ||
+          carriesRawColor(n.alternate, seen)
+        );
       case "LogicalExpression":
         return carriesRawColor(n.left, seen) || carriesRawColor(n.right, seen);
       case "Identifier": {
@@ -380,34 +390,74 @@ export function inlineStyles(model, { allow = [] } = {}) {
   };
 
   const dynamic = (at) =>
-    report(at, "Dynamic style object cannot be checked. Build it from CSS custom properties only.");
+    report(
+      at,
+      "Dynamic style object cannot be checked. Build it from CSS custom properties only."
+    );
 
   /** Whether a name is a `style` prop the component received (forwarded). */
   const forwardedStyle = (identifier) => {
     const d = bindingAt(model, identifier.name, identifier.start)?.declarator;
     return Boolean(
       d &&
-        d.id.type === "ObjectPattern" &&
-        calleeName(unwrap(d.init) ?? {}) === "$props" &&
-        d.id.properties.some(
-          (p) =>
-            p.type !== "RestElement" &&
-            keyOf(p) === "style" &&
-            (p.value?.type === "AssignmentPattern" ? p.value.left : p.value)?.name ===
-              identifier.name
-        )
+      d.id.type === "ObjectPattern" &&
+      calleeName(unwrap(d.init) ?? {}) === "$props" &&
+      d.id.properties.some(
+        (p) =>
+          p.type !== "RestElement" &&
+          keyOf(p) === "style" &&
+          (p.value?.type === "AssignmentPattern" ? p.value.left : p.value)
+            ?.name === identifier.name
+      )
     );
   };
 
-  const check = (raw, at, seen = new Set()) => {
-    const expr = unwrap(raw);
-    if (!expr) {
+  /** A value with nothing to read in it: `undefined`, `null`. */
+  const nothing = (expr) =>
+    (expr.type === "Identifier" && expr.name === "undefined") ||
+    (expr.type === "Literal" && expr.value === null);
+
+  const checkObject = (expr) => {
+    for (const property of expr.properties) {
+      const key = property.type === "Property" ? keyOf(property) : null;
+      if (key === null || property.computed) {
+        dynamic(property);
+      } else {
+        judge(key, property.value, property.value);
+      }
+    }
+  };
+
+  const checkName = (expr, at, seen) => {
+    if (forwardedStyle(expr)) {
       return;
     }
-    if (
-      (expr.type === "Identifier" && expr.name === "undefined") ||
-      (expr.type === "Literal" && expr.value === null)
-    ) {
+    const b = bindingAt(model, expr.name, expr.start);
+    if (b?.kind === "const" && b.init && !seen.has(b)) {
+      check(b.init, at, new Set([...seen, b]));
+    } else {
+      dynamic(at);
+    }
+  };
+
+  const BRANCHES = {
+    ConditionalExpression(expr, _at, seen) {
+      check(expr.consequent, expr.consequent, seen);
+      check(expr.alternate, expr.alternate, seen);
+    },
+    LogicalExpression(expr, _at, seen) {
+      if (expr.operator !== "&&") {
+        check(expr.left, expr.left, seen);
+      }
+      check(expr.right, expr.right, seen);
+    },
+    Identifier: checkName,
+    ObjectExpression: checkObject,
+  };
+
+  function check(raw, at, seen = new Set()) {
+    const expr = unwrap(raw);
+    if (!expr || nothing(expr)) {
       return;
     }
     if (expr.type === "CallExpression" && calleeName(expr) === "$derived") {
@@ -421,85 +471,71 @@ export function inlineStyles(model, { allow = [] } = {}) {
       }
       return;
     }
-    if (expr.type === "ConditionalExpression") {
-      check(expr.consequent, expr.consequent, seen);
-      check(expr.alternate, expr.alternate, seen);
-      return;
-    }
-    if (expr.type === "LogicalExpression") {
-      if (expr.operator !== "&&") {
-        check(expr.left, expr.left, seen);
-      }
-      check(expr.right, expr.right, seen);
-      return;
-    }
-    if (expr.type === "Identifier") {
-      if (forwardedStyle(expr)) {
-        return;
-      }
-      const b = bindingAt(model, expr.name, expr.start);
-      if (b?.kind === "const" && b.init && !seen.has(b)) {
-        check(b.init, at, new Set([...seen, b]));
-        return;
-      }
+    const branch = BRANCHES[expr.type];
+    if (branch) {
+      branch(expr, at, seen);
+    } else {
       dynamic(at);
+    }
+  }
+
+  const partsOf = (value) => {
+    if (value === true) {
+      return [];
+    }
+    return Array.isArray(value) ? value : [value];
+  };
+
+  const styleAttribute = (attribute) => {
+    const parts = partsOf(attribute.value);
+    if (parts.length === 1 && parts[0].type === "ExpressionTag") {
+      check(parts[0].expression, parts[0].expression);
       return;
     }
-    if (expr.type !== "ObjectExpression") {
-      dynamic(at);
-      return;
+    // Text with values written into it: each declaration's property is
+    // read; a value from an expression is no colour it can see.
+    const css = parts
+      .map((p) => (p.type === "Text" ? p.raw : "\u{fffc}"))
+      .join("");
+    for (const { property, value } of declarationsIn(css)) {
+      judge(property, attribute, null, value);
     }
-    for (const property of expr.properties) {
-      const key = property.type === "Property" ? keyOf(property) : null;
-      if (key === null || property.computed) {
-        dynamic(property);
-        continue;
-      }
-      judge(key, property.value, property.value);
+  };
+
+  const styleDirective = (attribute) => {
+    const parts = partsOf(attribute.value);
+    const text =
+      attribute.value !== true && parts.every((p) => p.type === "Text")
+        ? parts.map((p) => p.raw).join("")
+        : undefined;
+    const expression =
+      parts.length === 1 && parts[0].type === "ExpressionTag"
+        ? parts[0].expression
+        : null;
+    judge(attribute.name, attribute, expression, text);
+  };
+
+  const spread = (attribute) => {
+    const arg = unwrap(attribute.expression);
+    const style =
+      arg?.type === "ObjectExpression"
+        ? arg.properties.find(
+            (p) => p.type === "Property" && keyOf(p) === "style"
+          )
+        : null;
+    if (style) {
+      check(style.value, style.value);
     }
   };
 
   eachNode(model, (node) => {
     for (const attribute of node.attributes ?? []) {
       if (attribute.type === "Attribute" && attribute.name === "style") {
-        const value = attribute.value;
-        if (value === true) {
-          continue;
-        }
-        const parts = Array.isArray(value) ? value : [value];
-        if (parts.length === 1 && parts[0].type === "ExpressionTag") {
-          check(parts[0].expression, parts[0].expression);
-        } else {
-          // Text with values written into it: each declaration's property
-          // is read; a value from an expression is no colour it can see.
-          const css = parts
-            .map((p) => (p.type === "Text" ? p.raw : "\u{fffc}"))
-            .join("");
-          for (const { property, value: v } of declarationsIn(css)) {
-            judge(property, attribute, null, v);
-          }
-        }
+        styleAttribute(attribute);
       } else if (attribute.type === "StyleDirective") {
-        const value = attribute.value;
-        const parts = value === true ? [] : Array.isArray(value) ? value : [value];
-        const text = parts.every((p) => p.type === "Text")
-          ? parts.map((p) => p.raw).join("")
-          : undefined;
-        const expression =
-          parts.length === 1 && parts[0].type === "ExpressionTag"
-            ? parts[0].expression
-            : null;
-        judge(attribute.name, attribute, expression, value === true ? undefined : text);
+        styleDirective(attribute);
       } else if (attribute.type === "SpreadAttribute") {
-        const arg = unwrap(attribute.expression);
-        if (arg?.type === "ObjectExpression") {
-          const style = arg.properties.find(
-            (p) => p.type === "Property" && keyOf(p) === "style"
-          );
-          if (style) {
-            check(style.value, style.value);
-          }
-        }
+        spread(attribute);
       }
     }
   });

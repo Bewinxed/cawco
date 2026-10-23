@@ -16,7 +16,9 @@
  * store layout.
  *
  * For each tracked `tsconfig*.json` (but the shared base and paths, which
- * include nothing) this runs the repository's `tsc --listFilesOnly --traceResolution`,
+ * include nothing) this runs `golar tsc --listFilesOnly --traceResolution`
+ * (the TypeScript `bun run check` checks with, from the repository's root,
+ * where its config is),
  * which builds the program without checking it, and reads every
  * "successfully resolved to '<path>'" line of the trace. A path outside the
  * checkout fails the check, named with the import and the file that made it.
@@ -29,17 +31,24 @@
  * importing `leaky` that only a `node_modules` above it holds, must fail it
  * and name that path.
  *
- * `bun scripts/resolution-check.ts`, in `bun run lint` after `svelte-kit
+ * `bun scripts/resolution-check.ts`, in `bun run check` after `svelte-kit
  * sync` (the dashboard's project extends the config the sync writes).
  */
-import { readFileSync, realpathSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
-import ts from "typescript";
 
 const ROOT = await realpath(join(import.meta.dir, ".."));
-const TSC = join(ROOT, "node_modules/.bin/tsc");
+const GOLAR = join(ROOT, "node_modules/.bin/golar");
 /** Configs projects extend, which check nothing themselves. */
 const SHARED = ["tsconfig.base.json", "tsconfig.paths.json"];
 
@@ -95,8 +104,15 @@ const leaksOf = async (
   folders: string[]
 ): Promise<Leak[]> => {
   const child = Bun.spawn(
-    [TSC, "--project", project, "--listFilesOnly", "--traceResolution"],
-    { cwd: root, stdout: "pipe", stderr: "pipe" }
+    [
+      GOLAR,
+      "tsc",
+      "--project",
+      join(root, project),
+      "--listFilesOnly",
+      "--traceResolution",
+    ],
+    { cwd: ROOT, stdout: "pipe", stderr: "pipe" }
   );
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
@@ -110,16 +126,15 @@ const leaksOf = async (
   }
   if (code !== 0) {
     throw new Error(
-      `tsc --project ${project} --listFilesOnly exited ${code}\n${err}${out
+      `golar tsc --project ${project} --listFilesOnly exited ${code}\n${err}${out
         .split("\n")
         .filter((line) => line.includes("error TS"))
         .join("\n")}`
     );
   }
-  return [
-    ...leaksIn(out.split("\n"), project, folders),
-    ...componentLeaks(root, project, folders),
-  ];
+  // Golar reads a project's `.svelte` components through svelte2tsx, so
+  // their imports are in the same trace.
+  return leaksIn(out.split("\n"), project, folders);
 };
 
 /** The leaks a resolution trace's `lines` show, crossings first. */
@@ -136,7 +151,7 @@ const leaksIn = (
     if (header?.groups) {
       const { module, type, from: containing } = header.groups;
       specifier = module ?? `types:${type}`;
-      from = containing.replace(STUB, "");
+      from = containing;
       continue;
     }
     const path = RESOLVED.exec(line)?.groups?.path;
@@ -150,109 +165,6 @@ const leaksIn = (
   const all = [...leaks.values()];
   const crossings = all.filter((leak) => within(leak.from, folders));
   return crossings.length > 0 ? crossings : all;
-};
-
-/**
- * Svelte components, which tsc does not read: svelte-check gives the project
- * its `.svelte` files (`extraFileExtensions`, as the Svelte language tools
- * pass it). Each component's scripts' imports go into a stub beside it, read
- * from memory, never written, so they resolve from the component's folder
- * under the project's own options, traced as tsc traces.
- */
-const COMPONENTS: ts.FileExtensionInfo[] = [
-  {
-    extension: ".svelte",
-    isMixedContent: true,
-    scriptKind: ts.ScriptKind.Deferred,
-  },
-];
-const STUB = ".resolution-check.ts";
-
-interface SvelteScript {
-  content: { end: number; start: number };
-}
-let svelteParse:
-  | ((
-      source: string,
-      options: { filename: string; modern: true }
-    ) => { instance?: SvelteScript; module?: SvelteScript })
-  | undefined;
-
-/** The dashboard's svelte parser: scripts/ declares no svelte of its own. */
-const loadSvelte = async (): Promise<void> => {
-  svelteParse = (
-    (await import(
-      Bun.resolveSync("svelte/compiler", join(ROOT, "apps/dashboard"))
-    )) as { parse: NonNullable<typeof svelteParse> }
-  ).parse;
-};
-
-const componentLeaks = (
-  root: string,
-  project: string,
-  folders: string[]
-): Leak[] => {
-  const config = ts.getParsedCommandLineOfConfigFile(
-    join(root, project),
-    {},
-    {
-      ...ts.sys,
-      onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-        throw new Error(
-          `${project}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`
-        );
-      },
-    },
-    undefined,
-    undefined,
-    COMPONENTS
-  );
-  const components = (config?.fileNames ?? []).filter((file) =>
-    file.endsWith(".svelte")
-  );
-  if (!config || components.length === 0) {
-    return [];
-  }
-  if (!svelteParse) {
-    throw new Error("resolution-check: svelte's parser was not loaded");
-  }
-  const stubs = new Map<string, string>();
-  for (const file of components) {
-    const source = readFileSync(file, "utf8");
-    const ast = svelteParse(source, { filename: file, modern: true });
-    const imports = [ast.instance, ast.module].flatMap((script) =>
-      script
-        ? ts
-            .preProcessFile(
-              source.slice(script.content.start, script.content.end),
-              true,
-              true
-            )
-            .importedFiles.map((imported) => imported.fileName)
-        : []
-    );
-    stubs.set(
-      `${file}${STUB}`,
-      imports.map((name) => `import ${JSON.stringify(name)};\n`).join("")
-    );
-  }
-  const options = { ...config.options, noEmit: true, traceResolution: true };
-  const host = ts.createCompilerHost(options);
-  const fileExists = host.fileExists.bind(host);
-  const readFile = host.readFile.bind(host);
-  const getSourceFile = host.getSourceFile.bind(host);
-  const lines: string[] = [];
-  host.fileExists = (path) => stubs.has(path) || fileExists(path);
-  host.readFile = (path) => stubs.get(path) ?? readFile(path);
-  host.getSourceFile = (path, language, ...rest) => {
-    const text = stubs.get(path);
-    return text === undefined
-      ? getSourceFile(path, language, ...rest)
-      : ts.createSourceFile(path, text, language);
-  };
-  host.trace = (line) => lines.push(line);
-  ts.createProgram({ rootNames: [...stubs.keys()], options, host });
-  return leaksIn(lines, `${project} (its .svelte components)`, folders);
 };
 
 const leaksUnder = async (
@@ -277,7 +189,12 @@ const selfTest = async (): Promise<void> => {
   );
   try {
     const checkout = join(dir, "checkout");
-    await mkdir(checkout, { recursive: true });
+    await mkdir(join(checkout, "node_modules"), { recursive: true });
+    // Golar's Svelte codegen loads the svelte a component's project resolves.
+    await symlink(
+      realpathSync(join(ROOT, "node_modules/svelte")),
+      join(checkout, "node_modules/svelte")
+    );
     // Bun.write makes the folders it writes into.
     await Promise.all(
       ["leaky", "leaky-component"].flatMap((name) => [
@@ -329,7 +246,6 @@ const selfTest = async (): Promise<void> => {
   }
 };
 
-await loadSvelte();
 await selfTest();
 
 const tracked = (

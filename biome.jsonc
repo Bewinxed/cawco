@@ -125,7 +125,10 @@
       // biomejs.dev/linter/rules/no-tailwind-raw-colors). The other design
       // rules run in Golar (golar.config.ts, scripts/lint/design): Biome's
       // nearest rules hold neither their options nor their reach.
-      "includes": ["apps/dashboard/src/**/*.svelte", "apps/dashboard/src/**/*.ts"],
+      "includes": [
+        "apps/dashboard/src/**/*.svelte",
+        "apps/dashboard/src/**/*.ts",
+      ],
       "linter": {
         "rules": {
           "nursery": { "noTailwindRawColors": "error" },

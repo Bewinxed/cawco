@@ -1,9 +1,11 @@
 /**
- * Checks run at once, each in its own process, each with a time limit: the
- * runner `bun run typecheck` (typecheck.ts) and `bun run lint` (lint.ts) are
- * made of. What each printed comes out whole when it ends, and the run fails
- * when any one failed, timed out, or could not start. A check with `after`
- * starts only once the check it names has ended, whatever its verdict.
+ * Checks run at once, each in its own process, each with a time limit: what
+ * `bun run check` (check.ts) is made of. What each printed comes out whole
+ * when it ends, and the run fails when any one failed, timed out, or could
+ * not start. A check with `after` starts only once the check it names has
+ * ended, whatever its verdict. A check with `stamp` writes it when it
+ * passes: the key of the inputs it passed on, which check.ts reads to skip
+ * it while they stay the same.
  */
 import { availableParallelism } from "node:os";
 import {
@@ -23,7 +25,11 @@ export interface Check {
   after?: string;
   argv: string[];
   dir: string;
+  /** Environment over this process's. */
+  env?: Record<string, string>;
   name: string;
+  /** Written when the check passes: `key` into `file`. */
+  stamp?: { file: string; key: string };
 }
 
 interface Outcome {
@@ -52,6 +58,7 @@ const run = async (check: Check): Promise<Outcome> => {
       stdout: "pipe",
       stderr: "pipe",
       detached: true,
+      env: check.env ? { ...process.env, ...check.env } : undefined,
     });
   } catch (error) {
     return {
@@ -96,6 +103,9 @@ const run = async (check: Check): Promise<Outcome> => {
   } else if (code !== 0) {
     why = `exit ${code}`;
   }
+  if (why === "ok" && check.stamp) {
+    await Bun.write(check.stamp.file, check.stamp.key);
+  }
   return {
     check,
     ok: why === "ok",
@@ -122,7 +132,9 @@ const report = (outcome: Outcome): void => {
  */
 export const runChecks = async (
   what: string,
-  checks: Check[]
+  checks: Check[],
+  /** Printed after the verdict line's count. */
+  tail = ""
 ): Promise<never> => {
   // Out of the terminal's process group, a check no longer hears Ctrl-C itself.
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -186,6 +198,6 @@ export const runChecks = async (
     );
     process.exit(1);
   }
-  console.log(`${what}: ${checks.length} checks passed in ${wall}s`);
+  console.log(`${what}: ${checks.length} checks passed in ${wall}s${tail}`);
   process.exit(0);
 };

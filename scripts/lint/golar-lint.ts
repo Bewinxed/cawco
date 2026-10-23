@@ -21,6 +21,7 @@ const ROOT = join(import.meta.dir, "../..");
 const GOLAR = join(ROOT, "node_modules/golar/dist/bin.js");
 const FIXTURES = "scripts/lint/fixtures/";
 /** A report as Golar prints it: `path:line:column: rule: message`. */
+const SPACES = /\s+/;
 const FINDING = /^(\S[^:]*):(\d+):(\d+): ([\w/-]+): /;
 
 const fail = (why: string, said = ""): never => {
@@ -58,7 +59,7 @@ const expected: Expected[] = (
   .split("\n")
   .filter((line) => line.trim() && !line.startsWith("#"))
   .map((line) => {
-    const [place = "", rule = "", mark] = line.trim().split(/\s+/);
+    const [place = "", rule = "", mark] = line.trim().split(SPACES);
     const [file = "", at = "0", column = "0"] = place.split(":");
     return {
       file,
@@ -121,10 +122,7 @@ if (missing.length > 0 || extra.length > 0) {
   );
 }
 if (found.length > 0) {
-  fail(
-    `${found.length} finding(s)`,
-    found.map((f) => f.text).join("\n")
-  );
+  fail(`${found.length} finding(s)`, found.map((f) => f.text).join("\n"));
 }
 console.log(
   `golar lint: every rule found its planted mistakes (${proof.length}) and nothing else${

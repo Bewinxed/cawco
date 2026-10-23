@@ -14,7 +14,9 @@ export const THEME = path.join(DASHBOARD, "src/app.css");
 
 // @tailwindcss/node is @tailwindcss/vite's dependency; resolved from there.
 const fromVite = createRequire(
-  fs.realpathSync(path.join(DASHBOARD, "node_modules/@tailwindcss/vite/package.json"))
+  fs.realpathSync(
+    path.join(DASHBOARD, "node_modules/@tailwindcss/vite/package.json")
+  )
 );
 const tailwind = await import(
   pathToFileURL(fromVite.resolve("@tailwindcss/node")).href
@@ -58,12 +60,18 @@ export function splitVariants(token) {
   return { variants: segments.slice(0, -1), base: segments.at(-1) };
 }
 
+const LEADING_BANG = /^!/;
+const TRAILING_BANG = /!$/;
+const LEADING_MINUS = /^-/;
+const BRACKET_VALUE = /-\[[^\]]*\]/;
+const ARBITRARY_PROPERTY = /^\[[^\]]+:[^\]]+\]$/;
+
 /** The base without `!` or a leading `-`. */
 export function normalizeClass(token) {
   return splitVariants(token)
-    .base.replace(/^!/, "")
-    .replace(/!$/, "")
-    .replace(/^-/, "");
+    .base.replace(LEADING_BANG, "")
+    .replace(TRAILING_BANG, "")
+    .replace(LEADING_MINUS, "");
 }
 
 const MARKERS = new Set(["group", "peer", "dark", "light"]);
@@ -77,7 +85,7 @@ export function isArbitraryValue(token) {
     return false;
   }
   const { base } = splitVariants(token);
-  return /-\[[^\]]*\]/.test(base) || /^\[[^\]]+:[^\]]+\]$/.test(base);
+  return BRACKET_VALUE.test(base) || ARBITRARY_PROPERTY.test(base);
 }
 
 const compiledRules = new Map();

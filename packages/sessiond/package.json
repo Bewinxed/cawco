@@ -16,15 +16,13 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "start": "bun src/main.ts",
-    "typecheck": "tsc -b"
+    "start": "bun src/main.ts"
   },
   "dependencies": {
     "@cawco/core": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
-    "@typescript/native": "npm:typescript@~7.0.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }

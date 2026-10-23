@@ -148,8 +148,7 @@
     "openui:check": "OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun scripts/openui-views.ts --check",
     "pricing": "bun scripts/pricing-snapshot.ts",
     "tools": "bun scripts/tool-presentation.ts",
-    "tools:check": "bun scripts/tool-presentation.ts --check",
-    "typecheck": "tsc -b . scripts"
+    "tools:check": "bun scripts/tool-presentation.ts --check"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
@@ -157,7 +156,6 @@
     "@octokit/rest": "22.0.1",
     "@openuidev/lang-core": "1.0.1",
     "@tailwindcss/postcss": "4.3.3",
-    "@typescript/native": "npm:typescript@~7.0.2",
     "browserslist": "4.29.3",
     "bun-plugin-svelte": "0.0.6",
     "fontkit": "2.0.4",

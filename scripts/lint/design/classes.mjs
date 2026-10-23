@@ -25,7 +25,6 @@ import {
   modelOf,
   parentOf,
   parseScript,
-  parseSvelte,
   readText,
   SRC_LIB,
 } from "./model.mjs";
@@ -199,11 +198,11 @@ export function readerFor(model, { follow = true } = {}) {
   const forwarded = (identifier, local) => {
     const binding = bindingAt(local, identifier.name, identifier.start);
     const d = binding?.declarator;
+    const init = unwrap(d?.init);
     if (
-      !d ||
-      d.id.type !== "ObjectPattern" ||
-      unwrap(d.init)?.type !== "CallExpression" ||
-      calleeName(unwrap(d.init)) !== "$props"
+      d?.id.type !== "ObjectPattern" ||
+      init?.type !== "CallExpression" ||
+      calleeName(init) !== "$props"
     ) {
       return false;
     }
@@ -248,8 +247,20 @@ export function readerFor(model, { follow = true } = {}) {
       }
     },
     ConditionalExpression(node, tags, out, seen, local) {
-      visit(node.consequent, { ...tags, [axis(node)]: "then" }, out, seen, local);
-      visit(node.alternate, { ...tags, [axis(node)]: "else" }, out, seen, local);
+      visit(
+        node.consequent,
+        { ...tags, [axis(node)]: "then" },
+        out,
+        seen,
+        local
+      );
+      visit(
+        node.alternate,
+        { ...tags, [axis(node)]: "else" },
+        out,
+        seen,
+        local
+      );
     },
     LogicalExpression(node, tags, out, seen, local) {
       if (node.operator === "&&") {
@@ -328,7 +339,9 @@ export function readerFor(model, { follow = true } = {}) {
       const object = unwrap(node.object);
       const key = memberKey(node);
       const found =
-        object?.type === "Identifier" && local ? resolve(object, seen, local) : null;
+        object?.type === "Identifier" && local
+          ? resolve(object, seen, local)
+          : null;
       const init = unwrap(found?.init);
       const property =
         key && init?.type === "ObjectExpression"
@@ -340,10 +353,14 @@ export function readerFor(model, { follow = true } = {}) {
         out.unresolved.push(node);
         return;
       }
-      const inner = found.foreign
-        ? { entries: [], unresolved: [] }
-        : out;
-      visit(property.value, tags, inner, new Set([...seen, found.binding]), found.model);
+      const inner = found.foreign ? { entries: [], unresolved: [] } : out;
+      visit(
+        property.value,
+        tags,
+        inner,
+        new Set([...seen, found.binding]),
+        found.model
+      );
       if (found.foreign) {
         for (const entry of inner.entries) {
           out.entries.push({ ...entry, start: node.start, end: node.end });
@@ -376,7 +393,13 @@ export function readerFor(model, { follow = true } = {}) {
     }
     for (const property of v.properties) {
       if (property.type === "Property") {
-        visit(property.value, { ...tags, slot: keyOf(property) }, out, seen, local);
+        visit(
+          property.value,
+          { ...tags, slot: keyOf(property) },
+          out,
+          seen,
+          local
+        );
       }
     }
   };
@@ -436,7 +459,14 @@ export function readerFor(model, { follow = true } = {}) {
       slotted(props.get("slots"), tags, out, seen, true, local);
     }
     visitVariants(props.get("variants"), tags, out, seen, slots, local);
-    visitCompounds(props.get("compoundVariants"), tags, out, seen, slots, local);
+    visitCompounds(
+      props.get("compoundVariants"),
+      tags,
+      out,
+      seen,
+      slots,
+      local
+    );
   };
 
   return (node) => {
@@ -490,7 +520,12 @@ function readAttributeValue(value, read) {
       }
       for (const m of text.matchAll(WORD)) {
         const from = part.start + m.index;
-        out.entries.push({ name: m[0], start: from, end: from + m[0].length, tags: {} });
+        out.entries.push({
+          name: m[0],
+          start: from,
+          end: from + m[0].length,
+          tags: {},
+        });
       }
     } else if (part.type === "ExpressionTag") {
       const read1 = read(part.expression);
@@ -505,6 +540,8 @@ function readAttributeValue(value, read) {
 export const tagName = (tag) => tag?.name ?? "";
 
 /** A file's imports, by local name. */
+const IMPORT_KINDS = { default: "default", "*": "namespace" };
+
 export function importsOf(model) {
   if (!model.imports) {
     model.imports = new Map();
@@ -512,12 +549,7 @@ export function importsOf(model) {
       if (b.kind === "import") {
         model.imports.set(b.name, {
           source: b.source,
-          kind:
-            b.imported === "default"
-              ? "default"
-              : b.imported === "*"
-                ? "namespace"
-                : "named",
+          kind: IMPORT_KINDS[b.imported] ?? "named",
           imported: b.imported,
         });
       }
@@ -527,6 +559,24 @@ export function importsOf(model) {
 }
 
 const barrels = new Map();
+/** The components one `export { … } from "…"` names, into `found`. */
+function reExports(statement, file, found) {
+  const source = statement.source.value;
+  const component = svelteFile(source, file);
+  const module = component ? null : moduleFile(source, file);
+  for (const specifier of statement.specifiers) {
+    const local = specifier.local.name ?? specifier.local.value;
+    const exported = specifier.exported.name ?? specifier.exported.value;
+    const target =
+      component && local === "default"
+        ? component
+        : module && barrelComponents(module).get(local);
+    if (target) {
+      found.set(exported, target);
+    }
+  }
+}
+
 /** A barrel's components by exported name (`export { default as X } from "./x.svelte"`). */
 function barrelComponents(file) {
   if (!barrels.has(file)) {
@@ -534,20 +584,7 @@ function barrelComponents(file) {
     barrels.set(file, found);
     for (const statement of parseScript(readText(file)).body) {
       if (statement.type === "ExportNamedDeclaration" && statement.source) {
-        const source = statement.source.value;
-        const component = svelteFile(source, file);
-        const module = component ? null : moduleFile(source, file);
-        for (const specifier of statement.specifiers) {
-          const local = specifier.local.name ?? specifier.local.value;
-          const exported = specifier.exported.name ?? specifier.exported.value;
-          const target =
-            component && local === "default"
-              ? component
-              : module && barrelComponents(module).get(local);
-          if (target) {
-            found.set(exported, target);
-          }
-        }
+        reExports(statement, file, found);
       }
     }
   }
@@ -603,7 +640,9 @@ export function wrapsKit(file, depth = 0) {
       const attribute = node.attributes.find(
         (a) => a.type === "Attribute" && a.name === "class"
       );
-      if (!attribute || !uses.test(text.slice(attribute.start, attribute.end))) {
+      if (!(
+        attribute && uses.test(text.slice(attribute.start, attribute.end))
+      )) {
         return;
       }
       const [first] = tagName(node).split(".");
@@ -632,12 +671,20 @@ export function kitComponent(model, tag) {
   if (KIT_IMPORT.test(source)) {
     return { name: tagName(tag), file, wrapper: false };
   }
-  return file && wrapsKit(file) ? { name: tagName(tag), file, wrapper: true } : null;
+  return file && wrapsKit(file)
+    ? { name: tagName(tag), file, wrapper: true }
+    : null;
 }
 
 /** The class lists of a tag: `class` with every `class:x` (one element), and each other `*class*` on its own. */
-export function tagSites(model, tag, read) {
-  const own = { tag, attribute: "class", entries: [], unresolved: [], nodes: [] };
+export function tagSites(tag, read) {
+  const own = {
+    tag,
+    attribute: "class",
+    entries: [],
+    unresolved: [],
+    nodes: [],
+  };
   const sites = [own];
   for (const attribute of tag.attributes ?? []) {
     if (attribute.type === "ClassDirective") {
@@ -703,7 +750,7 @@ export function sitesOf(model, options = {}) {
   eachNode(model, (node) => {
     if (isTag(node)) {
       const component = kitComponent(model, node);
-      for (const site of tagSites(model, node, read)) {
+      for (const site of tagSites(node, read)) {
         sites.push({ ...site, component });
       }
     } else if (isClassCall(node) && !insideClassSite(model, node)) {

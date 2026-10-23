@@ -15,8 +15,7 @@
     "openapi:check": "bun scripts/openapi.ts --check",
     "roles:check": "bun scripts/role-budgets.ts",
     "skills:check": "bun scripts/skills-check.ts",
-    "start": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun src/index.ts",
-    "typecheck": "tsc -b"
+    "start": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun src/index.ts"
   },
   "dependencies": {
     "@cawco/auth": "workspace:*",
@@ -51,7 +50,6 @@
   "devDependencies": {
     "@elysia/openapi": "2.0.0-beta.4",
     "@types/bun": "^1.4.3",
-    "@typescript/native": "npm:typescript@~7.0.2",
     "drizzle-kit": "^0.31.11",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-json-schema": "0.68.0"

@@ -20,8 +20,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "dev": "bun --watch src/cli.ts",
-    "start": "bun src/cli.ts",
-    "typecheck": "tsc -b . src/canvas-host src/preview-overlay src/stage-host/canvas"
+    "start": "bun src/cli.ts"
   },
   "dependencies": {
     "@achingbrain/nat-port-mapper": "4.0.5",
@@ -69,7 +68,6 @@
     "@types/dockerode": "4.0.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@typescript/native": "npm:typescript@~7.0.2",
     "react-docgen": "8.0.4",
     "react-docgen-typescript": "2.4.0",
     "svelte2tsx": "0.7.61",

@@ -33,7 +33,8 @@ export const fromDashboard = createRequire(
   path.join(DASHBOARD, "package.json")
 );
 const fromSvelte = createRequire(fromDashboard.resolve("svelte/package.json"));
-const load = (require, name) => import(pathToFileURL(require.resolve(name)).href);
+const load = (require, name) =>
+  import(pathToFileURL(require.resolve(name)).href);
 
 const svelteCompiler = await load(fromDashboard, "svelte/compiler");
 const parseSvelte = svelteCompiler.parse ?? svelteCompiler.default.parse;
@@ -69,7 +70,7 @@ export function keepMappings() {
   const create = plugin.createServiceCode;
   plugin.createServiceCode = async (cwd, config, fileName, sourceText) => {
     const answer = await create(cwd, config, fileName, sourceText);
-    if (answer && "mappings" in answer) {
+    if ("mappings" in answer) {
       mappingsByFile.set(fileName, {
         serviceText: answer.serviceText,
         mappings: [...answer.mappings].sort(
@@ -258,101 +259,78 @@ function bindingsOf(model) {
     return whole;
   };
   const stack = [];
-  const visit = (node) => {
-    switch (node.type) {
-      case "ImportDeclaration":
-        for (const s of node.specifiers) {
-          add(s.local, whole, "import", {
-            source: node.source.value,
-            imported:
-              s.type === "ImportDefaultSpecifier"
-                ? "default"
-                : s.type === "ImportNamespaceSpecifier"
-                  ? "*"
-                  : (s.imported.name ?? s.imported.value),
-          });
-        }
-        break;
-      case "VariableDeclaration": {
-        const scope =
-          node.kind === "var" ? whole : scopeOf(stack.slice(0, -1));
-        for (const d of node.declarations) {
-          for (const id of patternNames(d.id)) {
-            const plain = d.id.type === "Identifier";
-            add(id, scope, node.kind === "const" && plain ? "const" : "other", {
-              init: plain ? d.init : null,
-              declarator: d,
-            });
-          }
-        }
-        break;
-      }
-      case "FunctionDeclaration":
-      case "ClassDeclaration":
-        if (node.id) {
-          add(node.id, scopeOf(stack.slice(0, -1)), "other");
-        }
-        break;
-      default:
-        break;
-    }
-    if (
-      node.type === "FunctionDeclaration" ||
-      node.type === "FunctionExpression" ||
-      node.type === "ArrowFunctionExpression"
-    ) {
-      for (const p of node.params) {
-        for (const id of patternNames(p)) {
-          add(id, [node.start, node.end], "other");
-        }
-      }
-    }
-    if (node.type === "CatchClause" && node.param) {
-      for (const id of patternNames(node.param)) {
-        add(id, [node.start, node.end], "other");
-      }
-    }
-    if (node.type === "EachBlock") {
-      for (const id of patternNames(node.context)) {
-        add(id, [node.start, node.end], "other");
-      }
-      if (node.index) {
-        bindings.push({
-          name: node.index,
-          start: node.start,
-          end: node.end,
-          kind: "other",
-        });
-      }
-    }
-    if (node.type === "SnippetBlock") {
-      add(node.expression, whole, "other");
-      for (const p of node.parameters ?? []) {
-        for (const id of patternNames(p)) {
-          add(id, [node.start, node.end], "other");
-        }
-      }
-    }
-    if (node.type === "AwaitBlock") {
-      for (const id of [
-        ...patternNames(node.value),
-        ...patternNames(node.error),
-      ]) {
-        add(id, [node.start, node.end], "other");
-      }
-    }
-    if (node.type === "ConstTag") {
-      const d = node.declaration.declarations[0];
-      const parent = stack.at(-2);
-      const scope = parent ? [parent.start, parent.end] : whole;
-      for (const id of patternNames(d.id)) {
-        add(id, scope, d.id.type === "Identifier" ? "const" : "other", {
-          init: d.id.type === "Identifier" ? d.init : null,
-          declarator: d,
-        });
-      }
+  /** Every name in `patterns`, seen in the node's own range, as other. */
+  const own = (node, patterns) => {
+    for (const id of patterns.flatMap((p) => patternNames(p))) {
+      add(id, [node.start, node.end], "other");
     }
   };
+  const declare = (declarator, scope, isConst) => {
+    const plain = declarator.id.type === "Identifier";
+    for (const id of patternNames(declarator.id)) {
+      add(id, scope, isConst && plain ? "const" : "other", {
+        init: plain ? declarator.init : null,
+        declarator,
+      });
+    }
+  };
+  const IMPORTED = {
+    ImportDefaultSpecifier: () => "default",
+    ImportNamespaceSpecifier: () => "*",
+    ImportSpecifier: (s) => s.imported.name ?? s.imported.value,
+  };
+  const functionParams = (node) => own(node, node.params);
+  const handlers = {
+    ImportDeclaration(node) {
+      for (const s of node.specifiers) {
+        add(s.local, whole, "import", {
+          source: node.source.value,
+          imported: IMPORTED[s.type](s),
+        });
+      }
+    },
+    VariableDeclaration(node) {
+      const scope = node.kind === "var" ? whole : scopeOf(stack.slice(0, -1));
+      for (const d of node.declarations) {
+        declare(d, scope, node.kind === "const");
+      }
+    },
+    FunctionDeclaration(node) {
+      if (node.id) {
+        add(node.id, scopeOf(stack.slice(0, -1)), "other");
+      }
+      functionParams(node);
+    },
+    ClassDeclaration(node) {
+      if (node.id) {
+        add(node.id, scopeOf(stack.slice(0, -1)), "other");
+      }
+    },
+    FunctionExpression: functionParams,
+    ArrowFunctionExpression: functionParams,
+    CatchClause(node) {
+      own(node, [node.param]);
+    },
+    EachBlock(node) {
+      own(node, [node.context]);
+      if (node.index) {
+        add({ name: node.index }, [node.start, node.end], "other");
+      }
+    },
+    SnippetBlock(node) {
+      add(node.expression, whole, "other");
+      own(node, node.parameters ?? []);
+    },
+    AwaitBlock(node) {
+      own(node, [node.value, node.error]);
+    },
+    ConstTag(node) {
+      const parent = stack.at(-2);
+      const [d] = node.declaration.declarations;
+      declare(d, parent ? [parent.start, parent.end] : whole, true);
+    },
+  };
+  const visit = (node) => handlers[node.type]?.(node);
   const roots =
     model.kind === "svelte"
       ? [model.ast.module, model.ast.instance, model.ast.fragment]
@@ -411,17 +389,25 @@ export function modelOf(fileName) {
   let ast;
   try {
     ast =
-      kind === "svelte" ? parseSvelte(text, { modern: true }) : parseScript(text);
+      kind === "svelte"
+        ? parseSvelte(text, { modern: true })
+        : parseScript(text);
   } catch {
     // A file that does not parse is Golar's type check's to report (svelte2tsx
     // fails on it there); the rules read nothing of it.
     ast =
       kind === "svelte"
-        ? { module: null, instance: null, fragment: { type: "Fragment", nodes: [] }, css: null }
+        ? {
+            module: null,
+            instance: null,
+            fragment: { type: "Fragment", nodes: [] },
+            css: null,
+          }
         : { type: "Program", body: [], start: 0, end: 0 };
   }
   const parents = new WeakMap();
-  const roots = kind === "svelte" ? [ast.module, ast.instance, ast.fragment] : [ast];
+  const roots =
+    kind === "svelte" ? [ast.module, ast.instance, ast.fragment] : [ast];
   for (const root of roots) {
     walk(root, (node, parent) => parents.set(node, parent));
   }
@@ -451,7 +437,8 @@ export const relative = (file) => path.relative(ROOT, file);
 /** The 1-based line `at` stands on. */
 export const lineOf = (text, at) => text.slice(0, at).split("\n").length;
 
-const IGNORE = /golar-ignore-next-line\s+([\w/-]+(?:\s*,\s*[\w/-]+)*)\s+--\s+\S/;
+const IGNORE =
+  /golar-ignore-next-line\s+([\w/-]+(?:\s*,\s*[\w/-]+)*)\s+--\s+\S/;
 
 /**
  * Whether the line before `at` holds `golar-ignore-next-line <rule> -- why`

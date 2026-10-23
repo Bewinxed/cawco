@@ -30,7 +30,7 @@ import {
   svelteFile,
   tagName,
 } from "./classes.mjs";
-import { DASHBOARD, parseScript, parseSvelte, readText, reportAt } from "./model.mjs";
+import { DASHBOARD, parseScript, parseSvelte, readText } from "./model.mjs";
 import { ds } from "./tailwind.mjs";
 
 /* ---------------------------------------------------------------- selectors */
@@ -987,7 +987,8 @@ function recipeClasses(expression, text, file, imports, props = new Map()) {
       return [];
     }
     const open = found.match.index + found.match[0].length - 1;
-    const call = parseScript(`f(${callArguments(found.text, open)})`).body[0]?.expression;
+    const call = parseScript(`f(${callArguments(found.text, open)})`).body[0]
+      ?.expression;
     const [first, second] = call?.arguments ?? [];
     const recipe =
       found.match[1] === "tv" ? recipeOf(first) : recipeOf(second, first);
@@ -1304,7 +1305,7 @@ export function variantOrder(model) {
     if (site.tag?.type !== "Component" || site.attribute !== "class") {
       continue;
     }
-    const entries = site.entries;
+    const { entries } = site;
     if (entries.length === 0) {
       continue;
     }

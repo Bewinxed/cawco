@@ -13,9 +13,6 @@
       "default": "./src/marks.ts"
     }
   },
-  "scripts": {
-    "typecheck": "tsc -b"
-  },
   "devDependencies": {
     "svelte": "5.57.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",

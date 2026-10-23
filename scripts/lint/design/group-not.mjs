@@ -64,7 +64,9 @@ function tagsWithin(node) {
   }
   return fragmentsOf(node)
     .filter(Boolean)
-    .flatMap((f) => (f.type === "Fragment" ? f.nodes.flatMap(tagsWithin) : tagsWithin(f)));
+    .flatMap((f) =>
+      f.type === "Fragment" ? f.nodes.flatMap(tagsWithin) : tagsWithin(f)
+    );
 }
 
 /** The name a `{@render name(…)}` calls. */
@@ -117,7 +119,11 @@ function ancestorPaths(model, node, renders, hops = 0) {
 function precedingPaths(model, start, renders, hops = 0) {
   const out = [];
   let node = start;
-  for (let parent = parentOf(model, node); parent; parent = parentOf(model, node)) {
+  for (
+    let parent = parentOf(model, node);
+    parent;
+    parent = parentOf(model, node)
+  ) {
     if (parent.type === "Fragment") {
       const at = parent.nodes.indexOf(node);
       out.push(...parent.nodes.slice(0, Math.max(0, at)).flatMap(tagsWithin));
@@ -144,7 +150,9 @@ function precedingPaths(model, start, renders, hops = 0) {
 
 const alone = (entry, relation) =>
   `"${entry.name}" uses ${relation.variant}, which matches only ${
-    relation.kind === "group" ? "inside an ancestor" : "after a preceding sibling"
+    relation.kind === "group"
+      ? "inside an ancestor"
+      : "after a preceding sibling"
   } carrying "${relation.marker}"; this file renders none there, so on its own it never matches. If the condition should not require the ${relation.kind}, write not-${relation.kind}-… instead.`;
 
 /** The findings of house/group-not-needs-ancestor in a file. */
@@ -164,7 +172,7 @@ export function groupNotNeedsAncestor(model) {
   });
   const classesOf = (tag) => {
     if (!carried.has(tag)) {
-      const [own] = tagSites(model, tag, read);
+      const [own] = tagSites(tag, read);
       carried.set(tag, new Set(own.entries.map((entry) => entry.name)));
     }
     return carried.get(tag);
@@ -174,34 +182,32 @@ export function groupNotNeedsAncestor(model) {
       relation.kind === "group"
         ? ancestorPaths(model, tag, renders)
         : precedingPaths(model, tag, renders);
-    return ways.every((way) => way.some((el) => classesOf(el).has(relation.marker)));
+    return ways.every((way) =>
+      way.some((el) => classesOf(el).has(relation.marker))
+    );
   };
+  const finding = (entry, relation) => ({
+    start: entry.start,
+    end: entry.end,
+    message: alone(entry, relation),
+  });
   // Elements are judged once every render site is known. A class string no
   // markup in this file carries (a recipe, a helper call in a .ts module)
   // stands on no element here.
   for (const tag of tags) {
-    for (const site of tagSites(model, tag, read)) {
-      for (const entry of site.entries) {
-        inMarkup.add(entry.start);
-        for (const relation of relationsOf(entry.name)) {
-          if (!backed(tag, relation)) {
-            findings.push({ start: entry.start, end: entry.end, message: alone(entry, relation) });
-          }
-        }
-      }
+    const entries = tagSites(tag, read).flatMap((site) => site.entries);
+    for (const entry of entries) {
+      inMarkup.add(entry.start);
+      const unbacked = relationsOf(entry.name).filter((r) => !backed(tag, r));
+      findings.push(...unbacked.map((r) => finding(entry, r)));
     }
   }
-  for (const site of sitesOf(model)) {
-    if (site.tag) {
-      continue;
-    }
-    for (const entry of site.entries) {
-      if (!inMarkup.has(entry.start)) {
-        for (const relation of relationsOf(entry.name)) {
-          findings.push({ start: entry.start, end: entry.end, message: alone(entry, relation) });
-        }
-      }
-    }
+  const scripted = sitesOf(model)
+    .filter((site) => !site.tag)
+    .flatMap((site) => site.entries)
+    .filter((entry) => !inMarkup.has(entry.start));
+  for (const entry of scripted) {
+    findings.push(...relationsOf(entry.name).map((r) => finding(entry, r)));
   }
   return findings;
 }
