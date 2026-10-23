@@ -7,7 +7,9 @@
  * covered box over that x, in bands. The mark is moved there by the
  * scrollers round it, innermost first (a scroll container, a same-origin
  * frame's document, the page), each moving it as far as it can while it
- * still shows it, and only as far as the band needs.
+ * still shows it, and only as far as the band needs. Where none can, room
+ * is given under the foot of what the person scrolls ({@link liftUnder},
+ * {@link padFoot}; pins.ts `giveRoom`).
  */
 import { type FrameElement, isFrame, rectOf } from "./frames";
 
@@ -73,6 +75,105 @@ export function liftUnder(x: number, covered: ViewBox[], r: number): number {
   }
   const top = Math.min(...over.map((box) => box.y));
   return Math.ceil(innerHeight - top + r + CLEAR_GAP);
+}
+
+/** Overflows that keep the person from scrolling a box (a script still can). */
+const HELD = /^(hidden|clip)$/;
+
+/**
+ * Whether the person scrolls the top page: its root's overflow, or the
+ * body's where the root's is `visible` (CSS Overflow 3 carries the body's up
+ * to the viewport then), holds no scroll back. An app's shell whose body is
+ * `overflow: hidden` scrolls only inside it.
+ */
+export function pageScrolls(): boolean {
+  const root = getComputedStyle(document.documentElement).overflowY;
+  if (root !== "visible") {
+    return !HELD.test(root);
+  }
+  return !(
+    document.body && HELD.test(getComputedStyle(document.body).overflowY)
+  );
+}
+
+/** The innermost scroll container round a mark in `chain` ({@link scrollersOf}), none a document's own; null when it has none. */
+export function innerScroller(
+  chain: Scroller[]
+): { el: HTMLElement; scale: number } | null {
+  const found = chain.find(
+    ({ el }) => el !== el.ownerDocument.scrollingElement && "style" in el
+  );
+  return found ? { el: found.el as HTMLElement, scale: found.scale } : null;
+}
+
+/**
+ * Room given under a scroll container's content, kept to be taken back:
+ * its bottom padding as computed before, its `style` attribute as it was,
+ * its inline bottom padding and priority, and the attribute as written.
+ */
+export interface FootPad {
+  el: HTMLElement;
+  inline: string;
+  own: string;
+  priority: string;
+  style: string | null;
+  wrote: string;
+}
+
+/**
+ * Room `px` (the container's own px) under scroll container `el`'s content:
+ * its bottom padding grown inline, important so no rule of the page's
+ * holds it back. Padding over a spacer the overlay would put in as its last
+ * child: such a child takes `:last-child` from the page's own last child
+ * (a list's last border, prose's last margin), and in a grid or a row of
+ * flex items stands beside the content rather than under it; a scroll
+ * container's bottom padding is under the content in every layout, and
+ * moves nothing inside it. `held`, the room given before: grown or shrunk
+ * in place on the same container, taken back from another first.
+ */
+export function padFoot(
+  el: HTMLElement,
+  px: number,
+  held: FootPad | null
+): FootPad {
+  const kept = held?.el === el ? held : null;
+  if (held && !kept) {
+    unpadFoot(held);
+  }
+  const first = kept ?? {
+    inline: el.style.getPropertyValue("padding-bottom"),
+    own: getComputedStyle(el).paddingBottom,
+    priority: el.style.getPropertyPriority("padding-bottom"),
+    style: el.getAttribute("style"),
+  };
+  el.style.setProperty(
+    "padding-bottom",
+    `calc(${first.own} + ${Math.ceil(px)}px)`,
+    "important"
+  );
+  return { ...first, el, wrote: el.getAttribute("style") ?? "" };
+}
+
+/**
+ * The room {@link padFoot} gave taken back: the `style` attribute as it
+ * was, to the byte, while nothing else has written it since; else only the
+ * bottom padding put back, so what the page wrote meanwhile stands.
+ */
+export function unpadFoot(pad: FootPad) {
+  const { el } = pad;
+  if ((el.getAttribute("style") ?? "") === pad.wrote) {
+    if (pad.style === null) {
+      el.removeAttribute("style");
+    } else {
+      el.setAttribute("style", pad.style);
+    }
+    return;
+  }
+  if (pad.inline) {
+    el.style.setProperty("padding-bottom", pad.inline, pad.priority);
+  } else {
+    el.style.removeProperty("padding-bottom");
+  }
 }
 
 export const inBands = (y: number, bands: Band[]) =>

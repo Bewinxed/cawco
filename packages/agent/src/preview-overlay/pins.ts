@@ -70,10 +70,15 @@ import { durationMs, type InkChrome } from "./radial";
 import {
   bandsAt,
   bringInto,
+  type FootPad,
   inBands,
+  innerScroller,
   liftUnder,
+  padFoot,
+  pageScrolls,
   scrollersOf,
   scrollMoves,
+  unpadFoot,
 } from "./scrollers";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -432,11 +437,13 @@ export function startPins(deps: PinsDeps): Pins {
   /** What of the page's viewport the host's chrome covers (`cawco:covered`): a phone's card or rail. */
   let covered: Box[] = [];
   /**
-   * Whose pill the room under the page's foot was made for (ink.ts
-   * `insetFoot`): a pin's id, or {@link DRAFT_PIN} for the comment being
-   * written; null while the page has its own scroll.
+   * Whose pill the room under the page's foot, or its scroll container's,
+   * was made for ({@link giveRoom}): a pin's id, or {@link DRAFT_PIN} for the
+   * comment being written; null while the page has its own scroll.
    */
   let insetFor: string | null = null;
+  /** The room given under a scroll container's content (scrollers.ts `padFoot`), while it stands. */
+  let footPad: FootPad | null = null;
 
   const anchoredEl = (pin: Pin): Element | null =>
     "selector" in pin.anchor ? (deps.locate(pin.anchor)?.el ?? null) : null;
@@ -1124,12 +1131,12 @@ export function startPins(deps: PinsDeps): Pins {
   /**
    * A pill standing at `where`, `owner`'s (a pin's id, or {@link DRAFT_PIN}
    * for the comment being written), brought out as {@link reveal} says. One
-   * no scroll can lift clear of what the host's chrome covers (a page too
-   * short to scroll it there) is given room under the page's foot, the
-   * covered height and the gap a lifted pill keeps (scrollers.ts
-   * `liftUnder`), as iOS insets content above its keyboard, and lifted into
-   * it; the room stays while `owner`'s pill is the one kept clear
-   * ({@link staleInset}).
+   * no scroll can lift clear of what the host's chrome covers (a page or a
+   * scroll container too short to scroll it there) is given room
+   * ({@link giveRoom}), the covered height and the gap a lifted pill keeps
+   * (scrollers.ts `liftUnder`), as iOS insets content above its keyboard,
+   * and lifted into it; the room stays while `owner`'s pill is the one kept
+   * clear ({@link staleInset}).
    */
   const bringOut = (where: Standing & { pill?: Pill }, owner: string) => {
     const r = (where.pill?.box.h ?? 20) / 2;
@@ -1142,14 +1149,10 @@ export function startPins(deps: PinsDeps): Pins {
     const chain = scrollersOf(where.el);
     let landed = bringInto(chain, y, clear);
     const room = landed ? 0 : liftUnder(x, covered, r);
-    if (room > 0) {
-      insetFor = owner;
-      insetFoot(room);
-      fitToPage(layer, true);
+    if (room > 0 && giveRoom(chain, room, owner)) {
       landed = bringInto(chain, y, clear);
     }
-    // Out from under nothing (no room lifts it: its scrollers are not the
-    // page's): at least in the viewport.
+    // Out from under nothing (nothing round it takes room): at least in the viewport.
     const moves = landed ?? bringInto(chain, y, bandsAt(x, [], r));
     if (moves) {
       scrollMoves(moves, motionOk() ? "smooth" : "auto");
@@ -1157,10 +1160,45 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /**
-   * Whether the room under the page's foot is no longer needed: nothing
-   * covers the page, or the pill it was made for is no longer the open
-   * thread's, the stepped-to one's or the comment being written. Taken back
-   * here; the caller draws, which fits the layers to the page's own scroll.
+   * Room `px` (the viewport's px) for `owner`'s pill, under the foot of what
+   * the person scrolls to reach it: the page's, where the person scrolls the
+   * page (the overlay's layers run past its scroll, ink.ts `insetFoot`);
+   * else, as in an app's shell whose body is `overflow: hidden`, the pill's
+   * own scroll container's (scrollers.ts `padFoot`), so the shell stays put
+   * and its list scrolls further. Whether any was given: none where the page
+   * holds its scroll and no container scrolls the pill.
+   */
+  const giveRoom = (
+    chain: ReturnType<typeof scrollersOf>,
+    px: number,
+    owner: string
+  ) => {
+    const page = pageScrolls();
+    const inner = page ? null : innerScroller(chain);
+    if (!(page || inner)) {
+      return false;
+    }
+    insetFor = owner;
+    if (inner) {
+      insetFoot(0);
+      footPad = padFoot(inner.el, px / inner.scale, footPad);
+    } else {
+      if (footPad) {
+        unpadFoot(footPad);
+        footPad = null;
+      }
+      insetFoot(px);
+    }
+    fitToPage(layer, true);
+    return true;
+  };
+
+  /**
+   * Whether the room given for a pill is no longer needed: nothing covers
+   * the page, or the pill it was made for is no longer the open thread's,
+   * the stepped-to one's or the comment being written. Taken back here, the
+   * container's style as it was; the caller draws, which fits the layers to
+   * the page's own scroll.
    */
   const staleInset = () => {
     const kept =
@@ -1174,6 +1212,10 @@ export function startPins(deps: PinsDeps): Pins {
     }
     insetFor = null;
     insetFoot(0);
+    if (footPad) {
+      unpadFoot(footPad);
+      footPad = null;
+    }
     return true;
   };
 

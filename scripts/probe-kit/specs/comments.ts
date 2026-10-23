@@ -241,7 +241,10 @@
  *   pill opens each stand as the foot sheet with the pill wholly above the
  *   sheet's top and the line inside the frame's viewport; on a page too
  *   short to scroll it there, the same, lifted into room the overlay makes
- *   under the page's foot; each sheet closed, the page's scroll is its own.
+ *   under the page's foot; on an app's shell whose body does not scroll and
+ *   whose scroll container scrolls too little, lifted into room under the
+ *   container's foot; each sheet closed, the page's and the container's
+ *   scroll are their own, the container's children and styles as they were.
  * The captures for the reviewer (light and dark, desk and 390) are written
  * under the run's output folder (`kit.out`/commenting); nothing here opens
  * them.
@@ -10122,12 +10125,43 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
 };
 
 /**
- * A page whose comment target stands low in the frame's bottom third, where
- * a phone's thread and composer sheets both stand over it: `tall`
- * runs on 150vh past it, so a scroll can lift it; otherwise the page is
- * exactly the frame's height, and nothing scrolls.
+ * The pages of the foot-sheet leg: `tall` runs on 150vh past its line, so a
+ * scroll of its own can lift it; `short` is exactly the frame's height, and
+ * nothing scrolls; `inner` is an app's shell, its body `overflow: hidden` at
+ * the frame's height, a header over a scroll container that holds the line
+ * near its foot and scrolls only 60px past it.
  */
-const footPage = (tall: boolean) => `<!doctype html>
+type FootKind = "tall" | "short" | "inner";
+const FOOT_KINDS: readonly FootKind[] = ["tall", "short", "inner"];
+
+/**
+ * A page whose comment target stands low in the frame's bottom third, where
+ * a phone's thread and composer sheets both stand over it ({@link FootKind}).
+ */
+const footPage = (kind: FootKind) => {
+  if (kind === "inner") {
+    return `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 18px/1.6 system-ui; overflow: hidden; height: 100vh; }
+  #shell { height: 100vh; display: flex; flex-direction: column; }
+  header { flex: none; height: 48px; padding: 12px 24px; box-sizing: border-box; }
+  #scroller { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px 24px; }
+  #lead { height: calc(86vh - 48px); margin: 0; }
+  #mark { margin: 0; padding: 8px; width: 70%; }
+  #below { height: 60px; }
+</style></head>
+<body><div id="shell">
+  <header>The app's header</header>
+  <div id="scroller">
+    <p id="lead">The list's lead, which stands above the line.</p>
+    <p id="mark" data-insp-path="src/Foot.svelte:9:3">The line near the foot.</p>
+    <div id="below"></div>
+  </div>
+</div></body></html>`;
+  }
+  const tall = kind === "tall";
+  return `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { margin: 0; font: 18px/1.6 system-ui; }
@@ -10141,9 +10175,18 @@ const footPage = (tall: boolean) => `<!doctype html>
   <p id="mark" data-insp-path="src/Foot.svelte:9:3">The line near the foot.</p>
   ${tall ? '<div id="below"></div>' : ""}
 </main></body></html>`;
+};
 
 /** What a foot-sheet leg reads: the sheet and the pin's pill on the screen, the target in the frame's viewport, and the frame's scroll. */
 interface FootRead {
+  /** The inner page's scroll container: its scroll, how far it scrolls, its children, its inline style and its bottom padding as computed. */
+  inner: {
+    children: number;
+    pad: string;
+    room: number;
+    scrollTop: number;
+    style: string | null;
+  } | null;
   /** The target, the frame's viewport px. */
   mark: { top: number; bottom: number };
   /** Pin `pill`'s face, the screen's px. */
@@ -10191,8 +10234,18 @@ const footRead = async (
         ?.getBoundingClientRect();
       const mark = document.querySelector("#mark")?.getBoundingClientRect();
       const root = document.scrollingElement ?? document.documentElement;
+      const box = document.querySelector<HTMLElement>("#scroller");
       return mark
         ? {
+            inner: box
+              ? {
+                  children: box.childElementCount,
+                  pad: getComputedStyle(box).paddingBottom,
+                  room: box.scrollHeight - box.clientHeight,
+                  scrollTop: box.scrollTop,
+                  style: box.getAttribute("style"),
+                }
+              : null,
             pill: face ? { top: face.top, bottom: face.bottom } : null,
             mark: { top: mark.top, bottom: mark.bottom },
             view: innerHeight,
@@ -10207,6 +10260,13 @@ const footRead = async (
   }
   const { top } = outer;
   return {
+    inner: inner.inner
+      ? {
+          ...inner.inner,
+          room: round(inner.inner.room),
+          scrollTop: round(inner.inner.scrollTop),
+        }
+      : null,
     pill: inner.pill
       ? {
           top: round(top + inner.pill.top),
@@ -10262,27 +10322,29 @@ const clearOfSheet = (read: FootRead | null) =>
  * own can lift (preview-overlay pins.ts `bringOut`), the overlay makes room
  * under the page's foot (ink.ts `insetFoot`) and lifts the pill the same
  * way: the page scrolls past its own height, the pill wholly above the
- * sheet's top. Each time a sheet closes, the page's scroll is its own again.
+ * sheet's top. On an app's shell whose page does not scroll and whose
+ * scroll container scrolls too little, the room is the container's: it
+ * scrolls past its own content, the page stays put, the pill wholly above
+ * the sheet's top. Each time a sheet closes, the page's and the container's
+ * scroll are their own again, and the container's children, inline style
+ * and bottom padding are as they were.
  */
 const footSheetChecks = async (on: On) => {
   const { origin } = new URL(on.page.url());
   for (const engine of ["chromium", "webkit"] as const) {
-    const made: Record<"tall" | "short", string | undefined> = {
-      tall: undefined,
-      short: undefined,
-    };
-    for (const kind of ["tall", "short"] as const) {
+    const made: Partial<Record<FootKind, string>> = {};
+    for (const kind of FOOT_KINDS) {
       // biome-ignore lint/performance/noAwaitInLoops: one page after the other, each a call of the session's
       const said = await on.call(CREATE, {
         kind: "page",
         does: "judge",
         ask: "Judge this page: pin anything that reads wrong",
         name: `foot-${kind}-${engine}`,
-        html: footPage(kind === "tall"),
+        html: footPage(kind),
       });
       made[kind] = said.match(ANSWERED_ID)?.[1];
     }
-    if (!(made.tall && made.short)) {
+    if (!FOOT_KINDS.every((kind) => made[kind])) {
       on.kit.check(
         `foot sheet (${engine}): the pages are made`,
         false,
@@ -10294,8 +10356,10 @@ const footSheetChecks = async (on: On) => {
     const faults: string[] = [];
     phone.on("pageerror", (error) => faults.push(error.message));
     try {
-      await footOn(on, phone, engine, origin, made.tall, true);
-      await footOn(on, phone, engine, origin, made.short, false);
+      for (const kind of FOOT_KINDS) {
+        // biome-ignore lint/performance/noAwaitInLoops: one page after the other on the one phone
+        await footOn(on, phone, engine, origin, made[kind] ?? "", kind);
+      }
     } finally {
       on.kit.check(
         `foot sheet (${engine}): the phone's page said no error`,
@@ -10334,13 +10398,40 @@ const commentOnPhone = async (phone: Page) => {
 interface FootRig {
   frame: Frame;
   frameTop: number;
+  /** The inner page's scroll container as it stood before any sheet. */
+  inner: FootRead["inner"];
+  kind: FootKind;
   on: On;
   phone: Page;
   /** How far the page scrolls of its own, before any sheet stands. */
   room: number;
   tag: string;
-  tall: boolean;
 }
+
+/** What each page's line and scroll are before any sheet: the line in the frame's bottom third, and how far its page and container scroll. */
+const footStart = (kind: FootKind, read: FootRead) => {
+  const low =
+    read.mark.top >= (read.view * 2) / 3 && read.mark.bottom <= read.view;
+  if (kind === "tall") {
+    return low && read.room > read.view;
+  }
+  if (kind === "short") {
+    return low && read.room <= 0;
+  }
+  return (
+    low &&
+    read.room <= 0 &&
+    !!read.inner &&
+    read.inner.room > 0 &&
+    read.inner.room < 60
+  );
+};
+const FOOT_START: Record<FootKind, string> = {
+  tall: "the page scrolling past it",
+  short: "the page not scrolling",
+  inner:
+    "the page not scrolling (its body overflow: hidden) and its scroll container scrolling under 60px",
+};
 
 /** One page of the foot-sheet leg on `phone`: the composer, then the thread. */
 const footOn = async (
@@ -10349,9 +10440,9 @@ const footOn = async (
   engine: string,
   origin: string,
   id: string,
-  tall: boolean
+  kind: FootKind
 ) => {
-  const tag = `foot sheet (${engine}, ${tall ? "tall page" : "short page"})`;
+  const tag = `foot sheet (${engine}, ${kind} page)`;
   await open(phone, `${origin}/artifact/${id}`, PANE);
   const frame = await frameHolding(phone, id, `${tag}: the page on the phone`);
   if (!frame) {
@@ -10372,20 +10463,19 @@ const footOn = async (
     return;
   }
   on.kit.check(
-    `${tag}: the line stands in the frame's bottom third, the page ${tall ? "scrolling past it" : "not scrolling"}`,
-    before.mark.top >= (before.view * 2) / 3 &&
-      before.mark.bottom <= before.view &&
-      (tall ? before.room > before.view : before.room <= 0),
+    `${tag}: the line stands in the frame's bottom third, ${FOOT_START[kind]}`,
+    footStart(kind, before),
     JSON.stringify(before)
   );
   const rig: FootRig = {
     frame,
     frameTop,
+    inner: before.inner,
+    kind,
     on,
     phone,
     room: before.room,
     tag,
-    tall,
   };
   const number = await footCompose(rig, engine);
   if (number) {
@@ -10393,7 +10483,31 @@ const footOn = async (
   }
 };
 
-/** The pill clear of the sheet, said as the page's kind has it: a short page lifted into the room the overlay made under its foot. */
+/** How each page lifts its pill: by its own scroll, into room under the page's foot, or into room under its scroll container's. */
+const FOOT_LIFT: Record<FootKind, string> = {
+  tall: "the page's own scroll lifts it",
+  short:
+    "no scroll of the page's own lifts the pill, so the overlay makes room under its foot: the page scrolls past its own height",
+  inner:
+    "neither the page nor its scroll container scrolls far enough, so the overlay makes room under the container's foot: the container scrolls past its own content and the page stays put",
+};
+const footLifted = (rig: FootRig, read: FootRead) => {
+  if (rig.kind === "tall") {
+    return true;
+  }
+  if (rig.kind === "short") {
+    return read.scrollY > 0 && read.room > rig.room;
+  }
+  return (
+    read.scrollY === 0 &&
+    !!read.inner &&
+    !!rig.inner &&
+    read.inner.scrollTop > 0 &&
+    read.inner.room > rig.inner.room
+  );
+};
+
+/** The pill clear of the sheet, lifted as the page's kind has it ({@link FOOT_LIFT}). */
 const footClear = (
   rig: FootRig,
   step: string,
@@ -10401,29 +10515,40 @@ const footClear = (
   read: FootRead | null
 ) =>
   rig.on.kit.check(
-    rig.tall
-      ? `${rig.tag} ${step}: ${sheet} stands as the well's foot sheet and the pill stands wholly above its top, the line inside the frame's viewport`
-      : `${rig.tag} ${step}: no scroll of the page's own lifts the pill, so the overlay makes room under its foot: the page scrolls past its own height, ${sheet} stands as the well's foot sheet, the pill wholly above its top and the line inside the frame's viewport`,
-    clearOfSheet(read) &&
-      (rig.tall || (!!read && read.scrollY > 0 && read.room > rig.room)),
+    `${rig.tag} ${step}: ${FOOT_LIFT[rig.kind]}; ${sheet} stands as the well's foot sheet, the pill wholly above its top and the line inside the frame's viewport`,
+    clearOfSheet(read) && !!read && footLifted(rig, read),
     JSON.stringify(read)
   );
 
-/** Once `what` has closed: no sheet stands, and the page scrolls as far as its own height lets it, the room under its foot taken back. */
+/** The inner page's scroll container as it stood before any sheet: as far to scroll, the same children, inline style and bottom padding. */
+const innerBack = (rig: FootRig, back: FootRead) =>
+  rig.inner === null ||
+  (!!back.inner &&
+    Math.abs(back.inner.room - rig.inner.room) <= 0.5 &&
+    back.inner.children === rig.inner.children &&
+    back.inner.style === rig.inner.style &&
+    back.inner.pad === rig.inner.pad);
+
+/** Once `what` has closed: no sheet stands, and the page and its scroll container scroll as far as their own content lets them, the room taken back. */
 const footBack = async (rig: FootRig, what: string, sheet: string) => {
   const back = await footSettled(() =>
     footRead(rig.phone, rig.frame, sheet, DRAFT_FACE)
   );
   rig.on.kit.check(
-    `${rig.tag}: ${what} closed, the page's scroll is its own again (${rig.room}px, as before any sheet)`,
-    !!back && back.sheet === null && Math.abs(back.room - rig.room) <= 0.5,
+    rig.inner
+      ? `${rig.tag}: ${what} closed, the page's scroll and its container's are their own again (${rig.room}px and ${rig.inner.room}px, as before any sheet), the container's ${rig.inner.children} children, inline style and bottom padding (${rig.inner.pad}) as they were`
+      : `${rig.tag}: ${what} closed, the page's scroll is its own again (${rig.room}px, as before any sheet)`,
+    !!back &&
+      back.sheet === null &&
+      Math.abs(back.room - rig.room) <= 0.5 &&
+      innerBack(rig, back),
     JSON.stringify(back)
   );
 };
 
 /** (i) A tap on the line: its composer, the foot sheet; then the comment written. Answers its pin's number, 0 when none was written. */
 const footCompose = async (rig: FootRig, engine: string) => {
-  const { frame, frameTop, on, phone, tag, tall } = rig;
+  const { frame, frameTop, kind, on, phone, tag } = rig;
   const outer = await phone.locator(FRAME).boundingBox();
   const mark = await frame.locator("#mark").evaluate((el) => {
     const r = el.getBoundingClientRect();
@@ -10445,7 +10570,7 @@ const footCompose = async (rig: FootRig, engine: string) => {
   await phone
     .locator(COMPOSE)
     .getByRole("combobox")
-    .fill(`On the line, ${engine}, ${tall ? "tall" : "short"}.`);
+    .fill(`On the line, ${engine}, ${kind}.`);
   await phone.locator(`${COMPOSE} [data-slot="stop"]`).click();
   await phone
     .locator(COMPOSE)
@@ -10472,7 +10597,10 @@ const DRAFT_FACE = '[data-pin="new"] [data-face]';
 /** (ii) The page back where the line stands in the bottom third, pin `number`'s pill tapped: its thread, the foot sheet. */
 const footThread = async (rig: FootRig, number: number) => {
   const { frame, on, phone, tag } = rig;
-  await frame.evaluate(() => scrollTo(0, 0));
+  await frame.evaluate(() => {
+    scrollTo(0, 0);
+    document.querySelector("#scroller")?.scrollTo(0, 0);
+  });
   await settle(phone, 300);
   const pill = await frame
     .locator(`svg[data-cawco-pins] g[data-pin="${number}"] [data-face]`)
