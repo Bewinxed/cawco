@@ -11,14 +11,16 @@
   their words picks too; the pick is named by its label alone, and its line,
   cost and badges are its description. Its media (its design, drawn live)
   stands in its own row, outside the pick, so a click, a hover or a scroll in
-  it is the embed's own and never picks.
+  it is the embed's own and never picks; it stands at its real size, and its
+  well tells the card its width, which lays the options out by it.
 -->
 <script lang="ts">
-  import { getContext } from "svelte";
+  import { getContext, setContext } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { OptionGroupItem } from "#lib/components/ui/option-group/index.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
+  import { MEDIA_WIDTHS, type MediaWidths } from "./page.svelte.js";
 
   let {
     props,
@@ -34,6 +36,12 @@
   }> = $props();
 
   const order = getContext<(() => string[]) | undefined>("decision-options");
+  // Its media's wells tell the card their real widths as an option's: the
+  // options' pitch is the widest of them (Decision.svelte).
+  setContext(
+    MEDIA_WIDTHS,
+    getContext<MediaWidths | undefined>("decision-option-widths")
+  );
   /** The rows the card's options share: each part's track, 0 where none has it. */
   const rows = getContext<
     | (() => { line: number; cost: number; media: number; span: number })

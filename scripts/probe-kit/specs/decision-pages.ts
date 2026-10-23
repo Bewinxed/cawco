@@ -360,9 +360,9 @@ const overflowIn = (frame: Frame) =>
   });
 
 /**
- * Each Canvas piece's frame against its drawing (DESIGN.md item 12: "a
- * canvas is its own box, width-fitted, capped at 80vb"): its box, its well's
- * room and the cap, and the drawing's own bounds read from the canvas's doc
+ * Each Canvas piece's frame against its drawing (a canvas is its own box at
+ * its real size, zoom 1): its box, its well's room and whether its well
+ * scrolls it sideways, and the drawing's own bounds read from the canvas's doc
  * in its frame, padded by its fitted view's 32px as the canvas host pads them
  * (canvas-host scene.ts `sceneBox`).
  */
@@ -419,7 +419,7 @@ const canvasBoxes = (frame: Frame) =>
             ?.textContent?.trim() ?? "",
         box: { w: f.width, h: f.height },
         room: s?.width ?? 0,
-        cap: Number.parseFloat(getComputedStyle(el).maxBlockSize),
+        wide: stage?.hasAttribute("data-wide") ?? false,
         off: s ? Math.abs(s.left + s.width / 2 - (f.left + f.width / 2)) : 99,
         scene,
       };
@@ -838,26 +838,18 @@ const mediaLeg = async (
       all.length === 2 && all.every((one) => one.box.h > 0 && !!one.scene),
     30_000
   ).catch(() => canvasBoxes(frame));
-  // The frame the canvas's own fit fills: the drawing at the room's width
-  // less its 32px each side, the margin round it; past the cap, the cap's
-  // height and the width it allows.
+  // The frame the canvas's own fit fills at zoom 1: the drawing and its
+  // fitted view's 32px margin each side (canvas-host scene.ts `sceneBox`).
   const fitted = (one: (typeof canvases)[number]) => {
     if (!one.scene) {
       return null;
     }
     const m = 32;
-    const tall =
-      2 * m + (one.scene.height * (one.room - 2 * m)) / one.scene.width;
-    return tall <= one.cap
-      ? { w: one.room, h: tall }
-      : {
-          w: 2 * m + (one.scene.width * (one.cap - 2 * m)) / one.scene.height,
-          h: one.cap,
-        };
+    return { w: one.scene.width + 2 * m, h: one.scene.height + 2 * m };
   };
   const shapes = canvases.map((one) => ({ ...one, want: fitted(one) }));
   kit.check(
-    `(a) ${leg}: each canvas is its drawing's own box, width-fitted under the 80vb cap and centred in its well, a wide one and a tall one (${shapes.map((one) => `“${one.caption}” ${Math.round(one.box.w)}×${Math.round(one.box.h)}, its drawing ${one.scene ? `${Math.round(one.scene.width)}×${Math.round(one.scene.height)}` : "unread"}`).join("; ")})`,
+    `(a) ${leg}: each canvas is its drawing's own box at its real size, centred in its well or, wider than it, scrolling sideways in it, a wide one and a tall one (${shapes.map((one) => `“${one.caption}” ${Math.round(one.box.w)}×${Math.round(one.box.h)}, its drawing ${one.scene ? `${Math.round(one.scene.width)}×${Math.round(one.scene.height)}` : "unread"}`).join("; ")})`,
     shapes.length === 2 &&
       shapes.some((one) => one.box.w > one.box.h) &&
       shapes.some((one) => one.box.h > one.box.w) &&
@@ -866,8 +858,8 @@ const mediaLeg = async (
           !!one.want &&
           Math.abs(one.box.w - one.want.w) <= 1 &&
           Math.abs(one.box.h - one.want.h) <= 1 &&
-          one.box.h <= one.cap + 0.5 &&
-          one.off <= 0.5
+          one.wide === one.box.w > one.room + 0.5 &&
+          (one.wide || one.off <= 0.5)
       ),
     JSON.stringify(shapes)
   );

@@ -281,7 +281,8 @@ export function reachOf(): string {
   //   its flow: a pseudo-element (a control's transparent hit area, The 44
   //   Touch Rule's `::after`), or a part placed absolutely or fixed (a graph
   //   node's port handles, half outside its card), or moved by its own
-  //   transform or offsets. Its in-flow contents,
+  //   transform, offsets or negative margin (a decision page's media well
+  //   reaching a phone's screen edges, Well.svelte `well-bleed`). Its in-flow contents,
   //   its text and the boxes laid out in its flow, stand inside it, each
   //   read on screen as its box is, so a transform's scale (a zoomed
   //   canvas's viewport) moves both alike;
@@ -295,12 +296,14 @@ export function reachOf(): string {
   /** Words cut on purpose: a box that ends them in an ellipsis. */
   const truncates = (s: CSSStyleDeclaration) =>
     cut(s) && s.textOverflow === "ellipsis";
-  /** A part placed where it stands, not laid there by its flow: out of flow, or moved off its place by its own transform or offsets. */
+  /** A part placed where it stands, not laid there by its flow: out of flow, or moved off its place by its own transform, offsets or negative margin. */
   const placedOnPurpose = (style: CSSStyleDeclaration) =>
     style.position === "absolute" ||
     style.position === "fixed" ||
     style.transform !== "none" ||
     style.translate !== "none" ||
+    Number.parseFloat(style.marginLeft) < 0 ||
+    Number.parseFloat(style.marginRight) < 0 ||
     (style.position === "relative" &&
       [style.left, style.right, style.top, style.bottom].some(
         (side) => side !== "auto" && side !== "0px"

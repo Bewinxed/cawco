@@ -93,7 +93,7 @@ export const decisionLibrary = <C>(
   );
   const Image = define(
     "Image",
-    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result).",
+    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result), shown at its own pixel size.",
     z.object({
       file: z.string().describe('Like "shots/hero.png".'),
       alt: z.string().describe("What it shows, in one sentence."),
@@ -114,7 +114,7 @@ export const decisionLibrary = <C>(
   );
   const Canvas = define(
     "Canvas",
-    "A drawing: a canvas artifact you made with artifact_create (kind canvas), shown at its box.",
+    "A drawing: a canvas artifact you made with artifact_create (kind canvas), shown at its own size.",
     z.object({
       artifact: z.string().describe("The canvas's id."),
       caption,
@@ -122,7 +122,7 @@ export const decisionLibrary = <C>(
   );
   const Preview = define(
     "Preview",
-    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone: the stories `stories` names, in that order (every story, in its file's order, when it names none), each at its own size from its start, one wider than the room it has scaled down to fit it.",
+    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone: the stories `stories` names, in that order (every story, in its file's order, when it names none), each at its own size from its start. Every piece of media is shown at its real size, never scaled: one wider than the room it has scrolls sideways in its well, a page taller than the window scrolls inside its frame, and a card's options stand side by side only where every one fits at its width, else one under another at the card's full width.",
     z.object({
       artifact: z.string().describe("Its id."),
       caption,
@@ -136,7 +136,7 @@ export const decisionLibrary = <C>(
         .number()
         .optional()
         .describe(
-          "The widest of those stories' own widths in px (its `parameters.viewport`), like 640: the page widens to draw it at 1:1, as many options abreast as fit."
+          "The design's own width in px, like 640: a page's or a preview's, or the widest of a component canvas's stories' own widths (its `parameters.viewport`). Its frame stands at it, 1:1, and the page widens to it."
         ),
     })
   );

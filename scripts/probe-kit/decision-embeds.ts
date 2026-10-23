@@ -63,6 +63,8 @@ export const STAGE_START_MS = 240_000;
 /** An embed on a decision page: a Preview's live frame (dashboard decisions host Preview.svelte). */
 export const EMBED_FRAME = "[data-slot=media] iframe[data-slot=embed]";
 const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
+/** A page artifact's own address, as the hub serves it. */
+const PAGE_ARTIFACT = /^\/__cawco\/page\/([^/]+)\/$/;
 const TITLE = /Decisions\("([^"]*)"/;
 const STATES_EXT = /\.stories\.ts$/;
 /** Where a stage's page loads the overlay's own pick, wired to the stand-in bridge (`pickWiring`). */
@@ -289,13 +291,16 @@ export interface StageProject {
  * Starts the stage of `project` (the dashboard's own by default) and serves
  * each program of `programs` (by page name) as the hub's decision host
  * draws it, each id of `files` (the states files of one component canvas,
- * from the project's root, by artifact id) a canvas its Previews embed.
+ * from the project's root, by artifact id) a canvas its Previews embed, and
+ * each id of `pages` a page artifact (its HTML) at its own address on the
+ * page's origin, as the hub serves one (`/__cawco/page/<id>/`).
  * Answers once the stage says it is ready.
  */
 export async function startDecisionStage(
   programs: ReadonlyMap<string, string>,
   files: Readonly<Record<string, readonly string[]>>,
-  project: StageProject = { root: APP, kit: true }
+  project: StageProject = { root: APP, kit: true },
+  pages: Readonly<Record<string, string>> = {}
 ): Promise<DecisionStage> {
   const host = join(project.root, ".cawco/stage/host.mjs");
   mkdirSync(join(project.root, ".cawco/stage"), { recursive: true });
@@ -321,11 +326,17 @@ export async function startDecisionStage(
   stage.stderr.on("data", hear);
   const embedHost = embedOrigin(stagePort);
   const picking = await pickWiring();
-  const pages = Bun.serve({
+  const served = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const { pathname } = new URL(request.url);
+      const artifact = pathname.match(PAGE_ARTIFACT)?.[1];
+      if (artifact && pages[artifact] !== undefined) {
+        return new Response(pages[artifact], {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
       if (pathname === PICK_PATH) {
         return new Response(picking, {
           headers: { "content-type": "text/javascript; charset=utf-8" },
@@ -342,16 +353,17 @@ export async function startDecisionStage(
       if (!(program && theme)) {
         return new Response("Not found", { status: 404 });
       }
-      const media = Object.fromEntries(
-        Object.entries(files).map(([id, held]) => [
+      const media = Object.fromEntries([
+        ...Object.entries(files).map(([id, held]) => [
           id,
           {
             kind: "component",
             name: held[0]?.split("/").at(-1) ?? id,
             embed: `http://127.0.0.1:${embedHost.port}/@cawco/canvas?${held.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&scheme=${theme}`,
           },
-        ])
-      );
+        ]),
+        ...Object.keys(pages).map((id) => [id, { kind: "page", name: id }]),
+      ]);
       const title = program.match(TITLE)?.[1] ?? "";
       const html = programHost(program, title, {}).replace(
         "</body>",
@@ -363,7 +375,7 @@ export async function startDecisionStage(
     },
   });
   const stop = async () => {
-    await pages.stop(true);
+    await served.stop(true);
     await embedHost.stop(true);
     stage.kill();
   };
@@ -381,7 +393,7 @@ export async function startDecisionStage(
   return {
     stagePort,
     pageUrl: (name, theme) =>
-      `http://127.0.0.1:${pages.port}/page/${name}/${theme}/`,
+      `http://127.0.0.1:${served.port}/page/${name}/${theme}/`,
     stop,
   };
 }
@@ -473,10 +485,7 @@ function embedRead() {
       return [];
     }
     const r = body.getBoundingClientRect();
-    // A story too wide to fit at a legible scale scrolls sideways in its frame (runtime.ts fitToEmbed): the frame's box is what stands in the embed.
-    const wide = frame.hasAttribute("data-cawco-wide");
-    const box = wide ? frame.getBoundingClientRect() : r;
-    /** CSS zoom in effect on an element (the embed's fit, runtime.ts): its words are drawn this much smaller than their font size. */
+    /** CSS zoom in effect on an element: an embed draws every story at 1 (runtime.ts `sayShape`), so its words at their own size. */
     const zoomOf = (el: Element) =>
       (el as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
     const sizes = new Map<number, number>();
@@ -499,16 +508,10 @@ function embedRead() {
       {
         story: frame.dataset.cawcoStory ?? "",
         h: Math.round(r.height),
-        left: Math.round(box.left),
-        right: Math.round(box.right),
-        /** Its drawn width, the whole story's (past its frame's edge where it scrolls). */
+        left: Math.round(r.left),
+        right: Math.round(r.right),
+        /** Its drawn width. */
         w: Math.round(r.width),
-        wide,
-        /** How far it scrolls sideways in its frame, and whether its frame lets a person scroll it. */
-        scrolls: wide ? frame.scrollWidth - frame.clientWidth : 0,
-        scrollable: ["auto", "scroll"].includes(
-          getComputedStyle(frame).overflowX
-        ),
         zoom: Math.round(zoomOf(body) * 1000) / 1000,
         state:
           frame.querySelector<HTMLElement>(".cawco-frame-status")?.dataset

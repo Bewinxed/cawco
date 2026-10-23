@@ -1,20 +1,27 @@
 <!--
-  The well every piece of media stands in, one recipe for all four (Preview,
-  Diagram, Image, Canvas): the content well inside a raised card (DESIGN.md,
-  Surfaces: `surface-well` with `border-well`), the token radius `well`, 11px
-  in. Its piece is centred on both axes at its own size (LIBRARY.md: "each at
-  its own size and centred"); a piece wider than the well at its smallest
-  scrolls sideways under the house edge fade (`wide`). Under it the caption
-  in meta at the start and the piece's one action at the end; an action's
-  refusal stands under them in the error formula's ink. A picture drawn at
-  its story's own width (`picture`, a Preview that says it) has its well
-  hug it: the story at 1:1 and the well's insets, never wider than what
-  holds it, so no empty well stands beside it. Standing alone in its card
-  on a phone it reaches the screen's edges as far as its story does, with no
-  side, edge or corner of its own, its words kept on the page's text edge.
+  The well every piece of media stands in, one recipe for all of them
+  (Preview, Diagram, Image, Canvas, Dials): the content well inside a raised
+  card (DESIGN.md, Surfaces: `surface-well` with `border-well`), the token
+  radius `well`, 11px in. Its piece stands at its real size, 1 CSS px per
+  px, never scaled, centred on both axes where it is narrower than the well.
+  A piece that knows its own width (`picture`: a Preview's design, a
+  canvas's drawing, a picture's or a diagram's own) has its well hug it: the
+  piece and the well's insets, never wider than what holds it, so no empty
+  well stands beside it; the well tells the card and the page that width
+  (`MEDIA_WIDTHS`), which lay their options and their column out by it. A
+  piece wider than the well scrolls sideways inside it under the house edge
+  fade at its full 40px on every width (over words cut mid-word a phone's
+  16px reads as a clip), on the side where more is hidden. Under it the
+  caption in meta at the start and the piece's one action at the end; an
+  action's refusal stands under them in the error formula's ink. Standing
+  alone in its card on a phone a pictured well reaches the screen's edges as
+  far as its piece does, with no side, edge or corner of its own, its words
+  kept on the page's text edge.
 -->
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { getContext, type Snippet } from "svelte";
+  import { frameObserver } from "../../frame-observer.js";
+  import { MEDIA_WIDTHS, type MediaWidths } from "./page.svelte.js";
 
   let {
     action,
@@ -23,20 +30,44 @@
     picture,
     said = "",
     stage = $bindable(),
-    wide = false,
   }: {
     action?: Snippet;
     caption?: string;
     children: Snippet;
-    /** Its picture's own width, px: the well hugs it, and under the phone's line, alone in its card (`data-bleeds`), reaches the screen's edges as far as it does. */
+    /** Its piece's own width, px, at 1 CSS px per px: the well hugs it, scrolls it sideways where it is narrower, and under the phone's line, alone in its card (`data-bleeds`), reaches the screen's edges as far as it does. */
     picture?: number;
     /** A refusal of the action, in the hub's words. */
     said?: string;
-    /** The box the piece is centred in, for a piece that measures its room. */
+    /** The box the piece stands in. */
     stage?: HTMLDivElement;
-    /** The piece is wider than the well and scrolls sideways. */
-    wide?: boolean;
   } = $props();
+
+  /** The card's and the page's ear for this well's width (Decision, Decisions). */
+  const tell = getContext<MediaWidths | undefined>(MEDIA_WIDTHS);
+  const key = {};
+  $effect(() => {
+    tell?.(key, picture ?? null);
+    return () => tell?.(key, null);
+  });
+
+  /** The stage's own width, px: a piece wider than it scrolls sideways. */
+  let room = $state(0);
+  $effect(() => {
+    const box = stage;
+    if (!box) {
+      return;
+    }
+    const read = () => {
+      room = box.clientWidth;
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(box);
+    return () => sizes.disconnect();
+  });
+  const wide = $derived(
+    picture !== undefined && room > 0 && picture > room + 0.5
+  );
 </script>
 
 <figure
@@ -52,9 +83,12 @@
     bind:this={stage}
     class={[
       "relative flex min-w-0 flex-1 items-center-safe justify-center-safe",
-      wide && "kit-edge-fade overflow-x-auto overscroll-x-contain",
+      picture !== undefined && "contain-inline-size",
+      wide &&
+        "kit-edge-fade fade-len-c-edge-fade-len overflow-x-auto overscroll-x-contain",
     ]}
     data-slot="media-stage"
+    data-wide={wide || undefined}
   >
     {@render children()}
   </div>

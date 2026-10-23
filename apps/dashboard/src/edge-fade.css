@@ -1,12 +1,9 @@
-/* The house edge fade (DESIGN.md), one definition: the app reads it
-   through app.css, and every component canvas reads it in its page's own
-   styles (packages/agent stage-host build.ts, chrome.ts), where an embed's
-   story too wide for its embed scrolls sideways under it (canvas
-   runtime.ts `fitToEmbed`). Plain CSS, so both read it as it is: its
-   length comes from the tokens both load (tokens.css). */
+/* The house edge fade (DESIGN.md), one definition: the app and the
+   decision host read it through design.css. Plain CSS: its length comes
+   from the tokens (tokens.css). */
 
 /* The edge fades of a scroller (.kit-edge-fade: the tab track, the board,
-   a view's pane, a wide embed's frame), registered so the scroll-driven
+   a view's pane, a decision page's media well), registered so the scroll-driven
    animation can interpolate them as lengths. */
 @property --fade-start {
   syntax: "<length>";

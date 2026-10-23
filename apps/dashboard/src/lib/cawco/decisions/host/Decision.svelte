@@ -88,7 +88,13 @@
   import { scrollOnClock } from "../../motion/scroll-on";
   import { closeInto, departBox, land } from "../../motion/share.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { bridge, picks } from "./page.svelte.js";
+  import {
+    bridge,
+    hearWidths,
+    MEDIA_WIDTHS,
+    type MediaWidths,
+    picks,
+  } from "./page.svelte.js";
 
   let {
     props,
@@ -156,33 +162,30 @@
   setContext("decision-rows", () => rows);
 
   /**
-   * The widest story its options' Previews draw, px, as the program says it
-   * (`Preview`'s `width`, through any Row or Column); 0 when none says one.
-   * Its options then stand on that pitch (the story and its well's insets),
-   * as many abreast as the column holds, each story at 1:1.
+   * Its media's real widths, as their wells say them (Well.svelte `picture`:
+   * a Preview's design, a drawing's, a picture's or a diagram's own, 1 CSS
+   * px per px), each passed on to the page: the card's own media, and its
+   * options' (Option.svelte hands its media this ear). The widest option's
+   * sets the options' pitch: as many abreast as the card holds at that
+   * width, one under another at the card's full width where one is wider
+   * than a column (`grid-cols-fit-story`), each at its real size.
    */
-  const storyWidth = $derived.by(() => {
-    const widest = (value: unknown): number => {
-      if (Array.isArray(value)) {
-        return Math.max(0, ...value.map(widest));
-      }
-      if (typeof value !== "object" || value === null) {
-        return 0;
-      }
-      const node = value as {
-        props?: { children?: unknown; width?: unknown };
-        typeName?: unknown;
-      };
-      if (node.typeName === "Preview") {
-        return typeof node.props?.width === "number" ? node.props.width : 0;
-      }
-      return widest(node.props?.children);
-    };
-    return widest(
-      (Array.isArray(props.options) ? props.options : []).map(
-        (option) => (option as OptionNode)?.props?.media
-      )
-    );
+  const pageWidths = getContext<MediaWidths | undefined>(MEDIA_WIDTHS);
+  const cardMedia = hearWidths(pageWidths);
+  const optionMedia = hearWidths(pageWidths);
+  setContext(MEDIA_WIDTHS, cardMedia.hear);
+  setContext("decision-option-widths", optionMedia.hear);
+  const storyWidth = $derived(optionMedia.widest());
+  /** The card's own media's widest real width: two pictures stand side by side only where both fit at it. */
+  const mediaWidth = $derived(cardMedia.widest());
+  /** The card's own media's columns: two pictures on their widest's pitch, or, saying no width, two equal columns once the body holds them; else one. */
+  const mediaColumns = $derived.by(() => {
+    if (!pictures) {
+      return "grid-cols-1";
+    }
+    return mediaWidth > 0
+      ? "grid-cols-fit-story max-phone:grid-cols-1"
+      : "grid-cols-1 @media-split:grid-cols-2";
   });
   let optionsGrid = $state<HTMLDivElement>();
   /**
@@ -936,14 +939,14 @@
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <!-- Two pictures side by side in equal columns once the card's body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, each at the body's width, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
+      <!-- Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
       <div
-        class={[
-          "grid min-w-0 grid-cols-1 gap-space-3",
-          pictures && "@media-split:grid-cols-2",
-        ]}
+        class={["grid min-w-0 gap-space-3", mediaColumns]}
         data-bleeds={pictures ? undefined : ""}
         data-slot="decision-media"
+        style:--story-w={pictures && mediaWidth > 0
+          ? `${mediaWidth}px`
+          : undefined}
       >
         {@render renderNode(props.media)}
       </div>
@@ -960,7 +963,7 @@
         }
       }}
     >
-      <!-- Options with pictures stand on their stories' pitch, each story at 1:1 in a well that hugs it, as many abreast as the column holds, one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its story does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. -->
+      <!-- Options with pictures stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. -->
       <div
         bind:this={optionsGrid}
         class={[

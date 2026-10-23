@@ -1086,22 +1086,26 @@
   grid-template-rows: minmax(0, 1fr) auto;
 }
 /* Options with pictures: as many abreast as fit, each track exactly its
-   stories' own width in their wells (`--story-w`, decisions/host
-   Decision.svelte), each story at 1:1, packed from the row's start as the
-   words are and the house gap between them, never stretched apart; a track
-   never wider than the row, where a story is scaled to fit. */
+   widest picture's own width in its well (`--story-w`, decisions/host
+   Decision.svelte), each at 1:1, packed from the row's start as the words
+   are and the house gap between them, never stretched apart; a track never
+   wider than the row, so a picture wider than it stands one to a row at the
+   row's full width and scrolls sideways in its well. */
 @utility grid-cols-fit-story {
   grid-template-columns: repeat(
     auto-fill,
     min(100%, calc(var(--story-w) + 2 * var(--well-in)))
   );
 }
-/* A picture's well hugging its story (`--picture-w`, the width a decision
-   page's Preview says, decisions/host Well.svelte): the story at 1:1 and the
-   well's own insets, never wider than what holds it, where a story too wide
-   for it is scaled to fit. No empty well stands beside a picture. */
+/* A picture's well hugging its picture (`--picture-w`, its real width,
+   decisions/host Well.svelte): the picture at 1:1 and the well's own
+   insets, never wider than what holds it, where a picture too wide for it
+   scrolls sideways in it; never narrower than its caption and action need
+   (its stage, `contain-inline-size`, asks no width of its own). No empty
+   well stands beside a picture. */
 @utility well-hug {
   inline-size: calc(var(--picture-w) + 2 * var(--well-in));
+  min-inline-size: min-content;
   max-inline-size: 100%;
 }
 /* The same well on a phone, standing alone in its card: no inset, edge or

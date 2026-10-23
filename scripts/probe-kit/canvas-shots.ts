@@ -185,8 +185,7 @@ function gridOf(args: { selector: string; grid: number }) {
    * Whether a box's mask draws the point at page (x, y) through: never
    * where it has none; under the house edge fade (edge-fade.css) within its
    * fades alone, each as long as its own `--fade-start` and `--fade-end` (a
-   * cap only shortens one): `kit-edge-fade` (a wide embed's frame:
-   * runtime.ts `fitToEmbed`) at its left and right, `kit-edge-fade-block`
+   * cap only shortens one): `kit-edge-fade` at its left and right, `kit-edge-fade-block`
    * at its top and its foot, whose fade ends `--fade-inset-end` short of
    * the box and leaves that band clear; everywhere under any other mask.
    */
@@ -681,7 +680,7 @@ function gridOf(args: { selector: string; grid: number }) {
   };
   const covered: string[] = [];
   const points: Painted[] = [];
-  // A frame that scrolls its story sideways (an embed's story too wide to fit at 10px words) shows what its scrollport holds: the grid reads that part.
+  // A frame that scrolls its story sideways shows what its scrollport holds: the grid reads that part.
   const holder = body.parentElement;
   const port =
     holder && getComputedStyle(holder).overflowX !== "visible"
@@ -988,6 +987,36 @@ async function bringIntoView(
 }
 
 /**
+ * What a page shows of an element, in the window's px: its box cut by every
+ * box round it that clips it, less a house edge fade's length where one
+ * fades it (`kit-edge-fade`, `--fade-start` and `--fade-end`). In the page.
+ */
+function shownOf(el: Element) {
+  const box = el.getBoundingClientRect();
+  let { left, right, top, bottom } = box;
+  for (let at = el.parentElement; at; at = at.parentElement) {
+    const style = getComputedStyle(at);
+    const port = at.getBoundingClientRect();
+    const fade = (name: string) =>
+      at.classList.contains("kit-edge-fade")
+        ? Number.parseFloat(style.getPropertyValue(name)) || 0
+        : 0;
+    if (style.overflowX !== "visible") {
+      left = Math.max(left, port.left + at.clientLeft + fade("--fade-start"));
+      right = Math.min(
+        right,
+        port.left + at.clientLeft + at.clientWidth - fade("--fade-end")
+      );
+    }
+    if (style.overflowY !== "visible") {
+      top = Math.max(top, port.top + at.clientTop);
+      bottom = Math.min(bottom, port.top + at.clientTop + at.clientHeight);
+    }
+  }
+  return { left, right, top, bottom };
+}
+
+/**
  * Each frame an embedded canvas shows (a decision page's Preview: the canvas
  * page by=embed, in a frame of `page`), shot where the person sees it: its
  * body scrolled into the window, settled (the canvas's own `settled`), read
@@ -1067,14 +1096,28 @@ export async function shootEmbedded(
       });
       continue;
     }
+    // What the page shows of the embed: a design wider than its well
+    // scrolls sideways in it (decisions/host Well.svelte), clipped there and
+    // faded at its edges.
+    const onPage = await embed.evaluate(shownOf);
     // Its part in the window, on whole CSS px (as Playwright takes a clip).
-    const left = Math.ceil(Math.max(0, at.x, at.x + body.x));
-    const top = Math.ceil(Math.max(0, at.y, at.y + body.y));
+    const left = Math.ceil(Math.max(0, at.x, at.x + body.x, onPage.left));
+    const top = Math.ceil(Math.max(0, at.y, at.y + body.y, onPage.top));
     const right = Math.floor(
-      Math.min(view.width, at.x + at.width, at.x + body.x + body.w)
+      Math.min(
+        view.width,
+        at.x + at.width,
+        at.x + body.x + body.w,
+        onPage.right
+      )
     );
     const bottom = Math.floor(
-      Math.min(view.height, at.y + at.height, at.y + body.y + body.h)
+      Math.min(
+        view.height,
+        at.y + at.height,
+        at.y + body.y + body.h,
+        onPage.bottom
+      )
     );
     if (right - left < 8 || bottom - top < 8) {
       reads.push({

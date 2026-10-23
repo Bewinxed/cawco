@@ -5,6 +5,35 @@
  * (hub decision-program.ts `programHost`, preview.ts `servePage`).
  */
 import type { ChoiceEntry } from "@cawco/core/choices";
+import { SvelteMap } from "svelte/reactivity";
+
+/**
+ * Who hears a media well's real width (Well.svelte `picture`: its piece's
+ * own width at 1 CSS px per px, null once it has none or is gone), by the
+ * well's own key: the card it stands in and the page.
+ */
+export type MediaWidths = (key: object, width: number | null) => void;
+/** The context a well finds its hearer under (Decisions, Decision and Option set it). */
+export const MEDIA_WIDTHS = "decision-media-widths";
+
+/** Wells' real widths heard, each passed on to `on` (the page, from a card); the widest of them, 0 with none. */
+export function hearWidths(on?: MediaWidths): {
+  hear: MediaWidths;
+  widest: () => number;
+} {
+  const heard = new SvelteMap<object, number>();
+  return {
+    hear: (key, width) => {
+      if (width === null) {
+        heard.delete(key);
+      } else {
+        heard.set(key, width);
+      }
+      on?.(key, width);
+    },
+    widest: () => Math.max(0, ...heard.values()),
+  };
+}
 
 /** The picks by decision id, as the hub keeps them now. */
 export const picks = $state<{ now: Record<string, ChoiceEntry> }>({ now: {} });

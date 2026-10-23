@@ -6,8 +6,9 @@
  *
  * 1. Every chip of an options row stands at one y, whether or not a badge
  *    wrapped beside it; "Add a note"'s first letter on the card's text edge.
- * 2. A wide diagram fits its well with its words at 10px and up, or scrolls
- *    sideways under the house edge fade from its start; a Row beside it
+ * 2. A wide diagram stands at its natural size, its words at 10px and up,
+ *    fitting its well or scrolling sideways in it under the house edge fade
+ *    from its start; a Row beside it
  *    stands at the body's width, not in a split column.
  * 3. Send, once sent, says "Sent" with its tick, the pair centred, and its
  *    keycaps gone.

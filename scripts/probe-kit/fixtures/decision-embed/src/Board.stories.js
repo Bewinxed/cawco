@@ -39,3 +39,18 @@ export const PhoneDense = {
   args: { title: "Dense on a phone", rows: ROWS },
   parameters: { viewport: 390 },
 };
+
+/** The board as a desk's whole window draws it, 1440px: two of them never fit side by side in a card. */
+export const DeskCalm = {
+  args: { title: "Calm on a desk", rows: ROWS, note: "One line per machine, quiet until something needs you." },
+  parameters: { viewport: 1440 },
+};
+
+export const DeskDense = {
+  args: {
+    title: "Dense on a desk",
+    rows: [...ROWS, ["Delegates", "7"], ["Tasks in review", "2"], ["Routines today", "5"]],
+    note: "Every figure at once, for a person who reads it all.",
+  },
+  parameters: { viewport: 1440 },
+};
