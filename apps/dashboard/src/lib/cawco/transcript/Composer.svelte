@@ -133,6 +133,7 @@
   import type { ComposerDraft } from "./composer-draft.svelte";
   import type { ComposerFleet } from "./composer-fleet";
   import { stand } from "./composer-presence.svelte";
+  import { connectWords } from "./connect-ask";
   import { GrownShape, layoutScale, measureShape } from "./grown";
   import { sentByReader } from "./recall";
   import { opensTurn } from "./rows";
@@ -2780,9 +2781,15 @@
         )
       : null
   );
-  /** The parked ask is a question the reader minimized here. */
+  /**
+   * The parked ask can fold to its bar: a question, or a connect ask
+   * (connect-ask.ts, drawn only by its states files until the hub raises
+   * one).
+   */
+  const askParks = $derived(!!(askQuestions || ask?.request.connectAsk));
+  /** The parked ask is one the reader minimized here. */
   const minimized = $derived(
-    !!(ask && askQuestions && minimizedAsks.has(ask.request.requestId))
+    !!(ask && askParks && minimizedAsks.has(ask.request.requestId))
   );
   /** The ask the composer grows into: the parked one, unless it is minimized. */
   const grownAsk = $derived(minimized ? null : ask);
@@ -3279,7 +3286,7 @@
     inert={askRaised}
     {@attach measureLift}
   >
-    {#if fleet && minimized && ask && askQuestions}
+    {#if fleet && minimized && ask && askParks}
       <!-- The minimized question, in the tray row's place: Caw's needs-you
            face, what it asks, and the chevron it comes back up by. The
            tray's chips and the plan's ring step aside meanwhile, as they do
@@ -3291,7 +3298,8 @@
            a tray chip high, a tray gap off the pill. It stands under the
            grown shape (grown.ts's halo, z 1): brought back, the card grows over
            the bar as it fades. -->
-      {@const [first] = askQuestions}
+      {@const [first] = askQuestions ?? []}
+      {@const connect = ask.request.connectAsk}
       <div
         class="absolute inset-0 flex items-box-end pb-c-tray-gap pointer-events-none"
         in:askedIn
@@ -3299,7 +3307,9 @@
       >
         <button
           data-slot="asked-chip"
-          aria-label={`Show the question from ${ask.asker}: ${first?.question ?? ""}`}
+          aria-label={connect
+            ? connectWords.showAsk(ask.asker, connect.service)
+            : `Show the question from ${ask.asker}: ${first?.question ?? ""}`}
           class={chipVariants({
             variant: "tray",
             class:
@@ -3319,7 +3329,9 @@
           </span>
           <span
             class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
-            >{first?.question ?? first?.header}</span
+            >{connect
+              ? connectWords.bar(ask.asker, connect.service)
+              : (first?.question ?? first?.header)}</span
           >
           {#if ask.more > 0}
             <span data-slot="num" class="num flex-none font-normal"
@@ -3597,7 +3609,7 @@
             <fleet.Prompt
               asker={drawnAsk.asker}
               onanswer={drawnAsk.onanswer}
-              onminimize={askQuestions ? minimizeAsk : undefined}
+              onminimize={askParks ? minimizeAsk : undefined}
               place={askPlace}
               request={drawnAsk.request}
               shown={askShown}

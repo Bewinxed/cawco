@@ -34,6 +34,8 @@
     IconClose,
     IconGlobe,
     IconInteract,
+    IconKey,
+    IconRefresh,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
@@ -49,6 +51,9 @@
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
+  import ConnectAddress from "./ConnectAddress.svelte";
+  import ConnectFault from "./ConnectFault.svelte";
+  import { connectWords, connectYes } from "./connect-ask";
 
   let {
     request,
@@ -59,9 +64,9 @@
     onminimize,
   }: {
     /**
-     * Folds a question down to its bar over the composer, answering nothing
-     * (minimized-asks.svelte.ts). Given only for a question; a card without
-     * it has no minimize control and no swipe.
+     * Folds a question or a connect ask down to its bar over the composer,
+     * answering nothing (minimized-asks.svelte.ts). Given only for those; a
+     * card without it has no minimize control and no swipe.
      */
     onminimize?: () => void;
     request: PendingPermission;
@@ -117,10 +122,36 @@
     });
   }
 
+  /**
+   * A connect ask (connect-ask.ts), drawn only by its states files until the
+   * hub raises one: the service, the agent's why and the whole sign-in
+   * address, with Connect and Not now at the row's two ends. Its stage is
+   * the request's; a press here moves it on in place (Connect to waiting,
+   * Try again to waiting), opening nothing, since no live ask reaches this
+   * branch yet. Not now declines, with the Other line's words, as a
+   * browser ask's Deny does.
+   */
+  const connect = $derived(request.connectAsk ?? null);
+  let connectStage = $state(untrack(() => request.connectAsk?.stage ?? null));
+
+  function declineConnect(): void {
+    if (!(answerable && connect)) {
+      return;
+    }
+    pressed = "deny";
+    commandId = onanswer({
+      behavior: "deny",
+      message: (others[connect.why] ?? "").trim(),
+    });
+  }
+
   /** What the card is, as its title and a screen reader name it. */
   const cardLabel = $derived.by(() => {
     if (browserAsk) {
       return askWords.browserAskFrom(asker);
+    }
+    if (connect) {
+      return connectWords.askFrom(asker);
     }
     return questions
       ? askWords.questionFrom(asker)
@@ -137,10 +168,10 @@
    */
   const asked = $derived<UserQuestion[] | null>(
     questions ??
-      (browserAsk
+      (browserAsk || connect
         ? [
             {
-              question: browserAsk.reason,
+              question: browserAsk?.reason ?? connect?.why ?? "",
               header: "",
               options: [],
               multiSelect: false,
@@ -382,9 +413,13 @@
     }
     event.preventDefault();
     event.stopPropagation();
-    // A browser ask's line goes with its Deny.
+    // A browser ask's line goes with its Deny, a connect ask's with Not now.
     if (browserAsk) {
       denyBrowser();
+      return;
+    }
+    if (connect) {
+      declineConnect();
       return;
     }
     if (allAnswered) {
@@ -607,6 +642,8 @@
     >
       {#if browserAsk}
         <IconGlobe class="size-icon-lg" />
+      {:else if connect}
+        <IconKey class="size-icon-lg" />
       {:else if questions}
         <IconAsk class="size-icon-lg" />
       {:else}
@@ -626,12 +663,12 @@
         figures="tabular">{place.at} of {place.of}</Kbd
       >
     {/if}
-    {#if questions && onminimize}
+    {#if (questions || connect) && onminimize}
       <!-- Folds the card to its bar over the composer; answers nothing. It
            ends the title row, in the title's muted ink, and keeps the row's
            own height (its 24px box overhangs the label line). -->
       <Button
-        aria-label="Minimize question"
+        aria-label={connect ? connectWords.minimize : "Minimize question"}
         class="touch-hit flex-none -my-space-1 ms-auto"
         margin="beside-num"
         tone="muted"
@@ -780,6 +817,167 @@
           onclick={denyBrowser}
           pending={pendingOf("deny")}
           pendingLabel="Denying…"
+          size="sm"
+          variant="secondary"
+        />
+      </div>
+    </div>
+  {:else if connect && connectStage}
+    {@render title(cardLabel)}
+    <!-- A connect ask: the browser ask's slots, one for one with what an MCP
+         client owes a URL-mode elicitation. Which agent asks is the title;
+         the line it is made on and the agent's why are the lede; the whole
+         address, its host in strong ink, stands before Connect opens
+         anything; what it may do, when the hub knows the scopes; the Other
+         line's words go with Not now; and what Connect does is the detail
+         line, the browser ask's own slot. Failed, the body is Caw in the
+         card's centre over what happened. -->
+    <div
+      data-slot="body"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      style:--part="1"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+    >
+      {#if connectStage === "failed" && connect.fault}
+        <ConnectFault
+          details={connect.fault.details}
+          next={connectWords.failedNext(asker)}
+          title={connect.fault.said}
+        />
+      {:else}
+        <p
+          data-slot="lede"
+          class="text-size-body font-medium leading-body text-ink-strong mb-space-1 max-w-c-measure wrap-anywhere text-pretty"
+        >
+          {connect.again
+            ? connectWords.ledeAgain(connect.service)
+            : connectWords.lede(connect.service)}
+        </p>
+        <p
+          data-slot="why"
+          class="text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty"
+        >
+          {connect.why}
+        </p>
+        <p data-slot="connect-meta" class="mb-space-2 min-w-0 text-size-meta">
+          <ConnectAddress url={connect.url} />
+        </p>
+        {#if connect.scopes?.length}
+          <p
+            data-slot="connect-scopes"
+            class="mb-space-2 text-size-label font-normal text-ink-strong"
+          >
+            {connect.scopes.join(" · ")}
+          </p>
+        {/if}
+        {#if connectStage === "asking"}
+          <div
+            data-slot="connect-other"
+            class="mb-space-2 flex h-c-input-h min-w-0 items-center gap-space-2"
+          >
+            <OptionGroup
+              aria-label={`Other answer to: ${connect.why}`}
+              class="flex-none"
+              value={otherAt === 0 ? [OTHER] : []}
+            >
+              <OptionGroupItem
+                onclick={(event) => pressOther(event, 0)}
+                value={OTHER}
+              >
+                <span
+                  data-slot="opt-label"
+                  class="min-w-0 wrap-anywhere text-pretty">Other</span
+                >
+              </OptionGroupItem>
+            </OptionGroup>
+            {#if otherAt === 0}
+              <Input
+                data-other
+                aria-label={askWords.yourAnswerTo(connect.why)}
+                class="flex-1"
+                disabled={!answerable}
+                oninput={(event) => writeOther(event.currentTarget.value)}
+                onkeydown={otherKey}
+                placeholder={askWords.yourAnswer}
+                value={others[connect.why] ?? ""}
+                bind:ref={otherField}
+              />
+            {/if}
+          </div>
+          <p
+            data-slot="detail"
+            class="text-size-label font-normal text-ink-muted mb-space-2"
+          >
+            {connectWords.detail(connect.service, asker)}
+          </p>
+        {:else}
+          <!-- The wait, said where the eye is, and the way back to the
+               provider's page should its tab be lost. -->
+          <div
+            data-slot="connect-wait"
+            class="mb-space-2 flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
+            role="status"
+          >
+            <p class="m-0 min-w-0 text-size-label font-normal text-ink-muted">
+              {connectWords.waiting(connect.service)}
+            </p>
+            <Button
+              class="flex-none"
+              label={connectWords.openSignIn}
+              pad="none"
+              size="xs"
+              variant="link"
+            />
+          </div>
+        {/if}
+      {/if}
+    </div>
+    <div
+      data-slot="foot"
+      class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      style:--part="2"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+    >
+      {@render wait()}
+      <!-- The Peer Rule's transcript form, as the browser ask's: the yes
+           and the refusal at the row's two ends, the one recessed fill,
+           each outlined in its tint; no third control between them. Not now
+           stays live while the provider's page is open: the person may
+           change their mind there. -->
+      <div
+        data-slot="choice"
+        class="flex justify-between gap-space-8 mt-space-2"
+      >
+        <Button
+          answer="approve-strong"
+          class="flex-none"
+          fit="prompt"
+          width="shrink"
+          data-connect
+          disabled={!answerable}
+          icon={connectStage === "failed" ? IconRefresh : IconKey}
+          label={connectYes(connectStage === "failed", !!connect.again)}
+          onclick={() => {
+            connectStage = "waiting";
+          }}
+          pending={connectStage === "waiting"}
+          pendingLabel={connectWords.connecting}
+          size="sm"
+          variant="secondary"
+        />
+        <Button
+          answer="deny-strong"
+          class="flex-none"
+          fit="prompt"
+          width="shrink"
+          data-connect-decline
+          disabled={disabledOf("deny")}
+          failed={failedOf("deny")}
+          icon={IconClose}
+          label={connectWords.notNow}
+          onclick={declineConnect}
+          pending={pendingOf("deny")}
+          pendingLabel={connectWords.decliningNow}
           size="sm"
           variant="secondary"
         />

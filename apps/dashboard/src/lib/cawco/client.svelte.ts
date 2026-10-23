@@ -209,6 +209,7 @@ import {
 } from "./stream";
 import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { warmCompactionMark } from "./transcript/compaction-mark";
+import type { ConnectAsk } from "./transcript/connect-ask";
 import {
   answeredNote,
   errorMessage,
@@ -443,6 +444,12 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
 export interface PendingPermission {
   /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
   browserAsk?: BrowserAskFrame;
+  /**
+   * A connect ask's service, why and sign-in address (transcript/connect-ask.ts):
+   * its card offers Connect and Not now. Set only by its states files until
+   * the hub raises one; nothing in the app makes it.
+   */
+  connectAsk?: ConnectAsk;
   /**
    * When this device last heard the hub park it, in the order it hears
    * things ({@link askHeard}): a read of `/api/pending` asked for before
