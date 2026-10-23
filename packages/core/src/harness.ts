@@ -1785,6 +1785,14 @@ export const CONTROL_MCP_FLEET_CHANGED = "fleetMcpChanged";
  */
 export const CONTROL_MCP_FLEET_HEAL = "fleetMcpHeal";
 /**
+ * The machine's own ask of one live Claude Code session, at its attach and
+ * after each fleet sync: its flag settings made again from the harness set
+ * (the fleet's hooks and Claude Code settings placed at its folder, agent
+ * fleet-harness-set.ts), each top-level key that moved applied. Answers
+ * `{ applied }`, the keys it applied.
+ */
+export const CONTROL_FLEET_SETTINGS = "fleetSettings";
+/**
  * Puts a session to sleep now if it is at rest: its machine stops everything
  * the session runs (the harness, the MCP servers it started, their browsers)
  * and says so with an `asleep` frame; its conversation stays, and its next
