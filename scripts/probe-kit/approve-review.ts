@@ -6,6 +6,9 @@
  *
  *   bun scripts/probe-kit/approve-review.ts <review dir> <picks.json>
  *
+ * `<review dir>` is the review's folder by path, wherever it is: by default
+ * `$XDG_CACHE_HOME/cawco/probe-review/<run>` (review.ts `reviewDir`).
+ *
  * `<picks.json>` is the page's `artifact_read` answer saved as JSON: its
  * `state` holds one entry per surface, keyed by the surface's id
  * (`<spec>:<surface>`), whose `options` is `["approve"]` or `["reject"]`.

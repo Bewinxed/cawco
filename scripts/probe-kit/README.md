@@ -6,7 +6,7 @@ the clock (`anim.ts`), regressions by pixel diff against an approved baseline
 (`diff.ts`), ink (`ink.ts`) only for what drawing alone decides.
 
 ```sh
-bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]   # specs/web/
+bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review]   # specs/web/
 bun scripts/probe-kit/run.ts <spec>…                                                       # specs/<spec>.ts, each in order
 ```
 
@@ -103,12 +103,15 @@ scratch copy, to prove an approve on.
 ## Showing the owner what changed
 
 A capture that differs from its approved baseline FAILs the run.
-`--review <dir>` (say `.probe-review/<spec>`) also writes the owner's review
-page: the new captures as candidate baselines under `<dir>/candidates/`, apart
+`--review` also writes the owner's review page into a folder outside the
+repository, `$XDG_CACHE_HOME/cawco/probe-review/<specs>-<head>` (`~/.cache`
+when unset), or the folder `PROBE_REVIEW_DIR=<dir>` names; the run prints it.
+A review run is build output, never source: nothing of it is committed. It
+holds the new captures as candidate baselines under `<dir>/candidates/`, apart
 from the approved set, and one page grouped by surface, each capture as its
 approved baseline, its new capture and the crop of what changed, with one
 Approve or Reject per surface (`review.ts`, `scripts/probe-review/README.md`).
-Open the folder with `artifact_create(kind: "preview", dir)`; the page's
+The orchestrator opens it with `artifact_create(kind: "preview", dir: <dir>)`; the page's
 `artifact_read` answer, saved as JSON, goes to
 `bun scripts/probe-kit/approve-review.ts <dir> <picks.json>`, which moves only
 the approved surfaces' candidates over the approved baselines.

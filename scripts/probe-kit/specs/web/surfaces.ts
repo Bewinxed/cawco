@@ -6,7 +6,7 @@
  * the viewport for a page, the open layer's box for a menu, sheet or card.
  *
  *   bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b]
- *   bun scripts/probe-kit/run.ts web surfaces --approve surfaces[:<entry>,…] [--review <dir>]
+ *   bun scripts/probe-kit/run.ts web surfaces --approve surfaces[:<entry>,…] [--review]
  *
  * An entry is `<surface>-<state>-<width>-<theme>`. The fleet is the style
  * snapshot's hub tapes, each hub state on its own section (walk.ts

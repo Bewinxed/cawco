@@ -4,14 +4,23 @@ How captures that differ from their approved baselines reach the owner: one
 page, every surface on it, never crops in a folder. `index.html` reads
 `manifest.json` beside it.
 
+This folder holds the page's source and this README only. A review run is
+build output, never source: it is written outside the repository, and
+nothing under `scripts/probe-review/runs/` is tracked (`.gitignore`).
+
 ## Make one
 
 ```sh
-bun scripts/probe-kit/run.ts web <spec> --review <dir>
+bun scripts/probe-kit/run.ts web <spec> --review
 ```
 
+The run's folder, `<dir>` below, is
+`$XDG_CACHE_HOME/cawco/probe-review/<specs>-<head>` (`~/.cache` when
+`XDG_CACHE_HOME` is unset; `<head>` is the checkout's commit, 9 characters),
+or the folder `PROBE_REVIEW_DIR=<dir>` names. The run prints it.
+
 A capture that differs from its approved baseline FAILs the run. With
-`--review <dir>` the run also writes:
+`--review` the run also writes:
 
 - `<dir>/candidates/web/<spec>/<entry>.png`: each new capture at full size, the
   candidate baseline, laid out as `scripts/probe-kit/baselines/` is. The
@@ -39,7 +48,8 @@ A state's candidates are the commits on its files:
 each `.svelte` file (`style-snapshot --coverage`), and
 `git log <baseline's commit>..<base> -- <those files>` names what touched them.
 
-The parent opens the folder with `artifact_create(kind: "preview", dir)`.
+The orchestrator opens the run with
+`artifact_create(kind: "preview", dir: <dir>)`, the folder's absolute path.
 
 ## The page
 
@@ -58,6 +68,8 @@ Save the page's `artifact_read` answer as JSON, then:
 ```sh
 bun scripts/probe-kit/approve-review.ts <dir> <picks.json>
 ```
+
+`<dir>` is the run's folder by path, wherever it is.
 
 Every approved surface's candidates, its pictures and its style snapshot,
 move over the approved baselines; a

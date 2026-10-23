@@ -2,8 +2,8 @@
 /**
  * The probe kit: every web UI proof, read from the engine, not the picture.
  *
- *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>] [--<option> <value>…]
- *   bun scripts/probe-kit/run.ts <spec>… [--approve <spec>[:<entry>,…]] [--review <dir>] [--<option> <value>…]
+ *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review] [--<option> <value>…]
+ *   bun scripts/probe-kit/run.ts <spec>… [--approve <spec>[:<entry>,…]] [--review] [--<option> <value>…]
  *   bun scripts/probe-kit/run.ts journeys [name…] [--engine chromium|webkit|firefox] [--size phone|tablet|desk]
  *
  * `PROBE_ENGINE=webkit` (or `firefox`) before either of the first two opens
@@ -43,10 +43,13 @@
  * show. `PROBE_BASELINES=<dir>` reads and writes the baselines under `<dir>`
  * instead: a scratch copy, to prove an approve on.
  *
- * `--review <dir>` writes the owner's review page (review.ts,
+ * `--review` writes the owner's review page (review.ts,
  * `scripts/probe-review/`) when a capture differs from its baseline: the new
  * captures as candidate baselines, apart from the approved set, one Approve
  * or Reject per surface, and approve-review.ts to move the approved ones.
+ * The folder is build output, never in the repository:
+ * `$XDG_CACHE_HOME/cawco/probe-review/<specs>-<head>` (`~/.cache` when
+ * unset), or the folder `PROBE_REVIEW_DIR=<dir>` names.
  *
  * What each level proves is the fleet's rule 7: state and geometry first
  * (geom.ts), motion by seeking the clock (anim.ts), regressions by pixel
@@ -76,7 +79,7 @@ const web = args[0] === "web";
 const rest = web ? args.slice(1) : args;
 if (!(web || rest[0]) || rest[0]?.startsWith("--")) {
   console.error(
-    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>] [--<option> <value>…]\n       bun scripts/probe-kit/run.ts <spec>… [--<option> <value>…]  (specs in specs/, or in specs/web/; every other --<option> <value> is the specs' own)"
+    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review] [--<option> <value>…]\n       bun scripts/probe-kit/run.ts <spec>… [--<option> <value>…]  (specs in specs/, or in specs/web/; every other --<option> <value> is the specs' own)"
   );
   process.exit(2);
 }
@@ -100,12 +103,8 @@ if (entries?.length === 0) {
   process.exit(2);
 }
 const approval: Approval | null = approve === null ? null : (entries ?? "all");
-const reviewAt = rest.indexOf("--review");
-const review = reviewAt === -1 ? null : (rest[reviewAt + 1] ?? null);
-if (reviewAt !== -1 && (review === null || review.startsWith("--"))) {
-  console.error("--review <dir>: name the folder the review page goes in");
-  process.exit(2);
-}
+/** `--review`, a flag with no value: the review folder is review.ts `reviewDir`'s. */
+const reviewing = rest.includes("--review");
 /**
  * The specs' own options: every `--<option>` but `--approve` and `--review`,
  * each with the value after it (none when the next is an option too or
@@ -119,12 +118,15 @@ for (const [i, one] of rest.entries()) {
     continue;
   }
   taken.add(i);
+  if (one === "--review") {
+    continue;
+  }
   const value = rest[i + 1];
   const hasValue = value !== undefined && !value.startsWith("--");
   if (hasValue) {
     taken.add(i + 1);
   }
-  if (one !== "--approve" && one !== "--review") {
+  if (one !== "--approve") {
     options.push(one, ...(hasValue ? [value] : []));
   }
 }
@@ -172,6 +174,12 @@ for (const name of chosen) {
   }
   specs.set(name, spec);
 }
+/**
+ * The review's folder, outside the repository (review.ts `reviewDir`), named
+ * once here so a spec run in a process of its own writes into the same one.
+ */
+const { REVIEW_DIR_ENV, reviewDir, writeReview } = await import("./review");
+const review = reviewing ? reviewDir(named.length > 0 ? named : ["web"]) : null;
 
 /**
  * A spec of its own that stands up its own git and HOME (kit.ts
@@ -194,11 +202,16 @@ const runOwnHome = async (spec: Spec): Promise<number> => {
       import.meta.path,
       spec.name,
       ...(approve === spec.name && approveArg ? ["--approve", approveArg] : []),
-      ...(review === null ? [] : ["--review", review]),
+      ...(review === null ? [] : ["--review"]),
       ...options,
     ],
     {
-      env: { ...env, HOME: home, [OWN_HOME_ENV]: home },
+      env: {
+        ...env,
+        HOME: home,
+        [OWN_HOME_ENV]: home,
+        ...(review === null ? {} : { [REVIEW_DIR_ENV]: review }),
+      },
       stdio: ["inherit", "inherit", "inherit"],
     }
   );
@@ -245,7 +258,6 @@ if (review !== null) {
   if (run.changed.length === 0) {
     console.log(`REVIEW: no baseline differs; nothing written to ${review}`);
   } else {
-    const { writeReview } = await import("./review");
     await writeReview(review, run.changed);
   }
 }

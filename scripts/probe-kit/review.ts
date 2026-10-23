@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * The owner's review page for captures that differ from their approved
- * baselines (`--review <dir>`): one page, `scripts/probe-review/index.html`
+ * baselines (`run.ts --review`): one page, `scripts/probe-review/index.html`
+ * copied into the review's folder (`reviewDir`, outside the repository) and
  * reading `manifest.json` beside it, grouped by surface. Each entry shows the
  * approved baseline, the new capture (held, the approved one) and pixelmatch's
  * picture of what changed, all three cut to the same region; each surface has
@@ -26,11 +27,33 @@
  */
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import type { Changed } from "./kit";
 
 const PAGE = join(import.meta.dir, "..", "probe-review", "index.html");
+
+/** Names the folder a review is written to, in place of `reviewDir`'s default. */
+export const REVIEW_DIR_ENV = "PROBE_REVIEW_DIR";
+
+/**
+ * Where a run's review goes. A review is build output, never in the
+ * repository: `$XDG_CACHE_HOME/cawco/probe-review/<specs>-<head>` (`~/.cache`
+ * when unset), or the folder `PROBE_REVIEW_DIR` names.
+ */
+export const reviewDir = (specs: readonly string[]): string => {
+  const named = process.env[REVIEW_DIR_ENV];
+  if (named) {
+    return resolve(named);
+  }
+  return join(
+    process.env.XDG_CACHE_HOME || join(homedir(), ".cache"),
+    "cawco",
+    "probe-review",
+    `${specs.join("-")}-${head().slice(0, 9)}`
+  );
+};
 
 /** One capture on the page, its paths inside the review's folder. */
 export interface ReviewEntry {
@@ -100,7 +123,7 @@ const words = (slug: string): string => {
 /**
  * `png` cut to `box`, made a phone-sized jpg at `to` with ffmpeg: 720 px wide
  * at most, `-q:v 5`, so a whole run's page (some 2,600 pictures) stays near
- * 100 MB in the repo.
+ * 100 MB on disk.
  */
 async function jpg(png: Buffer, box: Changed["box"], to: string) {
   let bytes = png;
@@ -292,13 +315,14 @@ export async function writeReview(
   );
   const manifest = await writeManifest(at);
   console.log(
-    `REVIEW ${relative(process.cwd(), at) || "."}: ${manifest.surfaces.length} surface(s), ${changed.length} capture(s) for the owner (index.html, manifest.json, img/, candidates/)`
+    `REVIEW ${at}: ${manifest.surfaces.length} surface(s), ${changed.length} capture(s) for the owner (index.html, manifest.json, img/, candidates/)`
   );
   for (const s of manifest.surfaces) {
     console.log(`  ${s.id}: ${s.entries.map((e) => e.entry).join(", ")}`);
   }
+  console.log(`  open it: artifact_create(kind: "preview", dir: "${at}")`);
   console.log(
-    `  approve the picks: bun scripts/probe-kit/approve-review.ts ${relative(process.cwd(), at) || "."} <picks.json>`
+    `  approve the picks: bun scripts/probe-kit/approve-review.ts ${at} <picks.json>`
   );
 }
 
