@@ -118,7 +118,7 @@ the approved surfaces' candidates over the approved baselines.
 ```sh
 bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] [--approve]   # computed styles, boxes, overflow, forced states
 bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b] [--approve surfaces]   # the same surfaces' pixels
-bun scripts/probe-kit/run.ts style-snapshot --coverage                      # style-snapshot-coverage.json
+bun scripts/probe-kit/run.ts style-snapshot --coverage [--surfaces=a,b]     # style-snapshot-coverage.json: the states that render each .svelte file
 bun scripts/probe-kit/run.ts style-snapshot --record                        # the hub tape, again (on the host)
 bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate     # in a workspace: no delegate
 ```

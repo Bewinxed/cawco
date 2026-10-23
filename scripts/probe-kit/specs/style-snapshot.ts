@@ -10,8 +10,7 @@
  *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b]              against the baselines
  *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b]              writes them
  *     --approve style-snapshot[:a,b]                                        (run.ts: a bare --approve writes none)
- *   bun scripts/probe-kit/run.ts style-snapshot --coverage                    the coverage map
- *   bun scripts/probe-kit/run.ts style-snapshot --coverage --styled-at=<rev>  of the files styled at <rev>
+ *   bun scripts/probe-kit/run.ts style-snapshot --coverage [--surfaces=a,b]   the coverage map
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage --surfaces=a        the element a difference line
  *     --where='<key>'                                                       names: its source line and tag
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage --surfaces=a        a state's `$props.id()`s, in
@@ -52,19 +51,18 @@
  * surface, written by `--approve` (surfaces/snapshot.ts holds the format).
  * The surfaces and their states are surfaces/catalogue.ts.
  *
- * `--coverage` reads every surface on the dev server (desk, light), where
- * each element names the `.svelte` file it is written in
- * (`__svelte_meta.loc.file`), and writes which surfaces render each file
- * with a `<style>` (`style-snapshot-coverage.json`), then lists the files
- * no surface renders. It counts what the reader reads: not what a
- * `content-visibility: hidden` box skips. `--styled-at=<rev>` counts the
- * files that had a `<style>` at that revision instead (a converted tree,
- * held to its base of record's list; whether a file's rules were scoped is
- * read off its source there), and lists apart those gone from this tree.
+ * `--coverage` reads every surface's states on the dev server, at the light
+ * passes, where each element names the `.svelte` file it is written in
+ * (`__svelte_meta.loc.file`) and each component above it the file that
+ * placed it, and writes which states render each of the dashboard's
+ * `.svelte` files (`style-snapshot-coverage.json`: `{ "<file>":
+ * ["<surface>/<state>", …] }`), then lists the files no state renders. It
+ * counts what the reader reads: not what a `content-visibility: hidden` box
+ * skips. The map is what `git log <range> -- <a state's files>` reads to
+ * name the commits that changed a state (scripts/probe-review/README.md).
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { recorder, type Tape, type TapeHub, writeTape } from "../hub-tape";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -465,9 +463,9 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
   );
 }
 
-/** Every `.svelte` under the dashboard's src with a `<style>`, repo-relative, with its source. */
-function styled(): Map<string, string> {
-  const out = new Map<string, string>();
+/** Every `.svelte` under the dashboard's src, repo-relative, sorted. */
+function svelteFiles(): string[] {
+  const out: string[] = [];
   const walkDir = (dir: string) => {
     for (const entry of readdirSync(dir)) {
       if (entry === "node_modules") {
@@ -477,95 +475,12 @@ function styled(): Map<string, string> {
       if (statSync(path).isDirectory()) {
         walkDir(path);
       } else if (entry.endsWith(".svelte")) {
-        const source = readFileSync(path, "utf8");
-        if (source.includes("<style")) {
-          out.set(relative(ROOT, path), source);
-        }
+        out.push(relative(ROOT, path));
       }
     }
   };
   walkDir(join(ROOT, "apps", "dashboard", "src"));
-  return new Map([...out].sort(([a], [b]) => a.localeCompare(b)));
-}
-
-/** Git's answer in the checkout; a thrown error with its own words. */
-const gitSays = (args: string[]): string => {
-  const run = Bun.spawnSync(["git", ...args], { cwd: ROOT });
-  if (run.exitCode !== 0) {
-    throw new Error(
-      `git ${args.join(" ")} exited ${run.exitCode}: ${run.stderr.toString().trim()}`
-    );
-  }
-  return run.stdout.toString();
-};
-
-/**
- * {@link styled} as it stood at `ref` (a git revision): the files a tree
- * that has since converted them must still render, each with its source
- * there (`--styled-at=`, the base of record for the converted tree).
- */
-function styledAt(ref: string): Map<string, string> {
-  const out = new Map<string, string>();
-  const listed = gitSays([
-    "grep",
-    "-l",
-    "<style",
-    ref,
-    "--",
-    "apps/dashboard/src/**/*.svelte",
-  ])
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.slice(ref.length + 1))
-    .sort((a, b) => a.localeCompare(b));
-  for (const path of listed) {
-    out.set(path, gitSays(["show", `${ref}:${path}`]));
-  }
-  return out;
-}
-
-/** What coverage asks of the Svelte compiler: one file compiled, its CSS. */
-interface SvelteCompiler {
-  compile: (
-    source: string,
-    options: {
-      css: "external";
-      cssHash: () => string;
-      dev: boolean;
-      filename: string;
-      generate: "client";
-    }
-  ) => { css: { code: string } | null };
-}
-/** The class every scoped rule carries when a file is compiled here. */
-const SCOPE_MARK = "svelte-coverage-scope";
-
-/**
- * The files whose `<style>` holds a rule Svelte scopes to their own
- * elements, as the compiler decides it (the dashboard's own, as its build
- * resolves it: the kit has no svelte of its own). Compiled with one fixed
- * scoping class, a scoped rule carries it and a `:global` one does not, and
- * a selector nothing in the template can match is gone (`css_unused_selector`).
- */
-async function scopedFiles(sources: Map<string, string>): Promise<Set<string>> {
-  const { compile } = (await import(
-    createRequire(join(ROOT, "apps", "dashboard", "package.json")).resolve(
-      "svelte/compiler"
-    )
-  )) as SvelteCompiler;
-  return new Set(
-    [...sources.keys()].filter((file) => {
-      const path = join(ROOT, file);
-      const { css } = compile(sources.get(file) ?? "", {
-        filename: path,
-        css: "external",
-        cssHash: () => SCOPE_MARK,
-        generate: "client",
-        dev: true,
-      });
-      return (css?.code ?? "").includes(SCOPE_MARK);
-    })
-  );
+  return out.sort((x, y) => x.localeCompare(y));
 }
 
 /**
@@ -641,30 +556,31 @@ function propsIds(): string[] {
   return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
 }
 
-/** Each of `files` (as `__svelte_meta` names them) heard on `surface`, repo-relative. */
-function heard(
-  into: Map<string, Set<string>>,
-  files: string[],
-  surface: string
-): void {
-  for (const file of files) {
-    const at = file.includes("apps/dashboard/")
-      ? file.slice(file.indexOf("apps/dashboard/"))
-      : `apps/dashboard/${file.replace(LEADING_DOT, "")}`;
-    const set = into.get(at) ?? new Set<string>();
-    set.add(surface);
-    into.set(at, set);
-  }
-}
+/** A `__svelte_meta` file as the repo names it: `apps/dashboard/…`. */
+const repoPath = (file: string): string =>
+  file.includes("apps/dashboard/")
+    ? file.slice(file.indexOf("apps/dashboard/"))
+    : `apps/dashboard/${file.replace(LEADING_DOT, "")}`;
 
-/** Which surfaces render an element of each styled file: the dev server's `__svelte_meta`. */
+/**
+ * Which states render each of the dashboard's `.svelte` files: every file an
+ * element of the state is written in, and every file up its component chain,
+ * at the state's light passes on the dev server (`__svelte_meta`). Written to
+ * `style-snapshot-coverage.json` as `{ "<file>": ["<surface>/<state>", …] }`,
+ * the files no state renders listed after it. A state read at every one of
+ * its passes replaces its entries; every other state in the catalogue (one
+ * outside `--surfaces=a,b`, one left out from a tape that lacks its host's
+ * recording, one that failed a pass) keeps what the map held for it, and
+ * the note names those the walk set out to read.
+ */
 async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
-  const seen = new Map<string, Set<string>>();
-  const chained = new Map<string, Set<string>>();
+  const rendered = new Map<string, Set<string>>();
+  const passes = PASSES.filter((p) => !p.reduced && p.theme === "light");
+  const readAt = new Map<string, number>();
   await walkTapes(
     kit,
     surfaces.map((s) => ({ ...s, serve: "dev" as const })),
-    PASSES.filter((p) => !p.reduced && p.theme === "light"),
+    passes,
     async ({ page, pass, state, surface }) => {
       const ids = flag("ids");
       if (ids && state.name === ids) {
@@ -684,20 +600,15 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
           `where ${surface.name}/${state.name} · ${pass.width}: ${found ? `${found.at} ${found.tag}` : "nothing at that key"}`
         );
       }
+      const key = `${surface.name}/${state.name}`;
       const read = await page.evaluate(filesUnder, state.root);
-      heard(seen, read.own, surface.name);
-      heard(chained, read.chain, surface.name);
-      // Each state's own files and the page it read them on: which state
-      // leaves a file out, where the map says only which surface.
-      if (has("dump")) {
-        await writeFile(
-          join(
-            kit.out,
-            `${surface.name}-${state.name}-${pass.width}-${pass.theme}.json`
-          ),
-          `${JSON.stringify({ url: page.url(), ...read }, null, 2)}\n`
-        );
+      for (const file of [...read.own, ...read.chain]) {
+        const at = repoPath(file);
+        const states = rendered.get(at) ?? new Set<string>();
+        states.add(key);
+        rendered.set(at, states);
       }
+      readAt.set(key, (readAt.get(key) ?? 0) + 1);
     }
   );
   // A walk that names one element, or lists a state's ids, counts nothing:
@@ -705,41 +616,55 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   if (flag("where") || flag("ids")) {
     return;
   }
+  const keyed = (surface: Surface) =>
+    surface.states.map((state) => ({
+      key: `${surface.name}/${state.name}`,
+      passes: passes.filter(
+        (pass) => !state.widths || state.widths.includes(pass.width)
+      ).length,
+    }));
+  const catalogued = new Set(
+    chosen(undefined).flatMap((s) => keyed(s).map(({ key }) => key))
+  );
+  const asked = surfaces.flatMap(keyed);
+  const whole = new Set(
+    asked
+      .filter(({ key, passes: due }) => readAt.get(key) === due)
+      .map(({ key }) => key)
+  );
+  const held: Record<string, string[]> = existsSync(COVERAGE)
+    ? (JSON.parse(readFileSync(COVERAGE, "utf8")) as Record<string, string[]>)
+    : {};
+  const files = svelteFiles();
   const map: Record<string, string[]> = {};
   const uncovered: string[] = [];
-  const at = flag("styled-at");
-  const sources = at ? styledAt(at) : styled();
-  // A file gone from this tree since `at` is no file it renders.
-  const gone = [...sources.keys()].filter(
-    (file) => !existsSync(join(ROOT, file))
-  );
-  for (const file of gone) {
-    sources.delete(file);
-  }
-  const files = [...sources.keys()];
-  const scoped = await scopedFiles(sources);
   for (const file of files) {
-    // Rendered through a child alone, a file proves only its unscoped rules:
-    // a scoped one matches its own elements, none of which stood there.
-    const through = scoped.has(file) ? [] : [...(chained.get(file) ?? [])];
-    const by = [...new Set([...(seen.get(file) ?? []), ...through])].sort();
-    map[file] = by;
-    if (by.length === 0) {
+    const states = [
+      ...new Set([
+        ...(held[file] ?? []).filter(
+          (key) => catalogued.has(key) && !whole.has(key)
+        ),
+        ...(rendered.get(file) ?? []),
+      ]),
+    ].sort();
+    map[file] = states;
+    if (states.length === 0) {
       uncovered.push(file);
     }
   }
   await writeFile(COVERAGE, `${JSON.stringify(map, null, 2)}\n`);
   kit.note(
-    `coverage: ${files.length - uncovered.length} of ${files.length} files with a <style>${at ? ` at ${at}` : ""} are rendered by a surface (${relative(ROOT, COVERAGE)})`
+    `coverage: ${files.length - uncovered.length} of ${files.length} .svelte files are rendered by a state (${relative(ROOT, COVERAGE)})`
   );
-  if (gone.length > 0) {
-    console.log(
-      `  gone from this tree since ${at} (${gone.length}):\n    ${gone.join("\n    ")}`
+  const unread = asked.filter(({ key }) => !whole.has(key)).map(({ key }) => key);
+  if (unread.length > 0) {
+    kit.note(
+      `coverage: ${unread.length} state(s) not read at every pass keep the map's last files: ${unread.join(", ")}`
     );
   }
   if (uncovered.length > 0) {
     console.log(
-      `  rendered by no surface (${uncovered.length}):\n    ${uncovered.join("\n    ")}`
+      `  rendered by no state (${uncovered.length}):\n    ${uncovered.join("\n    ")}`
     );
   }
 }

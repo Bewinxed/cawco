@@ -34,6 +34,10 @@ Which commits on main made each surface's change are the reviewer's finding:
 write `<dir>/commits.json`,
 `{ "<spec>:<surface>": [{ "sha": "…", "subject": "…", "states": ["rest", …] }] }`,
 then `bun scripts/probe-kit/review.ts <dir>` writes the manifest again with them.
+A state's candidates are the commits on its files:
+`scripts/probe-kit/style-snapshot-coverage.json` lists the states that render
+each `.svelte` file (`style-snapshot --coverage`), and
+`git log <baseline's commit>..<base> -- <those files>` names what touched them.
 
 The parent opens the folder with `artifact_create(kind: "preview", dir)`.
 
