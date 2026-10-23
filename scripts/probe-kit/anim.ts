@@ -55,6 +55,8 @@ import { frames } from "./kit";
 export interface Run {
   /** Its delay before it moves, ms. */
   delay: number;
+  /** One iteration, ms. */
+  duration: number;
   easing: string;
   /** Delay plus duration: where it stands whole, ms. */
   end: number;
@@ -104,6 +106,7 @@ const runOf = (one: Described): Run => {
     type: one.type,
     easing: s?.easing ?? "",
     delay: s?.delay ?? 0,
+    duration: s?.duration ?? 0,
     start: one.startTime ? one.startTime : null,
     // The protocol sends `iterations` only when it is finite.
     loop: s !== undefined && s.iterations === undefined,
@@ -459,15 +462,19 @@ export class Clock {
     return result.value;
   }
 
-  /** The clock's length: the named run's end (its first by that name), or the longest run's. */
+  /**
+   * The clock's length: the named run's end (its first by that name), or the
+   * longest run's; a loop's is one iteration, whatever its delay.
+   */
   length(of?: string): number {
+    const span = (one: Run) => (one.loop ? one.duration : one.end);
     const named = of ? this.runs.find((one) => one.name === of) : undefined;
     if (of && !named) {
       throw new Error(
         `no caught run named ${of} (${this.runs.map((one) => one.name).join(", ")})`
       );
     }
-    return named ? named.end : Math.max(0, ...this.runs.map((one) => one.end));
+    return named ? span(named) : Math.max(0, ...this.runs.map(span));
   }
 
   /**
@@ -479,7 +486,8 @@ export class Clock {
     const at = this.length(of) * fraction;
     const byTime = new Map<number, string[]>();
     for (const run of this.runs) {
-      const t = Math.min(run.end, at);
+      // A loop runs on past its first iteration's end: never held there.
+      const t = run.loop ? at : Math.min(run.end, at);
       byTime.set(t, [...(byTime.get(t) ?? []), run.id]);
     }
     for (const [currentTime, animations] of byTime) {

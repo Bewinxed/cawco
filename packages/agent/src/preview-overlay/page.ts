@@ -625,6 +625,8 @@ artifact.watch({
 
 /** The host's theme, once it said one: "light" or "dark". */
 let hostTheme: Scheme | null = null;
+/** The scheme the pills were last drawn in by {@link takeTheme}. */
+let drawnIn: Scheme | null = null;
 
 /**
  * A page artifact (HTML the agent wrote) draws in the host's theme, never the
@@ -664,7 +666,16 @@ function takeTheme(said: unknown) {
   if (said === "light" || said === "dark") {
     hostTheme = said;
     host.style.setProperty("color-scheme", said, "important");
+    // The tokens' dark values that no colour carries (the breath's floor)
+    // stand on `:host(.dark)` (tokens.ts).
+    host.classList.toggle("dark", said === "dark");
     themed();
+    // The pills are painted with the tokens read as they are drawn: drawn
+    // again in the new scheme, their inks and their breath's floor with it.
+    if (said !== drawnIn) {
+      drawnIn = said;
+      pins.draw();
+    }
   }
 }
 

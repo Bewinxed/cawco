@@ -1924,7 +1924,7 @@ export interface MotionRun {
   last?: Record<string, string>;
   /** A CSS animation's name, a CSS transition's property, a Web Animation's id (else its keyframes' properties). */
   name: string;
-  /** One iteration's length with its delay, ms: a loop's period (read with `loops`). */
+  /** One iteration's length, ms: a loop's period (read with `loops`). */
   period?: number;
   /** Its start on the document's timeline, ms, once it played; null where none was given. */
   start: number | null;
@@ -2186,7 +2186,7 @@ async function clockRead<T>(
       start: run.start,
       delay: run.delay,
       end: run.loop ? Number.POSITIVE_INFINITY : run.end,
-      period: run.end,
+      period: run.duration,
       easing: run.easing,
       heldAt: null,
       ended: playedTo(targets[index] ?? "", run.name),

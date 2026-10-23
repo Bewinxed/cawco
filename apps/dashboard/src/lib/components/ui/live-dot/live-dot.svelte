@@ -39,8 +39,46 @@
 </script>
 
 <script lang="ts">
+  import { breathPhase } from "@cawco/core/breath";
+  import type { Attachment } from "svelte/attachments";
   import type { HTMLAttributes } from "svelte/elements";
   import { cn } from "#lib/utils.js";
+
+  /**
+   * Its breath on the one clock (core breath.ts): every live dot, here and
+   * on a previewed page's pills, breathes in step, its loop begun on the
+   * wall clock's multiples of `--breath`. Set as the effect's delay, which
+   * leaves `animation-play-state` to CSS (CSS Animations 2, §2: only
+   * `play()`, `pause()`, `reverse()` and setting `startTime` take it over),
+   * so the rest rule still holds a dot nobody sees still: first from the
+   * timeline's time, then exactly from the start time it was given. Under
+   * reduced motion there is no breath to set.
+   */
+  const inStep: Attachment<HTMLElement> = (dot) => {
+    const breath = dot
+      .getAnimations()
+      .find(
+        (run): run is CSSAnimation =>
+          run instanceof CSSAnimation && run.animationName === "breath"
+      );
+    const effect = breath?.effect;
+    if (!(breath && effect)) {
+      return;
+    }
+    const period = Number(effect.getComputedTiming().duration);
+    const align = (at: number) =>
+      effect.updateTiming({
+        delay: -breathPhase(performance.timeOrigin, at, period),
+      });
+    align(Number(document.timeline.currentTime ?? performance.now()));
+    breath.ready
+      .then(() => {
+        if (breath.startTime !== null) {
+          align(Number(breath.startTime));
+        }
+      })
+      .catch(() => undefined);
+  };
 
   let {
     class: className,
@@ -61,4 +99,5 @@
   data-box
   data-slot="live-dot"
   {...rest}
+  {@attach inStep}
 ></span>

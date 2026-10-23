@@ -260,7 +260,9 @@ import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { pinName } from "../../../packages/core/src/pin-name";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { type BreathRead, readBreath } from "../breath";
 import { traceMain } from "../frames";
 import {
   COMPOSER,
@@ -350,6 +352,8 @@ const answered = new Map<string, string>();
 const answeredAt = new Map<string, number>();
 /** Calls whose turn the model draws out after the tool's answer: the agent at work. */
 const slow = new Set<string>();
+/** Calls whose turn the model draws out for half a minute: long enough to read a live dot in both schemes. */
+const long = new Set<string>();
 /** Every message the session was sent, as the model read it, with the request that carried it. */
 const heard: { body: string; last: string }[] = [];
 
@@ -376,6 +380,12 @@ const respond = (request: Seen): Reply => {
       // Its whole answer: a delivery may join at the tool's boundary.
       answered.set(marker, request.final);
       answeredAt.set(marker, Date.now());
+    }
+    if (long.has(marker)) {
+      return {
+        everyMs: 600,
+        words: ["Working", ...Array.from({ length: 50 }, () => " on"), "."],
+      };
     }
     return slow.has(marker)
       ? { everyMs: 600, words: ["Working", " on", " it", " now", "."] }
@@ -692,6 +702,7 @@ const runOn = async (kit: Kit, on: On) => {
   }
   await sendChecks(on, frame, one);
   await agentChecks(on, frame, one, two);
+  await breathChecks(on, frame);
   await hostChecks(on, frame, one);
   await anchorChecks(on, frame, id, one);
   // The Comments panel floats over the page's top-right: each check that
@@ -1232,6 +1243,132 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
       !second.last.includes("## 2."),
     `pill ${hollow}; ${second?.last.slice(0, 300) ?? "no delivery"}`
   );
+};
+
+/**
+ * 4b. One breath everywhere (the owner's pick): while the agent's turn runs
+ * on a pin, the page's own pill (the overlay's live dot, in the frame) and
+ * the rail row's live dot for the same pin each run one breath, `--breath`
+ * long on `--ease-in-out`, its opacity 1, the floor and 1 at 0, ½ and 1 of
+ * a loop, by day and at night, both begun on the one clock (core breath.ts,
+ * the wall clock's multiples of the breath: the two documents keep timelines
+ * of their own); and nothing breathes under reduced motion.
+ */
+const breathChecks = async (on: On, frame: Frame) => {
+  const { page: screen } = on;
+  // The breath's tokens as the dashboard computes them in its scheme now.
+  const tokensNow = () =>
+    screen.evaluate(() => {
+      const probe = document.createElement("i");
+      probe.style.animationDuration = "var(--breath)";
+      probe.style.animationTimingFunction = "var(--ease-in-out)";
+      document.body.append(probe);
+      const style = getComputedStyle(probe);
+      const read = {
+        ms: Number.parseFloat(style.animationDuration) * 1000,
+        easing: style.animationTimingFunction,
+        floor: Number(
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--breath-floor")
+            .trim()
+        ),
+      };
+      probe.remove();
+      return read;
+    });
+  const rows = await rowsOf(on);
+  long.add(String(Number(lastMarker) + 1));
+  // The turn runs on for half a minute after the tool answers.
+  await on.call(READ, { filter: "all" });
+  const liveRow = rows.locator('[data-slot="pin-row"]:has([data-dot="live"])');
+  const number = await liveRow
+    .first()
+    .getAttribute("data-pin-row", { timeout: 10_000 })
+    .catch(() => null);
+  const rowDot = `${RAIL} [data-slot="pin-row"][data-pin-row="${number}"] [data-dot="live"]`;
+  const pillDot = `svg[data-cawco-pins] g[data-pin="${number}"] circle[data-dot="live"]`;
+  const flat = (n: number) => Math.round(n * 1000) / 1000;
+  const shown = (one: BreathRead | null) =>
+    one
+      ? `runs ${one.runs}, ${flat(one.length)}ms, ${one.easing}, opacity ${one.opacity.map(flat).join("/")}, ${one.offClock === null ? "no start" : `${flat(one.offClock)}ms off the clock`}`
+      : "∅";
+  const breathes = (
+    one: BreathRead | null,
+    tokens: Awaited<ReturnType<typeof tokensNow>>
+  ) =>
+    !!one &&
+    one.runs === 1 &&
+    Math.abs(one.length - tokens.ms) <= 1 &&
+    one.easing.replaceAll(" ", "") === tokens.easing.replaceAll(" ", "") &&
+    Math.abs((one.opacity[0] ?? 0) - 1) <= 0.01 &&
+    Math.abs((one.opacity[1] ?? 0) - tokens.floor) <= 0.01 &&
+    Math.abs((one.opacity[2] ?? 0) - 1) <= 0.01 &&
+    one.offClock !== null &&
+    one.offClock <= 1;
+  const readBoth = async () => {
+    await frame
+      .waitForSelector(pillDot, { timeout: 10_000 })
+      .catch(() => undefined);
+    await screen.waitForTimeout(100);
+    return {
+      pill: await frame.evaluate(readBreath, pillDot).catch(() => null),
+      row: await screen.evaluate(readBreath, rowDot).catch(() => null),
+    };
+  };
+  const both = async (scheme: string) => {
+    const tokens = await tokensNow();
+    const { pill, row } = await readBoth();
+    on.kit.check(
+      `4b (${scheme}): while the agent works on pin ${number}, the page's pill and its rail row each breathe one breath, ${tokens.ms}ms on --ease-in-out, opacity 1, the floor (${tokens.floor}) and 1 at 0, ½ and 1 of a loop, both begun on the one clock (equal length, curve and start on the wall clock)`,
+      number !== null &&
+        breathes(pill, tokens) &&
+        breathes(row, tokens) &&
+        pill?.length === row?.length &&
+        pill?.easing === row?.easing,
+      `\n    pill: ${shown(pill)}\n    row:  ${shown(row)}`
+    );
+  };
+  await both("day");
+  // Night: the dashboard's own switch, which tells the page its scheme.
+  const switchTo = async (to: "dark" | "light") => {
+    const label = to === "dark" ? shellWords.lightMode : shellWords.darkMode;
+    for (let press = 0; press < 3; press += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one press of the switch at a time
+      const dark = await screen.evaluate(() =>
+        document.documentElement.classList.contains("dark")
+      );
+      if (dark === (to === "dark")) {
+        return;
+      }
+      await screen
+        .getByRole("button", { name: label })
+        .or(screen.getByRole("button", { name: "System" }))
+        .first()
+        .click({ timeout: 5000 });
+      // A plain wait, never `settle`, which holds every loop still at its
+      // start: the breath read next is the page's own.
+      await screen.waitForTimeout(400);
+    }
+  };
+  await switchTo("dark");
+  await both("night");
+  // Less motion: nothing breathes, on the page nor in the rail.
+  await screen.emulateMedia({ reducedMotion: "reduce" });
+  await screen.waitForTimeout(300);
+  const still = await readBoth();
+  on.kit.check(
+    `4b (reduced motion): pin ${number}'s live dot stands still on the page and in its rail row: no breath runs`,
+    still.pill?.runs === 0 && still.row?.runs === 0,
+    `\n    pill: ${shown(still.pill)}\n    row:  ${shown(still.row)}`
+  );
+  await screen.emulateMedia({ reducedMotion: "no-preference" });
+  await switchTo("light");
+  await until(
+    "the long turn to end",
+    () => screen.locator(`${RAIL} [data-dot="live"]`).count(),
+    (count) => count === 0,
+    60_000
+  ).catch(() => undefined);
 };
 
 /** 4. comment_read, comment_reply with the live dot, comment_resolve, Reopen. */

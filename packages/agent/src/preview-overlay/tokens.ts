@@ -13,6 +13,8 @@ const SPACES = /\s+/g;
 /** Spacing a stylesheet does not need: round braces, semicolons and commas. A colon can be a descendant combinator's, so it keeps its. */
 const AROUND = /\s*([{};,])\s*/g;
 const ROOT = /:root/g;
+/** The dark scheme's own values (a number no `light-dark()` carries: the breath's floor): on the host while the host's theme is dark (page.ts `takeTheme`). */
+const ROOT_DARK = /:root\.dark/g;
 
 export function hostTokens(): string {
   const css = readFileSync(
@@ -26,6 +28,7 @@ export function hostTokens(): string {
     .replace(COMMENTS, "")
     .replace(SPACES, " ")
     .replace(AROUND, "$1")
+    .replace(ROOT_DARK, ":host(.dark)")
     .replace(ROOT, ":host")
     .trim();
 }

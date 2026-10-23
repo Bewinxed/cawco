@@ -23,8 +23,9 @@
  * working and landed, for review.
  *
  * At 1440, in both schemes, one clock: put to work by one change, the
- * card's working mark and the pin's own pill each run one `breath`, with
- * equal duration, easing and start time (the owner's pick: "One breath
+ * card's working mark and the pin's own pill each run one `breath`, of
+ * equal length and curve, each begun on the one clock (core breath.ts: a
+ * multiple of the breath on the wall clock) (the owner's pick: "One breath
  * everywhere"). Then the motion, read through the kit's `readMotion`
  * on the DevTools clock with its loops caught: putting the agent to work
  * starts one run inside the card, the shared `breath` keyframes on the live
@@ -36,6 +37,7 @@
 import type { Page } from "playwright-core";
 import { accountsWords } from "../../../../packages/core/src/words/accounts";
 import { commentWords } from "../../../../packages/core/src/words/comments";
+import { readBreath } from "../../breath";
 import type { Kit, Spec, View } from "../../kit";
 import { open, readMotion, THEMES } from "../../kit";
 
@@ -283,40 +285,22 @@ async function breath(kit: Kit, base: string): Promise<void> {
     await bench(page, url, "work");
     await page.locator(DOT).waitFor();
     await page.waitForTimeout(100);
-    const clock = await page.evaluate(
-      ({ cardDot, pillDot }) =>
-        [cardDot, pillDot].map((sel) => {
-          const el = document.querySelector(sel);
-          const breaths = (el?.getAnimations() ?? []).filter(
-            (one): one is CSSAnimation =>
-              one instanceof CSSAnimation && one.animationName === "breath"
-          );
-          const [run] = breaths;
-          return {
-            found: !!el,
-            runs: breaths.length,
-            start: run ? Number(run.startTime) : null,
-            duration: run
-              ? Number(run.effect?.getComputedTiming().duration)
-              : null,
-            easing: el ? getComputedStyle(el).animationTimingFunction : "",
-          };
-        }),
-      { cardDot: DOT, pillDot: PILL_DOT }
-    );
-    const [mark, pill] = clock;
+    const mark = await page.evaluate(readBreath, DOT);
+    const pill = await page.evaluate(readBreath, PILL_DOT);
     kit.check(
-      `1440 ${theme}: the card's working mark and the pin's pill breathe on one clock: one breath each, equal duration (${tokens.ms}ms), easing and start time`,
+      `1440 ${theme}: the card's working mark and the pin's pill breathe on one clock: one breath each, equal length (${tokens.ms}ms) and curve, each begun on the one clock (core breath.ts)`,
       !!(mark && pill) &&
         mark.runs === 1 &&
         pill.runs === 1 &&
-        mark.start !== null &&
-        mark.start === pill.start &&
-        near(mark.duration ?? 0, tokens.ms, 1) &&
-        mark.duration === pill.duration &&
+        near(mark.length, tokens.ms, 1) &&
+        mark.length === pill.length &&
         mark.easing === pill.easing &&
-        mark.easing.replaceAll(" ", "") === tokens.easing.replaceAll(" ", ""),
-      `\n    ${JSON.stringify(clock)}`
+        mark.easing.replaceAll(" ", "") === tokens.easing.replaceAll(" ", "") &&
+        mark.offClock !== null &&
+        pill.offClock !== null &&
+        mark.offClock <= 1 &&
+        pill.offClock <= 1,
+      `\n    mark ${JSON.stringify(mark)}\n    pill ${JSON.stringify(pill)}`
     );
     await bench(page, url, "rest");
     await page.locator(WORKING).waitFor({ state: "detached" });
@@ -327,26 +311,41 @@ async function breath(kit: Kit, base: string): Promise<void> {
       CARD,
       {
         loops: true,
-        fractions: [0, 0.5, 1],
+        // Every twentieth of the clock: the breath begins on the one clock
+        // (its delay), so where in a loop each stands is its own progress.
+        fractions: Array.from({ length: 21 }, (_, i) => i / 20),
         read: () =>
           page.evaluate((sel) => {
-            const style = getComputedStyle(
-              document.querySelector(sel) as Element
-            );
+            const el = document.querySelector(sel) as Element;
+            const [run] = el.getAnimations();
             // A CSS animation carries its curve on its keyframes, which the
             // protocol reports as linear: the dot's own style names it.
             return {
-              opacity: Number(style.opacity),
-              easing: style.animationTimingFunction,
+              opacity: Number(getComputedStyle(el).opacity),
+              progress: Number(run?.effect?.getComputedTiming().progress ?? -1),
+              easing: getComputedStyle(el).animationTimingFunction,
             };
           }, DOT),
       }
     );
     const [run] = motion.runs;
-    const values = motion.at.map((one) => one.value.opacity);
+    // The sample nearest 0, ½ and 1 of a loop, by its own progress.
+    const nearest = (share: number) =>
+      motion.at.reduce<(typeof motion.at)[number] | undefined>(
+        (best, one) =>
+          !best ||
+          Math.abs(one.value.progress - share) <
+            Math.abs(best.value.progress - share)
+            ? one
+            : best,
+        undefined
+      )?.value;
+    const at = [nearest(0), nearest(0.5), nearest(1)];
+    const values = at.map((one) => one?.opacity ?? Number.NaN);
+    const shares = at.map((one) => one?.progress ?? Number.NaN);
     const curve = motion.at[0]?.value.easing ?? "";
     kit.check(
-      `1440 ${theme}: put to work, the card starts one run, the shared breath on the live dot: a loop of --breath (${tokens.ms}ms) on --ease-in-out, its opacity 1, the floor (${tokens.floor}) and 1 at 0, ½ and 1 of it`,
+      `1440 ${theme}: put to work, the card starts one run, the shared breath on the live dot: a loop of --breath (${tokens.ms}ms) on --ease-in-out, its opacity 1, the floor (${tokens.floor}) and 1 at 0, ½ and 1 of a loop`,
       motion.by === "clock" &&
         motion.runs.length === 1 &&
         !!run &&
@@ -356,11 +355,11 @@ async function breath(kit: Kit, base: string): Promise<void> {
         run.end === Number.POSITIVE_INFINITY &&
         near(run.period ?? 0, tokens.ms, 1) &&
         curve.replaceAll(" ", "") === tokens.easing.replaceAll(" ", "") &&
-        values.length === 3 &&
+        shares.every((share, i) => near(share, [0, 0.5, 1][i] ?? 0, 0.05)) &&
         near(values[0] ?? 0, 1, 0.01) &&
         near(values[1] ?? 0, tokens.floor, 0.01) &&
         near(values[2] ?? 0, 1, 0.01),
-      `\n    ${JSON.stringify(motion.runs.map(({ name, type, target, period, end, easing }) => ({ name, type, target, period, end, easing })))} opacity ${JSON.stringify(values)} curve ${curve}`
+      `\n    ${JSON.stringify(motion.runs.map(({ name, type, target, period, end, easing }) => ({ name, type, target, period, end, easing })))} opacity ${JSON.stringify(values)} at ${JSON.stringify(shares)} of a loop, curve ${curve}`
     );
     await page.context().close();
   }

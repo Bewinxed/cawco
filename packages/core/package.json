@@ -19,6 +19,7 @@
     "./release-key": "./src/release-key.ts",
     "./binary-updates": "./src/binary-updates.ts",
     "./clock": "./src/clock.ts",
+    "./breath": "./src/breath.ts",
     "./binary-distribution": "./src/binary-distribution.ts",
     "./binary-health": "./src/binary-health.ts",
     "./cli-failure": "./src/cli-failure.ts",

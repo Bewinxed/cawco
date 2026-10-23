@@ -46,6 +46,8 @@
  * open pin and the one being written stand as the page scrolls, and where
  * each pin's picture is cropped (`cropOf`).
  */
+
+import { breathPhase } from "@cawco/core/breath";
 import {
   type AnchorFound,
   changedAnchor,
@@ -737,7 +739,7 @@ export function startPins(deps: PinsDeps): Pins {
       // dashboard's live dot runs (its `breath` keyframes: down to the floor
       // half a breath in and back, each half on --ease-in-out), the owner's
       // pick: "One breath everywhere".
-      mark.animate(
+      const breath = mark.animate(
         [
           { opacity: 1, easing: paint.breathEase },
           { opacity: paint.breathFloor, easing: paint.breathEase },
@@ -745,6 +747,12 @@ export function startPins(deps: PinsDeps): Pins {
         ],
         { duration: paint.breath, iterations: Number.POSITIVE_INFINITY }
       );
+      // On the one clock (core breath.ts): in step with the dashboard's
+      // live dots and with this pill as it was drawn before, never from
+      // its start.
+      const now = Number(document.timeline.currentTime ?? performance.now());
+      breath.startTime =
+        now - breathPhase(performance.timeOrigin, now, paint.breath);
     }
     return [cut, mark];
   };
@@ -1092,6 +1100,12 @@ export function startPins(deps: PinsDeps): Pins {
   addEventListener("scroll", onScroll, { capture: true, passive: true });
   // The viewport's width moves the pins on the page as a whole, and which side a pill's tail takes.
   addEventListener("resize", () => draw(), { passive: true });
+  // Asking for less motion stops a live dot's breath at once, and asking
+  // for it again starts it, in step (DESIGN.md, The Reduced Motion Rule).
+  matchMedia("(prefers-reduced-motion: no-preference)").addEventListener(
+    "change",
+    () => draw()
+  );
 
   /**
    * Pin `id` brought where the person sees it: inside the viewport and out
