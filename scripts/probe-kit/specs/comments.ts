@@ -5019,15 +5019,20 @@ const edgesOn = async (
         };
       })
       .catch(() => null);
-    // The page lifts a pill out from under a drawer with a glide: read once it stands.
+    // The page lifts a pill out from under a drawer with a glide, once the
+    // drawer has told it what it covers: read once the pill has come clear
+    // of the card and stood for three reads, or after 3 s as it stands.
     let pill = await pillDrawn(frame, n);
-    for (let tries = 0; tries < 20; tries += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: a read each tenth of a second until the pill stands
+    let stood = 0;
+    for (let tries = 0; tries < 30 && stood < 3; tries += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: a read each tenth of a second until the pill stands clear
       await screen.waitForTimeout(100);
       const now = await pillDrawn(frame, n);
-      if (now && pill && Math.abs(now.top - pill.top) < 0.5) {
-        break;
-      }
+      const clear = !!(now && read && apart(now, read.rect));
+      stood =
+        clear && now && pill && Math.abs(now.top - pill.top) < 0.5
+          ? stood + 1
+          : 0;
       pill = now;
     }
     const beside = !!read && !read.sheet;
