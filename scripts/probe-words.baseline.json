@@ -333,15 +333,6 @@
   "scripts/probe-kit/specs/handed-inputs.ts": {
     "a workspace's boundary reaches public hosts only": 1
   },
-  "scripts/probe-kit/specs/heavy-gate-order.ts": {
-    "a landing gate waits for a heavy-run slot, and takes the next free one before any other run:": 1,
-    "landing gates take heavy-run slots in the order they came, and an earlier one waits:": 1
-  },
-  "scripts/probe-kit/specs/heavy-peak.ts": {
-    "holds a reservation since": 1,
-    "so it holds a reservation since": 2,
-    "this machine's measured room:": 1
-  },
   "scripts/probe-kit/specs/host-lfs.ts": {
     "Project details › Large files": 1
   },
@@ -421,9 +412,6 @@
     "Landing gate, run by the hub:": 1,
     "Nothing was sent": 1,
     "Run the repo's install before you build or test.": 1
-  },
-  "scripts/probe-kit/specs/landing-stop.ts": {
-    "a landing gate waits for a heavy-run slot, and takes the next free one before any other run:": 1
   },
   "scripts/probe-kit/specs/limit-admission.ts": {
     "moves from": 1

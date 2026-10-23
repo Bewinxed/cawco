@@ -24,9 +24,10 @@
  *    places, or spells nothing the product does, so it passes.
  *    The copies the kit held when this rule came in stand in
  *    scripts/probe-words.baseline.json, counted per file and phrase: their
- *    number may fall, never rise, and one moved to core leaves it by
- *    `--write-baseline` (a count that fell and stays written fails, so a
- *    phrase taken out can't come back unseen).
+ *    number may fall, never rise. A count that fell is said, not failed:
+ *    a commit elsewhere that changes the product's text or a spec must not
+ *    break every other branch's lint. `--write-baseline` takes it out, so
+ *    the phrase can't come back unseen.
  *
  * 3. An imported word read inside a function Playwright runs in the page
  *    (`evaluate`, `waitForFunction`, …; IN_PAGE): the page has none of the
@@ -482,7 +483,8 @@ for (const file of filesUnder(KIT, [".ts"])) {
  * The ratchet: rule 2's copies the kit held when the rule came in, each
  * file's phrases with how many times it matches each. Their number may
  * fall, never rise; a phrase moved to core leaves the baseline by
- * `--write-baseline`, so it can't come back unseen.
+ * `--write-baseline`, so it can't come back unseen (a fallen count is said,
+ * not failed).
  */
 const BASELINE = join(ROOT, "scripts/probe-words.baseline.json");
 type Baseline = Record<string, Record<string, number>>;
@@ -539,14 +541,14 @@ if (failing.length > 0) {
   }
 }
 if (stale.length > 0) {
-  console.error(
-    `probe-words: ${stale.length} copie(s) in scripts/probe-words.baseline.json are gone from the kit: run \`bun scripts/probe-words-check.ts --write-baseline\` so they can't come back unseen:`
+  console.log(
+    `probe-words: ${stale.length} copie(s) in scripts/probe-words.baseline.json are gone from the kit; \`bun scripts/probe-words-check.ts --write-baseline\` takes them out so they can't come back unseen:`
   );
   for (const line of stale) {
-    console.error(line);
+    console.log(line);
   }
 }
-if (failing.length > 0 || stale.length > 0) {
+if (failing.length > 0) {
   process.exit(1);
 }
 console.log(
