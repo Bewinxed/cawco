@@ -35,6 +35,16 @@
  * {@link deletePin}): the web pane on the doc it joins, the page's overlay on
  * its own for a host that holds no doc (the app, by `cawco:reply`,
  * `cawco:resolve` and `cawco:delete`).
+ *
+ * A delete is a tombstone, not an absence: the pin's id goes into the doc's
+ * `gone` map ({@link buryPin}) as it leaves `pins`. A Yjs map's delete
+ * removes only the writes it has seen, so a write made where the delete
+ * hadn't arrived yet (a page placing its pins on a stale load, the hub
+ * stamping a delivery, an agent's reply, another device) would stand the pin
+ * up again when the two meet. Every doc that holds pins (the page's, the
+ * pane's, the hub's) lets go of a pin its `gone` names whenever either map
+ * changes ({@link honourDeletions}), so a deletion made anywhere, while any
+ * link is down, wins every merge, and every copy converges on "deleted".
  */
 import type { Doc, Map as YMap } from "yjs";
 import { humanSize } from "./attachments";
@@ -71,6 +81,8 @@ export const pinFirstLine = (pin: Pin): string | null => {
 export const COMMENT_LIMITS = {
   /** Pins an artifact keeps. */
   pins: 200,
+  /** Deleted pins' tombstones an artifact keeps (the doc's `gone`). Our call: five artifacts' worth of pins. */
+  gone: 1000,
   /** Entries one pin's thread keeps. Our call. */
   entries: 100,
   /** Characters one thread entry holds: comment_reply's bound. */
@@ -498,16 +510,20 @@ export function pinProblem(value: unknown): string | null {
  * Why a person's change from `before` to `after` (the doc's pins, by id) may
  * not be kept; null when it may. The person writes pins and their own
  * entries; the agent's entries are the agent's (comment_reply), so a person's
- * change keeps every one of them as it was.
+ * change keeps every one of them as it was. A pin `gone` names is deleted,
+ * whatever the change wrote of it: the doc lets it go ({@link honourDeletions}),
+ * so it is not read.
  */
 export function pinsProblem(
   before: Map<string, unknown>,
-  after: Map<string, unknown>
+  after: Map<string, unknown>,
+  gone: ReadonlyMap<string, unknown>
 ): string | null {
-  if (after.size > COMMENT_LIMITS.pins) {
+  const standing = [...after].filter(([id]) => !gone.has(id));
+  if (standing.length > COMMENT_LIMITS.pins) {
     return `An artifact keeps at most ${COMMENT_LIMITS.pins} pins.`;
   }
-  for (const [id, pin] of after) {
+  for (const [id, pin] of standing) {
     const problem = pinProblem(pin);
     if (problem) {
       return problem;
@@ -525,6 +541,39 @@ export function pinsProblem(
     }
     if ([...was].some((entry) => !now.has(entry))) {
       return "The agent's replies stay in their thread.";
+    }
+  }
+  return null;
+}
+
+/** The longest pin id a tombstone names, and its time's length. Our call: a UUID and an ISO time fit well inside. */
+const GONE_KEY_MAX = 100;
+const GONE_AT_MAX = 40;
+
+/**
+ * Why a person's change from `before` to `after` (the doc's `gone`, by pin
+ * id) may not be kept; null when it may. A tombstone is written once, by a
+ * delete, and stays as it was: a deletion is never undone.
+ */
+export function goneProblem(
+  before: Map<string, unknown>,
+  after: Map<string, unknown>
+): string | null {
+  for (const [id, at] of before) {
+    if (after.get(id) !== at) {
+      return "A deleted comment stays deleted.";
+    }
+  }
+  if (after.size > COMMENT_LIMITS.gone) {
+    return `An artifact keeps at most ${COMMENT_LIMITS.gone} deleted comments.`;
+  }
+  for (const [id, at] of after) {
+    if (!(
+      id.length <= GONE_KEY_MAX &&
+      typeof at === "string" &&
+      at.length <= GONE_AT_MAX
+    )) {
+      return "A deleted comment is its pin's id and when it was deleted.";
     }
   }
   return null;
@@ -629,6 +678,54 @@ const entryId = (): string => {
 };
 
 const pinsOf = (doc: Doc) => doc.getMap("pins") as YMap<Pin>;
+
+/** The doc's tombstones: each deleted pin's id, and when it was deleted. */
+export const goneOf = (doc: Doc) => doc.getMap("gone") as YMap<string>;
+
+/**
+ * Pin `id` deleted from `doc`: its tombstone written ({@link goneOf}) and
+ * the pin let go, in the caller's transaction when there is one.
+ */
+export function buryPin(doc: Doc, id: string, at: string): void {
+  doc.transact(() => {
+    const gone = goneOf(doc);
+    if (!gone.has(id)) {
+      gone.set(id, at);
+    }
+    pinsOf(doc).delete(id);
+  });
+}
+
+/** The origin of the writes {@link honourDeletions} makes. */
+export const HONOUR_ORIGIN = "gone";
+
+/**
+ * From now on, `doc` lets go of every pin its tombstones name, whenever
+ * `pins` or `gone` changes (a merge from the device, the hub or another
+ * view), and of any it holds now: a write that stood a deleted pin up again
+ * is undone in the next transaction. Returns the watch's end.
+ */
+export function honourDeletions(doc: Doc): () => void {
+  const pins = pinsOf(doc);
+  const gone = goneOf(doc);
+  const sweep = () => {
+    const buried = [...pins.keys()].filter((id) => gone.has(id));
+    if (buried.length > 0) {
+      doc.transact(() => {
+        for (const id of buried) {
+          pins.delete(id);
+        }
+      }, HONOUR_ORIGIN);
+    }
+  };
+  pins.observe(sweep);
+  gone.observe(sweep);
+  sweep();
+  return () => {
+    pins.unobserve(sweep);
+    gone.unobserve(sweep);
+  };
+}
 
 /** What the person said in one entry: their words, and what they attached. */
 export interface Said {
@@ -770,6 +867,8 @@ export function resolvePin(
  * The person deletes pin `pin`, and the ink group it stands on when it
  * stands on one that no other pin stands on; the refusal's sentence when the
  * pin is gone, and nothing was written. The other pins keep their numbers.
+ * The pin's tombstone stays in the doc ({@link buryPin}): no later write of
+ * it, from any device, stands it up again.
  */
 export function deletePin(doc: Doc, pin: string): string | null {
   const pins = pinsOf(doc);
@@ -777,11 +876,14 @@ export function deletePin(doc: Doc, pin: string): string | null {
   if (!held) {
     return "This pin is gone from the page already, so there was nothing to delete.";
   }
+  if (goneOf(doc).size >= COMMENT_LIMITS.gone) {
+    return `A page keeps track of ${COMMENT_LIMITS.gone.toLocaleString()} deleted comments, so this one wasn't deleted. Resolve it instead.`;
+  }
   const shared = [...pins.values()].some(
     (other) => other.id !== pin && !!held.ink && other.ink === held.ink
   );
   doc.transact(() => {
-    pins.delete(pin);
+    buryPin(doc, pin, new Date().toISOString());
     if (held.ink && !shared) {
       doc.getMap("ink").delete(held.ink);
       doc.getMap("moved").delete(held.ink);

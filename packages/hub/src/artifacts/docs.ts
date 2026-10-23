@@ -14,6 +14,7 @@
  * replaced by one snapshot.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
+import { honourDeletions } from "@cawco/core/comments";
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import {
   type AbstractType,
@@ -35,6 +36,8 @@ export const MAPS = [
   "ink",
   "moved",
   "pins",
+  // Deleted pins' tombstones (core comments.ts `goneOf`): a deletion no later write undoes.
+  "gone",
   "comments",
   "files",
   "requests",
@@ -255,6 +258,11 @@ export const createArtifactDocs = (deps: {
         keep(id, entry, update, origin, changed);
       }
     });
+    // A pin deleted on any device stays deleted here: a write that reached
+    // the hub before its tombstone (a page placing its pins on a stale load,
+    // a delivery's stamp, an agent's reply) is undone as the tombstone lands,
+    // and that undoing is kept and sent like any update.
+    honourDeletions(doc);
     loaded.set(id, entry);
     sleep(id, entry);
     return entry;

@@ -39,6 +39,7 @@
  */
 import {
   type AnchorFound,
+  buryPin,
   changedAnchor,
   type PageAnchor,
   type Pin,
@@ -558,7 +559,7 @@ export function startInk(deps: InkDeps): Ink {
         }
         ink.delete(id);
         for (const pin of [...pins.values()].filter((one) => one.ink === id)) {
-          pins.delete(pin.id);
+          buryPin(doc, pin.id, at);
         }
       }
     });
@@ -1062,8 +1063,9 @@ export function startInk(deps: InkDeps): Ink {
       illustrate: () => ink.set(id, { ...group, illustration: true }),
       erase: () => {
         ink.delete(id);
+        const at = new Date().toISOString();
         for (const pin of [...pins.values()].filter((one) => one.ink === id)) {
-          pins.delete(pin.id);
+          buryPin(doc, pin.id, at);
         }
       },
     };

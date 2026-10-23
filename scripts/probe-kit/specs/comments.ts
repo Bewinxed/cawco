@@ -230,6 +230,11 @@
  *   survives a reload with its composer open at its target; Esc and a press
  *   outside park it as the hollow pill saying it holds a draft; one press
  *   brings the composer back with its words and chip, after a reload too.
+ * - tombstones (a deletion is never undone): a pin deleted while the hub's
+ *   link is down stays gone through a reload, the link's return and a
+ *   reload again, on the page, on the hub and in a fresh browser, though a
+ *   revision makes every load write its pin again; the same with the
+ *   delete on one desk and the stale load on another.
  * The captures for the reviewer (light and dark, desk and 390) are written
  * under `.probe/commenting/`; nothing here opens them.
  */
@@ -237,8 +242,9 @@ import { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { Frame, Locator, Page } from "playwright-core";
+import type { Frame, Locator, Page, WebSocketRoute } from "playwright-core";
 import { PNG } from "pngjs";
+import { applyUpdate, Doc } from "yjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import type { Pin } from "../../../packages/core/src/comments";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
@@ -705,6 +711,9 @@ const runOn = async (kit: Kit, on: On) => {
     () => pinSendChecks(on),
     // Delete, one press in the thread's head.
     () => deleteHeadChecks(on),
+    // A deletion stays deleted, whatever a stale load or another device writes.
+    () => deletedOnOneDevice(on),
+    () => deletedOnAnother(on),
     // Changed since you looked, on a canvas.
     () => canvasChangedChecks(on, id),
     // A long name holds its line.
@@ -1469,47 +1478,57 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
  * `cawco:resolve` into the page: the overlay writes them on its own doc and
  * answers each with its result, a gone pin with the refusal's sentence.
  */
-const hostChecks = async (on: On, frame: Frame, one: string) => {
+/**
+ * A message to the page in `screen`'s pane as a host that holds no doc of
+ * its own sends it (the app: `cawco:reply`, `cawco:resolve`, `cawco:delete`),
+ * and the page's answer of type `type`.
+ */
+const askPage = async (
+  screen: Page,
+  frame: Frame,
+  message: object,
+  type: string
+) => {
   const iframe = await frame.frameElement();
-  const ask = async (message: object, type: string) => {
-    const read = await readWithin(5000, () =>
-      on.page.evaluate(
-        ([el, sent, answer]) =>
-          new Promise<Record<string, unknown> | null>((resolve) => {
-            const win = (el as HTMLIFrameElement).contentWindow;
-            if (!win) {
-              resolve(null);
-              return;
+  const read = await readWithin(5000, () =>
+    screen.evaluate(
+      ([el, sent, answer]) =>
+        new Promise<Record<string, unknown> | null>((resolve) => {
+          const win = (el as HTMLIFrameElement).contentWindow;
+          if (!win) {
+            resolve(null);
+            return;
+          }
+          const listen = (event: MessageEvent) => {
+            if (event.source === win && event.data?.type === answer) {
+              removeEventListener("message", listen);
+              resolve(event.data);
             }
-            const listen = (event: MessageEvent) => {
-              if (event.source === win && event.data?.type === answer) {
-                removeEventListener("message", listen);
-                resolve(event.data);
-              }
-            };
-            addEventListener("message", listen);
-            // The page's own origin: a preview is never the dashboard's.
-            win.postMessage(
-              sent,
-              new URL((el as HTMLIFrameElement).src).origin
-            );
-          }),
-        [iframe, message, type] as const
-      )
-    );
-    switch (read.kind) {
-      case "answered":
-        return read.value;
-      case "unanswered":
-        throw new Error(
-          `the page did not answer ${type} within ${read.after} ms`
-        );
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+          };
+          addEventListener("message", listen);
+          // The page's own origin: a preview is never the dashboard's.
+          win.postMessage(sent, new URL((el as HTMLIFrameElement).src).origin);
+        }),
+      [iframe, message, type] as const
+    )
+  );
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `the page did not answer ${type} within ${read.after} ms`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
-  };
+  }
+};
+
+const hostChecks = async (on: On, frame: Frame, one: string) => {
+  const ask = (message: object, type: string) =>
+    askPage(on.page, frame, message, type);
   type Thread = { by: string; text: string }[];
   const pinNow = async () =>
     ((await docOf(frame)).pins[one] ?? {}) as {
@@ -8995,6 +9014,381 @@ const deleteHeadChecks = async (on: On) => {
     `${JSON.stringify(small)}; delete box after ${JSON.stringify(target)}`
   );
   await phone.close();
+};
+
+/** The pane's own doc socket on the dashboard's origin (dashboard artifact-doc.ts `joinArtifact`): its other link to the hub. */
+const PANE_SOCKET = /\/ws\/artifact\//;
+
+/** The send page revised: its first paragraph under another id, its words kept, so a load finds it by its text and writes its pin again. */
+const REVISED_SEND_PAGE = SEND_PAGE.replace('id="one"', 'id="first"');
+
+/** The probe's close of a dropped link. */
+const DROPPED = { code: 1011, reason: "The probe dropped the link." };
+
+/**
+ * A desk of its own (its own browser context, so its own device copies of
+ * the doc) whose links to the hub, the page's doc socket and the pane's,
+ * drop at the probe's word and come back at it.
+ */
+const deviceWithLink = async (on: On) => {
+  const tab = await on.kit.page("desk");
+  const link: { down: boolean } = { down: false };
+  const live = new Set<WebSocketRoute>();
+  const route = (ws: WebSocketRoute) => {
+    if (link.down) {
+      ws.close(DROPPED).catch(() => undefined);
+      return;
+    }
+    live.add(ws);
+    ws.connectToServer();
+  };
+  await tab.routeWebSocket(PAGE_SOCKET, route);
+  await tab.routeWebSocket(PANE_SOCKET, route);
+  return {
+    tab,
+    there: { ...on, page: tab } as On,
+    down: async () => {
+      link.down = true;
+      await Promise.all(
+        [...live].map((ws) => ws.close(DROPPED).catch(() => undefined))
+      );
+      live.clear();
+    },
+    up: () => {
+      link.down = false;
+    },
+  };
+};
+type Device = Awaited<ReturnType<typeof deviceWithLink>>;
+
+/** What the hub holds of artifact `id`: its update log applied in order, read for its pins and its tombstones. */
+const hubHolds = (on: On, id: string) => {
+  const doc = new Doc();
+  try {
+    for (const { update } of on.fleet.query<{ update: Uint8Array }>(
+      'SELECT "update" FROM artifact_updates WHERE artifact_id = ? ORDER BY seq',
+      id
+    )) {
+      applyUpdate(doc, update);
+    }
+    return {
+      pins: doc.getMap("pins").toJSON() as Pins,
+      gone: doc.getMap("gone").toJSON() as Record<string, string>,
+    };
+  } finally {
+    doc.destroy();
+  }
+};
+
+/** Whether the page's doc holds pin `pin`, holds its tombstone, and draws its pill. */
+const pageHolds = (frame: Frame, pin: string) =>
+  frame.evaluate((id) => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: { getMap: (name: string) => { has: (key: string) => boolean } };
+        };
+      }
+    ).cawcoArtifact;
+    return {
+      pin: doc.getMap("pins").has(id),
+      gone: doc.getMap("gone").has(id),
+      drawn:
+        document.querySelectorAll(
+          `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin-id="${CSS.escape(id)}"]`
+        ).length > 0,
+    };
+  }, pin);
+
+/** The page's doc's link to the hub now (overlay artifact.ts `Link`). */
+const pageLink = (frame: Frame) =>
+  frame.evaluate(() => {
+    let state = "";
+    const global = (
+      window as unknown as {
+        cawcoArtifact?: {
+          subscribe: (
+            holder: (hold: { link: { state: string } }) => void
+          ) => () => boolean;
+        };
+      }
+    ).cawcoArtifact;
+    global?.subscribe((hold) => {
+      ({ state } = hold.link);
+    })?.();
+    return state;
+  });
+
+/** The revised page on `screen` once it is shown and its link has synced: what a load there holds of pin `pin`. */
+const loadedHolds = async (
+  screen: Page,
+  id: string,
+  pin: string,
+  what: string
+) => {
+  const frame = await frameHolding(screen, id, what);
+  if (!frame) {
+    return null;
+  }
+  await frame.waitForSelector("#first").catch(() => undefined);
+  const link = await until(
+    `${what}: its link synced`,
+    () => pageLink(frame),
+    (state) => state === "synced",
+    20_000
+  ).catch(() => pageLink(frame));
+  // Its pins placed again and its device's copy merged: the time a stale load writes in.
+  await settle(screen, 1500);
+  return { link, ...(await pageHolds(frame, pin)) };
+};
+
+/** A fresh browser (no device copy of the doc): what its load of the page holds of pin `pin`. */
+const freshHolds = async (on: On, id: string, pin: string, what: string) => {
+  const tab = await on.kit.page("desk");
+  try {
+    const { origin } = new URL(on.page.url());
+    await open(tab, `${origin}/session/${on.session}`, COMPOSER);
+    return await loadedHolds(tab, id, pin, what);
+  } finally {
+    await tab.close();
+  }
+};
+
+/** A page made, shown on a device of its own, and commented on there: the comment's pin once the hub holds it. */
+const pinnedOnDevice = async (
+  on: On,
+  name: string
+): Promise<{
+  device: Device;
+  frame: Frame;
+  id: string;
+  pin: string;
+} | null> => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name,
+    html: SEND_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const device = await deviceWithLink(on);
+  const { origin } = new URL(on.page.url());
+  await open(device.tab, `${origin}/session/${on.session}`, COMPOSER);
+  const frame = await frameHolding(device.tab, id, `the ${name} page`);
+  if (!frame) {
+    on.kit.check(`${name}: the page is shown`, false, made.slice(0, 300));
+    await device.tab.close();
+    return null;
+  }
+  await frame.waitForSelector("#one");
+  await device.tab.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  const b = await screenBox(device.there, frame, "#one");
+  await commentAt(
+    device.there,
+    frame,
+    b.x + b.w * 0.3,
+    b.y + b.h / 2,
+    "Delete me while the link is down."
+  );
+  await device.tab.keyboard.press("Escape");
+  await device.tab
+    .locator(`${PANE} [role='tab'][aria-keyshortcuts='V']`)
+    .click();
+  await pageInComment(frame, false);
+  const pin = await until(
+    `the ${name} comment on the hub`,
+    () => pinNumbered(hubHolds(on, id).pins, 1)?.id,
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  if (!pin) {
+    on.kit.check(`${name}: the comment reaches the hub`, false, "not held");
+    await device.tab.close();
+    return null;
+  }
+  return { device, frame, id, pin };
+};
+
+/** Until the hub holds pin `pin` deleted: gone from its pins, its tombstone kept. */
+const hubLetsGo = (on: On, id: string, pin: string) =>
+  until(
+    "the hub holding the pin deleted",
+    () => hubHolds(on, id),
+    (held) => !held.pins[pin] && !!held.gone[pin],
+    20_000
+  ).catch(() => hubHolds(on, id));
+
+/**
+ * A deletion stays deleted (the owner's deleted pin that came back), on one
+ * device: deleted through the page's own doc (the app's `cawco:delete`) while
+ * the page's and the pane's links to the hub are down, it leaves the page and
+ * its tombstone stays on the device. The agent revises the page, so a load
+ * finds the comment's paragraph by its text under another id and writes its
+ * pin again; the page reloaded with the link still down, the hub's embedded
+ * copy still holding the pin, it waits for the device's copy and holds and
+ * draws none of it. The link back and a reload again: the pin is gone from
+ * the page, from the hub (its tombstone kept), and from a second browser.
+ */
+const deletedOnOneDevice = async (on: On) => {
+  const set = await pinnedOnDevice(on, "tombstone-one");
+  if (!set) {
+    return;
+  }
+  const { device, id, pin } = set;
+  const { origin } = new URL(on.page.url());
+  const url = `${origin}/session/${on.session}`;
+  await device.down();
+  const lost = await until(
+    "the page's link down",
+    () => pageLink(set.frame),
+    (state) => state === "lost",
+    20_000
+  ).catch(() => pageLink(set.frame));
+  const deleted = await askPage(
+    device.tab,
+    set.frame,
+    { type: "cawco:delete", pin },
+    "cawco:delete-result"
+  );
+  const right = await pageHolds(set.frame, pin);
+  await on.call(UPDATE, { id, html: REVISED_SEND_PAGE });
+  const hubWhileDown = !!hubHolds(on, id).pins[pin];
+  await open(device.tab, url, COMPOSER);
+  const reloaded = await frameHolding(
+    device.tab,
+    id,
+    "the tombstone page reloaded, its link down"
+  );
+  await reloaded?.waitForSelector("#first").catch(() => undefined);
+  await settle(device.tab, 1500);
+  const downLoad = reloaded ? await pageHolds(reloaded, pin) : null;
+  on.kit.check(
+    "tombstone (one device): deleted through the page's own doc while its links to the hub are down, the pin leaves the page and its tombstone stays; reloaded with the link still down (the hub still holding the pin, the page revised so a load places it again), the page holds and draws none of it",
+    lost === "lost" &&
+      deleted?.ok === true &&
+      !right.pin &&
+      right.gone &&
+      hubWhileDown &&
+      !!downLoad &&
+      !downLoad.pin &&
+      !downLoad.drawn,
+    `link ${lost}; delete ${JSON.stringify(deleted)}; after it ${JSON.stringify(right)}; the hub held it ${hubWhileDown}; after the reload ${JSON.stringify(downLoad)}`
+  );
+  device.up();
+  const onHub = await hubLetsGo(on, id, pin);
+  await open(device.tab, url, COMPOSER);
+  const upLoad = await loadedHolds(
+    device.tab,
+    id,
+    pin,
+    "the tombstone page reloaded, its link back"
+  );
+  const other = await freshHolds(on, id, pin, "a second browser");
+  on.kit.check(
+    "tombstone (one device): with the link back and a reload again, the pin stays gone: from the page (none drawn), from the hub (its tombstone kept) and from a second browser's page",
+    !onHub.pins[pin] &&
+      !!onHub.gone[pin] &&
+      upLoad?.link === "synced" &&
+      !upLoad.pin &&
+      !upLoad.drawn &&
+      other?.link === "synced" &&
+      !other.pin &&
+      !other.drawn,
+    `hub pin ${!!onHub.pins[pin]} tombstone ${String(onHub.gone[pin])}; the page ${JSON.stringify(upLoad)}; a second browser ${JSON.stringify(other)}`
+  );
+  await device.tab.close();
+};
+
+/**
+ * The same across devices: the person deletes the pin in one desk's thread
+ * while that desk's links to the hub are down; the agent revises the page,
+ * and another desk, its link up, loads it while the hub still holds the pin,
+ * so its load writes the pin again on the hub (the stale "present"). The
+ * first desk's link back, its tombstone undoes that write: the pin is gone
+ * from the second desk's page as it stands, from the hub (its tombstone
+ * kept), from the first desk's page reloaded, and from a third browser.
+ */
+const deletedOnAnother = async (on: On) => {
+  const set = await pinnedOnDevice(on, "tombstone-two");
+  if (!set) {
+    return;
+  }
+  const { device: first, id, pin } = set;
+  const { origin } = new URL(on.page.url());
+  const url = `${origin}/session/${on.session}`;
+  await first.down();
+  const lost = await until(
+    "the first desk's link down",
+    () => pageLink(set.frame),
+    (state) => state === "lost",
+    20_000
+  ).catch(() => pageLink(set.frame));
+  // Deleted as the person deletes, in its thread: the first desk's pane's doc and its device copy hold the deletion.
+  const card = await openThread(first.there, set.frame, 1);
+  await card.locator('[data-slot="delete"]').click();
+  await card
+    .locator('[data-ask="delete"]')
+    .getByRole("button", { name: "Delete comment" })
+    .click();
+  const closed = await card
+    .waitFor({ state: "detached", timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  await on.call(UPDATE, { id, html: REVISED_SEND_PAGE });
+  const second = await on.kit.page("desk");
+  await open(second, url, COMPOSER);
+  const there = await frameHolding(
+    second,
+    id,
+    "the tombstone page on the second desk"
+  );
+  const stale = await until(
+    "the second desk's load writing the pin again on the hub",
+    () => hubHolds(on, id).pins[pin],
+    (held) =>
+      (held.anchor as { selector?: string } | undefined)?.selector === "#first",
+    20_000
+  ).catch(() => undefined);
+  first.up();
+  const onHub = await hubLetsGo(on, id, pin);
+  const onSecond = there
+    ? await until(
+        "the second desk letting the pin go",
+        () => pageHolds(there, pin),
+        (held) => !(held.pin || held.drawn),
+        20_000
+      ).catch(() => pageHolds(there, pin))
+    : null;
+  await open(first.tab, url, COMPOSER);
+  const onFirst = await loadedHolds(
+    first.tab,
+    id,
+    pin,
+    "the tombstone page on the first desk, reloaded"
+  );
+  const third = await freshHolds(on, id, pin, "a third browser");
+  on.kit.check(
+    "tombstone (two devices): deleted in one desk's thread while its links are down, then written again on the hub by another desk's load of the revised page; with the first desk's link back the pin is gone from the second desk's page, from the hub (its tombstone kept), from the first desk's page reloaded and from a third browser",
+    lost === "lost" &&
+      closed &&
+      !!stale &&
+      !onHub.pins[pin] &&
+      !!onHub.gone[pin] &&
+      !!onSecond &&
+      !onSecond.pin &&
+      !onSecond.drawn &&
+      onFirst?.link === "synced" &&
+      !onFirst.pin &&
+      !onFirst.drawn &&
+      third?.link === "synced" &&
+      !third.pin &&
+      !third.drawn,
+    `link ${lost}; thread closed ${closed}; the stale write ${JSON.stringify((stale?.anchor as { selector?: string } | undefined)?.selector)}; hub pin ${!!onHub.pins[pin]} tombstone ${String(onHub.gone[pin])}; second desk ${JSON.stringify(onSecond)}; first desk ${JSON.stringify(onFirst)}; a third browser ${JSON.stringify(third)}`
+  );
+  await second.close();
+  await first.tab.close();
 };
 
 /*

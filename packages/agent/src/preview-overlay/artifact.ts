@@ -28,7 +28,12 @@ import {
   changedEntry,
   choiceEntryProblem,
 } from "@cawco/core/choices";
-import type { MarkPictures, Pin } from "@cawco/core/comments";
+import {
+  goneOf,
+  honourDeletions,
+  type MarkPictures,
+  type Pin,
+} from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
   deviceDocName,
@@ -195,6 +200,13 @@ let provider: WebsocketProvider | null = null;
 let quiet: StallWatch | null = null;
 /** The doc kept on the device, once the artifact is joined. */
 let kept: IndexeddbPersistence | null = null;
+/**
+ * What the device kept of the doc is merged in, or there is none to wait
+ * for (no IndexedDB here, or it wouldn't open): until then the doc is the
+ * hub's embedded copy alone, which may hold a pin the device deleted. False
+ * until the artifact is joined: the device's copy is opened then.
+ */
+let stored = false;
 /** The device gave the doc marks back (a reload while they hadn't reached the hub): their pictures are drawn once it syncs. */
 let restored = false;
 /** The artifact the page's doc is: told by the host, or embedded by the hub before that. */
@@ -298,6 +310,9 @@ let syncedOnce = new Promise<void>((resolve) => {
 });
 
 const observe = (own: Doc) => {
+  // A pin deleted anywhere stays deleted here, whatever a merge brings back
+  // of it (core comments.ts `honourDeletions`); its watch ends with the doc.
+  honourDeletions(own);
   own.getMap("state").observe((event) => {
     if (own === doc) {
       watchers?.state(
@@ -331,21 +346,39 @@ observe(doc);
  * The joined artifact's doc kept on the device from now on, and what the
  * device kept of it merged in; the device's copies of artifacts no one has
  * opened lately let go (core `tendDeviceDocs`). Nothing is kept where the
- * browser keeps no IndexedDB (a sandboxed frame, storage refused).
+ * browser keeps no IndexedDB (a sandboxed frame, storage refused). Once
+ * the device's copy is in (or there is none), the pins are drawn again:
+ * what waited on it ({@link artifact.stored}) goes on.
  */
 const keepOnDevice = () => {
   if (!joined) {
     return;
   }
+  const none = () => {
+    stored = true;
+    watchers?.ink();
+  };
   try {
     if (!globalThis.indexedDB) {
+      none();
       return;
     }
   } catch {
+    none();
     return;
   }
   tendDeviceDocs(joined.id);
-  kept = new IndexeddbPersistence(deviceDocName(joined.id), doc);
+  stored = false;
+  const own = new IndexeddbPersistence(deviceDocName(joined.id), doc);
+  kept = own;
+  const loaded = () => {
+    if (kept === own) {
+      none();
+    }
+  };
+  own.whenSynced.then(loaded);
+  // A database that won't open gives nothing back: there is no copy to wait for.
+  own._db.catch(loaded);
 };
 
 /** Starts a fresh doc in place of the one held (another artifact's, or one the hub refused); the device keeps the old one's no longer. */
@@ -355,6 +388,7 @@ const replaceDoc = () => {
   provider?.destroy();
   provider = null;
   kept = null;
+  stored = false;
   restored = false;
   // Its device copy lets go with it (y-indexeddb destroys on the doc's destroy).
   doc.destroy();
@@ -413,9 +447,11 @@ const keepRefused = () => {
   const { pins, why } = refusing;
   refusing = null;
   const held = doc.getMap("pins");
+  const gone = goneOf(doc);
   const at = new Date().toISOString();
+  // One the hub holds deleted was deleted, not lost: it is not kept aside.
   const lost = Object.values(pins).filter(
-    (pin) => pin.by === "person" && !held.has(pin.id)
+    (pin) => pin.by === "person" && !held.has(pin.id) && !gone.has(pin.id)
   );
   if (lost.length === 0) {
     return;
@@ -640,6 +676,14 @@ export const artifact = {
 
   /** Whether the doc holds the hub's state: embedded, or synced. */
   known: () => synced || seeded !== null,
+
+  /**
+   * Whether what the device kept of the doc is merged in, or there is none:
+   * a write the page makes of its own accord (placing its pins again) waits
+   * for it, so the hub's embedded copy alone never writes over a deletion
+   * the device holds.
+   */
+  stored: () => stored,
 
   /** Resolves once the doc holds the hub's state; ask only when it {@link artifact.keeps}. */
   whenKnown: (): Promise<void> =>

@@ -28,6 +28,7 @@ import {
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
   COMMENT_LIMITS,
+  goneProblem,
   type MarkPictures,
   pinsProblem,
   type SendBody,
@@ -193,20 +194,26 @@ const filesProblem = (
     : null;
 };
 
-/** The maps a person's ink, pins and looks write, on any artifact (core ink.ts, comments.ts). */
-const INK_MAPS = ["ink", "moved", "pins", "seen"];
+/** The maps a person's ink, pins, deleted pins and looks write, on any artifact (core ink.ts, comments.ts). */
+const INK_MAPS = ["ink", "moved", "pins", "gone", "seen"];
 
-/** Why the ink, moved groups, pins and looks in `trial`, `doc` after a person's update, may not be kept; null when they may. */
-const inkMapsProblem = (doc: Doc, trial: Doc): string | null =>
-  inkProblem(
-    [...trial.getMap("ink").entries()],
-    [...trial.getMap("moved").entries()]
-  ) ??
-  pinsProblem(
-    new Map(doc.getMap("pins").entries()),
-    new Map(trial.getMap("pins").entries())
-  ) ??
-  seenProblem(new Map(trial.getMap("seen").entries()));
+/** Why the ink, moved groups, pins, deleted pins and looks in `trial`, `doc` after a person's update, may not be kept; null when they may. */
+const inkMapsProblem = (doc: Doc, trial: Doc): string | null => {
+  const gone = new Map(trial.getMap("gone").entries());
+  return (
+    inkProblem(
+      [...trial.getMap("ink").entries()],
+      [...trial.getMap("moved").entries()]
+    ) ??
+    goneProblem(new Map(doc.getMap("gone").entries()), gone) ??
+    pinsProblem(
+      new Map(doc.getMap("pins").entries()),
+      new Map(trial.getMap("pins").entries()),
+      gone
+    ) ??
+    seenProblem(new Map(trial.getMap("seen").entries()))
+  );
+};
 
 /** Why `trial`, a canvas's doc after its screen's update, may not be kept; null when it may. */
 const canvasProblem = (doc: Doc, trial: Doc): string | null => {

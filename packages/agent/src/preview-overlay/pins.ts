@@ -53,6 +53,7 @@ import {
   type Pin,
   type PinnedElement,
   pinUnsent,
+  goneOf as tombstonesOf,
   wholePage,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
@@ -404,11 +405,15 @@ export function startPins(deps: PinsDeps): Pins {
   /**
    * A pin whose element is gone may be moved aside, and an anchor that reads
    * otherwise now is written again, only on a page the agent wrote or a sheet
-   * of its components (re-read after each HMR update), once it has laid out.
+   * of its components (re-read after each HMR update), once it has laid out,
+   * and once what the device kept of the doc is in (artifact.ts `stored`):
+   * the hub's embedded copy may still hold a pin the device deleted, and a
+   * write of it would stand against that deletion.
    */
   const settled = () =>
     (artifact.kind() === "page" || artifact.kind() === "component") &&
-    document.readyState !== "loading";
+    document.readyState !== "loading" &&
+    artifact.stored();
 
   /** Each placed pin: where it stands, and its pill as drawn; drawn while its frames show it. */
   const placed = new Map<string, Standing & { pill?: Pill }>();
@@ -813,18 +818,26 @@ export function startPins(deps: PinsDeps): Pins {
     return g;
   };
 
-  /** Writes the pins found again by their source, text or the page, and moves aside those no anchor finds. */
-  const settle = (moves: Pin[], gone: Pin[]) => {
-    if (moves.length === 0 && gone.length === 0) {
+  /**
+   * Writes the pins found again by their source, text or the page, and moves
+   * aside those no anchor finds; never one the doc holds deleted (core
+   * `goneOf`), nor one gone from the doc since it was read.
+   */
+  const settle = (moves: Pin[], missing: Pin[]) => {
+    const pins = pinsMap();
+    const buried = tombstonesOf(artifact.doc());
+    const stillHeld = (pin: Pin) => pins.has(pin.id) && !buried.has(pin.id);
+    const found = moves.filter(stillHeld);
+    const aside = missing.filter(stillHeld);
+    if (found.length === 0 && aside.length === 0) {
       return;
     }
-    const pins = pinsMap();
     const at = new Date().toISOString();
     artifact.doc().transact(() => {
-      for (const pin of moves) {
+      for (const pin of found) {
         pins.set(pin.id, pin);
       }
-      for (const pin of gone) {
+      for (const pin of aside) {
         pins.set(pin.id, { ...pin, movedAt: at });
       }
     });

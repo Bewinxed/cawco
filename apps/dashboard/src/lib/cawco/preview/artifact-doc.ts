@@ -2,6 +2,8 @@ import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
 import {
   type ArtifactChanges,
   deletePin,
+  goneOf,
+  honourDeletions,
   type Pin,
   replyToPin,
   resolvePin,
@@ -131,9 +133,11 @@ const SILENT_WHY = `The link to the hub stopped answering. ${KEEPS_TRYING}`;
 
 const viewOf = (doc: Doc): ArtifactView => {
   const meta = doc.getMap("meta");
+  const gone = goneOf(doc);
+  // One its tombstone names is deleted, though a merge wrote it a moment ago.
   const pins = Object.values(
     doc.getMap("pins").toJSON() as Record<string, Pin>
-  );
+  ).filter((pin) => !gone.has(pin.id));
   const pinned = new Set(pins.map((pin) => pin.ink));
   const looseInk = Object.values(
     doc.getMap("ink").toJSON() as Record<
@@ -304,6 +308,8 @@ export function joinArtifact(
   let quiet = watchQuiet(provider);
 
   function join(into: Doc): WebsocketProvider {
+    // A pin deleted anywhere stays deleted here (core `honourDeletions`).
+    honourDeletions(into);
     into.on("update", () => changed(viewOf(into)));
     const joined = new WebsocketProvider(url, artifactId, into, {
       disableBc: true,
