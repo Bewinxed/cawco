@@ -3,9 +3,9 @@
  * `bun run check` (check.ts) is made of. What each printed comes out whole
  * when it ends, and the run fails when any one failed, timed out, or could
  * not start. A check with `after` starts only once the check it names has
- * ended, whatever its verdict. A check with `stamp` writes it when it
+ * ended, whatever its verdict. A check with `stamp` adds to it when it
  * passes: the key of the inputs it passed on, which check.ts reads to skip
- * it while they stay the same.
+ * it on inputs it passed on (the last few kept).
  */
 import { availableParallelism } from "node:os";
 import {
@@ -104,7 +104,7 @@ const run = async (check: Check): Promise<Outcome> => {
     why = `exit ${code}`;
   }
   if (why === "ok" && check.stamp) {
-    await Bun.write(check.stamp.file, check.stamp.key);
+    await keepPass(check.stamp.file, check.stamp.key);
   }
   return {
     check,
@@ -113,6 +113,18 @@ const run = async (check: Check): Promise<Outcome> => {
     seconds: seconds(),
     output: `${out}${err}`.trim(),
   };
+};
+
+/** How many passes a stamp keeps: a change undone finds the pass before it. */
+const PASSES_KEPT = 16;
+
+/** Adds `key` to the passes `file` keeps, newest last. */
+const keepPass = async (file: string, key: string): Promise<void> => {
+  const stamp = Bun.file(file);
+  const kept = (await stamp.exists())
+    ? (await stamp.text()).split("\n").filter((line) => line && line !== key)
+    : [];
+  await Bun.write(file, [...kept, key].slice(-PASSES_KEPT).join("\n"));
 };
 
 const report = (outcome: Outcome): void => {

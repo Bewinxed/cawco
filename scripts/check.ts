@@ -327,7 +327,7 @@ const stampFile = (name: string): string =>
   join(STAMPS, `${name.replace(/[^\w.-]+/g, "_")}.stamp`);
 const passed = async (name: string, key: string): Promise<boolean> => {
   const file = Bun.file(stampFile(name));
-  return (await file.exists()) && (await file.text()) === key;
+  return (await file.exists()) && (await file.text()).split("\n").includes(key);
 };
 
 /** The tree's files under these folders or named exactly. */
