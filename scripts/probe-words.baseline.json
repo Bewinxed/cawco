@@ -425,18 +425,31 @@
   "scripts/probe-kit/specs/landing-stop.ts": {
     "a landing gate waits for a heavy-run slot, and takes the next free one before any other run:": 1
   },
+  "scripts/probe-kit/specs/limit-admission.ts": {
+    "moves from": 1
+  },
   "scripts/probe-kit/specs/limit-pick.ts": {
-    "No other account has room": 1,
+    "[hub] send": 1,
+    "a command was running and was ended by the move": 1,
+    "at its limit until": 1,
+    "couldn't move to": 1,
+    "it moves to": 1,
+    "moves from": 1,
+    "moves to": 1,
+    "No account can take it now": 1,
+    "No other account has room": 2,
     "Stopped at": 1,
     "Stopped at its limit": 1,
-    "Waiting for": 1
+    "Waiting for": 1,
+    "waiting for work in flight": 1,
+    "was interrupted": 1,
+    "work in flight": 1,
+    "would re-read it cold too": 1
   },
   "scripts/probe-kit/specs/limit-stall.ts": {
     "[hub] send": 1,
-    "at the latest": 2,
     "moves to": 1,
-    "Stopped at": 4,
-    "when its work in flight ends": 1
+    "Stopped at": 2
   },
   "scripts/probe-kit/specs/link-under-load.ts": {
     "input(s) written": 1
@@ -466,8 +479,9 @@
   },
   "scripts/probe-kit/specs/native-compact.ts": {
     "Open items": 1,
-    "was interrupted": 1,
-    "What was sent to it meanwhile goes now": 1
+    "process ended before it took its": 1,
+    "was interrupted": 2,
+    "What was sent to it meanwhile goes now": 2
   },
   "scripts/probe-kit/specs/own-lane.ts": {
     "earlier commit": 1,
@@ -762,6 +776,9 @@
   },
   "scripts/probe-kit/specs/workspace-held.ts": {
     "ISO date or datetime": 1
+  },
+  "scripts/probe-kit/specs/workspace-needs.ts": {
+    "Show details": 1
   },
   "scripts/probe-kit/specs/workspace-retire.ts": {
     "cutting its clone again": 4,
