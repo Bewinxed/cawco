@@ -18,7 +18,9 @@
  *   credential; the person presses Take over on its card in A's conversation;
  * - the panel stands the browser view: its well draws the stream (a `video`
  *   in a container, a `canvas` of frames on the local host) at a size above
- *   zero, and its frame count advances over two seconds; the band says "You
+ *   zero, and once the browser's pages are loaded with a page that paints
+ *   every frame (a screencast sends a frame only on a paint, so a still page
+ *   gives one), its frame count advances over two seconds; the band says "You
  *   have control" with the Private chip; no "This page has no artifact…" and
  *   no failure stands anywhere in the pane, and the page logged no console
  *   error;
@@ -136,6 +138,49 @@ const viewOf = (page: Page) =>
     };
   }, NO_ARTIFACT);
 
+/**
+ * A page that paints every frame: a screencast sends a frame only when the
+ * page paints (CDP `Page.screencastFrame`), so a still page gives one frame
+ * and a view whose stream stands still can't be told from one that froze.
+ */
+const MOVING_PAGE =
+  "data:text/html,<title>moving</title><style>@keyframes spin{to{transform:rotate(1turn)}}div{width:240px;height:240px;margin:120px;background:coral;animation:spin 1s linear infinite}</style><div></div>";
+
+/**
+ * Every page of `key`'s browser loaded with {@link MOVING_PAGE}, through its
+ * own DevTools port on this machine, as an agent's page left open would
+ * stand in front: the take-over's page among them. Answers how many.
+ */
+const movePages = async (key: BrowserKey): Promise<number> => {
+  const { readBrowser, portsOf } =
+    await import("../../../packages/agent/src/browser/state");
+  const { CdpLink } =
+    await import("../../../packages/agent/src/browser/cdp-takeover");
+  const record = await readBrowser(key);
+  if (!record) {
+    return 0;
+  }
+  const link = await CdpLink.open(
+    `http://127.0.0.1:${portsOf(record).devtools}`
+  );
+  try {
+    const { targetInfos } = await link.call("Target.getTargets");
+    const pages = (
+      (Array.isArray(targetInfos) ? targetInfos : []) as {
+        targetId: string;
+        type: string;
+      }[]
+    ).filter((info) => info.type === "page");
+    for (const one of pages) {
+      const session = await link.attach(one.targetId);
+      await link.call("Page.navigate", { url: MOVING_PAGE }, session);
+    }
+    return pages.length;
+  } finally {
+    link.close();
+  }
+};
+
 /** neko's room control, read as its admin (the record's own credentials). */
 const nekoControl = async (key: BrowserKey) => {
   const { readBrowser, portsOf } =
@@ -228,6 +273,17 @@ async function leg(
     (now) => now.view && now.frames > 0 && now.width > 0,
     5 * 60_000
   ).catch(() => viewOf(page));
+  // The page in front made to paint every frame: frames must then advance.
+  const paging = await movePages(key).catch((error: unknown) => {
+    kit.check(
+      `${name}: the browser's pages loaded the moving page`,
+      false,
+      String(error)
+    );
+    return 0;
+  });
+  await page.waitForTimeout(1000);
+  const moving = await viewOf(page);
   await page.waitForTimeout(2000);
   const later = await viewOf(page);
   const drawn =
@@ -235,12 +291,13 @@ async function leg(
       ? (later.video?.w ?? 0) > 0 && (later.video?.h ?? 0) > 0
       : (later.canvas?.w ?? 0) > 0 && (later.canvas?.h ?? 0) > 0;
   kit.check(
-    `${name}: the panel draws the browser's ${later.stream} at ${later.width}×${later.height} (element ${JSON.stringify(host === "container" ? later.video : later.canvas)}), frames ${first.frames} → ${later.frames} over 2 s`,
+    `${name}: the panel draws the browser's ${later.stream} at ${later.width}×${later.height} (element ${JSON.stringify(host === "container" ? later.video : later.canvas)}); with ${paging} page(s) moving, frames ${moving.frames} → ${later.frames} over 2 s`,
     later.view &&
       later.stream === (host === "container" ? "video" : "frames") &&
       drawn &&
-      later.frames > first.frames,
-    JSON.stringify({ first, later })
+      paging > 0 &&
+      later.frames > moving.frames,
+    JSON.stringify({ first, moving, later })
   );
   kit.check(
     `${name}: the band says "${later.control}" with the Private chip`,
