@@ -112,6 +112,8 @@ const BLOCKED = "The item failed as blocked";
 const GIT_REFUSED = /unable to (create file|unlink old) /;
 /** What a refused move of config says (workflow-command.ts `ownConfigWords`). */
 const CONFIG_REFUSED = "which no workspace's commit changes";
+/** The start of `ownConfigWords`, before the changed paths: where its excerpt begins, so it never opens inside a presence reminder's tail. */
+const CONFIG_CHANGE = "its commits change";
 /** What the boundary's git says of a move it refused before it ran (worktree-guard.ts `gitShim`). */
 const SHIM_REFUSED = "did not run, and the worktree is as it was";
 /** The agent's line for a move it ran on the host (workflow-command.ts `onHost`). */
@@ -366,6 +368,23 @@ const textAt = (path: string): Promise<string | undefined> =>
 /** What the command said after `marker`, up to the end of its word. */
 const after = (said: string, marker: string): string | undefined =>
   new RegExp(`${marker}(\\S*)`).exec(said)?.[1];
+
+/**
+ * The config refusal in `answer`, from the `its commits change` that precedes
+ * it (the delegate's own words), never a fixed-length tail that would open
+ * inside the presence reminder before it. Empty when it holds no refusal.
+ */
+const refusalFrom = (answer: string | undefined): string => {
+  if (!answer) {
+    return "";
+  }
+  const at = answer.lastIndexOf(CONFIG_REFUSED);
+  if (at < 0) {
+    return "";
+  }
+  const start = answer.lastIndexOf(CONFIG_CHANGE, at);
+  return answer.slice(start >= 0 ? start : Math.max(0, at - 400), at + 200);
+};
 
 /** The lines of `log` that say git refused a write. */
 const refusedIn = (log: string): string[] =>
@@ -708,8 +727,7 @@ const configPhase = async (
     .quiet()
     .nothrow()
     .text();
-  const at = answer?.lastIndexOf(CONFIG_REFUSED) ?? -1;
-  const refusal = answer?.slice(Math.max(0, at - 400), at + 200) ?? "";
+  const refusal = refusalFrom(answer);
   check(
     "(e) a delegate's commit of another .mcp.json, made through the index alone, does not land: its finish names .mcp.json as config no workspace's commit changes, and origin's main is as it was",
     refusal.includes(".mcp.json") &&
@@ -786,8 +804,7 @@ const depthPhase = async (
   const now = (
     await Bun.$`git --git-dir ${bare} rev-parse main`.quiet().nothrow().text()
   ).trim();
-  const at = answer?.lastIndexOf(CONFIG_REFUSED) ?? -1;
-  const refusal = answer?.slice(Math.max(0, at - 600), at + 200) ?? "";
+  const refusal = refusalFrom(answer);
   note(refusal);
   check(
     "(h) commits adding a nested pkg/.pi/extensions/x.ts and a mixed-case .MCP.json (through the index alone) do not land: the finish names BOTH as harness config no workspace's commit changes, at any depth and in any letter case, and origin's main does not move",
