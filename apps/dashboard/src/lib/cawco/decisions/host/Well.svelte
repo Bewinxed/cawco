@@ -50,7 +50,13 @@
     return () => tell?.(key, null);
   });
 
-  /** The stage's own width, px: a piece wider than it scrolls sideways. */
+  /**
+   * The stage's own width, px, as layout has it (fractional: a well hugging
+   * a 471.875px drawing is 471.875px wide, where `clientWidth` rounds to
+   * 471 and called the drawing wider than its own well; its computed width,
+   * which no transform round it scales): a piece wider than it scrolls
+   * sideways. The stage draws no border or padding of its own.
+   */
   let room = $state(0);
   $effect(() => {
     const box = stage;
@@ -58,7 +64,7 @@
       return;
     }
     const read = () => {
-      room = box.clientWidth;
+      room = Number.parseFloat(getComputedStyle(box).width) || 0;
     };
     read();
     const sizes = frameObserver(read);
