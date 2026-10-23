@@ -839,15 +839,16 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
   });
 };
 
-/** Each boundary's srt host followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
+/** Each boundary's srt host or Seatbelt runner followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
 const watchedHosts = new Map<string, SessiondClient>();
 
 /**
- * Says in the agent's log each line the srt host of workspace `id`'s
- * boundary `held` says after its sandbox is ready, on whichever keeper holds
- * it: above all a sandbox it starts again because a guarded path changed on
- * the host, which ends everything in the workspace (`boundary-host.ts`). Its
- * stderr the keeper drains unread, so these lines are the one record of it.
+ * Follows workspace `id`'s boundary `held`, its srt host on Linux and its
+ * Seatbelt runner on macOS, on whichever keeper holds it. Says in the
+ * agent's log each line it says after it is ready: on Linux above all a
+ * sandbox the host starts again because a guarded path changed on the host,
+ * which ends everything in the workspace (`boundary-host.ts`). Its stderr
+ * the keeper drains unread, so these lines are the one record of it.
  * From `afterSeq` (its ready line, so nothing is missed between the start and
  * this), or from now for a boundary an earlier agent started. A watch lives
  * on its keeper connection, so a new connection watches again. A host that
@@ -858,9 +859,6 @@ const watchHost = async (
   held: Pick<Held, "gen" | "path" | "pid">,
   afterSeq?: number
 ): Promise<void> => {
-  if (process.platform !== "linux") {
-    return;
-  }
   const procId = boundaryProcId(id, held.gen);
   const proc = await keepers.holding(procId);
   if (!proc || watchedHosts.get(procId) === proc.client) {
@@ -909,15 +907,18 @@ const UNASKED_RESTART_MS = 60_000;
 const unaskedAt = new Map<string, number>();
 
 /**
- * A BOUNDARY THAT ENDS UNASKED IS STARTED AGAIN WHILE ITS RECORD STANDS. Its
- * srt host exited, and nothing of the agent's ended it: no close or start of
+ * A BOUNDARY THAT ENDS UNASKED IS STARTED AGAIN WHILE ITS RECORD STANDS, on
+ * Linux and macOS alike. Its srt host or Seatbelt runner exited, and nothing
+ * of the agent's ended it: no close or start of
  * the workspace's is under way ({@link closing}, {@link starting}), and its
  * record (`boundary.json`) still names this generation, which every close
  * takes away and every replacement names anew. Its sessions' commands would
  * otherwise each be refused until the workspace's next session
  * ({@link stoppedLine}): a sandbox that ended (its runner gone, an OOM
- * kill), its host signalled, its host's own close. The executor waits for
- * the new one ({@link execScript}). A clone gone is refused at the start, as
+ * kill), its host or runner signalled, its host's own close. The start
+ * stops what the generation before left (on macOS, what answers to its
+ * name, which outlives its runner there: {@link stopUnvouched}). The
+ * executor waits for the new one ({@link execScript}). A clone gone is refused at the start, as
  * any start refuses it. One that ends unasked again within {@link
  * UNASKED_RESTART_MS} of its last such start is left down, said: a sandbox
  * that cannot stay up is not started in a loop, and the workspace's next
@@ -6052,9 +6053,10 @@ const FORGE_TOKEN_ENV = [
 ];
 
 /**
- * Linux: an executor whose boundary ended unasked waits for the one the
- * agent starts again ({@link restartUnasked}), which writes this executor
- * anew (a new file, so a new inode at `$0`), then runs through it.
+ * An executor whose boundary ended unasked waits for the one the agent
+ * starts again ({@link restartUnasked}), which writes this executor anew (a
+ * new file, so a new inode at `$0`: `ls -di`, the same on Linux and macOS),
+ * then runs through it.
  */
 const restartWait = `  rm -f "$mark"
   self=$(ls -di "$0" 2>/dev/null)
@@ -6228,7 +6230,7 @@ if [ -e "$gate" ]; then
 fi
 fifo=${shellQuote(fifoOf(id, held.gen))}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
-${linux ? restartWait : ""}  echo ${shellQuote(stoppedLine(id))} >&2
+${restartWait}  echo ${shellQuote(stoppedLine(id))} >&2
   exit 126
 fi
 ${linux ? mountCheck(id, held.gen, pid) : ""}
