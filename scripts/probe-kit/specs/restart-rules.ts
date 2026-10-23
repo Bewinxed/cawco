@@ -18,8 +18,8 @@
  *     Approve card, lead-gate.ts) goes to the hub's gate: its `lead_calls`
  *     row is `asked`, Full Send did not answer it, and no file is written.
  * d1. Before the restart, the delegate's `echo` under an ask rule of its
- *     repository's Claude Code settings (`permissions.ask`, on Bash) is
- *     answered "allow" by Full Send and runs.
+ *     repository's Claude Code settings (`permissions.ask`, on that
+ *     command) is answered "allow" by Full Send and runs.
  * r1. The agent restarts, and attaches to both live CLIs.
  * c2. After it, Caw's next `touch` still goes to the hub's gate, as c1.
  * d2. After it, the delegate is still in Full Send: its next `echo` is
@@ -40,14 +40,12 @@ const BRIEF = "PROBE-RR-DELEGATE-BRIEF: wait for the person's steps.";
 /** The delegate's command, which an ask rule of its repository's own Claude Code settings makes the CLI ask about. */
 const ASK_RULE_COMMAND = "echo probe-ask-rule";
 /**
- * The rule: on the whole tool, as Caw's is (claude.ts `LEAD_SETTINGS`). A
- * workspace's boundary hook hands the CLI its command wrapped in the
- * boundary's executor (boundary-judge.ts), and "Claude Code evaluates
- * permission rules … against the input your hook returns, not the input
- * Claude sent" (code.claude.com/docs/en/hooks, PreToolUse `updatedInput`),
- * so a rule naming the command itself never matches in a workspace.
+ * The rule: on the command itself. A workspace's CLI runs its commands
+ * through the workspace's shell prefix, which it applies after its rules
+ * have judged the command as the model wrote it (boundary.ts
+ * `claudePrefixScript`), so a rule naming the command matches there.
  */
-const ASK_RULE = "Bash";
+const ASK_RULE = `Bash(${ASK_RULE_COMMAND}:*)`;
 /** A step, in the person's words. */
 const STEP_TAG = /PROBE-RR-[a-z0-9-]+/;
 
@@ -180,7 +178,7 @@ const run = async (kit: Kit) => {
     join(home, ".gitconfig"),
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
-  // A repository whose own Claude Code settings put an ask rule on Bash.
+  // A repository whose own Claude Code settings put an ask rule on one echo.
   const repo = join(fleet.sandbox, "code");
   await mkdir(projectClaudeDir(repo), { recursive: true });
   await writeFile(

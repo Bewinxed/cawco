@@ -123,32 +123,86 @@ const lastToolResult = (body: string): string => {
   return "";
 };
 
+/** `wait_item` as each harness offers it. */
+const WAITS = ["mcp__cawco__wait_item", "cawco_wait_item", "wait_item"];
+const WAIT_INPUT = { minutes: 60, reason: "The probe's next step." };
+/** A delegate's brief, by its title: the first in its words is its own. */
+const BRIEF = /PROBE-WBR-BRIEF ([^:]+):/;
+
+/**
+ * Each delegate between steps, by its brief's title: its wait on its item
+ * being found (`searching`), asked for (`asked`), or declared (`resting`).
+ * None once a step's own call ended the wait.
+ */
+const rests = new Map<string, "asked" | "resting" | "searching">();
+
+/**
+ * A delegate between steps: its item's wait declared, so a turn of its that
+ * ends is a waiting turn, never one of the three quiet ones in a row that
+ * fail its item (hub work-items.ts `QUIET_TURNS`). A step's own call ends the
+ * wait, so it is declared again after each: on Claude Code behind
+ * ToolSearch, on OpenCode through Code Mode.
+ */
+const rest = (who: string, request: Seen): Reply => {
+  const state = rests.get(who);
+  if (state === "resting") {
+    return words("waiting");
+  }
+  if (state === "asked" && request.afterTool) {
+    rests.set(who, "resting");
+    return words("waiting");
+  }
+  const wait = request.toolNames.find((name) => WAITS.includes(name));
+  if (wait) {
+    rests.set(who, "asked");
+    return call(wait, WAIT_INPUT);
+  }
+  if (state !== "searching" && request.toolNames.includes("ToolSearch")) {
+    rests.set(who, "searching");
+    return call("ToolSearch", {
+      query: "select:mcp__cawco__wait_item",
+      max_results: 1,
+    });
+  }
+  if (state !== "asked" && request.toolNames.includes("execute")) {
+    rests.set(who, "asked");
+    return call("execute", {
+      [programKey(request.body)]:
+        `return await tools.cawco.wait_item(${JSON.stringify(WAIT_INPUT)});`,
+    });
+  }
+  return words("waiting");
+};
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return words("Probe title");
   }
+  const who = BRIEF.exec(request.all)?.[1];
   const key = [...request.all.matchAll(STEP_TAG)].at(-1)?.[1];
   const step = key ? steps.get(key) : undefined;
-  if (!step) {
-    return words("waiting");
-  }
-  if (request.afterTool && step.awaiting) {
-    step.results.push({
-      text: lastToolResult(request.body),
-      failed: request.toolFailed,
-    });
-    step.awaiting = false;
-  }
-  if (step.done || step.awaiting) {
-    return words("done");
-  }
-  const next = step.play(step, request);
-  if (!next) {
+  if (step && !step.done) {
+    if (request.afterTool && step.awaiting) {
+      step.results.push({
+        text: lastToolResult(request.body),
+        failed: request.toolFailed,
+      });
+      step.awaiting = false;
+    }
+    if (step.awaiting) {
+      return words("done");
+    }
+    const next = step.play(step, request);
+    if (next) {
+      step.awaiting = true;
+      if (who) {
+        rests.delete(who);
+      }
+      return next;
+    }
     step.done = true;
-    return words("done");
   }
-  step.awaiting = true;
-  return next;
+  return who ? rest(who, request) : words("waiting");
 };
 
 /** A step of shell commands, one call each, through the harness's shell tool `tool`. */
