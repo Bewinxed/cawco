@@ -1,46 +1,53 @@
 /**
- * Option C, the thread panel: the card beside the pill only composes, at
- * 280px; once posted, every thread opens in a panel at the pane's end, in
+ * Option C, the panel: the card beside the pin only writes a new comment,
+ * at 280px; once posted, every comment opens in a panel on the right, in
  * place of the Comments list, 400px wide, its handle dragging it from 300px
- * to half the pane, the full height of the well, its head and reply pinned
- * while the entries scroll. Every story but the first draws the same long
- * thread in a preview pane at its real size.
+ * to half the pane, the page's full height, its head and reply pinned while
+ * the replies scroll. Every story but the first draws the same long reply
+ * in a preview pane at its real size, its caption over it. The desk is
+ * 1320px, the widest a decision page's well holds at a 1440px window.
  */
 import Fixture from "./PinCardFixture.svelte";
 
-const desk = { w: 1357, h: 1137 };
+const desk = { w: 1320, h: 1137 };
 const tablet = { w: 820, h: 1180 };
 const phone = { w: 390, h: 844 };
 
 export default {
-  title: "Comment card sizing/C, the thread panel",
+  title: "Comment card sizing/C, the panel",
   component: Fixture,
-  args: { option: "panel", pane: desk, list: "beside", stands: "panel" },
+  args: {
+    option: "panel",
+    pane: desk,
+    list: "beside",
+    stands: "panel",
+    caption: "Your screen, Comments open",
+  },
 };
 
-/** Desk 1357, writing a comment: the composer beside the pill, 280px. */
+/** Desk, writing a comment: the composer beside the pin, 280px. */
 export const DeskComposing = {
-  args: { stands: "compose" },
-  parameters: { viewport: 1357 },
+  args: { stands: "compose", caption: "Your screen, writing a comment" },
+  parameters: { viewport: 1320 },
 };
 
-/** Desk 1357, Comments open: the thread takes the list's place, 400px, the handle on its edge. */
-export const DeskListOpen = { parameters: { viewport: 1357 } };
+/** Desk, Comments open: the comment takes the list's place, 400px, the handle on its edge. */
+export const DeskListOpen = { parameters: { viewport: 1320 } };
 
-/** Desk 1357, Comments shut: the same panel opens at 400px. */
+/** Desk, Comments shut: the same panel opens at 400px. */
 export const DeskListClosed = {
-  args: { list: "none" },
-  parameters: { viewport: 1357 },
+  args: { list: "none", caption: "Your screen, Comments shut" },
+  parameters: { viewport: 1320 },
 };
 
-/** Tablet 820, Comments open: the thread is a 400px side sheet over the page's end, in the list's place. */
+/** Tablet 820, Comments open: the comment is a 400px panel over the page's right side, in the list's place, over the pin. */
 export const TabletListOpen = {
-  args: { pane: tablet, stands: "side" },
+  args: { pane: tablet, stands: "side", caption: "Tablet, Comments open" },
   parameters: { viewport: 820 },
 };
 
-/** Phone 390: the thread is a bottom sheet. */
+/** Phone 390: the comment is a drawer at the bottom, the page lifting its pin above it. */
 export const Phone = {
-  args: { pane: phone, list: "none", stands: "bottom" },
+  args: { pane: phone, list: "none", stands: "bottom", caption: "Phone" },
   parameters: { viewport: 390 },
 };

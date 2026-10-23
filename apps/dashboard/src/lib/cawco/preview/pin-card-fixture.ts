@@ -67,7 +67,6 @@ export const OPEN_PIN: Pin = {
       by: "agent",
       at: "2026-10-23T09:14:00.000Z",
       text: ANSWER,
-      files: ["packages/agent/src/reconnect.ts"],
     },
   ],
 };

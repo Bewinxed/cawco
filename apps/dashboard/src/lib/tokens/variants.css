@@ -535,6 +535,7 @@
 @custom-variant slot-rail-cell (&[data-slot="rail-cell"]);
 @custom-variant slot-rail-name (&[data-slot="rail-name"]);
 @custom-variant slot-rail-row (&[data-slot="rail-row"]);
+@custom-variant slot-rail-sheet (&[data-slot="rail-sheet"]);
 @custom-variant slot-release-notes (&[data-slot="release-notes"]);
 @custom-variant slot-repo (&[data-slot="repo"]);
 @custom-variant slot-rim (&[data-slot="rim"]);

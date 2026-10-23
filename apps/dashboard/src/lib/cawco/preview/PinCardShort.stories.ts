@@ -1,46 +1,58 @@
 /**
  * Option B, the short card: a fixed 320px card at most 400px (or two fifths
- * of the well) tall, with no scroll inside it: the first and the last entry,
- * the ones between one press. A thread with more than two entries, or an
- * entry taller than the card's room, opens in the Comments rail instead,
- * which widens to 400px while it holds it. Every story but the first draws
- * the same long thread in a preview pane at its real size.
+ * of the page) tall, with no scroll inside it: the first and the last
+ * message, the ones between one press. A comment with more than two
+ * messages, or one taller than the card, opens in the Comments list
+ * instead, which widens to 400px while it holds it. Every story but the
+ * first draws the same long reply in a preview pane at its real size, its
+ * caption over it. The desk is 1320px, the widest a decision page's well
+ * holds at a 1440px window.
  */
 import Fixture from "./PinCardFixture.svelte";
 
-const desk = { w: 1357, h: 1137 };
+const desk = { w: 1320, h: 1137 };
 const tablet = { w: 820, h: 1180 };
 const phone = { w: 390, h: 844 };
 
 export default {
   title: "Comment card sizing/B, the short card",
   component: Fixture,
-  args: { option: "short", pane: desk, list: "beside", stands: "rail" },
+  args: {
+    option: "short",
+    pane: desk,
+    list: "beside",
+    stands: "rail",
+    caption: "Your screen, Comments open",
+  },
 };
 
-/** Desk 1357, a thread that fits: the card shows the first and last entries, the two between one press. */
+/** Desk, a comment that fits: the card shows the first and last messages, the two between one press. */
 export const DeskShortThread = {
-  args: { stands: "card", longer: true },
-  parameters: { viewport: 1357 },
+  args: {
+    stands: "card",
+    longer: true,
+    caption: "Your screen, a short exchange",
+  },
+  parameters: { viewport: 1320 },
 };
 
-/** Desk 1357, Comments open: the long answer is taller than the card, so the rail widens to 400px and holds the thread. */
-export const DeskListOpen = { parameters: { viewport: 1357 } };
+/** Desk, Comments open: the long reply is taller than the card, so the Comments list widens to 400px and holds it. */
+export const DeskListOpen = { parameters: { viewport: 1320 } };
 
-/** Desk 1357, Comments shut: the pill's press opens the rail at 400px, holding the thread. */
+/** Desk, Comments shut: the pin's press opens the Comments list at 400px, holding the comment. */
 export const DeskListClosed = {
-  args: { list: "none" },
-  parameters: { viewport: 1357 },
+  args: { list: "none", caption: "Your screen, Comments shut" },
+  parameters: { viewport: 1320 },
 };
 
-/** Tablet 820, Comments open: every thread opens in the rail. */
+/** Tablet 820, Comments open: every comment opens in the Comments list. */
 export const TabletListOpen = {
-  args: { pane: tablet },
+  args: { pane: tablet, caption: "Tablet, Comments open" },
   parameters: { viewport: 820 },
 };
 
-/** Phone 390: one sheet lists every comment, the picked one opened in its row. */
+/** Phone 390: one drawer lists every comment, the picked one opened in place, the page lifting its pin above it. */
 export const Phone = {
-  args: { pane: phone, list: "sheet", stands: "row" },
+  args: { pane: phone, list: "sheet", stands: "row", caption: "Phone" },
   parameters: { viewport: 390 },
 };

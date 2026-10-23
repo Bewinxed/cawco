@@ -530,7 +530,22 @@ export default defineConfig(({ command }) => {
        * made there and vite-plugin-svelte's optimizer plugin compiles it in.
        */
       // The brand marks (`@cawco/icons/marks`) are a module of their own, loaded by what draws one.
-      include: ["@cawco/icons", "@cawco/icons/marks"],
+      // What the three excluded packages below import, pre-bundled through
+      // them ("If an ESM dependency is excluded from optimization, but has a
+      // nested CommonJS dependency, the CommonJS dependency should be added
+      // to `optimizeDeps.include`. Example: include: ['esm-dep > cjs-dep']",
+      // vite.dev/config/dep-optimization-options): served file by file they
+      // were about 175 requests a component canvas sent through the preview
+      // proxy before a comment card drew (runed's two copies, svelte-toolbelt,
+      // @tanstack/highlight).
+      include: [
+        "@cawco/icons",
+        "@cawco/icons/marks",
+        "vaul-svelte > runed",
+        "vaul-svelte > svelte-toolbelt",
+        "svelte-sonner > runed",
+        "svelte-streamdown > @tanstack/highlight",
+      ],
       rolldownOptions: { plugins: [IconsBundled({ compiler: "svelte" })] },
       // svelte-streamdown, svelte-sonner and vaul-svelte are compiled like the
       // app's own components, so their stylesheets pass through

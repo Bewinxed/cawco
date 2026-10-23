@@ -46,6 +46,7 @@
     list = "none",
     stands,
     longer = false,
+    caption,
   }: {
     /** The direction drawn. */
     option: "reading" | "short" | "panel";
@@ -70,6 +71,8 @@
       | "compose";
     /** The thread after two more turns (B's short card folds it). */
     longer?: boolean;
+    /** What the person judges in this frame, in words over it: the screen and what is open. */
+    caption?: string;
   } = $props();
 
   const pin = $derived<Pin>(longer ? LONGER_PIN : OPEN_PIN);
@@ -80,6 +83,7 @@
   const nothing = new Set<string>();
 
   let well = $state<HTMLDivElement | null>(null);
+  let pageScroll = $state<HTMLDivElement | null>(null);
   let target = $state<HTMLElement | null>(null);
   let room = $state({ w: 0, h: 0 });
   let mark = $state<{ x: number; y: number; w: number; h: number } | null>(
@@ -87,15 +91,49 @@
   );
   /** The pill's height: `--c-pin`. */
   const pinH = $derived(numberOf("--c-pin") || 20);
+  /** How far clear of a drawer's top the pill stands once lifted: `--space-3`. */
+  const clearance = $derived(numberOf("--space-3") || 11);
+  /** The thread stands as a drawer over the page's foot, which the pane tells the page it covers (`cawco:covered`). */
+  const drawer = $derived(
+    stands === "sheet" ||
+      stands === "row" ||
+      stands === "bottom" ||
+      list === "sheet"
+  );
   // The well's room and the pill's box in it, read as they lay out: the
-  // pill stands on its element's top edge, near its end.
+  // pill stands on its element's top edge, near its end. Under a drawer the
+  // page is scrolled as little as lands the pill clear above it, as the
+  // page's overlay brings a covered pin out (agent preview-overlay pins.ts
+  // `reveal`); the drawer is watched too, as its entries take their height.
   $effect(() => {
     const holder = well;
+    const scroller = pageScroll;
     const on = target;
-    if (!(holder && on)) {
+    if (!(holder && scroller && on)) {
       return;
     }
+    const watched = new Set<Element>();
+    const lift = () => {
+      const over = holder.querySelector(
+        '[data-slot="pin-card"][data-sheet], [data-slot="rail-sheet"]'
+      );
+      if (!(drawer && over)) {
+        return;
+      }
+      if (!watched.has(over)) {
+        watched.add(over);
+        watch.observe(over);
+      }
+      const under =
+        on.getBoundingClientRect().top +
+        clearance -
+        over.getBoundingClientRect().top;
+      if (under > 0) {
+        scroller.scrollTop += under;
+      }
+    };
     const read = () => {
+      lift();
       const box = holder.getBoundingClientRect();
       const at = on.getBoundingClientRect();
       room = { w: holder.clientWidth, h: holder.clientHeight };
@@ -106,8 +144,8 @@
         h: pinH,
       };
     };
-    read();
     const watch = frameObserver(read);
+    read();
     watch.observe(holder);
     watch.observe(on);
     return () => watch.disconnect();
@@ -205,8 +243,9 @@
 
 {#snippet page()}
   <!-- The artifact's page, as its frame would draw it. -->
+  <!-- Its foot pads a pane's height, standing for the rest of a long page, so a drawer can lift the pin clear above it. -->
   <article
-    class="mx-auto max-w-phone px-space-6 py-space-8 text-ink-strong"
+    class="mx-auto max-w-phone px-space-6 pt-space-8 pb-(--pane-h) text-ink-strong"
     data-slot="fixture-page"
   >
     <h1 class="m-0 type-title" id="title">Reconnecting to the hub</h1>
@@ -236,6 +275,26 @@
       It never does today. A machine that can't reach the hub keeps trying at
       the longest wait until it is stopped.
     </p>
+    <h2 class="mt-space-8 mb-0 type-label">What the dashboard says</h2>
+    <p class="mt-space-2 mb-0 type-body text-pretty">
+      The machine's row keeps its last status until the hub hears from it again.
+      Its sessions keep their places on the board and show the time they were
+      last heard from.
+    </p>
+    <p class="mt-space-3 mb-0 type-body text-pretty">
+      Once the machine answers, its sessions report what they did while it was
+      away, and the row returns to its live status without a reload.
+    </p>
+    <h2 class="mt-space-8 mb-0 type-label">Settings</h2>
+    <p class="mt-space-2 mb-0 type-body text-pretty">
+      None of this can be changed from the dashboard yet. The wait and the
+      number of tries live in the daemon's own configuration, read once when it
+      starts.
+    </p>
+    <p class="mt-space-3 mb-0 type-body text-pretty">
+      A machine started with a different configuration keeps it until it is
+      restarted, so two machines on one hub can retry at different paces.
+    </p>
   </article>
 {/snippet}
 
@@ -245,7 +304,14 @@
     class="relative flex-1 min-w-0 h-full overflow-hidden bg-surface-well"
     data-slot="fixture-well"
   >
-    {@render page()}
+    <!-- The page scrolls in its own box, as the artifact's frame does: a drawer over its foot scrolls it as little as lifts the pin clear above the drawer. -->
+    <div
+      bind:this={pageScroll}
+      class="absolute inset-0 overflow-hidden"
+      data-slot="fixture-page-scroll"
+    >
+      {@render page()}
+    </div>
     {#if mark}
       <span
         class="absolute start-(--mark-x) top-(--mark-y) flex"
@@ -324,45 +390,52 @@
   </div>
 {/snippet}
 
-<div
-  class="relative flex w-(--pane-w) h-(--pane-h) overflow-hidden bg-surface-well"
-  data-slot="fixture-pane"
-  style:--pane-w={`${pane.w}px`}
-  style:--pane-h={`${pane.h}px`}
->
-  {#if stands === "panel"}
-    <!-- C on a desk: the thread a panel at the pane's end, the kit's split handle between. -->
-    <Resizable.PaneGroup direction="horizontal">
-      <Resizable.Pane defaultSize={100 - panelShare.size}>
-        {@render wellOf()}
-      </Resizable.Pane>
-      <Resizable.Handle
-        aria-label={said.resizeThread}
-        look="split"
-        withHandle
-      />
-      <Resizable.Pane
-        defaultSize={panelShare.size}
-        maxSize={panelShare.max}
-        minSize={panelShare.min}
-      >
-        <div class="flex h-full" data-slot="thread-panel">
-          {@render rail("beside", "100%")}
-        </div>
-      </Resizable.Pane>
-    </Resizable.PaneGroup>
-  {:else}
-    {@render wellOf()}
-    {#if (list === "beside" && stands !== "side") || stands === "rail"}
-      <div
-        class="flex flex-none min-h-0 border-s border-border-hairline"
-        data-slot="rail-beside"
-      >
-        {@render rail(
-          "beside",
-          stands === "rail" ? threadW : "var(--c-comments-w)"
-        )}
-      </div>
-    {/if}
+<div class="flex flex-col gap-space-2" data-slot="fixture">
+  {#if caption}
+    <p class="m-0 type-label text-ink-strong" data-slot="fixture-caption">
+      {caption}
+    </p>
   {/if}
+  <div
+    class="relative flex w-(--pane-w) h-(--pane-h) overflow-hidden bg-surface-well"
+    data-slot="fixture-pane"
+    style:--pane-w={`${pane.w}px`}
+    style:--pane-h={`${pane.h}px`}
+  >
+    {#if stands === "panel"}
+      <!-- C on a desk: the thread a panel at the pane's end, the kit's split handle between. -->
+      <Resizable.PaneGroup direction="horizontal">
+        <Resizable.Pane defaultSize={100 - panelShare.size}>
+          {@render wellOf()}
+        </Resizable.Pane>
+        <Resizable.Handle
+          aria-label={said.resizeThread}
+          look="split"
+          withHandle
+        />
+        <Resizable.Pane
+          defaultSize={panelShare.size}
+          maxSize={panelShare.max}
+          minSize={panelShare.min}
+        >
+          <div class="flex h-full" data-slot="thread-panel">
+            {@render rail("beside", "100%")}
+          </div>
+        </Resizable.Pane>
+      </Resizable.PaneGroup>
+    {:else}
+      {@render wellOf()}
+      {#if (list === "beside" && stands !== "side") || stands === "rail"}
+        <div
+          class="flex flex-none min-h-0 border-s border-border-hairline"
+          data-slot="rail-beside"
+        >
+          {@render rail(
+            "beside",
+            stands === "rail" ? threadW : "var(--c-comments-w)"
+          )}
+        </div>
+      {/if}
+    {/if}
+  </div>
 </div>

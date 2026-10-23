@@ -8,7 +8,7 @@
  *
  * 1. Its width, its tallest (computed `max-height`, else its drawn height)
  *    and whether its entries scroll inside it, printed per direction per
- *    size, and held to the direction's numbers: A 415px at the desk with the
+ *    size, and held to the direction's numbers: A 400px at the 1320px desk with the
  *    list open, 480 shut, 328 on the tablet with the list shut; B's card
  *    320, its rail 400; C's panel 400, its composer 280.
  * 2. Its head and its reply stand inside it, inside the pane, and hold
@@ -21,16 +21,32 @@
  * 6. A card or composer beside its pill stands clear of it.
  * 7. A thread in a sheet or a panel leaves its pill in view, except where
  *    the direction stands it over the pill (COVERS_PILL).
+ *
+ * Then each canvas opened on a page of its own (and StatTile's, a floor):
+ * when its page loaded, how many files it fetched by then and in all, when
+ * every frame stood whole (its composer in), and the stage's weight of it.
+ * And the decision page itself (design/explorations/comment-card-sizing/
+ * page.oui) as the hub's decision host draws it, its Previews on this
+ * stage (decision-embeds.ts), at 1440 on a cold stage and again warm, at
+ * 390 under a finger, and at 390 in a desk's window whose scrollbars take
+ * their width:
+ * 8. Every Preview draws, each one's time from the page's load to its
+ *    frames whole, and when it was asked, loaded and stood at its shape.
+ * 9. Nothing spills sideways: the page, no scroller holding more than its
+ *    width, no box past the window (a desk's picture scrolling in its well
+ *    on a phone is the page's design); and the page's height.
+ * 10. No page error.
  */
-import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
-import { until } from "../../scratch-fleet";
-import { type Engine, type Kit, ROOT, type Spec } from "../kit";
-
-const APP = join(ROOT, "apps/dashboard");
+import {
+  CAWCO_BRIDGE,
+  type DecisionStage,
+  EMBED_FRAME,
+  startDecisionStage,
+} from "../decision-embeds";
+import { type Engine, type Kit, ROOT, type Spec, settle } from "../kit";
 
 /** The directions' states files, from the dashboard's root, by the letter the page names them. */
 const FILES = {
@@ -41,7 +57,7 @@ const FILES = {
 
 /** The width each frame's thread holder must take, px (within 1px); none where it is the sheet's whole width. */
 const WIDTHS: Record<string, number> = {
-  "A DeskListOpen": 415,
+  "A DeskListOpen": 400,
   "A DeskListClosed": 480,
   "A TabletListClosed": 328,
   "A TabletListOpen": 500,
@@ -61,24 +77,11 @@ const WIDTHS: Record<string, number> = {
 const NO_SCROLL = new Set(["B DeskShortThread", "C DeskComposing"]);
 
 /**
- * Frames whose sheet or panel stands over the pill it answers: every phone
- * (the well's foot sheet, as today, over a page that doesn't scroll the pin
- * above it) and C's tablet side sheet.
+ * Frames whose sheet or panel stands over the pill it answers: C's tablet
+ * side sheet. A phone's drawer scrolls the page as little as lifts the pin
+ * above it (PinCardFixture, as the overlay's `reveal` does).
  */
-const COVERS_PILL = new Set([
-  "A Phone",
-  "B Phone",
-  "C Phone",
-  "C TabletListOpen",
-]);
-
-/** A port nothing holds now. */
-const freePort = async (): Promise<number> => {
-  const lease = Bun.serve({ port: 0, fetch: () => new Response(null) });
-  const port = lease.port as number;
-  await lease.stop(true);
-  return port;
-};
+const COVERS_PILL = new Set(["C TabletListOpen"]);
 
 /** A box, px. */
 interface Box {
@@ -152,8 +155,9 @@ async function openFile(page: Page, base: string, file: string) {
     () =>
       [...document.querySelectorAll('[data-slot="fixture-pane"]')].every(
         (pane) =>
-          !pane.querySelector("[data-pin-room]") ||
-          pane.querySelector('[data-slot="entry"]')
+          pane.querySelector('[contenteditable="true"]') &&
+          (!pane.querySelector("[data-pin-room]") ||
+            pane.querySelector('[data-slot="entry"]'))
       ),
     undefined,
     { timeout: 30_000 }
@@ -402,44 +406,276 @@ async function readEngine(kit: Kit, base: string, engine: Engine) {
   );
 }
 
-const run = async (kit: Kit) => {
-  const host = join(APP, ".cawco/stage/host.mjs");
-  mkdirSync(join(APP, ".cawco/stage"), { recursive: true });
-  writeFileSync(host, await buildStageHost());
-  const port = await freePort();
-  const stage = spawn("bun", [host], {
-    cwd: APP,
-    env: {
-      ...process.env,
-      CAWCO_STAGE: "1",
-      CAWCO_STAGE_PORT: String(port),
-      CAWCO_STAGE_FRAMEWORK: "svelte",
-      CAWCO_STAGE_KIT: "1",
-      CAWCO_STAGE_TOOLCHAIN: "vite",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
+/** The page's name, its program, and the canvases its Previews embed by their artifact ids. */
+const PAGE = "comment-card-sizing";
+const PROGRAM = join(ROOT, "design/explorations/comment-card-sizing/page.oui");
+const ARTIFACTS: Record<string, readonly string[]> = {
+  "b9b09f77-c5ec-416b-b79c-8cc9c7e21744": [FILES.A],
+  "9a5d35f3-751a-4902-8f8e-9250979d2489": [FILES.B],
+  "cd60e3e8-a370-48f2-b3c1-f62105666dab": [FILES.C],
+};
+/** The longest an embed may take to draw, ms, before the read gives up on it. */
+const EMBED_WAIT_MS = 90_000;
+
+/**
+ * Whether an embedded canvas has drawn every rest frame it shows, whole:
+ * each pane's composer (the card's reply, or the new comment's) arrived. In
+ * the embed's frame.
+ */
+const allDrawn = (): boolean => {
+  const states = [
+    ...document.querySelectorAll<HTMLElement>(
+      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
+    ),
+  ].map((one) => one.dataset.state ?? "");
+  const panes = [...document.querySelectorAll('[data-slot="fixture-pane"]')];
+  return (
+    states.length > 0 &&
+    states.every((one) => one === "drawn") &&
+    panes.every((pane) => pane.querySelector('[contenteditable="true"]'))
+  );
+};
+
+/** Records, from the page's start, when each embed's frame is asked for, loads and says its shape. An init script. */
+function embedPhases(): void {
+  const seen: Record<string, number>[] = [];
+  (window as unknown as { __phases: typeof seen }).__phases = seen;
+  const watch = () => {
+    for (const [at, frame] of [
+      ...document.querySelectorAll("iframe[data-slot=embed]"),
+    ].entries()) {
+      seen[at] ??= {};
+      const one = seen[at];
+      const now = Math.round(performance.now());
+      if (frame.getAttribute("src") && one.asked === undefined) {
+        one.asked = now;
+      }
+      if (frame.hasAttribute("data-drawn") && one.loaded === undefined) {
+        one.loaded = now;
+      }
+      if (
+        frame.getAttribute("data-shape") === "drawn" &&
+        one.shaped === undefined
+      ) {
+        one.shaped = now;
+      }
+    }
+  };
+  new MutationObserver(watch).observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
   });
-  let words = "";
-  stage.stdout.on("data", (chunk: Buffer) => {
-    words += chunk.toString("utf8");
-  });
-  stage.stderr.on("data", (chunk: Buffer) => {
-    words += chunk.toString("utf8");
-  });
-  try {
-    await until(
-      "the stage's ready",
-      () => words,
-      (text) => text.includes('"cawco":"ready"'),
-      60_000
+}
+
+/** Each embed's time from the page's load to its frames drawn, ms, in the page's order; -1 for one that never drew. */
+async function embedTimes(page: Page, started: number): Promise<number[]> {
+  const times: number[] = [];
+  const frames = page.locator(EMBED_FRAME);
+  /** Whether embed `at` has drawn whole now. */
+  const drawnNow = async (at: number): Promise<boolean> => {
+    const frame = await (await frames.nth(at).elementHandle())?.contentFrame();
+    return frame ? await frame.evaluate(allDrawn).catch(() => false) : false;
+  };
+  const late = () => Date.now() - started > EMBED_WAIT_MS;
+  // biome-ignore lint/performance/noAwaitInLoops: polled until every embed has drawn, a tenth of a second apart
+  for (let count = await frames.count(); ; count = await frames.count()) {
+    const asked = Array.from({ length: count }, (_, at) => at).filter(
+      (at) => (times[at] ?? -1) < 0
     );
-    const base = `http://127.0.0.1:${port}`;
+    const drew = await Promise.all(asked.map(drawnNow));
+    for (const [n, at] of asked.entries()) {
+      times[at] = drew[n] ? Date.now() - started : -1;
+    }
+    if ((count > 0 && times.every((one) => one >= 0)) || late()) {
+      return times;
+    }
+    await page.waitForTimeout(100);
+  }
+}
+
+/**
+ * Everything on the decision page that spills sideways, as the person
+ * would see it: the page itself scrolling sideways, a scroller holding more
+ * than its width (a scrollbar shows, or what it holds is cut), and a box
+ * painted past the window's edges. A media well scrolling a picture wider
+ * than a phone sideways (a desk's design on a phone, under its edge fade) is
+ * the page's design, never a spill; a box no one sees (folded shut, or
+ * outside a box that clips it) is no spill either. In the page.
+ */
+function sideSpills(narrow: boolean): string[] {
+  const spills: string[] = [];
+  const name = (el: Element) =>
+    `${el.localName}${el.getAttribute("data-slot") ? `[${el.getAttribute("data-slot")}]` : ""}.${(el.getAttribute("class") ?? "").split(" ").slice(0, 3).join(".")}`;
+  const clipped = (el: Element, box: DOMRect) => {
+    for (let up = el.parentElement; up; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      const outer = up.getBoundingClientRect();
+      const misses = box.right <= outer.left || box.left >= outer.right;
+      if (misses && style.overflowX !== "visible") {
+        return true;
+      }
+    }
+    return false;
+  };
+  const root = document.documentElement;
+  const wide = root.clientWidth;
+  if (root.scrollWidth > wide + 1) {
+    spills.push(`the page: ${root.scrollWidth} in ${wide}`);
+  }
+  for (const el of document.body.querySelectorAll<HTMLElement>("*")) {
+    const box = el.getBoundingClientRect();
+    const seen =
+      box.width > 0 &&
+      el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) &&
+      !clipped(el, box);
+    /** A desk's design scrolled sideways in its well on a phone: the well and what it holds. */
+    const designed =
+      narrow && !!el.closest("[data-slot=media-stage][data-wide]");
+    if (!seen || (designed && !el.matches("[data-slot=media-stage]"))) {
+      continue;
+    }
+    if (
+      getComputedStyle(el).overflowX !== "visible" &&
+      !designed &&
+      el.scrollWidth > el.clientWidth + 1
+    ) {
+      spills.push(`${name(el)}: holds ${el.scrollWidth} in ${el.clientWidth}`);
+    }
+    if (box.right > wide + 1 || box.left < -1) {
+      spills.push(
+        `${name(el)}: ${Math.round(box.left)} to ${Math.round(box.right)} in a ${wide}px window`
+      );
+    }
+  }
+  return spills;
+}
+
+/** The page's own height: its document's, or its tallest scroller's where the page scrolls inside one. In the page. */
+const pageHeight = (): number =>
+  Math.max(
+    document.documentElement.scrollHeight,
+    ...[...document.querySelectorAll<HTMLElement>("body *")]
+      .filter((el) => getComputedStyle(el).overflowY !== "visible")
+      .map((el) => el.scrollHeight)
+  );
+
+/** The decision page at `view`: each embed's first draw, then its sideways spills and its height. */
+async function readPage(
+  kit: Kit,
+  stage: DecisionStage,
+  view: "desk" | "phone" | "narrow",
+  when: string
+): Promise<void> {
+  const page = await kit.page(view === "phone" ? "phone" : "desk", {
+    init: [CAWCO_BRIDGE, embedPhases],
+    scale: 1,
+    scrollbars: true,
+  });
+  if (view === "narrow") {
+    // A desk's window drawn down to a phone's width: a mouse, and scrollbars that take their width.
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(String(error).slice(0, 300)));
+  const started = Date.now();
+  await page.goto(stage.pageUrl(PAGE, "light"), { waitUntil: "load" });
+  const times = await embedTimes(page, started);
+  kit.check(
+    `page ${view} ${when}: every Preview draws (${times.map((ms) => `${(ms / 1000).toFixed(1)}s`).join(", ")} from the page's load)`,
+    times.length > 0 && times.every((ms) => ms >= 0)
+  );
+  const phases = await page.evaluate(
+    () => (window as unknown as { __phases: Record<string, number>[] }).__phases
+  );
+  kit.check(
+    `page ${view} ${when}: each embed asked, loaded and shaped at (ms) ${phases.map((one) => `${one.asked}/${one.loaded}/${one.shaped}`).join(", ")}`,
+    true
+  );
+  await settle(page, 500);
+  const spills = await page.evaluate(sideSpills, view !== "desk");
+  const height = await page.evaluate(pageHeight);
+  kit.check(
+    `page ${view}: nothing spills sideways (${spills.length}); the page is ${height}px tall`,
+    spills.length === 0,
+    spills.slice(0, 12).join(" | ")
+  );
+  kit.check(
+    `page ${view}: no page error`,
+    errors.length === 0,
+    errors.join(" | ")
+  );
+  await page.close();
+}
+
+/** A small states file, the floor a canvas's first draw stands on: its time beside the directions' says what is theirs. */
+const FLOOR = "src/lib/cawco/StatTile.stories.ts";
+
+/** Each direction's canvas opened on its own page: the time to its frames drawn, and its weight as the stage reads it. */
+async function canvasLoads(kit: Kit, base: string): Promise<void> {
+  for (const file of [FLOOR, ...Object.values(FILES)]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one canvas at a time, each on a fresh page
+    const page = await kit.page("desk", {
+      scale: 1,
+      init: [() => performance.setResourceTimingBufferSize(5000)],
+    });
+    const started = Date.now();
+    await page.goto(
+      `${base}/@cawco/canvas?by=embed&file=${encodeURIComponent(file)}`,
+      { waitUntil: "load" }
+    );
+    await page.waitForFunction(allDrawn, undefined, { timeout: EMBED_WAIT_MS });
+    const ms = Date.now() - started;
+    /** The page's load (every module its first draw waits on, fetched) and how many it fetched by then; then all it fetched. */
+    const fetched = await page.evaluate(() => {
+      const [nav] = performance.getEntriesByType(
+        "navigation"
+      ) as PerformanceNavigationTiming[];
+      const loads = performance.getEntriesByType("resource");
+      const at = nav?.loadEventStart ?? 0;
+      return {
+        load: Math.round(at),
+        first: loads.filter((one) => one.responseEnd <= at).length,
+        all: loads.length,
+      };
+    });
+    const weight = (await (
+      await fetch(`${base}/__cawco/weight?file=${encodeURIComponent(file)}`)
+    ).json()) as {
+      weight: {
+        bytes: number;
+        modules: number;
+        over: boolean;
+        cut: string | null;
+      } | null;
+    };
+    kit.check(
+      `canvas ${file.split("/").at(-1)}: loaded at ${(fetched.load / 1000).toFixed(1)}s on ${fetched.first} files, drawn whole ${(ms / 1000).toFixed(1)}s after its start on ${fetched.all}; the stage weighs it ${weight.weight?.modules} modules, ${Math.round((weight.weight?.bytes ?? 0) / 1000)} kB`,
+      true,
+      weight.weight?.cut ?? ""
+    );
+    await page.close();
+  }
+}
+
+const run = async (kit: Kit) => {
+  const stage = await startDecisionStage(
+    new Map([[PAGE, readFileSync(PROGRAM, "utf8")]]),
+    ARTIFACTS
+  );
+  try {
+    await canvasLoads(kit, `http://127.0.0.1:${stage.stagePort}`);
+    await readPage(kit, stage, "desk", "cold stage");
+    await readPage(kit, stage, "desk", "warm stage");
+    await readPage(kit, stage, "phone", "warm stage");
+    await readPage(kit, stage, "narrow", "warm stage");
+    const base = `http://127.0.0.1:${stage.stagePort}`;
     for (const engine of ["chromium", "webkit"] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: one engine at a time, on one stage
       await readEngine(kit, base, engine);
     }
   } finally {
-    stage.kill("SIGTERM");
+    await stage.stop();
   }
 };
 
