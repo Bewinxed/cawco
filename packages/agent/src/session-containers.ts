@@ -101,7 +101,6 @@ import { machineId } from "@cawco/core/machine-id";
 import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { containerWords } from "@cawco/core/words/containers";
-import Docker from "dockerode";
 import { parseAllDocuments } from "yaml";
 import { contextEndpoint } from "./browser/runtime";
 import { delegationHubUrl } from "./delegation";
@@ -831,8 +830,17 @@ export const containersUntrackedWords = (
 /** The `/` the Engine API puts before each container's name. */
 const NAME_SLASH = /^\//;
 
+/** A container as the Engine API lists it (`GET /containers/json`), Docker's and Podman's alike. */
+interface ListedContainer {
+  Id: string;
+  Image: string;
+  Labels?: Record<string, string> | null;
+  Names: string[];
+  State: string;
+}
+
 /** One container a session's end reached, in words: `` `name` (image) ``. */
-const namedContainer = (container: Docker.ContainerInfo): string =>
+const namedContainer = (container: ListedContainer): string =>
   `\`${container.Names[0]?.replace(NAME_SLASH, "") ?? container.Id.slice(0, 12)}\` (${container.Image})`;
 
 /** A pod as libpod lists it (`GET /libpod/pods/json`). */
@@ -865,17 +873,21 @@ const runtimeSockets = async (): Promise<string[]> => {
   ];
 };
 
-/** A libpod API call on `socketPath`: its status and JSON answer. */
-const libpod = async (
+/**
+ * One Engine API call on the runtime at `socketPath`: its status and JSON
+ * answer. Made by `fetch` on the socket itself, never a client that reads
+ * the environment: dockerode's modem takes `DOCKER_HOST` over the socket it
+ * is given (docker-modem 5.0.7 lib/modem.js: `Object.assign({},
+ * optDefaults, options)`, then "if (!this.host) { this.socketPath = … }"),
+ * so with `DOCKER_HOST=tcp://127.0.0.1:9` it dialled that and read nothing
+ * (r191: no ending found the session's containers).
+ */
+const engine = async (
   socketPath: string,
   method: string,
   path: string
 ): Promise<{ body: unknown; status: number }> => {
-  // Libpod's routes are versioned only (podman v5.7.0
-  // pkg/api/server/register_pods.go: `r.Handle(VersionedPath("/libpod/pods/json"), …)`):
-  // unversioned, every one answers 404. 4.0.0, the oldest Podman whose pods
-  // API this speaks.
-  const answer = await fetch(`http://d/v4.0.0/libpod${path}`, {
+  const answer = await fetch(`http://d${path}`, {
     method,
     unix: socketPath,
   } as RequestInit);
@@ -892,6 +904,19 @@ const libpod = async (
 /** The label filter as the Engine and libpod APIs take it, in a query. */
 const filterQuery = (labels: readonly string[]): string =>
   `filters=${encodeURIComponent(JSON.stringify({ label: labels }))}`;
+
+/**
+ * A libpod API call. Libpod's routes are versioned only (podman v5.7.0
+ * pkg/api/server/register_pods.go: `r.Handle(VersionedPath("/libpod/pods/json"), …)`):
+ * unversioned, every one answers 404. 4.0.0, the oldest Podman whose pods
+ * API this speaks.
+ */
+const libpod = (
+  socketPath: string,
+  method: string,
+  path: string
+): Promise<{ body: unknown; status: number }> =>
+  engine(socketPath, method, `/v4.0.0/libpod${path}`);
 
 /** The pods on `socketPath` with every one of `labels`; none where the runtime has no pods (Docker answers 404). */
 const podsWith = async (
@@ -913,14 +938,22 @@ const podsWith = async (
 };
 
 /** The containers on `socketPath` with every one of `labels`, stopped ones too. */
-const containersWith = (
+const containersWith = async (
   socketPath: string,
   labels: readonly string[]
-): Promise<Docker.ContainerInfo[]> =>
-  new Docker({ socketPath }).listContainers({
-    all: true,
-    filters: { label: [...labels] },
-  });
+): Promise<ListedContainer[]> => {
+  const { status, body } = await engine(
+    socketPath,
+    "GET",
+    `/containers/json?all=true&${filterQuery(labels)}`
+  );
+  if (status !== 200 || !Array.isArray(body)) {
+    throw new Error(
+      `listing containers answered ${status}: ${JSON.stringify(body)}`
+    );
+  }
+  return body as ListedContainer[];
+};
 
 /**
  * What session `instanceId` made on `socketPath` through this agent's
@@ -934,7 +967,7 @@ const containersWith = (
 const madeBy = async (
   socketPath: string,
   instanceId: string
-): Promise<{ containers: Docker.ContainerInfo[]; pods: ListedPod[] }> => {
+): Promise<{ containers: ListedContainer[]; pods: ListedPod[] }> => {
   const own = await owner();
   const session = [`${SESSION_LABEL}=${instanceId}`];
   const ours = (labels: Record<string, string> | null | undefined): boolean =>
@@ -1000,25 +1033,38 @@ const endPod = async (
 /** Stops `container` and, unless named, removes it, into `ended`. */
 const endContainer = async (
   socketPath: string,
-  container: Docker.ContainerInfo,
+  container: ListedContainer,
   ended: ContainersEnded
 ): Promise<void> => {
-  const one = new Docker({ socketPath }).getContainer(container.Id);
   try {
     if (container.State !== "exited" && container.State !== "created") {
       // No `t`: the runtime's own stop, its stop signal, then SIGKILL after
       // the container's stop timeout. 304: it stopped meanwhile.
-      await one.stop().catch((error: { statusCode?: number }) => {
-        if (error.statusCode !== 304) {
-          throw error;
-        }
-      });
+      const stopped = await engine(
+        socketPath,
+        "POST",
+        `/containers/${container.Id}/stop`
+      );
+      if (stopped.status !== 204 && stopped.status !== 304) {
+        throw new Error(
+          `stop answered ${stopped.status}: ${JSON.stringify(stopped.body)}`
+        );
+      }
     }
     if (container.Labels?.[NAMED_LABEL] === "true") {
       ended.kept.push(namedContainer(container));
       return;
     }
-    await one.remove();
+    const removed = await engine(
+      socketPath,
+      "DELETE",
+      `/containers/${container.Id}`
+    );
+    if (removed.status !== 204) {
+      throw new Error(
+        `remove answered ${removed.status}: ${JSON.stringify(removed.body)}`
+      );
+    }
     ended.removed.push(namedContainer(container));
   } catch (error) {
     ended.failed.push(`${namedContainer(container)} (${said(error)})`);
