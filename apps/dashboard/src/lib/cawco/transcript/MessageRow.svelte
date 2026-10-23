@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HarnessKind, PermissionMode } from "@cawco/core";
-  import { transcriptWords } from "@cawco/core";
+  import { commonWords, transcriptWords } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -928,7 +928,7 @@
                       <Button
                         data-slot="action"
                         {failed}
-                        label="Send again"
+                        label={commonWords.sendAgain}
                         onclick={tryAgain}
                         pending={retrying || (retried && !failed)}
                         pendingLabel="Sending again…"

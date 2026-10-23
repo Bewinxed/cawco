@@ -785,20 +785,22 @@ async function rulesWaiting({ kit, fleet, page, base }: On) {
   await open(page, `${base}/config/rules`, CHIP);
   await page.locator(CHIP).click();
   const read = () =>
-    page.evaluate(([chip, noneWaiting]) => {
-      const button = document.querySelector(chip);
-      const names = [...document.querySelectorAll("[data-row-name]")].map(
-        (row) => row.getAttribute("data-row-name") ?? ""
-      );
-      return {
-        chip: button !== null,
-        pressed: button?.getAttribute("aria-pressed") ?? null,
-        waiting: names.includes("probe-waiting"),
-        quiet: names.includes("probe-quiet"),
-        stranded:
-          document.body.textContent?.includes(noneWaiting) ?? false,
-      };
-    }, [CHIP, rulesWords.noneWaiting] as const);
+    page.evaluate(
+      ([chip, noneWaiting]) => {
+        const button = document.querySelector(chip);
+        const names = [...document.querySelectorAll("[data-row-name]")].map(
+          (row) => row.getAttribute("data-row-name") ?? ""
+        );
+        return {
+          chip: button !== null,
+          pressed: button?.getAttribute("aria-pressed") ?? null,
+          waiting: names.includes("probe-waiting"),
+          quiet: names.includes("probe-quiet"),
+          stranded: document.body.textContent?.includes(noneWaiting) ?? false,
+        };
+      },
+      [CHIP, rulesWords.noneWaiting] as const
+    );
   const filtered = await read();
   const held = async () =>
     (await fleet.api<{ rules: { id: string }[] }>("/api/rules")).rules.some(

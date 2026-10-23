@@ -41,6 +41,7 @@ import type {
   FleetSyncReport,
 } from "../../../packages/core/src/index";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { noAccountRefusal } from "../../../packages/hub/src/placement";
 import { MACHINE, until } from "../../scratch-fleet";
 import { open, type Spec } from "../kit";
@@ -334,7 +335,7 @@ const spec: Spec = {
         () => false
       );
     if (faultShown) {
-      await fault.getByRole("button", { name: "Show details" }).click();
+      await fault.getByRole("button", { name: shellWords.showDetails }).click();
     }
     const shown = await page.evaluate((machineId) => {
       const li = document.querySelector(`li[data-machine="${machineId}"]`);
