@@ -3215,6 +3215,36 @@ public enum Words {
         public static let claudeDir = ".claude"
     }
 
+    public enum FindSecrets {
+        // packages/core/src/words/find-secrets.ts `findSecretWords`
+        /// A hidden secret, drawn: always this long, never its own length.
+        public static let dots = "••••••••"
+
+        /// A hidden secret's name, for a screen reader and the pointer.
+        public static let hidden = "Hidden secret, press to show"
+
+        /// What ↵ does on a row that holds one still hidden (Find's hint line).
+        public static let enter = "show secret"
+
+        /// Said once a secret is shown in place.
+        public static let shown = "Secret shown"
+
+        /// The setting's group, on Configure › Devices.
+        public static let group = "Find"
+
+        /// The setting.
+        public static let setting = "Hide secrets in Find"
+
+        public static let settingOn = "On: a password or key in Find's results shows as dots until you click it, so a screenshot of Find shows none."
+
+        public static let settingOff = "Off: Find shows every result's words as they were said."
+
+        /// The setting could not be read.
+        public static func unread(why: String) -> String {
+            "Could not read Find's settings — \(why)."
+        }
+    }
+
     public enum Spend {
         // packages/core/src/words/spend.ts `spendWords`
         public static let note = "Each project sets what it may spend in a day or a month on its Usage page, and follows this unless it chooses otherwise."

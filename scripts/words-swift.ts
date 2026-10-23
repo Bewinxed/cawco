@@ -250,6 +250,13 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     ],
   },
   {
+    // Find's hidden secrets: the dots, their name, what ↵ does, the setting.
+    swift: "FindSecrets",
+    members: [
+      { file: "words/find-secrets.ts", export: "findSecretWords", as: "" },
+    ],
+  },
+  {
     swift: "Spend",
     members: [
       { file: "words/spend.ts", export: "spendWords", as: "" },
