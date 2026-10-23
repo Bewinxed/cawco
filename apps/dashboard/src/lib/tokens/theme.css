@@ -314,6 +314,14 @@
   --spacing-c-pin-gone-ring: var(--c-pin-gone-ring);
   --spacing-c-comments-w: var(--c-comments-w);
   --spacing-c-pin-card-w: var(--c-pin-card-w);
+  --spacing-c-pin-card-reading-w: var(--c-pin-card-reading-w);
+  --spacing-c-pin-card-reading-room: var(--c-pin-card-reading-room);
+  --spacing-c-pin-card-fold-w: var(--c-pin-card-fold-w);
+  --spacing-c-pin-card-short-w: var(--c-pin-card-short-w);
+  --spacing-c-pin-card-short-max: var(--c-pin-card-short-max);
+  --spacing-c-comments-thread-w: var(--c-comments-thread-w);
+  --spacing-c-comments-thread-wide-w: var(--c-comments-thread-wide-w);
+  --spacing-c-thread-panel-min: var(--c-thread-panel-min);
   --spacing-c-target-stroke: var(--c-target-stroke);
   --spacing-c-target-gap: var(--c-target-gap);
   --spacing-c-sheet-inspector-w: var(--c-sheet-inspector-w);

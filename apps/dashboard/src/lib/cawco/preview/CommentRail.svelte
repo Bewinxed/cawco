@@ -36,7 +36,7 @@
   import type { Pin } from "@cawco/core/comments";
   import { parse } from "@cawco/core/find-match";
   import { pinName } from "@cawco/core/pin-name";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -96,7 +96,19 @@
     filter = $bindable("open"),
     sort = $bindable("newest"),
     scroll = $bindable(0),
+    width = "var(--c-comments-w)",
+    thread,
+    threadIn = "rail",
   }: {
+    /** Its width beside the page, a CSS length. */
+    width?: string;
+    /**
+     * The open comment's thread, held by the rail: in place of its list
+     * (`rail`), or in place of the open comment's row, the list round it
+     * (`row`).
+     */
+    thread?: Snippet;
+    threadIn?: "rail" | "row";
     pins: Pin[];
     /** Whether the pins are read yet (artifact-doc.ts `ListHold`). */
     hold: ListHold;
@@ -243,388 +255,422 @@
   {@const washed = pin.id === current}
   {@const firstWords =
     pin.thread[0]?.text.trim() || attached.map((one) => one.name).join(", ")}
-  <li class="group/row relative">
-    <!-- The row is the comment and the press that opens its thread; Resolve
+  {#if thread && threadIn === "row" && washed}
+    <!-- The open comment's row opens into its thread, the list round it:
+         its head and its reply stand, its entries scroll between them. -->
+    <li
+      data-slot="row-thread"
+      class="flex flex-auto min-h-0 flex-col gap-space-2 px-space-2 py-space-3 border-y border-border-hairline"
+    >
+      {@render thread()}
+    </li>
+  {:else}
+    <li class="group/row relative flex-none">
+      <!-- The row is the comment and the press that opens its thread; Resolve
          stands over its end. On the selection wash (its thread open) every
          word is `selected-ink` (DESIGN.md, Colors: Selected); off it, each
          part wears its dress (The Row Dress Rule). -->
-    <button
-      data-slot="pin-row"
-      aria-current={washed || undefined}
-      data-focused={pin.id === focused || undefined}
-      data-moved={gone || undefined}
-      class="flex items-start gap-space-3 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
-      data-pin-row={pin.number}
-      onblur={() => onhover(null)}
-      onclick={(event) =>
-        onopen(pin.id, event.detail === 0 ? "key" : "pointer")}
-      onfocus={() => onhover(pin.id)}
-      onpointerenter={() => onhover(pin.id)}
-      onpointerleave={() => onhover(null)}
-      type="button"
-    >
-      <span class="mark-cell">
-        <PinMark
-          dot={dotOf(pin)}
-          {gone}
-          number={pin.number}
-          state={markState(pin)}
-        />
-        {#if dotOf(pin) === "unread"}<span class="sr-only"
-            >{said.pinNewAnswer(pin.number)}</span
-          >{/if}
-      </span>
-      <span class="flex flex-1 min-w-0 flex-col">
-        <span class="flex min-w-0 items-baseline gap-space-2" data-line="place">
-          <span
-            data-slot="title"
-            class={[
-              "min-w-0 truncate type-label font-medium",
-              ink(washed, gone ? "text-ink-subtle" : "text-ink-row"),
-            ]}>{gone ? said.elementGone : pinName(pin)}</span
-          >
-          <span
-            data-slot="age"
-            class={[
-              "ms-auto flex-none type-meta num transition-opacity duration-(--dur-control) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
-              ink(washed, "text-ink-muted"),
-            ]}>{formatAgeShort(Date.parse(lastActivity(pin)))}</span
-          >
+      <button
+        data-slot="pin-row"
+        aria-current={washed || undefined}
+        data-focused={pin.id === focused || undefined}
+        data-moved={gone || undefined}
+        class="flex items-start gap-space-3 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+        data-pin-row={pin.number}
+        onblur={() => onhover(null)}
+        onclick={(event) =>
+          onopen(pin.id, event.detail === 0 ? "key" : "pointer")}
+        onfocus={() => onhover(pin.id)}
+        onpointerenter={() => onhover(pin.id)}
+        onpointerleave={() => onhover(null)}
+        type="button"
+      >
+        <span class="mark-cell">
+          <PinMark
+            dot={dotOf(pin)}
+            {gone}
+            number={pin.number}
+            state={markState(pin)}
+          />
+          {#if dotOf(pin) === "unread"}<span class="sr-only"
+              >{said.pinNewAnswer(pin.number)}</span
+            >{/if}
         </span>
-        {#if firstWords}
+        <span class="flex flex-1 min-w-0 flex-col">
           <span
-            data-line="words"
-            class={[
-              "mt-space-row line-clamp-2 type-body text-pretty wrap-anywhere",
-              ink(washed, "text-ink-strong"),
-            ]}
-            >{#each segments(firstWords) as part, at (at)}{#if part.hit}<mark
-                  class="bg-selection text-inherit rounded-xs">{part.text}</mark
-                >{:else}{part.text}{/if}{/each}</span
+            class="flex min-w-0 items-baseline gap-space-2"
+            data-line="place"
           >
-        {/if}
-        {#if attached.length > 0}
-          <!-- mark-line: a strip of thumbs and one count, no words beside a mark -->
-          <span
-            class="mt-space-1 flex items-center gap-space-1"
-            data-attach-strip
-          >
-            {#each attached.slice(0, STRIP) as one (one.ref)}
-              {#if one.kind === "image"}
-                <img
-                  alt={one.name}
-                  class="size-icon-lg flex-none rounded-xs border border-border-hairline object-cover"
-                  data-thumb
-                  src={one.ref}
-                />
-              {:else}
+            <span
+              data-slot="title"
+              class={[
+                "min-w-0 truncate type-label font-medium",
+                ink(washed, gone ? "text-ink-subtle" : "text-ink-row"),
+              ]}>{gone ? said.elementGone : pinName(pin)}</span
+            >
+            <span
+              data-slot="age"
+              class={[
+                "ms-auto flex-none type-meta num transition-opacity duration-(--dur-control) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
+                ink(washed, "text-ink-muted"),
+              ]}>{formatAgeShort(Date.parse(lastActivity(pin)))}</span
+            >
+          </span>
+          {#if firstWords}
+            <span
+              data-line="words"
+              class={[
+                "mt-space-row line-clamp-2 type-body text-pretty wrap-anywhere",
+                ink(washed, "text-ink-strong"),
+              ]}
+              >{#each segments(firstWords) as part, at (at)}{#if part.hit}<mark
+                    class="bg-selection text-inherit rounded-xs"
+                    >{part.text}</mark
+                  >{:else}{part.text}{/if}{/each}</span
+            >
+          {/if}
+          {#if attached.length > 0}
+            <!-- mark-line: a strip of thumbs and one count, no words beside a mark -->
+            <span
+              class="mt-space-1 flex items-center gap-space-1"
+              data-attach-strip
+            >
+              {#each attached.slice(0, STRIP) as one (one.ref)}
+                {#if one.kind === "image"}
+                  <img
+                    alt={one.name}
+                    class="size-icon-lg flex-none rounded-xs border border-border-hairline object-cover"
+                    data-thumb
+                    src={one.ref}
+                  />
+                {:else}
+                  <span
+                    class="grid size-icon-lg flex-none place-items-center rounded-xs border border-border-hairline bg-surface-recess text-ink-muted"
+                    data-thumb
+                    title={one.name}
+                    ><IconDocument
+                      aria-hidden="true"
+                      class="size-icon-sm"
+                    /><span class="sr-only">{one.name}</span></span
+                  >
+                {/if}
+              {/each}
+              {#if attached.length > STRIP}
                 <span
-                  class="grid size-icon-lg flex-none place-items-center rounded-xs border border-border-hairline bg-surface-recess text-ink-muted"
-                  data-thumb
-                  title={one.name}
-                  ><IconDocument aria-hidden="true" class="size-icon-sm" /><span
-                    class="sr-only">{one.name}</span
-                  ></span
+                  class={["type-meta num", ink(washed, "text-ink-muted")]}
+                  data-slot="more">+{attached.length - STRIP}</span
                 >
               {/if}
-            {/each}
-            {#if attached.length > STRIP}
-              <span
-                class={["type-meta num", ink(washed, "text-ink-muted")]}
-                data-slot="more">+{attached.length - STRIP}</span
-              >
-            {/if}
-          </span>
-        {/if}
-        {#if back?.kind === "notSent"}
-          <span
-            class={[
-              "mt-space-1 type-meta line-clamp-2 text-pretty wrap-anywhere",
-              ink(washed, "text-status-fail-ink"),
-            ]}
-            data-line="back"
-            data-not-sent="">{said.notSent(back.why)}</span
-          >
-        {:else if back?.kind === "live"}
-          <span
-            class={[
-              "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
-              ink(washed, "text-ink-muted"),
-            ]}
-            data-line="back"
-            ><span class="sr-only">Agent: </span><span
-              aria-hidden="true"
-              class="grid size-icon-sm flex-none place-items-center"
-              data-box
-              data-speaker="agent"><IconAgent class="size-icon-sm" /></span
-            ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{said.working}</span
-            ></span
-          >
-        {:else if back?.kind === "said"}
-          {@const Speaker = back.by === "agent" ? IconAgent : IconUser}
-          <span
-            class={[
-              "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
-              ink(washed, back.unread ? "text-ink-strong" : "text-ink-muted"),
-            ]}
-            data-line="back"
-            data-unread={back.unread || undefined}
-            ><span class="sr-only"
-              >{back.by === "agent" ? "Agent: " : "You: "}</span
-            ><span
-              aria-hidden="true"
+            </span>
+          {/if}
+          {#if back?.kind === "notSent"}
+            <span
               class={[
-                "grid size-icon-sm flex-none place-items-center",
-                back.by === "you" && !washed && "text-brand-ink",
+                "mt-space-1 type-meta line-clamp-2 text-pretty wrap-anywhere",
+                ink(washed, "text-status-fail-ink"),
               ]}
-              data-box
-              data-speaker={back.by}><Speaker class="size-icon-sm" /></span
-            ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{back.text}</span
-            ></span
+              data-line="back"
+              data-not-sent="">{said.notSent(back.why)}</span
+            >
+          {:else if back?.kind === "live"}
+            <span
+              class={[
+                "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
+                ink(washed, "text-ink-muted"),
+              ]}
+              data-line="back"
+              ><span class="sr-only">Agent: </span><span
+                aria-hidden="true"
+                class="grid size-icon-sm flex-none place-items-center"
+                data-box
+                data-speaker="agent"><IconAgent class="size-icon-sm" /></span
+              ><span
+                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                >{said.working}</span
+              ></span
+            >
+          {:else if back?.kind === "said"}
+            {@const Speaker = back.by === "agent" ? IconAgent : IconUser}
+            <span
+              class={[
+                "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
+                ink(washed, back.unread ? "text-ink-strong" : "text-ink-muted"),
+              ]}
+              data-line="back"
+              data-unread={back.unread || undefined}
+              ><span class="sr-only"
+                >{back.by === "agent" ? "Agent: " : "You: "}</span
+              ><span
+                aria-hidden="true"
+                class={[
+                  "grid size-icon-sm flex-none place-items-center",
+                  back.by === "you" && !washed && "text-brand-ink",
+                ]}
+                data-box
+                data-speaker={back.by}><Speaker class="size-icon-sm" /></span
+              ><span
+                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                >{back.text}</span
+              ></span
+            >
+          {/if}
+        </span>
+      </button>
+      {#if back?.kind === "notSent"}
+        <!-- Try again, one press, on a desk and under a finger alike. -->
+        <div class="flex justify-end px-space-2 pb-space-1">
+          <Button
+            aria-label={said.retryComment(pin.number)}
+            data-slot="pin-retry"
+            onclick={() => onretrypin(pin.id)}
+            pending={retrying.has(pin.id)}
+            size="sm"
+            variant="secondary"
           >
-        {/if}
-      </span>
-    </button>
-    {#if back?.kind === "notSent"}
-      <!-- Try again, one press, on a desk and under a finger alike. -->
-      <div class="flex justify-end px-space-2 pb-space-1">
-        <Button
-          aria-label={said.retryComment(pin.number)}
-          data-slot="pin-retry"
-          onclick={() => onretrypin(pin.id)}
-          pending={retrying.has(pin.id)}
-          size="sm"
-          variant="secondary"
+            <PendingContent icon={IconRefresh} pending={retrying.has(pin.id)} />
+            <span>{said.tryAgain}</span>
+          </Button>
+        </div>
+      {/if}
+      {#if !coarse.current}
+        <span
+          class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--dur-control) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
         >
-          <PendingContent icon={IconRefresh} pending={retrying.has(pin.id)} />
-          <span>{said.tryAgain}</span>
-        </Button>
-      </div>
-    {/if}
-    {#if !coarse.current}
-      <span
-        class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--dur-control) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
-      >
-        <Button
-          aria-label={pin.resolvedAt ? said.reopen : said.resolve}
-          icon={IconSuccess}
-          onclick={() => onresolve(pin.id, !pin.resolvedAt)}
-          size="icon-sm"
-          title={pin.resolvedAt ? said.reopen : said.resolve}
-          variant="ghost"
-        />
-      </span>
-    {/if}
-  </li>
+          <Button
+            aria-label={pin.resolvedAt ? said.reopen : said.resolve}
+            icon={IconSuccess}
+            onclick={() => onresolve(pin.id, !pin.resolvedAt)}
+            size="icon-sm"
+            title={pin.resolvedAt ? said.reopen : said.resolve}
+            variant="ghost"
+          />
+        </span>
+      {/if}
+    </li>
+  {/if}
 {/snippet}
 
 <aside
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:w-full data-[layout=sheet]:max-h-full data-[layout=sheet]:border-t data-[layout=sheet]:border-border-hairline data-[layout=sheet]:rounded-ss-lg data-[layout=sheet]:rounded-se-lg data-[layout=sheet]:shadow-drawer"
+  data-holds={thread ? threadIn : undefined}
+  class="group/rail flex flex-col min-h-0 w-(--rail-w) max-w-full bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:w-full data-[layout=sheet]:max-h-full data-[layout=sheet]:border-t data-[layout=sheet]:border-border-hairline data-[layout=sheet]:rounded-ss-lg data-[layout=sheet]:rounded-se-lg data-[layout=sheet]:shadow-drawer"
+  style:--rail-w={width}
 >
-  <header
-    data-slot="head"
-    class="flex flex-none items-center gap-space-1 h-c-sheet-inspector-head-h ps-space-4 pe-space-2"
-  >
-    <h2
-      data-slot="title"
-      class="flex-1 min-w-0 m-0 truncate text-ink-strong type-label"
+  {#if thread && threadIn === "rail"}
+    <!-- The rail holds the open comment's thread in place of its list: its
+         head and its reply stand, its entries scroll. Its Close gives the
+         list back. -->
+    <div
+      data-slot="rail-thread"
+      class="flex flex-auto min-h-0 flex-col gap-space-2 p-space-3"
     >
-      {said.comments}
-    </h2>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger
-        aria-label={said.sort}
-        size="icon-sm"
-        title={said.sort}
-        variant="ghost"
+      {@render thread()}
+    </div>
+  {:else}
+    <header
+      data-slot="head"
+      class="flex flex-none items-center gap-space-1 h-c-sheet-inspector-head-h ps-space-4 pe-space-2"
+    >
+      <h2
+        data-slot="title"
+        class="flex-1 min-w-0 m-0 truncate text-ink-strong type-label"
       >
-        <IconSort />
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
-        <DropdownMenu.RadioGroup
-          onValueChange={(next) => {
-            sort = next === "top" ? "top" : "newest";
-          }}
-          value={sort}
+        {said.comments}
+      </h2>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          aria-label={said.sort}
+          size="icon-sm"
+          title={said.sort}
+          variant="ghost"
         >
-          <DropdownMenu.RadioItem value="newest"
-            >{said.newestFirst}</DropdownMenu.RadioItem
+          <IconSort />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.RadioGroup
+            onValueChange={(next) => {
+              sort = next === "top" ? "top" : "newest";
+            }}
+            value={sort}
           >
-          <DropdownMenu.RadioItem value="top"
-            >{said.topOfPageFirst}</DropdownMenu.RadioItem
-          >
-        </DropdownMenu.RadioGroup>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
-    <Button
-      aria-label={said.onWholePage}
-      icon={IconPlus}
-      onclick={onpage}
-      size="icon-sm"
-      title={said.onWholePage}
-      variant="ghost"
-    />
-    <Button
-      aria-label={said.closeComments}
-      icon={IconClose}
-      onclick={onclose}
-      size="icon-sm"
-      title={said.closeComments}
-      variant="ghost"
-    />
-  </header>
-  <div class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-2">
-    <InputGroup.Root>
-      <InputGroup.Addon><IconSearch /></InputGroup.Addon>
-      <InputGroup.Input
-        aria-keyshortcuts="/"
-        aria-label={said.searchComments}
-        data-slot="search"
-        onkeydown={(event: KeyboardEvent) => {
-          if (event.key === "Escape" && query) {
-            event.preventDefault();
-            event.stopPropagation();
-            query = "";
-          }
-        }}
-        placeholder={said.searchComments}
-        type="search"
-        bind:ref={searchField}
-        bind:value={query}
+            <DropdownMenu.RadioItem value="newest"
+              >{said.newestFirst}</DropdownMenu.RadioItem
+            >
+            <DropdownMenu.RadioItem value="top"
+              >{said.topOfPageFirst}</DropdownMenu.RadioItem
+            >
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+      <Button
+        aria-label={said.onWholePage}
+        icon={IconPlus}
+        onclick={onpage}
+        size="icon-sm"
+        title={said.onWholePage}
+        variant="ghost"
       />
-    </InputGroup.Root>
-    <Tabs
-      onValueChange={(next) => {
-        filter = next as "open" | "resolved";
-      }}
-      size="compact"
-      value={filter}
-      values={["open", "resolved"]}
-    >
-      <TabsList aria-label="Which comments">
-        <TabItem label={tab(said.open, openPins.length)} value="open" />
-        <TabItem
-          label={tab(said.resolved, resolvedPins.length)}
-          value="resolved"
+      <Button
+        aria-label={said.closeComments}
+        icon={IconClose}
+        onclick={onclose}
+        size="icon-sm"
+        title={said.closeComments}
+        variant="ghost"
+      />
+    </header>
+    <div class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-2">
+      <InputGroup.Root>
+        <InputGroup.Addon><IconSearch /></InputGroup.Addon>
+        <InputGroup.Input
+          aria-keyshortcuts="/"
+          aria-label={said.searchComments}
+          data-slot="search"
+          onkeydown={(event: KeyboardEvent) => {
+            if (event.key === "Escape" && query) {
+              event.preventDefault();
+              event.stopPropagation();
+              query = "";
+            }
+          }}
+          placeholder={said.searchComments}
+          type="search"
+          bind:ref={searchField}
+          bind:value={query}
         />
-      </TabsList>
-    </Tabs>
-  </div>
-  {#if down !== null && failed === null}
-    <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
-    <RowFault
-      data-pin-list-down
-      again={onretry}
-      class="shrink-0 py-space-1 px-space-3"
-      details={down}
-      end="var(--space-2)"
-      indent="var(--space-2)"
-      reason={LINK_DROPPED}
-    />
-  {/if}
-  <div
-    data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain border-t border-border-hairline kit-edge-fade-block"
-    onscroll={(event) => {
-      scroll = event.currentTarget.scrollTop;
-    }}
-    style:--fault-indent="var(--space-2)"
-    style:--fault-end="var(--space-2)"
-  >
-    {#if hold === "quiet"}
-      <!-- Inside the wait's grace: its plain surface (The Real Wait Rule). -->
-    {:else if hold === "reading"}
-      <div
-        data-slot="pin-list-reading"
-        aria-label={words.readingComments}
-        class="px-space-2 py-space-2"
-        role="status"
-        out:revealOut
+      </InputGroup.Root>
+      <Tabs
+        onValueChange={(next) => {
+          filter = next as "open" | "resolved";
+        }}
+        size="compact"
+        value={filter}
+        values={["open", "resolved"]}
       >
-        <!-- Each stands for a row as a row is dressed (The Row Dress Rule): its
+        <TabsList aria-label="Which comments">
+          <TabItem label={tab(said.open, openPins.length)} value="open" />
+          <TabItem
+            label={tab(said.resolved, resolvedPins.length)}
+            value="resolved"
+          />
+        </TabsList>
+      </Tabs>
+    </div>
+    {#if down !== null && failed === null}
+      <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
+      <RowFault
+        data-pin-list-down
+        again={onretry}
+        class="shrink-0 py-space-1 px-space-3"
+        details={down}
+        end="var(--space-2)"
+        indent="var(--space-2)"
+        reason={LINK_DROPPED}
+      />
+    {/if}
+    <div
+      data-slot="rows"
+      class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain border-t border-border-hairline kit-edge-fade-block group-data-[holds=row]/rail:flex group-data-[holds=row]/rail:flex-col"
+      onscroll={(event) => {
+        scroll = event.currentTarget.scrollTop;
+      }}
+      style:--fault-indent="var(--space-2)"
+      style:--fault-end="var(--space-2)"
+    >
+      {#if hold === "quiet"}
+        <!-- Inside the wait's grace: its plain surface (The Real Wait Rule). -->
+      {:else if hold === "reading"}
+        <div
+          data-slot="pin-list-reading"
+          aria-label={words.readingComments}
+          class="px-space-2 py-space-2"
+          role="status"
+          out:revealOut
+        >
+          <!-- Each stands for a row as a row is dressed (The Row Dress Rule): its
              place and age, its words, what came back; at that row's height. -->
-        {#each [0, 1, 2] as skeleton (skeleton)}
-          <span
-            class="flex items-start gap-space-3 min-h-c-artifact-row-h px-space-2 py-space-2"
-            data-slot="skeleton-row"
-          >
-            <span class="mark-cell">
-              <Skeleton cell="pin" radius="pill" />
-            </span>
-            <span class="flex flex-1 min-w-0 flex-col">
-              <span class="flex min-w-0 items-start gap-space-2">
-                <Skeleton class="w-3/5" line="label" radius="text" />
+          {#each [0, 1, 2] as skeleton (skeleton)}
+            <span
+              class="flex items-start gap-space-3 min-h-c-artifact-row-h px-space-2 py-space-2"
+              data-slot="skeleton-row"
+            >
+              <span class="mark-cell">
+                <Skeleton cell="pin" radius="pill" />
+              </span>
+              <span class="flex flex-1 min-w-0 flex-col">
+                <span class="flex min-w-0 items-start gap-space-2">
+                  <Skeleton class="w-3/5" line="label" radius="text" />
+                  <Skeleton
+                    class="ms-auto"
+                    line="meta"
+                    radius="text"
+                    width="age"
+                  />
+                </span>
                 <Skeleton
-                  class="ms-auto"
+                  class="mt-space-row w-17/20"
+                  line="body"
+                  radius="text"
+                />
+                <Skeleton
+                  class="mt-space-1"
                   line="meta"
                   radius="text"
-                  width="age"
+                  width="name"
                 />
               </span>
-              <Skeleton
-                class="mt-space-row w-17/20"
-                line="body"
-                radius="text"
-              />
-              <Skeleton
-                class="mt-space-1"
-                line="meta"
-                radius="text"
-                width="name"
-              />
             </span>
-          </span>
-        {/each}
-      </div>
-    {:else if failed !== null}
-      <RowFault
-        data-pin-list-failed
-        again={onretry}
-        class="py-space-2 px-space-2"
-        reason={words.commentsNotRead(failed)}
-      />
-    {:else}
-      <div
-        data-slot="pin-list-read"
-        class="px-space-2 py-space-2"
-        in:reveal
-        {@attach keepScroll}
-      >
-        {#if shown.length > 0}
-          <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
-            {#each shown as pin (pin.id)}
-              {@render row(pin)}
-            {/each}
-          </ol>
-        {:else if asked.trim()}
-          <p
-            data-slot="pin-list-empty"
-            class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
-          >
-            {said.noMatch(asked.trim())}
-          </p>
-        {:else if filter === "open"}
-          <p
-            data-slot="pin-list-empty"
-            class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
-          >
-            <span class="text-ink-strong type-label">{said.noneOpen}</span>
-            {coarse.current ? said.noneOpenTap : said.noneOpenClick}
-          </p>
-        {:else}
-          <p
-            data-slot="pin-list-empty"
-            class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
-          >
-            {said.noneResolved}
-          </p>
-        {/if}
-      </div>
-    {/if}
-  </div>
+          {/each}
+        </div>
+      {:else if failed !== null}
+        <RowFault
+          data-pin-list-failed
+          again={onretry}
+          class="py-space-2 px-space-2"
+          reason={words.commentsNotRead(failed)}
+        />
+      {:else}
+        <div
+          data-slot="pin-list-read"
+          class="px-space-2 py-space-2 group-data-[holds=row]/rail:flex group-data-[holds=row]/rail:flex-auto group-data-[holds=row]/rail:min-h-0 group-data-[holds=row]/rail:flex-col"
+          in:reveal
+          {@attach keepScroll}
+        >
+          {#if shown.length > 0}
+            <ol
+              class="flex flex-col gap-space-row m-0 p-0 list-none group-data-[holds=row]/rail:flex-auto group-data-[holds=row]/rail:min-h-0"
+            >
+              {#each shown as pin (pin.id)}
+                {@render row(pin)}
+              {/each}
+            </ol>
+          {:else if asked.trim()}
+            <p
+              data-slot="pin-list-empty"
+              class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
+            >
+              {said.noMatch(asked.trim())}
+            </p>
+          {:else if filter === "open"}
+            <p
+              data-slot="pin-list-empty"
+              class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
+            >
+              <span class="text-ink-strong type-label">{said.noneOpen}</span>
+              {coarse.current ? said.noneOpenTap : said.noneOpenClick}
+            </p>
+          {:else}
+            <p
+              data-slot="pin-list-empty"
+              class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
+            >
+              {said.noneResolved}
+            </p>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  {/if}
 </aside>

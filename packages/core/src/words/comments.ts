@@ -35,6 +35,10 @@ export const commentWords = {
   resolvedAgo: (age: string) =>
     age === "now" ? "Resolved just now" : `Resolved ${age} ago`,
   close: "Close",
+  // Exploration (comment card sizing): the card's way to the rail, and a folded thread's middle.
+  openInComments: "Open in Comments",
+  moreReplies: (n: number) => (n === 1 ? "1 more reply" : `${n} more replies`),
+  resizeThread: "Resize the thread",
   // The rail.
   comments: "Comments",
   searchComments: "Search comments",

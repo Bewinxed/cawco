@@ -36,9 +36,22 @@
     label,
     slot,
     pin,
+    width: cardWidth = "var(--c-pin-card-w)",
+    cap = "calc(100% - 2 * var(--space-2))",
+    reach,
     float = $bindable(),
     children,
   }: {
+    /** Its width, a CSS length the well's room caps (the pin room is the size container, so `cqi` is the well's). */
+    width?: string;
+    /** Its tallest, a CSS length (`%` of the well's height). */
+    cap?: string;
+    /**
+     * px: its tallest is the room from where it stands down to the well's
+     * foot, until that room is under `reach`; then it takes the well's
+     * height, and its foot meets the well's.
+     */
+    reach?: number;
     /** The pill's box in the well, px; null while it is not on screen. */
     mark: Box | null;
     /** The well's room, px. */
@@ -109,6 +122,17 @@
     };
   });
 
+  /** Its tallest under `reach`: the room below where it stands, else the well's. */
+  const reached = $derived.by(() => {
+    if (sheet || reach === undefined || !mark) {
+      return null;
+    }
+    const top =
+      place?.side === "below" ? mark.y + mark.h + gap : Math.max(gap, mark.y);
+    const below = room.h - top - gap;
+    return below >= reach ? below : room.h - 2 * gap;
+  });
+
   /** In from the pill: `--press-scale` to its own size as it fades in. */
   function grow(_node: Element) {
     const travel = motionOk.current && !sheet;
@@ -145,8 +169,10 @@
   style:--float-x={place ? `${place.left}px` : undefined}
   style:--float-y={place ? `${place.top}px` : undefined}
   style:--float-origin={place?.origin ?? "bottom center"}
-  style:--float-w="min(var(--c-pin-card-w), calc(100% - 2 * var(--space-2)))"
-  style:--float-max="calc(100% - 2 * var(--space-2))"
+  style:--float-w={`min(${cardWidth}, calc(100% - 2 * var(--space-2)))`}
+  style:--float-max={reached === null
+    ? `min(${cap}, calc(100% - 2 * var(--space-2)))`
+    : `${reached}px`}
   style:--sheet-pb="calc(var(--space-3) + env(safe-area-inset-bottom, 0px))"
   in:grow
   out:fade

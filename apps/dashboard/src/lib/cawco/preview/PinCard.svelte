@@ -50,6 +50,7 @@
     IconLink,
     IconPin,
     IconReopen,
+    IconSidebar,
     IconSuccess,
     IconTrash,
   } from "#lib/icons.js";
@@ -92,7 +93,26 @@
     onfind,
     onring,
     ondraft,
+    head: headForm = "line",
+    fold,
+    onrail,
+    brief = false,
+    onmore,
   }: {
+    /**
+     * Its head: `line`, the pill, what it stands on in one line and the
+     * actions; `quote`, the pill and the actions over what it stands on in
+     * two lines at most (its whole words in the tooltip).
+     */
+    head?: "line" | "quote";
+    /** px: a card narrower than this folds Resolve and Delete into its More menu. */
+    fold?: number;
+    /** Its thread opens in the Comments rail: More's Open in Comments. */
+    onrail?: () => void;
+    /** The first entry and the last, the ones between them one press: no scroll inside it. */
+    brief?: boolean;
+    /** The press on the entries between: the whole thread, where it opens. */
+    onmore?: () => void;
     pin: Pin;
     /** What it stands on, in words (core pin-name.ts). */
     name: string;
@@ -276,6 +296,71 @@
     asked = id;
   });
 
+  /** The card's own width, read from what holds it: `fold` compares it. */
+  let cardW = $state(0);
+  $effect(() => {
+    const holder = head?.parentElement;
+    if (!(holder && fold)) {
+      return;
+    }
+    const watch = frameObserver(() => {
+      cardW = holder.offsetWidth;
+    });
+    watch.observe(holder);
+    return () => watch.disconnect();
+  });
+  const folded = $derived(!!fold && cardW > 0 && cardW < fold);
+
+  /** The entries drawn, each with its neighbours as drawn: all, or under `brief` the first and the last. */
+  const drawn = $derived(
+    brief && pin.thread.length > 2
+      ? [pin.thread[0], pin.thread.at(-1) ?? pin.thread[0]]
+      : pin.thread
+  );
+  const between = $derived(pin.thread.length - drawn.length);
+
+  /** More's actions: Copy link, Pin it somewhere else while its element is gone, and what folds into it. */
+  const moreActions = $derived([
+    ...(folded
+      ? [
+          pin.resolvedAt
+            ? {
+                icon: IconReopen,
+                label: said.reopen,
+                onselect: () => onresolve(false),
+              }
+            : {
+                icon: IconSuccess,
+                label: said.resolve,
+                onselect: () => onresolve(true),
+              },
+        ]
+      : []),
+    ...(onrail
+      ? [{ icon: IconSidebar, label: said.openInComments, onselect: onrail }]
+      : []),
+    { icon: IconLink, label: said.copyLink, onselect: copyLink },
+    ...(pin.movedAt
+      ? [
+          {
+            icon: IconPin,
+            label: said.placeElsewhere,
+            onselect: () => onplace(true),
+          },
+        ]
+      : []),
+    ...(folded
+      ? [
+          {
+            destructive: true,
+            icon: IconTrash,
+            label: said.deleteComment,
+            onselect: askDelete,
+          },
+        ]
+      : []),
+  ]);
+
   const placeholder = $derived(
     pin.resolvedAt ? said.reopenHint : said.replyHint
   );
@@ -327,79 +412,56 @@
   {/if}
 {/snippet}
 
-<header
-  bind:this={head}
-  data-slot="head"
-  class="flex shrink-0 items-center gap-space-2 coarse:gap-space-5 mark-line"
->
-  <span class="mark-cell">
-    <PinMark
-      focused
-      gone={!!pin.movedAt}
-      number={pin.number}
-      state={markState(pin)}
-      tail="bottom-start"
-    />
-  </span>
+{#snippet nameButton(clamp: "line" | "quote")}
   <button
     data-slot="name"
-    class="flex-1 min-w-0 px-0 border-none bg-transparent text-start text-ink-strong type-label overflow-clip text-ellipsis whitespace-nowrap rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+    data-clamp={clamp}
+    class="min-w-0 px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring data-[clamp=line]:flex-1 data-[clamp=line]:overflow-clip data-[clamp=line]:text-ellipsis data-[clamp=line]:whitespace-nowrap"
     onclick={onfind}
     title={name}
-    type="button">{name}</button
+    type="button"
+    >{#if clamp === "quote"}<!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. --><span
+        class="line-clamp-2 text-pretty wrap-anywhere">{name}</span
+      >{:else}{name}{/if}</button
   >
-  {#if pin.resolvedAt}
+{/snippet}
+{#snippet actions()}
+  {#if !folded}
+    {#if pin.resolvedAt}
+      <Button
+        data-box
+        aria-label={said.reopen}
+        icon={IconReopen}
+        onclick={() => onresolve(false)}
+        size="icon-sm"
+        title={said.reopen}
+        variant="ghost"
+      />
+    {:else}
+      <Button
+        data-box
+        aria-label={said.resolve}
+        icon={IconSuccess}
+        onclick={() => onresolve(true)}
+        size="icon-sm"
+        title={said.resolve}
+        variant="ghost"
+      />
+    {/if}
+    <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
     <Button
       data-box
-      aria-label={said.reopen}
-      icon={IconReopen}
-      onclick={() => onresolve(false)}
+      aria-label={said.deleteComment}
+      data-slot="delete"
+      icon={IconTrash}
+      onclick={askDelete}
       size="icon-sm"
-      title={said.reopen}
-      variant="ghost"
-    />
-  {:else}
-    <Button
-      data-box
-      aria-label={said.resolve}
-      icon={IconSuccess}
-      onclick={() => onresolve(true)}
-      size="icon-sm"
-      title={said.resolve}
+      title={said.deleteComment}
       variant="ghost"
     />
   {/if}
-  <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
-  <Button
-    data-box
-    aria-label={said.deleteComment}
-    data-slot="delete"
-    icon={IconTrash}
-    onclick={askDelete}
-    size="icon-sm"
-    title={said.deleteComment}
-    variant="ghost"
-  />
   <span class="flex flex-none" data-box>
-    <RowMenu
-      actions={[
-        {
-          icon: IconLink,
-          label: said.copyLink,
-          onselect: copyLink,
-        },
-        ...(pin.movedAt
-          ? [
-              {
-                icon: IconPin,
-                label: said.placeElsewhere,
-                onselect: () => onplace(true),
-              },
-            ]
-          : []),
-      ]}
-      label={`comment ${pin.number}`}
-    />
+    <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
   </span>
   <Button
     data-box
@@ -410,7 +472,53 @@
     title={said.close}
     variant="ghost"
   />
-</header>
+{/snippet}
+{#snippet pill()}
+  <span class="mark-cell">
+    <PinMark
+      focused
+      gone={!!pin.movedAt}
+      number={pin.number}
+      state={markState(pin)}
+      tail="bottom-start"
+    />
+  </span>
+{/snippet}
+{#if headForm === "quote"}
+  <!-- The pill and the actions, then what it stands on in two lines at most. -->
+  <header
+    bind:this={head}
+    data-slot="head"
+    data-head="quote"
+    data-folded={folded || undefined}
+    class="flex shrink-0 flex-col gap-space-1"
+  >
+    <div
+      class="flex items-center gap-space-2 coarse:gap-space-5 mark-line"
+      data-slot="head-row"
+    >
+      {@render pill()}
+      <span
+        class="ms-auto flex items-center gap-space-2 coarse:gap-space-5"
+        data-box
+      >
+        {@render actions()}
+      </span>
+    </div>
+    {@render nameButton("quote")}
+  </header>
+{:else}
+  <header
+    bind:this={head}
+    data-slot="head"
+    data-folded={folded || undefined}
+    class="flex shrink-0 items-center gap-space-2 coarse:gap-space-5 mark-line"
+  >
+    {@render pill()}
+    {@render nameButton("line")}
+    {@render actions()}
+  </header>
+{/if}
 {#if parent}
   <p
     data-slot="chain"
@@ -499,8 +607,9 @@
     </div>
   {/snippet}
   <div
-    class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
+    class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0 data-brief:overflow-y-clip"
     data-whole={squeezed || undefined}
+    data-brief={brief || undefined}
     data-pin-room
     onscroll={readAt}
     bind:this={roomEl}
@@ -509,11 +618,24 @@
          (its later entries under the first's speaker line), the person's
          run one well. -->
     <ol data-slot="thread" class="m-0 p-0 list-none">
-      {#each pin.thread as entry, i (entry.id)}
-        {@const grouped = pin.thread[i - 1]?.by === entry.by}
+      {#each drawn as entry, i (entry.id)}
+        {@const grouped =
+          i > 0 && between === 0 && drawn[i - 1]?.by === entry.by}
+        {#if i === 1 && between > 0}
+          <!-- The entries between the first and the last: one press opens the whole thread. -->
+          <li data-slot="between" class="my-space-2">
+            <Button
+              label={said.moreReplies(between)}
+              onclick={onmore}
+              pad="none"
+              size="sm"
+              variant="link"
+            />
+          </li>
+        {/if}
         <li data-slot="entry" class="group/entry" data-by={entry.by}>
           {#if entry.by === "person"}
-            {@const runsOn = pin.thread[i + 1]?.by === "person"}
+            {@const runsOn = between === 0 && drawn[i + 1]?.by === "person"}
             <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
               {#if !grouped}
                 <Who name="You" shown timestamp={entry.at} you />

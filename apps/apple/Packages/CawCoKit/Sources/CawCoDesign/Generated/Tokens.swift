@@ -562,6 +562,24 @@ public enum Size {
     public static let cCommentsW: Double = 320
     /// A comment's composer and its thread, each beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin): one width for both, so a card never changes width as it goes from composer to thread. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph.
     public static let cPinCardW: Double = 280
+    /// Exploration, option A (the reading card): the composer's and the thread's one width, two fifths of the well (the pin room is the size container) held between 280px and 480px. 415px at a 1357px pane with the 320px rail open, about 50 characters a line (Google Docs: 35 to 50; Radix Themes maxWidth 480).
+    /// Fluid on the web (clamp); its bounds in points.
+    public static let cPinCardReadingW: ClosedRange<Double> = 280...480
+    /// Exploration, option A: the room from the pill's top to the well's foot under which the reading card stops hanging from the pill and takes the well's height, its foot on the well's.
+    public static let cPinCardReadingRoom: Double = 320
+    /// Exploration, option A: a card narrower than this folds Resolve and Delete into its More menu, so the head keeps the pill, More and Close.
+    public static let cPinCardFoldW: Double = 360
+    /// Exploration, option B (the short card): the card's fixed width (Air, xNet).
+    public static let cPinCardShortW: Double = 320
+    /// Exploration, option B: the short card's tallest, and at most two fifths of the well; a thread that needs more opens in the rail.
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cPinCardShortMax: Double = 400
+    /// Exploration, options B and C: the Comments rail while it holds one thread, wider than its list (Mattermost's thread panel: 400, 500 on a wide screen).
+    public static let cCommentsThreadW: Double = 400
+    /// Exploration, option B: the rail holding a thread on a pane 1680px or wider.
+    public static let cCommentsThreadWideW: Double = 500
+    /// Exploration, option C (the thread panel): the narrowest the panel's handle drags it to (Crit). Its widest is half the pane (Glance).
+    public static let cThreadPanelMin: Double = 300
     /// The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule).
     public static let cTargetStroke: Double = 1
     /// How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule).
