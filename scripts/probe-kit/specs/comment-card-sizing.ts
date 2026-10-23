@@ -631,7 +631,9 @@ async function canvasLoads(kit: Kit, base: string): Promise<void> {
       const [nav] = performance.getEntriesByType(
         "navigation"
       ) as PerformanceNavigationTiming[];
-      const loads = performance.getEntriesByType("resource");
+      const loads = performance.getEntriesByType(
+        "resource"
+      ) as PerformanceResourceTiming[];
       const at = nav?.loadEventStart ?? 0;
       return {
         load: Math.round(at),
