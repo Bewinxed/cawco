@@ -70,7 +70,7 @@
     cards: ArtifactCard[];
     /** The masonry of thumbnails, or one row each. */
     view?: ArtifactsView;
-    /** The artifact on show beside Files. */
+    /** The artifact on show in the session's panel. */
     chosen?: string | null;
     /** Skeleton cards standing for a list still read. */
     ghosts?: number;

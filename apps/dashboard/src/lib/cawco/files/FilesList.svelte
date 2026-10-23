@@ -84,7 +84,6 @@
 
   let {
     instanceId,
-    chosen = null,
     segmented = false,
     onpick,
     onshow,
@@ -94,8 +93,6 @@
   }: {
     /** The session whose files these are. */
     instanceId: string;
-    /** The artifact on show beside Files. */
-    chosen?: string | null;
     /** One list at a time under a segmented control: the phone's drawer. */
     segmented?: boolean;
     /** An artifact chosen: it opens where the caller shows it. */
@@ -124,6 +121,12 @@
     const harness = cawco.session(instanceId)?.harness;
     const agent = harness ? accountsWords.harnesses[harness] : "the agent";
     return `Ask ${agent} for a page`;
+  });
+
+  /** The artifact on show in the session's panel: its card wears the selection pill. */
+  const chosen = $derived.by(() => {
+    const preview = cawco.previews[instanceId];
+    return preview?.state === "open" ? preview.artifact.id : null;
   });
 
   const uid = $props.id();

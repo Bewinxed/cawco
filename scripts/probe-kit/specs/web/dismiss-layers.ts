@@ -19,7 +19,7 @@
  *  3. opened again, Escape closes it and the focus is back on its trigger;
  *  4. on its first open, every kit floating surface the act brought onto
  *     the page (a popover, a dropdown or context menu or their submenus, a
- *     select, the Files float) came in by one animation on itself, `popIn`
+ *     select) came in by one animation on itself, `popIn`
  *     (motion/pop) over --dur-pop: never `@starting-style` transitions,
  *     which WebKit sometimes skips for an element just added
  *     (bugs.webkit.org 275184). Watched, never held: the run plays as the
@@ -52,7 +52,6 @@ const STATES = [
   "caw-panel/open",
   "workflows/new",
   "artifact/menu",
-  "files/float-menu",
   "strip-new/popover",
 ] as const;
 
@@ -491,7 +490,7 @@ interface Leg {
 const showsOf = ({ state, scene }: Leg): string =>
   (typeof state.ready === "function" ? state.ready(scene) : state.ready).shows;
 
-/** Every kit floating surface: what bits-ui's contents and the Files float draw. */
+/** Every kit floating surface: what bits-ui's contents draw. */
 const KIT_SURFACE = [
   "popover-content",
   "dropdown-menu-content",
@@ -501,7 +500,6 @@ const KIT_SURFACE = [
   "select-content",
 ]
   .map((slot) => `[data-slot="${slot}"]`)
-  .concat("[data-files-float]")
   .join(", ");
 
 /**
@@ -593,7 +591,7 @@ function entrances(surface: string): {
     }
   }
   return [...surfaces].map(([el, list]) => ({
-    slot: el.getAttribute("data-slot") ?? "files-float",
+    slot: el.getAttribute("data-slot") ?? "",
     runs: list.map(({ duration, easing, kind }) => ({
       duration,
       easing,

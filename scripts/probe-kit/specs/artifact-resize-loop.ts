@@ -1329,9 +1329,7 @@ export const runNarrow = async (
  * The artifact chosen in Files, at a desk: the session open at `width`, its
  * panel open (`panel: "open"`: in the split, or the sheet on the composer
  * in a pane under 900px) or shut first (`"shut"`), the top bar's Files item
- * pressed and the artifact's card in it chosen. Where the page has room
- * beside Files for the panel at its least width, the panel floats on Files'
- * leading side (FilesFloat); where it has none, the pick opens in the
+ * pressed and the artifact's card in it chosen: the pick opens in the
  * session's own panel and Files goes (FilesFace `pick`). Opening Files,
  * choosing it, and the page settling after send the hub nothing and log no
  * loop.
@@ -1395,31 +1393,13 @@ export const runFiles = async (
   await card.waitFor({ state: "visible", timeout: 30_000 });
   await settle(page);
   await card.click();
-  // Where the pick put the panel: floating beside Files, or in the
-  // session's own panel (the split, or the sheet in a pane under 900px)
-  // with Files gone. Its page drawn there.
-  const where = (await until(
-    "the pick placed",
-    () =>
-      page.evaluate(() => {
-        if (document.querySelector('[data-files-float][data-state="open"]')) {
-          return "floating";
-        }
-        return document.querySelector(
-          '[data-glass-card][data-glass-card-frame="files-pop"]'
-        )
-          ? null
-          : "panel";
-      }),
-    Boolean,
-    30_000
-  )) as "floating" | "panel";
+  // The pick in the session's own panel (the split, or the sheet in a pane
+  // under 900px), Files gone, its page drawn there.
   await page
-    .locator(
-      where === "floating"
-        ? '[data-files-float] iframe[title="Preview"]'
-        : PANEL_FRAME
-    )
+    .locator('[data-glass-card][data-glass-card-frame="files-pop"]')
+    .waitFor({ state: "detached", timeout: 30_000 });
+  await page
+    .locator(PANEL_FRAME)
     .first()
     .contentFrame()
     .locator("h1")
@@ -1431,7 +1411,7 @@ export const runFiles = async (
     kit,
     page,
     said,
-    `${leg.name}: choosing the artifact in Files (it opened ${where === "floating" ? "floating beside Files" : "in the session's panel"})`,
+    `${leg.name}: choosing the artifact in Files (it opened in the session's panel)`,
     start,
     opened
   );
@@ -1693,7 +1673,7 @@ export const runPageSweep = async (
 const PANEL_FRAME =
   '[data-side-pane] iframe[title="Preview"], [data-preview-sheet] iframe[title="Preview"]';
 
-/** The desk's width, and the band under 1100 where Files and the panel beside it fill the page. */
+/** The desk's widths Files is picked from, down to the split's edge. */
 const FILES_WIDTHS = [1440, 1100, 1000, 920];
 
 const spec: Spec = { name: "artifact-resize-loop", run };

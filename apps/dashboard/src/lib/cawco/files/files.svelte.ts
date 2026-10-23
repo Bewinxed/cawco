@@ -14,10 +14,11 @@
  * changes). Until a read answers there is no count and no "nothing" line.
  *
  * Where it stands: on a desk, a face of the bar glass's one card (bar-glass
- * `files`, GlassCard); a file chosen there floats on Files' leading side
- * (`picked`, FilesFloat). On a phone, the house bottom drawer (`sheet`,
+ * `files`, GlassCard). On a phone, the house bottom drawer (`sheet`,
  * FilesSheet), opened from the sidebar's Files row or a finger from the
- * screen's right edge.
+ * screen's right edge. Either way, an artifact chosen there opens in the
+ * session's own panel, and Files goes (owner: "if i open an artifact from
+ * the folder tab, it doesn't dismiss the panel").
  */
 import type { ArtifactSummary, SessionAttachment } from "@cawco/core";
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
@@ -405,64 +406,6 @@ class FilesPlace {
    * `invoker` does for Jump).
    */
   returnTo: HTMLElement | null = null;
-  /**
-   * The artifact chosen in Files on a desk, floating on Files' leading
-   * side: the session's panel shows it there rather than in the split
-   * while Files is open (SideSplit reads it). `panelWasOpen`: the session's
-   * panel stood open before Files opened it, so Files put away gives it
-   * back to the split; otherwise Files closes it, and no conversation moves
-   * for a panel the person had shut.
-   */
-  picked = $state<{
-    instanceId: string;
-    id: string;
-    panelWasOpen: boolean;
-    /** Chosen from the keyboard: the focus goes to the panel's name. */
-    byKeyboard: boolean;
-  } | null>(null);
-}
-
-/** The split's share of the page (Split), the float's widest. */
-const FLOAT_SHARE = 0.45;
-
-/**
- * Where the file floating beside Files stands, read off Files' card and the
- * rail: its top on Files' top, its trailing edge `--space-3` clear of
- * Files' leading one, the split's share of the page at most and never
- * nearer the rail than the same. Null when Files' card isn't drawn.
- */
-export function floatPlace(): {
-  top: number;
-  right: number;
-  width: number;
-} | null {
-  const card = document.querySelector<HTMLElement>(
-    '[data-glass-card][data-glass-card-frame="files-pop"]'
-  );
-  if (!card) {
-    return null;
-  }
-  const gap = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--space-3")
-  );
-  const box = card.getBoundingClientRect();
-  const rail =
-    document
-      .querySelector<HTMLElement>("[data-slot='rail']")
-      ?.getBoundingClientRect().right ?? 0;
-  const room = box.left - gap - (rail + gap);
-  return {
-    top: box.top,
-    right: window.innerWidth - box.left + gap,
-    width: Math.max(
-      0,
-      Math.min((window.innerWidth - rail) * FLOAT_SHARE, room)
-    ),
-  };
 }
 
 export const files = new FilesPlace();
-
-/** Files holds the session's panel floating beside it: the split leaves it alone. */
-export const floatingPanel = (instanceId: string): boolean =>
-  files.picked?.instanceId === instanceId;

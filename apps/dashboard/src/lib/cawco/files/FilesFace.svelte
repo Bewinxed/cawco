@@ -4,19 +4,16 @@
    * the glass as Caw's panel, the machines and Jump do, one shape with it,
    * floating over the page and never moving the conversation (owner: "it
    * should be a floating panel … dont allow it to disable page control").
-   * Choosing an artifact shows it in the session's panel, floating on
-   * Files' leading side (FilesFloat); where the page leaves no room for the
-   * panel at its least width (SIDE_FLOOR_PX) beside Files, it opens in the
-   * session's panel as it always has, and Files goes. Show in conversation
+   * Choosing an artifact shows it in the session's own panel, beside the
+   * conversation, and Files goes (owner: "if i open an artifact from the
+   * folder tab, it doesn't dismiss the panel"): the panel is the one place
+   * it opens, and it stays until the person closes it. Show in conversation
    * takes the transcript to the message and puts Files away.
    */
   import type { ArtifactSummary } from "@cawco/core";
   import { showArtifact } from "../artifact-api";
-  import { barGlass } from "../bar-glass.svelte";
-  import { cawco } from "../client.svelte";
   import { failureClause } from "../hub-read";
   import { refusals } from "../refusals.svelte";
-  import { SIDE_FLOOR_PX } from "../side/floor";
   import { askOpenAt } from "../transcript/open-at.svelte";
   import FilesList from "./FilesList.svelte";
   import {
@@ -24,7 +21,6 @@
     askForAPage,
     attachToSession,
     files,
-    floatPlace,
   } from "./files.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -49,13 +45,6 @@
     if (!id) {
       return;
     }
-    // Whether the panel stood open before Files first opened it: kept from
-    // the first pick while Files stays open.
-    const panelWasOpen =
-      files.picked?.instanceId === id
-        ? files.picked.panelWasOpen
-        : cawco.previews[id]?.state === "open";
-    const byKeyboard = !barGlass.byPointer;
     refusals.delete(`files-pick:${id}`);
     try {
       await showArtifact(id, artifact.id);
@@ -66,16 +55,7 @@
       });
       return;
     }
-    if ((floatPlace()?.width ?? 0) < SIDE_FLOOR_PX) {
-      onclose();
-      return;
-    }
-    files.picked = {
-      instanceId: id,
-      id: artifact.id,
-      panelWasOpen,
-      byKeyboard,
-    };
+    onclose();
   }
 
   /** The empty state's ask into the session's composer; Files goes, so the composer has the focus. */
@@ -104,9 +84,6 @@
   {#if instanceId}
     {#key instanceId}
       <FilesList
-        chosen={files.picked?.instanceId === instanceId
-          ? files.picked.id
-          : null}
         {instanceId}
         onask={ask}
         onattach={attach}

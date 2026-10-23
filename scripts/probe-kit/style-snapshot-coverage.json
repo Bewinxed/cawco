@@ -575,7 +575,6 @@
     "config-accounts/second",
     "config-accounts/sign-in"
   ],
-  "apps/dashboard/src/lib/cawco/ArtifactReference.svelte": [],
   "apps/dashboard/src/lib/cawco/AskHere.svelte": [
     "board/stages-ask"
   ],
@@ -611,8 +610,6 @@
     "views/routines",
     "views/table"
   ],
-  "apps/dashboard/src/lib/cawco/CantStart.svelte": [],
-  "apps/dashboard/src/lib/cawco/canvas/canvas-stages-frame.svelte": [],
   "apps/dashboard/src/lib/cawco/canvas/CanvasGrip.svelte": [
     "session/canvas"
   ],
@@ -814,8 +811,6 @@
     "config-skills/removed",
     "config-skills/rest"
   ],
-  "apps/dashboard/src/lib/cawco/config/McpSignIn.svelte": [],
-  "apps/dashboard/src/lib/cawco/config/Missing.svelte": [],
   "apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte": [
     "config-memory/deleted",
     "config-memory/filtered",
@@ -990,30 +985,22 @@
     "config-rules/editor",
     "config-rules/rule"
   ],
-  "apps/dashboard/src/lib/cawco/connect/AddMachineLink.svelte": [],
   "apps/dashboard/src/lib/cawco/connect/Checklist.svelte": [
     "home/add-machine",
     "no-machine/connect"
   ],
-  "apps/dashboard/src/lib/cawco/connect/Choice.svelte": [],
   "apps/dashboard/src/lib/cawco/connect/ConnectWindow.svelte": [
     "home/add-machine",
     "no-machine/connect"
   ],
-  "apps/dashboard/src/lib/cawco/connect/InstallNotice.svelte": [],
-  "apps/dashboard/src/lib/cawco/connect/InstallRow.svelte": [],
   "apps/dashboard/src/lib/cawco/connect/MonoWell.svelte": [
     "home/add-machine",
     "no-machine/connect"
   ],
-  "apps/dashboard/src/lib/cawco/connect/OutcomeStep.svelte": [],
-  "apps/dashboard/src/lib/cawco/connect/OutputSheet.svelte": [],
-  "apps/dashboard/src/lib/cawco/connect/PasswordField.svelte": [],
   "apps/dashboard/src/lib/cawco/connect/ReachStep.svelte": [
     "home/add-machine",
     "no-machine/connect"
   ],
-  "apps/dashboard/src/lib/cawco/connect/RunningStep.svelte": [],
   "apps/dashboard/src/lib/cawco/connect/StepMark.svelte": [
     "home/add-machine",
     "no-machine/connect"
@@ -1021,8 +1008,6 @@
   "apps/dashboard/src/lib/cawco/ContextMeter.svelte": [
     "caw-panel/peek"
   ],
-  "apps/dashboard/src/lib/cawco/CopyBox.svelte": [],
-  "apps/dashboard/src/lib/cawco/DecisionReference.svelte": [],
   "apps/dashboard/src/lib/cawco/decisions/DecisionPage.svelte": [
     "decisions/chip-media",
     "decisions/landing",
@@ -1051,29 +1036,12 @@
   "apps/dashboard/src/lib/cawco/decisions/graph/DecisionGraph.svelte": [
     "decisions/graph"
   ],
-  "apps/dashboard/src/lib/cawco/decisions/graph/DecisionGraphFit.svelte": [],
   "apps/dashboard/src/lib/cawco/decisions/graph/DecisionGroup.svelte": [
     "decisions/graph"
   ],
   "apps/dashboard/src/lib/cawco/decisions/graph/DecisionNode.svelte": [
     "decisions/graph"
   ],
-  "apps/dashboard/src/lib/cawco/decisions/host/Badge.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Canvas.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Column.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Decision.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Diagram.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Dials.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Host.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Image.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Option.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Preview.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Row.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Section.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Stack.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Text.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/host/Well.svelte": [],
   "apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte": [
     "decisions/chip-media",
     "decisions/landing",
@@ -1250,17 +1218,10 @@
     "pairing/start-failed"
   ],
   "apps/dashboard/src/lib/cawco/files/ArtifactCards.svelte": [
-    "files/float-menu",
-    "files/open",
-    "files/picked"
+    "files/open"
   ],
   "apps/dashboard/src/lib/cawco/files/FilesFace.svelte": [
-    "files/float-menu",
-    "files/open",
-    "files/picked"
-  ],
-  "apps/dashboard/src/lib/cawco/files/FilesFloat.svelte": [
-    "files/picked"
+    "files/open"
   ],
   "apps/dashboard/src/lib/cawco/files/FilesItem.svelte": [
     "artifact/comments",
@@ -1291,7 +1252,6 @@
     "artifact/place-pick",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -1324,9 +1284,7 @@
     "workflows/run-ask"
   ],
   "apps/dashboard/src/lib/cawco/files/FilesList.svelte": [
-    "files/float-menu",
-    "files/open",
-    "files/picked"
+    "files/open"
   ],
   "apps/dashboard/src/lib/cawco/files/FilesSheet.svelte": [
     "files/open"
@@ -1342,9 +1300,7 @@
     "jump/waiting"
   ],
   "apps/dashboard/src/lib/cawco/find/FindField.svelte": [
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "jump/open",
     "jump/peek",
     "jump/waiting"
@@ -1394,7 +1350,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -1567,7 +1522,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -1745,9 +1699,7 @@
     "config-subagents/rest",
     "config-updates/rest",
     "config/index",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -1816,8 +1768,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/cawco/HarnessBlock.svelte": [],
-  "apps/dashboard/src/lib/cawco/HarnessGlyph.svelte": [],
   "apps/dashboard/src/lib/cawco/HarnessLogo.svelte": [
     "bench-chosen-hover/rest",
     "bench-new-session/rest",
@@ -1999,7 +1949,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -2355,7 +2304,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -2530,7 +2478,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -2766,7 +2713,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/cawco/home/NeedsCardSheet.svelte": [],
   "apps/dashboard/src/lib/cawco/home/NoticeRow.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -3042,7 +2988,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -3220,7 +3165,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -3404,7 +3348,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -3469,7 +3412,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/cawco/HubStandIn.svelte": [],
   "apps/dashboard/src/lib/cawco/KeyValueRows.svelte": [
     "config-mcp/editor-remote"
   ],
@@ -3582,7 +3524,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -3757,7 +3698,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -3826,7 +3766,6 @@
     "home/unlocked",
     "home/unlocking"
   ],
-  "apps/dashboard/src/lib/cawco/MachineAway.svelte": [],
   "apps/dashboard/src/lib/cawco/MachineInventory.svelte": [
     "config-mcp/rest",
     "config-skills/fetch",
@@ -3954,7 +3893,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -4072,7 +4010,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -4269,7 +4206,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -4359,7 +4295,6 @@
     "strip-new/popover",
     "usage-popover/open"
   ],
-  "apps/dashboard/src/lib/cawco/OriginText.svelte": [],
   "apps/dashboard/src/lib/cawco/OsMark.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -4480,7 +4415,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -4675,9 +4609,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -4806,7 +4738,6 @@
     "new-session/used",
     "strip-new/popover"
   ],
-  "apps/dashboard/src/lib/cawco/PinReference.svelte": [],
   "apps/dashboard/src/lib/cawco/plan/PlanPane.svelte": [
     "session/plan"
   ],
@@ -4938,7 +4869,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -5036,9 +4966,7 @@
     "artifact/place-pick",
     "artifact/rest",
     "bench-artifact-head/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "sheet/inspect",
     "sheet/map"
   ],
@@ -5090,7 +5018,6 @@
   "apps/dashboard/src/lib/cawco/preview/map/MapCard.svelte": [
     "sheet/map"
   ],
-  "apps/dashboard/src/lib/cawco/preview/map/MapFit.svelte": [],
   "apps/dashboard/src/lib/cawco/preview/map/MapNode.svelte": [
     "sheet/map"
   ],
@@ -5124,8 +5051,7 @@
     "artifact/place-folder",
     "artifact/place-machines",
     "artifact/place-pick",
-    "files/open",
-    "files/picked"
+    "files/open"
   ],
   "apps/dashboard/src/lib/cawco/preview/PinCard.svelte": [
     "artifact/comments-beside",
@@ -5171,7 +5097,6 @@
     "bench-chosen-hover/rest",
     "bench-pins/rest"
   ],
-  "apps/dashboard/src/lib/cawco/preview/PinPeek.svelte": [],
   "apps/dashboard/src/lib/cawco/preview/PlacePick.svelte": [
     "artifact/place-folder",
     "artifact/place-machines",
@@ -5208,7 +5133,6 @@
     "artifact/rest",
     "bench-artifact-head/rest",
     "files/open",
-    "files/picked",
     "sheet/inspect",
     "sheet/map",
     "sheet/view",
@@ -5535,7 +5459,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -5723,7 +5646,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -5822,7 +5744,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/cawco/RegionHeld.svelte": [],
   "apps/dashboard/src/lib/cawco/relay/RelayJourney.svelte": [
     "config-browsers/rest"
   ],
@@ -5832,7 +5753,6 @@
   "apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte": [
     "views/routines"
   ],
-  "apps/dashboard/src/lib/cawco/routines/RoutineForm.svelte": [],
   "apps/dashboard/src/lib/cawco/routines/RunStatus.svelte": [
     "views/routines"
   ],
@@ -5967,7 +5887,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -6154,7 +6073,6 @@
     "config/index",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -6253,7 +6171,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -6417,7 +6334,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -6512,7 +6428,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -6690,9 +6605,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -6850,7 +6763,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -6930,7 +6842,6 @@
     "bench-chosen-hover/rest",
     "bench-side-head/rest",
     "files/open",
-    "files/picked",
     "project/caw-file",
     "sheet/inspect",
     "sheet/map",
@@ -6987,7 +6898,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -7167,7 +7077,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -7234,7 +7143,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/cawco/SkillChip.svelte": [],
   "apps/dashboard/src/lib/cawco/spawn/AccountChip.svelte": [
     "bench-new-session/rest",
     "new-session/account",
@@ -7253,7 +7161,6 @@
   "apps/dashboard/src/lib/cawco/spawn/EffortPips.svelte": [
     "new-session/effort"
   ],
-  "apps/dashboard/src/lib/cawco/spawn/glide-popover-frame.svelte": [],
   "apps/dashboard/src/lib/cawco/spawn/LifetimeChip.svelte": [
     "bench-chosen-hover/rest",
     "bench-new-session/rest",
@@ -7473,7 +7380,6 @@
     "new-session/used",
     "strip-new/popover"
   ],
-  "apps/dashboard/src/lib/cawco/spawn/StartingRows.svelte": [],
   "apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte": [
     "bench-new-session/rest",
     "new-session/account",
@@ -7499,7 +7405,6 @@
     "views/week",
     "views/week-page"
   ],
-  "apps/dashboard/src/lib/cawco/StopParked.svelte": [],
   "apps/dashboard/src/lib/cawco/StopTray.svelte": [
     "project/forget"
   ],
@@ -7761,7 +7666,6 @@
     "task/open",
     "task/rich-details"
   ],
-  "apps/dashboard/src/lib/cawco/ThingReference.svelte": [],
   "apps/dashboard/src/lib/cawco/ThreadPane.svelte": [
     "caw-on/decisions",
     "caw-on/panel",
@@ -7806,7 +7710,6 @@
     "artifact/place-machines",
     "artifact/place-pick",
     "files/open",
-    "files/picked",
     "no-machine/session",
     "region-failed/tabs",
     "session/answered",
@@ -7868,7 +7771,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -7982,7 +7884,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -8080,7 +7981,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -8184,7 +8084,6 @@
     "decisions/onboarding",
     "decisions/page",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -8265,7 +8164,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -8387,7 +8285,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -8558,7 +8455,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -8647,7 +8543,6 @@
     "artifact/place-machines",
     "artifact/place-pick",
     "files/open",
-    "files/picked",
     "project/caw",
     "project/caw-file",
     "project/caw-lfs",
@@ -8730,7 +8625,6 @@
     "bench-head-tint/rest",
     "catch-up/switch",
     "files/open",
-    "files/picked",
     "no-machine/session",
     "region-failed/tabs",
     "session/attached",
@@ -8788,7 +8682,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -8847,7 +8740,6 @@
   "apps/dashboard/src/lib/cawco/transcript/TranscriptSkeleton.svelte": [
     "session/run-block"
   ],
-  "apps/dashboard/src/lib/cawco/transcript/UploadRing.svelte": [],
   "apps/dashboard/src/lib/cawco/TreeCount.svelte": [
     "session/run-block",
     "workflows/run",
@@ -8964,7 +8856,6 @@
     "config/index",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -9063,7 +8954,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -9150,7 +9040,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -9237,7 +9126,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -9419,7 +9307,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -9589,7 +9476,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -9786,7 +9672,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -9977,7 +9862,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -10148,7 +10032,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -10214,7 +10097,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/cawco/views/canvas/TaskCanvasFit.svelte": [],
   "apps/dashboard/src/lib/cawco/views/canvas/TaskEdgeLine.svelte": [
     "views/canvas"
   ],
@@ -10229,7 +10111,6 @@
     "views/week",
     "views/week-page"
   ],
-  "apps/dashboard/src/lib/cawco/views/openui/ViewBadge.svelte": [],
   "apps/dashboard/src/lib/cawco/views/openui/ViewBoard.svelte": [
     "views/week",
     "views/week-page"
@@ -10242,7 +10123,6 @@
     "views/week",
     "views/week-page"
   ],
-  "apps/dashboard/src/lib/cawco/views/openui/ViewPipelineNode.svelte": [],
   "apps/dashboard/src/lib/cawco/views/openui/ViewRow.svelte": [
     "views/week",
     "views/week-page"
@@ -10381,7 +10261,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -10462,7 +10341,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -10548,7 +10426,6 @@
     "catch-up/switch",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -10634,7 +10511,6 @@
     "bench-head-tint/rest",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -10727,7 +10603,6 @@
     "bench-head-tint/rest",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -10790,8 +10665,6 @@
   "apps/dashboard/src/lib/components/features/DirectoryPicker.svelte": [
     "artifact/place-folder"
   ],
-  "apps/dashboard/src/lib/components/features/flow/FlowAutoFit.svelte": [],
-  "apps/dashboard/src/lib/components/features/flow/FlowZoomTracker.svelte": [],
   "apps/dashboard/src/lib/components/features/MarkdownEditor.svelte": [
     "bench-chosen-hover/rest",
     "config-memory/editor",
@@ -10899,7 +10772,6 @@
   "apps/dashboard/src/lib/components/features/workflows/WorkflowLaunch.svelte": [
     "workflows/launch"
   ],
-  "apps/dashboard/src/lib/components/features/workflows/WorkflowLaunchParked.svelte": [],
   "apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte": [
     "workflows/graph",
     "workflows/graph-branch",
@@ -11032,7 +10904,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -11263,7 +11134,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -11492,9 +11362,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -11618,7 +11486,6 @@
   "apps/dashboard/src/lib/components/ui/alert-dialog/alert-dialog-overlay.svelte": [
     "bench-overlays/alert-dialog"
   ],
-  "apps/dashboard/src/lib/components/ui/alert-dialog/alert-dialog-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/alert-dialog/alert-dialog-title.svelte": [
     "bench-overlays/alert-dialog"
   ],
@@ -11790,7 +11657,6 @@
     "config-updates/rest",
     "decisions/page",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -11871,7 +11737,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/components/ui/bar-glass/bar-glass-frame.svelte": [],
   "apps/dashboard/src/lib/components/ui/bar-glass/bar-glass.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -11981,7 +11846,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -12175,9 +12039,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -12411,9 +12273,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -12520,7 +12380,6 @@
   "apps/dashboard/src/lib/components/ui/card/card-content.svelte": [
     "workflows/run-ask"
   ],
-  "apps/dashboard/src/lib/components/ui/card/card-footer.svelte": [],
   "apps/dashboard/src/lib/components/ui/card/card-header.svelte": [
     "workflows/run-ask"
   ],
@@ -12638,7 +12497,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -12840,7 +12698,6 @@
     "task/open",
     "views/routines"
   ],
-  "apps/dashboard/src/lib/components/ui/command/command-empty.svelte": [],
   "apps/dashboard/src/lib/components/ui/command/command-group.svelte": [
     "config-delegate-types/model",
     "session/slash"
@@ -12856,7 +12713,6 @@
     "config-delegate-types/model",
     "session/slash"
   ],
-  "apps/dashboard/src/lib/components/ui/command/command-loading.svelte": [],
   "apps/dashboard/src/lib/components/ui/command/command.svelte": [
     "config-delegate-types/model",
     "session/slash"
@@ -12874,7 +12730,6 @@
     "rail/row-menu",
     "session/tab-menu"
   ],
-  "apps/dashboard/src/lib/components/ui/context-menu/context-menu-group.svelte": [],
   "apps/dashboard/src/lib/components/ui/context-menu/context-menu-item.svelte": [
     "bench-overlays/context-menu",
     "home/machine-pause",
@@ -12882,7 +12737,6 @@
     "rail/row-menu",
     "session/tab-menu"
   ],
-  "apps/dashboard/src/lib/components/ui/context-menu/context-menu-lazy-props.svelte": [],
   "apps/dashboard/src/lib/components/ui/context-menu/context-menu-lazy.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -12990,7 +12844,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -13058,7 +12911,6 @@
     "rail/row-account",
     "rail/row-menu"
   ],
-  "apps/dashboard/src/lib/components/ui/context-menu/context-menu-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/context-menu/context-menu-radio-group.svelte": [
     "rail/row-account"
   ],
@@ -13198,7 +13050,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -13394,7 +13245,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -13487,7 +13337,6 @@
     "project/caw-note",
     "session/diff"
   ],
-  "apps/dashboard/src/lib/components/ui/dialog/dialog-close.svelte": [],
   "apps/dashboard/src/lib/components/ui/dialog/dialog-content.svelte": [
     "bench-overlays/dialog",
     "home/add-machine",
@@ -13495,7 +13344,6 @@
     "pairing/start-failed",
     "session/diff"
   ],
-  "apps/dashboard/src/lib/components/ui/dialog/dialog-description.svelte": [],
   "apps/dashboard/src/lib/components/ui/dialog/dialog-footer.svelte": [
     "pairing/start-failed"
   ],
@@ -13512,7 +13360,6 @@
     "pairing/start-failed",
     "project/caw-note"
   ],
-  "apps/dashboard/src/lib/components/ui/dialog/dialog-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/dialog/dialog-title.svelte": [
     "bench-overlays/dialog",
     "home/add-machine",
@@ -13602,8 +13449,6 @@
     "workflows/graph-step",
     "workflows/launch"
   ],
-  "apps/dashboard/src/lib/components/ui/drawer/drawer-footer.svelte": [],
-  "apps/dashboard/src/lib/components/ui/drawer/drawer-nested.svelte": [],
   "apps/dashboard/src/lib/components/ui/drawer/drawer-overlay.svelte": [
     "bench-new-session/rest",
     "bench-overlays/drawer",
@@ -13618,7 +13463,6 @@
     "project/caw-settings",
     "workflows/launch"
   ],
-  "apps/dashboard/src/lib/components/ui/drawer/drawer-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/drawer/drawer-trigger.svelte": [
     "bench-overlays/alert-dialog",
     "bench-overlays/context-menu",
@@ -13671,7 +13515,6 @@
     "rail/rest",
     "rail/sort"
   ],
-  "apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-checkbox-group.svelte": [],
   "apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-checkbox-item.svelte": [
     "sheet/view"
   ],
@@ -13679,7 +13522,6 @@
     "artifact/menu",
     "artifact/menu-narrow",
     "bench-overlays/dropdown-menu",
-    "files/float-menu",
     "project/more-menu",
     "project/upstream",
     "rail/sort",
@@ -13687,7 +13529,6 @@
     "sheet/view",
     "workflows/new"
   ],
-  "apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-frame.svelte": [],
   "apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-group-heading.svelte": [
     "rail/sort",
     "sheet/view"
@@ -13700,7 +13541,6 @@
     "artifact/menu",
     "artifact/menu-narrow",
     "bench-overlays/dropdown-menu",
-    "files/float-menu",
     "project/more-menu",
     "project/upstream",
     "session/attach-menu",
@@ -13713,7 +13553,6 @@
   "apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-pending-item.svelte": [
     "workflows/new"
   ],
-  "apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-radio-group.svelte": [
     "project/upstream",
     "rail/sort",
@@ -13869,7 +13708,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -14086,7 +13924,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -14198,7 +14035,6 @@
     "views/routines",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/components/ui/empty/EmptyStarts.svelte": [],
   "apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -14320,7 +14156,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -14540,7 +14375,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -14760,7 +14594,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -14859,8 +14692,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/components/ui/hang-card/hang-card-frame.svelte": [],
-  "apps/dashboard/src/lib/components/ui/hang-card/hang-card-tab-frame.svelte": [],
   "apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -14970,9 +14801,7 @@
     "config-subagents/rest",
     "config-updates/rest",
     "config/index",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -15105,7 +14934,6 @@
     "config-accounts/key-sent",
     "config-delegate-types/model"
   ],
-  "apps/dashboard/src/lib/components/ui/input-group/input-group-textarea.svelte": [],
   "apps/dashboard/src/lib/components/ui/input-group/input-group.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -15202,7 +15030,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/components/ui/kbd/kbd-group.svelte": [],
   "apps/dashboard/src/lib/components/ui/kbd/kbd.svelte": [
     "bench-prompt-head/rest",
     "caw-panel/peek",
@@ -15282,7 +15109,6 @@
     "caw-on/panel",
     "caw-panel/peek",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -15466,9 +15292,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -15568,7 +15392,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/components/ui/native-select/native-select-opt-group.svelte": [],
   "apps/dashboard/src/lib/components/ui/native-select/native-select-option.svelte": [
     "config-accounts/routing",
     "config-previews/rest",
@@ -15630,7 +15453,6 @@
     "rail/row-hover",
     "session/question"
   ],
-  "apps/dashboard/src/lib/components/ui/popover/popover-close.svelte": [],
   "apps/dashboard/src/lib/components/ui/popover/popover-content.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -15745,9 +15567,7 @@
     "config-subagents/rest",
     "config-updates/rest",
     "config/index",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -15824,7 +15644,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/components/ui/popover/popover-frame.svelte": [],
   "apps/dashboard/src/lib/components/ui/popover/popover-portal.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -15934,9 +15753,7 @@
     "config-subagents/rest",
     "config-updates/rest",
     "config/index",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -16117,7 +15934,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -16292,9 +16108,7 @@
     "config-subagents/rest",
     "config-updates/rest",
     "config/index",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -16416,7 +16230,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -16537,7 +16350,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -16659,7 +16471,6 @@
     "decisions/page",
     "decisions/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -16789,11 +16600,9 @@
     "usage/project-pick",
     "usage/project-pick-many"
   ],
-  "apps/dashboard/src/lib/components/ui/select/select-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/select/select-scroll-down-button.svelte": [
     "usage/project-pick-many"
   ],
-  "apps/dashboard/src/lib/components/ui/select/select-scroll-up-button.svelte": [],
   "apps/dashboard/src/lib/components/ui/select/select-trigger.svelte": [
     "artifact/place-folder",
     "artifact/place-machines",
@@ -16902,19 +16711,15 @@
     "views/table",
     "views/week"
   ],
-  "apps/dashboard/src/lib/components/ui/separator/separator.svelte": [],
-  "apps/dashboard/src/lib/components/ui/sheet/sheet-close.svelte": [],
   "apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte": [
     "bench-overlays/sheet",
     "rail/older",
     "rail/rest",
     "rail/sort"
   ],
-  "apps/dashboard/src/lib/components/ui/sheet/sheet-footer.svelte": [],
   "apps/dashboard/src/lib/components/ui/sheet/sheet-overlay.svelte": [
     "bench-overlays/sheet"
   ],
-  "apps/dashboard/src/lib/components/ui/sheet/sheet-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/sheet/sheet-trigger.svelte": [
     "bench-overlays/alert-dialog",
     "bench-overlays/context-menu",
@@ -17045,7 +16850,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -17220,7 +17024,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -17395,7 +17198,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -17568,7 +17370,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -17743,7 +17544,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -17917,7 +17717,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/keychain",
     "home/machine-pause",
@@ -18089,7 +17888,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -18264,7 +18062,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -18447,7 +18244,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -18547,7 +18343,6 @@
     "config-hooks/editor-reading",
     "config-memory/reading",
     "files/open",
-    "files/picked",
     "home/connecting",
     "home/reading",
     "session/run-block",
@@ -18666,7 +18461,6 @@
     "config-updates/rest",
     "config/index",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -18843,7 +18637,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -19035,9 +18828,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -19234,7 +19025,6 @@
     "views/week-page",
     "workflows/rest"
   ],
-  "apps/dashboard/src/lib/components/ui/tabs/segmented-frame.svelte": [],
   "apps/dashboard/src/lib/components/ui/tabs/tabs-content.svelte": [
     "files/open"
   ],
@@ -19413,7 +19203,6 @@
     "config-subagents/rest",
     "config-updates/rest",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -19480,12 +19269,10 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/lib/components/ui/thinking-indicator/size-provider.svelte": [],
   "apps/dashboard/src/lib/components/ui/thinking-indicator/thinking-indicator.svelte": [
     "session/live-thinking",
     "session/thinking"
   ],
-  "apps/dashboard/src/lib/components/ui/thinking-steps/thinking-step-details.svelte": [],
   "apps/dashboard/src/lib/components/ui/thinking-steps/thinking-step.svelte": [
     "bench-step-ink/rest",
     "session/compacted",
@@ -19676,7 +19463,6 @@
     "config/index",
     "decisions/graph",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -19776,7 +19562,6 @@
   "apps/dashboard/src/lib/components/ui/tooltip/tooltip-content.svelte": [
     "caw-panel/peek"
   ],
-  "apps/dashboard/src/lib/components/ui/tooltip/tooltip-portal.svelte": [],
   "apps/dashboard/src/lib/components/ui/tooltip/tooltip-provider.svelte": [
     "artifact/comments",
     "artifact/comments-beside",
@@ -19900,9 +19685,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -20120,7 +19903,6 @@
     "config/index",
     "decisions/graph",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -20333,7 +20115,6 @@
     "config/index",
     "decisions/graph",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -20558,9 +20339,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",
@@ -20665,7 +20444,6 @@
     "workflows/run-ask",
     "workflows/runs"
   ],
-  "apps/dashboard/src/routes/(app)/+page.svelte": [],
   "apps/dashboard/src/routes/(app)/config/+layout.svelte": [
     "config-accounts/account",
     "config-accounts/device-sign-in",
@@ -20869,7 +20647,6 @@
   "apps/dashboard/src/routes/(app)/motion/recall/+page.svelte": [
     "bench-recall/rest"
   ],
-  "apps/dashboard/src/routes/(app)/motion/seed-tabs/+page.svelte": [],
   "apps/dashboard/src/routes/(app)/motion/session-limit/+page.svelte": [
     "bench-session-limit/rest"
   ],
@@ -20940,7 +20717,6 @@
   "apps/dashboard/src/routes/(app)/project/new/+page.svelte": [
     "project/new"
   ],
-  "apps/dashboard/src/routes/(app)/session/[[id]]/+page.svelte": [],
   "apps/dashboard/src/routes/(app)/usage/+page.svelte": [
     "usage/project",
     "usage/project-pick",
@@ -21084,9 +20860,7 @@
     "decisions/onboarding",
     "decisions/page",
     "decisions/rest",
-    "files/float-menu",
     "files/open",
-    "files/picked",
     "home/add-machine",
     "home/connecting",
     "home/keychain",

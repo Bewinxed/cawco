@@ -41,7 +41,6 @@
   import { browser, dev } from "$app/env";
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
-  import { deletePreview } from "./artifact-api";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { barStrip } from "./bar-strip.svelte";
   import { cawco } from "./client.svelte";
@@ -49,7 +48,6 @@
   import { connect } from "./connect/installs.svelte";
   import { continuing } from "./continue.svelte";
   import EdgePull from "./EdgePull.svelte";
-  import FilesFloat from "./files/FilesFloat.svelte";
   import FilesItem from "./files/FilesItem.svelte";
   import FilesSheet from "./files/FilesSheet.svelte";
   import { files, filesCount, followFiles } from "./files/files.svelte";
@@ -867,9 +865,8 @@
 
   /**
    * Files follows the conversation on screen (a session's, not a thread's):
-   * the bar's item and the phone's sidebar row count it, and its card, its
-   * float and its drawer hold it. Another conversation, or none, puts away
-   * the file floating beside Files.
+   * the bar's item and the phone's sidebar row count it, and its card and
+   * its drawer hold it. None closes the drawer.
    */
   $effect(() => {
     const id =
@@ -880,7 +877,6 @@
         : null;
     untrack(() => {
       if (files.session !== id) {
-        putPickAway();
         files.sheet = files.sheet && id !== null;
       }
       files.session = id;
@@ -888,30 +884,6 @@
   });
   $effect(() => {
     followFiles(files.session);
-  });
-  /**
-   * The file floating beside Files goes. The split takes the panel back only
-   * if it held it before Files opened it; otherwise the panel closes, so no
-   * conversation moves for a panel the person had shut.
-   */
-  function putPickAway() {
-    const { picked } = files;
-    if (!picked) {
-      return;
-    }
-    files.picked = null;
-    if (!picked.panelWasOpen) {
-      deletePreview(picked.instanceId).catch((error: unknown) => {
-        console.error("The panel Files opened did not close", error);
-      });
-    }
-  }
-  // Files put away (or another card in its place), or another conversation
-  // in front: the pick is put away.
-  $effect(() => {
-    if (barGlass.open !== "files" && files.picked) {
-      untrack(putPickAway);
-    }
   });
   // Files is a card of the wide bar's glass, and a drawer on a phone: one
   // asked for across the drawer's line goes where that width keeps it.
@@ -1442,10 +1414,7 @@
   >
     <GlassCard />
   </div>
-  <!-- The file chosen in Files, floating on its leading side (a desk). -->
-  {#if railed}
-    <FilesFloat />
-  {:else}
+  {#if !railed}
     <!-- Files on a phone: the house bottom drawer. -->
     <FilesSheet />
   {/if}

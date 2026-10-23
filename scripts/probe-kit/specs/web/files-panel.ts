@@ -25,8 +25,8 @@
  *     items standing past its foot (review-4 item 3);
  *  6. desk: search finds by title and by the words on a page, marks the
  *     hit, and says when nothing matches (pin 4);
- *  7. desk: a picked artifact opens floating on Files' left, its edge the
- *     row-outline token (pin 2, review-4 item 2);
+ *  7. desk: a picked artifact opens in the session's panel beside the
+ *     conversation, and Files goes;
  *  8. a picture that won't load, and a page never pictured, stand as their
  *     kind's glyph in the well;
  *  9. phone and 680: Files is the vaul drawer from the sidebar's row, with
@@ -47,11 +47,19 @@
  *     thumbnails the cards keep their slots (33's read);
  * 35. the choice survives a reload, and holds where Files opens next (the
  *     bar's card, then the phone's drawer);
- * 36. a row opens its artifact as its card does (floating on Files' left,
- *     the row the one on show);
+ * 36. a row opens its artifact as its card does (in the session's panel,
+ *     Files gone; opened again, the row the one on show);
  * 37. the switch's motion on the clock: every row slides on one clock (one
  *     start, length and curve) from its card's place to its row's; with
  *     less motion nothing travels.
+ * 38. the owner's report ("if i open an artifact from the folder tab, it
+ *     doesn't dismiss the panel and still thinks i'm still hovering it …
+ *     dismissing that closes it too"): in Chromium and WebKit, at 1440 and
+ *     390, the real pointer rests on a card, then presses it: Files goes
+ *     and the session's panel shows that artifact; with the pointer moved
+ *     off, for 2 s no Files surface or floating copy opens and the panel
+ *     stays; at 1440, Escape and a press outside leave the panel as it is.
+ *     From the keyboard (Tab to the card, Enter) the same.
  *
  * One capture per state at 390 and 1440, light and dark, in the run's output
  * folder (`kit.out`).
@@ -179,9 +187,49 @@ const watch = (page: Page) => {
   page.on("pageerror", (error) => seen.push(String(error)));
 };
 
-/** What Files is drawn in: the drawer, the bar's card, each region and its "N more" sign, and a picked artifact's float. */
+/** What Files is drawn in: the drawer, the bar's card, each region and its "N more" sign. */
 const FILES_PARTS =
-  "[data-files-sheet], [data-glass-card-frame='files-pop'], [data-files-region], [data-files-more], [data-files-float]";
+  "[data-files-sheet], [data-glass-card-frame='files-pop'], [data-files-region], [data-files-more]";
+
+/** The session's panel's name, beside the conversation (the split) or in its sheet on the composer: `data-artifact` is the one it shows. */
+const PANE_NAME =
+  "[data-side-pane] [data-artifact-trigger], [data-preview-sheet][data-state='open'] [data-artifact-trigger]";
+
+/** Files open: the bar's card, or the drawer. */
+const FILES_OPEN =
+  "[data-glass-card-frame='files-pop'][data-state='open'], [data-files-sheet]";
+
+/** The artifact the session's panel shows, or null with none. */
+const paneShows = (page: Page) =>
+  page.evaluate(
+    (name) =>
+      document.querySelector<HTMLElement>(name)?.dataset.artifact ?? null,
+    PANE_NAME
+  );
+
+/**
+ * Waits until the pick has landed: Files gone and the session's panel
+ * showing `artifact`. Answers what stood when it did, or when it gave up.
+ */
+const pickLanded = async (page: Page, artifact: string) => {
+  await page
+    .waitForFunction(
+      ([files, name, id]) =>
+        !document.querySelector(files) &&
+        document.querySelector<HTMLElement>(name)?.dataset.artifact === id,
+      [FILES_OPEN, PANE_NAME, artifact] as const,
+      { timeout: 30_000 }
+    )
+    .catch(() => undefined);
+  return page.evaluate(
+    ([files, name]) => ({
+      filesOpen: !!document.querySelector(files),
+      pane: document.querySelector<HTMLElement>(name)?.dataset.artifact ?? null,
+      float: !!document.querySelector("[data-files-float]"),
+    }),
+    [FILES_OPEN, PANE_NAME] as const
+  );
+};
 
 /**
  * Waits until Files stands as the person comes to see it: nothing on the
@@ -216,7 +264,6 @@ const filesAtRest = async (page: Page): Promise<string | null> => {
       if (performance.now() > deadline) {
         return `Files never stood still for three frames${morphing() ? " (words still morphing)" : ""}: ${last}`;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until three pass still
       await new Promise((done) => requestAnimationFrame(done));
       const now = read();
       same = now === last && !morphing() ? same + 1 : 0;
@@ -837,48 +884,21 @@ const desk = async (
   );
   await field.fill("");
 
-  // 7. A picked artifact floats on Files' left.
-  await page.locator(`[data-files-card][title="${PRICING}"]`).click();
-  const float = page.locator("[data-files-float]");
-  await float.waitFor({ timeout: 30_000 });
+  // 7. A picked artifact opens in the session's panel, and Files goes.
+  const pricingCard = page.locator(`[data-files-card][title="${PRICING}"]`);
+  const pricingId = (await pricingCard.getAttribute("data-artifact")) ?? "";
+  await pricingCard.click();
+  const picked = await pickLanded(page, pricingId);
   await filesAtRest(page);
-  const picked = await page.evaluate(() => {
-    const pop = document
-      .querySelector("[data-glass-card-frame='files-pop']")
-      ?.getBoundingClientRect();
-    const box = document.querySelector<HTMLElement>("[data-files-float]");
-    const rect = box?.getBoundingClientRect();
-    const swatch = document.createElement("span");
-    swatch.style.color = "var(--border-row-outline)";
-    document.body.append(swatch);
-    const outline = getComputedStyle(swatch).color;
-    swatch.remove();
-    return pop && rect && box
-      ? {
-          leftOf: rect.right <= pop.left,
-          topsAligned: Math.abs(rect.top - pop.top) <= 1,
-          position: getComputedStyle(box).position,
-          edge: getComputedStyle(box).borderTopColor,
-          outline,
-          splitDocked: document.querySelectorAll(
-            '[data-slot="side-split"] iframe'
-          ).length,
-        }
-      : null;
-  });
   kit.check(
-    `7 (${theme}): a picked artifact opens floating on Files' left, the tops on one line, its edge the row outline`,
-    !!picked &&
-      picked.leftOf &&
-      picked.topsAligned &&
-      picked.position === "fixed" &&
-      picked.edge === picked.outline &&
+    `7 (${theme}): a picked artifact opens in the session's panel beside the conversation, and Files goes`,
+    !(picked.filesOpen || picked.float) &&
+      picked.pane === pricingId &&
       !(await pageGrows(page)),
-    JSON.stringify(picked)
+    `${JSON.stringify(picked)} (picked ${pricingId})`
   );
   await shot(page, `picked-1440-${theme}`);
   await sweep(page, `picked 1440 ${theme}`);
-  await page.keyboard.press("Escape");
   await page.close();
 
   // 10. None, one, and the list unreadable.
@@ -942,8 +962,6 @@ const focused = (page: Page) =>
       ? {
           tag: el.tagName,
           card: el.dataset.artifact ?? null,
-          trigger: el.hasAttribute("data-artifact-trigger"),
-          inFloat: !!el.closest("[data-files-float]"),
           slot: el.dataset.slot ?? null,
         }
       : null;
@@ -1129,60 +1147,29 @@ const reviewLegs = async (
       cardRing === "-2px",
     `field ${JSON.stringify(ring)}; card ${JSON.stringify(card)} offset ${cardRing}`
   );
-  // A keyboard pick: the focus goes to the panel's name in the float.
+  // A keyboard pick: the artifact in the session's panel, Files gone, the
+  // focus back on Files' control (GlassCard gives it back to what opened it).
   const pickedId = card?.card ?? "";
   await page.keyboard.press("Enter");
-  await page
-    .locator("[data-files-float][data-state='open']")
-    .waitFor({ timeout: 30_000 });
-  // The pick's focus move, which the check reads.
+  const keyPicked = await pickLanded(page, pickedId);
   await comes(
     page,
-    () => !!document.activeElement?.closest("[data-files-float]")
+    () => !!document.activeElement?.closest("[data-files-control]")
   );
-  const afterPick = await focused(page);
-  const floatRole = await page.evaluate(() => {
-    const float = document.querySelector<HTMLElement>("[data-files-float]");
-    return {
-      // A named <section> is a region.
-      role:
-        float?.tagName === "SECTION" ? "region" : float?.getAttribute("role"),
-      label: float?.getAttribute("aria-label"),
-      afterFiles:
-        !!float &&
-        !!document.querySelector("[data-glass-card-frame='files-pop']") &&
-        (
-          document.querySelector(
-            "[data-glass-card-frame='files-pop']"
-          ) as Element
-        ).compareDocumentPosition(float) === Node.DOCUMENT_POSITION_FOLLOWING,
-    };
-  });
-  await page
-    .locator("[data-files-float] button[title='Close']")
-    .first()
-    .click();
-  await page
-    .locator("[data-files-float]")
-    .waitFor({ state: "detached", timeout: 10_000 });
-  // The focus handed back to a card, which the check reads.
-  await comes(
-    page,
-    () =>
-      (document.activeElement as HTMLElement | null)?.dataset.artifact !==
-      undefined
+  const afterPick = await page.evaluate(
+    () => !!document.activeElement?.closest("[data-files-control]")
   );
-  const afterClose = await focused(page);
   kit.check(
-    "17: a keyboard pick moves the focus to the panel's name in the float (a region named for the artifact, after Files in the page); its Close gives it back to the artifact's card",
-    afterPick?.trigger === true &&
-      afterPick.inFloat &&
-      floatRole.role === "region" &&
-      !!floatRole.label &&
-      floatRole.afterFiles &&
-      afterClose?.card === pickedId,
-    `after pick ${JSON.stringify(afterPick)} ${JSON.stringify(floatRole)}; after close ${JSON.stringify(afterClose)} (picked ${pickedId})`
+    "17: a keyboard pick (Enter on a card) opens it in the session's panel and Files goes, the focus back on Files' control",
+    !(keyPicked.filesOpen || keyPicked.float) &&
+      keyPicked.pane === pickedId &&
+      afterPick,
+    `${JSON.stringify(keyPicked)} (picked ${pickedId}); focus on the control ${afterPick}`
   );
+  // Files again, for the lightbox.
+  await page.locator("[data-files-control]").click();
+  await page.locator("[data-files-row]").first().waitFor({ timeout: 30_000 });
+  await atRest(page);
   // 18. A press inside a picture's lightbox is not outside Files.
   await page
     .locator('[data-files-region="attachments"] button[data-menu-item]')
@@ -1599,8 +1586,6 @@ const lengths = (runs: readonly MotionRun[]) =>
  *  26. C: a streamed reply with no attachment reads no attachments again;
  *  27. A: a new attachment keeps the focus on the row it was on;
  *  28. Attach a file opens the composer's own picker, and Files goes;
- *  29. E: narrowed under the panel's least width, the float hands the pick
- *      to the session's panel and Files goes;
  *  30. Jump's field draws the house ring (FindField);
  *  31. the skeleton gives its place to the empty state in its reveal.
  */
@@ -1909,41 +1894,6 @@ const roundThree = async (
     `chooser ${!!chooser}; ${JSON.stringify(attachSaid)}`
   );
   await attach.close();
-
-  // 29. E: the float narrowed past the panel's least width.
-  const narrowing = await openSession(kit, base, "desk", "light", ids.many);
-  await narrowing.locator("[data-files-control]").click();
-  await narrowing.locator(`[data-files-card][title="${PRICING}"]`).click();
-  await narrowing
-    .locator("[data-files-float][data-state='open']")
-    .waitFor({ timeout: 30_000 });
-  // Still a desk (900px and up), but Files' card leaves the float under
-  // the panel's 320px least width beside the rail (about 270px at 920).
-  await narrowing.setViewportSize({ width: 920, height: 900 });
-  // The hand-off the check reads: the float gone and the session's panel open.
-  await comes(
-    narrowing,
-    () =>
-      !document.querySelector("[data-files-float]") &&
-      [...document.querySelectorAll('iframe[title="Preview"]')].some(
-        (frame) => !frame.closest("[data-files-float]")
-      )
-  );
-  const narrowed = await narrowing.evaluate(() => ({
-    float: !!document.querySelector("[data-files-float]"),
-    filesOpen: !!document.querySelector(
-      "[data-glass-card-frame='files-pop'][data-state='open']"
-    ),
-    panel: [...document.querySelectorAll('iframe[title="Preview"]')].some(
-      (frame) => !frame.closest("[data-files-float]")
-    ),
-  }));
-  kit.check(
-    "29: narrowed under the panel's least width, the float hands the pick to the session's panel (open beside the conversation) and Files goes: never a sliver",
-    !(narrowed.float || narrowed.filesOpen) && narrowed.panel,
-    JSON.stringify(narrowed)
-  );
-  await narrowing.close();
 
   // 30. Jump's field draws the house ring.
   const jump = await openSession(kit, base, "desk", "light", ids.many);
@@ -2515,6 +2465,7 @@ const viewLegs = async (
   }
   await keptLeg(kit, base, ids.many);
   await rowOpensLeg(kit, base, ids.many);
+  await pickLegs(kit, base, ids.many);
   await switchMotionLeg(kit, base, ids.many);
 };
 
@@ -2635,7 +2586,7 @@ const keptLeg = async (kit: Kit, base: string, id: string) => {
   await page.close();
 };
 
-/** 36: in the list, a row's press opens its artifact floating on Files' left, as a card's does (7). */
+/** 36: in the list, a row's press opens its artifact as a card's does (7); Files opened again marks it the one on show. */
 const rowOpensLeg = async (kit: Kit, base: string, id: string) => {
   const page = await openSession(kit, base, "desk", "light", id);
   await openFiles(page, "desk");
@@ -2643,34 +2594,204 @@ const rowOpensLeg = async (kit: Kit, base: string, id: string) => {
   const row = page.locator(
     `[data-files-cards][data-files-view="list"] [data-files-card][title="${PRICING}"]`
   );
+  const rowId = (await row.getAttribute("data-artifact")) ?? "";
   await row.click();
-  await page.locator("[data-files-float]").waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(600);
-  const opened = await page.evaluate((name) => {
-    const pop = document
-      .querySelector("[data-glass-card-frame='files-pop']")
-      ?.getBoundingClientRect();
-    const float = document
-      .querySelector("[data-files-float]")
-      ?.getBoundingClientRect();
-    const current = document.querySelector<HTMLElement>(
-      '[data-files-card][aria-current="true"]'
-    );
-    return {
-      leftOf: !!pop && !!float && float.right <= pop.left,
-      current: current?.title ?? null,
-      wanted: name,
-      view:
-        document.querySelector<HTMLElement>("[data-files-cards]")?.dataset
-          .filesView ?? null,
-    };
-  }, PRICING);
+  const landed = await pickLanded(page, rowId);
+  await openFiles(page, "desk");
+  await atRest(page);
+  const opened = await page.evaluate(() => ({
+    current:
+      document.querySelector<HTMLElement>(
+        '[data-files-card][aria-current="true"]'
+      )?.title ?? null,
+    view:
+      document.querySelector<HTMLElement>("[data-files-cards]")?.dataset
+        .filesView ?? null,
+  }));
   kit.check(
-    "36: a row's press opens its artifact as its card's does: floating on Files' left, the row the one on show, Files still the list",
-    opened.leftOf && opened.current === PRICING && opened.view === "list",
-    JSON.stringify(opened)
+    "36: a row's press opens its artifact as its card's does (the session's panel shows it, Files goes); Files opened again is still the list, the row the one on show",
+    !(landed.filesOpen || landed.float) &&
+      landed.pane === rowId &&
+      opened.current === PRICING &&
+      opened.view === "list",
+    `${JSON.stringify(landed)} (picked ${rowId}); again ${JSON.stringify(opened)}`
   );
   await page.close();
+};
+
+/**
+ * Every surface that could stand over the page after a pick, as a
+ * MutationObserver and each frame see it: Files (its card or its drawer),
+ * a floating copy of the artifact, and any kit floating surface open
+ * (popover, hover card, menu, tooltip). Started in the page; read back by
+ * `surfacesSeen`, each with the time it first showed.
+ */
+const watchSurfaces = (page: Page) =>
+  page.evaluate(() => {
+    const SURFACES =
+      "[data-glass-card-frame='files-pop'][data-state='open'], [data-files-sheet], [data-files-float], [data-state='open'][data-slot$='-content']:not([data-preview-sheet] *):not([data-preview-sheet])";
+    const w = window as unknown as {
+      probeSurfaces: string[];
+      probeStop: () => void;
+    };
+    const seen = new Set<string>();
+    w.probeSurfaces = [];
+    const t0 = performance.now();
+    const look = () => {
+      for (const el of document.querySelectorAll<HTMLElement>(SURFACES)) {
+        const name = `${el.tagName.toLowerCase()}[${el.dataset.slot ?? ""}${el.dataset.glassCardFrame ?? ""}${el.hasAttribute("data-files-sheet") ? "files-sheet" : ""}${el.hasAttribute("data-files-float") ? "files-float" : ""}]`;
+        if (!seen.has(name)) {
+          seen.add(name);
+          w.probeSurfaces.push(
+            `${name} at +${Math.round(performance.now() - t0)}ms`
+          );
+        }
+      }
+    };
+    const observer = new MutationObserver(look);
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-state"],
+    });
+    let frame = requestAnimationFrame(function each() {
+      look();
+      frame = requestAnimationFrame(each);
+    });
+    look();
+    w.probeStop = () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  });
+
+const surfacesSeen = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      probeSurfaces: string[];
+      probeStop: () => void;
+    };
+    w.probeStop();
+    return w.probeSurfaces;
+  });
+
+/** How long the page is watched for a surface the pick should never bring: the owner's "keeps hovering" came within it. */
+const AFTER_PICK_MS = 2000;
+
+/**
+ * 38, one leg: an engine, a width, the pointer or the keyboard. The
+ * session's panel shut first, so the pick is what opens it.
+ */
+const pickLeg = async (
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  view: "desk" | "phone",
+  by: "pointer" | "keyboard",
+  id: string
+) => {
+  const leg = `${engine} ${SLOT_WIDTHS[view]} ${by}`;
+  const page = await openSession(
+    kit,
+    base,
+    view,
+    "light",
+    id,
+    undefined,
+    engine
+  );
+  await page.evaluate(
+    (session) =>
+      fetch(`/api/instances/${encodeURIComponent(session)}/preview`, {
+        method: "DELETE",
+      }),
+    id
+  );
+  await page
+    .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {
+      timeout: 15_000,
+    })
+    .catch(() => undefined);
+  if (by === "keyboard" && view === "desk") {
+    await page.locator("[data-files-control]").focus();
+    await page.keyboard.press("Enter");
+    await page
+      .locator("[data-files-card]")
+      .first()
+      .waitFor({ timeout: 30_000 });
+  } else {
+    await openFiles(page, view);
+  }
+  await atRest(page);
+  const card = page.locator(`[data-files-card][title="${PRICING}"]`);
+  const wanted = (await card.getAttribute("data-artifact")) ?? "";
+  if (by === "pointer") {
+    // The real pointer rests on the card, as the owner's did, then presses it.
+    await card.scrollIntoViewIfNeeded();
+    await atRest(page);
+    const box = await card.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
+        steps: 4,
+      });
+    }
+    await page.waitForTimeout(600);
+    await page.mouse.down();
+    await page.mouse.up();
+  } else {
+    // The focus on the card (a Tab stop; Files' cards take no arrows), then Enter.
+    await card.focus();
+    await page.keyboard.press("Enter");
+  }
+  const landed = await pickLanded(page, wanted);
+  // The pointer off Files' place, onto the transcript; then the page
+  // watched for what the pick should never bring back.
+  await watchSurfaces(page);
+  if (by === "pointer") {
+    const size = page.viewportSize() ?? { width: 390, height: 844 };
+    await page.mouse.move(size.width * 0.25, size.height * 0.5, { steps: 6 });
+  }
+  await page.waitForTimeout(AFTER_PICK_MS);
+  const surfaced = await surfacesSeen(page);
+  const paneAfter = await paneShows(page);
+  kit.check(
+    `38 (${leg}): the pick shows ${PRICING} in the session's panel and Files goes; for ${AFTER_PICK_MS} ms after, the pointer ${by === "pointer" ? "moved off" : "untouched"}, no Files surface, floating copy or hover surface opens, and the panel still shows it`,
+    !(landed.filesOpen || landed.float) &&
+      landed.pane === wanted &&
+      surfaced.length === 0 &&
+      paneAfter === wanted,
+    `landed ${JSON.stringify(landed)} (picked ${wanted}); surfaces ${JSON.stringify(surfaced)}; panel after ${paneAfter}`
+  );
+  if (view === "desk") {
+    // Escape, then a press outside (on the transcript): nothing of the
+    // pick's to dismiss, and the panel stays.
+    await watchSurfaces(page);
+    await page.keyboard.press("Escape");
+    const size = page.viewportSize() ?? { width: 1440, height: 900 };
+    await page.mouse.click(size.width * 0.25, size.height * 0.5);
+    await page.waitForTimeout(SEND_WINDOW_MS);
+    const dismissed = await surfacesSeen(page);
+    const paneKept = await paneShows(page);
+    kit.check(
+      `38 (${leg}): Escape and a press outside leave the session's panel showing ${PRICING}, and open nothing`,
+      paneKept === wanted && dismissed.length === 0,
+      `panel ${paneKept}; surfaces ${JSON.stringify(dismissed)}`
+    );
+  }
+  await sweep(page, `pick ${leg}`);
+  await page.close();
+};
+
+/** 38: the owner's report, in Chromium and WebKit, at 1440 and 390, by the pointer and the keyboard. */
+const pickLegs = async (kit: Kit, base: string, id: string) => {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["desk", "phone"] as const) {
+      for (const by of ["pointer", "keyboard"] as const) {
+        await pickLeg(kit, base, engine, view, by, id);
+      }
+    }
+  }
 };
 
 /** The first rows' boxes, read for 37. */

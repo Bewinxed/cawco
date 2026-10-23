@@ -422,8 +422,6 @@ const MODEL_CHIP = /^Model/;
 const NEW_WORKFLOW = /^New workflow$/;
 const NEW_WORKFLOW_KINDS = /New graph[\s\S]*New program/;
 const UPSTREAM = /^Other people's repositories/;
-/** An artifact shown in its session's panel (artifact-api.ts `showArtifact`). */
-const ARTIFACT_SHOW = /\/api\/instances\/[^/]+\/artifacts\/[^/]+\/show$/;
 /** A component canvas's map (artifact-api.ts `fetchCanvasMap`), and the scene's Card's (core `CanvasMap`). */
 const CANVAS_MAP_READ = /\/artifacts\/[^/]+\/map$/;
 const thumbOf = (states: ("drawn" | "failed" | "unseen")[]) => ({
@@ -4827,8 +4825,7 @@ export const SURFACES: Surface[] = [
   },
   {
     // The session's Files: the bar's glass card on a desk, the drawer from
-    // the rail's Files row on a phone; then an artifact picked in it,
-    // floating on Files' leading side (a desk's alone).
+    // the rail's Files row on a phone.
     name: "files",
     serve: "built",
     route: (s) => `/session/${s.art}`,
@@ -4840,51 +4837,6 @@ export const SURFACES: Surface[] = [
         ready: {
           shows:
             ":is([data-files-panel], [data-files-sheet]) [data-files-card]",
-        },
-      },
-      {
-        name: "picked",
-        widths: ["desk"],
-        act: async (page) => {
-          // The pick shows the artifact in its session's panel first (hub
-          // `…/show`, which the tape never heard): answered as the hub
-          // answers it. Last (its route stays).
-          await page.route(ARTIFACT_SHOW, (route) =>
-            route.fulfill({ status: 200, json: { ok: true } })
-          );
-          await openFiles(page);
-          await page
-            .locator("[data-files-panel] [data-files-card]")
-            .first()
-            .click();
-        },
-        root: "body",
-        ready: { shows: "[data-files-float][data-state=open]" },
-      },
-      {
-        // The floating panel's artifact menu: in its narrower head the ask's
-        // line gives way, and the menu says it first (ArtifactMenu's line).
-        name: "float-menu",
-        widths: ["desk"],
-        act: async (page) => {
-          await page.route(ARTIFACT_SHOW, (route) =>
-            route.fulfill({ status: 200, json: { ok: true } })
-          );
-          await openFiles(page);
-          await page
-            .locator("[data-files-panel] [data-files-card]")
-            .first()
-            .click();
-          await page
-            .locator(
-              "[data-files-float][data-state=open] [data-artifact-trigger]"
-            )
-            .first()
-            .click();
-        },
-        root: LAYER,
-        ready: {
-          shows: "[data-artifact-list][data-state=open] [data-artifact-row]",
         },
       },
     ],

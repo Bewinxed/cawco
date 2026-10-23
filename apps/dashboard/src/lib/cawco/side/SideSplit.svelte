@@ -29,7 +29,6 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { cawco } from "../client.svelte";
-  import { floatingPanel } from "../files/files.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
@@ -87,15 +86,7 @@
   // --- what the surface holds --------------------------------------------------
 
   const previewId = $derived(previewOf ?? viewId);
-  /**
-   * The panel is open, and stands here: while Files holds it floating
-   * beside itself on a desk (a file chosen there), the split leaves it to
-   * Files, and takes it back when Files closes.
-   */
-  const previewOpen = $derived(
-    cawco.previews[previewId]?.state === "open" &&
-      (phone || !floatingPanel(previewId))
-  );
+  const previewOpen = $derived(cawco.previews[previewId]?.state === "open");
   const taskShown = $derived(taskOpen && !!task && phone === false);
   const open = $derived(previewOpen || taskShown);
   /** What is open, in the switch's order. */

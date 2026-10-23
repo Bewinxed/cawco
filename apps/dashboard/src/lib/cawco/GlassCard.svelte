@@ -546,15 +546,15 @@
     }}
     onInteractOutside={(event) => {
       // The glass's own items open, swap or shut it themselves; bits-ui
-      // tells of a press on one after its click has already done so. The
-      // file floating beside Files is Files' own, and so is a picture it
-      // opened (the lightbox's PhotoSwipe root, appended to the body, is no
-      // layer of bits-ui's). Add machine's window and its output stand over
-      // the machines while their installs' rows arrive in it: the list stays.
+      // tells of a press on one after its click has already done so. A
+      // picture Files opened is Files' own (the lightbox's PhotoSwipe root,
+      // appended to the body, is no layer of bits-ui's). Add machine's
+      // window and its output stand over the machines while their installs'
+      // rows arrive in it: the list stays.
       if (
         event.target instanceof Element &&
         event.target.closest(
-          "[data-bar-group], [data-files-float], .cawco-pswp, [data-connect-window], [data-connect-output]"
+          "[data-bar-group], .cawco-pswp, [data-connect-window], [data-connect-output]"
         )
       ) {
         event.preventDefault();
