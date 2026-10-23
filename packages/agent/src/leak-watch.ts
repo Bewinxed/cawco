@@ -30,6 +30,13 @@
  * a machine whose keeper has no cgroups is out of its tree from its first
  * instant, and is not seen.
  *
+ * The same reading says which children are working (agent awake.ts holds
+ * idle sleep off for them): a child whose processes, itself aside, used at
+ * least {@link WORKING_SHARE} of one core since the reading before. A run a
+ * session started in its shell and left running past its turn (a probe kit
+ * run, a typecheck, a release) is one; the MCP servers a harness keeps idle
+ * beside it are not.
+ *
  * Why: the owner's word, 2026-10-22, replacing the heavy-run slots that
  * queued every probe, typecheck, landing gate and release behind 8 fixed
  * slots: "the issue is runaway tests runaway processes etc, javascript
@@ -41,6 +48,7 @@ import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
   commandLine,
+  cpuTimeUsed,
   type ProcessLineage,
   processLineage,
   residentBytes,
@@ -76,6 +84,14 @@ const CLIMB_MIN = 64 * 1024 ** 2;
 const DIP = 0.01;
 /** How long a process stays left behind before its session is told. */
 const ORPHAN_GRACE_MS = 10_000;
+/**
+ * The share of one core a child's processes, itself aside, use between two
+ * readings for the child to be working. Ours: an idle MCP server or shell
+ * uses well under a hundredth of a core; a bundler, a test run or a compiler
+ * uses most of one or more, and its waits for a build or a network answer
+ * still sum above a quarter over {@link LOOK_MS}.
+ */
+const WORKING_SHARE = 0.25;
 /** The most leftovers one message names; the rest are counted. */
 const NAMED = 8;
 /** Where the cgroup v2 hierarchy is mounted. */
@@ -209,6 +225,8 @@ interface Climb {
 /** What the watch remembers between readings. */
 interface Watching {
   climbs: Map<string, Climb>;
+  /** Each process's CPU time at its last reading, in microseconds, and when it was read (epoch ms). */
+  cpu: Map<string, { at: number; used: number }>;
   /** When each leftover was first seen left behind, by process. */
   left: Map<string, number>;
   /** Leftovers already told. */
@@ -374,7 +392,7 @@ const leftovers = async (
 
 /** Forgets what no process in `alive` is any more. */
 const forget = (watching: Watching, alive: ReadonlySet<string>): void => {
-  for (const map of [watching.climbs, watching.left]) {
+  for (const map of [watching.climbs, watching.left, watching.cpu]) {
     for (const key of map.keys()) {
       if (!alive.has(key)) {
         map.delete(key);
@@ -410,14 +428,53 @@ interface Table {
   rows: ReadonlyMap<number, ProcessLineage>;
 }
 
-/** One keeper child read once: its leaks found, told to its sessions. */
+/**
+ * What child `root`'s processes, itself aside, did since their last reading:
+ * the share of one core they used together and the busiest one's pid, or
+ * nothing when none was read before.
+ */
+const cpuSince = async (
+  root: ProcessLineage,
+  members: ReadonlyMap<number, ProcessLineage>,
+  watching: Watching
+): Promise<{ busiest: number; share: number } | undefined> => {
+  const shares = await Promise.all(
+    [...members.values()].map(async (row) => {
+      const used = await cpuTimeUsed(row.pid);
+      if (used === undefined) {
+        return;
+      }
+      const key = keyOf(row);
+      const at = Date.now();
+      const before = watching.cpu.get(key);
+      watching.cpu.set(key, { at, used });
+      return row.pid === root.pid || !before || at <= before.at
+        ? undefined
+        : {
+            pid: row.pid,
+            share: (used - before.used) / 1000 / (at - before.at),
+          };
+    })
+  );
+  let busiest: { pid: number; share: number } | undefined;
+  let share = 0;
+  for (const one of shares) {
+    if (one) {
+      share += one.share;
+      busiest = !busiest || one.share > busiest.share ? one : busiest;
+    }
+  }
+  return busiest ? { busiest: busiest.pid, share } : undefined;
+};
+
+/** One keeper child read once: its leaks found, told to its sessions; the words for its work when it is {@link WORKING_SHARE} busy. */
 const lookAtChild = async (
   child: { pid: number; procId: string; target: LeakTarget },
   table: Table,
   watching: Watching,
   limit: number,
   options: LeakOptions
-): Promise<void> => {
+): Promise<string | undefined> => {
   const root = table.rows.get(child.pid);
   if (!root) {
     return;
@@ -452,7 +509,18 @@ const lookAtChild = async (
       options.tell(child.target.instanceIds, found.id, found.words);
     }
   }
+  const cpu = await cpuSince(root, members, watching);
+  if (!cpu || cpu.share < WORKING_SHARE) {
+    return;
+  }
+  return `\`${await commandOf(cpu.busiest)}\` in session ${child.target.instanceIds.map((id) => id.slice(0, 8)).join(", ")} (${Math.round(cpu.share * 100)}% of a core)`;
 };
+
+/** The keeper children working at the watch's last reading, in words: what awake.ts holds idle sleep off for. */
+let working: readonly string[] = [];
+
+/** The runs the sessions' processes are working on, as the leak watch last read them ({@link WORKING_SHARE}). */
+export const runsWorking = (): readonly string[] => working;
 
 /**
  * Starts the watch: every {@link LOOK_MS}, each keeper child `targetOf`
@@ -464,6 +532,7 @@ const lookAtChild = async (
 export const watchLeaks = (options: LeakOptions): void => {
   const watching: Watching = {
     climbs: new Map(),
+    cpu: new Map(),
     left: new Map(),
     trees: new Map(),
     told: new Set(),
@@ -480,6 +549,7 @@ export const watchLeaks = (options: LeakOptions): void => {
       .filter((child) => child.target.instanceIds.length > 0);
     if (children.length === 0) {
       forget(watching, new Set());
+      working = [];
       return;
     }
     const lineage = await processLineage();
@@ -491,10 +561,15 @@ export const watchLeaks = (options: LeakOptions): void => {
       rows: new Map(lineage.map((row) => [row.pid, row])),
       byParent,
     };
+    const now: string[] = [];
     for (const child of children) {
       // biome-ignore lint/performance/noAwaitInLoops: one child at a time, each read against the same table
-      await lookAtChild(child, table, watching, limit, options);
+      const work = await lookAtChild(child, table, watching, limit, options);
+      if (work) {
+        now.push(work);
+      }
     }
+    working = now;
     forget(watching, new Set(lineage.map(keyOf)));
   };
   const again = (): void => {

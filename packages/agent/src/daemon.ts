@@ -3187,8 +3187,9 @@ export const startDaemon = (rediscover = false) =>
           return network ? [network] : [];
         }),
     });
-    // While a turn, a gate step or a boundary's command is live
-    // here, the OS does not idle-sleep this machine (awake.ts).
+    // While a turn, a gate step, a boundary's command or a run a session
+    // left working is live here, the OS does not idle-sleep this machine
+    // (awake.ts).
     keepAwakeWhileWorking(() => supervisor.turnsRunning());
     // How the person uses this machine, toward whether they are here.
     watchActivity()

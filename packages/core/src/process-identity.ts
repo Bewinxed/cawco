@@ -1133,6 +1133,23 @@ export async function residentBytes(pid: number): Promise<number | undefined> {
   return kb === undefined ? undefined : Number(kb) * 1024;
 }
 
+/**
+ * The CPU time `pid` has used, user and system, in microseconds: Linux's
+ * `utime` + `stime` in `/proc/<pid>/stat`, the Mac's task info, as
+ * {@link processTable} reads them. Undefined when it is gone or not ours to
+ * read.
+ */
+export async function cpuTimeUsed(pid: number): Promise<number | undefined> {
+  if (process.platform !== "linux") {
+    return darwinCpuMicroseconds(pid);
+  }
+  const fields = (await linuxStat(pid))?.fields;
+  return fields?.[12] === undefined
+    ? undefined
+    : ((Number(fields[11]) + Number(fields[12])) * 1_000_000) /
+        LINUX_TICKS_PER_SECOND;
+}
+
 /** The whitespace between a `/proc/net/tcp` row's fields. */
 const PROC_NET_FIELDS = /\s+/;
 

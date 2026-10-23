@@ -6,7 +6,10 @@
  *  - a command the hub asked of this machine, a landing gate's step among
  *    them (workflow-command.ts `commandsRunning`);
  *  - a command in a workspace's boundary (boundary.ts
- *    `workspacesWithCommands`, its executors' marks).
+ *    `workspacesWithCommands`, its executors' marks);
+ *  - a run a session's processes are working on past its turn (a probe kit
+ *    run, a typecheck or a release left running in its shell), as the leak
+ *    watch reads the sessions' processes (leak-watch.ts `runsWorking`).
  *
  * Once none is left the hold goes, and the OS's own sleep settings apply
  * again. Only idle sleep is held: the person can still sleep the machine or
@@ -47,6 +50,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { workspacesWithCommands } from "./boundary";
+import { runsWorking } from "./leak-watch";
 import { resolveBin, toolEnv } from "./tools";
 import { commandsRunning } from "./workflow-command";
 
@@ -142,6 +146,7 @@ export const keepAwakeWhileWorking = (
       workspacesWithCommands(),
     ]);
     const commands = commandsRunning();
+    const runs = runsWorking();
     return [
       ...(running.length > 0
         ? [
@@ -155,6 +160,7 @@ export const keepAwakeWhileWorking = (
             `a command in workspace ${named(workspaces.map((id) => id.slice(0, 8)))}`,
           ]
         : []),
+      ...runs.map((run) => `the run ${run}`),
     ];
   };
 
