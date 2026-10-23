@@ -4,6 +4,10 @@
   "compilerOptions": {
     "sourceMap": true,
     "strict": true,
+    // Its own, not only the generated config's: before `svelte-kit sync`
+    // writes that config, a build here would write `.svelte.js` and `.js`
+    // beside every source.
+    "noEmit": true,
     // A leaf of the project references (scripts/check.ts): its build info
     // keeps what it checked, and the libraries it imports are read from
     // their declarations, checked in their own projects.
