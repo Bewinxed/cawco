@@ -4,7 +4,8 @@
  * `/proc/self/ns/pid`, another inside a workspace boundary than on the
  * host), its working directory, the workspace its executor named
  * (`CAWCO_WORKSPACE`, set on every command a boundary runs and on nothing
- * else), and whether `PROBE_REACH` (a URL, the browser gate's) answered it.
+ * else), whether `PROBE_REACH` (a URL, the browser gate's) answered it, and
+ * `PROBE_MARK`, which tells one config of it from another.
  * Each process writes its pid into `PROBE_MCP_PIDS` as it starts, when that
  * names a directory. JSON-RPC, one message per line
  * (https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
@@ -87,6 +88,7 @@ const take = async (message: Message): Promise<void> => {
         cwd: process.cwd(),
         workspace: process.env.CAWCO_WORKSPACE ?? "",
         reach: await reach(process.env.PROBE_REACH),
+        mark: process.env.PROBE_MARK ?? "",
       };
       send({
         id: message.id,

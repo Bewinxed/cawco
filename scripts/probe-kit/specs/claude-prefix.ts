@@ -46,6 +46,9 @@
  *   runs.
  * - p12. The prefix hands its stdin to the command whole, and a read at a
  *   time while it stays open (the CLI's stdin is a socket).
+ * - p13. A fleet change to `probegate`'s config gives its gate URL a new
+ *   mark (so a session's harness dials it anew), and the gate runs the new
+ *   config.
  *
  *   bun scripts/probe-kit/run.ts claude-prefix
  */
@@ -66,6 +69,7 @@ const WHERE = /PROBE-WHERE (\{.*\})/;
 
 interface Where {
   cwd: string;
+  mark: string;
   ns: string;
   pid: number;
   workspace: string;
@@ -355,14 +359,17 @@ const run = async (kit: Kit) => {
   };
 
   // ── The fleet's `probegate`, through the gateway ──────────────────────
+  const probegate: {
+    args: string[];
+    command: string;
+    env: Record<string, string>;
+  } = {
+    command: bun,
+    args: [FIXTURE],
+    env: { PROBE_MCP_PIDS: pids },
+  };
   await writeFleetMcpSet({
-    servers: {
-      probegate: {
-        command: bun,
-        args: [FIXTURE],
-        env: { PROBE_MCP_PIDS: pids },
-      },
-    },
+    servers: { probegate },
     placed: {},
     signedOut: [],
   });
@@ -443,10 +450,7 @@ const run = async (kit: Kit) => {
           permissionMode: "bypassPermissions",
           allowDangerouslySkipPermissions: true,
           settingSources: ["project", "local"],
-          mcpServers: throughMcpGate(
-            { probegate: { command: bun, args: [FIXTURE] } },
-            gate
-          ),
+          mcpServers: throughMcpGate({ probegate }, gate),
           ...bounded,
           env: {
             ...env,
@@ -654,6 +658,44 @@ const run = async (kit: Kit) => {
       "p9: the gate's last session leaving ends its process, and `tools/list` is answered from the kept listing, starting none",
       ended && listed.includes('"whereami"') && before === after,
       `ended ${ended}; listed ${listed.slice(0, 300)}; pids before ${before} after ${after}`
+    );
+
+    // ── The fleet changes the gate's server ────────────────────────────
+    const changed = {
+      ...probegate,
+      env: { ...probegate.env, PROBE_MARK: "changed" },
+    };
+    await writeFleetMcpSet({
+      servers: { probegate: changed },
+      placed: {},
+      signedOut: [],
+    });
+    const urlOf = (config: typeof probegate) =>
+      (throughMcpGate({ probegate: config }, gate).probegate as { url: string })
+        .url;
+    const called = await fetch(urlOf(changed), {
+      method: "POST",
+      headers: { ...gate.headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "whereami", arguments: {} },
+      }),
+    }).then((answered) => answered.text());
+    const answer = (
+      JSON.parse(called) as { result?: { content?: { text?: string }[] } }
+    ).result?.content?.[0]?.text;
+    const changedFound = WHERE.exec(answer ?? "")?.[1];
+    const changedWhere = changedFound
+      ? (JSON.parse(changedFound) as Where)
+      : undefined;
+    check(
+      "p13: a changed fleet config gives its gate URL a new mark, so a session dials it anew, and the gate runs the new config",
+      urlOf(probegate) !== urlOf(changed) &&
+        changedWhere?.mark === "changed" &&
+        changedWhere.pid !== gated?.pid,
+      `${urlOf(probegate)} → ${urlOf(changed)}; ${called.slice(0, 400)}`
     );
 
     // ── An emptied prefix ──────────────────────────────────────────────
