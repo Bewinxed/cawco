@@ -52,7 +52,14 @@
  *
  *   bun scripts/probe-kit/run.ts claude-prefix
  */
-import { chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
@@ -736,6 +743,8 @@ const run = async (kit: Kit) => {
     mcpHost.stopAll();
     judge.kill();
     runner.kill();
+    // The judge's socket is in the run's temp dir, outside its HOME.
+    await rm(socket, { force: true });
   }
 };
 
