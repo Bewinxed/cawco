@@ -535,6 +535,10 @@ const baseURL = `${mock.url.origin}/v1`;
 const hub = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
+  // It is the harnesses' MCP gateway here too, and a gate's tool call (a
+  // browser's cold start) outlasts Bun's 10 s idle cut, as the agent's own
+  // gateway is served with none (mcp-oauth.ts).
+  idleTimeout: 0,
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/api/delegation/tools") {
@@ -579,6 +583,12 @@ process.env.CAWCO_HUB_URL = `${hub.url.origin}/ws`;
 // server's, never the live agent's on the default port. Read once per
 // process (core `CAWCO_ENV.mcpPort`), so named before anything reads it.
 process.env.CAWCO_MCP_PORT = String(hub.port);
+// The machine's agent is the process holding the machine's hub link
+// (machine-agent.ts): the daemon says so once its connection is proven, and
+// OpenCode's server waits on it to start. This probe plays the agent, its
+// hub the stand-in above.
+const { holdHubLink } = await import("../packages/agent/src/machine-agent");
+holdHubLink();
 await Bun.write(
   join(home, ".config", "cawco", "config.json"),
   JSON.stringify({ hubUrl: `${hub.url.origin}/ws` })
@@ -806,7 +816,8 @@ await browsers.watchBrowsers();
 // hub stand-in, the harnesses' gateway here), which runs it on the host
 // through the workspace's door, for OpenCode (its plugin points the
 // location's entry at the gate) and Claude Code alike.
-const { hostKey, mcpGateOf } = await import("../packages/agent/src/mcp-host");
+const { hostKey, mcpGateOf, mcpHost } =
+  await import("../packages/agent/src/mcp-host");
 const { writeFleetMcpSet } =
   await import("../packages/agent/src/fleet-mcp-set");
 hostKey();
@@ -1503,6 +1514,10 @@ try {
 } finally {
   await earlier?.dispose();
   await opencode.dispose();
+  // The gates' chrome-devtools this process ran for the workspaces, each
+  // holding its browser through the DevTools gate: ended before the browsers
+  // are removed, as the agent ends them with a gate's last session.
+  mcpHost.stopAll();
   for (const row of await browsers.browserRows()) {
     // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
     await browsers.removeBrowser(row.key);
