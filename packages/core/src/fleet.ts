@@ -22,19 +22,16 @@ import { memoryWords } from "./words/memory";
 /**
  * Where a fleet row applies, in Claude Code's own vocabulary:
  *
- * - `user` — every machine, every project. MCP goes to `~/.claude.json`'s
- *   top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install
- *   `--scope user`. The default, and what most rows want.
- * - `local` — one project, privately: `~/.claude.json`'s
- *   `projects["<cwd>"].mcpServers`, the map Claude Code already keeps per
- *   checkout and git never sees; plugins `--scope local`. What a
- *   project-bound row should be unless the reader asks to share it.
- * - `project` — one project, shared with whoever clones it: `.mcp.json` at
- *   the repo root, plugins `--scope project`. It writes inside the working
- *   tree, so it is never the default.
- *
- * Skills have no `local` in Claude Code, so a project-bound skill lands in
- * `<cwd>/.claude/skills/` under either scope.
+ * - `user` — every machine, every project. The default, and what most rows
+ *   want.
+ * - `local`, `project` — one project ({@link FleetPlacement.projectId}):
+ *   the hub sends one copy per checkout and workspace of it, and each
+ *   session in that folder takes it. An MCP server, a hook, Claude Code
+ *   settings, an OpenCode plugin and a pi extension reach the folder's
+ *   sessions through CawCo's own files and their launch (agent
+ *   fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.
+ *   A skill is placed in `<cwd>/.claude/skills/` under either scope, kept
+ *   out of the checkout's status.
  */
 export type FleetScope = "user" | "project" | "local";
 
@@ -941,8 +938,11 @@ export interface MachineFleetConfig extends FleetConfig {
    * Project-bound MCP servers (Projects §5.1: "reach every place of the
    * project"), one copy per checkout and delegate workspace of the project on
    * this machine, each with that place's `cwd` and `placeId`. Written into
-   * each `.claude.json`'s per-folder map (`projects["<cwd>"].mcpServers`),
-   * which git never sees. Never in {@link mcp}, so no user-scope path takes
+   * CawCo's own file (agent fleet-mcp-set.ts, core `fleetMcpSetFile`), which
+   * each CawCo session reads as it starts: Claude Code's through the SDK's
+   * `mcpServers`, pi's through `pi.registerMcpServer`, OpenCode's through
+   * CawCo's plugin. No config file the person's own `claude`, `opencode` or
+   * `pi` reads holds them. Never in {@link mcp}, so no user-scope path takes
    * them.
    */
   placedMcp: FleetMcpServer[];

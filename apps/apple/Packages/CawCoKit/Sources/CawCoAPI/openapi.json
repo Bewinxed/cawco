@@ -31109,7 +31109,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "script": {
             "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
@@ -48145,6 +48145,10 @@
             "description": "When the sync ran, ms epoch.",
             "type": "number"
           },
+          "harnessConfig": {
+            "type": "object",
+            "description": "The fleet's Claude Code settings, OpenCode plugins and pi extensions,\nby `<kind>:<name>` (a placed copy's `<kind>:<name>@<place id>`): what the\nsync wrote or installed for each, as sessions take it at their launch."
+          },
           "have": {
             "description": "What this machine holds on its disk once the sync is done, by hash — the\ncontent-carrying rows only, hashed as the hub hashes them. It tells the\nhub whose content moved, so running sessions reload.",
             "type": "object",
@@ -48161,10 +48165,6 @@
           "hooks": {
             "type": "object",
             "description": "The fleet's hooks, by the same id the hub keeps them under (a placed\ncopy's `<id>@<place id>`). Claude Code's report says what its sync\nregistered; OpenCode's and pi's whether CawCo runs the hook there at all,\n`unsupported` with why for an event or handler that harness has no point\nfor (core `hookUnsupported`). A machine's merged report holds each hook's\nworst, every harness's word in its `detail`. `failed` covers three\ndifferent machine-local facts — a hand-edited script, a validation the\nhub already passed but this row failed again, or a project hook with no\ncheckout here — and `detail` is what tells them apart."
-          },
-          "harnessConfig": {
-            "type": "object",
-            "description": "The fleet's Claude Code settings, OpenCode plugins and pi extensions,\nby `<kind>:<name>` (a placed copy's `<kind>:<name>@<place id>`): what the\nsync wrote or installed for each, as sessions take it at their launch."
           },
           "marketplaces": {
             "type": "object"
@@ -49552,7 +49552,7 @@
         ]
       },
       "FleetScope": {
-        "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
+        "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status.",
         "type": "string",
         "enum": [
           "local",
@@ -53659,7 +53659,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           }
         },
         "required": [
@@ -53692,7 +53692,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           }
         },
         "required": [
@@ -53741,7 +53741,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "checkError": {
             "description": "Why the last read of the source for what it holds failed.",
@@ -53882,7 +53882,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "checkError": {
             "description": "Why the last read of the source for what it holds failed.",
@@ -54560,7 +54560,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           }
         },
         "required": [
@@ -54830,7 +54830,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "matcher": {
             "type": "string"
