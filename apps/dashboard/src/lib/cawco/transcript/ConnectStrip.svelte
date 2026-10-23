@@ -8,8 +8,8 @@
    * and the address's host; ✕ is Not now. Connect grows the same tile
    * upward into the card: the why, the whole address, what it may do, the
    * Other line and what Connect does stand over the line, and the line
-   * stays at the tile's foot with its Connect, so the card reads as the
-   * strip opened. Each outcome is said on the same line until it is done:
+   * stays under them, so the card reads as the strip opened; its foot is
+   * Connect and a labelled Not now at the two ends, as A's and B's are. Each outcome is said on the same line until it is done:
    * the wait, a failure with Try again, a lapsed connection with Reconnect,
    * and Connected for a beat before the line goes.
    *
@@ -156,7 +156,7 @@
         >
       {/if}
     </p>
-    {#if !connected}
+    {#if !(connected || opened)}
       <div data-slot="actions" class="flex gap-space-2 ms-auto">
         {#if step === "waiting"}
           <Button
@@ -167,13 +167,12 @@
           />
         {:else}
           <Button
-            answer={opened ? "approve-strong" : undefined}
             fit="prompt"
             icon={step === "failed" ? IconRefresh : IconKey}
             label={connectYes(step === "failed", step === "expired")}
             onclick={onopen}
             size="sm"
-            variant={opened ? "secondary" : "outline"}
+            variant="outline"
           />
         {/if}
         <Button
@@ -186,4 +185,32 @@
       </div>
     {/if}
   </div>
+  {#if opened}
+    <!-- The Peer Rule's transcript form, as A's and B's cards have it: the
+         yes and the refusal at the row's two ends, the one recessed fill,
+         each outlined in its tint. Opened, the line's ✕ gives way to the
+         labelled Not now. -->
+    <div data-slot="choice" class="flex justify-between gap-space-8">
+      <Button
+        answer="approve-strong"
+        class="flex-none"
+        fit="prompt"
+        width="shrink"
+        icon={IconKey}
+        label={connectWords.connect}
+        size="sm"
+        variant="secondary"
+      />
+      <Button
+        answer="deny-strong"
+        class="flex-none"
+        fit="prompt"
+        width="shrink"
+        icon={IconClose}
+        label={connectWords.notNow}
+        size="sm"
+        variant="secondary"
+      />
+    </div>
+  {/if}
 </section>

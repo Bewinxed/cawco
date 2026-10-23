@@ -36,10 +36,10 @@ export const AskingPhone = {
   parameters: { viewport: 390 },
 };
 
-/** Desk: opened. Connect grows the strip upward into the card: why, the whole address, consent, over the strip's own line. */
+/** Desk: opened. Connect grows the strip upward into the card: why, the whole address, consent, over the strip's own line, Connect and Not now at the two ends. */
 export const Opened = { args: { moment: "opened" } };
 
-/** Phone: the strip opened into the card, its line still at the foot. */
+/** Phone: the strip opened into the card, its line kept, Connect and Not now at the two ends. */
 export const OpenedPhone = {
   args: { moment: "opened", height: PHONE_HEIGHT },
   parameters: { viewport: 390 },
