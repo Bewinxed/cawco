@@ -24,6 +24,9 @@
  *     attributes as at rest, no control of the page newly under an `inert`,
  *     and the focus is on the control the press put it on, or back on the
  *     control that opened the layer: never left on the body.
+ *  4. each screen again as Safari presses (its click focuses no link or
+ *     button: the control pressed outside gives the focus up as it takes
+ *     it): once the exit settles, the focus is back on the opener.
  *
  *   bun scripts/probe-kit/run.ts menus-let-go [--engines=chromium,webkit] [--views=desk,phone]
  */
@@ -102,6 +105,8 @@ const REDRAW_MS = 15_000;
 
 declare global {
   interface Window {
+    /** Ends the Safari press's hold on the control pressed. */
+    probeLetGo?: () => void;
     /** Whether the click arrived at the control the press was aimed at. */
     probeTook?: boolean;
   }
@@ -257,7 +262,11 @@ function openedLayer(layer: string): string | null {
  * And what the engine says at that point now: the element found there,
  * <html>'s and <body>'s `pointer-events`, and where the focus is.
  */
-function pickOutside(args: { scrim: string; outside: string[] }) {
+function pickOutside(args: {
+  scrim: string;
+  outside: string[];
+  safari: boolean;
+}) {
   const name = (el: Element | null): string => {
     if (!el) {
       return "nothing";
@@ -346,6 +355,15 @@ function pickOutside(args: { scrim: string; outside: string[] }) {
     return null;
   }
   best.el.setAttribute("data-probe-picked", "");
+  // As Safari: a click focuses no link or button, so the press leaves the
+  // focus on <body> by the time the layer closes.
+  // Under a scrim the press never reaches it, so it is held only for this
+  // press: the leg lets it go once the layer has closed (`probeLetGo`).
+  if (args.safari && !scrim) {
+    const giveUp = () => best.el.blur();
+    best.el.addEventListener("focus", giveUp, { once: true });
+    window.probeLetGo = () => best.el.removeEventListener("focus", giveUp);
+  }
   // Heard on the control itself, where the click is aimed: it goes no
   // further up (the page's delegated handlers, SvelteKit's links) and does
   // nothing by default. A dismissal that listens on the document's capture
@@ -463,16 +481,26 @@ function afterExit(openerKey: string) {
   };
   const at = document.activeElement;
   const picked = document.querySelector("[data-probe-picked]");
+  // An opener that went with the layer it stood in (the rail's sheet, giving
+  // way to Jump) hands the focus to what opened that layer (bar-glass
+  // `invoker`, the burger): any control of the page then, never <body>.
+  const opener = document.querySelector("[data-probe-opener-pressed]");
+  const box = opener?.isConnected ? opener.getBoundingClientRect() : null;
+  const openerGone = !(box && box.width > 0 && box.height > 0);
+  const onControl = Boolean(
+    at && at !== document.body && !at.closest("[data-probe-layer]")
+  );
   return {
+    openerGone,
     htmlPointer: getComputedStyle(document.documentElement).pointerEvents,
     bodyPointer: getComputedStyle(document.body).pointerEvents,
     html: document.documentElement.getAttribute("style") || null,
     body: document.body.getAttribute("style") || null,
     inert: document.querySelectorAll("[inert] [data-probe-any]").length,
     focus: at ? keyOf(at) : "nothing",
-    onOpener: Boolean(
-      at && at !== document.body && openerKey.startsWith(keyOf(at))
-    ),
+    onOpener: openerGone
+      ? onControl
+      : Boolean(at && at !== document.body && openerKey.startsWith(keyOf(at))),
     onPicked: Boolean(picked && at && (at === picked || picked.contains(at))),
     restOpen: Array.from(document.querySelectorAll("[data-probe-rest]")).filter(
       (el) => el.isConnected && el.getAttribute("data-state") === "open"
@@ -524,7 +552,8 @@ async function exitChecks(
   page: Page,
   what: string,
   key: string,
-  rest: Rest
+  rest: Rest,
+  safari: boolean
 ): Promise<void> {
   const leaving = await page.evaluate(duringExit);
   if (leaving.held > 0) {
@@ -551,11 +580,11 @@ async function exitChecks(
       ? after.html === rest.html && !LOCK_STYLE.test(after.body ?? "")
       : after.html === rest.html && after.body === rest.body;
   kit.check(
-    `${what}: once its exit settles, <html> and <body> take presses as at rest, their style and the page's inert are as at rest, and the focus is on the pressed control or its opener`,
+    `${what}: once its exit settles, <html> and <body> take presses as at rest, their style and the page's inert are as at rest, and the focus is ${safari ? "back on its opener, the press having focused nothing" : "on the pressed control or its opener"}`,
     pointers &&
       styles &&
       after.inert === rest.inert &&
-      (after.onPicked || after.onOpener),
+      (safari ? after.onOpener : after.onPicked || after.onOpener),
     JSON.stringify({
       pointerEvents: {
         html: [rest.htmlPointer, after.htmlPointer],
@@ -564,6 +593,7 @@ async function exitChecks(
       style: { html: [rest.html, after.html], body: [rest.body, after.body] },
       inert: [rest.inert, after.inert],
       focus: after.focus,
+      openerGone: after.openerGone,
       onOpener: after.onOpener,
       onPicked: after.onPicked,
     })
@@ -576,7 +606,8 @@ async function leg(
   page: Page,
   view: View,
   key: string,
-  label: string
+  label: string,
+  safari: boolean
 ): Promise<boolean> {
   const rest = await page.evaluate(atRest, {
     layer: LAYER,
@@ -613,6 +644,7 @@ async function leg(
   await settle(page, 0);
   const layer = await page.evaluate(openedLayer, LAYER);
   const pick = await page.evaluate(pickOutside, {
+    safari,
     scrim: SCRIM,
     outside: OUTSIDE,
   });
@@ -655,13 +687,15 @@ async function leg(
     JSON.stringify({ closed, took })
   );
   if (closed) {
-    await exitChecks(kit, page, what, key, rest);
+    await exitChecks(kit, page, what, key, rest, safari);
   }
-  await page.evaluate(() =>
+  await page.evaluate(() => {
     document
       .querySelector("[data-probe-opener-pressed]")
-      ?.removeAttribute("data-probe-opener-pressed")
-  );
+      ?.removeAttribute("data-probe-opener-pressed");
+    window.probeLetGo?.();
+    window.probeLetGo = undefined;
+  });
   return closed && page.url() === url;
 }
 
@@ -672,9 +706,10 @@ async function walk(
   view: View,
   engine: Engine,
   base: string,
-  screen: Screen
+  screen: Screen,
+  safari: boolean
 ): Promise<void> {
-  const on = `${screen.name} · ${engine} ${VIEW_PX[view] ?? view}`;
+  const on = `${screen.name} · ${engine} ${VIEW_PX[view] ?? view}${safari ? " · as Safari" : ""}`;
   const find = () =>
     page.evaluate(openersOf, {
       opener: OPENER,
@@ -700,7 +735,7 @@ async function walk(
         REDRAW_MS
       ).catch(() => undefined);
     }
-    const clean = await leg(kit, page, view, key, label).catch(
+    const clean = await leg(kit, page, view, key, label, safari).catch(
       (error: unknown) => {
         kit.check(`${label}: runs`, false, String(error).split("\n")[0]);
         return false;
@@ -772,9 +807,13 @@ const spec: Spec = {
       for (const view of VIEWS) {
         const page = await kit.page(view, { engine, theme: "light" });
         page.setDefaultTimeout(10_000);
-        for (const screen of screens) {
-          if (!screen.views || screen.views.includes(view)) {
-            await walk(kit, page, view, engine, base, screen);
+        // Each screen as the engine presses, then as Safari does, whose
+        // click focuses no link or button.
+        for (const safari of [false, true]) {
+          for (const screen of screens) {
+            if (!screen.views || screen.views.includes(view)) {
+              await walk(kit, page, view, engine, base, screen, safari);
+            }
           }
         }
         await page.context().close();

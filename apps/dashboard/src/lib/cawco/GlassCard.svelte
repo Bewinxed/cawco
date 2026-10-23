@@ -139,8 +139,6 @@
 
   /** What had the focus before the first card opened. */
   let returnTo: HTMLElement | null = null;
-  /** It is closing on a press outside it, or on the glass: the focus stays. */
-  let closedOutside = false;
   /** It is folding back into the glass, still drawn. */
   let folding = false;
 
@@ -303,7 +301,6 @@
       folding = from !== null && barGlass.joined;
       return;
     }
-    closedOutside = false;
     if (from === to) {
       return;
     }
@@ -528,25 +525,24 @@
       if (rehearsing) {
         return;
       }
-      // Shut by a press elsewhere, or by a press on the glass that took the
-      // focus: it stays where that press put it.
+      // Shut by a press on the glass that took the focus: it stays where
+      // that press put it.
       const pressedGlass =
         document.activeElement instanceof Element &&
         glass?.contains(document.activeElement);
-      // What the card put away also moved the focus on to somewhere of its
-      // own (Files' ask, into the composer): it stays there.
+      // A press elsewhere that put the focus on a control, or what the card
+      // put away moving it on to somewhere of its own (Files' ask, into the
+      // composer): it stays there. A press that focused nothing (Safari's
+      // click on a link or button, the page's ground) gives it back, never
+      // leaving it on <body> (floating-presence `pressedAway`).
       const movedOn =
         document.activeElement instanceof HTMLElement &&
         document.activeElement !== document.body &&
         !content?.contains(document.activeElement) &&
         !pressedGlass;
-      if (
-        !(closedOutside || pressedGlass || movedOn) &&
-        returnTo?.isConnected
-      ) {
+      if (!(pressedGlass || movedOn) && returnTo?.isConnected) {
         returnTo.focus({ preventScroll: true });
       }
-      closedOutside = false;
       returnTo = null;
     }}
     onInteractOutside={(event) => {
@@ -563,9 +559,7 @@
         )
       ) {
         event.preventDefault();
-        return;
       }
-      closedOutside = true;
     }}
     onOpenAutoFocus={(event) => {
       event.preventDefault();

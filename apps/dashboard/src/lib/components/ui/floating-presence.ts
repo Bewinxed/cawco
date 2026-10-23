@@ -47,17 +47,27 @@ export function pressable(open: boolean): "auto" | "none" {
 
 /**
  * A floating surface a press outside closed leaves the focus where that
- * press put it. bits-ui's focus scope hands the focus back to whatever held
- * it before the surface opened (its trigger) whenever the surface closes, so
- * a press on a field or a row outside an open popover closed the popover and
- * then took the focus off what was pressed. Closed by Escape, an item or its
- * trigger, the focus goes back to the trigger as before.
+ * press put it: on the control pressed. bits-ui's focus scope hands the
+ * focus back to whatever held it before the surface opened whenever the
+ * surface closes, so a press on a field or a row outside an open popover
+ * closed the popover and then took the focus off what was pressed.
+ *
+ * A press that put the focus on no control (Safari focuses no link or
+ * button a click lands on, and a press on the page's ground focuses
+ * nothing) gives it back to the surface's trigger, the control naming it
+ * (`aria-controls`), never leaving it on <body>: bits-ui's memory is what
+ * held the focus as the surface opened, which in Safari, where the press on
+ * the trigger focused nothing either, is <body>. Closed by Escape, an item
+ * or its trigger, bits-ui hands the focus back as before.
  *
  * Its site's own handlers run first; a press the site keeps (its
  * `onInteractOutside` prevents it) closes nothing and changes nothing here,
- * nor does one on another floating surface.
+ * nor does one on another floating surface, nor a close whose focus the
+ * site handles itself (its `onCloseAutoFocus` prevents it).
  */
 export function pressedAway(site: {
+  /** The surface's element (its content's `ref`). */
+  content: () => HTMLElement | null;
   onCloseAutoFocus: () => ((event: Event) => void) | undefined;
   onInteractOutside: () => ((event: PointerEvent) => void) | undefined;
 }): {
@@ -65,6 +75,7 @@ export function pressedAway(site: {
   onInteractOutside: (event: PointerEvent) => void;
 } {
   let away = false;
+  let trigger: HTMLElement | null = null;
   return {
     onInteractOutside: (event) => {
       site.onInteractOutside()?.(event);
@@ -75,13 +86,35 @@ export function pressedAway(site: {
         event.defaultPrevented ||
         target?.closest("[data-bits-floating-content-wrapper]")
       );
+      // Its trigger names it only while it is open (bits-ui writes
+      // `aria-controls` then): read now, before the close.
+      const surface = site.content();
+      trigger = surface?.id
+        ? document.querySelector<HTMLElement>(
+            `[aria-controls="${CSS.escape(surface.id)}"]`
+          )
+        : null;
     },
     onCloseAutoFocus: (event) => {
       site.onCloseAutoFocus()?.(event);
-      if (away) {
+      const pressed = away;
+      away = false;
+      if (!pressed || event.defaultPrevented) {
+        return;
+      }
+      // bits-ui closes a mouse's press 10ms after its pointerdown and a
+      // finger's at its click: the press has put the focus where it goes.
+      const surface = site.content();
+      const at = document.activeElement;
+      const onControl = at && at !== document.body && !surface?.contains(at);
+      // A surface no trigger names (a context menu's area) is bits-ui's to
+      // hand back.
+      if (onControl || trigger) {
         event.preventDefault();
       }
-      away = false;
+      if (!onControl) {
+        trigger?.focus({ preventScroll: true });
+      }
     },
   };
 }

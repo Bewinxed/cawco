@@ -65,6 +65,7 @@
      outside closes the menu and lands on what it was pressed on, the focus
      left there (`pressedAway`). */
   const away = pressedAway({
+    content: () => ref,
     onInteractOutside: () => onInteractOutside,
     onCloseAutoFocus: () => onCloseAutoFocus,
   });

@@ -157,6 +157,7 @@
      press outside closes it, leaving the focus where that press put it
      (floating-presence `pressedAway`). */
   const away = pressedAway({
+    content: () => ref,
     onInteractOutside: () => onInteractOutside,
     onCloseAutoFocus: () => onCloseAutoFocus,
   });
