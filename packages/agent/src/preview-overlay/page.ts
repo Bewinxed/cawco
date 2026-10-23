@@ -206,6 +206,8 @@ function paint() {
       : null;
   const chosen = pinned ?? (stepped?.isConnected ? stepped : null);
   const target = chosen ?? (commenting() && !composing ? hovered : null);
+  // One tint per element: a changed element that becomes the target is looked at, and its change tint goes.
+  changeMarks.targeted(target);
   highlight.hidden = !target;
   const doc = target?.ownerDocument;
   const root =

@@ -939,7 +939,7 @@ const canvasIds = async (on: On) => {
         '.canvas-change[data-change="db"]:not([data-leaving])'
       );
       const probe = document.createElement("span");
-      probe.style.color = "var(--change-wash)";
+      probe.style.color = "var(--c-change-tint)";
       document.body.append(probe);
       const token = getComputedStyle(probe).color;
       probe.remove();
@@ -959,7 +959,7 @@ const canvasIds = async (on: On) => {
     15_000
   ).catch(canvasWash);
   kit.check(
-    "4: a canvas patch's element takes the done wash over it, in change-wash",
+    "4: a canvas patch's element takes the done tint over it, in c-change-tint",
     !!wash && wash.fill === wash.token && wash.w > 0 && wash.h > 0,
     JSON.stringify(wash)
   );

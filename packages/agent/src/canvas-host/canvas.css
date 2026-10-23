@@ -394,7 +394,7 @@ body {
 }
 
 .canvas-change {
-  background: var(--change-wash);
+  background: var(--c-change-tint);
   transition: opacity var(--dur-fade) var(--ease-out);
 
   &[data-leaving] {

@@ -4,7 +4,7 @@
  * scene. The overlay reads the doc's `meta.changes` and the person's looks
  * and says which elements stand unseen, and which one a step of the panel's
  * tag chose (`cawco:canvas-changes`, preview-overlay changes.ts); this draws
- * the done wash over each (`change-wash`, translucent, with no edge, at the
+ * the done wash over each (`c-change-tint`, translucent, with no edge, at the
  * house's small radius), the chosen one with the One Target Rule's 1px
  * line, following the scene's scroll and zoom. A step scrolls its element
  * into view (`cawco:canvas-step`); a wash looked at fades off over

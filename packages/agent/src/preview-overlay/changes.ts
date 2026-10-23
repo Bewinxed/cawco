@@ -5,11 +5,12 @@
  * `meta.seen` and each pin's `seenAt`.
  *
  * - **The done wash.** Each changed element the person has not looked at
- *   takes a translucent `change-wash` (the done glyph at the alpha that
- *   keeps the element's words at 4.5:1 on it, day and night) over its box,
- *   at its own radius, with no edge, drawn in the pins' layer under the
- *   discs, so it scrolls with the page and takes no press. Looked at, it
- *   fades off over `--dur-fade`.
+ *   takes the see-through `c-change-tint` (the done glyph at 8%: its words
+ *   keep 4.5:1 on it, day and night) over its box, at its own radius, with
+ *   no edge, drawn in the pins' layer under the discs, so it scrolls with
+ *   the page and takes no press. Looked at, it fades off over `--dur-fade`.
+ *   One tint per element: a changed element that becomes the target (rested
+ *   on in Comment mode, its pin's card open, stepped to) is looked at.
  * - **The stops.** Every unseen change and every pin with an unread answer,
  *   in page order; a pin and the changed element it stands in, on or round
  *   are one stop. A change that left the page has no box: it stands last,
@@ -64,6 +65,12 @@ export interface Changes {
   draw: () => void;
   /** A press on the page in Interact: a changed element it lands in is looked at. */
   pressed: (target: Element) => void;
+  /**
+   * The overlay's one target is `el` (rested on in Comment mode, a pin's
+   * open card, a step): a changed element it is, stands in or holds is
+   * looked at, so one tint stands on it, the target's.
+   */
+  targeted: (el: Element | null) => void;
   /** The host's step onto stop `key` (null: the step is over). */
   step: (key: string | null) => void;
 }
@@ -212,7 +219,7 @@ export function startChanges(deps: ChangesDeps): Changes {
     }
     // A change's stop is its revision's: the next revision's is another stop, which starts the host's round anew.
     const revision = changesOf(meta().get("changes"))?.revision ?? 0;
-    const fill = items.length > 0 ? chrome.token("--change-wash") : "";
+    const fill = items.length > 0 ? chrome.token("--c-change-tint") : "";
     const placed = items.map((item): Placed => {
       const { el, box } = washOver(item, fill);
       return {
@@ -388,6 +395,26 @@ export function startChanges(deps: ChangesDeps): Changes {
       deps.choose(chosen);
       if (stop?.anchor) {
         seeChanges(artifact.doc(), [stop.anchor]);
+      }
+    },
+    targeted: (el) => {
+      if (!el) {
+        return;
+      }
+      // The page's own root holds every change, and is no one change's target.
+      const root =
+        el === el.ownerDocument.body || el === el.ownerDocument.documentElement;
+      const looked = stops.flatMap((stop) =>
+        stop.anchor &&
+        stop.el &&
+        (stop.el === el ||
+          stop.el.contains(el) ||
+          (!root && el.contains(stop.el)))
+          ? [stop.anchor]
+          : []
+      );
+      if (looked.length > 0) {
+        seeChanges(artifact.doc(), looked);
       }
     },
     pressed: (target) => {

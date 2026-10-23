@@ -1649,17 +1649,17 @@
         "components": [0.52, 0.14, 140]
       }
     },
-    "change-wash": {
+    "c-change-tint": {
       "$type": "color",
       "$value": {
         "colorSpace": "oklch",
         "components": [0.52, 0.14, 140],
-        "alpha": 0.14
+        "alpha": 0.08
       },
-      "$description": "The done wash over an element a revision changed that the person has not looked at (the preview overlay's change marks): the done glyph at 14%, drawn over the element's words, so it is never opaque. 14% is the most that keeps every house ink at 4.5:1 or better on the blend, on raised, page and recess, day and night (ink-muted on the page by day reads 4.65:1; 20% drops it to 4.29:1).",
+      "$description": "The overlay's see-through tint on an element the last revision changed; content reads through it: status-done-glyph at 8%, never a line.",
       "$extensions": {
         "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-done-glyph} 14%, transparent)",
+          "css": "oklch(from {color.status-done-glyph} l c h / 0.08)",
           "platforms": ["web"]
         }
       }

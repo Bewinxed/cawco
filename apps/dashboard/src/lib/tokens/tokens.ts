@@ -188,7 +188,7 @@ export type TokenColor =
   | "color.status-attn-glyph"
   | "color.tab-rim-attn"
   | "color.status-done-glyph"
-  | "color.change-wash"
+  | "color.c-change-tint"
   | "color.status-fail-glyph"
   | "color.status-idle-glyph"
   | "color.nest-ink"
