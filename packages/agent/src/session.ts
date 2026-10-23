@@ -2557,8 +2557,9 @@ export class SessionSupervisor {
 
   /**
    * A launch waits here while its machine's room on memory fails (core
-   * machine-room.ts `measureMemoryRoom`: swap read back, swap left, memory
-   * stall or pressure), measured again every {@link ROOM_POLL_MS}. Never
+   * machine-room.ts `measureMemoryRoom`: Linux's memory available; the Mac's
+   * swap read back, swap out or pressure level), measured again every
+   * {@link ROOM_POLL_MS}. Never
    * refused: the session's transcript says once why it waits, in the
    * machine's readings ({@link ROOM_HELD}), and the hub waits on its start
    * as long as that line stands. A stop ends the wait ({@link dispatch}).

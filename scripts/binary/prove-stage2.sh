@@ -140,10 +140,7 @@ EOF
   # root cgroup pids.max", systemd-system.conf(5)), give every unit of the user's 307 tasks, under one session's own
   # limit of 8,192. So each machine holds 65,536 tasks (`boot`), and these drop-ins give each unit of the user's 49,152,
   # with no lower limit on the user's slice or manager. The user's service manager runs every unit and job (hub,
-  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps, and as machines this
-  # proof brought up for itself (CAWCO_INSIDE_RUN, core machine-room.ts): a session start in one waits on no reading of
-  # the host's memory, which its own rigs move (on 2026-10-19 a run's session starts were held 63 s on the host's
-  # memory stall while its 24 machines ran).
+  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps.
   # No system service takes a kernel keyring of its own (KeyringMode=inherit for every service, a top-level `service.d`
   # drop-in: systemd.unit(5), "a top-level drop-in with type.d/ … allows altering or adding to the settings of all
   # corresponding unit files"). systemd.exec(5): KeyringMode "Defaults to private for services of the system service
@@ -200,7 +197,7 @@ RUN apt-get update \\
  && printf '[Service]\\nKeyringMode=inherit\\n' > /etc/systemd/system/service.d/proof-keyring.conf \\
  && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
  && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
- && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS CAWCO_INSIDE_RUN=stage2-proof\\n' > /etc/systemd/user.conf.d/proof.conf
+ && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS\\n' > /etc/systemd/user.conf.d/proof.conf
 COPY --from=claude --chown=cawco:cawco /home/cawco/.local /home/cawco/.local
 RUN HOME=/tmp/claude-check /home/cawco/.local/bin/claude --version | grep -F '$claude_version' \\
  && rm -rf /tmp/claude-check && ! command -v openssl$absent

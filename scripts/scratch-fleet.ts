@@ -43,7 +43,6 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
-import { INSIDE_RUN_ENV } from "../packages/core/src/machine-room";
 import {
   darwinUserDirs,
   socketPathProblem,
@@ -1929,13 +1928,6 @@ async function standUp(
     CAWCO_DEBUG: "1",
     CAWCO_MACHINE_ID: MACHINE,
     CAWCO_SESSIOND_ENDPOINT: sessiondSocket,
-    // Its machines are ones a run brought up for itself (core
-    // machine-room.ts `INSIDE_RUN_ENV`, as stage 2's rig machines are): a
-    // session start there waits on no reading of the host's memory, which
-    // the host's other work moves. On 2026-10-19 limit-stall's delegates
-    // sat 3 to 9 minutes each on obelisk's 13 to 63% memory stall (another
-    // workspace's boundary, 106 GB available) and never started.
-    [INSIDE_RUN_ENV]: options.name,
     ANTHROPIC_BASE_URL: mockBase,
     CLAUDE_CODE_TMPDIR: claudeTmp,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",

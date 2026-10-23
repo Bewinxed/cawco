@@ -330,8 +330,9 @@ export const LEAK_FOUND = "leak_found";
 
 /**
  * A session's start waits for its machine's memory: the machine's room on
- * memory (core machine-room.ts `measureMemoryRoom`: swap read back, swap left,
- * memory stall or pressure) fails, so its process is not started yet. The
+ * memory (core machine-room.ts `measureMemoryRoom`: Linux's memory available;
+ * the Mac's swap read back, swap out or pressure level) fails, so its process
+ * is not started yet. The
  * agent's frame to the hub (`content`, {@link roomHeldSentence}), and the
  * hub's line in the session's transcript, kept on its row. Drawn as a note
  * titled by its first sentence, the readings under it. The start goes on by

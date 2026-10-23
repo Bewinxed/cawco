@@ -3,9 +3,10 @@
  * never refused for it (packages/agent session.ts `#roomForStart`, core
  * machine-room.ts `measureMemoryRoom`).
  *
- * On a scratch fleet whose agent reads its memory as full (the memory
- * thresholds set to 0: `CAWCO_ROOM_MEMORY_STALL_MAX` on Linux,
- * `CAWCO_ROOM_SWAP_USED_MAX_PCT` on the Mac), a Claude session is started:
+ * On a scratch fleet whose agent reads its memory as full (Linux's least
+ * available, `CAWCO_ROOM_MEMORY_AVAILABLE_MIN_MIB`, set past any machine's
+ * memory; the Mac's most swap used, `CAWCO_ROOM_SWAP_USED_MAX_PCT`, set to
+ * 0), a Claude session is started:
  *
  * - its row holds a `room` line, in the machine's readings ("this
  *   machine's measured room: …", the failing reading marked ✗), and the
@@ -34,10 +35,9 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.hubUp();
   fleet.fileAccount();
   fleet.launch("agent", [], {
-    CAWCO_ROOM_MEMORY_STALL_MAX: "0",
+    // 1 PiB: more than any machine has available.
+    CAWCO_ROOM_MEMORY_AVAILABLE_MIN_MIB: String(1024 ** 3),
     CAWCO_ROOM_SWAP_USED_MAX_PCT: "0",
-    // Read on its own room, not as a machine the fleet brought up (scratch-fleet.ts).
-    CAWCO_INSIDE_RUN: undefined,
   });
   await fleet.agentUp();
   await fleet.accountSignedIn();

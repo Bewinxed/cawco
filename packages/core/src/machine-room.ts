@@ -2,53 +2,62 @@
  * The machine's room on memory, measured on the machine itself, and its
  * contention, one reading. Two readers:
  *
- * - A SESSION'S START waits while the machine's memory is thrashing or its
- *   swap is nearly full ({@link measureMemoryRoom}; agent session.ts
- *   `#roomForStart`), and starts by itself once the room is back. Added on
- *   2026-10-18 (a00f49f31, "session starts wait for memory"): a start onto a
- *   machine already paging is what turned obelisk's memory stall into a
- *   frozen desktop on 2026-10-16 (load 84, memory PSI `full avg300=12.82`;
- *   the kernel's PSI doc, https://docs.kernel.org/accounting/psi.html: "a
- *   workload that spends extended time in this state is considered to be
- *   thrashing").
+ * - A SESSION'S START waits only while the machine cannot give it memory
+ *   ({@link measureMemoryRoom}; agent session.ts `#roomForStart`), and
+ *   starts by itself once it can. Nothing else holds a start: no limit is
+ *   set on what runs, and what a run leaks is told to the session that
+ *   started it (agent leak-watch.ts), and nothing is stopped.
  * - Every timing leg of the probe kit (quiet.ts) reads the machine's
  *   pressure ({@link machinePressure}) so a leg measured on a loaded machine
  *   is void and taken again.
  *
- * Heavy runs (a probe kit run, a typecheck, a landing gate, the release) are
- * read by neither: every one starts at once. What a run leaks is told to the
- * session that started it (agent leak-watch.ts), and nothing is stopped.
+ * Linux reads one number, the kernel's own answer to "can a start get
+ * memory": `/proc/meminfo` MemAvailable, "An estimate of how much memory is
+ * available for starting new applications, without swapping" (Linux commit
+ * 34e431b0ae39, "/proc/meminfo: provide estimated available memory",
+ * Documentation/filesystems/proc.txt; https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=34e431b0ae398fc54ea69ff85ec700722c9da773).
+ * It counts what reclaim can give back (free memory above the low
+ * watermarks, half the file cache, reclaimable slab), so a machine whose
+ * memory sits in cache has room, as it does.
+ *
+ * Neither the memory stall nor swap holds a start any more. From 2026-10-18
+ * (a00f49f31) to 2026-10-23 a start waited while `/proc/pressure/memory`
+ * "some" avg10 was 1% or more. That file is the root group's: it counts a
+ * task stalled anywhere ("pressure stall information is also tracked for
+ * tasks grouped into cgroups", https://docs.kernel.org/accounting/psi.html),
+ * a task reclaiming inside its own cgroup's `memory.high` among them ("When
+ * a memcg hits its limit and reclaim can't catch up with allocations, the
+ * allocations are throttled by adding a delay and this throttling delay is
+ * accounted as PSI stall. This artificially inflates global PSI stall levels
+ * and can be misinterpreted as critical PSI pressure", Android common kernel
+ * 61789b3255c8, https://android.googlesource.com/kernel/common/+/61789b3255c818c51a8db5530aeeeea62c259217).
+ * "Some" is also only "the share of time in which at least some tasks are
+ * stalled" (psi.html), one task in a capped workspace enough. So one bounded
+ * workspace held every start on a machine with 100 GiB free: obelisk's
+ * stage-1 proof on 2026-10-23 at 1.16% beside 133 GiB available, scratch
+ * fleets' delegates for 3 to 9 minutes at 13 to 63% beside 106 GB on
+ * 2026-10-19. Swap's share held a start only once memory was short too, which
+ * MemAvailable now says on its own: a full swap beside room is pages nothing
+ * uses (obelisk's 0.5 GiB, all of it in use).
  *
  * macOS has no PSI, so the Mac reads its own counterparts from the kernel
  * ({@link macReadings}), each over the same last 10 s: the pages read back in
  * from swap, how full swap is against the Mac's memory, and its pressure
  * level, refused only at critical. On 2026-10-19 the Mac had 29.6 GiB swapped
  * out of 32 GiB of memory at a load of 800.
- *
- * The machines a run brings up for itself (stage 2's rig machines, a scratch
- * fleet's) carry {@link INSIDE_RUN_ENV}: their session starts wait on no
- * reading of the host's memory, which their own run's load moves. On
- * 2026-10-19 a stage-2 run's rig machines held their session starts 63 s on
- * the host's memory stall while its 24 machines ran.
  */
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { readFileSync } from "node:fs";
 import { totalmem } from "node:os";
 
 /**
- * Set on the machines a run brings up for itself (stage 2's rig machines, a
- * scratch fleet's), naming that run: a session start there waits on no
- * reading of the host's memory ({@link measureMemoryRoom}).
+ * Linux: the least MemAvailable, in MiB, that lets a session start. Our
+ * call: a session's first process (its harness's runtime and the MCP
+ * servers it launches) takes some hundreds of MiB, so 1 GiB is what one
+ * start can be given without the kernel taking it from another's working
+ * set; under it the next start waits for room, and none is stopped.
  */
-export const INSIDE_RUN_ENV = "CAWCO_INSIDE_RUN";
-
-/**
- * Linux: the most of the last 10 s in which some task waited on memory
- * (`/proc/pressure/memory` "some" avg10, a percent) that still lets a session
- * start. Our call: any sustained memory stall means the kernel is already
- * reclaiming from someone's working set. 1% leaves room for reclaim blips.
- */
-const MEMORY_STALL_MAX = 1;
+const MEMORY_AVAILABLE_MIN_MIB = 1024;
 /**
  * macOS: `kern.memorystatus_vm_pressure_level` 4, critical (1 is normal, 2
  * warn), holds a start whatever the other readings say. Level 2 is this
@@ -68,15 +77,6 @@ const MAC_SWAPIN_MAX_MIB = 128;
 /** macOS: the window every rate reading spans, as Linux's PSI avg10 does. */
 const MAC_WINDOW_MS = 10_000;
 /**
- * Linux: the least share of swap left free (`/proc/meminfo` SwapFree over
- * SwapTotal, a percent) that still lets a start go. Our call: Linux's swap is
- * the size it was made, and once it is full the next allocation that cannot
- * be reclaimed is the OOM killer's; a tenth left is the last moment a start
- * can still be held back rather than ended. A machine with no swap has none
- * to fill and is read on its memory stall alone.
- */
-const LINUX_SWAP_FREE_MIN_PCT = 10;
-/**
  * macOS: the most swap in use (`vm.swapusage` used), as a percent of the
  * Mac's memory, that still lets a start go. macOS adds swap files as it needs
  * them, so what tells rest from paging is how much is swapped out against
@@ -88,13 +88,13 @@ const MAC_SWAP_USED_MAX_PCT = 50;
 
 /**
  * Overrides of the thresholds above, for proving a start waits and goes (set
- * one to 0 and a start waits, naming the numbers; unset it and it starts).
- * Each is a number; one that is not is no room, with its name.
+ * Linux's least available above the machine's memory, or a Mac's most to 0,
+ * and a start waits, naming the numbers; unset it and it starts). Each is a
+ * number; one that is not is no room, with its name.
  */
 const ROOM_ENV = {
-  memoryStall: "CAWCO_ROOM_MEMORY_STALL_MAX",
+  memoryAvailableMin: "CAWCO_ROOM_MEMORY_AVAILABLE_MIN_MIB",
   swapInMib: "CAWCO_ROOM_SWAPIN_MAX_MIB",
-  swapFreeMin: "CAWCO_ROOM_SWAP_FREE_MIN_PCT",
   swapUsedMax: "CAWCO_ROOM_SWAP_USED_MAX_PCT",
 } as const;
 
@@ -132,8 +132,7 @@ const roomOf = (readings: Reading[]): Room => ({
 
 const SOME_AVG10 = /^some avg10=([\d.]+)/m;
 const MEM_AVAILABLE = /^MemAvailable:\s+(\d+) kB$/m;
-const SWAP_TOTAL = /^SwapTotal:\s+(\d+) kB$/m;
-const SWAP_FREE = /^SwapFree:\s+(\d+) kB$/m;
+const MEM_TOTAL = /^MemTotal:\s+(\d+) kB$/m;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 
@@ -154,10 +153,10 @@ export const MACHINE_PRESSURE = {
 /**
  * THE MACHINE'S CONTENTION, ONE READING: the share of the last 10 s in which
  * some task anywhere on the machine waited for a CPU, and for memory
- * ({@link MACHINE_PRESSURE}, "some" avg10, each a percent). A session start
- * reads memory's ({@link measureMemoryRoom}) and every timing leg's gate (the
- * probe kit's quiet.ts) reads both, so the two never read different things.
- * Linux only.
+ * ({@link MACHINE_PRESSURE}, "some" avg10, each a percent). Every timing
+ * leg's gate (the probe kit's quiet.ts) reads both: a timing taken while
+ * anything stalled is not a clean one. A session start reads neither: a
+ * stall is not a lack of room ({@link measureMemoryRoom}). Linux only.
  */
 export interface MachinePressure {
   cpu: number;
@@ -187,38 +186,22 @@ const meminfoBytes = (meminfo: string, line: RegExp, name: string): number => {
 };
 
 /**
- * Swap's reading from SwapTotal and SwapFree: refused once less than the
- * least share is left free while memory is short too (MemAvailable under
- * {@link LINUX_SWAP_FREE_MIN_PCT} of RAM). A full swap beside plenty of
- * memory is pages nothing uses: obelisk's 0.5 GiB was all in use with
- * 100 GiB available (2026-10-19), and refused there it would hold every
- * start on a machine with room.
+ * Linux's one reading: MemAvailable, the kernel's estimate of what a new
+ * program can be given without swapping, against
+ * {@link MEMORY_AVAILABLE_MIN_MIB}.
  */
-const linuxSwap = (meminfo: string): Reading => {
-  const total = meminfoBytes(meminfo, SWAP_TOTAL, "SwapTotal");
-  const free = meminfoBytes(meminfo, SWAP_FREE, "SwapFree");
-  const available = meminfoBytes(meminfo, MEM_AVAILABLE, "MemAvailable");
-  const freeMin = threshold(ROOM_ENV.swapFreeMin, LINUX_SWAP_FREE_MIN_PCT);
-  if (total === 0) {
-    return { ok: true, words: "no swap" };
-  }
-  const share = (100 * free) / total;
-  const short = (100 * available) / totalmem() < LINUX_SWAP_FREE_MIN_PCT;
-  return {
-    ok: share >= freeMin || !short,
-    words: `swap ${gib(free)} free of ${gib(total)}, ${share.toFixed(0)}% (a start needs ${freeMin}% free once under ${LINUX_SWAP_FREE_MIN_PCT}% of memory is available)`,
-  };
-};
-
 const linuxReadings = (): Reading[] => {
-  const memoryMax = threshold(ROOM_ENV.memoryStall, MEMORY_STALL_MAX);
-  const { memory } = machinePressure();
+  const meminfo = readFileSync("/proc/meminfo", "utf8");
+  const available = meminfoBytes(meminfo, MEM_AVAILABLE, "MemAvailable");
+  const total = meminfoBytes(meminfo, MEM_TOTAL, "MemTotal");
+  const min =
+    threshold(ROOM_ENV.memoryAvailableMin, MEMORY_AVAILABLE_MIN_MIB) *
+    1024 ** 2;
   return [
     {
-      ok: memory < memoryMax,
-      words: `memory stall ${memory.toFixed(2)}% of the last 10 s (a start goes under ${memoryMax})`,
+      ok: available >= min,
+      words: `${gib(available)} of ${gib(total)} memory available (a start needs ${gib(min)})`,
     },
-    linuxSwap(readFileSync("/proc/meminfo", "utf8")),
   ];
 };
 
@@ -395,20 +378,11 @@ const macReadings = (): Reading[] => {
 
 /**
  * This machine's room on memory, measured now: what a session start waits
- * on (Linux's memory stall and swap left; the Mac's swap
- * read back, swap out and pressure level). A reading that cannot be taken is
- * no room, in words naming why: a start is never let go on what could not be
- * measured. A machine a run brought up for itself ({@link INSIDE_RUN_ENV})
- * always has room.
+ * on (Linux's memory available; the Mac's swap read back, swap out and
+ * pressure level). A reading that cannot be taken is no room, in words
+ * naming why: a start is never let go on what could not be measured.
  */
 export const measureMemoryRoom = (): Room => {
-  const inside = process.env[INSIDE_RUN_ENV];
-  if (inside) {
-    return {
-      ok: true,
-      words: `this machine is one a run brought up for itself (${INSIDE_RUN_ENV}=${inside}), and the host's memory moves with that run's own load`,
-    };
-  }
   try {
     if (process.platform === "linux") {
       return roomOf(linuxReadings());
