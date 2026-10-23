@@ -386,9 +386,24 @@ export function createBinaryUpdates(options: Options) {
           (a) => a.archive === params.archive
         );
         if (found && artifact) {
-          return new Response(
-            Bun.file(await fetchArchive(found, artifact.target, root))
+          // A download that fails is said, in the log and to the machine
+          // that asked: it was a bare 500, said nowhere.
+          const fetched = await fetchArchive(found, artifact.target, root).then(
+            (path) => ({ path }),
+            (error: unknown) => ({
+              error: error instanceof Error ? error.message : String(error),
+            })
           );
+          if ("error" in fetched) {
+            console.warn(
+              `[updates] the hub could not fetch ${artifact.archive} of ${found.manifest.version} from its release host: ${fetched.error}`
+            );
+            return status(
+              502,
+              `The hub could not fetch this build from its release host: ${fetched.error}`
+            );
+          }
+          return new Response(Bun.file(fetched.path));
         }
         return status(404, "This build is not one the hub offers");
       }

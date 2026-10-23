@@ -885,11 +885,11 @@ import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
 import {
+  caughtUp,
   closeLine,
   drainLine,
   type HubSocket,
   openLine,
-  readThrough,
   receiveFrame,
   sendFrame as writeFrame,
 } from "./wire-socket";
@@ -9740,15 +9740,15 @@ export const createServer = (
       forget();
       return reply;
     }
-    // The deadline passed. What the machine's socket already handed the hub
-    // is read first: an answer that came in time can wait in its inbox
-    // behind the frames before it, and a timer that came due meanwhile runs
-    // before the inbox's next turn (2026-10-23, three machines' answers to
-    // one configure logged as unrouted in the same second, while twenty
-    // transcript reads came in).
+    // The deadline passed. The hub catches up with the machine's socket
+    // first (wire-socket.ts `caughtUp`): after its thread was held, the
+    // deadline's timer runs before the socket is read, and an answer read in
+    // time can wait in the inbox behind the frames before it (2026-10-23,
+    // three machines' answers to one configure logged as unrouted in the
+    // same second, while twenty transcript reads came in).
     const call = waitingMachines.get(requestId);
     if (call?.socketId) {
-      await readThrough(call.socketId);
+      await caughtUp(call.socketId);
     }
     if (answered) {
       return { kind: "answered", value: answered };
@@ -10200,8 +10200,11 @@ export const createServer = (
    */
   const claudeSessionsOn = (machineId: string): CarrySessionRequest[] => {
     const bySession = new Map<string, CarrySessionRequest | null>();
+    // The moves owed, read once: one read per conversation held the hub's
+    // thread 63 ms for a machine's 2,277 at its register (hub-restart-load).
+    const owed = new Map(owedMoves.list());
     for (const row of db.claudeConversationsOn(machineId)) {
-      if (owedMoves.get(row.id)?.to !== undefined) {
+      if (owed.get(row.id)?.to !== undefined) {
         bySession.set(row.sessionId, null);
         continue;
       }
@@ -14925,14 +14928,18 @@ export const createServer = (
       // Ended, it holds its finished item's workspace no longer.
       workItems.settleFor(row.id);
     },
-    recoverRemoved: (machineId) => {
+    // From the rows the reconcile read: each reconcile read the machine's
+    // every row three times over, at each heartbeat (hub-restart-load).
+    // Every conversation the machine's rows claim is read only when there
+    // is a removed session to recover.
+    recoverRemoved: (machineId, owned) => {
       if (recoveringRemoved.has(machineId) || !registry.agent(machineId)) {
         return;
       }
       const connection = registry.agent(machineId);
-      const rows = db
-        .sessionOwnership(machineId)
-        .filter((row) => row.machineRemoved && row.harness === "opencode");
+      const rows = owned.filter(
+        (row) => row.machineRemoved && row.harness === "opencode"
+      );
       if (rows.length === 0) {
         return;
       }
@@ -31676,10 +31683,7 @@ export const createServer = (
               // dashboard that connects and fail on click.
               const registrationCustody = peekCustody(message.payload);
               const returningRemoved = new Set(
-                db
-                  .sessionOwnership(message.machineId)
-                  .filter((row) => row.machineRemoved)
-                  .map((row) => row.id)
+                db.removedOn(message.machineId).map((row) => row.id)
               );
               db.restoreRemovedSessions(
                 message.machineId,
@@ -31829,7 +31833,7 @@ export const createServer = (
               const justSettled = new Set(settled.map(({ row }) => row.id));
               const listedLive = new Set(peekInstances(message.payload));
               const filedAway = db
-                .sessionOwnership(message.machineId)
+                .ownedByIds(message.machineId, [...heldIds])
                 .filter(
                   (row) =>
                     heldIds.has(row.id) &&
@@ -31885,12 +31889,9 @@ export const createServer = (
                   .map((job) => job.summariserInstanceId)
               );
               const toEnd = db
-                .sessionOwnership(message.machineId)
-                .filter((row) =>
-                  reattachable(
-                    [...heldIds],
-                    peekInstances(message.payload)
-                  ).includes(row.id)
+                .ownedByIds(
+                  message.machineId,
+                  reattachable([...heldIds], peekInstances(message.payload))
                 )
                 .filter(
                   (row) =>
@@ -31904,7 +31905,7 @@ export const createServer = (
               // since rewritten. Inspect those without attaching or replaying asks.
               // Discarded/stopped rows are never even sent to the server to probe.
               if (heldOpencode) {
-                for (const row of db.listInstances()) {
+                for (const row of db.listInstancesOn(message.machineId)) {
                   if (
                     row.machineId === message.machineId &&
                     !restoredIds.has(row.id) &&
@@ -31975,7 +31976,7 @@ export const createServer = (
                   claudeSessionsOn(message.machineId),
                   // Every session this hub has on the machine: what it kept
                   // for any other goes.
-                  db.sessionOwnership(message.machineId).map((row) => row.id),
+                  db.sessionIdsOn(message.machineId),
                   // This connection's credential for the hub's git remote;
                   // the one its last connection held stops working.
                   machineCredentials.mint(message.machineId),
@@ -32067,7 +32068,13 @@ export const createServer = (
               }
               // A recovered machine can now answer an idle receipt for an overdue schedule.
               detach(keepAliveScheduler.wake(), "keepalive wake");
-              if ((message.payload as HeartbeatPayload).custody !== undefined) {
+              // Payload fields outside the declared heartbeat (including old listing reports)
+              // are ignored; fresh reads and stored row intent alone drive lifetime.
+              // Once a beat: a fresh custody's reconcile does all a cached
+              // one would, and each reads every row the machine has.
+              if ((message.payload as HeartbeatPayload).custody === undefined) {
+                lifecycle.reconcile(message.machineId);
+              } else {
                 const custody = peekCustody(message.payload);
                 machineCustody.set(message.machineId, custody);
                 lifecycle.reconcile(message.machineId, {
@@ -32075,9 +32082,6 @@ export const createServer = (
                   attached: peekInstances(message.payload),
                 });
               }
-              // Payload fields outside the declared heartbeat (including old listing reports)
-              // are ignored; fresh reads and stored row intent alone drive lifetime.
-              lifecycle.reconcile(message.machineId);
               // The beat is the truth (contract C4). Every 15s the machine says
               // what it is carrying, and the hub's column is made to agree with
               // it: listed ids become `running`, and rows claiming a process the

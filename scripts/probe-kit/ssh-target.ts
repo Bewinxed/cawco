@@ -36,6 +36,7 @@ import {
   type TcpipBindInfo,
   utils,
 } from "ssh2";
+import { signalGroup, spawnedPid } from "../../packages/core/src/signal";
 
 /** What a held install step on the machine runs: a `sleep` no other process here runs. */
 export const HELD = ["sleep", "3017"];
@@ -192,7 +193,15 @@ const forwarding = (client: Connection): void => {
   });
 };
 
-/** Each command a session runs, as sshd runs it: `sh -c`, output as it comes, the exit once both ends close. */
+/**
+ * Each command a session runs, as sshd runs it: `sh -c` leading a session
+ * of its own (sshd's session process makes one for the login shell), output
+ * as it comes, the exit once both ends close. A connection that closes
+ * first ends the command's whole group, as a hub's stopped add leaves
+ * nothing running on a real machine: a held install step (`sleep 3017`)
+ * outlived its spec once (2026-10-23), its watchdog's `kill -TERM -$$`
+ * naming a group `sh` did not lead.
+ */
 const running = (
   client: Connection,
   machine: { home: string; path: string }
@@ -206,7 +215,16 @@ const running = (
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
+        detached: true,
       });
+      const endGroup = () => {
+        const leader = spawnedPid(child);
+        if (child.exitCode === null && leader !== undefined) {
+          signalGroup(leader, "SIGTERM");
+        }
+      };
+      channel.on("close", endGroup);
+      client.on("close", endGroup);
       // The client's stdin, as sshd hands it on: the hub writes a machine's key so.
       channel.on("data", (chunk: Buffer) => {
         child.stdin.write(chunk);

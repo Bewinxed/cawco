@@ -46,6 +46,8 @@ interface Line {
   inbox: Inbox;
   outbox: Outbox;
   raw: RawSocket;
+  /** Frames the socket has handed the hub so far: what {@link caughtUp} watches go still. */
+  received: number;
 }
 
 /**
@@ -74,6 +76,7 @@ export const openLine = (
     raw,
     assembler: new WireAssembler(),
     inbox: new Inbox(),
+    received: 0,
     // A client that does not announce parts runs the build before them (an
     // agent not yet updated, a tab not yet reloaded): it is sent every
     // message whole, as that build reads them (`WIRE_PARTS_PARAM`).
@@ -95,18 +98,42 @@ export const drainLine = (socket: HubSocket): void => {
 };
 
 /**
- * Resolves once every frame the socket `socketId` has handed the hub so far
- * has been read through its inbox: what a deadline waits for before it says
- * no answer came, since an answer that arrived in time may wait there behind
- * the frames before it (a transcript's parts, a turn's budget at a time).
- * At once for a socket that is gone or holds nothing unread.
+ * How long {@link caughtUp} waits for a socket to hand over nothing more, and
+ * the most it waits in all: a 4 MB answer that lay in a stopped hub's socket
+ * was read 6 ms after its deadline's timer ran (measured, Bun 1.4.4).
  */
-export const readThrough = (socketId: string): Promise<void> => {
-  const line = lines.get(socketId);
-  if (!line) {
-    return Promise.resolve();
+const QUIET_MS = 10;
+const CATCH_UP_MS = 1000;
+
+/**
+ * Resolves once the hub has caught up with the socket `socketId`: it has
+ * read what the socket holds (until a {@link QUIET_MS} turn brings no frame,
+ * {@link CATCH_UP_MS} at most) and worked every frame it read through the
+ * inbox. What a deadline waits for before it says no answer came. After the
+ * hub's thread was held past a deadline, Bun runs the deadline's timer
+ * before it reads the sockets, so an answer sent in time still lies in the
+ * socket (measured: "deadline at 1710ms, message seen: false … message at
+ * 1716ms"); and one read in time may wait in the inbox behind the frames
+ * before it (a transcript's parts, a turn's budget at a time). At once for
+ * a socket that is gone.
+ */
+export const caughtUp = async (socketId: string): Promise<void> => {
+  const until = Date.now() + CATCH_UP_MS;
+  for (;;) {
+    const seen = lines.get(socketId)?.received;
+    if (seen === undefined) {
+      return;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one quiet turn after another, until the socket hands over nothing more
+    await Bun.sleep(QUIET_MS);
+    if (lines.get(socketId)?.received === seen || Date.now() >= until) {
+      break;
+    }
   }
-  return new Promise((resolve) => line.inbox.push(0, resolve));
+  const line = lines.get(socketId);
+  if (line) {
+    await new Promise<void>((resolve) => line.inbox.push(0, resolve));
+  }
 };
 
 /** The socket closed: its queue and any half-received message go with it. */
@@ -131,6 +158,7 @@ export const receiveFrame = (
   if (!line) {
     return;
   }
+  line.received += 1;
   const text = (frame as { text?: unknown } | null)?.text;
   line.inbox.push(typeof text === "string" ? text.length : 0, () => {
     let message: unknown;

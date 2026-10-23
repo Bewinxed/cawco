@@ -1,10 +1,13 @@
 /**
  * An HTTPS proxy a scratch hub reaches the internet through
  * (`HTTPS_PROXY`), standing for a slow release host: while held, every
- * tunnel it carries, open now or opened later, keeps what the far end sends
- * and passes none of it on; let go, each passes on what it kept and carries
- * on. A hub's archive download, held so, is a release host taking that long
- * to answer.
+ * tunnel to a host `holds` names, open now or opened later, keeps what the
+ * far end sends and passes none of it on; let go, each passes on what it
+ * kept and carries on. Only the hosts named: an archive's download held so
+ * is a release host slow to send it, while the release's pages and API (its
+ * redirect to the asset) answer as they do. Holding those too held GitHub's
+ * redirect past its keep-alive, which then closed the connection under the
+ * held answer (ssh-forward-download (b), 2026-10-23).
  *
  * It counts what each host sent back through it, so a spec reads how many
  * copies of a download the hub drew (TLS hides the requests themselves).
@@ -18,6 +21,8 @@ import net from "node:net";
 export interface HeldProxy {
   /** The bytes each `host:port` has sent back through the proxy so far, in all its tunnels. */
   carried: () => Record<string, number>;
+  /** Each far end that closed: its `host:port`, when (ms since the proxy started), whether it was held then, and what it had sent. */
+  closes: () => { at: number; bytes: number; held: boolean; target: string }[];
   /** Holds every tunnel's answer from now (true), or lets each go on (false). */
   hold: (held: boolean) => void;
   stop: () => void;
@@ -27,7 +32,11 @@ export interface HeldProxy {
 }
 
 interface Tunnel {
+  /** What its far end has sent. */
+  bytes: number;
   client: net.Socket;
+  /** The far end closed while its bytes were held: the client is ended once they are passed on. */
+  farGone: boolean;
   kept: Buffer[];
   target: string;
 }
@@ -42,10 +51,15 @@ const upstreamProxy = (): { host: string; port: number } | undefined => {
   return { host: url.hostname, port: Number(url.port || 80) };
 };
 
-export async function heldProxy(): Promise<HeldProxy> {
+export async function heldProxy(
+  holds: (target: string) => boolean
+): Promise<HeldProxy> {
   const tunnels = new Set<Tunnel>();
   const targets: string[] = [];
   const carried = new Map<string, number>();
+  const closes: { at: number; bytes: number; held: boolean; target: string }[] =
+    [];
+  const started = Date.now();
   let held = false;
   const upstream = upstreamProxy();
 
@@ -55,7 +69,8 @@ export async function heldProxy(): Promise<HeldProxy> {
       tunnel.target,
       (carried.get(tunnel.target) ?? 0) + chunk.length
     );
-    if (held) {
+    tunnel.bytes += chunk.length;
+    if (held && holds(tunnel.target)) {
       tunnel.kept.push(chunk);
       return;
     }
@@ -73,7 +88,13 @@ export async function heldProxy(): Promise<HeldProxy> {
       }
       targets.push(target);
       const at = target.lastIndexOf(":");
-      const tunnel: Tunnel = { client, kept: [], target };
+      const tunnel: Tunnel = {
+        bytes: 0,
+        client,
+        farGone: false,
+        kept: [],
+        target,
+      };
       tunnels.add(tunnel);
       const rest = head.subarray(
         Buffer.byteLength(text.slice(0, end + 4), "latin1")
@@ -86,9 +107,27 @@ export async function heldProxy(): Promise<HeldProxy> {
         far.destroy();
         client.destroy();
       };
-      far.on("error", close);
+      // A far end that closes while held (a proxy before it cuts a tunnel
+      // that has carried nothing for a while) leaves what it sent to be
+      // passed on: the client hears the close only after those bytes.
+      const farClosed = () => {
+        if (!tunnel.farGone) {
+          closes.push({
+            at: Date.now() - started,
+            bytes: tunnel.bytes,
+            held,
+            target,
+          });
+        }
+        if ((held && holds(target)) || tunnel.kept.length > 0) {
+          tunnel.farGone = true;
+          return;
+        }
+        close();
+      };
+      far.on("error", farClosed);
       client.on("error", close);
-      far.on("close", close);
+      far.on("close", farClosed);
       client.on("close", close);
       const carry = () => {
         client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
@@ -134,6 +173,7 @@ export async function heldProxy(): Promise<HeldProxy> {
   });
   return {
     carried: () => Object.fromEntries(carried),
+    closes: () => [...closes],
     hold: (next) => {
       held = next;
       if (next) {
@@ -142,6 +182,10 @@ export async function heldProxy(): Promise<HeldProxy> {
       for (const tunnel of tunnels) {
         for (const chunk of tunnel.kept.splice(0)) {
           tunnel.client.write(chunk);
+        }
+        if (tunnel.farGone) {
+          tunnels.delete(tunnel);
+          tunnel.client.end();
         }
       }
     },

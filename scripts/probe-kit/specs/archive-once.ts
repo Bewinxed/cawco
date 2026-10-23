@@ -51,7 +51,10 @@ const archiveBytes = (carried: Record<string, number>): number =>
 
 async function run(kit: Kit): Promise<void> {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-  const proxy = await heldProxy();
+  // The asset host alone: what a slow release host is slow to send.
+  const proxy = await heldProxy((target) =>
+    target.startsWith("release-assets.")
+  );
   try {
     const loopback =
       fleet.env.no_proxy ?? fleet.env.NO_PROXY ?? "localhost,127.0.0.1,::1";

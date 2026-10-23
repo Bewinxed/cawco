@@ -18191,6 +18191,16 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "getApiBinaryUpdatesArtifactsByVersionByArchive 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

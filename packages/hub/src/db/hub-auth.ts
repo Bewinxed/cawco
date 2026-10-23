@@ -35,76 +35,82 @@ export interface HubAuthDb {
   readonly touchDevice: (id: string, at: Date, address: string | null) => void;
 }
 
-export const hubAuthDb = (db: BunSQLiteDatabase): HubAuthDb => ({
-  devices: () =>
-    db.select().from(ownerDevices).orderBy(asc(ownerDevices.createdAt)).all(),
-  deviceByHash: (tokenHash) =>
-    db
-      .select()
-      .from(ownerDevices)
-      .where(eq(ownerDevices.tokenHash, tokenHash))
-      .get(),
-  addDevice: (row) => {
-    db.insert(ownerDevices).values(row).run();
-  },
-  removeDevice: (id) =>
-    db
-      .delete(ownerDevices)
-      .where(eq(ownerDevices.id, id))
-      .returning({ id: ownerDevices.id })
-      .all().length > 0,
-  touchDevice: (id, at, address) => {
-    db.update(ownerDevices)
-      .set({ lastUsedAt: at, lastAddress: address })
-      .where(eq(ownerDevices.id, id))
-      .run();
-  },
-  machineKey: (machineId) =>
-    db
-      .select({ key: machineKeys.key })
-      .from(machineKeys)
-      .where(eq(machineKeys.machineId, machineId))
-      .get()?.key ?? undefined,
-  putMachineKey: (machineId, key) => {
-    db.insert(machineKeys)
-      .values({ machineId, key, admittedAt: new Date() })
-      .onConflictDoUpdate({
-        target: machineKeys.machineId,
-        set: { key, admittedAt: new Date() },
-      })
-      .run();
-  },
-  forgetMachineKey: (machineId) => {
-    db.delete(machineKeys).where(eq(machineKeys.machineId, machineId)).run();
-  },
-  pairingRequired: () =>
-    db
-      .select({ required: pairingSettings.required })
-      .from(pairingSettings)
-      .where(eq(pairingSettings.id, "pairing"))
-      .get()?.required === true,
-  setPairingRequired: (required) => {
-    db.transaction((tx) => {
-      tx.insert(pairingSettings)
-        .values({ id: "pairing", required, changedAt: new Date() })
+export const hubAuthDb = (db: BunSQLiteDatabase): HubAuthDb => {
+  // Read at every request the gate sees (hub-auth.ts `mode`): prepared once.
+  // Built and prepared afresh each time, it was the gate's largest cost in
+  // a restarted hub's profile (hub-restart-load, 2026-10-23). Still read
+  // each time, never kept: `cawco pairing off` writes it from another process.
+  const pairing = db
+    .select({ required: pairingSettings.required })
+    .from(pairingSettings)
+    .where(eq(pairingSettings.id, "pairing"))
+    .prepare();
+  return {
+    devices: () =>
+      db.select().from(ownerDevices).orderBy(asc(ownerDevices.createdAt)).all(),
+    deviceByHash: (tokenHash) =>
+      db
+        .select()
+        .from(ownerDevices)
+        .where(eq(ownerDevices.tokenHash, tokenHash))
+        .get(),
+    addDevice: (row) => {
+      db.insert(ownerDevices).values(row).run();
+    },
+    removeDevice: (id) =>
+      db
+        .delete(ownerDevices)
+        .where(eq(ownerDevices.id, id))
+        .returning({ id: ownerDevices.id })
+        .all().length > 0,
+    touchDevice: (id, at, address) => {
+      db.update(ownerDevices)
+        .set({ lastUsedAt: at, lastAddress: address })
+        .where(eq(ownerDevices.id, id))
+        .run();
+    },
+    machineKey: (machineId) =>
+      db
+        .select({ key: machineKeys.key })
+        .from(machineKeys)
+        .where(eq(machineKeys.machineId, machineId))
+        .get()?.key ?? undefined,
+    putMachineKey: (machineId, key) => {
+      db.insert(machineKeys)
+        .values({ machineId, key, admittedAt: new Date() })
         .onConflictDoUpdate({
-          target: pairingSettings.id,
-          set: { required, changedAt: new Date() },
+          target: machineKeys.machineId,
+          set: { key, admittedAt: new Date() },
         })
         .run();
-      if (required) {
-        tx.delete(previewPasses)
-          .where(
-            and(
-              isNull(previewPasses.deviceId),
-              isNull(previewPasses.instanceId)
-            )
-          )
+    },
+    forgetMachineKey: (machineId) => {
+      db.delete(machineKeys).where(eq(machineKeys.machineId, machineId)).run();
+    },
+    pairingRequired: () => pairing.get()?.required === true,
+    setPairingRequired: (required) => {
+      db.transaction((tx) => {
+        tx.insert(pairingSettings)
+          .values({ id: "pairing", required, changedAt: new Date() })
+          .onConflictDoUpdate({
+            target: pairingSettings.id,
+            set: { required, changedAt: new Date() },
+          })
           .run();
-      } else {
-        tx.delete(ownerDevices).run();
-        tx.delete(machineKeys).run();
-      }
-    });
-  },
-});
+        if (required) {
+          tx.delete(previewPasses)
+            .where(
+              and(
+                isNull(previewPasses.deviceId),
+                isNull(previewPasses.instanceId)
+              )
+            )
+            .run();
+        } else {
+          tx.delete(ownerDevices).run();
+          tx.delete(machineKeys).run();
+        }
+      });
+    },
+  };
+};

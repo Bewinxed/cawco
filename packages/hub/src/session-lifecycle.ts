@@ -18,7 +18,11 @@ export const createSessionLifecycle = (ports: {
   restore: (row: InstanceRow) => void;
   deleteTranscript: (row: InstanceRow) => Promise<boolean>;
   confirmed: (row: ReturnType<DbShape["sessionOwnership"]>[number]) => void;
-  recoverRemoved: (machineId: string) => void;
+  /** The rows this reconcile read (db `ownedToReconcile`): the machine's removed opencode sessions among them are recovered. */
+  recoverRemoved: (
+    machineId: string,
+    rows: ReturnType<DbShape["sessionOwnership"]>
+  ) => void;
   changed: (machineId: string, removed?: string) => void;
   refresh: (machineId: string) => void;
 }) => {
@@ -87,8 +91,15 @@ export const createSessionLifecycle = (ports: {
     const held = new Set(snapshot.custody.instances);
     const attached = new Set(snapshot.attached);
     const pending = new Set(snapshot.custody.pending ?? []);
-    const rows = ports.db.sessionOwnership(machineId);
-    ports.recoverRemoved(machineId);
+    // The rows this can act on, never the machine's every row: thousands of
+    // ended sessions read whole, at every heartbeat and register, held the
+    // hub's thread past its updater's 3 s probe (hub-restart-load, 2026-10-23).
+    const rows = ports.db.ownedToReconcile(machineId, [
+      ...held,
+      ...attached,
+      ...pending,
+    ]);
+    ports.recoverRemoved(machineId, rows);
     for (const row of rows) {
       if (row.machineRemoved) {
         continue;
@@ -351,12 +362,12 @@ export const createSessionLifecycle = (ports: {
     deliveryFailed: (id: string) => delivering.delete(id),
     disconnect: (machineId: string) => {
       snapshots.delete(machineId);
-      for (const row of ports.db.sessionOwnership(machineId)) {
-        delivering.delete(row.id);
-        issued.delete(row.id);
-        attaching.delete(row.id);
-        unavailable.delete(row.id);
-        preservedUnattached.delete(row.id);
+      for (const id of ports.db.sessionIdsOn(machineId)) {
+        delivering.delete(id);
+        issued.delete(id);
+        attaching.delete(id);
+        unavailable.delete(id);
+        preservedUnattached.delete(id);
       }
     },
   };

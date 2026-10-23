@@ -18,9 +18,20 @@
  * (a) The ask fails at its deadline, as a machine that did not answer.
  * (b) Its late answer is said as that call's (its method and how late),
  *     and nothing is logged as an unrouted reply.
+ * (c) An answer that reached the hub in time but waits in its socket's
+ *     inbox behind the frames before it (wire.ts `Inbox`, a part's worth a
+ *     turn) as the deadline passes reaches its call: the machine asked for a
+ *     picture of {@link PICTURE_BYTES} (its answer {@link PICTURE_BYTES}
+ *     base64, several parts) while its agent is frozen; near the deadline the
+ *     hub is frozen and the agent let go, so the whole answer lies in the
+ *     hub's socket when the deadline passes; the hub let go, the ask is
+ *     answered whole, and nothing is said late or unrouted.
  *
  *   bun scripts/probe-kit/run.ts late-answer
  */
+import { randomBytes } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { delay } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -32,6 +43,12 @@ const READ_DEADLINE_MS = 10_000;
 const UNROUTED = "[hub] unrouted reply";
 /** The hub's line for a late answer to one of its calls (server.ts `lateAnswer`). */
 const LATE = "past its 10 s deadline; its caller had been told no answer came";
+/** Leg (c)'s picture: its answer, base64, is several of the wire's 1 MiB parts (core wire.ts `WIRE_PART_CHARS`). */
+const PICTURE_BYTES = 3 * 1024 * 1024;
+/** When, after its ask, leg (c) freezes the hub and lets the agent answer: short of the deadline. */
+const FREEZE_HUB_AT_MS = 8000;
+/** How long the hub stays frozen: across the deadline, with the agent's whole answer sent meanwhile. */
+const HUB_FROZEN_MS = 4000;
 
 export default {
   name: "late-answer",
@@ -81,6 +98,40 @@ export default {
         late[0]?.includes("inspectConfig") === true &&
         unrouted.length === 0,
       `late ${JSON.stringify(late)}; unrouted ${JSON.stringify(unrouted)}`
+    );
+
+    // (c) In time, but behind the frames before it in the hub's inbox.
+    const picture = join(other.home, "big.png");
+    const bytes = randomBytes(PICTURE_BYTES);
+    writeFileSync(picture, bytes);
+    const before = await fleet.logMark("hub");
+    signal(pid, "SIGSTOP");
+    const from = Date.now();
+    const read = fetch(
+      `${fleet.base}/api/agents/${OTHER}/media?path=${encodeURIComponent(picture)}`
+    ).then(async (response) => ({
+      status: response.status,
+      size: (await response.arrayBuffer()).byteLength,
+    }));
+    await delay(FREEZE_HUB_AT_MS);
+    fleet.freeze("hub", true);
+    signal(pid, "SIGCONT");
+    await delay(HUB_FROZEN_MS);
+    fleet.freeze("hub", false);
+    const got = await read;
+    const spent = Date.now() - from;
+    await delay(1000);
+    const after = (await before.since()).split("\n");
+    const lateC = after.filter((line) => line.includes(LATE));
+    const unroutedC = after.filter((line) => line.includes(UNROUTED));
+    check(
+      `c: an answer in the hub's socket as the deadline passes, behind ${Math.ceil((PICTURE_BYTES * 4) / 3 / 1024 / 1024)} MiB of its own parts, reaches its call: the picture comes whole, and nothing is said late or unrouted`,
+      got.status === 200 &&
+        got.size === PICTURE_BYTES &&
+        spent > READ_DEADLINE_MS &&
+        lateC.length === 0 &&
+        unroutedC.length === 0,
+      `${got.status}, ${got.size} bytes after ${spent} ms; late ${JSON.stringify(lateC)}; unrouted ${JSON.stringify(unroutedC)}`
     );
   },
 } satisfies Spec;

@@ -1150,6 +1150,8 @@ export interface DbShape {
    * each call reads and parses every row (2,600 of them, 2026-10-09).
    */
   readonly listInstances: () => PublicInstanceRow[];
+  /** {@link listInstances}, of one machine's sessions alone. */
+  readonly listInstancesOn: (machineId: string) => PublicInstanceRow[];
   /**
    * Runs not yet ended (running, waiting, or holding a stop: its
    * `ending_status`), narrowed in SQL to one parent's children or one
@@ -1522,6 +1524,11 @@ export interface DbShape {
   readonly oweSpawn: (id: string, envelope: string, at: number) => void;
   /** Whether the session's start is still owed to its machine ({@link oweSpawn}). */
   readonly owesSpawn: (id: string) => boolean;
+  /** `machineId`'s rows among `ids`, hidden and discarded ones too. */
+  readonly ownedByIds: (
+    machineId: string,
+    ids: readonly string[]
+  ) => OwnedInstanceRow[];
   /**
    * The fields a dashboard may move on a live row: "Keep" — a spin-off that
    * earned its place stops being treated as scratch — and the model and
@@ -1534,6 +1541,17 @@ export interface DbShape {
     id: string,
     machineId?: string
   ) => OwnedInstanceRow | undefined;
+  /**
+   * The rows a reconcile of `machineId` can act on (session-lifecycle.ts
+   * `reconcile`): an end still owed or a transcript delete unfinished, a
+   * session running or starting, a removed opencode session, and every row
+   * `named` (the machine's custody, attached and pending). A row with none of
+   * these is one the reconcile passes over.
+   */
+  readonly ownedToReconcile: (
+    machineId: string,
+    named: readonly string[]
+  ) => OwnedInstanceRow[];
   /**
    * The asks the hub holds parked (`pending.ts`), kept across its restarts:
    * read once as it boots, written as each is parked and dropped as it ends.
@@ -1970,6 +1988,8 @@ export interface DbShape {
   readonly relays: RelaysDb;
   /** The machines the person removed ({@link deleteMachine}), by id. */
   readonly removedMachines: () => (typeof removedMachines.$inferSelect)[];
+  /** `machineId`'s rows for sessions removed with a machine (`machineRemoved`). */
+  readonly removedOn: (machineId: string) => OwnedInstanceRow[];
   /**
    * Removes one of a project's places. Its primary checkout and its hub
    * folder are never removed here: forgetting the project is.
@@ -2046,6 +2066,8 @@ export interface DbShape {
     error: string | null,
     rejectPending?: boolean
   ) => void;
+  /** Every session id on `machineId`, and nothing else of them: a read of thousands of rows' every column held the hub's thread (hub-restart-load). */
+  readonly sessionIdsOn: (machineId: string) => string[];
   /** The fleet's session limits; none set reads as `{}`. */
   readonly sessionLimits: () => SessionLimits;
   /** Unfiltered ownership, including hidden deletes and discarded rows. */
@@ -4219,6 +4241,8 @@ const make = async (path: string): Promise<DbShape> => {
    * (OpenCode's) arrives on a beat after the register and is written the same
    * way.
    */
+  /** Sessions whose newest send is read at once by {@link dateStoredSessions}: well inside SQLite's bound on a statement's parameters. */
+  const DATED_CHUNK = 500;
   const dateStoredSessions = (
     machineId: string,
     liveIds: string[],
@@ -4227,7 +4251,6 @@ const make = async (path: string): Promise<DbShape> => {
     if (!resumableAt) {
       return 0;
     }
-    let moved = 0;
     const dated = db
       .select({
         id: instances.id,
@@ -4246,31 +4269,67 @@ const make = async (path: string): Promise<DbShape> => {
         )
       )
       .all();
-    for (const row of dated) {
-      const latest = db
-        .select({ body: sentMessages.body })
-        .from(sentMessages)
-        .where(eq(sentMessages.instanceId, row.id))
-        .orderBy(desc(sentMessages.acceptedAt))
-        .limit(1)
-        .get()?.body;
-      if (
-        latest?.origin?.kind === "system" &&
-        latest.origin.name === "keepalive"
-      ) {
-        // The transcript's mtime includes maintenance; it is not real activity.
-        continue;
-      }
+    // Only a row whose time the catalog moves is read further: its newest
+    // send, all of them in one read. Each row's newest send was read on its
+    // own, moved or not: a statement prepared and run per session, 314 ms
+    // for a machine's 3,024 at every register and heartbeat, the hub's
+    // thread held all that time (hub-restart-load, 2026-10-23).
+    const moving = dated.flatMap((row) => {
       const at = row.sessionId ? resumableAt[row.sessionId] : undefined;
-      if (at === undefined || at === row.updatedAt.getTime()) {
-        continue;
-      }
-      db.update(instances)
-        .set({ updatedAt: new Date(at) })
-        .where(eq(instances.id, row.id))
-        .run();
-      moved += 1;
+      return at === undefined || at === row.updatedAt.getTime()
+        ? []
+        : [{ id: row.id, at }];
+    });
+    if (moving.length === 0) {
+      return 0;
     }
+    // Whether each one's newest send is a keep-alive: its origin alone, read
+    // in SQLite, never the whole body (a brief's words, kilobytes each).
+    const keptAlive = new Set<string>();
+    for (let from = 0; from < moving.length; from += DATED_CHUNK) {
+      const ids = moving.slice(from, from + DATED_CHUNK).map((row) => row.id);
+      for (const send of db
+        .select({
+          instanceId: sentMessages.instanceId,
+          kind: sql<
+            string | null
+          >`json_extract(${sentMessages.body}, '$.origin.kind')`,
+          name: sql<
+            string | null
+          >`json_extract(${sentMessages.body}, '$.origin.name')`,
+        })
+        .from(sentMessages)
+        .where(
+          and(
+            inArray(sentMessages.instanceId, ids),
+            eq(
+              sentMessages.acceptedAt,
+              sql`(SELECT max(newest.accepted_at) FROM sent_messages AS newest WHERE newest.instance_id = ${sentMessages.instanceId})`
+            )
+          )
+        )
+        .all()) {
+        if (send.kind === "system" && send.name === "keepalive") {
+          keptAlive.add(send.instanceId);
+        }
+      }
+    }
+    // The transcript's mtime includes maintenance; it is not real activity.
+    const dates = moving.filter((row) => !keptAlive.has(row.id));
+    // Each chunk's rows in one statement: one update per row was the rest of
+    // the hold, 400 ms for 3,024 rows whose times all moved.
+    db.transaction((tx) => {
+      for (let from = 0; from < dates.length; from += DATED_CHUNK) {
+        const chunk = dates.slice(from, from + DATED_CHUNK);
+        tx.run(
+          sql`WITH dated(id, at) AS (VALUES ${sql.join(
+            chunk.map((row) => sql`(${row.id}, ${row.at})`),
+            sql`, `
+          )}) UPDATE instances SET updated_at = (SELECT at FROM dated WHERE dated.id = instances.id) WHERE id IN (SELECT id FROM dated)`
+        );
+      }
+    });
+    const moved = dates.length;
     return moved;
   };
 
@@ -4422,6 +4481,67 @@ const make = async (path: string): Promise<DbShape> => {
           machineId === undefined
             ? undefined
             : eq(instances.machineId, machineId)
+        )
+        .all(),
+    sessionIdsOn: (machineId) =>
+      db
+        .select({ id: instances.id })
+        .from(instances)
+        .where(eq(instances.machineId, machineId))
+        .all()
+        .map((row) => row.id),
+    ownedByIds: (machineId, ids) =>
+      ids.length === 0
+        ? []
+        : db
+            .select(ownedColumns)
+            .from(instances)
+            .where(
+              and(
+                eq(instances.machineId, machineId),
+                inArray(instances.id, [...new Set(ids)])
+              )
+            )
+            .all(),
+    removedOn: (machineId) =>
+      db
+        .select(ownedColumns)
+        .from(instances)
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            eq(instances.machineRemoved, true)
+          )
+        )
+        .all(),
+    ownedToReconcile: (machineId, named) =>
+      db
+        .select(ownedColumns)
+        .from(instances)
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            or(
+              // An end still owed, or a transcript's delete still to finish.
+              and(
+                isNotNull(instances.endIntent),
+                or(
+                  isNull(instances.endConfirmedAt),
+                  eq(instances.endIntent, "delete-transcript")
+                )
+              ),
+              // What an opencode stop names as claimed, besides `named`.
+              inArray(instances.status, ["running", "starting"]),
+              // A removed opencode session, which the reconcile recovers.
+              and(
+                eq(instances.machineRemoved, true),
+                eq(instances.harness, "opencode")
+              ),
+              ...(named.length > 0
+                ? [inArray(instances.id, [...new Set(named)])]
+                : [])
+            )
+          )
         )
         .all(),
     endInstance: (id, intent) =>
@@ -7200,6 +7320,13 @@ const make = async (path: string): Promise<DbShape> => {
         .where(listedInstances())
         .all()
         .map(asListed),
+    listInstancesOn: (machineId) =>
+      db
+        .select(publicColumns)
+        .from(instances)
+        .where(and(eq(instances.machineId, machineId), listedInstances()))
+        .all()
+        .map(asListed),
     listedInstancesByIds: (ids) =>
       ids.length === 0
         ? []
@@ -8965,23 +9092,30 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .orderBy(asc(sentMessages.acceptedAt))
         .all(),
+    // By the sessions' ids, so SQLite finds each one's pending sends by its
+    // index (`sent_messages_state`): joined to its sessions, it read every
+    // send the hub ever kept, at each register (hub-restart-load).
     owedSends: (of) =>
       db
-        .select({ send: sentMessages })
+        .select()
         .from(sentMessages)
-        .innerJoin(instances, eq(instances.id, sentMessages.instanceId))
         .where(
           and(
-            isNotNull(sentMessages.owed),
-            eq(sentMessages.state, "pending"),
             "instanceId" in of
               ? eq(sentMessages.instanceId, of.instanceId)
-              : eq(instances.machineId, of.machineId)
+              : inArray(
+                  sentMessages.instanceId,
+                  db
+                    .select({ id: instances.id })
+                    .from(instances)
+                    .where(eq(instances.machineId, of.machineId))
+                ),
+            eq(sentMessages.state, "pending"),
+            isNotNull(sentMessages.owed)
           )
         )
         .orderBy(asc(sentMessages.acceptedAt))
-        .all()
-        .map((row) => row.send),
+        .all(),
     holdSend: (uuid, envelope) =>
       db
         .update(sentMessages)
