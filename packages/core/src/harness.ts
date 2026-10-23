@@ -2545,6 +2545,16 @@ export interface CommandRun {
    */
   gate?: string;
   id: string;
+  /**
+   * The command moves the workspace's worktree to this commit: a rebase
+   * onto it, a checkout of it. A move that would write a path the boundary
+   * keeps from every command (core workspace-policy.ts `cloneDenies`) runs
+   * with git on the host, the sandbox down (agent workflow-command.ts
+   * `movedCommand`); any move that leaves such a path other than its HEAD
+   * has it fails. Given only with a workspace, and with a command that runs
+   * git as safe-git.ts says.
+   */
+  moves?: string;
   queueMaxMs: number;
 }
 

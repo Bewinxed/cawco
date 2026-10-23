@@ -32,6 +32,17 @@
  *   `.mcp.json` and writes `opencode.json`, each path spelled apart so only
  *   the boundary judges it: every one fails, and on the host both files
  *   still hold the commit's texts, with nothing at the rename's target.
+ * - (d) A delegate whose branch is open commits a file and tries to rename
+ *   `.git` (which holds the denied `.git/config` and `.git/hooks`): the
+ *   rename fails (on the Mac it passed before, and the hooks under the new
+ *   name were written). Main then changes `.mcp.json`, and the delegate
+ *   finishes: the landing rebases onto that main and lands (hub landing.ts,
+ *   the rebase a move, agent workflow-command.ts `movedCommand`): origin's
+ *   main is the delegate's commit on main's, the clone's HEAD is it, its
+ *   status is clean and its `.mcp.json` on the host is main's new text,
+ *   and the agent's log says the rebase ran on the host with the sandbox
+ *   down. Before the fix the rebase failed inside the boundary: "unable to
+ *   unlink old '.mcp.json'".
  *
  *   bun scripts/probe-kit/run.ts cut-tracked-denies
  */
@@ -114,6 +125,29 @@ const NEW_COMMAND = [
   `echo ${apart(NEW_END)}`,
 ].join("\n");
 
+const LAND = "PROBE-REBASE-LAND";
+const LAND_MADE = "PROBE-REBASE-LAND-MADE";
+const LAND_TITLE = "Land over a moved .mcp.json";
+const LAND_COMMIT = "Probe commit landed over a moved .mcp.json";
+/** The file in the land delegate's scratch dir the spec writes once main has moved: it finishes after. */
+const MAIN_MOVED = "main-moved";
+/** `.mcp.json` as main changes it while the land delegate's branch is open. */
+const MOVED_MCP = '{\n  "mcpServers": {},\n  "probe": "main moved"\n}\n';
+/** The agent's line for a move it ran on the host (workflow-command.ts `onHost`). */
+const ON_HOST = "ran on the host, its sandbox down, as it writes .mcp.json";
+
+/**
+ * The land delegate's one command: a commit of its own, a try at renaming
+ * `.git` (put back at once when it passes), then a wait for main to move.
+ */
+const LAND_COMMAND = [
+  "echo land > land-probe.txt && git add land-probe.txt",
+  `git -c user.name=Delegate -c user.email=d@probe.test commit -qm '${LAND_COMMIT}'`,
+  `g=".g""it"; if mv "$g" "$g-probe" 2>/dev/null; then mv "$g-probe" "$g"; echo ${apart("GIT-MV:")}0; else echo ${apart("GIT-MV:")}1; fi`,
+  `for i in $(seq 240); do [ -e "$TMPDIR/${MAIN_MOVED}" ] && break; sleep 1; done`,
+  `echo ${apart(LAND_MADE)}`,
+].join("\n");
+
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
   everyMs: 5,
@@ -134,7 +168,7 @@ const found = (request: Seen, name: string, input: object): Reply => {
 const ASKED = new RegExp(`${ASK} ([0-9a-f-]{36})`);
 
 /** Which session has made its one call already: the parent its delegate, the new delegate its finish. */
-const called = { delegate: false, finish: false };
+const called = { delegate: false, finish: false, land: false };
 
 /** `name` called once, after finding it: `done` from then on. */
 const once = (
@@ -204,6 +238,22 @@ const respond = (request: Seen): Reply => {
       "Done."
     );
   }
+  if (request.all.includes(LAND)) {
+    if (!request.all.includes(LAND_MADE)) {
+      return useTool("Bash", {
+        command: LAND_COMMAND,
+        description: "Commit, then wait for main",
+        timeout: 300_000,
+      });
+    }
+    return once(
+      request,
+      "land",
+      FINISH,
+      { headline: "Landed.", summary: "Committed land-probe.txt." },
+      "Landed."
+    );
+  }
   return text("ok");
 };
 
@@ -239,7 +289,12 @@ const after = (said: string, marker: string): string | undefined =>
 /** The fleet up, a project whose main tracks `.mcp.json`, and its parent session. */
 const scene = async (
   kit: Kit
-): Promise<{ fleet: KitFleet; parent: string; src: string }> => {
+): Promise<{
+  fleet: KitFleet;
+  parent: string;
+  project: string;
+  src: string;
+}> => {
   const fleet = await kit.fleet(respond);
   const home = fleet.env.HOME as string;
   fleet.launch("sessiond");
@@ -270,7 +325,7 @@ const scene = async (
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
-  return { fleet, parent, src };
+  return { fleet, parent, project: project.id, src };
 };
 
 /** (a) The source delegate's workspace, held at its commit of both deny paths: the row and its HEAD. */
@@ -403,16 +458,116 @@ const cutPhase = async (
   );
 };
 
+/** (d) A delegate's landing rebased onto a main that changed `.mcp.json` while its branch was open. */
+const landPhase = async (
+  { check, note }: Kit,
+  fleet: KitFleet,
+  parent: string,
+  src: string,
+  projectId: string
+): Promise<void> => {
+  const watched = await fleet.logMark("agent");
+  const started = await fleet.api<{ workItemId: string; workspaceId: string }>(
+    "/api/work-items",
+    {
+      parentInstanceId: parent,
+      title: LAND_TITLE,
+      prompt: `${LAND}: commit, wait for main, then finish.`,
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      cwd: src,
+    }
+  );
+  const row = await until(
+    "the land delegate committed",
+    async () => {
+      const [one] = fleet.query<{ path: string; tmp: string | null }>(
+        "SELECT path, tmp FROM workspaces WHERE id = ?",
+        started.workspaceId
+      );
+      return one?.path &&
+        (await gitIn(one.path, "log", "-1", "--format=%s")) === LAND_COMMIT
+        ? one
+        : undefined;
+    },
+    Boolean,
+    300_000
+  ).catch(() => undefined);
+  if (!row) {
+    check("(d) the land delegate committed in its clone", false, "no commit");
+    return;
+  }
+  const bare = join(fleet.sandbox, "hub", "git", `${projectId}.git`);
+  const mover = join(fleet.sandbox, "main-mover");
+  const env = { ...process.env, HOME: fleet.env.HOME as string };
+  await Bun.$`git clone -q ${bare} ${mover}`.env(env).quiet();
+  await writeFile(join(mover, ".mcp.json"), MOVED_MCP);
+  await Bun.$`git add -A && git commit -qm 'Main changes .mcp.json' && git push -q origin HEAD:main`
+    .cwd(mover)
+    .env(env)
+    .quiet();
+  const moved = await gitIn(mover, "rev-parse", "HEAD");
+  await writeFile(join(row.tmp ?? "", MAIN_MOVED), "");
+  const state = await until(
+    "the land delegate's item ended",
+    () =>
+      fleet.query<{ state: string; error: string | null }>(
+        "SELECT state, error FROM work_items WHERE id = ?",
+        started.workItemId
+      )[0],
+    (one) => ["done", "failed", "cancelled"].includes(one?.state ?? ""),
+    600_000
+  ).catch(() => undefined);
+  const said = fleet.seen.find((one) => one.all.includes(LAND_MADE))?.all ?? "";
+  const renamed = after(said, "GIT-MV:");
+  check(
+    "(d) in its boundary the delegate's rename of .git (which holds the denied .git/config and .git/hooks) fails",
+    renamed === "1",
+    `GIT-MV ${renamed ?? "unread"}`
+  );
+  const main = await Bun.$`git --git-dir ${bare} log -2 --format=%H%x09%s main`
+    .quiet()
+    .nothrow()
+    .text();
+  const [top, below] = main.trim().split("\n");
+  const head = await gitIn(row.path, "rev-parse", "HEAD");
+  const status = await gitIn(row.path, "status", "--porcelain");
+  const mcp = await textAt(join(row.path, ".mcp.json"));
+  const log = await watched.since();
+  note(main.trim());
+  check(
+    "(d) the landing rebased onto the main that changed .mcp.json and landed: origin's main is the delegate's commit on main's, the clone's HEAD is it, its status is clean",
+    state?.state === "done" &&
+      top?.endsWith(`\t${LAND_COMMIT}`) === true &&
+      below?.startsWith(`${moved}\t`) === true &&
+      top.startsWith(`${head}\t`) &&
+      status === "",
+    `item ${state?.state} ${state?.error ?? ""}; main ${JSON.stringify(main.trim())}; clone HEAD ${head.slice(0, 9)}; status ${JSON.stringify(status.slice(0, 300))}`
+  );
+  const refused = log.split("\n").filter((line) => GIT_REFUSED.test(line));
+  check(
+    "(d) its .mcp.json on the host is main's new text, the agent ran the rebase on the host with its sandbox down, and no git write was refused",
+    mcp === MOVED_MCP &&
+      log
+        .split("\n")
+        .some(
+          (line) => line.includes(started.workspaceId) && line.includes(ON_HOST)
+        ) &&
+      refused.length === 0,
+    `.mcp.json ${JSON.stringify(mcp)}; on-host line ${log.includes(ON_HOST)}; ${refused.join(" / ").slice(0, 600) || "no refusal"}`
+  );
+};
+
 const spec: Spec = {
   name: "cut-tracked-denies",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
-    const { fleet, parent, src } = await scene(kit);
+    const { fleet, parent, project, src } = await scene(kit);
     const held = await sourcePhase(kit, fleet, parent, src);
-    if (!held) {
-      return;
+    if (held) {
+      await cutPhase(kit, fleet, parent, held);
     }
-    await cutPhase(kit, fleet, parent, held);
+    await landPhase(kit, fleet, parent, src, project);
   },
 };
 

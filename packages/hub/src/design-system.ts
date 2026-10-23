@@ -622,7 +622,9 @@ export type Run = (
   cwd: string,
   cmd: string,
   timeoutMs: number,
-  workspace?: WorkspaceRef
+  workspace?: WorkspaceRef,
+  /** The commit the command moves the workspace's worktree to (hub machine-pause.ts `CommandOptions.moves`). */
+  moves?: string
 ) => Promise<CommandResult>;
 
 /**

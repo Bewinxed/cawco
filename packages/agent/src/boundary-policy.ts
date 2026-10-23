@@ -349,6 +349,31 @@ export interface SeatbeltPlace {
 }
 
 /**
+ * The clone's dirs that hold a write-denied path, between the clone and it
+ * (`.git` for `.git/config` and `.git/hooks`, `.claude` for Claude Code's
+ * project settings). Seatbelt judges a path as it is named at each call, so
+ * a deny on `.git/hooks` alone let a command rename `.git` away, write the
+ * hooks under the new name and rename it back: measured inside a Mac
+ * workspace on 2026-10-23, `mv .git .git-probe` exited 0 and so did `touch
+ * .git-probe/hooks/probe-touch`. Each is denied as a literal: the dir itself
+ * is never renamed, removed or made again, and what it holds is written as
+ * the rest of the policy says. srt's binds hold the same on Linux: a mount
+ * point is never renamed (boundary-host.ts `toProtect`).
+ */
+const holdersIn = (policy: Policy): string[] => {
+  const holders = new Set<string>();
+  for (const path of policy.denyWrite) {
+    if (!(path !== policy.clone && within(path, policy.clone))) {
+      continue;
+    }
+    for (let dir = dirname(path); dir !== policy.clone; dir = dirname(dir)) {
+      holders.add(dir);
+    }
+  }
+  return [...holders].sort();
+};
+
+/**
  * The Seatbelt profile of a macOS workspace's runner. Seatbelt lets the last
  * matching rule win, so the read rules come in order of depth, a deny before
  * an allow of the same depth: the most specific entry decides, an allow
@@ -450,6 +475,9 @@ export const seatbeltProfile = (
     '  (regex #"^/dev/tty") (regex #"^/dev/fd/"))',
     ...policy.denyWrite.map(
       (path) => `(deny file-write* (subpath ${sbString(path)}))`
+    ),
+    ...holdersIn(policy).map(
+      (dir) => `(deny file-write* (literal ${sbString(dir)}))`
     ),
     // Its contents are the workspace's to write; the scratch dir itself stays.
     `(deny file-write-unlink (literal ${sbString(policy.scratch)}))`,

@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { lstat, realpath } from "node:fs/promises";
+import { join, relative } from "node:path";
 import {
   type CommandQueue,
   type CommandQueueFrame,
@@ -11,10 +13,20 @@ import {
   queueWords,
   type WorkspaceRef,
 } from "@cawco/core";
-import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { workspaceScratchDir } from "@cawco/core/paths";
+import {
+  repositoryConfigProblem,
+  SAFE_GIT_ENV,
+  SAFE_GIT_SHELL,
+} from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { agentCommandStarted, ensureBoundary } from "./boundary";
+import { workspaceDenies } from "@cawco/core/workspace-policy";
+import {
+  agentCommandStarted,
+  ensureBoundary,
+  whileSandboxDown,
+} from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -93,13 +105,14 @@ export const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
   typeof (value as WorkspaceRef).path === "string" &&
   (value as WorkspaceRef).path.startsWith("/");
 
-/** Whether `value` names a run the hub follows: `{ id, queueMaxMs, gate? }` (core `CommandRun`). */
+/** Whether `value` names a run the hub follows: `{ id, queueMaxMs, gate?, moves? }` (core `CommandRun`). */
 const isCommandRun = (value: unknown): value is CommandRun =>
   typeof value === "object" &&
   value !== null &&
   typeof (value as CommandRun).id === "string" &&
   typeof (value as CommandRun).queueMaxMs === "number" &&
-  ["string", "undefined"].includes(typeof (value as CommandRun).gate);
+  ["string", "undefined"].includes(typeof (value as CommandRun).gate) &&
+  ["string", "undefined"].includes(typeof (value as CommandRun).moves);
 
 /** The slots only the runner itself waits for: no command's marker opens them. */
 const RUNNER_SLOTS: ReadonlySet<QueueSlot> = new Set(["folder", "boundary"]);
@@ -359,17 +372,65 @@ export async function runWorkflowCommand(
   if ((workspace ?? undefined) !== undefined && !isWorkspaceRef(workspace)) {
     throw new Error("runCommand's workspace must be { id, path }.");
   }
+  if (named?.moves !== undefined) {
+    if (!isWorkspaceRef(workspace)) {
+      throw new Error("runCommand moves a worktree only in a workspace.");
+    }
+    return await movedCommand(cwd, cmd, timeoutMs, workspace, named);
+  }
   const [file, args] = await commandLine(cmd, workspace, named);
   // Cancelled while it waited its turn or its boundary: it never starts.
   if (named && cancelledEarly.delete(named.id)) {
-    return { cancelled: true, exitCode: 143, stdout: "", stderr: "" };
+    return CANCELLED;
   }
-  return new Promise((resolve, reject) => {
+  return await spawned({
+    file,
+    args,
+    cwd,
+    cmd,
+    env: {},
+    timeoutMs,
+    workspace,
+    named,
+  });
+}
+
+const CANCELLED: CommandResult = {
+  cancelled: true,
+  exitCode: 143,
+  stdout: "",
+  stderr: "",
+};
+
+/** One command as {@link runWorkflowCommand} runs it: `file` and `args` in `cwd`, `env` over the host's. */
+interface Spawned {
+  readonly args: readonly string[];
+  readonly cmd: string;
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly file: string;
+  readonly named: CommandRun | undefined;
+  readonly timeoutMs: unknown;
+  readonly workspace: unknown;
+}
+
+/** {@link runWorkflowCommand}'s run of one process, its clock, limits and cancel as it says. */
+const spawned = ({
+  args,
+  cmd,
+  cwd,
+  env,
+  file,
+  named,
+  timeoutMs,
+  workspace,
+}: Spawned): Promise<CommandResult> =>
+  new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
       detached: true,
       // The executor enters the boundary in `$PWD`: it names `cwd`.
-      env: { ...hostEnvironment(), PWD: cwd },
+      env: { ...hostEnvironment(), ...env, PWD: cwd },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
@@ -482,4 +543,228 @@ export async function runWorkflowCommand(
       });
     });
   });
-}
+
+/** A commit name a move may name: a sha, or a ref of plain words. */
+const MOVE_TARGET = /^[\w./@^~-]+$/;
+
+/** How long a move on the host waits between looks at a boundary that still runs something. */
+const BUSY_LOOK_MS = 2000;
+
+/**
+ * The deny paths of `workspace`'s clone a git command there may hit, by path
+ * in the clone, each as a literal pathspec: every clone-side deny path but
+ * those in `.git`, which git tracks none of. On macOS srt's own names
+ * (`.vscode`, `.gitmodules`, …) are not denied (workspace-policy.ts
+ * `cloneDenies`, `srt`); on Linux srt binds them read-only too.
+ */
+const denyPathspecs = async (workspace: WorkspaceRef): Promise<string[]> => {
+  const clone = await realpath(workspace.path);
+  return (await workspaceDenies(workspace))
+    .filter((deny) => process.platform === "linux" || !deny.srt)
+    .map((deny) => relative(clone, deny.path))
+    .filter((path) => path !== ".git" && !path.startsWith(".git/"))
+    .map((path) => `':(literal)${path}'`);
+};
+
+/** A read inside `workspace`'s boundary: git's stdout, or why it failed. */
+const insideRead = async (
+  workspace: WorkspaceRef,
+  cmd: string
+): Promise<{ ok: true; out: string } | { ok: false; why: string }> => {
+  const read = await runWorkflowCommand(
+    workspace.path,
+    `${SAFE_GIT_SHELL}${cmd}`,
+    READ_TIMEOUT_MS,
+    workspace
+  );
+  return read.exitCode === 0
+    ? { ok: true, out: read.stdout }
+    : {
+        ok: false,
+        why:
+          read.stderr.trim() || read.stdout.trim() || `exit ${read.exitCode}`,
+      };
+};
+
+/** How long a move's reads inside the boundary may take. */
+const READ_TIMEOUT_MS = 60_000;
+
+/** The deny paths among NUL-ended `git diff --name-only -z` output. */
+const namesIn = (out: string): string[] =>
+  [...new Set(out.split("\0").filter(Boolean))].sort();
+
+/**
+ * A {@link CommandRun.moves} command in `workspace`: the hub's rebase onto
+ * a commit, a checkout of one. The boundary keeps every clone-side deny path
+ * from its commands (workspace-policy.ts `cloneDenies`: `.mcp.json`,
+ * OpenCode's config, Claude Code's project settings), so a move that writes
+ * one there fails, or, for a checkout without `--force`, prints "unable to
+ * create file" and exits 0 with the file gone. A move whose commit holds
+ * every deny path as HEAD does, in a worktree that holds them as HEAD does,
+ * runs inside as any command does. Any other runs with git on this host
+ * ({@link onHost}), as a first cut checks out before its boundary exists.
+ * Either way, a move that ends 0 with a deny path the worktree holds other
+ * than its HEAD does fails, naming them: nothing is dropped quietly.
+ */
+const movedCommand = async (
+  cwd: string,
+  cmd: string,
+  timeoutMs: unknown,
+  workspace: WorkspaceRef,
+  run: CommandRun
+): Promise<CommandResult> => {
+  const target = run.moves ?? "";
+  if (!MOVE_TARGET.test(target)) {
+    throw new Error(`runCommand cannot move to "${target}": no commit name`);
+  }
+  const paths = (await denyPathspecs(workspace)).join(" ");
+  const touched = await insideRead(
+    workspace,
+    `git diff --name-only -z HEAD ${target} -- ${paths} && git diff --name-only -z HEAD -- ${paths}`
+  );
+  if (!touched.ok) {
+    return { exitCode: 1, stdout: "", stderr: touched.why };
+  }
+  const writes = namesIn(touched.out);
+  const { moves: _moved, ...plain } = run;
+  const ran =
+    writes.length === 0
+      ? await runWorkflowCommand(cwd, cmd, timeoutMs, workspace, plain)
+      : await onHost(cwd, cmd, timeoutMs, workspace, run, writes);
+  if (ran.exitCode !== 0 || ran.cancelled) {
+    return ran;
+  }
+  const left = await insideRead(
+    workspace,
+    `git diff --name-only -z HEAD -- ${paths}`
+  );
+  if (!left.ok) {
+    return { ...ran, exitCode: 1, stderr: `${ran.stderr}${left.why}\n` };
+  }
+  const dropped = namesIn(left.out);
+  return dropped.length === 0
+    ? ran
+    : {
+        ...ran,
+        exitCode: 1,
+        stderr: `${ran.stderr}CawCo: the move left ${dropped.join(", ")} other than HEAD has ${dropped.length === 1 ? "it" : "them"} in the workspace's worktree, paths its boundary keeps from every command.\n`,
+      };
+};
+
+/**
+ * A move ({@link movedCommand}) that writes deny paths `writes`, run with
+ * git on this host while the workspace's sandbox is down and its sessions
+ * live on ({@link whileSandboxDown}). Only a command that runs every git as
+ * safe-git.ts says, in a clone whose `.git` is a folder and whose config
+ * holds no key past the allowlist (`repositoryConfigProblem`), looked at
+ * again once the sandbox is down. git-lfs smudges nothing here, where a
+ * `.lfsconfig` could point it anywhere with the owner's credentials; a
+ * target that marks files for LFS has them pulled inside the boundary
+ * after. `$TMPDIR` is the workspace's scratch dir, as inside. While
+ * something still runs in the boundary, the move waits (the run's `folder`
+ * wait, which a run that may not wait is cancelled on), for the run's
+ * `queueMaxMs` at most, then fails in words.
+ */
+const onHost = async (
+  cwd: string,
+  cmd: string,
+  timeoutMs: unknown,
+  workspace: WorkspaceRef,
+  run: CommandRun,
+  writes: readonly string[]
+): Promise<CommandResult> => {
+  if (!cmd.startsWith(SAFE_GIT_SHELL)) {
+    throw new Error(
+      `a move that writes ${writes.join(", ")} runs on the host, and only a command that runs git as safe-git.ts says runs there`
+    );
+  }
+  const refused = await hostGitRefusal(workspace.path);
+  if (refused) {
+    return { exitCode: 1, stdout: "", stderr: `${refused}\n` };
+  }
+  const deadline = Date.now() + run.queueMaxMs;
+  let told = false;
+  try {
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: one look at the boundary at a time, until it is idle
+      const down = await whileSandboxDown(workspace, async () => {
+        const now = await hostGitRefusal(workspace.path);
+        if (now) {
+          return { exitCode: 1, stdout: "", stderr: `${now}\n` };
+        }
+        return await spawned({
+          file: "/bin/sh",
+          args: ["-c", cmd],
+          cwd,
+          cmd,
+          env: {
+            ...SAFE_GIT_ENV,
+            GIT_LFS_SKIP_SMUDGE: "1",
+            TMPDIR: workspaceScratchDir(workspace.id),
+          },
+          timeoutMs,
+          workspace,
+          named: run,
+        });
+      });
+      if ("ran" in down) {
+        console.info(
+          `[workspace] ${workspace.id}: \`${shownCommand(cmd)}\` ran on the host, its sandbox down, as it writes ${writes.join(", ")}`
+        );
+        return down.ran.exitCode === 0
+          ? await largeFilesAfter(workspace, run.moves ?? "", down.ran)
+          : down.ran;
+      }
+      if (cancelledEarly.delete(run.id)) {
+        return CANCELLED;
+      }
+      const words = `${down.busy}, and the move writes ${writes.join(", ")} on the host with its sandbox down`;
+      if (Date.now() >= deadline) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `CawCo: the move did not run: ${words}, and it still did after ${Math.round(run.queueMaxMs / 1000)} s.\n`,
+        };
+      }
+      told = true;
+      tellWait(run, { slot: "folder", holders: words });
+      await Bun.sleep(BUSY_LOOK_MS);
+    }
+  } finally {
+    if (told) {
+      tellWait(run, null);
+    }
+  }
+};
+
+/** Why git must not run on this host in the clone at `path`: its `.git` no folder of its own, or its config past the allowlist. */
+const hostGitRefusal = async (path: string): Promise<string | undefined> => {
+  const dotGit = join(path, ".git");
+  const found = await lstat(dotGit).catch(() => undefined);
+  if (!found?.isDirectory()) {
+    return `${dotGit} is ${found?.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through on the host`;
+  }
+  return await repositoryConfigProblem(dotGit);
+};
+
+/** `ran`, once the large files `target` marks for LFS are pulled inside the boundary; its failure in words otherwise. */
+const largeFilesAfter = async (
+  workspace: WorkspaceRef,
+  target: string,
+  ran: CommandResult
+): Promise<CommandResult> => {
+  const marked = await insideRead(
+    workspace,
+    `if git grep -q filter=lfs ${target} -- ':(glob)**/.gitattributes'; then echo lfs; fi`
+  );
+  if (!marked.ok) {
+    return { ...ran, exitCode: 1, stderr: `${ran.stderr}${marked.why}\n` };
+  }
+  if (marked.out.trim() !== "lfs") {
+    return ran;
+  }
+  const pulled = await insideRead(workspace, "git lfs pull");
+  return pulled.ok
+    ? ran
+    : { ...ran, exitCode: 1, stderr: `${ran.stderr}${pulled.why}\n` };
+};
