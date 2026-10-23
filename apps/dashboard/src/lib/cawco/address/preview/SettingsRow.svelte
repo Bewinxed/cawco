@@ -29,7 +29,7 @@
     started
       ? rowLine(tray)
       : {
-          text: "Type cawco on any of your devices to open CawCo.",
+          text: `Type ${tray.phoneTyped} on any of your devices to open CawCo.`,
           live: false,
         }
   );

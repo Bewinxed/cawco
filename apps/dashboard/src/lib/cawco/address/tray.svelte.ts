@@ -284,7 +284,7 @@ export class AddressTray {
   );
   /** NetBird resolves only the long name until its admin adds a search domain (facts §7). */
   readonly bareWordWorks = $derived(this.network !== "netbird");
-  /** What the QR and the phone's button open: the word where it resolves, else the long name. */
+  /** The address that opens CawCo on any device (the QR, the phone's button, the row once live): the word where it resolves, else the long name. */
   readonly phoneAddress = $derived(
     this.bareWordWorks ? this.short : `http://${this.long}/`
   );

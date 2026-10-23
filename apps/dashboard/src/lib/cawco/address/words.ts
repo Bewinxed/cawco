@@ -388,7 +388,7 @@ export function rowLine(tray: AddressTray): { text: string; live: boolean } {
       return { text: "Looking at this computer's networks…", live: true };
     case "found":
       return {
-        text: `Type ${tray.name} on any of your devices to open CawCo. One sign-in sets it up.`,
+        text: `Type ${tray.phoneTyped} on any of your devices to open CawCo. ${tray.network === "netbird" ? "One setup key" : "One sign-in"} sets it up.`,
         live: false,
       };
     case "signin":
@@ -403,11 +403,11 @@ export function rowLine(tray: AddressTray): { text: string; live: boolean } {
     case "keep":
     case "phone":
       return {
-        text: `${tray.short} answers. A few optional steps are left.`,
+        text: `${tray.phoneAddress} answers. A few optional steps are left.`,
         live: false,
       };
     case "live":
-      return { text: `Live at ${tray.short}`, live: false };
+      return { text: `Live at ${tray.phoneAddress}`, live: false };
     case "failed":
       return { text: failureWords(tray, tray.cause).title, live: false };
     case "unsupported":
