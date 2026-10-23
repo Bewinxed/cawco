@@ -1,9 +1,6 @@
-import {
-  deriveTitleFromFirstMessage,
-  type HarnessKind,
-  type InstanceRow,
-  type NeutralSessionInfo,
-} from "@cawco/core";
+import type { InstanceRow } from "@cawco/core";
+import type { HarnessKind, NeutralSessionInfo } from "@cawco/core/harness";
+import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 
 /**
  * A row the lists draw: a session's, or a Caw thread's drawn as one

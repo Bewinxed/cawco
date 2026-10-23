@@ -8,7 +8,7 @@
  * agent's ports, the daemon's {@link BrowserFrame} and the hub's commands.
  */
 
-import { CAWCO_ENV, readEnv } from "./index";
+import { CAWCO_ENV, readEnv } from "./cawco-env";
 
 /** Which browser: a project's, or the machine's for sessions outside any project. */
 export type BrowserKey = `project:${string}` | `machine:${string}`;

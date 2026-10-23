@@ -32,8 +32,8 @@ import {
   type InstallStarted,
   type InstallsFrame,
   type InstallsRead,
-  type JoinInfo,
-} from "@cawco/core";
+} from "@cawco/core/install";
+import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";

@@ -108,4 +108,4 @@ export const UNKNOWN_HINT =
 export const MACHINE_UNREACHABLE_HINT =
   "The hub can't currently reach this machine.";
 
-import { commonWords } from "@cawco/core";
+import { commonWords } from "@cawco/core/words/common";

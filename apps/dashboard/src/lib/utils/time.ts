@@ -1,4 +1,4 @@
-import { memoryWords } from "@cawco/core";
+import { memoryWords } from "@cawco/core/words/memory";
 
 /**
  * Format a date as a relative time string (e.g., "5m ago"); the app's

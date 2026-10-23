@@ -9,7 +9,7 @@
  * the session being written in is never one, and a stored session the hub
  * never started (no handle) cannot be named.
  */
-import { sessionLink } from "@cawco/core";
+import { sessionLink } from "@cawco/core/references";
 import {
   type FindAnswer,
   type FindKind,

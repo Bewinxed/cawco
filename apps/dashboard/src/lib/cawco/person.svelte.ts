@@ -16,15 +16,15 @@
  *   ties the browser to its machine by the address it asks from,
  *   `thisMachine`), notifications while still to answer.
  */
-import {
-  type DeskAck,
-  type DeskAckHow,
-  type DeskAlertFrame,
-  type PersonRead,
-  type PersonView,
-  PRESENCE_ONBOARDING_SKIPPED,
-  presenceWords,
-} from "@cawco/core";
+import type {
+  DeskAck,
+  DeskAckHow,
+  DeskAlertFrame,
+  PersonRead,
+  PersonView,
+} from "@cawco/core/notifications";
+import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
+import { presenceWords } from "@cawco/core/words/presence";
 import { goto } from "$app/navigation";
 import { failureWords } from "./hub-read";
 import { conversationHref, type InstanceIndex } from "./links";

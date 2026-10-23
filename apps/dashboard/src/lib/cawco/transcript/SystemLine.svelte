@@ -1,9 +1,6 @@
 <script lang="ts">
-  import {
-    ARTIFACT_RESPONSES,
-    type ArtifactKind,
-    MOVED_HERE,
-  } from "@cawco/core";
+  import type { ArtifactKind } from "@cawco/core";
+  import { ARTIFACT_RESPONSES, MOVED_HERE } from "@cawco/core/harness";
   import type { Component } from "svelte";
   import { showArtifact } from "#lib/cawco/artifact-api.js";
   import { revealPreview } from "#lib/cawco/client.svelte.js";

@@ -14,7 +14,7 @@
    * session's composer, New session's first prompt and the comment composer
    * draw it.
    */
-  import { humanSize } from "@cawco/core";
+  import { humanSize } from "@cawco/core/attachments";
   import type { Component } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";

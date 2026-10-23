@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * A direction's tray on a desk, live: the transcript-width page with
-   * Needs you (the address's onboarding row over a real budget row, in
-   * NeedsCard), or Settings' Word address row, and the story's control at
+   * Needs you (the address's onboarding row over a real budget row,
+   * NeedsCard's own NeedsRow), or Settings' Word address row, and the story's control at
    * the frame's top edge. The row becomes the tray in place, its box growing
    * to the tray's while the row under it slides down (The One Object Rule);
    * Settings' Set up opens into the tray floating over it. ×, Esc and a
@@ -11,8 +11,10 @@
    */
   import { onDestroy, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import type { NeedsItem } from "#lib/cawco/home/home-state.svelte.js";
-  import NeedsCardSheet from "#lib/cawco/home/NeedsCardSheet.svelte";
+  import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
+  import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
+  import { capLine } from "#lib/cawco/usage.js";
+  import { IconDollar } from "#lib/icons.js";
   import { closeTo, openFrom, type Source } from "../motion";
   import { AddressTray, type Network } from "../tray.svelte";
   import AddressRow from "./AddressRow.svelte";
@@ -29,9 +31,11 @@
   const tray = new AddressTray({ network });
   onDestroy(() => tray.dispose());
 
-  /** A project past its budget, as Needs you lists it today, under the address's row. */
+  /**
+   * A project past its budget, as Needs you lists it today, under the
+   * address's row: NeedsCard's own row (NeedsRow), as it draws a budget.
+   */
   const budget = {
-    kind: "cap",
     key: "cap:address-tray-story",
     cap: {
       inherited: false,
@@ -44,10 +48,8 @@
       usd: 10,
     },
     title: "cockpit",
-    place: "Budget reached",
     href: "/usage?project=address-tray-story",
-    raisedAt: undefined,
-  } as NeedsItem;
+  } as const;
 
   let trayEl = $state<HTMLElement | null>(null);
   let rowEl = $state<HTMLElement | null>(null);
@@ -182,11 +184,21 @@
               {/if}
             </div>
           {/if}
-          <NeedsCardSheet
-            item={budget}
+          <NeedsRow
+            href={budget.href}
+            kind="cap"
             onchoose={() => undefined}
-            stale={false}
-          />
+            share="pane:{budget.key}"
+            title={budget.title}
+            want={capLine(budget.cap)}
+          >
+            {#snippet lead()}
+              <IconDollar aria-hidden="true" class="size-icon-md" />
+            {/snippet}
+            {#snippet below()}
+              <NeedsMeta text="Budget" />
+            {/snippet}
+          </NeedsRow>
         </div>
       </section>
     {:else}

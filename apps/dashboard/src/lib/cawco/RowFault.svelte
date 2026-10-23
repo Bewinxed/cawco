@@ -31,7 +31,8 @@
    * row above (`--fault-indent`, `--fault-end`); a host that sets those for
    * every row inside it passes neither.
    */
-  import { configureWords, shellWords } from "@cawco/core";
+  import { configureWords } from "@cawco/core/words/configure";
+  import { shellWords } from "@cawco/core/words/shell";
   import type { Component, Snippet } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
   import { failureWords } from "#lib/cawco/hub-read.js";

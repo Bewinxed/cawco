@@ -6,12 +6,10 @@
  * fixed chrome.
  */
 
-import {
-  type AccountMove,
-  ASK_USER_QUESTION,
-  COMPACT_SUMMARY_KIND,
-  type ToolGlance,
-} from "@cawco/core";
+import type { AccountMove } from "@cawco/core/accounts";
+import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
+import type { ToolGlance } from "@cawco/core/transcript-types";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { SessionState } from "../client.svelte";
 import type { Message } from "../types";

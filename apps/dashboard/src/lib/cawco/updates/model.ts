@@ -3,7 +3,7 @@
  * the Update cell of a machine, the Running cell, the rail's count and the
  * one notice. Nothing here knows Svelte.
  */
-import { updatesWords } from "@cawco/core";
+
 import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
@@ -13,6 +13,7 @@ import {
   RESTART_WAIT_CAP_MS,
   type RetiringKeeper,
 } from "@cawco/core/binary-updates";
+import { updatesWords } from "@cawco/core/words/updates";
 
 /** The part of a machine row these functions read. */
 export interface UpdateMachine {

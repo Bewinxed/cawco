@@ -33,7 +33,8 @@
   export const planTitle = (plan: SessionPlan | undefined): string =>
     onlyTodos(plan) ? planWords.todos : planWords.plan;
 
-  import { planWords, type SessionPlan } from "@cawco/core";
+  import type { SessionPlan } from "@cawco/core/plan";
+  import { planWords } from "@cawco/core/words/plan";
   import { stepsTree, todosTree } from "./PlanTree.svelte";
 </script>
 

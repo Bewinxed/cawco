@@ -1,8 +1,5 @@
-import {
-  type ArtifactKind,
-  type PreviewSource,
-  parseReference,
-} from "@cawco/core";
+import type { ArtifactKind, PreviewSource } from "@cawco/core";
+import { parseReference } from "@cawco/core/references";
 import { pathLeaf, resultField } from "@cawco/core/tool-presentation";
 
 /** A short name for where a preview's page is, for the panel's head. */

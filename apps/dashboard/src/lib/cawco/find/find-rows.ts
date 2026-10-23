@@ -10,14 +10,11 @@
  * Stopped, Failed, Unreachable) and WORDS.md's nouns (session, delegate,
  * thread, task, routine, preview, decision, report, machine, project).
  */
-import {
-  type ArtifactKind,
-  type FindSecrets,
-  findSecretWords,
-  type SecretSpan,
-  workWords,
-} from "@cawco/core";
+import type { ArtifactKind } from "@cawco/core";
+import type { FindSecrets, SecretSpan } from "@cawco/core/find";
 import { markedRuns } from "@cawco/core/find-match";
+import { findSecretWords } from "@cawco/core/words/find-secrets";
+import { workWords } from "@cawco/core/words/work";
 import type { Component } from "svelte";
 import {
   IconGlobe as Browser,

@@ -14,17 +14,17 @@ import {
   type AccountSignin,
   accountNameAmong,
   CLAUDE_PROVIDER,
-  type HarnessKind,
   type HomeStore,
   LIMITED_PROVIDERS,
-  machineLabel,
   type PlacementStrategy,
   type ProviderChoice,
   type ProviderRouting,
   type RebalanceNotice,
   type SigninState,
-  accountsWords as words,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
+import type { HarnessKind } from "@cawco/core/harness";
+import { machineLabel } from "@cawco/core/machine-names";
+import { accountsWords as words } from "@cawco/core/words/accounts";
 import { cawco } from "../client.svelte";
 
 /** The colour token an account is drawn in. */

@@ -9,20 +9,21 @@
  * Not to be confused with a session's own plan (WORDS.md: plan), which is
  * the hub's too, held in the client by `plan.ts`.
  */
-import {
-  type AttemptResult,
-  type GithubProjectsView,
-  type IssueTracker,
-  outputArtifacts,
-  type ProjectGate,
-  type ProjectStarter,
-  type StarterGlyph,
-  type StarterPlace,
-  type TaskIssueLink,
-  type Tracker,
-  type TrackerTarget,
-  type TrackerView,
-} from "@cawco/core";
+import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
+import type { ProjectGate } from "@cawco/core/project-gate";
+import type {
+  ProjectStarter,
+  StarterGlyph,
+  StarterPlace,
+} from "@cawco/core/starters";
+import type {
+  GithubProjectsView,
+  IssueTracker,
+  TaskIssueLink,
+  Tracker,
+  TrackerTarget,
+  TrackerView,
+} from "@cawco/core/trackers";
 import {
   HUB_UNREACHABLE,
   HubUnreachable,

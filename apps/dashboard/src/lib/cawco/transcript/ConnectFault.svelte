@@ -10,7 +10,7 @@
    * Caw is drawn in his needs-you file, still: there is no failed Caw, and
    * the ask is waiting on the person again.
    */
-  import { shellWords } from "@cawco/core";
+  import { shellWords } from "@cawco/core/words/shell";
   import { Button } from "#lib/components/ui/button/index.js";
   import Caw from "../home/Caw.svelte";
   import { unfold } from "../motion/fold.svelte";

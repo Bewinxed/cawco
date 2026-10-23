@@ -11,16 +11,16 @@
  * follows it, a reload finds it, and closing the surface that pressed it
  * leaves it going (DESIGN.md, The Work Outlives Its Surface Rule).
  */
+
+import type { Bounded } from "@cawco/core/bounded";
+import { HARNESS_TOOL, type HarnessKind } from "@cawco/core/harness";
+import { machineLabel } from "@cawco/core/machine-names";
 import {
-  HARNESS_TOOL,
-  type HarnessKind,
-  machineLabel,
   type ToolSpec,
   type ToolStatus,
   toolRuns,
   toolSpec,
-} from "@cawco/core";
-import type { Bounded } from "@cawco/core/bounded";
+} from "@cawco/core/tools";
 import {
   cawco,
   didntAnswer,

@@ -12,7 +12,7 @@
    * if the upload failed, "Couldn't upload", and a press tries again; once
    * the hub has it (`href`), a press downloads it.
    */
-  import { humanSize } from "@cawco/core";
+  import { humanSize } from "@cawco/core/attachments";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { glyphOf, nameParts, sizeLine } from "./doc-face";
   import UploadRing from "./UploadRing.svelte";

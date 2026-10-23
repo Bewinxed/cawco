@@ -10,9 +10,11 @@
    * stands over the screen.
    */
   import { onDestroy, untrack } from "svelte";
-  import type { NeedsItem } from "#lib/cawco/home/home-state.svelte.js";
-  import NeedsCardSheet from "#lib/cawco/home/NeedsCardSheet.svelte";
+  import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
+  import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
+  import { capLine } from "#lib/cawco/usage.js";
+  import { IconDollar } from "#lib/icons.js";
   import { sheetIn, sheetOut } from "../motion";
   import { AddressTray, type Network } from "../tray.svelte";
   import AddressRow from "./AddressRow.svelte";
@@ -29,8 +31,8 @@
   const tray = new AddressTray({ network });
   onDestroy(() => tray.dispose());
 
+  /** A project past its budget, drawn by NeedsCard's own row (NeedsRow) as it draws a budget. */
   const budget = {
-    kind: "cap",
     key: "cap:address-tray-story-phone",
     cap: {
       inherited: false,
@@ -43,10 +45,8 @@
       usd: 10,
     },
     title: "cockpit",
-    place: "Budget reached",
     href: "/usage?project=address-tray-story",
-    raisedAt: undefined,
-  } as NeedsItem;
+  } as const;
 
   /** The sheet stands at most 85% of the screen, Caw's room over its edge included. */
   const SHEET_ROOM = "calc(var(--c-address-phone-h) * 0.85 - var(--space-8))";
@@ -102,11 +102,21 @@
           {#if !tray.stopped}
             <AddressRow onopen={openTray} {tray} />
           {/if}
-          <NeedsCardSheet
-            item={budget}
+          <NeedsRow
+            href={budget.href}
+            kind="cap"
             onchoose={() => undefined}
-            stale={false}
-          />
+            share="pane:{budget.key}"
+            title={budget.title}
+            want={capLine(budget.cap)}
+          >
+            {#snippet lead()}
+              <IconDollar aria-hidden="true" class="size-icon-md" />
+            {/snippet}
+            {#snippet below()}
+              <NeedsMeta text="Budget" />
+            {/snippet}
+          </NeedsRow>
         </div>
       {:else}
         <h2 class="m-0 px-space-3 type-title tracking-title text-ink-strong">

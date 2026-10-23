@@ -8,7 +8,7 @@
    * opening, and ↵ on the row shows the first still hidden (Finder). Named
    * for a screen reader as a hidden secret; the row's own words say so too.
    */
-  import { findSecretWords as words } from "@cawco/core";
+  import { findSecretWords as words } from "@cawco/core/words/find-secrets";
   import { piecesOf, type Run } from "./find-rows";
 
   let {

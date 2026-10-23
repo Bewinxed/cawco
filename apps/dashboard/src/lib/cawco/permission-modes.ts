@@ -18,8 +18,8 @@ import {
   PERMISSION_MODES,
   type PermissionMode,
   permissionModeNamed,
-  spawnWords,
-} from "@cawco/core";
+} from "@cawco/core/harness";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { speakerName } from "./transcript/speaker";
 
 export interface PermissionModeOption {

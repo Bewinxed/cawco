@@ -4,7 +4,7 @@
  * (`TranscriptBuilder`, @cawco/core). Which tools draw a picture or a
  * preview is the tool presentation's (@cawco/core tool-presentation).
  */
-import { getToolGlance } from "@cawco/core";
+import { getToolGlance } from "@cawco/core/transcript-rules";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { JsonValue, Message } from "../types";
 

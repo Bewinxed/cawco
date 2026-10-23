@@ -17,7 +17,8 @@
  * is open. `workingSet` only remembers what a conversation is called and
  * where a stored one lives.
  */
-import { artifactStopOf, type HarnessKind, harnessNamed } from "@cawco/core";
+import { artifactStopOf } from "@cawco/core/artifact-needs";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";

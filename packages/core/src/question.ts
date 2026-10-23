@@ -1,5 +1,5 @@
+import { ASK_USER_QUESTION } from "./ask-tools";
 import type { PermissionResult, UserAnswers, UserQuestion } from "./harness";
-import { ASK_USER_QUESTION } from "./index";
 
 const looksLikeQuestion = (value: unknown): value is UserQuestion =>
   typeof value === "object" &&

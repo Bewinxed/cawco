@@ -10,12 +10,10 @@
  * says its project's tasks moved. A thing the hub holds no longer is null,
  * and its chip is its label alone (the registry's rule).
  */
-import {
-  machineLabel,
-  planWords,
-  referenceParts,
-  type SessionPlan,
-} from "@cawco/core";
+import { machineLabel } from "@cawco/core/machine-names";
+import type { SessionPlan } from "@cawco/core/plan";
+import { referenceParts } from "@cawco/core/references";
+import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
 import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";

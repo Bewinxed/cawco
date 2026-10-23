@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { shownAttachments, sidecarOf, VIDEO_FILE } from "@cawco/core";
+  import {
+    shownAttachments,
+    sidecarOf,
+    VIDEO_FILE,
+  } from "@cawco/core/attachments";
   import {
     hasBody as bodyFor,
     inputFields,

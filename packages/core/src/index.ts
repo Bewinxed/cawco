@@ -1,5 +1,6 @@
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
+import type { LastErrorKind } from "./relaunch";
 import type { ToolStatus } from "./tools";
 
 // Accounts: several sign-ins per provider, and which one a session runs on.
@@ -11,6 +12,7 @@ export * from "./actions";
 export * from "./archive";
 // What waits on the person among the artifacts: Needs you's artifact items.
 export * from "./artifact-needs";
+export * from "./ask-tools";
 // Files and texts a turn carries, and the line naming each attached file.
 export * from "./attachments";
 // Pages are blocks: a project page's arrangement, kept by the hub.
@@ -66,6 +68,7 @@ export * from "./invariant";
 export * from "./join";
 // The hub's `.local` name and the dashboard's address at it.
 export * from "./local-name";
+export * from "./machine-names";
 // Moving a project to a machine without a checkout of it: the hub-owned job,
 // its estimate and request, and the hub ↔ machine controls that run its steps.
 export * from "./move";
@@ -92,6 +95,7 @@ export * from "./project-membership";
 // the tool's own input or the call fails validation.
 export * from "./question";
 export * from "./references";
+export * from "./relaunch";
 export * from "./relays";
 // The bounded replay ring behind the Ledger Protocol — SessionRing, lifted
 // from packages/hub/src/stream.ts so sessiond's per-child ring (see
@@ -101,6 +105,7 @@ export * from "./ring";
 // for and a reply to send back. The matcher lives here so the hub and the
 // editor's test box decide identically.
 export * from "./rules";
+export * from "./scratch-tag";
 // What reads as a credential in text: a memory note's words, a file a place's first commit would take.
 export * from "./secret-text";
 // A project's starters: what its empty board and Caw's panel offer to say to him.
@@ -761,39 +766,6 @@ export interface ControlPayload {
   requestId: string;
 }
 
-/** Settles a parked permission request; args are `[requestId, PermissionResult]`. */
-export const RESOLVE_PERMISSION = "resolvePermission";
-
-/**
- * Takes back a parked permission request nobody could be shown; args are
- * `[requestId, message]`. The harness denies it with the message and moves
- * on, as it does when the CLI withdraws an ask itself (an interrupt): it is
- * not the reader's dismissal, because the reader never saw it.
- */
-export const WITHDRAW_PERMISSION = "withdrawPermission";
-
-/** How a withdrawn question's message begins; the card that drew it reads "withdrawn" from it. */
-export const QUESTION_UNSHOWN = "This question couldn't be shown";
-
-/** What an ask the hub could not show says to the session that asked it, with why. */
-export const unshownAskMessage = (question: boolean, why: string): string =>
-  `${question ? QUESTION_UNSHOWN : "This permission request couldn't be shown"} (${why}).`;
-
-/**
- * The tool that asks the reader rather than the machine. Its permission request
- * is the question, so it settles through {@link RESOLVE_PERMISSION} like any
- * other: the choices arrive as the request's `input`, and the answer goes back
- * as `updatedInput`.
- */
-export const ASK_USER_QUESTION = "AskUserQuestion";
-
-/**
- * OpenCode's Code Mode tool: MCP tools are reached through the programs it
- * runs, each of a program's calls its own tool_use frame under the
- * program's (`parent_tool_use_id`).
- */
-export const CODE_MODE_TOOL = "execute";
-
 /**
  * `fs`: the machine's files, for the cwd picker and light markdown editing
  * (NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],
@@ -935,9 +907,6 @@ export interface ScratchWorktree {
   root: string;
 }
 
-/** mDNS and router suffixes: they say "same network", which the fleet already implies. */
-const LOCAL_SUFFIXES = [".local", ".lan", ".home"];
-
 /**
  * A machine pause's end as the fleet says it (hub machine-pause.ts): the
  * local clock, "00:57", and the weekday too when it is not today ("Fri 08:00").
@@ -984,137 +953,6 @@ export function stoppedWords(stopped: StoppedCommands): string | undefined {
   }
   const last = parts.pop();
   return `stopped ${parts.length > 0 ? `${parts.join(", ")} and ${last}` : last}`;
-}
-
-/**
- * How the fleet names a machine out loud: its hostname without a local-network
- * suffix ("Omars-MacBook-Pro.local" is "Omars-MacBook-Pro"). The dashboard
- * shows this name, and `start_session` takes it.
- */
-export function machineLabel(hostname: string): string {
-  const name = hostname.trim();
-  const suffix = LOCAL_SUFFIXES.find((s) => name.toLowerCase().endsWith(s));
-  return suffix ? name.slice(0, -suffix.length) : name;
-}
-
-/** What naming a machine reads of it: an agents row, or any row shaped like one. */
-export interface NamedMachine {
-  hostname: string;
-  machineId: string;
-}
-
-/** Ordinals a sentence spells out; past them it says "machine number 11". */
-const ORDINALS = [
-  "first",
-  "second",
-  "third",
-  "fourth",
-  "fifth",
-  "sixth",
-  "seventh",
-  "eighth",
-  "ninth",
-  "tenth",
-];
-
-/**
- * A machine as a sentence names it among `fleet`: its {@link machineLabel},
- * else words for a stranger, never its id. Machines that show the same name
- * (machines on one host do, a scratch fleet's all of them) are told apart by
- * their place among those in `fleet`, which the hub lists in join order: the
- * first is "obelisk-of-light", the next "obelisk-of-light (the second
- * machine with that name)". Before 2026-10-18 the next was
- * "obelisk-of-light · 2", which inside a sentence read like a count.
- */
-export function machineCalled(
-  machineId: string,
-  fleet: readonly NamedMachine[]
-): string {
-  const machine = fleet.find((each) => each.machineId === machineId);
-  if (!machine) {
-    return "a machine this hub doesn't know";
-  }
-  const name = machineLabel(machine.hostname);
-  const place = fleet
-    .filter(
-      (other) =>
-        machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
-    )
-    .findIndex((other) => other.machineId === machineId);
-  if (place <= 0) {
-    return name;
-  }
-  const nth = ORDINALS[place];
-  return `${name} (${nth ? `the ${nth} machine` : `machine number ${place + 1}`} with that name)`;
-}
-
-/** Machines as a sentence lists them, each {@link machineCalled} among `fleet`, or `none`. */
-export function machinesCalled(
-  machines: readonly NamedMachine[],
-  fleet: readonly NamedMachine[],
-  none = "none"
-): string {
-  return (
-    machines
-      .map((machine) => machineCalled(machine.machineId, fleet))
-      .join(", ") || none
-  );
-}
-
-/** A machine's state that keeps a request from it. */
-export type MachineFault = "offline" | "silent" | "unknown";
-
-const MACHINE_FAULT_WORDS: Record<MachineFault, [string, string]> = {
-  offline: ["isn't connected.", "Try again once it's back."],
-  silent: ["didn't answer in time.", "Try again in a moment."],
-  unknown: ["isn't on this hub any more.", "Pick another machine."],
-};
-
-/**
- * Why a machine could not take a request, as the person reads it (WORDS.md's
- * error formula): the machine by its name, never its id; what to do. `name`
- * is its {@link machineCalled}, undefined when the hub doesn't know the machine.
- * `next: false`, the cause alone, for a reader that says its own next step
- * (a preview pane that tries again by itself).
- */
-export function machineFaultWords(
-  name: string | undefined,
-  fault: MachineFault,
-  { next = true }: { next?: boolean } = {}
-): string {
-  const [cause, step] = MACHINE_FAULT_WORDS[fault];
-  return `${name ?? "That machine"} ${cause}${next ? ` ${step}` : ""}`;
-}
-
-/**
- * One ask a machine left unanswered, as the hub's log and an error that
- * names the read before it say it: "<machine> did not answer within 10 s",
- * or, its link gone, "<machine> is not connected". `after` is how long the
- * ask waited, in ms; undefined when the link was gone.
- */
-export function machineSilenceWords(
-  name: string,
-  after: number | undefined
-): string {
-  return after === undefined
-    ? `${name} is not connected`
-    : `${name} did not answer within ${Math.round(after / 1000)} s`;
-}
-
-/** The causes {@link machineFaultWords} and {@link machineSilenceWords} say a machine's silence with. */
-const MACHINE_SILENCE =
-  /(?:didn't answer in time\.|isn't connected\.|did not answer within \d+ s\b|is not connected\b)/;
-
-/**
- * Whether an error carries CawCo's word that a machine didn't answer one
- * ask in time or isn't connected ({@link machineFaultWords},
- * {@link machineSilenceWords}): the machine's state, never what a session
- * did. Fleet watch counts no such error as a session's own (hub
- * fleet-watch.ts); a machine lost for good is said once, by the machine's
- * contact rule (words/contact.ts `MACHINE_LOST_MS`).
- */
-export function isMachineSilence(text: string): boolean {
-  return MACHINE_SILENCE.test(text);
 }
 
 /** What a daemon reports about the checkout it was started from. */
@@ -1221,118 +1059,6 @@ export const ENDED_STATUSES: ReadonlySet<InstanceStatus> = new Set([
   "stopped",
   "discarded",
 ]);
-
-/**
- * A missing Claude conversation is terminal; restarting cannot recreate its
- * history. The words a person reads; what CawCo decides by is the kind
- * `conversation-gone` ({@link LastErrorKind}).
- */
-export const CLAUDE_CONVERSATION_GONE =
-  "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working.";
-
-/**
- * What a session's failure was, typed where it is found, beside the words
- * (`lastError`) a person reads. Every decision about a failed row reads this,
- * never the words:
- * - `conversation-gone` — the conversation it would resume is gone
- *   ({@link CLAUDE_CONVERSATION_GONE}): it never runs on it again;
- * - `restart-lost` — its daemon restarted and it left nothing to resume from
- *   ({@link RESTART_LOST});
- * - `start-refused` — the hub would not restore it: its account or its
- *   settings cannot run on its machine (hub server.ts `restore`). It stays
- *   so, unrestored, until they can.
- * A failure no producer typed has none.
- */
-export type LastErrorKind =
-  "conversation-gone" | "restart-lost" | "start-refused";
-
-/** An error that carries its {@link LastErrorKind} from where it is made to the row it fails. */
-export class KindedError extends Error {
-  readonly lastErrorKind: LastErrorKind;
-  constructor(lastErrorKind: LastErrorKind, message: string) {
-    super(message);
-    this.name = "KindedError";
-    this.lastErrorKind = lastErrorKind;
-  }
-}
-
-/** A Claude conversation that is gone: its words, and its kind. */
-export const conversationGone = (): KindedError =>
-  new KindedError("conversation-gone", CLAUDE_CONVERSATION_GONE);
-
-/**
- * Whether a row the hub refused to restore still stands refused: filed
- * `error` with the kind `start-refused`, whatever words its refusal said
- * then or says now. Its restore fails it once, not on every boot.
- */
-export const startRefused = (row: {
-  lastErrorKind?: LastErrorKind | null;
-  status: string;
-}): boolean => row.status === "error" && row.lastErrorKind === "start-refused";
-
-/** Every {@link LastErrorKind}, for a reader of one off the wire. */
-const LAST_ERROR_KINDS: ReadonlySet<string> = new Set<LastErrorKind>([
-  "conversation-gone",
-  "restart-lost",
-  "start-refused",
-]);
-
-/** `value` as a {@link LastErrorKind}, when it is one. */
-export const asLastErrorKind = (value: unknown): LastErrorKind | undefined =>
-  typeof value === "string" && LAST_ERROR_KINDS.has(value)
-    ? (value as LastErrorKind)
-    : undefined;
-
-/** The {@link LastErrorKind} an error carries, when its maker typed it. */
-export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>
-  error instanceof KindedError ? error.lastErrorKind : undefined;
-
-/**
- * How a session with no process comes back: on its conversation by its key;
- * fresh under the same id when its harness never began one (no key: it never
- * said init), so there is nothing to lose; or not at all when its
- * conversation existed and is gone, or a continuation took its work item on
- * ({@link InstanceRow.continuedInto}): two sessions never work one item in
- * one workspace. The one decision for every revive: a relaunch or rewind
- * from the dashboard, the hub's wake for a send, and a relaunch on another
- * account at a limit.
- */
-export type Relaunch =
-  | { kind: "resume"; sessionKey: string }
-  | { kind: "fresh" }
-  | { kind: "refused"; reason: string };
-
-/** Why a session whose work a continuation took on never runs again. */
-export const continuedWords = (continuedInto: string): string =>
-  `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
-
-/**
- * Where a continued session's work went, as its page says it in its
- * composer's place (the words before the new session's title, a link to
- * it), and as the hub refuses a person's message to it: a moved
- * conversation points onward, it never takes a message on silently.
- */
-export const CONTINUED_IN = "Continued in";
-
-/** {@link CONTINUED_IN} with the new session's title, as one sentence. */
-export const continuedInWords = (title: string): string =>
-  `${CONTINUED_IN} ${title}`;
-
-export const relaunchOf = (row: {
-  continuedInto?: string | null;
-  lastErrorKind?: LastErrorKind | null;
-  sessionId: string | null;
-}): Relaunch => {
-  if (row.continuedInto) {
-    return { kind: "refused", reason: continuedWords(row.continuedInto) };
-  }
-  if (row.lastErrorKind === "conversation-gone") {
-    return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
-  }
-  return row.sessionId
-    ? { kind: "resume", sessionKey: row.sessionId }
-    : { kind: "fresh" };
-};
 
 /**
  * A continuation in a new session the hub is carrying, as every dashboard
@@ -2073,32 +1799,12 @@ export const PREVIEW_WEIGHT = "previewWeight";
  */
 export const PREVIEW_FOLDERS = "previewFolders";
 
-/**
- * The session tag a spin-off's transcript carries (NEW.md §1). The agent
- * applies it when the session names itself and clears it when the spin-off is
- * kept; the catalogs the rails read hide what wears it.
- */
-export const CAWCO_SCRATCH_TAG = "cawco-scratch";
-
 // The registry of CawCo's environment variables, in a file of its own that
 // imports nothing (cawco-env.ts), re-exported here as every caller reads it,
 // and read here by the readers below it.
-import { CAWCO_ENV, type CawcoEnvVar } from "./cawco-env";
+import { CAWCO_ENV, readEnv } from "./cawco-env";
 
-export { CAWCO_ENV, type CawcoEnvVar } from "./cawco-env";
-
-/**
- * Reads one of cawco's environment variables. Typed to the registry so a
- * variable cannot escape it as a bare literal again — which is how five of
- * them escaped in the first place.
- *
- * `env` is a parameter so callers that hold a child's environment — the
- * spawner, the installer's rendered unit — can resolve against it too.
- */
-export const readEnv = (
-  name: CawcoEnvVar,
-  env: Record<string, string | undefined> = process.env
-): string | undefined => env[name];
+export { CAWCO_ENV, type CawcoEnvVar, readEnv } from "./cawco-env";
 
 let gatewayPort: number | undefined;
 

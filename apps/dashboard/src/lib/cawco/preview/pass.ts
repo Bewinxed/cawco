@@ -14,7 +14,7 @@ import {
   hostModeDomain,
   type PreviewTicket,
   previewEnterUrl,
-} from "@cawco/core";
+} from "@cawco/core/frames";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 
 interface Entry {

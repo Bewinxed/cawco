@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { PermissionResult } from "@cawco/core";
+  import type { PermissionResult } from "@cawco/core/harness";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import type { PendingPermission } from "../client.svelte";
 
@@ -52,12 +52,10 @@
 </script>
 
 <script lang="ts">
-  import {
-    type AvailableCommand,
-    commonWords,
-    questionsOf,
-    transcriptWords,
-  } from "@cawco/core";
+  import type { AvailableCommand } from "@cawco/core/fleet";
+  import { questionsOf } from "@cawco/core/question";
+  import { commonWords } from "@cawco/core/words/common";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
    * and send controls. A parked permission or question is the composer

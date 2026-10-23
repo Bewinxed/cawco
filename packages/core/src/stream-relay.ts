@@ -12,7 +12,7 @@
  * Caw's setup card, and later the iOS app.
  */
 import { getDomain } from "tldts";
-import { CAWCO_ENV, readEnv } from "./index";
+import { CAWCO_ENV, readEnv } from "./cawco-env";
 
 /**
  * The ports the relay takes: TURN's own, every one above 1024, so no machine

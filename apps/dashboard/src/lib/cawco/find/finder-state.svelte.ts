@@ -17,7 +17,7 @@
  * - when the hub-side section is empty, the first row of "Where it was
  *   said" is active the moment it lands.
  */
-import { findSecretWords } from "@cawco/core";
+import { findSecretWords } from "@cawco/core/words/find-secrets";
 import { SvelteSet } from "svelte/reactivity";
 import {
   type FindAnswer,

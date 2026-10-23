@@ -1,4 +1,4 @@
-import { primaryPlaceOf } from "@cawco/core";
+import { primaryPlaceOf } from "@cawco/core/project-membership";
 import type { ProjectPlace, ProjectRow } from "./client.svelte";
 
 /* Which projects a row lists in is core's `projectsFor` (project-membership):

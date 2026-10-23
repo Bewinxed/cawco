@@ -8,7 +8,7 @@
  * on the hub: it is a record of what *this* reader has been looking at, not a
  * property of the fleet.
  */
-import { type HarnessKind, harnessNamed } from "@cawco/core";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { store, stored } from "./storage";
 import { workspace } from "./workspace/workspace.svelte";
 

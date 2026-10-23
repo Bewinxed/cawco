@@ -6,33 +6,35 @@
  * ever loops over machines — it changes the fleet's mind and lets the
  * `instances` frames say what came of it.
  */
+import type { FsEntry } from "@cawco/core";
+import type { Bounded } from "@cawco/core/bounded";
 import {
   CAWCO_OAUTH_URL,
   type ConfigInspection,
   type Deleted,
   type FleetAgent,
   type FleetConfig,
-  type FleetFetchFrame,
-  type FleetHook,
   type FleetMarketplace,
   type FleetMcpConfig,
   type FleetMcpServer,
   type FleetPlugin,
   type FleetSkillMeta,
-  type FsEntry,
   type MachineHookScript,
   type MachineMemorySet,
   type MarketplaceLink,
   type MarketplacePluginInfo,
   type MarketplaceRead,
-  type McpHttpServerConfig,
-  type McpSSEServerConfig,
   type MemoryScope,
-  mcpWords,
   parseAgentFrontMatter,
-  skillsWords,
-} from "@cawco/core";
-import type { Bounded } from "@cawco/core/bounded";
+} from "@cawco/core/fleet";
+import type { FleetFetchFrame } from "@cawco/core/frames";
+import type {
+  McpHttpServerConfig,
+  McpSSEServerConfig,
+} from "@cawco/core/harness";
+import type { FleetHook } from "@cawco/core/hooks";
+import { mcpWords } from "@cawco/core/words/mcp";
+import { skillsWords } from "@cawco/core/words/skills";
 import { awayOf, hubFailure } from "#lib/cawco/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";

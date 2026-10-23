@@ -6,7 +6,8 @@
    * (`/api/projects/:id/design-offer`). Build files the task; nothing is
    * built before it.
    */
-  import { type DesignOfferState, offerWords } from "@cawco/core";
+  import type { DesignOfferState } from "@cawco/core/threads";
+  import { offerWords } from "@cawco/core/words/offers";
   import { untrack } from "svelte";
   import {
     answerDesignOffer,

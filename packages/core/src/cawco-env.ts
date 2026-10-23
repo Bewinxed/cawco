@@ -128,3 +128,16 @@ export const CAWCO_ENV = {
 
 /** One of {@link CAWCO_ENV}'s variable names. */
 export type CawcoEnvVar = (typeof CAWCO_ENV)[keyof typeof CAWCO_ENV];
+
+/**
+ * Reads one of cawco's environment variables. Typed to the registry so a
+ * variable cannot escape it as a bare literal again — which is how five of
+ * them escaped in the first place.
+ *
+ * `env` is a parameter so callers that hold a child's environment — the
+ * spawner, the installer's rendered unit — can resolve against it too.
+ */
+export const readEnv = (
+  name: CawcoEnvVar,
+  env: Record<string, string | undefined> = process.env
+): string | undefined => env[name];

@@ -22,7 +22,7 @@ import {
   type MachineState,
   PRESENCE_BEAT_MS,
   type PresenceBeat,
-} from "@cawco/core";
+} from "@cawco/core/notifications";
 import { newId } from "#lib/cawco/id.js";
 import { store, stored } from "#lib/cawco/storage.js";
 

@@ -3,7 +3,7 @@
  * tile (DocThumb) and the composer's chip (AttachmentChips) read the same
  * glyph, the same size line and the same kept tail of its name.
  */
-import { humanSize } from "@cawco/core";
+import { humanSize } from "@cawco/core/attachments";
 import type { Component } from "svelte";
 import {
   IconDocument,

@@ -11,13 +11,9 @@
  * machine is back, what refused the send no longer holds, and the row says
  * so and offers Send again.
  */
-import {
-  type Account,
-  type HarnessKind,
-  type ModeAsk,
-  machineLabel,
-  type SendRefusal,
-} from "@cawco/core";
+import type { Account } from "@cawco/core/accounts";
+import type { HarnessKind, ModeAsk, SendRefusal } from "@cawco/core/harness";
+import { machineLabel } from "@cawco/core/machine-names";
 import { nameOf, signinState } from "../accounts/model.svelte";
 import { signedInHere } from "../accounts/switch.svelte";
 import { type BoardRow, cawco } from "../client.svelte";

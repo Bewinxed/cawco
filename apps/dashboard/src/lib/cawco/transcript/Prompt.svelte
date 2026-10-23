@@ -3,8 +3,10 @@
     PermissionResult,
     UserAnswers,
     UserQuestion,
-  } from "@cawco/core";
-  import { askerLine, askWords, questionsOf } from "@cawco/core";
+  } from "@cawco/core/harness";
+  import { askerLine } from "@cawco/core/permission-presentation";
+  import { questionsOf } from "@cawco/core/question";
+  import { askWords } from "@cawco/core/words/asks";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /

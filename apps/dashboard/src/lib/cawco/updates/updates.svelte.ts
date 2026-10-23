@@ -4,11 +4,13 @@
  * nothing here polls it. This module does not import the client: callers pass
  * the machines in, so the client can call `loadPolicy` without a cycle.
  */
-import { machineLabel, updatesWords } from "@cawco/core";
+
 import type {
   BinaryUpdateChannels,
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
+import { machineLabel } from "@cawco/core/machine-names";
+import { updatesWords } from "@cawco/core/words/updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { failureClause, hubFailure, hubRefusal } from "#lib/cawco/hub-read.js";
 import { newId } from "../id";

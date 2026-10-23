@@ -18,7 +18,7 @@
  * ask open sends `cancel`.
  */
 
-import { commonWords } from "@cawco/core";
+import { commonWords } from "@cawco/core/words/common";
 
 /** Where an ask stands while it is open. */
 export type ConnectStage =

@@ -7,7 +7,8 @@
    * hub as it is now (`/api/lfs-offers/:id`). Nothing is tracked before
    * Track.
    */
-  import { type LfsOfferState, lfsWords } from "@cawco/core";
+  import type { LfsOfferState } from "@cawco/core/threads";
+  import { lfsWords } from "@cawco/core/words/lfs";
   import { untrack } from "svelte";
   import { answerLfsOffer, readLfsOffer } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";

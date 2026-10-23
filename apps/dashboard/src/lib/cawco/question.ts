@@ -1,5 +1,8 @@
-import type { PermissionResult, UserAnswers } from "@cawco/core";
-import { answeredQuestionInput, QUESTION_DISMISSED } from "@cawco/core";
+import type { PermissionResult, UserAnswers } from "@cawco/core/harness";
+import {
+  answeredQuestionInput,
+  QUESTION_DISMISSED,
+} from "@cawco/core/question";
 
 /**
  * The reader's choices, back the way the tool reads them: its own input with

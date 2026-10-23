@@ -22,8 +22,8 @@ import {
   hostModeDomain,
   type PreviewAddress,
   previewRoute,
-  previewWords,
-} from "@cawco/core";
+} from "@cawco/core/frames";
+import { previewWords } from "@cawco/core/words/preview";
 import { SvelteMap } from "svelte/reactivity";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { theme } from "#lib/theme.svelte.js";

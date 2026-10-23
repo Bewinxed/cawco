@@ -17,7 +17,7 @@
    *
    * Drawn only by its states files until the hub raises a connect ask.
    */
-  import { askWords } from "@cawco/core";
+  import { askWords } from "@cawco/core/words/asks";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";

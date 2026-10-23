@@ -147,6 +147,8 @@
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import { askView, clock, type NeedsItem, span } from "./home-state.svelte";
+  import NeedsMeta from "./NeedsMeta.svelte";
+  import NeedsRow from "./NeedsRow.svelte";
   import { openPeek, peekable, peekTipOff } from "./peek.svelte";
 
   let {
@@ -671,51 +673,21 @@
     ((item.request.presentation.command && !item.request.presentation.post) ||
       item.request.browserAsk)
   )}
-  <!-- The session's mark leading on the title's line; the title and its wait;
-       what it wants, two lines at most; then the kind and where; a
-       permission's peers under them. Its machine is offline: it stands,
-       dimmed as every stale row is. -->
-  <!-- mark-line: a grid whose first row is the mark line; its words take
-       .mark-text, centred on the lead (the rows under it hold other things) -->
-  <div
-    data-slot="row"
-    class="group/row relative grid min-h-c-row-h grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55"
-    data-flip
-    data-artifact={item.kind === "artifact" ? item.artifactId : undefined}
-    data-kind={item.kind}
-    data-peek={peeks || item.kind === "artifact" || undefined}
-    data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
-    data-stale={held || undefined}
-    style:--peek-glyph={item.kind === "artifact"
-      ? "var(--icon-sm)"
-      : "var(--c-peek-glyph)"}
-    style:--peek-ink={item.kind === "artifact"
-      ? "calc((var(--c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 5.25 / 24)"
-      : "calc((var(--c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"}
-    style:--peek-room={"calc(var(--c-btn-h-xs) - var(--peek-ink) + var(--space-2))"}
-    style:--row-cols="auto minmax(0, 1fr) auto"
+  <!-- lead, end and below are this card's; the row's box, cover, title, wait and want are NeedsRow's. -->
+  <NeedsRow
+    artifact={item.kind === "artifact" ? item.artifactId : undefined}
+    {held}
+    {href}
+    kind={item.kind}
+    onchoose={chosen}
+    {onkeydown}
+    peek={peeks || item.kind === "artifact"}
+    share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
+    title={item.title}
+    {want}
+    wait={item.raisedAt === undefined ? null : span(clock.now - item.raisedAt)}
   >
-    <!-- The whole row opens it; the panel closes. A choice opens nothing:
-         it is answered here. Everything over the cover takes no pointer, so
-         a press anywhere that is not a control opens it; the peers take
-         theirs back. -->
-    {#if href !== undefined}
-      <a
-        data-slot="cover"
-        aria-label="Open {item.title}"
-        class="press-tint focus-inset absolute inset-0 rounded-inherit hover:bg-surface-hover"
-        {href}
-        onclick={chosen}
-        {onkeydown}><span class="sr-only">Open {item.title}</span></a
-      >
-    {/if}
-    <!-- The session's own mark, as the rail draws it; a run and a budget their
-         glyphs; centred in the panel's one leading column, a notice's tile
-         wide (NoticeRow), so both groups' words start on one line. -->
-    <span
-      data-slot="lead"
-      class="pointer-events-none relative col-1 row-1 grid h-c-row-mark w-c-row-lead place-items-center self-center text-ink-muted"
-    >
+    {#snippet lead()}
       {#if item.kind === "ask" || item.kind === "watch" || item.kind === "artifact"}
         <SessionMark
           caw={cawOf(item.instanceId)}
@@ -770,120 +742,100 @@
       {:else}
         <IconDollar aria-hidden="true" class="size-icon-md" />
       {/if}
-    </span>
-    <!-- The first row's words stand on the lead's middle (.mark-text,
-         app.css). Peek, the title line's trailing cell, as a notice's ✕ is
-         (NoticeRow): the wait and, with no wait, the title keep its room clear
-         (`--peek-room`), `space-2` short of its box. -->
-    <span
-      data-slot="name"
-      class={[
-        "mark-text pointer-events-none relative col-2 row-1 min-w-0 self-center overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong",
-        item.raisedAt === undefined && "group-data-peek/row:pe-(--peek-room)",
-      ]}>{item.title}</span
-    >
-    {#if item.raisedAt !== undefined}
-      <span
-        data-slot="wait"
-        class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-ink-muted group-data-peek/row:me-(--peek-room)"
-        >{span(clock.now - item.raisedAt)}</span
-      >
-    {/if}
-    {#if peeks}
-      <!-- Glance → peek → dive: read what led here before answering. A box
+    {/snippet}
+    {#snippet end()}
+      {#if peeks}
+        <!-- Glance → peek → dive: read what led here before answering. A box
            round the 16px glyph, centred on the label line, hanging past the
            trailing edge by `--peek-ink` (the box's padding round the glyph
            plus the glyph's side bearing: Maximize's arrow ends at 22.75 of
            24), so its ink ends on the panel's one trailing edge, where a
            wait's figures and Approve's fill end. -->
-      <span
-        data-slot="end"
-        class="absolute end-(--end-x) top-(--end-top) flex type-label"
-        style:--end-top="calc(var(--space-2) + (1lh - var(--c-btn-h-xs)) / 2)"
-        style:--end-x="calc(var(--space-3) - var(--peek-ink))"
-      >
-        <Tip disabled={peekTipOff()} label="Peek">
-          {#snippet children(tip)}
-            <!-- An iPad's finger gets the house's 44px area (`touch-hit`),
+        <span
+          data-slot="end"
+          class="absolute end-(--end-x) top-(--end-top) flex type-label"
+          style:--end-top="calc(var(--space-2) + (1lh - var(--c-btn-h-xs)) / 2)"
+          style:--end-x="calc(var(--space-3) - var(--peek-ink))"
+        >
+          <Tip disabled={peekTipOff()} label="Peek">
+            {#snippet children(tip)}
+              <!-- An iPad's finger gets the house's 44px area (`touch-hit`),
                  whole and centred where the box stood before it hung: moved
                  back inboard by `--peek-ink`, so the list never grows a
                  sideways scroll for it. -->
-            <button
-              data-needs-card-peek
-              {...tip}
-              aria-label="Peek {item.title}"
-              class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
-              onclick={peekAsk}
-              {onkeydown}
-              style:--peek-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}
-              style:--peek-hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"}
-              style:--peek-press="scale(var(--press-scale))"
-              type="button"
-            >
-              <IconMaximize aria-hidden="true" class="size-(--peek-glyph)" />
-            </button>
-          {/snippet}
-        </Tip>
-      </span>
-    {:else if item.kind === "artifact"}
-      <!-- Not now: the first line's trailing cell, a notice's ✕ (NoticeRow),
+              <button
+                data-needs-card-peek
+                {...tip}
+                aria-label="Peek {item.title}"
+                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
+                onclick={peekAsk}
+                {onkeydown}
+                style:--peek-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}
+                style:--peek-hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"}
+                style:--peek-press="scale(var(--press-scale))"
+                type="button"
+              >
+                <IconMaximize aria-hidden="true" class="size-(--peek-glyph)" />
+              </button>
+            {/snippet}
+          </Tip>
+        </span>
+      {:else if item.kind === "artifact"}
+        <!-- Not now: the first line's trailing cell, a notice's ✕ (NoticeRow),
            its ink on the panel's one trailing edge; always shown, to a mouse
            as to a finger, which gets the house's 44px area moved back
            inboard by `--peek-ink`. -->
-      <span
-        data-slot="end"
-        class="absolute end-(--end-x) top-(--end-top) flex type-label"
-        style:--end-top="calc(var(--space-2) + (1lh - var(--c-btn-h-xs)) / 2)"
-        style:--end-x="calc(var(--space-3) - var(--peek-ink))"
-      >
-        <Tip disabled={peekTipOff()} label={artifactWords.notNow}>
-          {#snippet children(tip)}
-            <button
-              data-needs-card-not-now
-              {...tip}
-              aria-label={artifactWords.notNowNamed(item.title)}
-              class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
-              onclick={notNow}
-              style:--x-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}
-              style:--x-hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"}
-              style:--x-press="scale(var(--press-scale))"
-              type="button"
-            >
-              <IconClose aria-hidden="true" class="size-(--peek-glyph)" />
-            </button>
-          {/snippet}
-        </Tip>
-      </span>
-    {/if}
-    <span
-      data-slot="want"
-      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo"
-      >{want}</span
-    >
-    {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
-      <!-- What runs, under why: its first line, so Approve here is made on
+        <span
+          data-slot="end"
+          class="absolute end-(--end-x) top-(--end-top) flex type-label"
+          style:--end-top="calc(var(--space-2) + (1lh - var(--c-btn-h-xs)) / 2)"
+          style:--end-x="calc(var(--space-3) - var(--peek-ink))"
+        >
+          <Tip disabled={peekTipOff()} label={artifactWords.notNow}>
+            {#snippet children(tip)}
+              <button
+                data-needs-card-not-now
+                {...tip}
+                aria-label={artifactWords.notNowNamed(item.title)}
+                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
+                onclick={notNow}
+                style:--x-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}
+                style:--x-hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"}
+                style:--x-press="scale(var(--press-scale))"
+                type="button"
+              >
+                <IconClose aria-hidden="true" class="size-(--peek-glyph)" />
+              </button>
+            {/snippet}
+          </Tip>
+        </span>
+      {/if}
+    {/snippet}
+    {#snippet below()}
+      {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
+        <!-- What runs, under why: its first line, so Approve here is made on
            the command as much as on the card. A held post's target line
            already says where it goes. A shell ask's command: one line under
            its reason, in the transcript's command rule, cut with an
            ellipsis. -->
-      <code
-        data-slot="needs-command"
-        class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
-        >{item.request.presentation.command.trim().split("\n")[0]}</code
-      >
-    {/if}
-    {#if item.kind === "ask" && item.request.browserAsk}
-      <!-- Where the person will be typing, in the line a command stands in:
+        <code
+          data-slot="needs-command"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
+          >{item.request.presentation.command.trim().split("\n")[0]}</code
+        >
+      {/if}
+      {#if item.kind === "ask" && item.request.browserAsk}
+        <!-- Where the person will be typing, in the line a command stands in:
            the page's origin whole (never cut, as a command's line is: the
            domain is at its end), broken only after its dots. -->
-      <code
-        data-slot="needs-origin"
-        class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta wrap-break-word whitespace-normal text-ink-muted"
-        ><OriginText origin={item.request.browserAsk.origin} /></code
-      >
-    {/if}
-    {#if item.kind === "ask"}
-      <!-- Where it came from: the project first, in its mark and strong ink;
+        <code
+          data-slot="needs-origin"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta wrap-break-word whitespace-normal text-ink-muted"
+          ><OriginText origin={item.request.browserAsk.origin} /></code
+        >
+      {/if}
+      {#if item.kind === "ask"}
+        <!-- Where it came from: the project first, in its mark and strong ink;
            then what it asks for; then the machine, by its OS mark. The meta
            line of an ask: the project leads, its name a name (label role,
            strong ink) beside its folder in the project's hue; the machine
@@ -891,395 +843,391 @@
            way first. Both marks stand at the house's 16px icon size
            (`icon-md`), the box OsMark is drawn on: at 14px its marks were
            scaled off their pixel grid and read as a smudge at 1x. -->
-      <span
-        data-where
-        data-slot="meta"
-        class={[
-          "mark-line pointer-events-none relative col-start-2 col-end-4 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
-          lined ? "row-4" : "row-3",
-        ]}
-      >
-        {#if item.project}
+        <span
+          data-where
+          data-slot="meta"
+          class={[
+            "mark-line pointer-events-none relative col-start-2 col-end-4 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+            lined ? "row-4" : "row-3",
+          ]}
+        >
+          {#if item.project}
+            <span
+              data-slot="project"
+              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+              data-box
+            >
+              <IconFolder
+                data-needs-card-mark
+                aria-hidden="true"
+                class="size-icon-md flex-none"
+                style="color: var(--mark-{item.project.hue})"
+              />
+              <span data-slot="project-name" class="type-label text-ink-strong"
+                >{item.project.name}</span
+              >
+            </span>
+            <span
+              data-slot="dot"
+              aria-hidden="true"
+              class="flex-none text-ink-muted">·</span
+            >
+          {/if}
+          <!-- A held post names the session that asked; its title is the row's. -->
+          {#if item.request.presentation.post && item.request.presentation.asker}
+            <span
+              data-slot="asker"
+              class="min-w-0 flex-initial overflow-clip text-ellipsis"
+              >{item.request.presentation.asker}</span
+            >
+          {:else}
+            <span class="flex-none">{askKind(item)}</span>
+          {/if}
           <span
-            data-slot="project"
-            class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+            data-slot="dot"
+            aria-hidden="true"
+            class="flex-none text-ink-muted">·</span
+          >
+          <span
+            data-slot="machine"
+            class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
             data-box
           >
-            <IconFolder
-              data-needs-card-mark
-              aria-hidden="true"
-              class="size-icon-md flex-none"
-              style="color: var(--mark-{item.project.hue})"
-            />
-            <span data-slot="project-name" class="type-label text-ink-strong"
-              >{item.project.name}</span
+            <OsMark class="size-icon-md flex-none" os={item.machine.os} />
+            <span class="min-w-0 overflow-clip text-ellipsis"
+              >{item.machine.name}</span
             >
           </span>
-          <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
-          >
-        {/if}
-        <!-- A held post names the session that asked; its title is the row's. -->
-        {#if item.request.presentation.post && item.request.presentation.asker}
-          <span
-            data-slot="asker"
-            class="min-w-0 flex-initial overflow-clip text-ellipsis"
-            >{item.request.presentation.asker}</span
-          >
-        {:else}
-          <span class="flex-none">{askKind(item)}</span>
-        {/if}
-        <span
-          data-slot="dot"
-          aria-hidden="true"
-          class="flex-none text-ink-muted">·</span
-        >
-        <span
-          data-slot="machine"
-          class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
-          data-box
-        >
-          <OsMark class="size-icon-md flex-none" os={item.machine.os} />
-          <span class="min-w-0 overflow-clip text-ellipsis"
-            >{item.machine.name}</span
-          >
+          {#if item.stale}
+            <span
+              data-slot="dot"
+              aria-hidden="true"
+              class="flex-none text-ink-muted">·</span
+            >
+            <span class="flex-none">machine offline</span>
+          {/if}
         </span>
-        {#if item.stale}
-          <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
-          >
-          <span class="flex-none">machine offline</span>
-        {/if}
-      </span>
-    {:else if item.kind === "artifact"}
-      {@const Kind = ARTIFACT_GLYPHS[item.artifactKind]}
-      <!-- Where it came from, as an ask's: its project first, then its kind
+      {:else if item.kind === "artifact"}
+        {@const Kind = ARTIFACT_GLYPHS[item.artifactKind]}
+        <!-- Where it came from, as an ask's: its project first, then its kind
            by its glyph where an ask says "Question", then its machine. Send
            ends the line while something is written and not sent. -->
-      <span
-        data-where
-        data-slot="meta"
-        class={[
-          "mark-line pointer-events-none relative col-start-2 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
-          sends ? "col-end-3" : "col-end-4",
-        ]}
-      >
-        {#if item.project}
+        <span
+          data-where
+          data-slot="meta"
+          class={[
+            "mark-line pointer-events-none relative col-start-2 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+            sends ? "col-end-3" : "col-end-4",
+          ]}
+        >
+          {#if item.project}
+            <span
+              data-slot="project"
+              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+              data-box
+            >
+              <IconFolder
+                data-needs-card-mark
+                aria-hidden="true"
+                class="size-icon-md flex-none"
+                style="color: var(--mark-{item.project.hue})"
+              />
+              <span data-slot="project-name" class="type-label text-ink-strong"
+                >{item.project.name}</span
+              >
+            </span>
+            <span
+              data-slot="dot"
+              aria-hidden="true"
+              class="flex-none text-ink-muted">·</span
+            >
+          {/if}
           <span
-            data-slot="project"
-            class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+            data-slot="artifact-kind"
+            class="mark-line inline-flex flex-none items-center gap-space-1"
             data-box
           >
-            <IconFolder
-              data-needs-card-mark
-              aria-hidden="true"
-              class="size-icon-md flex-none"
-              style="color: var(--mark-{item.project.hue})"
-            />
-            <span data-slot="project-name" class="type-label text-ink-strong"
-              >{item.project.name}</span
-            >
+            <Kind aria-hidden="true" class="size-icon-md flex-none" data-box />
+            <span>{artifactWords.kindWord[item.artifactKind]}</span>
           </span>
           <span
             data-slot="dot"
             aria-hidden="true"
             class="flex-none text-ink-muted">·</span
           >
-        {/if}
-        <span
-          data-slot="artifact-kind"
-          class="mark-line inline-flex flex-none items-center gap-space-1"
-          data-box
-        >
-          <Kind aria-hidden="true" class="size-icon-md flex-none" data-box />
-          <span>{artifactWords.kindWord[item.artifactKind]}</span>
-        </span>
-        <span
-          data-slot="dot"
-          aria-hidden="true"
-          class="flex-none text-ink-muted">·</span
-        >
-        <span
-          data-slot="machine"
-          class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
-          data-box
-        >
-          <OsMark class="size-icon-md flex-none" os={item.machine.os} />
-          <span class="min-w-0 overflow-clip text-ellipsis"
-            >{item.machine.name}</span
-          >
-        </span>
-        {#if item.stale}
           <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
+            data-slot="machine"
+            class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
+            data-box
           >
-          <span class="flex-none">machine offline</span>
-        {/if}
-      </span>
-      {#if sends}
-        <!-- Send: the kit's sm ghost over the row's cover, its last figure's
+            <OsMark class="size-icon-md flex-none" os={item.machine.os} />
+            <span class="min-w-0 overflow-clip text-ellipsis"
+              >{item.machine.name}</span
+            >
+          </span>
+          {#if item.stale}
+            <span
+              data-slot="dot"
+              aria-hidden="true"
+              class="flex-none text-ink-muted">·</span
+            >
+            <span class="flex-none">machine offline</span>
+          {/if}
+        </span>
+        {#if sends}
+          <!-- Send: the kit's sm ghost over the row's cover, its last figure's
              ink on the trailing edge: it hangs past by what stands between
              its box and that ink (the kit's 1px transparent border, its
              padding, `space-2` a side so it never hangs past the row's own
              `space-3`, and the figure's side bearing, 0.07em). -->
-        <span
-          data-slot="send"
-          class="relative col-3 row-3 flex items-center self-center justify-self-end"
-          style:--send-hang="calc(-1 * (1px + var(--space-2) + 0.07em))"
-        >
-          <Button
-            data-needs-card-send
-            class="me-(--send-hang)"
-            pad="more"
-            style="--more-px: var(--space-2);"
-            aria-label={artifactWords.sendNamed(item.unsent, item.title)}
-            disabled={held}
-            failed={sendRefused !== null}
-            icon={IconSend}
-            label={artifactWords.sendCount(item.unsent)}
-            onclick={sendItsMarks}
-            pending={sendingArtifact}
-            pendingLabel={artifactWords.sending}
-            size="sm"
-            variant="ghost"
-          />
-        </span>
-      {/if}
-      {#if sendRefused}
-        <div
-          data-slot="peers"
-          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end"
-        >
-          <ErrorText
-            message={artifactWords.notSent(sendRefused)}
-            title="The hub refused that Send"
-          />
-        </div>
-      {/if}
-      <!-- A press (or its address) the hub refused: said on the row, over
+          <span
+            data-slot="send"
+            class="relative col-3 row-3 flex items-center self-center justify-self-end"
+            style:--send-hang="calc(-1 * (1px + var(--space-2) + 0.07em))"
+          >
+            <Button
+              data-needs-card-send
+              class="me-(--send-hang)"
+              pad="more"
+              style="--more-px: var(--space-2);"
+              aria-label={artifactWords.sendNamed(item.unsent, item.title)}
+              disabled={held}
+              failed={sendRefused !== null}
+              icon={IconSend}
+              label={artifactWords.sendCount(item.unsent)}
+              onclick={sendItsMarks}
+              pending={sendingArtifact}
+              pendingLabel={artifactWords.sending}
+              size="sm"
+              variant="ghost"
+            />
+          </span>
+        {/if}
+        {#if sendRefused}
+          <div
+            data-slot="peers"
+            class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end"
+          >
+            <ErrorText
+              message={artifactWords.notSent(sendRefused)}
+              title="The hub refused that Send"
+            />
+          </div>
+        {/if}
+        <!-- A press (or its address) the hub refused: said on the row, over
            its cover, with Try again, kept through a reload. -->
-      <RowFault
-        again={chosen}
-        class="relative col-start-2 col-end-4 row-5 mt-space-2"
-        data-needs-card-refused
-        reason={refusals.reason(artifactOpenKey(item.artifactId))}
-      />
-    {:else if item.kind === "action" && call}
-      <!-- The exact call: when, through which account, the tool, the arguments. -->
-      <!-- An approved action: its reason, then the call (when, through, tool)
+        <RowFault
+          again={chosen}
+          class="relative col-start-2 col-end-4 row-5 mt-space-2"
+          data-needs-card-refused
+          reason={refusals.reason(artifactOpenKey(item.artifactId))}
+        />
+      {:else if item.kind === "action" && call}
+        <!-- The exact call: when, through which account, the tool, the arguments. -->
+        <!-- An approved action: its reason, then the call (when, through, tool)
            as label and value pairs on the meta type, then the arguments in a
            content well that scrolls, then where it is from, then the peers.
            Everything the call says is read before the choice is made, in the
            order it is made: when, as whom, what, with what. -->
-      <dl
-        data-slot="call"
-        class="pointer-events-none relative col-start-2 col-end-4 row-3 mx-0 mt-space-2 mb-0 grid grid-cols-(--call-cols) gap-x-space-3 type-meta"
-        style:--call-cols="auto minmax(0, 1fr)"
-      >
-        <dt class="text-ink-muted">Runs</dt>
-        <dd class="m-0 wrap-anywhere text-ink-strong">{call.when}</dd>
-        <dt class="text-ink-muted">Through</dt>
-        <dd class="m-0 wrap-anywhere text-ink-strong">{call.through}</dd>
-        <dt class="text-ink-muted">Tool</dt>
-        <dd
-          data-slot="tool"
-          class="m-0 font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+        <dl
+          data-slot="call"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 mx-0 mt-space-2 mb-0 grid grid-cols-(--call-cols) gap-x-space-3 type-meta"
+          style:--call-cols="auto minmax(0, 1fr)"
         >
-          {call.tool}
-        </dd>
-      </dl>
-      <!-- A scroller with no focusable child is itself in the tab order
+          <dt class="text-ink-muted">Runs</dt>
+          <dd class="m-0 wrap-anywhere text-ink-strong">{call.when}</dd>
+          <dt class="text-ink-muted">Through</dt>
+          <dd class="m-0 wrap-anywhere text-ink-strong">{call.through}</dd>
+          <dt class="text-ink-muted">Tool</dt>
+          <dd
+            data-slot="tool"
+            class="m-0 font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+          >
+            {call.tool}
+          </dd>
+        </dl>
+        <!-- A scroller with no focusable child is itself in the tab order
            (keyboard-focusable scrollers), so a keyboard scrolls it too. The
            arguments as the hub will send them, pretty-printed: a well the
            pointer and the keyboard can scroll, over the row's cover. -->
-      <pre
-        data-slot="args"
-        class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs border border-border-well bg-surface-well px-space-3 py-space-2 type-code whitespace-pre text-ink-strong">{call.args}</pre>
-      <span
-        data-where
-        data-slot="meta"
-        class="mark-line pointer-events-none relative col-start-2 col-end-4 row-5 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-      >
-        {#if item.project}
-          <span
-            data-slot="project"
-            class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
-            data-box
-          >
-            <IconFolder
-              data-needs-card-mark
-              aria-hidden="true"
-              class="size-icon-md flex-none"
-              style="color: var(--mark-{item.project.hue})"
-            />
-            <span data-slot="project-name" class="type-label text-ink-strong"
-              >{item.project.name}</span
+        <pre
+          data-slot="args"
+          class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs border border-border-well bg-surface-well px-space-3 py-space-2 type-code whitespace-pre text-ink-strong">{call.args}</pre>
+        <span
+          data-where
+          data-slot="meta"
+          class="mark-line pointer-events-none relative col-start-2 col-end-4 row-5 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+        >
+          {#if item.project}
+            <span
+              data-slot="project"
+              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+              data-box
             >
-          </span>
-          <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
-          >
-        {/if}
-        <span class="flex-none">Approved action</span>
-        {#if item.action.taskId}
-          <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
-          >
-          <span class="flex-none num">{item.action.taskId}</span>
-        {/if}
-      </span>
-    {:else if item.kind === "tailnet"}
-      <!-- Where it comes from, under what it wants, as every row's meta
+              <IconFolder
+                data-needs-card-mark
+                aria-hidden="true"
+                class="size-icon-md flex-none"
+                style="color: var(--mark-{item.project.hue})"
+              />
+              <span data-slot="project-name" class="type-label text-ink-strong"
+                >{item.project.name}</span
+              >
+            </span>
+            <span
+              data-slot="dot"
+              aria-hidden="true"
+              class="flex-none text-ink-muted">·</span
+            >
+          {/if}
+          <span class="flex-none">Approved action</span>
+          {#if item.action.taskId}
+            <span
+              data-slot="dot"
+              aria-hidden="true"
+              class="flex-none text-ink-muted">·</span
+            >
+            <span class="flex-none num">{item.action.taskId}</span>
+          {/if}
+        </span>
+      {:else if item.kind === "tailnet"}
+        <!-- Where it comes from, under what it wants, as every row's meta
            stands; its steps follow. -->
-      <span
-        data-slot="meta"
-        class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-        >{meta}</span
-      >
-      {#if todos.length > 0}
-        <!-- Every step on the path, in order: a step that stands says what to
+        <span
+          data-slot="meta"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+          >{meta}</span
+        >
+        {#if todos.length > 0}
+          <!-- Every step on the path, in order: a step that stands says what to
              do, where or why, and its control; a step taken is its tick and
              its label. -->
-        <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
-        <ol
-          data-slot="steps"
-          class="relative col-start-2 col-end-4 row-4 mx-0 my-space-3 grid list-none gap-space-3 p-0"
-          role="list"
-        >
-          <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
-          {#each todos as one, index (one.step)}
-            <li
-              data-slot="step"
-              class="group/step mark-line grid grid-cols-(--step-cols) items-box-start gap-x-space-2 gap-y-space-1 type-label"
-              data-done={one.done || undefined}
-              data-step={one.step}
-              style:--step-cols="var(--icon-md) minmax(0, 1fr)"
-            >
-              <span class="mark-cell">
-                <span
-                  data-slot="step-mark"
-                  class="grid size-icon-md place-items-center text-ink-muted"
-                >
-                  {#if one.done}
-                    <IconSuccess
-                      aria-hidden="true"
-                      class="size-icon-md text-status-done-ink"
-                    />
-                  {:else}
-                    <!-- The step's place in the list, drawn from its
+          <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
+          <ol
+            data-slot="steps"
+            class="relative col-start-2 col-end-4 row-4 mx-0 my-space-3 grid list-none gap-space-3 p-0"
+            role="list"
+          >
+            <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
+            {#each todos as one, index (one.step)}
+              <li
+                data-slot="step"
+                class="group/step mark-line grid grid-cols-(--step-cols) items-box-start gap-x-space-2 gap-y-space-1 type-label"
+                data-done={one.done || undefined}
+                data-step={one.step}
+                style:--step-cols="var(--icon-md) minmax(0, 1fr)"
+              >
+                <span class="mark-cell">
+                  <span
+                    data-slot="step-mark"
+                    class="grid size-icon-md place-items-center text-ink-muted"
+                  >
+                    {#if one.done}
+                      <IconSuccess
+                        aria-hidden="true"
+                        class="size-icon-md text-status-done-ink"
+                      />
+                    {:else}
+                      <!-- The step's place in the list, drawn from its
                          attribute: the grid items are no list items, so the
                          list's own counter stays at 0. -->
-                    <span
-                      data-slot="step-number"
-                      aria-hidden="true"
-                      class="box-border grid size-full place-items-center rounded-pill border border-border-control type-meta leading-none num before:content-data-n"
-                      data-n={index + 1}
-                    ></span>
-                  {/if}
+                      <span
+                        data-slot="step-number"
+                        aria-hidden="true"
+                        class="box-border grid size-full place-items-center rounded-pill border border-border-control type-meta leading-none num before:content-data-n"
+                        data-n={index + 1}
+                      ></span>
+                    {/if}
+                  </span>
                 </span>
-              </span>
-              <span
-                data-slot="step-label"
-                class="min-w-0 type-label wrap-anywhere text-ink-strong group-data-done/step:text-ink-muted"
-                >{#if one.done}<span class="sr-only"
-                    >{tailnetWords.stepDone}{" "}</span
-                  >{/if}{one.label}</span
-              >
-              {#if !one.done}
                 <span
-                  data-slot="step-note"
-                  class="col-start-2 min-w-0 type-meta wrap-anywhere text-ink-muted"
-                  >{one.note}</span
+                  data-slot="step-label"
+                  class="min-w-0 type-label wrap-anywhere text-ink-strong group-data-done/step:text-ink-muted"
+                  >{#if one.done}<span class="sr-only"
+                      >{tailnetWords.stepDone}{" "}</span
+                    >{/if}{one.label}</span
                 >
-                {#if one.command}
-                  <div
-                    data-slot="step-command"
-                    class="col-start-2 mt-space-1 flex min-w-0 *:min-w-0 *:flex-auto"
-                    data-box
+                {#if !one.done}
+                  <span
+                    data-slot="step-note"
+                    class="col-start-2 min-w-0 type-meta wrap-anywhere text-ink-muted"
+                    >{one.note}</span
                   >
-                    <CopyBox
-                      label={tailnetWords.command}
-                      text={one.command}
-                      wrap
-                    />
-                  </div>
-                {:else if one.href}
-                  <div
-                    data-slot="step-link"
-                    class="col-start-2 mt-space-1 flex min-w-0 *:min-w-0 *:flex-initial"
-                    data-box
-                  >
-                    <Button
-                      href={one.href}
-                      icon={IconExternal}
-                      label={one.link}
-                      rel="noopener"
-                      size="sm"
-                      target="_blank"
-                      variant="secondary"
-                    />
-                  </div>
+                  {#if one.command}
+                    <div
+                      data-slot="step-command"
+                      class="col-start-2 mt-space-1 flex min-w-0 *:min-w-0 *:flex-auto"
+                      data-box
+                    >
+                      <CopyBox
+                        label={tailnetWords.command}
+                        text={one.command}
+                        wrap
+                      />
+                    </div>
+                  {:else if one.href}
+                    <div
+                      data-slot="step-link"
+                      class="col-start-2 mt-space-1 flex min-w-0 *:min-w-0 *:flex-initial"
+                      data-box
+                    >
+                      <Button
+                        href={one.href}
+                        icon={IconExternal}
+                        label={one.link}
+                        rel="noopener"
+                        size="sm"
+                        target="_blank"
+                        variant="secondary"
+                      />
+                    </div>
+                  {/if}
                 {/if}
-              {/if}
-            </li>
-          {/each}
-        </ol>
-      {/if}
-    {:else if item.kind === "task"}
-      <span
-        data-where
-        data-slot="meta"
-        class="mark-line pointer-events-none relative col-start-2 col-end-4 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-      >
-        {#if item.project}
-          <span
-            data-slot="project"
-            class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
-            data-box
-          >
-            <IconFolder
-              data-needs-card-mark
-              aria-hidden="true"
-              class="size-icon-md flex-none"
-              style="color: var(--mark-{item.project.hue})"
-            />
-            <span data-slot="project-name" class="type-label text-ink-strong"
-              >{item.project.name}</span
+              </li>
+            {/each}
+          </ol>
+        {/if}
+      {:else if item.kind === "task"}
+        <span
+          data-where
+          data-slot="meta"
+          class="mark-line pointer-events-none relative col-start-2 col-end-4 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+        >
+          {#if item.project}
+            <span
+              data-slot="project"
+              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+              data-box
             >
-          </span>
+              <IconFolder
+                data-needs-card-mark
+                aria-hidden="true"
+                class="size-icon-md flex-none"
+                style="color: var(--mark-{item.project.hue})"
+              />
+              <span data-slot="project-name" class="type-label text-ink-strong"
+                >{item.project.name}</span
+              >
+            </span>
+            <span
+              data-slot="dot"
+              aria-hidden="true"
+              class="flex-none text-ink-muted">·</span
+            >
+          {/if}
+          <span class="flex-none">Task</span>
           <span
             data-slot="dot"
             aria-hidden="true"
             class="flex-none text-ink-muted">·</span
           >
-        {/if}
-        <span class="flex-none">Task</span>
-        <span
-          data-slot="dot"
-          aria-hidden="true"
-          class="flex-none text-ink-muted">·</span
-        >
-        <span class="flex-none num">{item.taskId}</span>
-      </span>
-    {:else}
-      <span
-        data-slot="meta"
-        class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-        >{meta}</span
-      >
-    {/if}
-    {#if item.kind === "ask" && answerable}
-      <!-- Deny then Approve together at the trailing edge, the same size, each
+          <span class="flex-none num">{item.taskId}</span>
+        </span>
+      {:else}
+        <NeedsMeta text={meta} />
+      {/if}
+      {#if item.kind === "ask" && answerable}
+        <!-- Deny then Approve together at the trailing edge, the same size, each
            tinted by what it does: Deny in the fail status's fill and ink,
            Approve in the done status's, the house's success pair (go, not
            "working"). Both pairs are their hue's 3-step mixed 24% toward its
@@ -1288,237 +1236,242 @@
            variant holds still, so neither is made the more inviting. On a
            finger the gap opens (The 44 Touch Rule), the separation the rule's
            opposite ends gave a rushed thumb. -->
-      <div
-        data-slot="peers"
-        class={[
-          "relative col-start-2 col-end-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4",
-          lined ? "row-5" : "row-4",
-        ]}
-      >
-        {#if answerRefused}
-          <ErrorText
-            message={answerRefused}
-            title="The hub refused that answer"
+        <div
+          data-slot="peers"
+          class={[
+            "relative col-start-2 col-end-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4",
+            lined ? "row-5" : "row-4",
+          ]}
+        >
+          {#if answerRefused}
+            <ErrorText
+              message={answerRefused}
+              title="The hub refused that answer"
+            />
+          {/if}
+          <Button
+            data-deny
+            aria-label="Deny {answered}"
+            answer="deny"
+            disabled={held || (answering && pressed !== "deny")}
+            failed={answerRefused !== null && pressed === "deny"}
+            icon={IconClose}
+            label="Deny"
+            onclick={() => answer("deny")}
+            {onkeydown}
+            pending={answering && pressed === "deny"}
+            pendingLabel="Denying…"
+            size="sm"
+            variant="secondary"
           />
-        {/if}
-        <Button
-          data-deny
-          aria-label="Deny {answered}"
-          answer="deny"
-          disabled={held || (answering && pressed !== "deny")}
-          failed={answerRefused !== null && pressed === "deny"}
-          icon={IconClose}
-          label="Deny"
-          onclick={() => answer("deny")}
-          {onkeydown}
-          pending={answering && pressed === "deny"}
-          pendingLabel="Denying…"
-          size="sm"
-          variant="secondary"
-        />
-        <Button
-          data-approve
-          aria-label="{item.request.browserAsk
-            ? 'Take over'
-            : 'Approve'} {answered}"
-          answer="approve"
-          disabled={held || (answering && pressed !== "allow")}
-          failed={answerRefused !== null && pressed === "allow"}
-          icon={item.request.browserAsk ? IconInteract : IconTick}
-          label={item.request.browserAsk ? askWords.takeOver : "Approve"}
-          onclick={() => answer("allow")}
-          {onkeydown}
-          pending={answering && pressed === "allow"}
-          pendingLabel={item.request.browserAsk
-            ? askWords.takingOver
-            : "Approving…"}
-          size="sm"
-          variant="secondary"
-        />
-      </div>
-    {:else if item.kind === "choice"}
-      <!-- Its three options as the peers: same size, type and fill (The Peer
+          <Button
+            data-approve
+            aria-label="{item.request.browserAsk
+              ? 'Take over'
+              : 'Approve'} {answered}"
+            answer="approve"
+            disabled={held || (answering && pressed !== "allow")}
+            failed={answerRefused !== null && pressed === "allow"}
+            icon={item.request.browserAsk ? IconInteract : IconTick}
+            label={item.request.browserAsk ? askWords.takeOver : "Approve"}
+            onclick={() => answer("allow")}
+            {onkeydown}
+            pending={answering && pressed === "allow"}
+            pendingLabel={item.request.browserAsk
+              ? askWords.takingOver
+              : "Approving…"}
+            size="sm"
+            variant="secondary"
+          />
+        </div>
+      {:else if item.kind === "choice"}
+        <!-- Its three options as the peers: same size, type and fill (The Peer
            Rule); keeping agents off comes first, as the recommended one, then
            asking first, then letting them post. Its options are its words,
            longer than Deny and Approve, too long to stand side by side in the
            panel: they stack, each the text column's width, so the three stay
            peers in size. -->
-      <div
-        data-slot="peers"
-        class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-col items-stretch justify-end gap-space-2 coarse:gap-space-4"
-      >
-        {#if choiceRefusal}
-          <ErrorText
-            message={choiceRefusal}
-            title="The hub refused that answer"
-          />
-        {/if}
-        {#each UPSTREAM_POSTS as answer (answer)}
-          <Button
-            edge="none"
-            disabled={stale || (choosing !== null && choosing !== answer)}
-            failed={answer === "off" && choiceRefusal !== null}
-            label={upstreamPostsWords(answer)}
-            onclick={() => choose(answer)}
-            pending={choosing === answer}
-            pendingLabel="Saving…"
-            size="sm"
-            variant="secondary"
-          />
-        {/each}
-      </div>
-    {:else if item.kind === "desk" && !item.done}
-      <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-col items-stretch justify-end gap-space-2 coarse:gap-space-4"
+        >
+          {#if choiceRefusal}
+            <ErrorText
+              message={choiceRefusal}
+              title="The hub refused that answer"
+            />
+          {/if}
+          {#each UPSTREAM_POSTS as answer (answer)}
+            <Button
+              edge="none"
+              disabled={stale || (choosing !== null && choosing !== answer)}
+              failed={answer === "off" && choiceRefusal !== null}
+              label={upstreamPostsWords(answer)}
+              onclick={() => choose(answer)}
+              pending={choosing === answer}
+              pendingLabel="Saving…"
+              size="sm"
+              variant="secondary"
+            />
+          {/each}
+        </div>
+      {:else if item.kind === "desk" && !item.done}
+        <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in
            this browser, the presence menu still offers it; Allow calls the
            browser's own prompts on the press. A refusal stands over them,
            naming each blocked setting and where to turn it on. -->
-      <div
-        data-slot="peers"
-        class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-wrap justify-end gap-space-2 coarse:gap-space-4"
-      >
-        {#if person.refusal}
-          <!-- Wrapped, never cut to one line: the setting's name and where
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-wrap justify-end gap-space-2 coarse:gap-space-4"
+        >
+          {#if person.refusal}
+            <!-- Wrapped, never cut to one line: the setting's name and where
                to turn it on are the whole point of it. -->
-          <p
-            data-slot="desk-refusal"
-            class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
-            role="alert"
-          >
-            {person.refusal.title}. {person.refusal.message}
-          </p>
-        {/if}
-        <Button
-          data-skip
-          disabled={person.pending === "allow"}
-          label={presenceWords.skip}
-          onclick={skipHere}
-          size="sm"
-          variant="secondary"
-        />
-        <Button
-          data-allow
-          disabled={person.pending === "allow"}
-          label={presenceWords.allow}
-          onclick={() => allowHere()}
-          pending={person.pending === "allow"}
-          pendingLabel={presenceWords.allowing}
-          size="sm"
-          variant="secondary"
-        />
-      </div>
-    {:else if item.kind === "tailnet" && item.done}
-      <!-- Ticked: the https dashboard to open. -->
-      <div
-        data-slot="peers"
-        class="relative col-start-2 col-end-4 row-5 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
-      >
-        <Button
-          href={item.tailnet.dashboard}
-          icon={IconExternal}
-          label={tailnetWords.openDashboard}
-          rel="noopener"
-          size="sm"
-          target="_blank"
-          variant="secondary"
-        />
-      </div>
-    {:else if item.kind === "pairing" || item.kind === "admission"}
-      {@const who =
-        item.kind === "pairing"
-          ? `${item.title}, code ${item.request.userCode}`
-          : item.title}
-      <div
-        data-slot="peers"
-        class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
-      >
-        {#if refusal}
-          <ErrorText message={refusal} title="The hub refused that answer" />
-        {/if}
-        <Button
-          data-deny
-          aria-label="Deny {who}"
-          answer="deny"
-          disabled={held || admitting === true}
-          icon={IconClose}
-          label="Deny"
-          onclick={() => admitOrDeny(false)}
-          pending={admitting === false}
-          pendingLabel="Denying…"
-          size="sm"
-          variant="secondary"
-        />
-        <Button
-          data-approve
-          aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
-          answer="approve"
-          disabled={held || admitting === false}
-          icon={IconTick}
-          label={item.kind === "pairing" ? "Approve" : "Admit"}
-          onclick={() => admitOrDeny(true)}
-          pending={admitting === true}
-          pendingLabel={item.kind === "pairing" ? "Approving…" : "Admitting…"}
-          size="sm"
-          variant="secondary"
-        />
-      </div>
-    {:else if item.kind === "action"}
-      <div
-        data-slot="peers"
-        class="relative col-start-2 col-end-4 row-6 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
-      >
-        {#if refusal}
-          <ErrorText message={refusal} title="The hub refused that decision" />
-        {/if}
-        {#if approvable}
+            <p
+              data-slot="desk-refusal"
+              class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
+              role="alert"
+            >
+              {person.refusal.title}. {person.refusal.message}
+            </p>
+          {/if}
+          <Button
+            data-skip
+            disabled={person.pending === "allow"}
+            label={presenceWords.skip}
+            onclick={skipHere}
+            size="sm"
+            variant="secondary"
+          />
+          <Button
+            data-allow
+            disabled={person.pending === "allow"}
+            label={presenceWords.allow}
+            onclick={() => allowHere()}
+            pending={person.pending === "allow"}
+            pendingLabel={presenceWords.allowing}
+            size="sm"
+            variant="secondary"
+          />
+        </div>
+      {:else if item.kind === "tailnet" && item.done}
+        <!-- Ticked: the https dashboard to open. -->
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-5 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
+        >
+          <Button
+            href={item.tailnet.dashboard}
+            icon={IconExternal}
+            label={tailnetWords.openDashboard}
+            rel="noopener"
+            size="sm"
+            target="_blank"
+            variant="secondary"
+          />
+        </div>
+      {:else if item.kind === "pairing" || item.kind === "admission"}
+        {@const who =
+          item.kind === "pairing"
+            ? `${item.title}, code ${item.request.userCode}`
+            : item.title}
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
+        >
+          {#if refusal}
+            <ErrorText message={refusal} title="The hub refused that answer" />
+          {/if}
           <Button
             data-deny
-            aria-label="Deny {item.action.tool} on {item.action.connection}"
+            aria-label="Deny {who}"
             answer="deny"
-            disabled={held || deciding}
-            onclick={() => decide("deny")}
-            {onkeydown}
+            disabled={held || admitting === true}
+            icon={IconClose}
+            label="Deny"
+            onclick={() => admitOrDeny(false)}
+            pending={admitting === false}
+            pendingLabel="Denying…"
             size="sm"
             variant="secondary"
-          >
-            <IconClose />
-            <span>Deny</span>
-          </Button>
+          />
           <Button
             data-approve
-            aria-label="Approve {item.action.tool} on {item.action.connection}"
+            aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
             answer="approve"
-            disabled={held || deciding}
-            onclick={() => decide("approve")}
-            {onkeydown}
+            disabled={held || admitting === false}
+            icon={IconTick}
+            label={item.kind === "pairing" ? "Approve" : "Admit"}
+            onclick={() => admitOrDeny(true)}
+            pending={admitting === true}
+            pendingLabel={item.kind === "pairing" ? "Approving…" : "Admitting…"}
             size="sm"
             variant="secondary"
-          >
-            <IconTick />
-            <span>Approve</span>
-          </Button>
-        {:else}
-          <Button
-            aria-label="Remove {item.action.tool} on {item.action
-              .connection} from Needs you"
-            disabled={held || deciding}
-            onclick={() => decide("checked")}
-            size="sm"
-            variant="secondary"
-          >
-            <IconCheck />
-            <span>Remove</span>
-          </Button>
-        {/if}
-      </div>
-    {:else if item.kind === "mcp" && item.why}
-      <!-- Why the sign-in ended, the provider's own words under Show
+          />
+        </div>
+      {:else if item.kind === "action"}
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-6 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
+        >
+          {#if refusal}
+            <ErrorText
+              message={refusal}
+              title="The hub refused that decision"
+            />
+          {/if}
+          {#if approvable}
+            <Button
+              data-deny
+              aria-label="Deny {item.action.tool} on {item.action.connection}"
+              answer="deny"
+              disabled={held || deciding}
+              onclick={() => decide("deny")}
+              {onkeydown}
+              size="sm"
+              variant="secondary"
+            >
+              <IconClose />
+              <span>Deny</span>
+            </Button>
+            <Button
+              data-approve
+              aria-label="Approve {item.action.tool} on {item.action
+                .connection}"
+              answer="approve"
+              disabled={held || deciding}
+              onclick={() => decide("approve")}
+              {onkeydown}
+              size="sm"
+              variant="secondary"
+            >
+              <IconTick />
+              <span>Approve</span>
+            </Button>
+          {:else}
+            <Button
+              aria-label="Remove {item.action.tool} on {item.action
+                .connection} from Needs you"
+              disabled={held || deciding}
+              onclick={() => decide("checked")}
+              size="sm"
+              variant="secondary"
+            >
+              <IconCheck />
+              <span>Remove</span>
+            </Button>
+          {/if}
+        </div>
+      {:else if item.kind === "mcp" && item.why}
+        <!-- Why the sign-in ended, the provider's own words under Show
            details, over the row's cover: its press still opens Configure. -->
-      <RowFault
-        class="relative col-start-2 col-end-4 row-4 mt-space-1"
-        data-needs-card-mcp-why
-        details={item.why}
-        reason={mcpWords.signInEndedWhy}
-      />
-    {/if}
-  </div>
+        <RowFault
+          class="relative col-start-2 col-end-4 row-4 mt-space-1"
+          data-needs-card-mcp-why
+          details={item.why}
+          reason={mcpWords.signInEndedWhy}
+        />
+      {/if}
+    {/snippet}
+  </NeedsRow>
 {/if}
