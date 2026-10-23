@@ -18,7 +18,7 @@
  * read. Messages stored before the tag were given it once, by the hub's
  * migration over its stored sends (hub db/tag-markers.ts).
  */
-import type { ArtifactKind } from "./index";
+import type { ArtifactKind, CarryRestored } from "./index";
 
 /** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
 export interface MarkerTag {
@@ -275,8 +275,24 @@ export const withInputsLine = (
  *   package manifests among them.
  */
 export type CheckoutMove =
-  | { branch: string; carry?: string; commit: string; kind: "recut" }
+  | {
+      branch: string;
+      carry?: string;
+      commit: string;
+      kind: "recut";
+      restored?: CarryRestored;
+    }
   | { branch: string; from: string; kind: "landing"; to: string };
+
+/** What a cut again made of its carry's uncommitted diff, in the moved line's words. */
+export const restoredWords = (restored: CarryRestored | undefined): string => {
+  if (!restored) {
+    return "";
+  }
+  return "applied" in restored
+    ? `; your uncommitted changes from ${restored.applied} are applied on top (unstaged, new files untracked)`
+    : `; your uncommitted changes in ${restored.refused} did not apply (${restored.why}), so they stay there`;
+};
 
 /** The run that brings a moved checkout's installed dependencies to its lockfile, in the line's words. */
 const INSTALL_AGAIN = "Run the repo's install before you build or test.";
@@ -292,7 +308,7 @@ const INSTALL_AGAIN = "Run the repo's install before you build or test.";
  */
 export const movedLine = (move: CheckoutMove): string =>
   move.kind === "recut"
-    ? `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${move.commit.slice(0, 9)} on ${move.branch}${move.carry ? `, your own commits restored on top from the carry ${move.carry}, HEAD where you left it` : ""}: installed dependencies, build outputs and your $TMPDIR scratch are gone. ${INSTALL_AGAIN}`
+    ? `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${move.commit.slice(0, 9)} on ${move.branch}${move.carry ? `, your own commits restored on top from the carry ${move.carry}, HEAD where you left it` : ""}${restoredWords(move.restored)}: installed dependencies, build outputs and your $TMPDIR scratch are gone. ${INSTALL_AGAIN}`
     : `[CawCo] Your checkout moved from ${move.from.slice(0, 9)} to ${move.to.slice(0, 9)}: the hub rebased your commits onto origin/${move.branch} as it landed them, so files main gained since are here and your installed dependencies may predate them. ${INSTALL_AGAIN}`;
 
 /**

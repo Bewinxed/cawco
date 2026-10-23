@@ -4405,7 +4405,11 @@ export const createWorkItems = ({
           boundaryPid: checkout.boundaryPid,
           base: checkout.base,
           tmp: checkout.tmp,
-          movedUntold: { kind: "recut", ...head },
+          movedUntold: {
+            kind: "recut",
+            ...head,
+            ...(checkout.restored ? { restored: checkout.restored } : {}),
+          },
           // Its commits are in the clone again: a carry of its next end is its own.
           carry: null,
         }) ?? workspace;

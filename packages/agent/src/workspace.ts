@@ -21,6 +21,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type {
+  CarryRestored,
   CommandResult,
   WorkspaceArchive,
   WorkspaceArchived,
@@ -49,6 +50,7 @@ import {
   workspacesDir,
   workspaceTmpDir,
 } from "@cawco/core/paths";
+import { commandLine, processLineage } from "@cawco/core/process-identity";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
@@ -120,6 +122,7 @@ import {
   withoutCredential,
 } from "./move";
 import { removeTree } from "./remove-tree";
+import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
@@ -720,7 +723,7 @@ export const createWorkspace = async (
   // HEAD, which is what a cut cut short holds and is cleared with.
   const carried = cut?.carry ? await carryOf(id, cut.carry) : undefined;
   const marked: WorkspaceCut | null = cut
-    ? { branch: cut.branch, commit: carried?.head ?? cut.commit }
+    ? { branch: cut.branch, commit: carried?.commits?.head ?? cut.commit }
     : null;
   await interruptedCleared;
   await clearOwnCut(id, path, repoRoot, marked);
@@ -753,10 +756,10 @@ export const createWorkspace = async (
     if (cut) {
       await fetchCut(path, id, base, cut, authed);
     }
-    if (carried) {
-      await carryOnto(path, carried, plain);
+    if (carried?.commits) {
+      await carryOnto(path, carried.commits, plain);
     }
-    const start = carried?.head ?? (cut ? cut.commit : `origin/${base}`);
+    const start = startOf(cut, carried, base);
     const checkout = (await marksLfs(authed, path, start))
       ? await lfsCheckout({
           deadline,
@@ -786,6 +789,7 @@ export const createWorkspace = async (
       await setProject(id, projectId);
     }
     const boundary = await ensureBoundary({ id, path });
+    const restored = await applyCarried({ id, path }, carried);
     await cutMade(id);
     return {
       repoRoot,
@@ -794,6 +798,7 @@ export const createWorkspace = async (
       base,
       boundaryPid: boundary.pid,
       tmp: workspaceScratchDir(id),
+      ...(restored ? { restored } : {}),
     };
   } catch (error) {
     await archiveWorkspace({
@@ -805,25 +810,37 @@ export const createWorkspace = async (
   }
 };
 
-/** A carry a workspace is cut again with ({@link WorkspaceCut} `carry`): its bundle and the HEAD it was saved at. */
+/**
+ * A carry a workspace is cut again with ({@link WorkspaceCut} `carry`): its
+ * commits (its bundle and the HEAD it was saved at), when it holds any, and
+ * its uncommitted diff, when it holds one.
+ */
 interface Carried {
+  commits?: CarriedCommits;
+  patch?: string;
+}
+
+/** A carry's commits: its bundle and the HEAD it was saved at. */
+interface CarriedCommits {
   bundle: string;
   head: string;
 }
 
+/** Whether `path` is a regular file. */
+const isFile = async (path: string): Promise<boolean> =>
+  (await lstat(path).catch(() => undefined))?.isFile() ?? false;
+
 /**
  * The carry `folder` names for workspace `id`'s cut again: one of this
  * machine's carries (`~/.cawco/carries/<id>-<time>`, carry.ts
- * `carryFolder`), the HEAD its `head` file says and its `commits.bundle`.
- * Nothing for a carry that holds no commits (only its uncommitted diff, or
- * commits whose changes all landed): the clone is cut at the commit its HEAD
- * built on, and the carry keeps the rest. Refused, nothing cut, for a folder
- * outside the carries or of another workspace's.
+ * `carryFolder`). Its commits are the HEAD its `head` file says and its
+ * `commits.bundle`; one with none (only its uncommitted diff, or commits
+ * whose changes all landed) is cut at the commit its HEAD built on. Its
+ * `uncommitted.patch` is laid on top once the clone's boundary runs
+ * ({@link applyCarried}). Refused, nothing cut, for a folder outside the
+ * carries or of another workspace's.
  */
-const carryOf = async (
-  id: string,
-  folder: string
-): Promise<Carried | undefined> => {
+const carryOf = async (id: string, folder: string): Promise<Carried> => {
   const named = resolve(folder);
   if (
     dirname(named) !== resolve(workspaceCarriesDir()) ||
@@ -834,11 +851,16 @@ const carryOf = async (
     );
   }
   const bundle = join(named, "commits.bundle");
+  const patch = join(named, "uncommitted.patch");
   const head = (
     await readFile(join(named, "head"), "utf8").catch(() => "")
   ).trim();
-  const found = await lstat(bundle).catch(() => undefined);
-  return COMMIT.test(head) && found?.isFile() ? { bundle, head } : undefined;
+  return {
+    ...(COMMIT.test(head) && (await isFile(bundle))
+      ? { commits: { bundle, head } }
+      : {}),
+    ...((await isFile(patch)) ? { patch } : {}),
+  };
 };
 
 /**
@@ -848,11 +870,74 @@ const carryOf = async (
  */
 const carryOnto = async (
   path: string,
-  carried: Carried,
+  carried: CarriedCommits,
   git: Git
 ): Promise<void> => {
   await git(path, "fetch", "--quiet", "--no-tags", carried.bundle, "HEAD");
   await git(path, "cat-file", "-e", `${carried.head}^{commit}`);
+};
+
+/** Where a cut checks its branch out: the carry's HEAD, the commit it is cut again at, or origin's `base`. */
+const startOf = (
+  cut: WorkspaceCut | undefined,
+  carried: Carried | undefined,
+  base: string
+): string => carried?.commits?.head ?? cut?.commit ?? `origin/${base}`;
+
+/** How many of `git apply`'s lines a refusal names. */
+const APPLY_LINES = 12;
+
+/**
+ * A carry's uncommitted diff (`patch`, carry.ts: every changed, deleted and
+ * untracked file against its HEAD) laid on the clone cut again at that HEAD:
+ * copied into its scratch dir as a file of its own, then `git apply` inside
+ * its boundary, which refuses any path the workspace may not write (a deny
+ * path), as the workspace's own commands are refused. Its changes come back
+ * unstaged and its new files untracked, as `git apply` writes them; all of
+ * it or none (`git apply` is atomic). One that does not apply says why in
+ * git's words, which name each file, and stays in the carry.
+ */
+const applyCarried = async (
+  workspace: WorkspaceRef,
+  carried: Carried | undefined
+): Promise<CarryRestored | undefined> => {
+  const patch = carried?.patch;
+  if (!patch) {
+    return;
+  }
+  const { scratch } = await ensureBoundary(workspace);
+  const name = `.cawco-carry-${crypto.randomUUID()}.patch`;
+  const copy = join(scratch, name);
+  try {
+    await writeStateFile(copy, await readFile(patch), {
+      exclusive: true,
+      mode: 0o600,
+    });
+    const applied = await runHubCommand(
+      workspace.path,
+      `${SAFE_GIT_SHELL}git apply --whitespace=nowarn "$TMPDIR"/${name}`,
+      WORKSPACE_GIT_TIMEOUT_MS,
+      workspace
+    );
+    if (applied.exitCode === 0) {
+      console.info(
+        `[workspace] ${workspace.id}: cut again with its carry's uncommitted diff ${patch} applied`
+      );
+      return { applied: patch };
+    }
+    const why =
+      (applied.stderr || applied.stdout)
+        .trim()
+        .split("\n")
+        .slice(0, APPLY_LINES)
+        .join("; ") || `git apply exited ${applied.exitCode}`;
+    console.warn(
+      `[workspace] ${workspace.id}: its carry's uncommitted diff ${patch} did not apply, and stays in the carry: ${why}`
+    );
+    return { refused: patch, why };
+  } finally {
+    await rm(copy, { force: true });
+  }
 };
 
 /**
@@ -1739,20 +1824,91 @@ const LEFT_INSIDE_PASSES = 5;
 /** How long a SIGKILLed process has to leave the table before {@link endLeftInside} reads it as still running. */
 const LEFT_INSIDE_SETTLE_MS = 500;
 
+/** The user's service manager, which adopts what a process of the user's session left (Linux `systemd --user`, macOS `launchd`). */
+const SERVICE_MANAGER = /(^|\/)(systemd --user|launchd)( |$)/;
+
+/** A process left running from a clone, and whose it is ({@link whoseLeft}). */
+interface LeftInside {
+  command: string;
+  /** Set for one of someone else's: the live process outside the clone it hangs from. */
+  owner?: { command: string; pid: number };
+  pid: number;
+}
+
+/**
+ * Whose each process in `found` is (all of them running from a clone or its
+ * scratch dir): CawCo's when it, or a process up its tree, is this agent,
+ * its keeper or one of the keeper's children (a session, a boundary); or
+ * when the first process up its tree that runs from outside the clone is
+ * init or the user's service manager: an orphan whose starter is gone,
+ * which nothing of the person's holds (the Mac's 9-day `vite preview`,
+ * launchd its parent). Anyone else's (`owner` set) hangs from a live
+ * process outside the clone that is none of CawCo's: the person's terminal
+ * shell, an editor.
+ */
+const whoseLeft = async (
+  found: readonly { command: string; pid: number }[]
+): Promise<LeftInside[]> => {
+  const lineage = await processLineage();
+  const parent = new Map(lineage.map((one) => [one.pid, one.ppid]));
+  const held = (await keeperChildren()).map((child) => child.pid);
+  const cawco = new Set([
+    process.pid,
+    ...held,
+    ...held.flatMap((pid) => {
+      const keeper = parent.get(pid);
+      return keeper === undefined ? [] : [keeper];
+    }),
+  ]);
+  const inside = new Set(found.map((one) => one.pid));
+  const upFrom = (pid: number): number[] => {
+    const chain: number[] = [];
+    for (let at = parent.get(pid); at !== undefined && at > 1;) {
+      if (chain.includes(at)) {
+        break;
+      }
+      chain.push(at);
+      at = parent.get(at);
+    }
+    return chain;
+  };
+  return await Promise.all(
+    found.map(async (one): Promise<LeftInside> => {
+      const chain = upFrom(one.pid);
+      if (cawco.has(one.pid) || chain.some((pid) => cawco.has(pid))) {
+        return one;
+      }
+      const outside = chain.find((pid) => !inside.has(pid));
+      if (outside === undefined) {
+        return one;
+      }
+      const command = (await commandLine(outside)) ?? "";
+      return SERVICE_MANAGER.test(command)
+        ? one
+        : { ...one, owner: { pid: outside, command } };
+    })
+  );
+};
+
+/** Processes in words: `pid 12 (vite preview)`, each command cut short. */
+const processWords = (left: readonly LeftInside[]): string =>
+  left.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)})`).join("; ");
+
 /**
  * Every process left running from workspace `workspace`'s clone or scratch
  * dir once its boundary is stopped (live-processes.ts `processesWithin`: its
  * working directory or executable there, or its command line naming a path
- * there), SIGKILLed, reading again after each round. The boundary's own
- * stop ends what runs inside it, each process it started by name on macOS
- * (boundary.ts `killAnswering`); a process that left it before its profile
- * carried that name, or that the boundary never started (a server a
- * session's host shell left), is ended here by where it runs from. On the
- * Mac on 2026-10-24 a `vite preview` from workspace bcaa39e4's clone, its
- * parent launchd, still held port 55978 nine days after that workspace was
- * archived and its folder gone. One still there once the rounds are done
- * throws, and nothing is deleted: the archive is not over while anything of
- * it runs.
+ * there) that is CawCo's ({@link whoseLeft}), SIGKILLed, reading again
+ * after each round. The boundary's own stop ends what runs inside it, each
+ * process it started by name on macOS (boundary.ts `killAnswering`); a
+ * process that left it before its profile carried that name, or that a
+ * session's host shell left, is ended here. On the Mac on 2026-10-24 a
+ * `vite preview` from workspace bcaa39e4's clone, its parent launchd,
+ * still held port 55978 nine days after that workspace was archived and its
+ * folder gone. One of the person's own (their shell or editor there) is
+ * never ended: the archive throws naming it and what it hangs from, nothing
+ * is deleted, and the next sweep tries again. So does one of CawCo's still
+ * there after the rounds.
  */
 const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
   const roots = [
@@ -1761,11 +1917,15 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
     workspaceTmpDir(workspace.id),
   ];
   const read = async () =>
-    (await processesWithin(roots)).filter((one) => one.pid !== process.pid);
+    await whoseLeft(
+      (await processesWithin(roots)).filter((one) => one.pid !== process.pid)
+    );
   const killed = new Map<number, string>();
   for (let pass = 0; pass < LEFT_INSIDE_PASSES; pass += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each round reads the process table the round before left
-    const fresh = (await read()).filter((one) => !killed.has(one.pid));
+    const fresh = (await read()).filter(
+      (one) => !(one.owner || killed.has(one.pid))
+    );
     if (fresh.length === 0) {
       break;
     }
@@ -1775,15 +1935,21 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
     }
     await Bun.sleep(LEFT_INSIDE_SETTLE_MS);
   }
-  const left = await read();
-  if (left.length > 0) {
-    throw new Error(
-      `Workspace ${workspace.id} was not archived: ${left.map((one) => `pid ${one.pid} (${one.command})`).join("; ")} still ${left.length === 1 ? "runs" : "run"} from its clone or scratch dir after SIGKILL, so nothing was deleted.`
-    );
-  }
   if (killed.size > 0) {
     console.info(
       `[workspace] ${workspace.id}: ended ${killed.size} process(es) left running from its clone or scratch dir once its boundary was stopped: ${[...killed].map(([pid, command]) => `pid ${pid} (${command.slice(0, 200)})`).join("; ")}`
+    );
+  }
+  const left = await read();
+  const owned = left.filter((one) => one.owner);
+  if (owned.length > 0) {
+    throw new Error(
+      `Workspace ${workspace.id} was not archived: ${owned.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)}), under pid ${one.owner?.pid} (${one.owner?.command.slice(0, 200)})`).join("; ")} ${owned.length === 1 ? "runs" : "run"} from its clone or scratch dir, started from outside CawCo, so ${owned.length === 1 ? "it is" : "they are"} left running and nothing was deleted; the archive is tried again at the next sweep.`
+    );
+  }
+  if (left.length > 0) {
+    throw new Error(
+      `Workspace ${workspace.id} was not archived: ${processWords(left)} still ${left.length === 1 ? "runs" : "run"} from its clone or scratch dir after SIGKILL, so nothing was deleted.`
     );
   }
 };

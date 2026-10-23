@@ -30611,6 +30611,37 @@
                     "enum": [
                       "recut"
                     ]
+                  },
+                  "restored": {
+                    "description": "What a workspace cut again from its carry ({@link WorkspaceCut} `carry`)\nmade of the carry's uncommitted diff: `applied`, the patch, laid on its\nHEAD (changes unstaged, new files untracked); or `refused`, the patch,\nleft in the carry, and `why` in git's words, which name each file.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "applied": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "applied"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "refused": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "refused",
+                          "why"
+                        ]
+                      }
+                    ]
                   }
                 },
                 "required": [
