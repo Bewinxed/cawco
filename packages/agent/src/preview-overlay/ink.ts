@@ -45,9 +45,9 @@ import {
   type Pin,
   type PinnedElement,
 } from "@cawco/core/comments";
+import type { DocMap } from "@cawco/core/doc-maps";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
-import type { Map as YMap } from "yjs";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, framesOf, frameWindows, rectOf, sizesIn } from "./frames";
@@ -413,9 +413,9 @@ export function startInk(deps: InkDeps): Ink {
     const doc = artifact.doc();
     return {
       doc,
-      ink: doc.getMap("ink") as YMap<InkGroup>,
-      moved: doc.getMap("moved") as YMap<InkGroup>,
-      pins: doc.getMap("pins") as YMap<Pin>,
+      ink: doc.getMap("ink") as DocMap<InkGroup>,
+      moved: doc.getMap("moved") as DocMap<InkGroup>,
+      pins: doc.getMap("pins") as DocMap<Pin>,
     };
   };
 

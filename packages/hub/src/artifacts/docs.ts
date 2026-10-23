@@ -16,6 +16,7 @@
 import type { CanvasAuthor } from "@cawco/core/canvas";
 import { honourDeletions } from "@cawco/core/comments";
 import { RESYNC_MS } from "@cawco/core/doc-link";
+import { mapsOf } from "@cawco/core/doc-maps";
 import {
   type AbstractType,
   applyUpdate,
@@ -97,8 +98,12 @@ export interface ArtifactDocs {
   merge: (from: string, to: string, origin: ChangeOrigin) => void;
   /** How many screens (canvas host pages) are joined to the artifact now. */
   screens: (id: string) => number;
-  /** The whole doc as one base64 Yjs update: what a page's overlay starts from before it joins. */
-  snapshot: (id: string) => string;
+  /**
+   * What a page's overlay starts from before it joins, its tag's data: the
+   * whole doc as one base64 Yjs update (`state`, for its doc worker) and its
+   * mirrored maps as JSON (`maps`, for the page's mirror, core doc-maps.ts).
+   */
+  seed: (id: string) => { maps: string; state: string };
   /** Runs `change` as one transaction on the artifact's doc, made by `origin`. */
   transact: (
     id: string,
@@ -313,8 +318,13 @@ export const createArtifactDocs = (deps: {
       [...(loaded.get(id)?.clients ?? [])].filter((client) => client.screen)
         .length,
     viewers: (id) => loaded.get(id)?.clients.size ?? 0,
-    snapshot: (id) =>
-      Buffer.from(encodeStateAsUpdate(load(id).doc)).toString("base64"),
+    seed: (id) => {
+      const { doc } = load(id);
+      return {
+        state: Buffer.from(encodeStateAsUpdate(doc)).toString("base64"),
+        maps: JSON.stringify(mapsOf(doc)),
+      };
+    },
     transact: (id, origin, change) => {
       const { doc } = load(id);
       doc.transact(() => change(doc), origin);

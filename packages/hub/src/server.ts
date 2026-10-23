@@ -13614,7 +13614,7 @@ export const createServer = (
     pictures: artifactPictures(artifacts.pictures),
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),
-    state: artifactDocs.snapshot,
+    seed: artifactDocs.seed,
     program: (artifactId, reachedAt) => {
       const served = artifacts.programServed(artifactId);
       if (!served) {

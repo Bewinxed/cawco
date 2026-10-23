@@ -12,7 +12,6 @@
  * against the same tape ("dev").
  */
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
-import { deviceDocName } from "../../../packages/core/src/doc-link";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
@@ -1458,61 +1457,23 @@ const writePins = async (
       window as unknown as {
         cawcoArtifact?: {
           subscribe: (
-            holder: (hold: { hasSynced: boolean; ref: unknown }) => void
+            holder: (hold: {
+              hasSynced: boolean;
+              ref: unknown;
+              stored: boolean;
+            }) => void
           ) => () => boolean;
         };
       }
     ).cawcoArtifact;
-    let synced = false;
-    // `subscribe` answers at once with the hold as it stands.
+    let whole = false;
+    // `subscribe` answers at once with the hold as it stands: synced with
+    // the hub, and the device's copy merged in (the overlay's worker's).
     artifact?.subscribe((hold) => {
-      synced = hold.hasSynced && hold.ref !== null;
+      whole = hold.hasSynced && hold.ref !== null && hold.stored;
     })();
-    return synced;
+    return whole;
   });
-  await inner.evaluate(async (prefix) => {
-    interface Hold {
-      doc: object;
-      ref: { id: string } | null;
-    }
-    const artifact = (
-      window as unknown as {
-        cawcoArtifact: {
-          subscribe: (holder: (hold: Hold) => void) => () => boolean;
-          Y: { applyUpdate: (doc: object, update: Uint8Array) => void };
-        };
-      }
-    ).cawcoArtifact;
-    let held: Hold | null = null;
-    artifact.subscribe((hold) => {
-      held = hold;
-    })();
-    const { doc, ref } = held as unknown as Hold;
-    const name = `${prefix}${ref?.id}`;
-    const listed = await indexedDB.databases();
-    if (!listed.some((one) => one.name === name)) {
-      return;
-    }
-    const kept = await new Promise<Uint8Array[]>((resolve, reject) => {
-      const open = indexedDB.open(name);
-      open.onerror = () => reject(open.error);
-      open.onsuccess = () => {
-        const db = open.result;
-        const read = db.transaction("updates").objectStore("updates").getAll();
-        read.onsuccess = () => {
-          db.close();
-          resolve(read.result as Uint8Array[]);
-        };
-        read.onerror = () => {
-          db.close();
-          reject(read.error);
-        };
-      };
-    });
-    for (const update of kept) {
-      artifact.Y.applyUpdate(doc, update);
-    }
-  }, deviceDocName(""));
   return await inner.evaluate(
     ({ seeds: wanted, answered }) => {
       interface Entry {

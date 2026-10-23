@@ -23,11 +23,13 @@
  * 7. Throughout, every request the pages make is to the dashboard's own
  *    origin.
  * 9. No canvas page load logs "Yjs was already imported", and no console
- *    message is an error: the page runs one Yjs, the overlay's.
- * 10. The page's binding holds the overlay's doc itself
- *     (`window.cawcoArtifact.doc`) and its scene doc is of the same Yjs
- *     (one `Doc` constructor on the page); an `artifact_update` with one
- *     skeleton element is in Excalidraw's scene within 2 s.
+ *    message is an error: the page runs one Yjs, the canvas host's own (the
+ *    overlay keeps its doc in a worker, preview-overlay doc-worker.ts).
+ * 10. The page's binding holds the canvas host's replica of the doc
+ *     (`window.cawcoCanvasDoc`, canvas-host replica.ts) and its scene doc
+ *     is of the same Yjs (one `Doc` constructor on the page); the overlay
+ *     hands the page no Yjs; an `artifact_update` with one skeleton element
+ *     is in Excalidraw's scene within 2 s.
  * 18–25. A pen stroke held still at its end becomes its shape (snap.ts):
  *     a wobbly rectangle held 400 ms is one rectangle on its box, in one
  *     transaction, undone in one step, and the page posts its host
@@ -746,9 +748,10 @@ const imageChecks = async (on: OnCanvas) => {
 };
 
 /**
- * Check 10: one doc, one Yjs. The binding's `live` is the overlay's doc
- * itself and its `scene` a doc of the overlay's Yjs; the agent's one
- * skeleton element reaches Excalidraw's scene within 2 s.
+ * Check 10: one doc, one Yjs. The binding's `live` is the canvas host's
+ * replica of the doc and its `scene` a doc of the same Yjs, the page's one;
+ * the overlay hands the page none; the agent's one skeleton element
+ * reaches Excalidraw's scene within 2 s.
  */
 const oneDocCheck = async (on: OnCanvas, id: string) => {
   const frame = await canvasFrame(on.page);
@@ -758,18 +761,17 @@ const oneDocCheck = async (on: OnCanvas, id: string) => {
         cawcoCanvasProbe?: { live: object; scene: object };
       }
     ).cawcoCanvasProbe;
-    const overlay = (
-      window as unknown as {
-        cawcoArtifact: { doc: object; Y: { Doc: new () => object } };
-      }
-    ).cawcoArtifact;
+    const page = window as unknown as {
+      cawcoArtifact: object;
+      cawcoCanvasDoc: object;
+    };
     return {
       hooked: !!probe,
-      sameDoc: !!probe && probe.live === overlay.doc,
+      sameDoc: !!probe && probe.live === page.cawcoCanvasDoc,
       oneYjs:
         !!probe &&
-        probe.live instanceof overlay.Y.Doc &&
-        probe.scene instanceof overlay.Y.Doc,
+        probe.live.constructor === probe.scene.constructor &&
+        !("Y" in page.cawcoArtifact),
     };
   });
   const answer = await on.call(UPDATE, {
@@ -805,7 +807,7 @@ const oneDocCheck = async (on: OnCanvas, id: string) => {
     () => null
   );
   on.kit.check(
-    "10: the binding holds the overlay's doc itself, its scene doc is of the same Yjs (one Doc constructor); the agent's one element is in Excalidraw's scene within 2 s",
+    "10: the binding holds the canvas host's replica of the doc, its scene doc is of the same Yjs (one Doc constructor) and the overlay hands the page none; the agent's one element is in Excalidraw's scene within 2 s",
     docs.hooked &&
       docs.sameDoc &&
       docs.oneYjs &&

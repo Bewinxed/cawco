@@ -122,8 +122,12 @@
  *    dashboard's comment rail, through y-websocket), each embed given the
  *    overlay as a machine's preview proxy gives it, in Chromium and WebKit:
  *    no console message on the page or any frame says "Yjs was already
- *    imported", and every card in every embed builds its doc on the
- *    overlay's Yjs (its `Doc` is `window.cawcoArtifact.Y.Doc`).
+ *    imported"; the overlay runs in every embed and brings no Yjs into its
+ *    realm (preview-overlay doc-worker.ts), so each embed's one Yjs is the
+ *    project's: every card draws on it, every member it imports there and
+ *    Yjs's constructor checks holding; the decision page, which imports
+ *    none, runs none. On the stage's own port (as the daemon draws), and on
+ *    the dashboard's own stage, the same.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  *   bun scripts/probe-kit/run.ts web decision-embed --leg one-yjs   # 15 alone
@@ -1900,8 +1904,71 @@ const ONLY_LEG = process.argv.includes("--leg")
   : undefined;
 
 /**
- * 15. The shared page in Chromium and WebKit: no realm logs a second Yjs,
- * and every card in each embed builds its doc on the overlay's.
+ * What a realm ran of Yjs, read in it: whether a copy ran there (Yjs's own
+ * word in the realm, `globalThis['__ $YJS$ __']`, which its module sets as
+ * it loads, yjs src/index.js), whether the overlay runs there, and the Yjs
+ * modules and overlay script it loaded.
+ */
+function realmYjs() {
+  return {
+    ran: (globalThis as Record<string, unknown>)["__ $YJS$ __"] === true,
+    overlay: "cawcoArtifact" in window,
+    loads: performance
+      .getEntriesByType("resource")
+      .map((one) => one.name)
+      .filter(
+        (name) => name.includes("yjs") || name.includes("__cawco/overlay")
+      ),
+  };
+}
+
+/**
+ * Once every rest frame of a canvas has said how it drew, each shared card
+ * it draws: whether its imports are there and Yjs's constructor checks
+ * hold, and whether the overlay runs in its page; null until then. In the
+ * canvas's page.
+ */
+function sharedMarks(): string[] | null {
+  const rest = [
+    ...document.querySelectorAll<HTMLElement>(
+      '.cawco-frame[data-cawco-interaction="rest"]'
+    ),
+  ];
+  const said = rest.every((one) =>
+    ["drawn", "failed", "empty"].includes(
+      one.querySelector<HTMLElement>(".cawco-frame-status")?.dataset.state ?? ""
+    )
+  );
+  return rest.length > 0 && said
+    ? [
+        ...document.querySelectorAll<HTMLElement>(
+          '.cawco-frame[data-cawco-interaction="rest"] [data-defined]'
+        ),
+      ].map(
+        (one) =>
+          `defined ${one.dataset.defined ?? ""}, overlay ${one.dataset.overlay ?? ""}`
+      )
+    : null;
+}
+
+/** Every console message on `page` or any of its frames that says Yjs loaded twice. */
+const heardTwice = (page: Page): string[] => {
+  const twice: string[] = [];
+  page.on("console", (message) => {
+    if (YJS_TWICE.test(message.text())) {
+      twice.push(
+        `[${message.type()}] ${message.text().slice(0, 160)} (${message.location().url})`
+      );
+    }
+  });
+  return twice;
+};
+
+/**
+ * 15. The shared page in Chromium and WebKit: no realm logs a second Yjs;
+ * the decision page runs none; each embed runs one, the project's, with the
+ * overlay in it, every card drawing on it; on the stage's own port, the
+ * same with no overlay.
  */
 async function oneYjs(
   kit: Kit,
@@ -1910,24 +1977,17 @@ async function oneYjs(
   for (const engine of ["chromium", "webkit"] as const) {
     const leg = `${engine} 1440px light, ${SHARED_PAGE}`;
     const page = await kit.page("desk", { engine, theme: "light" });
-    const twice: string[] = [];
-    page.on("console", (message) => {
-      if (YJS_TWICE.test(message.text())) {
-        twice.push(
-          `[${message.type()}] ${message.text().slice(0, 160)} (${message.location().url})`
-        );
-      }
-    });
+    const twice = heardTwice(page);
     await page.goto(stage.pageUrl(SHARED_PAGE, "light"), { waitUntil: "load" });
     await page.waitForFunction(
       (selector) => document.querySelectorAll(selector).length === 3,
       EMBED_FRAME,
       { timeout: 60_000 }
     );
-    const cards: {
+    const embeds: {
       caption: string;
-      loads: string[];
       marks: string[] | null;
+      realm: ReturnType<typeof realmYjs> | null;
     }[] = [];
     for (const handle of await page.$$(EMBED_FRAME)) {
       await handle.scrollIntoViewIfNeeded();
@@ -1940,113 +2000,74 @@ async function oneYjs(
             ?.textContent?.trim() ?? ""
       );
       const marks = await frame
-        ?.waitForFunction(
-          () => {
-            const rest = [
-              ...document.querySelectorAll<HTMLElement>(
-                '.cawco-frame[data-cawco-interaction="rest"]'
-              ),
-            ];
-            const said = rest.every((one) =>
-              ["drawn", "failed", "empty"].includes(
-                one.querySelector<HTMLElement>(".cawco-frame-status")?.dataset
-                  .state ?? ""
-              )
-            );
-            return rest.length > 0 && said
-              ? [
-                  ...document.querySelectorAll<HTMLElement>(
-                    '.cawco-frame[data-cawco-interaction="rest"] [data-one-yjs]'
-                  ),
-                ].map((one) => one.dataset.oneYjs ?? "")
-              : null;
-          },
-          undefined,
-          { timeout: STAGE_WAIT_MS, polling: 250 }
-        )
+        ?.waitForFunction(sharedMarks, undefined, {
+          timeout: STAGE_WAIT_MS,
+          polling: 250,
+        })
         .then(
           async (answer) => (await answer.jsonValue()) as string[],
           () => null
         );
-      // Where the embed's realm loaded a Yjs from: the overlay's script, and any module of the page's.
-      const loads =
-        (await frame?.evaluate(() =>
-          performance
-            .getEntriesByType("resource")
-            .map((one) => one.name)
-            .filter(
-              (name) => name.includes("yjs") || name.includes("__cawco/overlay")
-            )
-        )) ?? [];
-      cards.push({ caption, marks: marks ?? null, loads });
+      embeds.push({
+        caption,
+        marks: marks ?? null,
+        realm: (await frame?.evaluate(realmYjs)) ?? null,
+      });
     }
     await settle(page, 1000);
-    const said = cards.map(
-      ({ caption, marks }) =>
-        `“${caption}”: ${marks ? marks.join(", ") || "no shared card" : "nothing drawn"}`
+    const top = await page.evaluate(realmYjs);
+    const said = embeds.map(
+      ({ caption, marks, realm }) =>
+        `“${caption}”: ${marks ? marks.join("; ") || "no shared card" : "nothing drawn"}; Yjs ran ${realm?.ran}, loaded ${realm?.loads.join(", ")}`
     );
     kit.check(
-      `${leg}: no realm logs "Yjs was already imported", the page or its ${cards.length} embeds (${twice.length} found)`,
+      `${leg}: no realm logs "Yjs was already imported", the page or its ${embeds.length} embeds (${twice.length} found)`,
       twice.length === 0,
-      [
-        ...new Set(twice),
-        ...cards.map(
-          ({ caption, loads }) => `“${caption}” loaded ${loads.join(", ")}`
-        ),
-      ].join("\n    ")
+      [...new Set(twice), ...said].join("\n    ")
     );
     kit.check(
-      `${leg}: every shared card in every embed builds its doc on the overlay's Yjs (${said.join("; ")})`,
-      cards.length === 3 &&
-        cards.every(
-          ({ marks }) =>
-            !!marks && marks.length > 0 && marks.every((one) => one === "true")
+      `${leg}: the decision page, which imports no Yjs, runs none, the overlay running there (Yjs ran ${top.ran}; overlay ${top.overlay}; loaded ${top.loads.join(", ")})`,
+      !top.ran && top.overlay && top.loads.every((one) => !one.includes("yjs"))
+    );
+    kit.check(
+      `${leg}: each embed runs one Yjs, the project's, the overlay in it bringing none, and every shared card draws on it with every member it imports there (${said.join("; ")})`,
+      embeds.length === 3 &&
+        embeds.every(
+          ({ marks, realm }) =>
+            !!realm?.ran &&
+            realm.overlay &&
+            !!marks &&
+            marks.length > 0 &&
+            marks.every((one) => one === "defined true, overlay true")
         ),
       said.join("\n    ")
     );
     await page.close();
 
     // The canvas on the stage's own port, as the daemon draws it (agent
-    // stage-render.ts): no overlay, so the project's own Yjs, once.
+    // stage-render.ts): no overlay, the project's own Yjs, once.
     const bare = await kit.page("desk", { engine, theme: "light" });
-    const bareTwice: string[] = [];
-    bare.on("console", (message) => {
-      if (YJS_TWICE.test(message.text())) {
-        bareTwice.push(message.text().slice(0, 160));
-      }
-    });
+    const bareTwice = heardTwice(bare);
     await bare.goto(
       `http://127.0.0.1:${stage.stagePort}/@cawco/canvas?file=${encodeURIComponent(SHARED)}&by=stage`,
       { waitUntil: "load" }
     );
     const bareMarks = await bare
-      .waitForFunction(
-        () => {
-          const marks = [
-            ...document.querySelectorAll<HTMLElement>(
-              '.cawco-frame[data-cawco-interaction="rest"] [data-one-yjs]'
-            ),
-          ].map((one) => one.dataset.oneYjs ?? "");
-          return marks.length === 2 ? marks : null;
-        },
-        undefined,
-        { timeout: STAGE_WAIT_MS, polling: 250 }
-      )
+      .waitForFunction(sharedMarks, undefined, {
+        timeout: STAGE_WAIT_MS,
+        polling: 250,
+      })
       .then(
         async (answer) => (await answer.jsonValue()) as string[],
         () => [] as string[]
       );
     await settle(bare, 1000);
-    const bareLoads = await bare.evaluate(() =>
-      performance
-        .getEntriesByType("resource")
-        .map((one) => one.name)
-        .filter((name) => name.includes("yjs"))
-    );
+    const bareRealm = await bare.evaluate(realmYjs);
     kit.check(
-      `${engine}, the shared canvas on the stage's own port (as the daemon draws it): both cards draw on the project's own Yjs, loaded once, and nothing logs "Yjs was already imported" (cards ${bareMarks.join(", ") || "none drawn"}; ${bareTwice.length} found; loaded ${bareLoads.join(", ")})`,
+      `${engine}, the shared canvas on the stage's own port (as the daemon draws it): both cards draw on the project's own Yjs, run once, and nothing logs "Yjs was already imported" (cards ${bareMarks.join("; ") || "none drawn"}; Yjs ran ${bareRealm.ran}; ${bareTwice.length} found; loaded ${bareRealm.loads.join(", ")})`,
       bareMarks.length === 2 &&
-        bareMarks.every((one) => one === "no overlay") &&
+        bareMarks.every((one) => one === "defined true, overlay false") &&
+        bareRealm.ran &&
         bareTwice.length === 0,
       bareTwice.join("\n    ")
     );
@@ -2058,8 +2079,6 @@ async function oneYjs(
 const NEEDS = "src/lib/cawco/home/NeedsCard.stories.ts";
 const NEEDS_ID = idOf("needs-card");
 const NEEDS_PAGE = "needs";
-/** A Yjs of the dashboard's own, as its stage would serve it: from node_modules, or pre-bundled. */
-const DASHBOARD_YJS = /node_modules\/yjs|deps\/yjs/;
 const NEEDS_PROGRAM = [
   `root = Decisions("The held post", [held])`,
   `held = Decision("held", "Does the held post read right?", [send, keep], "Its card is the dashboard's own.", [card])`,
@@ -2072,8 +2091,8 @@ const NEEDS_PROGRAM = [
  * 15, on the dashboard's own stage (SvelteKit, its config's pre-bundling):
  * a decision page with the overlay embedding the Needs you card, whose
  * sheet imports the dashboard's artifact-doc.ts, in Chromium and WebKit;
- * no realm logs a second Yjs, and the embed loads no Yjs of the
- * dashboard's own (neither `node_modules/yjs` nor a pre-bundled one).
+ * no realm logs a second Yjs, the embed runs the dashboard's one Yjs with
+ * the overlay in it, and the decision page runs none.
  */
 async function oneYjsOnDashboard(kit: Kit): Promise<void> {
   const stage = await startDecisionStage(
@@ -2087,14 +2106,7 @@ async function oneYjsOnDashboard(kit: Kit): Promise<void> {
     for (const engine of ["chromium", "webkit"] as const) {
       const leg = `${engine} 1440px light, the dashboard's ${NEEDS_PAGE} page`;
       const page = await kit.page("desk", { engine, theme: "light" });
-      const twice: string[] = [];
-      page.on("console", (message) => {
-        if (YJS_TWICE.test(message.text())) {
-          twice.push(
-            `[${message.type()}] ${message.text().slice(0, 160)} (${message.location().url})`
-          );
-        }
-      });
+      const twice = heardTwice(page);
       await page.goto(stage.pageUrl(NEEDS_PAGE, "light"), {
         waitUntil: "load",
       });
@@ -2121,20 +2133,16 @@ async function oneYjsOnDashboard(kit: Kit): Promise<void> {
           () => false
         );
       await settle(page, 1000);
-      const loads =
-        (await frame?.evaluate(() =>
-          performance
-            .getEntriesByType("resource")
-            .map((one) => one.name)
-            .filter(
-              (name) => name.includes("yjs") || name.includes("__cawco/overlay")
-            )
-        )) ?? [];
-      const own = loads.filter((one) => DASHBOARD_YJS.test(one));
+      const realm = await frame?.evaluate(realmYjs);
+      const top = await page.evaluate(realmYjs);
       kit.check(
-        `${leg}: every card drawn, no realm logs "Yjs was already imported" and the embed loads no Yjs of the dashboard's own (${twice.length} found; drawn ${drawn}; loaded ${loads.join(", ")})`,
-        drawn === true && twice.length === 0 && own.length === 0,
-        [...new Set(twice), ...own].join("\n    ")
+        `${leg}: every card drawn, no realm logs "Yjs was already imported", the embed runs the dashboard's one Yjs with the overlay in it, and the decision page runs none (${twice.length} found; drawn ${drawn}; embed: Yjs ran ${realm?.ran}, overlay ${realm?.overlay}, loaded ${realm?.loads.join(", ")}; page: Yjs ran ${top.ran})`,
+        drawn === true &&
+          twice.length === 0 &&
+          !!realm?.ran &&
+          realm.overlay &&
+          !top.ran,
+        [...new Set(twice)].join("\n    ")
       );
       await page.close();
     }

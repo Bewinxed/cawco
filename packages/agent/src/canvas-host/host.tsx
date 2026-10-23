@@ -3,8 +3,9 @@
  * its own chrome hidden, our tool rail over it, the empty state when it
  * holds nothing. The hub serves it at the canvas's root with the overlay in
  * it (core canvas-host.ts); the overlay joins the artifact's doc as it does
- * for any page, and hands it over through `window.cawcoArtifact`
- * (artifact.ts), which scene.ts binds Excalidraw to. Its stylesheet,
+ * for any page, and hands it over as Yjs updates through
+ * `window.cawcoArtifact` (artifact.ts) to this page's own replica of it
+ * (replica.ts), which scene.ts binds Excalidraw to. Its stylesheet,
  * Excalidraw's and canvas.css, is no import of this module's: Lightning CSS
  * compiles it (core canvas-host.ts `SHEETS`), and index.html links it.
  */
@@ -28,7 +29,6 @@ import {
 import { createRoot } from "react-dom/client";
 import type { Map as YMap } from "yjs";
 import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with { type: "text" };
-import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
 import {
   heardFromHost,
   toHost as postToHost,
@@ -38,6 +38,7 @@ import { Icon } from "./icons";
 import { guardImages } from "./images";
 import { tokenMs } from "./motion";
 import { Rail } from "./rail";
+import { type CanvasHold, subscribeHold } from "./replica";
 import {
   bindScene,
   type CanvasInk,
@@ -45,12 +46,6 @@ import {
   sceneBox,
   tokenHex,
 } from "./scene";
-
-declare global {
-  interface Window {
-    cawcoArtifact: ArtifactGlobal;
-  }
-}
 
 /**
  * Embedded in a decision page (its Canvas, `?embed=1`, the overlay's tag
@@ -129,10 +124,10 @@ const schemeStore = {
   now: () => scheme,
 };
 
-/** The doc as the overlay holds it now: the first hold, and every one after. */
-let current: ArtifactHold | null = null;
+/** The doc as this page's replica holds it now (replica.ts): the first hold, and every one after. */
+let current: CanvasHold | null = null;
 const holdListeners = new Set<() => void>();
-window.cawcoArtifact.subscribe((hold) => {
+subscribeHold((hold) => {
   current = hold;
   for (const listener of holdListeners) {
     listener();
@@ -219,7 +214,7 @@ const byPos = (a: { pos: string }, b: { pos: string }) => {
  * their order and its files (Excalidraw's first scene), its pen mode, and
  * whether it is empty.
  */
-const firstLook = (hold: ArtifactHold | null) => {
+const firstLook = (hold: CanvasHold | null) => {
   const meta = hold?.doc.getMap("meta");
   const elements = (
     hold?.doc.getArray<YMap<unknown>>("elements").toArray() ?? []
@@ -367,7 +362,7 @@ function Unlinked({ why }: { why: string }) {
 }
 
 /** Why the canvas can't reach the hub, as the formula's middle clause. */
-const unlinkedBecause = (hold: ArtifactHold | null): string =>
+const unlinkedBecause = (hold: CanvasHold | null): string =>
   hold?.link.error ?? `It is still connecting to ${location.host}`;
 
 /**
@@ -380,7 +375,7 @@ const unlinkedBecause = (hold: ArtifactHold | null): string =>
  * lost link is refused once it has stood its 5 s (artifact.ts), and the
  * line shows then.
  */
-function useUnlinkedShown(hold: ArtifactHold | null): boolean {
+function useUnlinkedShown(hold: CanvasHold | null): boolean {
   const refused = hold?.refused ?? true;
   const hasSynced = hold?.hasSynced ?? false;
   const generation = hold?.generation ?? -1;
@@ -446,7 +441,7 @@ function Host() {
       if (gone) {
         return;
       }
-      bound = bindScene(api, () => holdStore.now() as ArtifactHold, {
+      bound = bindScene(api, () => holdStore.now() as CanvasHold, {
         ink,
         dark: () => schemeStore.now() === "dark",
       });

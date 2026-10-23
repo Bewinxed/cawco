@@ -9,9 +9,10 @@ import {
  * bound to the artifact's doc by y-excalidraw, the agent's writes converted
  * here, and the picture drawn for the agent.
  *
- * Two docs of the page's one Yjs (the overlay's, canvas-host/yjs.ts):
+ * Two docs of the page's one Yjs (this bundle's own):
  *
- * - `live`, the overlay's doc itself, synced with the hub: the agent's
+ * - `live`, the page's replica of the artifact's doc (replica.ts), which
+ *   the overlay's worker syncs with the hub: the agent's
  *   requests are claimed and answered here, and converted elements written
  *   here;
  * - `scene`, what Excalidraw is bound to: it takes what `live` hears only
@@ -52,10 +53,10 @@ import {
   type YEvent,
   Map as YMap,
 } from "yjs";
-import type { ArtifactHold } from "../preview-overlay/artifact";
 import { toHost } from "../preview-overlay/host-origin";
 import { bindingMade } from "./bound";
 import { clock, progressOf, tokenMs } from "./motion";
+import type { CanvasHold } from "./replica";
 import { HOLD_PX, seenByDoc, snapToShape, swapView } from "./snap";
 
 /** Origins of the page's own transactions. */
@@ -174,7 +175,7 @@ export interface BoundScene {
 /** Binds Excalidraw (`api`) to the artifact's doc (`hold`), converts the agent's writes, and draws the picture. */
 export function bindScene(
   api: ExcalidrawImperativeAPI,
-  hold: () => ArtifactHold,
+  hold: () => CanvasHold,
   options: { ink: CanvasInk; dark: () => boolean }
 ): BoundScene {
   const stops: (() => void)[] = [];

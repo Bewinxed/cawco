@@ -70,25 +70,12 @@ const INLINED_FONTS = () =>
   );
 
 /**
- * `yjs` in the host bundle is the overlay's (canvas-host/yjs.ts, which reads
- * `window.cawcoArtifact.Y`): the page runs one Yjs, and the doc it binds is
- * the overlay's, of the same classes.
- */
-const YJS = /^yjs$/;
-const overlayYjs: Bun.BunPlugin = {
-  name: "overlay-yjs",
-  setup(build) {
-    build.onResolve({ filter: YJS }, () => ({
-      path: join(HOST_DIR, "yjs.ts"),
-    }));
-  },
-};
-
-/**
  * Builds the host page's files, by name: Bun's bundle of its JS and the
  * stylesheet (`host.css`). React and Excalidraw built for production;
  * Mermaid's converter is its own chunk, loaded when the agent first sends
- * Mermaid. Yjs is not in it: the overlay's is (`overlayYjs`).
+ * Mermaid. Its Yjs is the page's one copy: the overlay keeps its own in a
+ * worker (agent preview-overlay doc-worker.ts), and hands the doc to the
+ * page's replica as updates (canvas-host replica.ts).
  */
 export async function buildCanvasHost(): Promise<Map<string, Blob>> {
   const [result, css] = await Promise.all([
@@ -106,7 +93,7 @@ async function bundleJs() {
     splitting: true,
     minify: true,
     conditions: ["production"],
-    plugins: [overlayYjs, agentReact, ...HOST_PLUGINS],
+    plugins: [agentReact, ...HOST_PLUGINS],
     define: {
       "process.env.NODE_ENV": '"production"',
     },

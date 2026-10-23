@@ -2,26 +2,42 @@
   /**
    * A note kept in a Yjs doc and written out as y-protocols' first sync
    * step: what a component sharing documents imports (the dashboard's
-   * comment rail, through y-websocket). `data-one-yjs` says whether its
-   * `Doc` is the overlay's (`window.cawcoArtifact.Y`), where an overlay runs
-   * in this page: the page's one Yjs.
+   * comment rail, through y-websocket). `data-defined` says every member it
+   * imports is there and Yjs's constructor checks hold (a nested map read
+   * back is a map); `data-overlay` whether CawCo's overlay runs in this page
+   * (`window.cawcoArtifact`), which brings no Yjs of its own into it.
    */
   import * as encoding from "lib0/encoding";
   import { writeSyncStep1 } from "y-protocols/sync";
-  import { Doc } from "yjs";
+  import {
+    applyUpdate,
+    Doc,
+    encodeStateAsUpdate,
+    encodeStateVector,
+    Map as YMap,
+    Text as YText,
+  } from "yjs";
 
   let { title = "Shared note" } = $props();
   const doc = new Doc();
   doc.getText("note").insert(0, "Kept in one document");
+  doc.getMap("card").set("reply", new YMap());
   const step = encoding.createEncoder();
   writeSyncStep1(step, doc);
-  const overlay = window.cawcoArtifact?.Y;
-  const one = overlay ? String(overlay.Doc === Doc) : "no overlay";
+  const copy = new Doc();
+  applyUpdate(copy, encodeStateAsUpdate(doc));
+  const defined =
+    [applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector, YMap, YText].every(
+      (one) => typeof one === "function"
+    ) &&
+    copy.getMap("card").get("reply") instanceof YMap &&
+    copy.getText("note").toString() === "Kept in one document";
+  const overlay = "cawcoArtifact" in window;
 </script>
 
-<section class="shared" data-one-yjs={one}>
+<section class="shared" data-defined={String(defined)} data-overlay={String(overlay)}>
   <h3><span>{title}</span></h3>
-  <p><span>{doc.getText("note").toString()}</span></p>
+  <p><span>{copy.getText("note").toString()}</span></p>
   <p><small>{encoding.length(step)} bytes in its first sync step</small></p>
 </section>
 

@@ -345,17 +345,16 @@ const canvasBoxes = (frame: Frame) =>
       const f = el.getBoundingClientRect();
       let scene: { width: number; height: number } | null = null;
       try {
+        // The canvas host's own replica of the doc (canvas-host replica.ts).
         const doc = (
           el.contentWindow as unknown as {
-            cawcoArtifact?: {
-              doc: {
-                getArray: (name: string) => {
-                  toArray: () => { get: (key: string) => unknown }[];
-                };
+            cawcoCanvasDoc?: {
+              getArray: (name: string) => {
+                toArray: () => { get: (key: string) => unknown }[];
               };
             };
           } | null
-        )?.cawcoArtifact?.doc;
+        )?.cawcoCanvasDoc;
         const els = (doc?.getArray("elements").toArray() ?? [])
           .map(
             (one) =>

@@ -280,7 +280,7 @@ export function previewFrame(
 async function servePage(
   artifactId: string,
   pathname: string,
-  deps: Pick<PreviewListenerDeps, "program" | "state">,
+  deps: Pick<PreviewListenerDeps, "program" | "seed">,
   /** The page's address as the browser asked for it: an embed's address is built from it. */
   reachedAt: URL,
   /** Where the page stands on its origin: its root, or the Decisions tab's `/__cawco/page/<id>/`. */
@@ -329,7 +329,7 @@ async function servePage(
   const program = deps.program(artifactId, reachedAt);
   const injected = injectOverlay(
     await body.text(),
-    { artifact: artifactId, state: deps.state(artifactId) },
+    { artifact: artifactId, ...deps.seed(artifactId) },
     program?.hash
   );
   const page = program
@@ -357,7 +357,7 @@ const serveBrowser = (
     new Response(
       injectOverlay(
         '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>',
-        { artifact: artifactId, state: deps.state(artifactId) }
+        { artifact: artifactId, ...deps.seed(artifactId) }
       ),
       { headers: { "content-type": "text/html; charset=utf-8" } }
     )
@@ -381,7 +381,7 @@ const HUB_SERVES: Record<
   page: servePage,
   preview: servePage,
   canvas: (artifactId, pathname, deps) =>
-    serveCanvas(artifactId, pathname, deps.state),
+    serveCanvas(artifactId, pathname, deps.seed),
   browser: serveBrowser,
 };
 
@@ -430,6 +430,8 @@ export interface PreviewListenerDeps {
   ) => { hash: string; media: string } | null;
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
+  /** A page artifact's doc as its overlay tag carries it (artifacts/docs.ts `seed`). */
+  seed: (artifactId: string) => { maps: string; state: string };
   send: ReturnType<typeof artifactSend>;
   /**
    * Whether origin `key` serves an artifact by its id: the origin that
@@ -450,8 +452,6 @@ export interface PreviewListenerDeps {
   socket: ReturnType<typeof artifactSocket>;
   /** Artifact `artifactId`'s stage answered its page through the relay (core `PREVIEW_SERVED_HEADER`): it is reachable. */
   stageAnswered: (artifactId: string) => void;
-  /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
-  state: (artifactId: string) => string;
   /** The machine's listener at `upstream` refused a connection: the next request reaches the preview again. */
   unreachable: (
     instanceId: string,
@@ -761,7 +761,7 @@ async function artifactById(
     const embed = url.searchParams.get("embed") === "1";
     return deps.servedOn(artifactId, instanceId) &&
       deps.kindOf(artifactId) === "canvas"
-      ? serveCanvas(artifactId, rest, deps.state, embed)
+      ? serveCanvas(artifactId, rest, deps.seed, embed)
       : new Response("This session has no such canvas.", { status: 404 });
   }
   const paged = pathname.match(PAGE_PATH);

@@ -24,9 +24,9 @@ import {
   replyToPin,
   resolvePin,
 } from "@cawco/core/comments";
+import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
-import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
 import { type Changes, startChanges } from "./changes";
@@ -88,7 +88,12 @@ const { tag } = here;
 let pageHash = tag?.dataset.pageHash ?? "";
 // A page the hub serves carries its artifact's doc, so it is filled before it paints.
 if (tag?.dataset.artifact && tag.dataset.state) {
-  artifact.seed(tag.dataset.artifact, tag.dataset.state, tag.dataset.kind);
+  artifact.seed(
+    tag.dataset.artifact,
+    tag.dataset.state,
+    tag.dataset.kind,
+    tag.dataset.maps
+  );
 }
 // Before any listener that stops a press: a morph waits for every pointer up.
 watchPointers();
@@ -2002,7 +2007,7 @@ function restoreDraft(message: HostMessage) {
   const parked = message.parked === true;
   const group =
     typeof target?.inkId === "string"
-      ? (artifact.doc().getMap("ink") as YMap<InkGroup>).get(target.inkId)
+      ? (artifact.doc().getMap("ink") as DocMap<InkGroup>).get(target.inkId)
       : undefined;
   const r = el.getBoundingClientRect();
   const fx = Number(target?.point?.x);
@@ -2107,7 +2112,7 @@ function startDraft(el: Element, x: number, y: number) {
 /** The radial's Comment on an ink group: its composer opens on the ink. */
 function composeInk(target: DraftTarget, elements: PinnedElement[] | string[]) {
   const group = target.ink
-    ? (artifact.doc().getMap("ink") as YMap<InkGroup>).get(target.ink)
+    ? (artifact.doc().getMap("ink") as DocMap<InkGroup>).get(target.ink)
     : undefined;
   if (!(group && artifact.keeps())) {
     return;
@@ -2475,7 +2480,7 @@ function groupPicture(id: string): Promise<string | null> {
 /** A pin's picture: its ink's, or the page round its element at its point. */
 function pinPicture(id: string): Promise<string | null> {
   const crop = pins.cropOf(id);
-  const pin = (artifact.doc().getMap("pins") as YMap<Pin>).get(id);
+  const pin = (artifact.doc().getMap("pins") as DocMap<Pin>).get(id);
   if (pin?.ink) {
     return groupPicture(pin.ink);
   }
@@ -2489,10 +2494,10 @@ function pinPicture(id: string): Promise<string | null> {
  */
 async function markPictures(): Promise<MarkPicture[]> {
   const doc = artifact.doc();
-  const all = [...(doc.getMap("pins") as YMap<Pin>).values()];
+  const all = [...(doc.getMap("pins") as DocMap<Pin>).values()];
   const owed = all.filter(pinUnsent).sort((a, b) => a.number - b.number);
   const pinned = new Set(all.map((pin) => pin.ink));
-  const loose = [...(doc.getMap("ink") as YMap<InkGroup>).values()].filter(
+  const loose = [...(doc.getMap("ink") as DocMap<InkGroup>).values()].filter(
     (group) => !(group.sentAt || pinned.has(group.id))
   );
   const marks = [
@@ -2595,7 +2600,7 @@ async function personWrite(
   const error = write(pin);
   // The pin as this page holds it now (null once deleted): a host drawing it
   // from the page (its own doc doesn't hold it yet) draws it again from this.
-  const now = (artifact.doc().getMap("pins") as YMap<Pin>).get(pin) ?? null;
+  const now = (artifact.doc().getMap("pins") as DocMap<Pin>).get(pin) ?? null;
   post(result, error ? { pin, ok: false, error, now } : { pin, ok: true, now });
 }
 
@@ -2780,7 +2785,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       paint();
       // The open thread's element and what holds it, for its card's chain line.
       const pin = id
-        ? (artifact.doc().getMap("pins") as YMap<Pin>).get(id)
+        ? (artifact.doc().getMap("pins") as DocMap<Pin>).get(id)
         : undefined;
       const el =
         pin && "selector" in pin.anchor ? locate(pin.anchor)?.el : undefined;

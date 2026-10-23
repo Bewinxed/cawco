@@ -116,8 +116,12 @@ export interface LinkProvider {
   wsLastMessageReceived: number;
 }
 
-/** The page's document as {@link watchSilence} reads it: core is typed without the DOM's. */
-interface ShownDocument {
+/**
+ * Whether the page is shown, as {@link watchSilence} reads it: the page's
+ * own document, or what a worker holding the socket's doc is told of it
+ * (agent preview-overlay doc-worker.ts). Core is typed without the DOM's.
+ */
+export interface ShownDocument {
   addEventListener: (type: "visibilitychange", listener: () => void) => void;
   removeEventListener: (type: "visibilitychange", listener: () => void) => void;
   visibilityState: string;
@@ -141,15 +145,16 @@ export interface StallWatch {
  * A hidden tab's timers run once a minute (Chromium's intensive wake-up
  * throttling), so the watch says nothing while the tab is hidden, and its
  * silence counts from the later of the last message and the tab's showing:
- * there y-websocket's own check stands, as before.
+ * there y-websocket's own check stands, as before. `page` says whether the
+ * page is shown.
  */
 export function watchSilence(
   provider: LinkProvider,
-  silent: () => void
+  silent: () => void,
+  page: ShownDocument
 ): StallWatch {
   let reopening = false;
   let shownAt = Date.now();
-  const page = (globalThis as unknown as { document: ShownDocument }).document;
   const shown = () => {
     if (page.visibilityState === "visible") {
       shownAt = Date.now();

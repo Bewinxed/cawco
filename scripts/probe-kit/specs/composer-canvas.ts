@@ -1794,21 +1794,19 @@ const syncCheck = async (on: On) => {
   }
   await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
   await settle(page, 300);
-  /** Elements the page's doc holds, drawn and not deleted. */
+  /** Elements the page's doc holds, drawn and not deleted: the canvas host's own replica of it (canvas-host replica.ts). */
   const counted = () =>
     frame.evaluate(
       () =>
         (
           window as unknown as {
-            cawcoArtifact: {
-              doc: {
-                getArray: (name: string) => {
-                  toArray: () => { get: (key: string) => unknown }[];
-                };
+            cawcoCanvasDoc: {
+              getArray: (name: string) => {
+                toArray: () => { get: (key: string) => unknown }[];
               };
             };
           }
-        ).cawcoArtifact.doc
+        ).cawcoCanvasDoc
           .getArray("elements")
           .toArray()
           .filter(
@@ -2125,20 +2123,19 @@ const pasteOrderCheck = async (on: On) => {
   await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
   await settle(page, 1000);
   const seen = await frame.evaluate(async () => {
-    const { doc } = (
+    // The canvas host's own replica of the doc (canvas-host replica.ts).
+    const doc = (
       window as unknown as {
-        cawcoArtifact: {
-          doc: {
-            getArray: (name: string) => {
-              toArray: () => { get: (key: string) => unknown }[];
-            };
-            getMap: (name: string) => { has: (key: string) => boolean };
-            on: (event: string, f: () => void) => void;
-            off: (event: string, f: () => void) => void;
+        cawcoCanvasDoc: {
+          getArray: (name: string) => {
+            toArray: () => { get: (key: string) => unknown }[];
           };
+          getMap: (name: string) => { has: (key: string) => boolean };
+          on: (event: string, f: () => void) => void;
+          off: (event: string, f: () => void) => void;
         };
       }
-    ).cawcoArtifact;
+    ).cawcoCanvasDoc;
     const files = doc.getMap("files");
     const images = () =>
       doc

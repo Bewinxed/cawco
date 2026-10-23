@@ -58,8 +58,8 @@ import {
   goneOf as tombstonesOf,
   wholePage,
 } from "@cawco/core/comments";
+import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
-import type { Map as YMap } from "yjs";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, rectOf } from "./frames";
@@ -389,7 +389,7 @@ export function startPins(deps: PinsDeps): Pins {
     "position:fixed;left:0;top:0;z-index:2147483646;overflow:visible;pointer-events:none;margin:0;padding:0;border:0";
   document.documentElement.append(fixed);
 
-  const pinsMap = () => artifact.doc().getMap("pins") as YMap<Pin>;
+  const pinsMap = () => artifact.doc().getMap("pins") as DocMap<Pin>;
   /**
    * Pin `id`'s thread opened in the host, carrying the pin as this page
    * holds it: a host whose own doc doesn't hold it yet (it reaches the

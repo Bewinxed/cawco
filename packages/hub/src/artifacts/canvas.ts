@@ -41,7 +41,7 @@ import { ArtifactRefusal } from "./service";
 export async function serveCanvas(
   artifactId: string,
   pathname: string,
-  state: (artifactId: string) => string,
+  seed: (artifactId: string) => { maps: string; state: string },
   embed = false
 ): Promise<Response> {
   if (pathname === "/") {
@@ -49,7 +49,7 @@ export async function serveCanvas(
       injectOverlay(await canvasHostPage(), {
         artifact: artifactId,
         kind: "canvas",
-        state: state(artifactId),
+        ...seed(artifactId),
         ...(embed ? { embed: "1" } : {}),
       }),
       {

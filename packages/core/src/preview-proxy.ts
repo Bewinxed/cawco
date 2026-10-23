@@ -34,8 +34,28 @@ function buildOverlay(): Promise<string> {
 }
 
 /**
+ * The overlay's doc worker (agent preview-overlay doc-worker.ts), the one
+ * place the overlay's Yjs runs: a minified IIFE, carried in the overlay as
+ * text and started from it as a blob, so the page's realm never evaluates
+ * a Yjs of CawCo's.
+ */
+async function bundleDocWorker(): Promise<string> {
+  const result = await bundled("The overlay's doc worker", {
+    entrypoints: [
+      new URL("../../agent/src/preview-overlay/doc-worker.ts", import.meta.url)
+        .pathname,
+    ],
+    target: "browser",
+    minify: true,
+    format: "iife",
+  });
+  return result.outputs[0].text();
+}
+
+/**
  * The overlay's one build: the agent's overlay.ts as a minified browser IIFE,
- * refused if it lowers `light-dark()`. A source checkout serves it in memory
+ * its doc worker's text in it ({@link bundleDocWorker}), refused if it
+ * lowers `light-dark()`. A source checkout serves it in memory
  * ({@link buildOverlay}); `build-binary.ts` writes it out to embed.
  */
 export async function bundleOverlay(): Promise<string> {
@@ -47,6 +67,7 @@ export async function bundleOverlay(): Promise<string> {
     target: "browser",
     minify: true,
     format: "iife",
+    define: { __CAWCO_DOC_WORKER__: JSON.stringify(await bundleDocWorker()) },
   });
   await refuseSchemeLowering("The preview overlay", result.outputs);
   return result.outputs[0].text();

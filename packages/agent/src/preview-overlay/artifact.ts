@@ -1,25 +1,33 @@
 /**
  * The page's hold on its artifact's document (Projects spec §5.10, D23): the
- * Yjs doc the hub keeps, joined by the overlay itself over the y-websocket
- * protocol on the path its host names in `cawco:hello` (the dashboard's
- * preview proxy in its frame, the hub's preview listener straight in the
- * app's web view). The page's picks, notes, values and fields are the doc's
- * `state`, written here within the bounds the hub keeps (`@cawco/core/choices`),
- * and every change to it, this page's, another view's or the agent's, is
- * heard back through {@link Watchers}.
+ * Yjs doc the hub keeps, joined over the y-websocket protocol on the path
+ * its host names in `cawco:hello` (the dashboard's preview proxy in its
+ * frame, the hub's preview listener straight in the app's web view). The
+ * page's picks, notes, values and fields are the doc's `state`, written here
+ * within the bounds the hub keeps (`@cawco/core/choices`), and every change
+ * to it, this page's, another view's or the agent's, is heard back through
+ * {@link Watchers}.
+ *
+ * The Yjs doc itself lives in the overlay's worker (doc-worker.ts), a realm
+ * of its own, so the page's realm holds no Yjs of CawCo's: a previewed app
+ * keeps its one copy of Yjs, or has none. The page holds the doc's mirror
+ * (mirror.ts), which the overlay reads and writes as it read the doc, and
+ * the doc's socket, which the worker speaks through (doc-wire.ts).
  *
  * A page the hub serves carries its doc in the overlay's tag
- * (`data-artifact`, `data-state`), so the page is filled from it before it
- * paints, and the socket only catches up.
+ * (`data-artifact`, `data-state` for the worker, `data-maps` for the
+ * mirror), so the page is filled from it before it paints, and the socket
+ * only catches up.
  *
- * The doc is kept on the device too, per artifact (y-indexeddb, its
- * IndexedDB provider): what the person marks while the link is down stays
- * through a reload and goes to the hub as the socket syncs again (the hub
- * asks for what it lacks on every open, artifacts/sync.ts). A write the hub
- * refused is cleared from the device with the doc that held it; the
- * person's comments in it the hub doesn't hold are kept aside on the
- * device with its reason, never let go ({@link artifact.refused}). A
- * browser that keeps no IndexedDB keeps nothing on the device.
+ * The doc is kept on the device too, per artifact (y-indexeddb, in the
+ * worker): what the person marks while the link is down stays through a
+ * reload and goes to the hub as the socket syncs again (the hub asks for
+ * what it lacks on every open, artifacts/sync.ts). A write the hub refused
+ * is cleared from the device with the doc that held it; the person's
+ * comments in it the hub doesn't hold are kept aside on the device with its
+ * reason, never let go ({@link artifact.refused}). A browser that keeps no
+ * IndexedDB keeps nothing on the device. Where the page may start no worker
+ * (a Content-Security-Policy that refuses one), the page keeps no doc.
  */
 import {
   CHOICE_LIMITS,
@@ -30,32 +38,18 @@ import {
 } from "@cawco/core/choices";
 import {
   goneOf,
-  honourDeletions,
   isSendControl,
   type MarkPictures,
   type Pin,
 } from "@cawco/core/comments";
-import {
-  ARTIFACT_GONE,
-  deviceDocName,
-  RESYNC_MS,
-  reopenStalled,
-  type StallWatch,
-  tendDeviceDocs,
-  watchSilence,
-} from "@cawco/core/doc-link";
-import { IndexeddbPersistence } from "y-indexeddb";
-import { WebsocketProvider } from "y-websocket";
-// biome-ignore lint/performance/noNamespaceImport: the whole of Yjs is what the overlay hands a page as its one copy (`SHARED_YJS`)
-import * as Yjs from "yjs";
-import { applyUpdate, Doc } from "yjs";
+import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
+import type { MapDoc } from "@cawco/core/doc-maps";
 import { here } from "./boot";
+import type { DeviceCopy, FromWorker, ToWorker } from "./doc-wire";
+import { Mirror } from "./mirror";
 
-/** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
-const REFUSED = 4400;
-
-/** Attempts in a row that never opened, after which the link is said lost. */
-const STALLS_LOST = 2;
+/** The doc worker's bundle (doc-worker.ts), its text put in by the overlay's build (core preview-proxy.ts `bundleOverlay`). */
+declare const __CAWCO_DOC_WORKER__: string;
 
 const KINDS = new Set(["page", "canvas", "preview", "component"]);
 
@@ -113,26 +107,6 @@ export interface Watchers {
   synced: () => void;
 }
 
-/**
- * Opens each socket through whatever `window.WebSocket` is when it opens, so
- * the overlay's own prefix patch, and any a page installs later, sees every
- * connection, a reconnect's included.
- */
-const LiveWebSocket = class {
-  constructor(url: string | URL, protocols?: string | string[]) {
-    // biome-ignore lint/correctness/noConstructorReturn: y-websocket constructs this, and the socket itself is what it gets.
-    return new window.WebSocket(url, protocols);
-  }
-} as unknown as typeof WebSocket;
-
-const decode = (base64: string): Uint8Array | null => {
-  try {
-    return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-  } catch {
-    return null;
-  }
-};
-
 const sameEntry = (a: ChoiceEntry | undefined, b: ChoiceEntry): boolean =>
   !!a &&
   a.note === b.note &&
@@ -140,16 +114,13 @@ const sameEntry = (a: ChoiceEntry | undefined, b: ChoiceEntry): boolean =>
   JSON.stringify(a.value) === JSON.stringify(b.value);
 
 /**
- * The doc the overlay holds, as a canvas's host page takes it
- * (`window.cawcoArtifact`): the doc itself, of the page's one Yjs (the host
- * bundle's `yjs` is this one, canvas-host/yjs.ts), so whatever the page
- * writes in it reaches the hub and every other view. With it, the artifact
- * once the host named it, and where it is synced (the host page posts its
- * picture beside it).
+ * The doc as a canvas's host page follows it (`window.cawcoArtifact`): which
+ * doc of the worker's it is now, and its link, so the host page keeps its
+ * own Yjs replica of it (canvas-host replica.ts) and says when the canvas
+ * can't reach the hub.
  */
 export interface ArtifactHold {
-  doc: Doc;
-  /** Which doc this is: it moves when the overlay replaces its doc (another artifact's, or one the hub refused). */
+  /** Which doc this is: it moves when the doc is replaced (another artifact's, or one the hub refused). */
   generation: number;
   /** The doc has synced with the hub since it was joined. */
   hasSynced: boolean;
@@ -161,35 +132,37 @@ export interface ArtifactHold {
    * first synced, and once a lost link has stood {@link LOST_REFUSES_MS}.
    */
   refused: boolean;
+  /** What the device kept of the doc is merged in, or there is none ({@link artifact.stored}). */
+  stored: boolean;
   sync: string | null;
 }
 
 /**
- * The Yjs every module of the page runs on where the overlay runs: the
- * whole of it, its module namespace, so the page loads no second copy. A
- * second copy logs "Yjs was already imported" and breaks the constructor
- * checks across the two (`instanceof Y.Map` false for a map made by the
- * other). The overlay's script runs before any of the page's, so its copy
- * is the first; a canvas's host page binds it by name (canvas-host/yjs.ts),
- * and a stage's Vite serves it as the page's `yjs` (agent stage-host
- * host.ts `cawcoYjs`), y-websocket's and y-protocols' imports included.
+ * What a canvas's host page takes from the overlay: the doc's hold now and
+ * every one after, and the doc itself as Yjs updates (the host page runs
+ * its own Yjs, which the overlay never brings into the page): its whole
+ * state, then each change, and the host page's own changes back.
  */
-const SHARED_YJS = Yjs;
-
-/** What a canvas's host page takes from the overlay: its Yjs, the doc now, and every doc after. */
 export interface ArtifactGlobal {
-  readonly doc: Doc;
+  /** The doc's mirror: its maps as the overlay reads them. */
+  readonly doc: MapDoc;
+  /** Doc `generation`'s whole state, then each change to it, as Yjs updates; until the returned stop. */
+  replicate: (
+    heard: (generation: number, update: Uint8Array) => void
+  ) => () => boolean;
+  /** A change the host page made to doc `generation`, as a Yjs update. */
+  send: (generation: number, update: Uint8Array) => void;
   subscribe: (holder: (hold: ArtifactHold) => void) => () => boolean;
-  readonly Y: typeof SHARED_YJS;
 }
 
+/** The doc's worker, once the page has a doc to keep; null before, and where the page may start none. */
+let worker: Worker | null = null;
+/** The page may start no worker here (its policy refused one): it keeps no doc. */
+let workerless = false;
+const tell = (message: ToWorker) => worker?.postMessage(message);
+
+const mirror = new Mirror((ops, seq) => tell({ type: "write", ops, seq }));
 let watchers: Watchers | null = null;
-let doc = new Doc();
-let provider: WebsocketProvider | null = null;
-/** {@link provider}'s silence watch (core doc-link.ts `watchSilence`), stopped with it. */
-let quiet: StallWatch | null = null;
-/** The doc kept on the device, once the artifact is joined. */
-let kept: IndexeddbPersistence | null = null;
 /**
  * What the device kept of the doc is merged in, or there is none to wait
  * for (no IndexedDB here, or it wouldn't open): until then the doc is the
@@ -206,7 +179,7 @@ let seeded: string | null = null;
 let seededKind: ArtifactRef["kind"] | null = null;
 let syncPath: string | null = null;
 const holders = new Set<(hold: ArtifactHold) => void>();
-let generation = 0;
+const replicas = new Set<(generation: number, update: Uint8Array) => void>();
 let link: Link = { state: "connecting", error: null, silent: false };
 /** The doc has synced with the hub since it was joined. */
 let everSynced = false;
@@ -214,12 +187,12 @@ let everSynced = false;
 let lostLong = false;
 let lostTimer: ReturnType<typeof setTimeout> | undefined;
 const hold = (): ArtifactHold => ({
-  doc,
-  generation,
+  generation: mirror.generation,
   hasSynced: everSynced,
   link,
   refused: !everSynced || lostLong,
   ref: joined,
+  stored,
   sync: syncPath,
 });
 const handed = () => {
@@ -266,24 +239,24 @@ const linked = (said: Omit<Link, "silent"> & { silent?: boolean }) => {
   handed();
 };
 
-/** Why a socket to the hub closed, as one clause. */
-const closedBecause = (event: CloseEvent | null): string =>
-  event
-    ? `Its link to ${location.host} closed (code ${event.code}${event.reason ? `: ${event.reason.slice(0, 80)}` : ""})`
-    : `Its link to ${location.host} stopped answering`;
-
 /**
- * The one global a canvas's host page takes the doc from, and its Yjs:
- * `subscribe` calls back at once and again whenever the doc is replaced or
- * joined, so the page binds to the doc the overlay syncs and never opens a
- * socket of its own; `Y` is the Yjs the page's bundle runs on, so the page
- * holds one copy of it and its types are the doc's.
+ * The one global a canvas's host page takes the doc from: `subscribe` calls
+ * back at once and again whenever the doc is replaced or joined, and
+ * `replicate` hands it the doc as Yjs updates, so the page binds its own
+ * Yjs doc to the one the overlay syncs and never opens a socket of its own.
+ * `doc` is the mirror, what a probe reads the doc's maps from.
  */
 const artifactGlobal: ArtifactGlobal = Object.freeze({
-  Y: SHARED_YJS,
   get doc() {
-    return doc;
+    return mirror;
   },
+  replicate: (replica: (generation: number, update: Uint8Array) => void) => {
+    replicas.add(replica);
+    tell({ type: "replicate" });
+    return () => replicas.delete(replica);
+  },
+  send: (generation: number, update: Uint8Array) =>
+    tell({ type: "replica-update", generation, update }),
   subscribe: (holder: (hold: ArtifactHold) => void) => {
     holders.add(holder);
     holder(hold());
@@ -299,94 +272,63 @@ let syncedOnce = new Promise<void>((resolve) => {
   whenSynced = resolve;
 });
 
-const observe = (own: Doc) => {
-  // A pin deleted anywhere stays deleted here, whatever a merge brings back
-  // of it (core comments.ts `honourDeletions`); its watch ends with the doc.
-  honourDeletions(own);
-  own.getMap("state").observe((event) => {
-    if (own === doc) {
-      watchers?.state(
-        new Set([...event.keysChanged]),
-        !event.transaction.local
-      );
-    }
-  });
-  own.getMap("meta").observe(() => {
-    if (own === doc) {
-      watchers?.meta();
-    }
-  });
-  for (const name of ["ink", "moved", "pins"]) {
-    own.getMap(name).observe((event) => {
-      if (own === doc) {
-        watchers?.ink();
-        if (name !== "moved" && event.transaction.local) {
-          watchers?.marked();
-        }
-        if (name !== "moved" && kept && event.transaction.origin === kept) {
-          restored = true;
-        }
-      }
-    });
-  }
-};
-observe(doc);
-
-/**
- * The joined artifact's doc kept on the device from now on, and what the
- * device kept of it merged in; the device's copies of artifacts no one has
- * opened lately let go (core `tendDeviceDocs`). Nothing is kept where the
- * browser keeps no IndexedDB (a sandboxed frame, storage refused). Once
- * the device's copy is in (or there is none), the pins are drawn again:
- * what waited on it ({@link artifact.stored}) goes on.
- */
-const keepOnDevice = () => {
-  if (!joined) {
-    return;
-  }
-  const none = () => {
-    stored = true;
+// The mirror's own watchers: what the overlay hears of the doc.
+mirror.getMap("state").observe((event) => {
+  watchers?.state(new Set([...event.keysChanged]), !event.transaction.local);
+});
+mirror.getMap("meta").observe(() => watchers?.meta());
+for (const name of ["ink", "moved", "pins"]) {
+  mirror.getMap(name).observe((event) => {
     watchers?.ink();
-  };
-  try {
-    if (!globalThis.indexedDB) {
-      none();
-      return;
+    if (name !== "moved" && event.transaction.local) {
+      watchers?.marked();
     }
+    if (name !== "moved" && event.transaction.origin === "kept") {
+      restored = true;
+    }
+  });
+}
+
+/** The page's sockets the worker speaks through, by its number for them. */
+const sockets = new Map<number, WebSocket>();
+
+/** Opens socket `id` for the worker through whatever `window.WebSocket` is now, so a patch the page installs sees it. */
+const openSocket = (id: number, url: string, protocols: string[]) => {
+  let socket: WebSocket;
+  try {
+    socket = new window.WebSocket(
+      url,
+      protocols.length > 0 ? protocols : undefined
+    );
   } catch {
-    none();
+    tell({ type: "socket-error", id });
+    tell({ type: "socket-close", id, code: 1006, reason: "", wasClean: false });
     return;
   }
-  tendDeviceDocs(joined.id);
-  stored = false;
-  const own = new IndexeddbPersistence(deviceDocName(joined.id), doc);
-  kept = own;
-  const loaded = () => {
-    if (kept === own) {
-      none();
-    }
+  socket.binaryType = "arraybuffer";
+  sockets.set(id, socket);
+  socket.onopen = () => tell({ type: "socket-open", id });
+  socket.onmessage = (event: MessageEvent<ArrayBuffer | string>) =>
+    tell({ type: "socket-message", id, data: event.data });
+  socket.onerror = () => tell({ type: "socket-error", id });
+  socket.onclose = (event) => {
+    sockets.delete(id);
+    tell({
+      type: "socket-close",
+      id,
+      code: event.code,
+      reason: event.reason,
+      wasClean: event.wasClean,
+    });
   };
-  own.whenSynced.then(loaded);
-  // A database that won't open gives nothing back: there is no copy to wait for.
-  own._db.catch(loaded);
 };
 
-/** Starts a fresh doc in place of the one held (another artifact's, or one the hub refused); the device keeps the old one's no longer. */
-const replaceDoc = () => {
-  quiet?.stop();
-  quiet = null;
-  provider?.destroy();
-  provider = null;
-  kept = null;
+/** The doc started again as `generation`: the mirror emptied, nothing of the hub's held until it syncs. */
+const restart = (generation: number) => {
+  mirror.reset(generation);
   stored = false;
   restored = false;
-  // Its device copy lets go with it (y-indexeddb destroys on the doc's destroy).
-  doc.destroy();
-  doc = new Doc();
-  generation += 1;
-  observe(doc);
   synced = false;
-  // The new doc holds nothing of the hub's until it syncs.
   everSynced = false;
   linked({ state: "connecting", error: null });
   syncedOnce = new Promise<void>((resolve) => {
@@ -436,8 +378,8 @@ const keepRefused = () => {
   }
   const { pins, why } = refusing;
   refusing = null;
-  const held = doc.getMap("pins");
-  const gone = goneOf(doc);
+  const held = mirror.getMap("pins");
+  const gone = goneOf(mirror);
   const at = new Date().toISOString();
   // One the hub holds deleted was deleted, not lost: it is not kept aside.
   const lost = Object.values(pins).filter(
@@ -455,103 +397,148 @@ const keepRefused = () => {
   watchers?.ink();
 };
 
-const connect = () => {
-  if (!(syncPath && joined)) {
+/** What the worker says. */
+const heard = (message: FromWorker) => {
+  switch (message.type) {
+    case "changes":
+      mirror.heard(message);
+      return;
+    case "connecting":
+      linked({
+        state: link.state === "lost" ? "lost" : "connecting",
+        error: link.error,
+      });
+      return;
+    case "lost":
+      linked({ state: "lost", error: message.error, silent: message.silent });
+      return;
+    case "synced":
+      linked({ state: "synced", error: null });
+      keepRefused();
+      if (!synced) {
+        synced = true;
+        whenSynced();
+        watchers?.synced();
+      }
+      // Marks the device gave back are on the hub now: their pictures go for the delivery that carries them.
+      if (restored) {
+        restored = false;
+        watchers?.marked();
+      }
+      return;
+    case "stored":
+      stored = true;
+      watchers?.ink();
+      handed();
+      return;
+    case "refused":
+      // What this page wrote the hub would not keep: the worker starts
+      // again from the hub's. The person's comments in it are never let
+      // go: once the hub's doc is in, each it doesn't hold is kept aside.
+      refusing = {
+        pins: message.pins as Record<string, Pin>,
+        why: message.reason || "The hub didn't keep it.",
+      };
+      restart(message.generation);
+      watchers?.refused(message.reason);
+      return;
+    case "replica":
+      for (const replica of replicas) {
+        replica(message.generation, message.update);
+      }
+      return;
+    case "socket-new":
+      openSocket(message.id, message.url, message.protocols);
+      return;
+    case "socket-send":
+      sockets.get(message.id)?.send(message.data);
+      return;
+    case "socket-close":
+      sockets.get(message.id)?.close(message.code, message.reason);
+      return;
+    default:
+      return;
+  }
+};
+
+/**
+ * The doc's worker, started once the page has a doc to keep: from the
+ * overlay's own text of it, as a blob of the page's origin, so its
+ * IndexedDB is the page's. Null where the page's policy refuses a worker:
+ * the page keeps no doc.
+ */
+const started = (): Worker | null => {
+  if (worker || workerless) {
+    return worker;
+  }
+  try {
+    const url = URL.createObjectURL(
+      new Blob([__CAWCO_DOC_WORKER__], { type: "text/javascript" })
+    );
+    worker = new Worker(url, { name: "cawco-doc" });
+    URL.revokeObjectURL(url);
+  } catch {
+    workerless = true;
+    return null;
+  }
+  worker.addEventListener("message", (event: MessageEvent<FromWorker>) =>
+    heard(event.data)
+  );
+  const shown = () =>
+    tell({ type: "shown", visible: document.visibilityState === "visible" });
+  document.addEventListener("visibilitychange", shown);
+  shown();
+  // A replica that asked before the page had a doc to keep.
+  if (replicas.size > 0) {
+    tell({ type: "replicate" });
+  }
+  return worker;
+};
+
+/**
+ * Where the joined doc is kept on the device: its database's name, the
+ * device's copies of artifacts no one has opened lately let go (core
+ * `tendDeviceDocs`); none where the browser keeps no IndexedDB (a
+ * sandboxed frame, storage refused).
+ */
+const deviceCopy = (id: string): DeviceCopy => {
+  try {
+    if (!globalThis.indexedDB) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  tendDeviceDocs(id);
+  return deviceDocName(id);
+};
+
+const decode = (base64: string): Uint8Array | null => {
+  try {
+    return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+};
+
+/** The mirror filled from the hub's embedded maps, as the worker's doc will hold them once seeded. */
+const fill = (maps: string) => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(maps);
+  } catch {
     return;
   }
-  const at = syncPath.lastIndexOf("/");
-  const scheme = location.protocol === "https:" ? "wss" : "ws";
-  const own = new WebsocketProvider(
-    `${scheme}://${location.host}${syncPath.slice(0, at)}`,
-    syncPath.slice(at + 1),
-    doc,
-    {
-      disableBc: true,
-      resyncInterval: RESYNC_MS,
-      WebSocketPolyfill: LiveWebSocket,
-      // A canvas's page is a screen: it converts the agent's writes. One
-      // embedded in a decision page only shows it.
-      params:
-        joined.kind === "canvas" && here.tag?.dataset.embed === undefined
-          ? { screen: "1" }
-          : ({} as Record<string, string>),
-    }
-  );
-  provider = own;
-  linked({
-    state: link.state === "lost" ? "lost" : "connecting",
-    error: link.error,
-  });
-  // An open socket silent for core `SILENT_MS` is lost now, the host told
-  // to say so at once; the watch opens it again.
-  quiet?.stop();
-  const silence = watchSilence(own, () => {
-    linked({
-      state: "lost",
-      error: `Its link to ${location.host} stopped answering`,
-      silent: true,
-    });
-  });
-  quiet = silence;
-  // An attempt that never opens is tried again (core doc-link.ts); the
-  // second in a row that never opened says the link is lost.
-  const stalls = reopenStalled(own, (inRow) => {
-    if (own === provider && inRow >= STALLS_LOST) {
-      linked({
-        state: "lost",
-        error: `Its link to ${location.host} didn't open`,
-      });
-    }
-  });
-  own.on("sync", (isSynced: boolean) => {
-    if (!isSynced || own !== provider) {
-      return;
-    }
-    linked({ state: "synced", error: null });
-    keepRefused();
-    if (!synced) {
-      synced = true;
-      whenSynced();
-      watchers?.synced();
-    }
-    // Marks the device gave back are on the hub now: their pictures go for the delivery that carries them.
-    if (restored) {
-      restored = false;
-      watchers?.marked();
-    }
-  });
-  own.on("connection-close", (event) => {
-    if (own !== provider || stalls.reopening() || silence.reopening()) {
-      return;
-    }
-    // The artifact was removed: nothing of it is kept on the device.
-    if (event?.code === ARTIFACT_GONE) {
-      kept?.clearData().catch(() => undefined);
-      kept = null;
-    }
-    if (event?.code !== REFUSED) {
-      linked({ state: "lost", error: closedBecause(event) });
-      return;
-    }
-    // What this page wrote the hub would not keep: start again from the
-    // hub's, the device's copy of it cleared first so it never comes back.
-    // The person's comments in it are never let go: once the hub's doc is
-    // in, each it doesn't hold is kept aside with the hub's reason.
-    const refusedCopy = kept;
-    refusing = {
-      pins: doc.getMap("pins").toJSON() as Record<string, Pin>,
-      why: event.reason || "The hub didn't keep it.",
-    };
-    replaceDoc();
-    watchers?.refused(event.reason);
-    (refusedCopy?.clearData() ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() => {
-        if (own === provider || provider === null) {
-          keepOnDevice();
-          connect();
-        }
-      });
+  if (!parsed || typeof parsed !== "object") {
+    return;
+  }
+  mirror.heard({
+    type: "changes",
+    generation: mirror.generation,
+    origin: "seed",
+    seq: 0,
+    set: parsed as Record<string, Record<string, unknown>>,
+    deleted: {},
   });
 };
 
@@ -560,26 +547,34 @@ export const artifact = {
     watchers = next;
   },
 
-  /** The doc the hub embedded in the page's overlay tag, for `id`, and its kind (a page's, unless it says canvas). */
-  seed: (id: string, state: string, kind: string | undefined) => {
+  /**
+   * The doc the hub embedded in the page's overlay tag, for `id`: its Yjs
+   * update for the worker, and its maps for the mirror, so the page is
+   * filled before it paints; and its kind (a page's, unless it says canvas).
+   */
+  seed: (
+    id: string,
+    state: string,
+    kind: string | undefined,
+    maps: string | undefined
+  ) => {
     const update = decode(state);
-    if (!update) {
+    if (!(update && started())) {
       return;
     }
-    try {
-      applyUpdate(doc, update, "seed");
-      seeded = id;
-      seededKind = kind === "canvas" ? "canvas" : "page";
-      handed();
-    } catch {
-      // Not a Yjs update: the socket brings the doc instead.
+    tell({ type: "seed", update });
+    if (maps) {
+      fill(maps);
     }
+    seeded = id;
+    seededKind = kind === "canvas" ? "canvas" : "page";
+    handed();
   },
 
   /**
    * The host's word on which artifact this page is (`cawco:hello`): the doc
-   * joins it, once. Null when the host named none or named it wrongly, and
-   * the page runs without state.
+   * joins it, once. Null when the host named none or named it wrongly, or
+   * the page may keep no doc, and the page runs without state.
    */
   join: (artifactValue: unknown, sync: unknown): ArtifactRef | null => {
     const raw = artifactValue as Partial<ArtifactRef> | null | undefined;
@@ -590,7 +585,8 @@ export const artifact = {
       typeof raw.name === "string" &&
       typeof raw.kind === "string" &&
       KINDS.has(raw.kind) &&
-      path?.[1] === raw.id
+      path?.[1] === raw.id &&
+      started()
     )) {
       if (status === "waiting") {
         status = "none";
@@ -601,23 +597,35 @@ export const artifact = {
       return joined;
     }
     if (joined || (seeded && seeded !== raw.id)) {
-      replaceDoc();
+      const next = mirror.generation + 1;
+      tell({ type: "replace", generation: next });
+      restart(next);
     }
     joined = { id: raw.id, kind: raw.kind, name: raw.name.slice(0, 200) };
     syncPath = sync as string;
     status = "joined";
     loadRefused(joined.id);
-    keepOnDevice();
-    connect();
+    stored = false;
+    const at = syncPath.lastIndexOf("/");
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    tell({
+      type: "join",
+      url: `${scheme}://${location.host}${syncPath.slice(0, at)}`,
+      room: syncPath.slice(at + 1),
+      // A canvas's page is a screen: it converts the agent's writes. One
+      // embedded in a decision page only shows it.
+      params:
+        joined.kind === "canvas" && here.tag?.dataset.embed === undefined
+          ? { screen: "1" }
+          : {},
+      device: deviceCopy(joined.id),
+    });
     handed();
     return joined;
   },
 
   /** The host's Try again (`cawco:reconnect`): the socket closed and opened again now, not at its backoff's next turn. */
-  reconnect: () => {
-    provider?.disconnect();
-    provider?.connect();
-  },
+  reconnect: () => tell({ type: "reconnect" }),
 
   /** The kind of artifact this page is, once known. */
   kind: (): ArtifactRef["kind"] | null => joined?.kind ?? seededKind,
@@ -625,8 +633,8 @@ export const artifact = {
   /** The artifact this page is, by id, once known. */
   id: (): string | null => joined?.id ?? seeded,
 
-  /** The doc as it is now: the ink (ink.ts) reads and writes its `ink`, `moved` and `pins`. */
-  doc: (): Doc => doc,
+  /** The doc as it is now, its mirror: the ink (ink.ts) reads and writes its `ink`, `moved` and `pins`. */
+  doc: (): MapDoc => mirror,
 
   /** The person's comments the hub refused, each with its reason (`notSent`), kept on the device. */
   refused: (): Pin[] => refusedPins,
@@ -654,7 +662,7 @@ export const artifact = {
     const { notSent: _why, ...again } = pin;
     refusedPins = refusedPins.filter((one) => one.id !== id);
     storeRefused();
-    doc.transact(() => doc.getMap("pins").set(id, again));
+    mirror.transact(() => mirror.getMap("pins").set(id, again));
     return true;
   },
 
@@ -679,10 +687,10 @@ export const artifact = {
   whenKnown: (): Promise<void> =>
     synced || seeded !== null ? Promise.resolve() : syncedOnce,
 
-  state: (): State => doc.getMap("state").toJSON() as State,
+  state: (): State => mirror.getMap("state").toJSON() as State,
 
   meta: () => {
-    const meta = doc.getMap("meta");
+    const meta = mirror.getMap("meta");
     return {
       pageHash: (meta.get("pageHash") as string | undefined) ?? null,
       revision: (meta.get("revision") as number | undefined) ?? null,
@@ -694,8 +702,8 @@ export const artifact = {
     if (status === "none") {
       return NO_ARTIFACT;
     }
-    const state = doc.getMap("state");
-    const before = state.get(change.choice) as ChoiceEntry | undefined;
+    const state = mirror.getMap<ChoiceEntry>("state");
+    const before = state.get(change.choice);
     if (!before && state.size >= CHOICE_LIMITS.perArtifact) {
       return `An artifact keeps at most ${CHOICE_LIMITS.perArtifact} ids.`;
     }

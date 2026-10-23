@@ -248,10 +248,14 @@ export function joinArtifact(
 
   /** An open socket that heard nothing for core `SILENT_MS`: said at once, the silence its grace; the watch reopens it. */
   const watchQuiet = (joined: WebsocketProvider) =>
-    watchSilence(joined, () => {
-      clearDown();
-      sayDown(SILENT_WHY);
-    });
+    watchSilence(
+      joined,
+      () => {
+        clearDown();
+        sayDown(SILENT_WHY);
+      },
+      document
+    );
 
   const ours = (close: () => void) => {
     closingOurs = true;

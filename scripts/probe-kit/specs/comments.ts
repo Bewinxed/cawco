@@ -246,9 +246,22 @@
  *   whose scroll container scrolls too little, lifted into room under the
  *   container's foot; each sheet closed, the page's and the container's
  *   scroll are their own, the container's children and styles as they were.
+ * And the overlay's own Yjs kept out of the page (its doc in a worker of
+ * its own, preview-overlay doc-worker.ts):
+ * y1. The page artifact, which imports no Yjs, runs none: Yjs's word in its
+ *    realm (`globalThis['__ $YJS$ __']`, which its module sets as it loads)
+ *    is unset, and it loaded no Yjs module.
+ * y2. A dev server's app that imports its own Yjs (`/yjs.js`), previewed
+ *    through the machine's proxy: nothing says "Yjs was already imported";
+ *    its realm ran one Yjs, the one module it loaded, whose constructor
+ *    checks hold; and a comment on its paragraph is written, anchored on
+ *    it, and goes to the session by itself.
  * The captures for the reviewer (light and dark, desk and 390) are written
  * under the run's output folder (`kit.out`/commenting); nothing here opens
  * them.
+ *
+ *   bun scripts/probe-kit/run.ts comments
+ *   bun scripts/probe-kit/run.ts comments --leg yjs   # y1 and y2 alone
  */
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "node:fs";
@@ -665,6 +678,173 @@ const near = (
   Math.abs(a.w - b.w) <= slack &&
   Math.abs(a.h - b.h) <= slack;
 
+/** What Yjs logs when a second copy of it loads into a realm (yjs src/index.js). */
+const YJS_TWICE = /Yjs was already imported/;
+/** `--leg yjs`: y1 and y2 alone. */
+const ONLY_LEG = process.argv.includes("--leg")
+  ? process.argv[process.argv.indexOf("--leg") + 1]
+  : undefined;
+
+/**
+ * What a page's realm ran of Yjs, read in it: Yjs's own word that a copy
+ * ran there (`globalThis['__ $YJS$ __']`, yjs src/index.js), the Yjs modules
+ * it loaded, and what the app's own Yjs said of its types (y2's app).
+ */
+const realmYjs = (frame: Frame) =>
+  frame.evaluate(() => ({
+    ran: (globalThis as Record<string, unknown>)["__ $YJS$ __"] === true,
+    loads: performance
+      .getEntriesByType("resource")
+      .map((one) => one.name)
+      .filter((name) => name.includes("yjs")),
+    own: (window as unknown as { ownYjs?: string }).ownYjs ?? null,
+  }));
+
+/** y1. The page artifact, which imports no Yjs, runs none. */
+const noYjsCheck = async (on: On, frame: Frame) => {
+  const realm = await realmYjs(frame);
+  on.kit.check(
+    `y1: the page artifact, which imports no Yjs, runs none: Yjs's word in its realm unset and no Yjs module loaded (ran ${realm.ran}; loaded ${realm.loads.join(", ") || "none"})`,
+    !realm.ran && realm.loads.length === 0
+  );
+};
+
+/** y2's app: a paragraph to comment on, and a line its own Yjs fills. */
+const OWN_YJS_APP = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Shared notes</title>
+<style>body { margin: 0; padding: 24px 29px; font: 16px/1.5 system-ui; }</style></head>
+<body><p id="para">The app keeps its notes in a Yjs document of its own.</p><p id="own">Not loaded.</p>
+<script type="module" src="/app.js"></script></body></html>`;
+/** y2's app's script: a nested map through a copy of its doc, read back as a map, its constructor checks holding. */
+const OWN_YJS_SCRIPT = `import * as Y from "/yjs.js";
+const doc = new Y.Doc();
+doc.getMap("notes").set("reply", new Y.Map());
+const copy = new Y.Doc();
+Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc));
+const kept = copy.getMap("notes").get("reply") instanceof Y.Map;
+window.ownYjs = kept ? "kept" : "broken";
+document.getElementById("own").textContent = kept ? "Its own Yjs keeps its types." : "Its own Yjs broke its types.";`;
+
+/** y2. A dev server's app with its own Yjs, previewed: one Yjs in its realm, no warning, and comments on it. */
+const ownYjsChecks = async (on: On) => {
+  const built = await Bun.build({
+    entrypoints: [Bun.resolveSync("yjs", ROOT)],
+    target: "browser",
+    format: "esm",
+    minify: true,
+  });
+  const [bundle] = built.outputs;
+  if (!(built.success && bundle)) {
+    on.kit.check("y2: the app's Yjs builds", false, built.logs.join("; "));
+    return;
+  }
+  const yjs = await bundle.text();
+  const twice: string[] = [];
+  const listen = (message: { text: () => string; type: () => string }) => {
+    if (YJS_TWICE.test(message.text())) {
+      twice.push(`[${message.type()}] ${message.text().slice(0, 160)}`);
+    }
+  };
+  on.page.on("console", listen);
+  const script = { "content-type": "text/javascript; charset=utf-8" };
+  const app = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname } = new URL(request.url);
+      if (pathname === "/yjs.js") {
+        return new Response(yjs, { headers: script });
+      }
+      if (pathname === "/app.js") {
+        return new Response(OWN_YJS_SCRIPT, { headers: script });
+      }
+      return new Response(OWN_YJS_APP, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    },
+  });
+  try {
+    await on.call(CREATE, {
+      kind: "preview",
+      does: "try",
+      ask: "Try the notes app and say whether it works",
+      name: "shared-notes",
+      port: app.port,
+    });
+    const frame = (await until(
+      "the notes app in the pane, its own Yjs run",
+      async () => {
+        const one = await pageFrame(on);
+        const said = await one
+          .locator("#own")
+          .textContent({ timeout: 1000 })
+          .catch(() => null);
+        return said && said !== "Not loaded." ? one : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+    await settle(on.page, 600);
+    const realm = await realmYjs(frame);
+    on.kit.check(
+      `y2: an app with its own Yjs, previewed: nothing says "Yjs was already imported", and its realm ran one Yjs, the one module it loaded, its constructor checks holding (${twice.length} found; ran ${realm.ran}; loaded ${realm.loads.join(", ")}; its types ${realm.own})`,
+      twice.length === 0 &&
+        realm.ran &&
+        realm.loads.length === 1 &&
+        !!realm.loads[0]?.endsWith("/yjs.js") &&
+        realm.own === "kept",
+      twice.join("\n    ")
+    );
+
+    const comment = on.page.locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+    );
+    await comment.click();
+    await pageInComment(frame, true);
+    const before = Object.keys((await docOf(frame)).pins).length;
+    const para = await screenBox(on, frame, "#para");
+    const press = await commentAt(
+      on,
+      frame,
+      para.x + para.w * 0.3,
+      para.y + para.h / 2,
+      "Keep the notes in one place."
+    );
+    const pins = await until(
+      "the paragraph's pin in the doc",
+      async () => (await docOf(frame)).pins,
+      (all) => Object.keys(all).length > before,
+      10_000
+    ).catch(() => ({}) as Pins);
+    const made = Object.values(pins).sort(
+      (a, b) => Number(b.number) - Number(a.number)
+    )[0] as { anchor: { selector: string }; id: string } | undefined;
+    const onPara = made
+      ? await frame.evaluate(
+          (selector) => document.querySelector(selector)?.id === "para",
+          made.anchor.selector
+        )
+      : false;
+    const sent = made
+      ? await until(
+          "the app's pin gone to the session",
+          async () =>
+            (await docOf(frame)).pins[made.id] as
+              { sentAt?: string } | undefined,
+          (pin) => !!pin?.sentAt,
+          DELIVERY_MS + QUIET_MS
+        ).catch(() => null)
+      : null;
+    on.kit.check(
+      `y2: a comment on the app's paragraph is written, anchored on it, and goes to the session by itself (press ${JSON.stringify(press)}; anchor ${JSON.stringify(made?.anchor)}; sent ${String((sent as { sentAt?: string } | null)?.sentAt)})`,
+      press.shown && press.gone && !!made && onPara && !!sent?.sentAt
+    );
+    await on.page.keyboard.press("Escape");
+    await on.page.keyboard.press("Escape");
+  } finally {
+    on.page.off("console", listen);
+    await app.stop(true);
+  }
+};
+
 const run = async (kit: Kit) => {
   const on = await setUp(kit);
   try {
@@ -695,6 +875,11 @@ const runOn = async (kit: Kit, on: On) => {
   const frame = await pageFrame(on);
   await frame.waitForSelector("#para");
   await settle(on.page, 400);
+  await noYjsCheck(on, frame);
+  if (ONLY_LEG === "yjs") {
+    await ownYjsChecks(on);
+    return;
+  }
 
   const one = await commentChecks(on, frame);
   const two = await inkCommentChecks(on, frame);
@@ -711,6 +896,7 @@ const runOn = async (kit: Kit, on: On) => {
   for (const checks of [
     () => tapAndDeleteChecks(on, frame),
     () => frameChecks(on),
+    () => ownYjsChecks(on),
     () => embedChecks(on),
     () => scaledFrameChecks(on),
     () => scrollChecks(on, "window"),
@@ -8562,13 +8748,26 @@ const pinSendChecks = async (on: On) => {
     (pins) => !!pinNumbered(pins, 1)?.sentAt && !!pinNumbered(pins, 2)?.sentAt,
     DELIVERY_MS + QUIET_MS
   ).catch(pinsNow);
-  const told = heard
-    .slice(heardBefore)
-    .filter((one) => NOTICE.test(one.last) && one.last.includes("pin-send"))
-    .map((one) => one.last)
-    .join("\n");
   const first = pinNumbered(sent, 1);
   const second = pinNumbered(sent, 2);
+  // The hub stamps a pin sent as it hands the delivery over; the session's
+  // turn hears it after, on its own clock.
+  const toldNow = () =>
+    heard
+      .slice(heardBefore)
+      .filter((one) => NOTICE.test(one.last) && one.last.includes("pin-send"))
+      .map((one) => one.last)
+      .join("\n");
+  const told = await until(
+    "both comments heard by the session",
+    async () => toldNow(),
+    (said) =>
+      !!first &&
+      !!second &&
+      said.includes(first.id) &&
+      said.includes(second.id),
+    DELIVERY_MS
+  ).catch(toldNow);
   await settle(on.page, 400);
   const unsentRows = await rail
     .locator('[data-slot="pin-row"] [data-line="back"]', { hasText: "Unsent" })

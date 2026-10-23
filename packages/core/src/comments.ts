@@ -47,8 +47,9 @@
  * changes ({@link honourDeletions}), so a deletion made anywhere, while any
  * link is down, wins every merge, and every copy converges on "deleted".
  */
-import type { Doc, Map as YMap } from "yjs";
+
 import { humanSize } from "./attachments";
+import type { DocMap, MapDoc } from "./doc-maps";
 import type { PreviewElement } from "./index";
 import type { InkGroup } from "./ink";
 
@@ -339,7 +340,7 @@ export const newAnswer = (pin: Pin): boolean => {
 };
 
 /** Pin `pin` as looked at, at `at`: what {@link newAnswer} reads it by. */
-export function seePin(doc: Doc, pin: string, at: string): void {
+export function seePin(doc: MapDoc, pin: string, at: string): void {
   const held = pinsOf(doc).get(pin);
   if (held && (held.seenAt ?? "") < at) {
     doc.transact(() => pinsOf(doc).set(pin, { ...held, seenAt: at }));
@@ -385,11 +386,11 @@ export const CHANGES_LIMIT = 100;
  * revision, the anchors he has stepped onto or pressed, his Send marking
  * all of them. Written by the person, so it holds on every device.
  */
-export const seenOf = (doc: Doc) => doc.getMap("seen") as YMap<string[]>;
+export const seenOf = (doc: MapDoc) => doc.getMap("seen") as DocMap<string[]>;
 
 /** The anchors of revision `revision`'s changes the person has looked at, written as seen. */
 export function seeChanges(
-  doc: Doc,
+  doc: MapDoc,
   revision: number,
   anchors: string[]
 ): void {
@@ -704,16 +705,16 @@ const entryId = (): string => {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 };
 
-const pinsOf = (doc: Doc) => doc.getMap("pins") as YMap<Pin>;
+const pinsOf = (doc: MapDoc) => doc.getMap("pins") as DocMap<Pin>;
 
 /** The doc's tombstones: each deleted pin's id, and when it was deleted. */
-export const goneOf = (doc: Doc) => doc.getMap("gone") as YMap<string>;
+export const goneOf = (doc: MapDoc) => doc.getMap("gone") as DocMap<string>;
 
 /**
  * Pin `id` deleted from `doc`: its tombstone written ({@link goneOf}) and
  * the pin let go, in the caller's transaction when there is one.
  */
-export function buryPin(doc: Doc, id: string, at: string): void {
+export function buryPin(doc: MapDoc, id: string, at: string): void {
   doc.transact(() => {
     const gone = goneOf(doc);
     if (!gone.has(id)) {
@@ -732,7 +733,7 @@ export const HONOUR_ORIGIN = "gone";
  * view), and of any it holds now: a write that stood a deleted pin up again
  * is undone in the next transaction. Returns the watch's end.
  */
-export function honourDeletions(doc: Doc): () => void {
+export function honourDeletions(doc: MapDoc): () => void {
   const pins = pinsOf(doc);
   const gone = goneOf(doc);
   const sweep = () => {
@@ -795,7 +796,11 @@ function personEntry(
  * until their Send; the refusal's sentence when they were not kept, and
  * nothing was written.
  */
-export function replyToPin(doc: Doc, pin: string, said: Said): string | null {
+export function replyToPin(
+  doc: MapDoc,
+  pin: string,
+  said: Said
+): string | null {
   const held = pinsOf(doc).get(pin);
   if (!held) {
     return "This pin is gone from the page, so the reply wasn't kept.";
@@ -832,7 +837,7 @@ export interface CommentTarget {
  * said in it. The pin, or the refusal's sentence when nothing was written.
  */
 export function commentOn(
-  doc: Doc,
+  doc: MapDoc,
   target: CommentTarget,
   said: Said,
   id: string = entryId()
@@ -868,7 +873,7 @@ export function commentOn(
  * the pin is gone, and nothing was written.
  */
 export function resolvePin(
-  doc: Doc,
+  doc: MapDoc,
   pin: string,
   resolved: boolean
 ): string | null {
@@ -897,7 +902,7 @@ export function resolvePin(
  * The pin's tombstone stays in the doc ({@link buryPin}): no later write of
  * it, from any device, stands it up again.
  */
-export function deletePin(doc: Doc, pin: string): string | null {
+export function deletePin(doc: MapDoc, pin: string): string | null {
   const pins = pinsOf(doc);
   const held = pins.get(pin);
   if (!held) {

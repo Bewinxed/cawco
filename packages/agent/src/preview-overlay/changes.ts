@@ -17,7 +17,7 @@
  * look at it (`cawco:change-pressed`).
  */
 import type { PageAnchor, Pin } from "@cawco/core/comments";
-import type { Map as YMap } from "yjs";
+import type { DocMap } from "@cawco/core/doc-maps";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
 
@@ -130,7 +130,7 @@ export function startChanges(deps: ChangesDeps): Changes {
 
   /** The stops in page order: each change with the pins in, holding or inside it; each other pin; changes not on the page last. */
   function tellStops() {
-    const pins = artifact.doc().getMap("pins") as YMap<Pin>;
+    const pins = artifact.doc().getMap("pins") as DocMap<Pin>;
     const stops: Stop[] = anchors.map((anchor) => ({
       anchors: [anchor],
       el: elementOf(anchor),

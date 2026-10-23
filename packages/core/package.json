@@ -72,6 +72,7 @@
     "./comments": "./src/comments.ts",
     "./pin-name": "./src/pin-name.ts",
     "./doc-link": "./src/doc-link.ts",
+    "./doc-maps": "./src/doc-maps.ts",
     "./stage": "./src/stage.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./decision-host": "./src/decision-host.ts",
