@@ -809,7 +809,9 @@ export interface DbShape {
   readonly dateStoredSessions: (
     machineId: string,
     liveIds: string[],
-    resumableAt?: Record<string, number>
+    resumableAt?: Record<string, number>,
+    /** Told once the dates, written a chunk a turn after this returns, are in. */
+    written?: () => void
   ) => number;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
@@ -1258,6 +1260,8 @@ export interface DbShape {
    * from is history, and history survives a restart. Only reachability is reset.
    */
   readonly markAllAgentsOffline: () => void;
+  /** Where the fleet's marketplace `name` comes from; undefined for none. */
+  readonly marketplaceSource: (name: string) => string | undefined;
   /**
    * An attach to a process sessiond still holds is on its way: a row filed
    * asleep, failed or unknown is `starting` until its `init` or a beat lists
@@ -1320,6 +1324,8 @@ export interface DbShape {
   readonly moveRows: () => MoveRow[];
   /** The project moves that name a machine: a Cancel it has not heard, or a step on it or reading from it. */
   readonly moveRowsOn: (machineId: string) => MoveRow[];
+  /** Every machine by its id and hostname, in {@link listAgents}' order: what a machine's name is read from. */
+  readonly namedMachines: () => { hostname: string; machineId: string }[];
   /**
    * Gives the session its name. The owner's always lands; the session's own
    * (`set_title`) is refused once the owner has named it, and the answer
@@ -2247,6 +2253,8 @@ export interface DbShape {
     runId: string,
     instanceIds: string[]
   ) => void;
+  /** Where the fleet's skill `name` comes from; undefined for none. */
+  readonly skillSource: (name: string) => string | undefined;
   /** Names of fleet skills installed at or after `since`. */
   readonly skillsInstalledSince: (since: Date) => string[];
   /**
@@ -4253,12 +4261,126 @@ const make = async (path: string): Promise<DbShape> => {
    * (OpenCode's) arrives on a beat after the register and is written the same
    * way.
    */
+  /**
+   * Each enabled skill's and plugin's files, by the hash its row names: read
+   * from its row only when that hash is new. The fleet's config is built for
+   * every machine's welcome and delta, and it read and parsed every skill's
+   * and plugin's files each time, 78 MB on the live hub, 267 ms a build
+   * (hub-restart-live-db, 2026-10-23). A row's hash is its files' (fleet
+   * `hashSkillFiles`), so a kept copy under the same hash is those files.
+   */
+  const filesKept = new Map<string, { files: SkillFile[]; hash: string }>();
+  const keptFiles = (
+    key: string,
+    hash: string,
+    read: () => SkillFile[] | null | undefined
+  ): SkillFile[] | undefined => {
+    const held = filesKept.get(key);
+    if (held?.hash === hash) {
+      return held.files;
+    }
+    const files = read() ?? undefined;
+    if (files) {
+      filesKept.set(key, { files, hash });
+    } else {
+      filesKept.delete(key);
+    }
+    return files;
+  };
   /** Sessions whose newest send is read at once by {@link dateStoredSessions}: well inside SQLite's bound on a statement's parameters. */
   const DATED_CHUNK = 500;
+  /**
+   * Sessions dated in one statement, a turn apart: on the live database a
+   * chunk of 500 took up to 670 ms, so 100 keeps each well inside a probe.
+   */
+  const DATES_WRITTEN_AT_ONCE = 100;
+  /** Sessions whose date waits in a later chunk ({@link dateStoredSessions}): a call meanwhile leaves them to it. */
+  const dating = new Set<string>();
+  /** One chunk of sessions' dates, in one statement. */
+  const writeDates = (chunk: { at: number; id: string }[]): void => {
+    db.run(
+      sql`WITH dated(id, at) AS (VALUES ${sql.join(
+        chunk.map((row) => sql`(${row.id}, ${row.at})`),
+        sql`, `
+      )}) UPDATE instances SET updated_at = (SELECT at FROM dated WHERE dated.id = instances.id) WHERE id IN (SELECT id FROM dated)`
+    );
+  };
+  /** Which of `sessions` sent a keep-alive last ({@link dateStoredSessions}). */
+  const newestKeptAlive = (sessions: string[]): Set<string> => {
+    // Whether each one's newest send is a keep-alive: its origin alone, read
+    // in SQLite, never the whole body (a brief's words, kilobytes each). One
+    // pass over each session's sends, grouped: a bare column beside max()
+    // is read off the row that holds the max ("all bare columns in the
+    // result set take values from an input row which also contains the
+    // minimum or maximum", https://sqlite.org/lang_select.html, 2.5 Bare
+    // columns in an aggregate query). The newest found by a
+    // subquery per send read a session's every send once for each of them:
+    // 45 s for the 5,206 sends of one, the hub's thread held all that time
+    // through its machine's register (nightly 5224, 2026-10-23).
+    const keptAlive = new Set<string>();
+    for (let from = 0; from < sessions.length; from += DATED_CHUNK) {
+      const ids = sessions.slice(from, from + DATED_CHUNK);
+      for (const send of db
+        .select({
+          instanceId: sentMessages.instanceId,
+          kind: sql<
+            string | null
+          >`json_extract(${sentMessages.body}, '$.origin.kind')`,
+          name: sql<
+            string | null
+          >`json_extract(${sentMessages.body}, '$.origin.name')`,
+          newest: sql<number>`max(${sentMessages.acceptedAt})`,
+        })
+        .from(sentMessages)
+        .where(inArray(sentMessages.instanceId, ids))
+        .groupBy(sentMessages.instanceId)
+        .all()) {
+        if (send.kind === "system" && send.name === "keepalive") {
+          keptAlive.add(send.instanceId);
+        }
+      }
+    }
+    return keptAlive;
+  };
+  /** `chunks` of dates written a turn apart, then `written` told ({@link dateStoredSessions}). */
+  const writeDatesLater = (
+    machineId: string,
+    chunks: { at: number; id: string }[][],
+    written?: () => void
+  ): void => {
+    if (chunks.length === 0) {
+      return;
+    }
+    for (const chunk of chunks) {
+      for (const row of chunk) {
+        dating.add(row.id);
+      }
+    }
+    const later = async () => {
+      for (const chunk of chunks) {
+        // biome-ignore lint/performance/noAwaitInLoops: one chunk a turn, so the hub answers between them
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        try {
+          writeDates(chunk);
+        } finally {
+          for (const row of chunk) {
+            dating.delete(row.id);
+          }
+        }
+      }
+      written?.();
+    };
+    later().catch((error: unknown) =>
+      console.warn(
+        `[hub] dating ${machineId}'s stored sessions stopped: ${error instanceof Error ? error.message : String(error)}; the next register dates them again`
+      )
+    );
+  };
   const dateStoredSessions = (
     machineId: string,
     liveIds: string[],
-    resumableAt?: Record<string, number>
+    resumableAt?: Record<string, number>,
+    written?: () => void
   ): number => {
     if (!resumableAt) {
       return 0;
@@ -4295,54 +4417,24 @@ const make = async (path: string): Promise<DbShape> => {
     if (moving.length === 0) {
       return 0;
     }
-    // Whether each one's newest send is a keep-alive: its origin alone, read
-    // in SQLite, never the whole body (a brief's words, kilobytes each).
-    const keptAlive = new Set<string>();
-    for (let from = 0; from < moving.length; from += DATED_CHUNK) {
-      const ids = moving.slice(from, from + DATED_CHUNK).map((row) => row.id);
-      for (const send of db
-        .select({
-          instanceId: sentMessages.instanceId,
-          kind: sql<
-            string | null
-          >`json_extract(${sentMessages.body}, '$.origin.kind')`,
-          name: sql<
-            string | null
-          >`json_extract(${sentMessages.body}, '$.origin.name')`,
-        })
-        .from(sentMessages)
-        .where(
-          and(
-            inArray(sentMessages.instanceId, ids),
-            eq(
-              sentMessages.acceptedAt,
-              sql`(SELECT max(newest.accepted_at) FROM sent_messages AS newest WHERE newest.instance_id = ${sentMessages.instanceId})`
-            )
-          )
-        )
-        .all()) {
-        if (send.kind === "system" && send.name === "keepalive") {
-          keptAlive.add(send.instanceId);
-        }
-      }
-    }
+    const keptAlive = newestKeptAlive(moving.map((row) => row.id));
     // The transcript's mtime includes maintenance; it is not real activity.
     const dates = moving.filter((row) => !keptAlive.has(row.id));
-    // Each chunk's rows in one statement: one update per row was the rest of
-    // the hold, 400 ms for 3,024 rows whose times all moved.
-    db.transaction((tx) => {
-      for (let from = 0; from < dates.length; from += DATED_CHUNK) {
-        const chunk = dates.slice(from, from + DATED_CHUNK);
-        tx.run(
-          sql`WITH dated(id, at) AS (VALUES ${sql.join(
-            chunk.map((row) => sql`(${row.id}, ${row.at})`),
-            sql`, `
-          )}) UPDATE instances SET updated_at = (SELECT at FROM dated WHERE dated.id = instances.id) WHERE id IN (SELECT id FROM dated)`
-        );
+    // Each chunk's rows in one statement, each a turn of the loop after the
+    // last, so the hub answers between them and the register that asked
+    // waits on none: 4,277 rows whose times all moved held the thread 0.9 s
+    // in one go on the live database (hub-restart-live-db).
+    const chunks: (typeof dates)[] = [];
+    for (let from = 0; from < dates.length; from += DATES_WRITTEN_AT_ONCE) {
+      const chunk = dates
+        .slice(from, from + DATES_WRITTEN_AT_ONCE)
+        .filter((row) => !dating.has(row.id));
+      if (chunk.length > 0) {
+        chunks.push(chunk);
       }
-    });
-    const moved = dates.length;
-    return moved;
+    }
+    writeDatesLater(machineId, chunks, written);
+    return dates.length;
   };
 
   const store: DbShape = {
@@ -4532,9 +4624,15 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .all(),
-    ownedToReconcile: (machineId, named) =>
-      db
-        .select(ownedColumns)
+    // Found by ids first, each kind by what reads it cheapest, then read
+    // whole by id: `status` lies past the row's `tooling` (kilobytes a row),
+    // so one scan that tested it read every row's overflow, 54 ms on the live
+    // database at every heartbeat; ends and removals are tested on the
+    // columns before it (13 ms), and running sessions by their index.
+    ownedToReconcile: (machineId, named) => {
+      const ids = new Set<string>(named);
+      for (const { id } of db
+        .select({ id: instances.id })
         .from(instances)
         .where(
           and(
@@ -4548,20 +4646,43 @@ const make = async (path: string): Promise<DbShape> => {
                   eq(instances.endIntent, "delete-transcript")
                 )
               ),
-              // What an opencode stop names as claimed, besides `named`.
-              inArray(instances.status, ["running", "starting"]),
               // A removed opencode session, which the reconcile recovers.
               and(
                 eq(instances.machineRemoved, true),
                 eq(instances.harness, "opencode")
-              ),
-              ...(named.length > 0
-                ? [inArray(instances.id, [...new Set(named)])]
-                : [])
+              )
             )
           )
         )
-        .all(),
+        .all()) {
+        ids.add(id);
+      }
+      // What an opencode stop names as claimed, besides `named`.
+      for (const { id } of db
+        .select({ id: instances.id })
+        .from(instances)
+        .where(
+          and(
+            inArray(instances.status, ["running", "starting"]),
+            eq(instances.machineId, machineId)
+          )
+        )
+        .all()) {
+        ids.add(id);
+      }
+      return ids.size === 0
+        ? []
+        : db
+            .select(ownedColumns)
+            .from(instances)
+            .where(
+              and(
+                eq(instances.machineId, machineId),
+                inArray(instances.id, [...ids])
+              )
+            )
+            .all();
+    },
     endInstance: (id, intent) =>
       db.transaction(
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: precedence and never-started confirmation share the persist-first transaction
@@ -6416,14 +6537,25 @@ const make = async (path: string): Promise<DbShape> => {
             .select({
               name: skills.name,
               hash: skills.hash,
-              files: skills.files,
               projectId: skills.projectId,
             })
             .from(skills)
             .where(eq(skills.enabled, true))
             .all()
-            .flatMap(({ name, hash, files, projectId }) =>
-              hash && files
+            .flatMap(({ name, hash, projectId }) => {
+              const files = hash
+                ? keptFiles(
+                    `skill:${name}`,
+                    hash,
+                    () =>
+                      db
+                        .select({ files: skills.files })
+                        .from(skills)
+                        .where(eq(skills.name, name))
+                        .get()?.files
+                  )
+                : undefined;
+              return hash && files
                 ? [
                     {
                       name,
@@ -6434,8 +6566,8 @@ const make = async (path: string): Promise<DbShape> => {
                         : {}),
                     },
                   ]
-                : []
-            ),
+                : [];
+            }),
           ...db
             .select({
               id: workflows.id,
@@ -6475,12 +6607,23 @@ const make = async (path: string): Promise<DbShape> => {
             id: plugins.id,
             hash: plugins.hash,
             bytes: plugins.bytes,
-            files: plugins.files,
           })
           .from(plugins)
           .where(eq(plugins.enabled, true))
           .all()
-          .flatMap(({ id, hash, bytes, files }) => {
+          .flatMap(({ id, hash, bytes }) => {
+            const files = hash
+              ? keptFiles(
+                  `plugin:${id}`,
+                  hash,
+                  () =>
+                    db
+                      .select({ files: plugins.files })
+                      .from(plugins)
+                      .where(eq(plugins.id, id))
+                      .get()?.files
+                )
+              : undefined;
             if (!(hash && files)) {
               return [];
             }
@@ -6765,6 +6908,30 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
       return plugin;
     },
+    // Its id and hostname alone: a machine named in a sentence read every
+    // machine's row whole (its fleet, its harnesses, its tools), once per
+    // session an account wake named (hub-restart-live-db).
+    namedMachines: () =>
+      db
+        .select({ machineId: agents.machineId, hostname: agents.hostname })
+        .from(agents)
+        .orderBy(asc(agents.createdAt), asc(agents.machineId))
+        .all(),
+    // One row's source each: a pass over every skill and plugin asked the
+    // whole catalog, and the whole fleet config, once per row (the update
+    // check's `watched`, at every hub start: hub-restart-live-db).
+    skillSource: (name) =>
+      db
+        .select({ source: skills.source })
+        .from(skills)
+        .where(eq(skills.name, name))
+        .get()?.source,
+    marketplaceSource: (name) =>
+      db
+        .select({ source: marketplaces.source })
+        .from(marketplaces)
+        .where(eq(marketplaces.name, name))
+        .get()?.source,
     listSkills: () =>
       db
         .select({

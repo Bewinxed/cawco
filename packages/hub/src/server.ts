@@ -643,7 +643,7 @@ import {
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
-import { FleetSync } from "./fleet-sync";
+import { FleetSync, warmHashes } from "./fleet-sync";
 import { refreshOf, skillVersion } from "./fleet-versions";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
@@ -3950,7 +3950,7 @@ export const createServer = (
   };
   /** A machine as a sentence names it (core `machineCalled`), never by its id. */
   const machineName = (machineId: string): string =>
-    machineCalled(machineId, db.listAgents());
+    machineCalled(machineId, db.namedMachines());
   /**
    * Why a machine could not take a request, as a client reads it (core
    * `machineFaultWords`): by its name, and a machine not on this hub as
@@ -18712,6 +18712,12 @@ export const createServer = (
    * machine and nothing waited for (fleet-sync.ts diffs it against what the
    * machine acknowledged, so only what moved is sent).
    */
+  /** Every known machine's fleet items hashed, before the hub listens (fleet-sync.ts `warmHashes`). */
+  const warmFleetHashes = (): void => {
+    for (const { machineId } of db.namedMachines()) {
+      warmHashes(machineFleetItems(machineId));
+    }
+  };
   const machineFleetItems = (machineId: string): FleetItems => {
     const config = db.fleetConfig();
     // A directory on the hub's disk names nothing on any other machine, so
@@ -19617,7 +19623,7 @@ export const createServer = (
   const watched = (row: { skill: string } | { plugin: string }): boolean => {
     const source =
       "skill" in row
-        ? db.listSkills().find((skill) => skill.name === row.skill)?.source
+        ? db.skillSource(row.skill)
         : marketplaceSource(row.plugin.split("@")[1] ?? "");
     return (
       source !== undefined &&
@@ -19712,8 +19718,7 @@ export const createServer = (
 
   /** Where the fleet's marketplace `marketplace` comes from, if it links one. */
   const marketplaceSource = (marketplace: string): string | undefined =>
-    db.fleetConfig().marketplaces.find(({ name }) => name === marketplace)
-      ?.source;
+    db.marketplaceSource(marketplace);
 
   /** What `marketplace`'s source holds now for the plugins named `names`. */
   const readPluginSource = (
@@ -26513,8 +26518,11 @@ export const createServer = (
   });
 
   // Everything is made: a hub that serves starts its work off the boot path.
-  // One built only to be read starts none of it.
+  // One built only to be read starts none of it. Before it listens, each
+  // known machine's fleet items are hashed (fleet-sync.ts `warmHashes`), so
+  // no machine's register is the one that hashes the fleet's files.
   if (background) {
+    warmFleetHashes();
     for (const start of offBoot) {
       start();
     }
@@ -32337,7 +32345,8 @@ export const createServer = (
               const dated = db.dateStoredSessions(
                 message.machineId,
                 beatIds,
-                peekResumableAt(message.payload)
+                peekResumableAt(message.payload),
+                () => publishInstances(message.machineId)
               );
               if (
                 dated > 0 ||

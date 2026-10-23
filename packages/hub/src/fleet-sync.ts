@@ -81,6 +81,65 @@ interface InFlight {
 
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
+/** Each object an item holds, by a number of its own: what {@link hashOf} keys a value by. */
+const refs = new WeakMap<object, number>();
+let nextRef = 0;
+const refOf = (value: object): number => {
+  let ref = refs.get(value);
+  if (ref === undefined) {
+    ref = nextRef;
+    nextRef += 1;
+    refs.set(value, ref);
+  }
+  return ref;
+};
+
+/** Each item's last hash, by its id, with the shallow key it was taken for. */
+const hashed = new Map<string, { hash: string; key: string }>();
+
+/**
+ * An item's hash (core `itemHash`), taken again only when the item is not
+ * the one hashed last: its own fields the same and each object it holds the
+ * same object. A skill's or plugin's files are kept by their content hash
+ * (db `keptFiles`), the same arrays build after build, so each welcome and
+ * delta no longer hashes every file the fleet holds for every machine
+ * (78 MB, the register's largest cost after its reads: hub-restart-live-db).
+ */
+const hashOf = (id: string, value: unknown): string => {
+  const key =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? JSON.stringify(
+          Object.entries(value).map(([field, inner]) => [
+            field,
+            inner && typeof inner === "object" ? `#${refOf(inner)}` : inner,
+          ])
+        )
+      : undefined;
+  const held = hashed.get(id);
+  if (key !== undefined && held?.key === key) {
+    return held.hash;
+  }
+  const hash = itemHash(value);
+  if (key === undefined) {
+    hashed.delete(id);
+  } else {
+    hashed.set(id, { hash, key });
+  }
+  return hash;
+};
+
+/**
+ * Each of `items` hashed now, so the welcome that diffs them next takes
+ * each hash kept: the hub's start does it for every machine it knows, before
+ * it listens, rather than the first register paying for every file the fleet
+ * holds (hub-restart-live-db, 2026-10-23).
+ */
+export const warmHashes = (items: FleetItems): void => {
+  for (const [id, value] of items) {
+    hashOf(id, value);
+  }
+};
+
 /**
  * The items of `desired` whose hash differs from what was acknowledged
  * (`acked`), or that are forced, and, unless every item goes (`full`), each
@@ -94,7 +153,7 @@ const diffItems = (
 ): FleetDeltaItem[] => {
   const items: FleetDeltaItem[] = [];
   for (const [id, value] of desired) {
-    const hash = itemHash(value);
+    const hash = hashOf(id, value);
     if (acked.get(id) !== hash || forced.has(id)) {
       items.push({
         id,
