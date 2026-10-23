@@ -83,7 +83,9 @@ export async function callDelegationTool(
   instanceId: string,
   name: string,
   args: unknown,
-  credential?: string
+  credential?: string,
+  /** The harness's own id for this call (pi's `toolCallId`): the hub runs a keyed tool once per id (hub call-keys.ts). */
+  callId?: string
 ) {
   const url = harnessMcpUrl(
     `/api/delegation/call/${encodeURIComponent(instanceId)}`
@@ -94,7 +96,11 @@ export async function callDelegationTool(
       "Content-Type": "application/json",
       ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
     },
-    body: JSON.stringify({ name, arguments: args }),
+    body: JSON.stringify({
+      name,
+      arguments: args,
+      ...(callId ? { callKey: `pi:${callId}` } : {}),
+    }),
   };
   const take = async (response: Response) => {
     if (!response.ok) {

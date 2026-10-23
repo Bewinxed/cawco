@@ -534,6 +534,7 @@ import {
   browserRoutes,
   createBrowsers,
 } from "./browsers";
+import { createCallKeys } from "./call-keys";
 import {
   attemptTry,
   type Caw,
@@ -24500,6 +24501,8 @@ export const createServer = (
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   const delegationMcp = createDelegationMcp({
     lifetime,
+    // Kept with the relayed calls' keys, whose table tool-call-keys prunes.
+    callKeys: createCallKeys({ db: db.toolCallKeys }),
     tasks,
     connections,
     hubTools,
@@ -27584,6 +27587,8 @@ export const createServer = (
           const input = body as {
             name: string;
             arguments?: Record<string, unknown>;
+            /** The harness's own key for the call (pi's toolCallId, call-keys.ts). */
+            callKey?: unknown;
           };
           if (
             input.name === "generate_image" ||
@@ -27603,7 +27608,11 @@ export const createServer = (
                   params.instanceId,
                   input.name,
                   input.arguments ?? {},
-                  authorization ?? undefined
+                  authorization ?? undefined,
+                  undefined,
+                  typeof input.callKey === "string" && input.callKey
+                    ? input.callKey
+                    : undefined
                 )
               ),
             toolResultRefused

@@ -18,6 +18,7 @@ import {
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
 import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
+import { type CallKeys, CLAUDE_CALL_META, mcpCallKey } from "./call-keys";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
 import type {
@@ -113,7 +114,7 @@ const CREDENTIAL_TOKEN =
  * (`"_meta": {"claudecode/toolUseId": "toolu_…", "progressToken": 14}`,
  * github.com/modelcontextprotocol/python-sdk/issues/2579).
  */
-const TOOL_USE_META = "claudecode/toolUseId";
+const TOOL_USE_META = CLAUDE_CALL_META;
 
 /** What an admin write's progress heartbeat says while the person decides. */
 const ASKING = "Waiting for the person to approve this fleet-settings change";
@@ -318,6 +319,8 @@ export function createDelegationMcp(options: {
     input: Record<string, unknown>,
     toolUseId?: string
   ) => Promise<void>;
+  /** The once-per-key rule of the calls that start or send (call-keys.ts). */
+  callKeys: Pick<CallKeys, "once">;
   /** `send_to_user`'s push to the person's paired devices (push.ts `userMessage`); its transcript row is the call itself. */
   sendToUser: (actor: InstanceRow, message: string) => void;
   /** Why `actor` may not show the person one of `paths` (shown-files.ts `shownRefusal`). */
@@ -693,7 +696,9 @@ export function createDelegationMcp(options: {
     name: string,
     args: Record<string, unknown>,
     authorization?: string,
-    toolUseId?: string
+    toolUseId?: string,
+    /** The harness's key for the call (call-keys.ts): a delegate, handoff or page call runs once per key. */
+    callKey?: string
   ): Promise<CallToolResult> => {
     const admitted = admitToolCall(name, binding ?? "unbound");
     if ("refused" in admitted) {
@@ -703,7 +708,9 @@ export function createDelegationMcp(options: {
       };
     }
     try {
-      return await answer(binding, name, args, authorization, toolUseId);
+      return await options.callKeys.once(binding, name, callKey, () =>
+        answer(binding, name, args, authorization, toolUseId)
+      );
     } finally {
       admitted.release();
     }
@@ -1104,15 +1111,17 @@ export function createDelegationMcp(options: {
       // The tool call this request is, as Claude Code names it in `_meta`
       // (`claudecode/toolUseId`): an ask it parks is drawn at that call.
       const toolUseId = message.params._meta?.[TOOL_USE_META];
+      const args = message.params.arguments ?? {};
       try {
         return await call(
           binding,
           message.params.name,
-          message.params.arguments ?? {},
+          args,
           typeof extra.requestInfo?.headers.authorization === "string"
             ? extra.requestInfo.headers.authorization
             : undefined,
-          typeof toolUseId === "string" ? toolUseId : undefined
+          typeof toolUseId === "string" ? toolUseId : undefined,
+          mcpCallKey(message.params._meta, message.params.name, args)
         );
       } finally {
         options.lifetime.cancel(heartbeat);

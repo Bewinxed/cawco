@@ -410,6 +410,7 @@ export const listRoleTools = (): RoleTools[] => {
     fleet: { instances: () => rows, machines: () => [] },
     formerIds: () => ({}),
     forward: () => Promise.resolve(),
+    callKeys: { once: (_actor, _name, _key, run) => run() },
     spawn: () => Promise.reject(new Error("A budget read starts nothing")),
     deliver: () => Promise.reject(new Error("measuring")),
     credentialActor: () => undefined,

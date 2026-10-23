@@ -331,8 +331,10 @@ const piHandoffTools = async (
       label: tool.name,
       description: tool.description,
       parameters: tool.inputSchema as never,
-      execute: async (_id, params) =>
-        callDelegationTool(instanceId, tool.name, params, credential.value),
+      // pi's own id for the call: the key the hub runs a delegate, a
+      // handoff or a page under once (hub call-keys.ts).
+      execute: async (id, params) =>
+        callDelegationTool(instanceId, tool.name, params, credential.value, id),
     })
   );
 
