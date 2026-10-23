@@ -7,13 +7,15 @@
    * the kit's segmented control (FilesList `segmented`). Opened from the
    * sidebar's Files row or a finger from the screen's right edge (Shell,
    * EdgePull). Choosing an artifact shows it in the session's panel, which
-   * rises as its sheet does on the composer, and puts Files away; Show in
+   * rises as its sheet does on the composer, and puts Files away (chosen
+   * from the keyboard, the focus goes on to the panel's name); Show in
    * conversation takes the transcript to the message.
    */
   import type { ArtifactSummary } from "@cawco/core";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { showArtifact } from "../artifact-api";
+  import { barGlass } from "../bar-glass.svelte";
   import { failureClause } from "../hub-read";
   import { refusals } from "../refusals.svelte";
   import { askOpenAt } from "../transcript/open-at.svelte";
@@ -23,6 +25,7 @@
     askForAPage,
     attachToSession,
     files,
+    focusPanelName,
   } from "./files.svelte";
 
   /**
@@ -59,10 +62,15 @@
     if (!id) {
       return;
     }
+    // Chosen from the keyboard: the focus goes on to the panel's name.
+    const byKeyboard = !barGlass.byPointer;
     refusals.delete(`files-pick:${id}`);
     try {
       await showArtifact(id, artifact.id);
       files.sheet = false;
+      if (byKeyboard) {
+        focusPanelName(artifact.id);
+      }
     } catch (error) {
       refusals.set(`files-pick:${id}`, {
         reason: `${artifact.name} was not shown: ${failureClause(error)}. Files stays open.`,

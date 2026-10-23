@@ -409,3 +409,48 @@ class FilesPlace {
 }
 
 export const files = new FilesPlace();
+
+/**
+ * An artifact chosen in Files from the keyboard: the focus goes to the name
+ * of the session's panel showing it (its `[data-artifact-trigger]`, beside
+ * the conversation or in its sheet on the composer) as soon as that stands
+ * and takes the focus, so the person goes on from where it opened (WAI-ARIA
+ * APG, Dialog (Modal) Pattern: on close the focus goes back to the invoker
+ * "unless … The invoking element no longer exists. Then, focus is set on
+ * another element that provides logical work flow"). Files' own close may
+ * hand the focus to its opener first; this takes it on from there. A press
+ * or a key before the panel stands is the person moving on: it lets go.
+ */
+export function focusPanelName(artifactId: string): void {
+  const name = `:is([data-side-pane], [data-preview-sheet][data-state="open"]) [data-artifact-trigger][data-artifact="${CSS.escape(artifactId)}"]`;
+  const land = (): boolean => {
+    const trigger = document.querySelector<HTMLElement>(name);
+    if (!trigger || trigger.closest("[inert]")) {
+      return false;
+    }
+    trigger.focus({ preventScroll: true });
+    return document.activeElement === trigger;
+  };
+  // The panel already showed it: its name stands now.
+  if (land()) {
+    return;
+  }
+  const seen = new MutationObserver(() => {
+    if (land()) {
+      letGo();
+    }
+  });
+  const letGo = () => {
+    seen.disconnect();
+    window.removeEventListener("pointerdown", letGo, true);
+    window.removeEventListener("keydown", letGo, true);
+  };
+  seen.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["inert", "data-state", "data-artifact"],
+  });
+  window.addEventListener("pointerdown", letGo, true);
+  window.addEventListener("keydown", letGo, true);
+}

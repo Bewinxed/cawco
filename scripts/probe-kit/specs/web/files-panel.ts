@@ -59,7 +59,18 @@
  *     and the session's panel shows that artifact; with the pointer moved
  *     off, for 2 s no Files surface or floating copy opens and the panel
  *     stays; at 1440, Escape and a press outside leave the panel as it is.
- *     From the keyboard (Tab to the card, Enter) the same.
+ *     From the keyboard (Tab to the card, Enter) the same, and the focus
+ *     lands on the panel's name.
+ * 39. the cards are one Tab stop with arrows inside (owner: "Arrow keys
+ *     inside, one Tab stop: Tab lands on the list once. Up and Down move
+ *     through the list view, and all four arrows move through thumbnails.
+ *     Enter opens."): in Chromium and WebKit, at 1440 and 390, in the list
+ *     and in thumbnails: Tab enters the list on the first card (none on
+ *     show) and a second Tab leaves it; each arrow, Home and End lands
+ *     where it should and stops at the ends, the card scrolled into view;
+ *     in thumbnails Down lands on the card directly below; Enter opens it,
+ *     the focus on the panel's name; Files opened again, Tab enters on the
+ *     card on show.
  *
  * One capture per state at 390 and 1440, light and dark, in the run's output
  * folder (`kit.out`).
@@ -228,6 +239,39 @@ const pickLanded = async (page: Page, artifact: string) => {
       float: !!document.querySelector("[data-files-float]"),
     }),
     [FILES_OPEN, PANE_NAME] as const
+  );
+};
+
+/**
+ * After a keyboard pick: waits until the focus is on the session panel's
+ * name for `artifact`, then reads it again once the page stands still, so
+ * a later hand-back (Files' close giving the focus to its control) is
+ * caught. Answers whether it is there, whether it draws its ring
+ * (`:focus-visible`), and what has the focus.
+ */
+const panelFocus = async (page: Page, artifact: string) => {
+  const onName = ([name, id]: readonly [string, string]) => {
+    const el = document.activeElement as HTMLElement | null;
+    return !!el?.matches(name) && el.dataset.artifact === id;
+  };
+  await page
+    .waitForFunction(onName, [PANE_NAME, artifact] as const, {
+      timeout: 15_000,
+    })
+    .catch(() => undefined);
+  await stillWithin(page, "body", { ms: 5000 });
+  return page.evaluate(
+    ([name, id]) => {
+      const el = document.activeElement as HTMLElement | null;
+      return {
+        onName: !!el?.matches(name) && el.dataset.artifact === id,
+        visible: !!el?.matches(":focus-visible"),
+        has: el
+          ? `${el.tagName.toLowerCase()}${el.hasAttribute("data-artifact-trigger") ? "[data-artifact-trigger]" : ""}${el.closest("[data-files-control]") ? " (Files' control)" : ""}`
+          : null,
+      };
+    },
+    [PANE_NAME, artifact] as const
   );
 };
 
@@ -1147,24 +1191,19 @@ const reviewLegs = async (
       cardRing === "-2px",
     `field ${JSON.stringify(ring)}; card ${JSON.stringify(card)} offset ${cardRing}`
   );
-  // A keyboard pick: the artifact in the session's panel, Files gone, the
-  // focus back on Files' control (GlassCard gives it back to what opened it).
+  // A keyboard pick: the artifact in the session's panel, Files gone, and
+  // the focus on the panel's name once it stands, its ring drawn.
   const pickedId = card?.card ?? "";
   await page.keyboard.press("Enter");
   const keyPicked = await pickLanded(page, pickedId);
-  await comes(
-    page,
-    () => !!document.activeElement?.closest("[data-files-control]")
-  );
-  const afterPick = await page.evaluate(
-    () => !!document.activeElement?.closest("[data-files-control]")
-  );
+  const afterPick = await panelFocus(page, pickedId);
   kit.check(
-    "17: a keyboard pick (Enter on a card) opens it in the session's panel and Files goes, the focus back on Files' control",
+    "17: a keyboard pick (Enter on a card) opens it in the session's panel and Files goes, and the focus lands on the panel's name ([data-artifact-trigger], :focus-visible) and stays there",
     !(keyPicked.filesOpen || keyPicked.float) &&
       keyPicked.pane === pickedId &&
-      afterPick,
-    `${JSON.stringify(keyPicked)} (picked ${pickedId}); focus on the control ${afterPick}`
+      afterPick.onName &&
+      afterPick.visible,
+    `${JSON.stringify(keyPicked)} (picked ${pickedId}); focus ${JSON.stringify(afterPick)}`
   );
   // Files again, for the lightbox.
   await page.locator("[data-files-control]").click();
@@ -2466,7 +2505,217 @@ const viewLegs = async (
   await keptLeg(kit, base, ids.many);
   await rowOpensLeg(kit, base, ids.many);
   await pickLegs(kit, base, ids.many);
+  await keysLegs(kit, base, ids.many);
   await switchMotionLeg(kit, base, ids.many);
+};
+
+/** The card with the focus, by its artifact; null when the focus is on no card. */
+const activeCard = (page: Page) =>
+  page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return el?.matches("[data-files-cards] [data-files-card]")
+      ? (el.dataset.artifact ?? null)
+      : null;
+  });
+
+/**
+ * Where the arrows should land, read off the cards as drawn: their ids in
+ * order, and from `from`, the card directly below (the nearest top among
+ * those under it whose centre stands within its width) and directly above.
+ * Answers too whether `from` lies inside its scroller's view.
+ */
+const cardsRead = (page: Page, from: string | null) =>
+  page.evaluate((id) => {
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>(
+        "[data-files-cards] [data-files-card]"
+      ),
+    ];
+    const at = cards.find((card) => card.dataset.artifact === id);
+    const box = at?.getBoundingClientRect();
+    const column = (other: DOMRect) => {
+      const centre = other.left + other.width / 2;
+      return !!box && centre > box.left && centre < box.right;
+    };
+    const nearest = (
+      pick: (r: DOMRect) => boolean,
+      score: (r: DOMRect) => number
+    ) =>
+      cards
+        .filter((card) => card !== at && pick(card.getBoundingClientRect()))
+        .sort(
+          (a, b) =>
+            score(a.getBoundingClientRect()) - score(b.getBoundingClientRect())
+        )[0]?.dataset.artifact ?? null;
+    const scroller = at?.closest<HTMLElement>("[data-files-scroll]");
+    const view = scroller?.getBoundingClientRect();
+    return {
+      ids: cards.map((card) => card.dataset.artifact ?? ""),
+      below: box
+        ? nearest(
+            (r) => column(r) && r.top >= box.bottom - 1,
+            (r) => r.top
+          )
+        : null,
+      above: box
+        ? nearest(
+            (r) => column(r) && r.bottom <= box.top + 1,
+            (r) => -r.bottom
+          )
+        : null,
+      inView:
+        !!box &&
+        !!view &&
+        box.top >= view.top - 1 &&
+        box.bottom <= view.bottom + 1,
+      tabStops: cards.filter((card) => card.tabIndex === 0).length,
+      role: document.querySelector("[data-files-cards]")?.getAttribute("role"),
+      optionRoles: cards.every(
+        (card) => card.getAttribute("role") === "option"
+      ),
+    };
+  }, from);
+
+/** Tabs from Files' search field until the focus enters the cards (at most 10); answers the card it entered on. */
+const tabIntoCards = async (page: Page) => {
+  await page.locator("[data-files-search] input").focus();
+  for (let i = 0; i < 10; i += 1) {
+    await page.keyboard.press("Tab");
+    const card = await activeCard(page);
+    if (card) {
+      return card;
+    }
+  }
+  return null;
+};
+
+/** 39, one leg: an engine, a width, a view. The session's panel shut first, so no card is on show. */
+const keysLeg = async (
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  view: "desk" | "phone",
+  way: "list" | "thumbnails",
+  id: string
+) => {
+  const leg = `${engine} ${SLOT_WIDTHS[view]} ${way}`;
+  const page = await openSession(
+    kit,
+    base,
+    view,
+    "light",
+    id,
+    undefined,
+    engine
+  );
+  await page.evaluate(
+    (session) =>
+      fetch(`/api/instances/${encodeURIComponent(session)}/preview`, {
+        method: "DELETE",
+      }),
+    id
+  );
+  await page
+    .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {
+      timeout: 15_000,
+    })
+    .catch(() => undefined);
+  await openFiles(page, view);
+  await page.locator(VIEW_PICK(way)).click();
+  await page
+    .locator(`[data-files-cards][data-files-view="${way}"]`)
+    .waitFor({ timeout: 10_000 });
+  await atRest(page);
+
+  // One Tab stop: in on the first card, out on the next Tab.
+  const first = await cardsRead(page, null);
+  const entered = await tabIntoCards(page);
+  await page.keyboard.press("Tab");
+  const leftTo = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return {
+      inCards: !!el?.closest("[data-files-cards]"),
+      has: el
+        ? `${el.tagName.toLowerCase()}${el.dataset.slot ? `[${el.dataset.slot}]` : ""}`
+        : null,
+    };
+  });
+  kit.check(
+    `39 (${leg}): the cards are one Tab stop (a listbox of options, one tabindex 0): Tab enters on the first card with none on show, and a second Tab leaves the list`,
+    first.role === "listbox" &&
+      first.optionRoles &&
+      first.tabStops === 1 &&
+      entered === first.ids[0] &&
+      !leftTo.inCards,
+    `role ${first.role}, options ${first.optionRoles}, tab stops ${first.tabStops}; entered on ${entered} (first ${first.ids[0]}); the next Tab to ${JSON.stringify(leftTo)}`
+  );
+
+  // The arrows, Home and End, from the first card.
+  await page.keyboard.press("Shift+Tab");
+  const { ids } = first;
+  const steps: { key: string; want: string | null; got: string | null }[] = [];
+  const press = async (key: string, want: string | null) => {
+    await page.keyboard.press(key);
+    steps.push({ key, want, got: await activeCard(page) });
+  };
+  const [next, back] =
+    way === "list" ? ["ArrowDown", "ArrowUp"] : ["ArrowRight", "ArrowLeft"];
+  await press(next, ids[1] ?? ids[0] ?? null);
+  await press(back, ids[0] ?? null);
+  await press(back, ids[0] ?? null);
+  if (way === "thumbnails") {
+    const fromFirst = await cardsRead(page, ids[0] ?? null);
+    await press("ArrowDown", fromFirst.below);
+    const fromBelow = await cardsRead(page, fromFirst.below);
+    await press("ArrowUp", fromBelow.above);
+  }
+  await press("End", ids.at(-1) ?? null);
+  const atEnd = await cardsRead(page, ids.at(-1) ?? null);
+  await press(way === "list" ? "ArrowDown" : "ArrowRight", ids.at(-1) ?? null);
+  await press("Home", ids[0] ?? null);
+  const missed = steps.filter((step) => step.got !== step.want);
+  kit.check(
+    `39 (${leg}): ${way === "list" ? "Down and Up move one card" : "Left and Right move one card, Down to the card directly below and Up back above it"}, Home and End to the first and last, stopping at the ends, End's card scrolled into view`,
+    missed.length === 0 && steps.length > 0 && atEnd.inView,
+    `${missed.length ? `missed ${JSON.stringify(missed)}` : `${steps.length} steps landed`}; End's card in view ${atEnd.inView}`
+  );
+
+  // Enter opens the first card; the focus on the panel's name.
+  const opened = ids[0] ?? "";
+  await page.keyboard.press("Enter");
+  const landed = await pickLanded(page, opened);
+  const focus = await panelFocus(page, opened);
+  kit.check(
+    `39 (${leg}): Enter opens the focused card in the session's panel, Files gone, the focus on the panel's name`,
+    !landed.filesOpen &&
+      landed.pane === opened &&
+      focus.onName &&
+      focus.visible,
+    `${JSON.stringify(landed)} (opened ${opened}); focus ${JSON.stringify(focus)}`
+  );
+
+  // Files again: Tab enters on the card on show.
+  await openFiles(page, view);
+  await atRest(page);
+  const again = await tabIntoCards(page);
+  kit.check(
+    `39 (${leg}): Files opened again, Tab enters the list on the card on show`,
+    again === opened,
+    `entered on ${again}, on show ${opened}`
+  );
+  await sweep(page, `keys ${leg}`);
+  await page.close();
+};
+
+/** 39: Chromium and WebKit, 1440 and 390, the list and thumbnails. */
+const keysLegs = async (kit: Kit, base: string, id: string) => {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["desk", "phone"] as const) {
+      for (const way of ["list", "thumbnails"] as const) {
+        await keysLeg(kit, base, engine, view, way, id);
+      }
+    }
+  }
 };
 
 /** One of 34's legs: an engine, a width, one artifact or many. */
@@ -2602,7 +2851,7 @@ const rowOpensLeg = async (kit: Kit, base: string, id: string) => {
   const opened = await page.evaluate(() => ({
     current:
       document.querySelector<HTMLElement>(
-        '[data-files-card][aria-current="true"]'
+        '[data-files-card][aria-selected="true"]'
       )?.title ?? null,
     view:
       document.querySelector<HTMLElement>("[data-files-cards]")?.dataset
@@ -2745,6 +2994,14 @@ const pickLeg = async (
     await page.keyboard.press("Enter");
   }
   const landed = await pickLanded(page, wanted);
+  if (by === "keyboard") {
+    const focus = await panelFocus(page, wanted);
+    kit.check(
+      `38 (${leg}): after the Enter pick the focus lands on the panel's name ([data-artifact-trigger] for ${PRICING}, :focus-visible) and stays there`,
+      focus.onName && focus.visible,
+      JSON.stringify(focus)
+    );
+  }
   // The pointer off Files' place, onto the transcript; then the page
   // watched for what the pick should never bring back.
   await watchSurfaces(page);

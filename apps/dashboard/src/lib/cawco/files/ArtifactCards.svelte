@@ -31,6 +31,23 @@
    * the same button its card is, so a switch moves each from its card's place
    * to its row's (reflow, `data-flip`), and a press opens it as the card's
    * does.
+   *
+   * From the keyboard the cards are one Tab stop with the arrows inside
+   * (owner: "Arrow keys inside, one Tab stop: Tab lands on the list once.
+   * Up and Down move through the list view, and all four arrows move
+   * through thumbnails. Enter opens."; W3C APG, Developing a Keyboard
+   * Interface: "the tab and shift + tab keys move focus from one UI
+   * component to another while other keys, primarily the arrow keys, move
+   * focus inside of components"). They are a single-select listbox of
+   * options (APG, Listbox Pattern), the one on show the selected one, with
+   * a roving tabindex: Tab enters on the card on show, or the first with
+   * none ("If an option is selected before the listbox receives focus,
+   * focus is set on the selected option"), and on the last one the arrows
+   * reached after. In the list Down and Up move one card; in thumbnails
+   * Left and Right do, and Down and Up go to the card under or over it as
+   * drawn (the nearest top in its column), so they follow the columns at
+   * every width. Home and End go to the first and last; nothing wraps. A
+   * card is still its button: Enter and Space open it as a press does.
    */
   import {
     type ArtifactKind,
@@ -181,6 +198,96 @@
     seen.observe(node);
     return () => seen.disconnect();
   };
+
+  /* ── The keys ───────────────────────────────────────────────────── */
+  /** The card the arrows last reached, while it is listed. */
+  let reached = $state<string | null>(null);
+  /** The one Tab stop: the card the arrows reached, else the one on show, else the first. */
+  const stop = $derived.by(() => {
+    const listed = (id: string | null) =>
+      id !== null && cards.some((card) => card.artifact.id === id);
+    if (listed(reached)) {
+      return reached;
+    }
+    return listed(chosen) ? chosen : (cards[0]?.artifact.id ?? null);
+  });
+
+  /** The card under (`down`) or over `from` as drawn: the nearest edge among those whose centre stands within its width. */
+  function verticalOf(
+    all: HTMLElement[],
+    from: HTMLElement,
+    down: boolean
+  ): HTMLElement | undefined {
+    const rect = from.getBoundingClientRect();
+    let best: HTMLElement | undefined;
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const card of all) {
+      if (card === from) {
+        continue;
+      }
+      const r = card.getBoundingClientRect();
+      const centre = r.left + r.width / 2;
+      if (centre <= rect.left || centre >= rect.right) {
+        continue;
+      }
+      const distance = down ? r.top - rect.bottom : rect.top - r.bottom;
+      if (distance >= -1 && distance < nearest) {
+        best = card;
+        nearest = distance;
+      }
+    }
+    return best;
+  }
+
+  /** The card a key moves to from `from`, or undefined for a key the cards don't take. */
+  function targetOf(
+    key: string,
+    all: HTMLElement[],
+    from: HTMLElement
+  ): HTMLElement | undefined {
+    const at = all.indexOf(from);
+    const step = (by: number) =>
+      all[Math.min(all.length - 1, Math.max(0, at + by))];
+    const list = view === "list";
+    switch (key) {
+      case "Home":
+        return all[0];
+      case "End":
+        return all.at(-1);
+      case "ArrowDown":
+        return list ? step(1) : (verticalOf(all, from, true) ?? from);
+      case "ArrowUp":
+        return list ? step(-1) : (verticalOf(all, from, false) ?? from);
+      case "ArrowRight":
+        return list ? undefined : step(1);
+      case "ArrowLeft":
+        return list ? undefined : step(-1);
+      default:
+        return;
+    }
+  }
+
+  function onkeydown(event: KeyboardEvent) {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+    const from =
+      event.target instanceof HTMLElement
+        ? event.target.closest<HTMLElement>("[data-files-card]")
+        : null;
+    if (!(from && box)) {
+      return;
+    }
+    const all = [...box.querySelectorAll<HTMLElement>("[data-files-card]")];
+    const to = targetOf(event.key, all, from);
+    if (!to) {
+      return;
+    }
+    event.preventDefault();
+    reached = to.dataset.artifact ?? null;
+    to.focus({ preventScroll: true });
+    to.scrollIntoView({ block: "nearest" });
+  }
 </script>
 
 <!-- A card's least width: a thumbnail that still reads, and a name of a
@@ -196,14 +303,18 @@
       ? "grid-cols-1"
       : "auto-rows-line grid-flow-dense grid-cols-(--lane-tracks) items-box-start px-(--gutter)",
   ]}
+  aria-label="Artifacts"
   data-files-cards
   data-files-view={view}
+  {onkeydown}
+  role="listbox"
+  tabindex={-1}
   style:--card-min="var(--c-artifact-card-min)"
   style:--gutter={"calc((var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1))"}
   style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
   {@attach highlight({
     rows: "[data-files-card]",
-    selected: '[data-files-card][aria-current="true"]',
+    selected: '[data-files-card][aria-selected="true"]',
     axis: view === "list" ? "y" : "xy",
   })}
   {@attach echoBeat()}
@@ -267,7 +378,7 @@
          The row: the attachments' row (FilesList), its glyph in the lead
          column. One button either way, which a switch slides (data-flip). -->
     <button
-      aria-current={artifact.id === chosen || undefined}
+      aria-selected={artifact.id === chosen}
       class={view === "list"
         ? menuItemVariants({
             class:
@@ -282,6 +393,11 @@
       style:--span={view === "list" ? undefined : `span ${span}`}
       {@attach measured}
       onclick={() => onpick(artifact)}
+      onfocus={() => {
+        reached = artifact.id;
+      }}
+      role="option"
+      tabindex={artifact.id === stop ? 0 : -1}
       title={artifact.name}
       type="button"
     >

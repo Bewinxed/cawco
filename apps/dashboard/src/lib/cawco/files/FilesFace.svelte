@@ -7,11 +7,13 @@
    * Choosing an artifact shows it in the session's own panel, beside the
    * conversation, and Files goes (owner: "if i open an artifact from the
    * folder tab, it doesn't dismiss the panel"): the panel is the one place
-   * it opens, and it stays until the person closes it. Show in conversation
+   * it opens, and it stays until the person closes it; chosen from the
+   * keyboard, the focus goes on to the panel's name. Show in conversation
    * takes the transcript to the message and puts Files away.
    */
   import type { ArtifactSummary } from "@cawco/core";
   import { showArtifact } from "../artifact-api";
+  import { barGlass } from "../bar-glass.svelte";
   import { failureClause } from "../hub-read";
   import { refusals } from "../refusals.svelte";
   import { askOpenAt } from "../transcript/open-at.svelte";
@@ -21,6 +23,7 @@
     askForAPage,
     attachToSession,
     files,
+    focusPanelName,
   } from "./files.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -45,6 +48,8 @@
     if (!id) {
       return;
     }
+    // Chosen from the keyboard: the focus goes on to the panel's name.
+    const byKeyboard = !barGlass.byPointer;
     refusals.delete(`files-pick:${id}`);
     try {
       await showArtifact(id, artifact.id);
@@ -56,6 +61,9 @@
       return;
     }
     onclose();
+    if (byKeyboard) {
+      focusPanelName(artifact.id);
+    }
   }
 
   /** The empty state's ask into the session's composer; Files goes, so the composer has the focus. */
