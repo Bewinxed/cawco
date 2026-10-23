@@ -97,59 +97,12 @@ const within = (path: string, folders: string[]): boolean => {
   return folders.some((folder) => at === folder || at.startsWith(folder + sep));
 };
 
-/**
- * A trace that Golar's own runtime ended, not one with something to say:
- * killed by a signal, or a Go runtime's or V8's fatal error. The landing
- * gate saw both on trees that check clean, under the load of every other
- * check running beside this one: "exited 133 … # Fatal error in , line 0 #
- * Check failed: !is_null()" (V8), and a Go goroutine dump from
- * `(*Program).BindSourceFiles`; none in 8 runs of this check alone.
- */
-const CRASHED = /^(?:fatal error: |panic: |# Fatal error in |SIGSEGV)/m;
-const crashed = (code: number, err: string): boolean =>
-  code >= 128 || CRASHED.test(err);
-/** How many times a project's trace is run before its crash is the answer. */
-const TRACE_TRIES = 3;
-
 /** The imports `project` (a tsconfig under `root`) resolves outside `root`. */
 const leaksOf = async (
   root: string,
   project: string,
   folders: string[]
 ): Promise<Leak[]> => {
-  let traced = await traceOf(root, project);
-  for (
-    let tries = 1;
-    tries < TRACE_TRIES && crashed(traced.code, traced.err);
-    tries += 1
-  ) {
-    // biome-ignore lint/performance/noAwaitInLoops: the same trace again, after the one before it crashed
-    traced = await traceOf(root, project);
-  }
-  const { out, err, code } = traced;
-  // A config others extend and which includes nothing itself
-  // (packages/agent/tsconfig.browser.json) imports nothing.
-  if (code !== 0 && out.includes("error TS18003: No inputs were found")) {
-    return [];
-  }
-  if (code !== 0) {
-    throw new Error(
-      `golar tsc --project ${project} --listFilesOnly exited ${code}${crashed(code, err) ? ` (its runtime crashed, ${TRACE_TRIES} times running)` : ""}\n${err}${out
-        .split("\n")
-        .filter((line) => line.includes("error TS"))
-        .join("\n")}`
-    );
-  }
-  // Golar reads a project's `.svelte` components through svelte2tsx, so
-  // their imports are in the same trace.
-  return leaksIn(out.split("\n"), project, folders);
-};
-
-/** One resolution trace of `project`: what Golar printed, and how it exited. */
-const traceOf = async (
-  root: string,
-  project: string
-): Promise<{ code: number; err: string; out: string }> => {
   const child = Bun.spawn(
     [
       GOLAR,
@@ -170,7 +123,22 @@ const traceOf = async (
     new Response(child.stderr).text(),
     child.exited,
   ]);
-  return { out, err, code };
+  // A config others extend and which includes nothing itself
+  // (packages/agent/tsconfig.browser.json) imports nothing.
+  if (code !== 0 && out.includes("error TS18003: No inputs were found")) {
+    return [];
+  }
+  if (code !== 0) {
+    throw new Error(
+      `golar tsc --project ${project} --listFilesOnly exited ${code}\n${err}${out
+        .split("\n")
+        .filter((line) => line.includes("error TS"))
+        .join("\n")}`
+    );
+  }
+  // Golar reads a project's `.svelte` components through svelte2tsx, so
+  // their imports are in the same trace.
+  return leaksIn(out.split("\n"), project, folders);
 };
 
 /** The leaks a resolution trace's `lines` show, crossings first. */
