@@ -26,10 +26,12 @@
  *   drops `opencode.json`, and the delegate finishes. Its landing rebases
  *   onto that main and lands (hub landing.ts, the rebase a move, agent
  *   workflow-command.ts `movedCommand`): origin's main is its commit on
- *   main's, the clone's HEAD is it, its status is clean, its `.mcp.json` on
- *   the host is main's new text, HEAD tracks no `opencode.json`, and the
- *   agent's log says the rebase ran on the host with the sandbox down.
- *   Before the fix: "unable to unlink old '.mcp.json'".
+ *   main's, with main's new `.mcp.json` and no `opencode.json`, and the
+ *   agent's log says the rebase ran on the host with the sandbox down. The
+ *   landed workspace retires at once, so its clone is read through its
+ *   archive: it held nothing past origin and stood at the landed commit
+ *   (agent workspace.ts `closeClone`'s line). Before the fix: "unable to
+ *   unlink old '.mcp.json'".
  * - (c) The parent delegates `from` the held workspace. The new workspace is
  *   cut at main as it is now, then moved to the source's commit, which has
  *   the older `.mcp.json` and an `opencode.json` (agent workspace.ts
@@ -462,27 +464,50 @@ const landPhase = async (
     .quiet()
     .nothrow()
     .text();
-  const [top, below] = main.trim().split("\n");
-  const head = await gitIn(row.path, "rev-parse", "HEAD");
-  const status = await gitIn(row.path, "status", "--porcelain");
-  const tracksOpencode = await gitIn(
-    row.path,
-    "ls-tree",
-    "--name-only",
-    "HEAD",
-    "opencode.json"
-  );
-  const mcp = await textAt(join(row.path, ".mcp.json"));
-  const log = await watched.since();
+  const [top = "", below = ""] = main.trim().split("\n");
+  const landed = top.split("\t")[0] ?? "";
   note(main.trim());
   check(
-    "(b) the landing rebased onto the main that changed .mcp.json and dropped opencode.json, and landed: origin's main is the delegate's commit on main's, the clone's HEAD is it, its status is clean",
+    "(b) the landing rebased onto the main that changed .mcp.json and dropped opencode.json, and landed: origin's main is the delegate's commit on main's",
     state?.state === "done" &&
-      top?.endsWith(`\t${LAND_COMMIT}`) === true &&
-      below?.startsWith(`${moved}\t`) === true &&
-      top.startsWith(`${head}\t`) &&
-      status === "",
-    `item ${state?.state} ${state?.error ?? ""}; main ${JSON.stringify(main.trim())}; clone HEAD ${head.slice(0, 9)}; status ${JSON.stringify(status.slice(0, 300))}`
+      top.endsWith(`\t${LAND_COMMIT}`) &&
+      below.startsWith(`${moved}\t`),
+    `item ${state?.state} ${state?.error ?? ""}; main ${JSON.stringify(main.trim())}`
+  );
+  // A landed item's workspace retires at once (its session put to sleep, its
+  // clone archived), so the clone is read through its archive: archived it
+  // held nothing past origin (no change, no stash, no commit of its own) and
+  // stood at the landed commit, which the archive's line names, or the
+  // archive would have kept it ("not archived: its clone … holds …").
+  const archivedLine = `[workspace] ${started.workspaceId}: archived; its clone ${row.path}`;
+  const archived = await until(
+    "the land delegate's workspace archived",
+    async () =>
+      (await watched.since())
+        .split("\n")
+        .find((line) => line.startsWith(archivedLine)),
+    Boolean,
+    SETTLE_MS
+  ).catch(() => undefined);
+  const log = await watched.since();
+  const tracked =
+    await Bun.$`git --git-dir ${bare} show ${`${landed}:.mcp.json`}`
+      .quiet()
+      .nothrow()
+      .text();
+  const tracksOpencode = (
+    await Bun.$`git --git-dir ${bare} ls-tree --name-only ${landed} opencode.json`
+      .quiet()
+      .nothrow()
+      .text()
+  ).trim();
+  check(
+    "(b) its clone held nothing past origin and stood at the landed commit when it retired, whose .mcp.json is main's new text and which tracks no opencode.json",
+    landed.length === 40 &&
+      archived?.includes(` ${landed.slice(0, 9)} `) === true &&
+      tracked === MOVED_MCP &&
+      tracksOpencode === "",
+    `${archived ?? "no archive line"}; landed .mcp.json ${JSON.stringify(tracked)}; tracks ${JSON.stringify(tracksOpencode)}`
   );
   const onHost = log
     .split("\n")
@@ -491,12 +516,9 @@ const landPhase = async (
     );
   const refused = refusedIn(log);
   check(
-    "(b) its .mcp.json on the host is main's new text and HEAD tracks no opencode.json; the agent ran the rebase on the host with its sandbox down, and no git write was refused",
-    mcp === MOVED_MCP &&
-      tracksOpencode === "" &&
-      onHost &&
-      refused.length === 0,
-    `.mcp.json ${JSON.stringify(mcp)}; HEAD tracks ${JSON.stringify(tracksOpencode)}; on-host line ${onHost}; ${refused.join(" / ").slice(0, 600) || "no refusal"}`
+    "(b) the agent ran the rebase on the host with its sandbox down, and no git write was refused: a move that left .mcp.json other than HEAD has it fails the landing (workflow-command.ts `movedCommand`)",
+    onHost && refused.length === 0,
+    `on-host line ${onHost}; ${refused.join(" / ").slice(0, 600) || "no refusal"}`
   );
 };
 
@@ -620,7 +642,7 @@ const configPhase = async (
     .quiet()
     .nothrow()
     .text();
-  const at = answer?.indexOf(CONFIG_REFUSED) ?? -1;
+  const at = answer?.lastIndexOf(CONFIG_REFUSED) ?? -1;
   const refusal = answer?.slice(Math.max(0, at - 400), at + 200) ?? "";
   check(
     "(e) a delegate's commit of another .mcp.json, made through the index alone, does not land: its finish names .mcp.json as config no workspace's commit changes, and origin's main is as it was",
