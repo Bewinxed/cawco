@@ -251,6 +251,17 @@ const press = (name: string | RegExp) => (page: Page) =>
   page.getByRole("button", { name }).filter({ visible: true }).first().click();
 
 /**
+ * Opens the tool row that says `words`: the row, never another button whose
+ * name holds them (the memory session's title, "Read the fleet memory", does).
+ */
+const openToolRow = (words: RegExp) => (page: Page) =>
+  page
+    .locator("button[data-slot=trow]")
+    .filter({ hasText: words, visible: true })
+    .first()
+    .click();
+
+/**
  * A pane head's control by its key (SideSurface `data-head-item`), where the
  * head stands it: pressed in the head when it has room, chosen from More when
  * the head's fit put it there (SideSurface `stands`: by priority, the
@@ -2930,7 +2941,7 @@ export const SURFACES: Surface[] = [
         // CawCo's fleet-memory read, its card opened: the memory it read.
         name: "memory-tool",
         route: (s) => `/session/${s.memoryRead}`,
-        act: press(MEMORY_ROW),
+        act: openToolRow(MEMORY_ROW),
         root: MAIN,
         ready: (s) => ({
           shows: on(s.memoryRead, OPEN_TOOL_ROW),
@@ -2941,7 +2952,7 @@ export const SURFACES: Surface[] = [
         // A skill the session ran, its card opened: what it was asked.
         name: "skill-tool",
         route: (s) => `/session/${s.skillRun}`,
-        act: press(SKILL_ROW),
+        act: openToolRow(SKILL_ROW),
         root: MAIN,
         ready: (s) => ({
           shows: on(s.skillRun, OPEN_TOOL_ROW),
@@ -4118,11 +4129,14 @@ export const SURFACES: Surface[] = [
       // The pane's Comments rail, its pins seeded: a short comment the agent
       // answered (its reply in meta, after the agent's glyph), a 48-word one
       // cut at two lines, and a gone pin's row beside them, its pill recessed.
+      // The rows stand 1, the gone 3, then 2, which on a phone stands past
+      // the foot sheet's end (60% of the well) until it is scrolled to.
       {
         name: "comments",
         route: (s) => `/session/${s.art}`,
         act: inComments(),
         root: "body",
+        inView: `${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`,
         widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
           shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`),

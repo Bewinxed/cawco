@@ -17,6 +17,7 @@ import type {
   MemoryScope,
   RuleRow,
 } from "@cawco/core";
+import { memoryKeptWords, memoryReadHead } from "@cawco/core/tool-presentation";
 import type { Presented } from "../mcp-tool";
 import { delegateTypesWords } from "./sessions";
 import { ago, count, lasted, lines, listed, quote, valueWords } from "./words";
@@ -303,7 +304,10 @@ export const memorySettingsWords = (
       const { memory } = answer as { memory: FleetMemory | null };
       return memory
         ? lines(
-            `The fleet's CLAUDE.md, ${count(memory.docs.length, "linked document")}; a write's expectedHash takes ${memory.hash.slice(0, HASH_HANDLE)}:`,
+            memoryReadHead(
+              memory.docs.length,
+              memory.hash.slice(0, HASH_HANDLE)
+            ),
             memory.content
           )
         : "The fleet keeps no CLAUDE.md: set writes one.";
@@ -333,7 +337,12 @@ export const memorySettingsWords = (
         lines: number;
         path?: string;
       };
-      return `Kept ${kept.path ?? "CLAUDE.md"}: ${count(kept.lines, "line")}, ${kept.bytes} bytes; the next write's expectedHash takes ${kept.hash.slice(0, HASH_HANDLE)}.`;
+      return memoryKeptWords({
+        path: kept.path ?? "CLAUDE.md",
+        lines: kept.lines,
+        bytes: kept.bytes,
+        handle: kept.hash.slice(0, HASH_HANDLE),
+      });
     }
   }
 };

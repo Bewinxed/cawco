@@ -1092,7 +1092,7 @@ export function patchFiles(patch: string): FileChange[] {
   return files;
 }
 
-/** What a fleet memory call answered with, read off the hub's JSON. */
+/** What a fleet memory call answered with, read off the hub's JSON or its words. */
 export type MemoryResult =
   | {
       kind: "doc";
@@ -1136,14 +1136,53 @@ function memoryDoc(value: unknown): MemoryResult {
   };
 }
 
-/** `get` answers `{memory}`, `list_docs` `{docs}`, and `set`/`set_doc` what they saved (`{hash, updatedAt, lines, bytes}`). */
+const plural = (n: number, one: string): string =>
+  `${n} ${one}${n === 1 ? "" : "s"}`;
+
+/**
+ * What an agent reads from an `admin_memory_read` get (hub
+ * presenters/fleet-settings.ts): this head, then the document whole. The
+ * memory card reads the document back from the same words.
+ */
+export const memoryReadHead = (docs: number, handle: string): string =>
+  `The fleet's CLAUDE.md, ${plural(docs, "linked document")}; a write's expectedHash takes ${handle}:`;
+
+/** What an agent reads from a memory write: what it kept, and the handle the next write takes. */
+export const memoryKeptWords = (kept: {
+  bytes: number;
+  handle: string;
+  lines: number;
+  path: string;
+}): string =>
+  `Kept ${kept.path}: ${plural(kept.lines, "line")}, ${kept.bytes} bytes; the next write's expectedHash takes ${kept.handle}.`;
+
+const MEMORY_READ =
+  /^The fleet's CLAUDE\.md, \d+ linked documents?; a write's expectedHash takes ([0-9a-f]+):(?:\n([\s\S]*))?$/;
+const MEMORY_KEPT =
+  /^Kept [^\n]+: \d+ lines?, \d+ bytes; the next write's expectedHash takes ([0-9a-f]+)\.$/;
+
+/** A memory call's answer in the words its agent read (`memoryReadHead`, `memoryKeptWords`). */
+function memoryWords(text: string): MemoryResult {
+  const got = MEMORY_READ.exec(text);
+  if (got?.[1]) {
+    return { kind: "doc", content: got[2] ?? "", hash: got[1] };
+  }
+  const kept = MEMORY_KEPT.exec(text);
+  return kept?.[1] ? { kind: "saved", hash: kept[1] } : { kind: "none" };
+}
+
+/**
+ * `get` answers `{memory}`, `list_docs` `{docs}`, and `set`/`set_doc` what
+ * they saved (`{hash, updatedAt, lines, bytes}`), as JSON when the call asked
+ * for the detailed form; in words otherwise (`memoryWords`).
+ */
 export function memoryResult(raw: unknown): MemoryResult {
   let value: unknown = raw;
   if (typeof raw === "string") {
     try {
       value = JSON.parse(raw);
     } catch {
-      return { kind: "none" };
+      return memoryWords(raw);
     }
   }
   if (!isRecord(value)) {

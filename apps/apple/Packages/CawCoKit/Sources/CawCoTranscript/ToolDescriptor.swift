@@ -557,8 +557,9 @@ nonisolated enum MemoryResult {
     case none
 
     init(_ raw: String?) {
-        guard let raw, let data = raw.data(using: .utf8),
-              let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { self = .none; return }
+        guard let raw else { self = .none; return }
+        guard let data = raw.data(using: .utf8),
+              let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { self = MemoryResult(words: raw); return }
         if let docs = value["docs"] as? [[String: Any]] {
             self = .docs(docs.compactMap { doc in
                 guard let path = doc["path"] as? String, let content = doc["content"] as? String else { return nil }
@@ -568,5 +569,18 @@ nonisolated enum MemoryResult {
         }
         let doc = (value["memory"] as? [String: Any]) ?? value
         if let content = doc["content"] as? String { self = .doc(content) } else if doc["hash"] is String { self = .saved } else { self = .none }
+    }
+
+    /// The answer in the words its agent read (tool-presentation.ts `memoryWords`): a get's head, then the document; a write's line.
+    private init(words text: String) {
+        let read = #"^The fleet's CLAUDE\.md, \d+ linked documents?; a write's expectedHash takes [0-9a-f]+:(?:\n([\s\S]*))?$"#
+        let kept = #"^Kept [^\n]+: \d+ lines?, \d+ bytes; the next write's expectedHash takes [0-9a-f]+\.$"#
+        if let regex = try? Regex(read), let match = text.wholeMatch(of: regex) {
+            self = .doc(match.output[1].substring.map(String.init) ?? "")
+        } else if let regex = try? Regex(kept), text.wholeMatch(of: regex) != nil {
+            self = .saved
+        } else {
+            self = .none
+        }
     }
 }

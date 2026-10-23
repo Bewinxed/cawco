@@ -8,6 +8,8 @@
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
 import {
+  type FleetMemory,
+  type FleetMemoryDoc,
   type FleetPlugin,
   type FleetSkillMeta,
   type MarketplaceLink,
@@ -958,10 +960,17 @@ export function adminTools() {
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches all five memory actions (get, set, list_docs, set_doc, remove_doc) with their validation in one handler; splitting would scatter the action enum's contract across several functions.
       async ({ action, content, path, scope, expectedHash }) => {
         if (action === "get") {
+          // CLAUDE.md with its linked documents, as a machine is sent it
+          // (FleetMemory): the hub's read keeps the two apart.
           const fleet = (await api("GET", "/api/fleet")) as {
-            memory?: unknown;
+            memory?: Omit<FleetMemory, "docs"> | null;
+            memoryDocs?: FleetMemoryDoc[];
           };
-          return { memory: fleet.memory ?? null };
+          return {
+            memory: fleet.memory
+              ? { ...fleet.memory, docs: fleet.memoryDocs ?? [] }
+              : null,
+          };
         }
         if (action === "list_docs") {
           const fleet = (await api("GET", "/api/fleet")) as {

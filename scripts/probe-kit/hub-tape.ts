@@ -224,6 +224,9 @@ const ID_KEYS = new Set([
   "presenceId",
   // A preview pane's own id, in what it reports (`…/artifacts/<id>/shown`).
   "client",
+  // The page an Add machine draft's edit is stamped by (dashboard
+  // connect/installs.svelte.ts `#stamp`, minted per page load).
+  "page",
   "nonce",
   "subscriptionId",
 ]);
@@ -723,16 +726,23 @@ const PROJECT_ADDRESS = /^\/api\/projects\/[^/]+\/preview-address$/;
 const PAGE_PATH = "/__cawco/page/";
 
 export function player(tape: TapeHub) {
+  // Each recorded body masked again, as a request is: a key `ID_KEYS` took
+  // in after the tape was recorded masks it on both sides.
   const http = new Map<string, TapeHttp>();
   for (const one of tape.http) {
-    const key = HTTP_KEY(one.method, one.path, one.body);
+    const key = HTTP_KEY(one.method, one.path, canonical(one.body));
     if (!http.has(key)) {
       http.set(key, one);
     }
   }
   const previews = new Map<string, TapePreview>();
   for (const one of tape.preview) {
-    const key = PREVIEW_KEY(one.port, one.method, one.path, one.body);
+    const key = PREVIEW_KEY(
+      one.port,
+      one.method,
+      one.path,
+      canonical(one.body)
+    );
     if (!previews.has(key)) {
       previews.set(key, one);
     }
