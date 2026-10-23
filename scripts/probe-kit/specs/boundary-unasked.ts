@@ -10,8 +10,9 @@
  * A delegate starts a `sleep` in the background, then runs one short command
  * after another (`printf 'RAN-%s\n' ok`) until the spec lets it finish. The
  * spec reads its boundary's process from its record (`boundary.json`: the
- * srt host on Linux, `sandbox-exec` on macOS), checked by its command line,
- * and kills it with SIGKILL: nothing of the agent's ended it.
+ * srt host on Linux; on macOS the runner `sandbox-exec` became, under the
+ * same pid), checked by its command line, and kills it with SIGKILL: nothing
+ * of the agent's ended it.
  *
  * - u1. The agent says the boundary ended unasked and starts again, then
  *   that it is started again; the record names a new generation whose
@@ -148,13 +149,27 @@ const sleepPid = async (): Promise<Pid | undefined> => {
   return found ? listedPid(found.pid) : undefined;
 };
 
-/** Whether `pid`'s command line is a boundary's: the srt host (Linux) or `sandbox-exec` (macOS). */
+/**
+ * `pid`'s command line when it is a boundary's, read for that one process:
+ * on Linux the srt host (`boundary-host.ts`, a binary install's
+ * `srt/host.js`); on macOS the runner, which `sandbox-exec` runs in its own
+ * place once it has entered the sandbox, under the same pid: its command
+ * line is then the runner's bash, named `cawco-boundary` (agent boundary.ts
+ * `planFor`), no longer `sandbox-exec` (r189 on the Mac read pid 97318 as
+ * no boundary for that). Undefined for any other process, or none.
+ */
 const isBoundaryProcess = async (pid: number): Promise<string | undefined> => {
-  const argv = (await processes()).find((row) => row.pid === pid)?.argv ?? "";
-  return argv.includes("sandbox-exec") ||
+  const argv =
+    process.platform === "linux"
+      ? (
+          await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "")
+        ).replaceAll("\0", " ")
+      : await Bun.$`ps -p ${pid} -o command=`.quiet().nothrow().text();
+  return argv.includes("cawco-boundary") ||
+    argv.includes("sandbox-exec") ||
     argv.includes("boundary-host") ||
     argv.includes("host.js")
-    ? argv
+    ? argv.trim()
     : undefined;
 };
 
@@ -221,7 +236,7 @@ const run = async (kit: Kit) => {
   const oldArgv = await isBoundaryProcess(old.pid);
   if (!oldArgv) {
     check(
-      "the record names a live boundary process (the srt host or sandbox-exec)",
+      "the record names a live boundary process (the srt host, or the runner sandbox-exec runs)",
       false,
       `pid ${old.pid}: ${JSON.stringify(old)}`
     );
