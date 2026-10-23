@@ -5185,16 +5185,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * had it on screen at least once (`openedRevision`, `shownAt`), its
    * session put it in front of them ({@link putBeforePerson}), or they made
    * it (their composer canvas, the one create that writes `meta.draft`). A
-   * browser is a tool, never a file. Nothing is deleted by it: the panel's
-   * menu ({@link Artifacts.list}) and `artifact_list` keep every artifact,
-   * and one that reaches the person later is listed from then on.
+   * browser is listed as soon as it is the session's (browsers.ts `listed`):
+   * Files is where the person finds it, opens it in the panel and takes it
+   * over (Projects spec §5.11, "The view": "listed in the panel of every
+   * session of the project"), whatever started the session. Nothing is
+   * deleted by it: the panel's menu ({@link Artifacts.list}) and
+   * `artifact_list` keep every artifact, and one that reaches the person
+   * later is listed from then on.
    */
   const reachedPerson = (row: ArtifactRow): boolean =>
-    row.kind !== "browser" &&
-    (row.openedRevision !== null ||
-      row.shownAt !== null ||
-      docs.doc(row.id).getMap("meta").has("draft") ||
-      putBeforePerson(row));
+    row.kind === "browser" ||
+    row.openedRevision !== null ||
+    row.shownAt !== null ||
+    docs.doc(row.id).getMap("meta").has("draft") ||
+    putBeforePerson(row);
 
   /** The artifacts each decision page's Canvas and Preview pieces show, by the page's id, read once per change of it. */
   const mediaKept = new Map<string, { at: number; ids: string[] }>();
@@ -5240,6 +5244,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * through their page and get no row of their own.
    */
   const filesOf = (instance: InstanceRow): ArtifactRow[] => {
+    // The browser the session uses gets its artifact here too, made the
+    // first time: a session whose panel never opened lists it in Files.
+    deps.listing(instance);
     const rows = db.ofInstance(instance.id).filter(reachedPerson);
     const embedded = new Set(rows.flatMap(mediaOf));
     return rows.filter((row) => !embedded.has(row.id));

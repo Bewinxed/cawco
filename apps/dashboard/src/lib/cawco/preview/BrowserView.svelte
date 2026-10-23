@@ -185,13 +185,13 @@
     );
   });
 
-  // The person opened it asleep: it starts (§5.11, "or when the person opens it").
+  // The person opened it asleep, or failed at a start before this view: it
+  // starts (§5.11, "or when the person opens it"), once per view, so a
+  // failure the view shows is this start's, never one an older start left.
   let wokeFor = "";
   $effect(() => {
-    if (
-      !(browser?.state === "asleep" && machine.online) ||
-      wokeFor === browser.key
-    ) {
+    const resting = browser?.state === "asleep" || browser?.state === "failed";
+    if (!(browser && resting && machine.online) || wokeFor === browser.key) {
       return;
     }
     wokeFor = browser.key;
@@ -205,7 +205,8 @@
     starting = true;
     const why = await startFromPanel(browser.key, machine.machineId);
     starting = false;
-    refusal = why;
+    // A start that failed on its machine says so in the well, from the row.
+    refusal = why && browser?.state !== "failed" ? why : null;
   }
 
   function tryAgain() {
@@ -318,7 +319,8 @@
           again: false,
         };
       }
-      if (browser?.state === "failed") {
+      // While this view's own start runs, it is starting, whatever an older start left.
+      if (browser?.state === "failed" && !starting) {
         return {
           kind: "fail",
           title: browserWords.failedTitle,

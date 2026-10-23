@@ -28,7 +28,14 @@
  *   browsers.ts: a kept slot whose ports another program holds moves);
  * - container: neko's control is held (`/room/control` has_host), given to
  *   the view's own session by the shield;
- * - Hand back in the head answers A's tool with the hand-back's words.
+ * - Hand back in the head answers A's tool with the hand-back's words;
+ * - then a plain session (spawned as New session spawns one, no work item)
+ *   whose browser tool opens a page through its door: the hub's Files list
+ *   holds its browser, Files draws its card, a press opens the browser view
+ *   in the panel with Take over in the head, and Take over draws the page's
+ *   frames, advancing, with the Private chip and no error.
+ *
+ * The fleet runs chrome-devtools-mcp, so every session has its door.
  *
  * Run on the host, outside every workspace boundary (a boundary hides the
  * runtime's socket and the browser's ports):
@@ -60,6 +67,8 @@ const REASON = "Sign in to Example so I can read the page behind it.";
 /** The overlay's refusal the owner saw in a take-over's footer (agent preview-overlay artifact.ts `NO_ARTIFACT`). */
 const NO_ARTIFACT = "This page has no artifact to keep its state in.";
 const HANDED_BACK = "They handed the browser back";
+/** The browser tool every session runs, as browser-shield pins it. */
+const MCP_VERSION = "1.11.0";
 
 const respond = (_request: Seen): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -365,6 +374,177 @@ async function leg(
   await page.close();
 }
 
+/**
+ * Session `id`'s browser tool, as chrome-devtools-mcp connects through its
+ * door (agent door.ts `browser-mcp.json`): a page of its own opened at `url`.
+ * The connection stays open, as the tool's does, until `close`.
+ */
+const openThroughDoor = async (
+  home: string,
+  id: string,
+  url: string
+): Promise<{ close: () => void; targetId: string }> => {
+  const config = (await Bun.file(
+    join(home, ".cawco", "workspaces", id, "browser-mcp.json")
+  ).json()) as { wsEndpoint: string; wsHeaders: string };
+  const { Authorization } = JSON.parse(config.wsHeaders) as {
+    Authorization: string;
+  };
+  const socket = new WebSocket(config.wsEndpoint, {
+    headers: { Authorization },
+  } as unknown as string[]);
+  await new Promise<void>((resolve, reject) => {
+    socket.onopen = () => resolve();
+    socket.onerror = () =>
+      reject(new Error(`the gate refused ${config.wsEndpoint}`));
+  });
+  const made = await new Promise<{
+    error?: { message: string };
+    result?: { targetId?: string };
+  }>((resolve) => {
+    socket.onmessage = (event) => {
+      const message = JSON.parse(String(event.data)) as {
+        id?: number;
+        error?: { message: string };
+        result?: { targetId?: string };
+      };
+      if (message.id === 1) {
+        resolve(message);
+      }
+    };
+    socket.send(
+      JSON.stringify({ id: 1, method: "Target.createTarget", params: { url } })
+    );
+  });
+  if (!made.result?.targetId) {
+    socket.close();
+    throw new Error(
+      `the gate opened no page: ${made.error?.message ?? JSON.stringify(made)}`
+    );
+  }
+  return { targetId: made.result.targetId, close: () => socket.close() };
+};
+
+/**
+ * A plain session (started as New session starts one, no work item) whose
+ * browser tool opened a page: Files lists its browser, a press on it opens
+ * the browser in the panel, and the head's Take over draws its frames.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one plain session's leg, in the order a person takes it, a check at each step
+async function plainLeg(
+  kit: Kit,
+  fleet: KitFleet,
+  base: string,
+  host: "container" | "local",
+  repo: string,
+  projectId: string,
+  key: BrowserKey
+): Promise<void> {
+  const name = `${host} plain session`;
+  const S = await fleet.spawn("claude", `Plain ${host}`, repo, { projectId });
+  const tool = await openThroughDoor(
+    fleet.env.HOME as string,
+    S,
+    MOVING_PAGE
+  ).catch((error: unknown) => String(error));
+  if (typeof tool === "string") {
+    kit.check(`${name}: its browser tool opened a page`, false, tool);
+    return;
+  }
+  const listed = await until(
+    `${name}: Files lists its browser`,
+    () =>
+      fleet.api<{ id: string; kind: string }[]>(
+        `/api/instances/${S}/artifacts/files`
+      ),
+    (rows) => rows.some((row) => row.kind === "browser"),
+    60_000
+  ).catch(() =>
+    fleet.api<{ id: string; kind: string }[]>(
+      `/api/instances/${S}/artifacts/files`
+    )
+  );
+  const browser = listed.find((row) => row.kind === "browser");
+  kit.check(
+    `${name}: with a page open, the hub's Files list holds its browser (${browser?.id})`,
+    !!browser,
+    JSON.stringify(listed)
+  );
+  if (!browser) {
+    tool.close();
+    return;
+  }
+
+  const page = await kit.page("desk");
+  const errors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && !kitsOwnMessage(message.text())) {
+      errors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => errors.push(String(error)));
+  await open(page, `${base}/session/${S}`, '[data-slot="pane"]');
+  // Files, then the browser's card: the panel opens on it.
+  await page.locator("[data-files-control]").first().click();
+  const card = page.locator(`[data-files-card][data-artifact="${browser.id}"]`);
+  const carded = await card.waitFor({ state: "visible", timeout: 30_000 }).then(
+    () => true,
+    () => false
+  );
+  kit.check(`${name}: Files draws the browser's card`, carded);
+  if (!carded) {
+    tool.close();
+    await page.close();
+    return;
+  }
+  await card.click();
+  const take = page
+    .getByRole("button", { name: browserWords.takeOver, exact: true })
+    .first();
+  const shown = await take.waitFor({ state: "visible", timeout: 60_000 }).then(
+    () => true,
+    () => false
+  );
+  const before = await viewOf(page);
+  kit.check(
+    `${name}: the panel shows the browser view with Take over in its head (view ${before.view}, ${before.control})`,
+    shown && before.view,
+    JSON.stringify(before)
+  );
+  if (!shown) {
+    tool.close();
+    await page.close();
+    return;
+  }
+  await take.click();
+  const first = await until(
+    `${name}: the take-over draws frames`,
+    () => viewOf(page),
+    (now) =>
+      now.frames > 0 &&
+      now.control?.startsWith(browserWords.youHaveControl) === true,
+    5 * 60_000
+  ).catch(() => viewOf(page));
+  await page.waitForTimeout(2000);
+  const later = await viewOf(page);
+  kit.check(
+    `${name}: Take over draws the session's moving page, frames ${first.frames} → ${later.frames} over 2 s, the band "${later.control}"`,
+    (await recordOf(key)).state === "live" &&
+      later.frames > first.frames &&
+      later.private &&
+      !(later.overlayError || later.paneFailure || later.down) &&
+      errors.length === 0,
+    JSON.stringify({ first, later, errors })
+  );
+  await page
+    .getByRole("button", { name: browserWords.handBack, exact: true })
+    .first()
+    .click({ timeout: 30_000 })
+    .catch(() => undefined);
+  tool.close();
+  await page.close();
+}
+
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet(respond);
   const browsersPath =
@@ -400,6 +580,37 @@ const run = async (kit: Kit): Promise<void> => {
   await agentOn(`unix://${runtime.endpoint}`);
   await fleet.accountSignedIn();
   process.env.XDG_DATA_HOME = fleet.env.XDG_DATA_HOME as string;
+  // Every session's browser tool, through its door (agent door.ts): the
+  // plain session's leg opens its page there.
+  const put = await fetch(`${fleet.base}/api/fleet/mcp/chrome-devtools`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      config: {
+        command: "npx",
+        args: [
+          "-y",
+          `chrome-devtools-mcp@${MCP_VERSION}`,
+          "--no-usage-statistics",
+        ],
+      },
+      enabled: true,
+    }),
+  });
+  kit.check("the fleet runs chrome-devtools-mcp", put.ok, String(put.status));
+  await until(
+    "the machine applied the fleet's chrome-devtools",
+    () =>
+      fleet
+        .query<{ fleet: string | null }>("SELECT fleet FROM agents")
+        .map((row) => row.fleet ?? "")
+        .find((text) => text.includes("chrome-devtools")),
+    (text) =>
+      (JSON.parse(text) as { mcp?: Record<string, { state?: string }> }).mcp?.[
+        "chrome-devtools"
+      ]?.state === "applied",
+    180_000
+  );
   const base = await fleet.dashboard();
 
   for (const host of ["container", "local"] as const) {
@@ -425,6 +636,7 @@ const run = async (kit: Kit): Promise<void> => {
       });
       await leg(kit, fleet, base, host, view, key, A);
     }
+    await plainLeg(kit, fleet, base, host, repo, project.id, key);
     await post(fleet, `/api/browsers/${encodeURIComponent(key)}/remove`, {
       machineId: "scratch-fleet",
     });
