@@ -7,8 +7,8 @@
    * capitalises it. It lives in this page alone (connect.password): never
    * kept by the hub, gone with a reload, which its placeholder then says.
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import { connectWords } from "@cawco/core";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { IconEye, IconEyeClosed } from "#lib/icons.js";
   import { connect } from "./installs.svelte";
