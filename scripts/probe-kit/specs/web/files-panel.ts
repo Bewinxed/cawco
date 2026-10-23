@@ -226,6 +226,25 @@ const filesAtRest = async (page: Page): Promise<string | null> => {
   }, FILES_PARTS);
 };
 
+/** Files at rest before a read of it, or the run stops on why it never stood still. */
+const atRest = async (page: Page): Promise<void> => {
+  const restless = await filesAtRest(page);
+  if (restless) {
+    throw new Error(restless);
+  }
+};
+
+/** Waits until `holds` reads true in the page; false when it never does within `ms`, for the check to say. */
+const comes = (
+  page: Page,
+  holds: () => boolean,
+  ms = 15_000
+): Promise<boolean> =>
+  page.waitForFunction(holds, null, { timeout: ms }).then(
+    () => true,
+    () => false
+  );
+
 /** The overflow sweep's findings, summed over every state: each read once Files stands still. */
 const sweeps: { state: string; findings: string[] }[] = [];
 const sweep = async (page: Page, state: string) => {
@@ -578,7 +597,7 @@ const desk = async (
   const panel = page.locator("[data-glass-card-frame='files-pop']");
   await panel.waitFor();
   await page.locator("[data-files-card]").first().waitFor();
-  await page.waitForTimeout(600);
+  await atRest(page);
 
   // 2. It floats.
   const floats = await page.evaluate(() => {
@@ -870,7 +889,12 @@ const desk = async (
     const each = await openSession(kit, base, "desk", theme, id);
     await each.locator("[data-files-control]").click();
     await each.locator("[data-glass-card-frame='files-pop']").waitFor();
-    await each.waitForTimeout(600);
+    // The read answered: its empty state, or its card.
+    await each
+      .locator("[data-files-empty], [data-files-card]")
+      .first()
+      .waitFor({ timeout: 30_000 });
+    await atRest(each);
     const said = await each.evaluate(() => ({
       empty: !!document.querySelector("[data-files-empty]"),
       cards: document.querySelectorAll("[data-files-card]").length,
@@ -1040,7 +1064,7 @@ const reviewLegs = async (
   await page.locator("[data-files-control]").focus();
   await page.keyboard.press("Enter");
   await page.locator("[data-files-card]").first().waitFor();
-  await page.waitForTimeout(400);
+  await atRest(page);
   const order = await page.evaluate(async (id) => {
     const listed = (await (
       await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts/files`)
@@ -1111,7 +1135,11 @@ const reviewLegs = async (
   await page
     .locator("[data-files-float][data-state='open']")
     .waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(500);
+  // The pick's focus move, which the check reads.
+  await comes(
+    page,
+    () => !!document.activeElement?.closest("[data-files-float]")
+  );
   const afterPick = await focused(page);
   const floatRole = await page.evaluate(() => {
     const float = document.querySelector<HTMLElement>("[data-files-float]");
@@ -1137,7 +1165,13 @@ const reviewLegs = async (
   await page
     .locator("[data-files-float]")
     .waitFor({ state: "detached", timeout: 10_000 });
-  await page.waitForTimeout(200);
+  // The focus handed back to a card, which the check reads.
+  await comes(
+    page,
+    () =>
+      (document.activeElement as HTMLElement | null)?.dataset.artifact !==
+      undefined
+  );
   const afterClose = await focused(page);
   kit.check(
     "17: a keyboard pick moves the focus to the panel's name in the float (a region named for the artifact, after Files in the page); its Close gives it back to the artifact's card",
@@ -1154,13 +1188,18 @@ const reviewLegs = async (
     .locator('[data-files-region="attachments"] button[data-menu-item]')
     .first()
     .click();
-  await page.waitForTimeout(800);
-  const lightboxOpen = await page.evaluate(
+  const lightboxOpen = await comes(
+    page,
     () => !!document.querySelector(".pswp, [role='dialog'] img")
   );
   await page.mouse.click(720, 450);
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(600);
+  // The lightbox put away, and whatever that started landed.
+  await comes(
+    page,
+    () => !document.querySelector(".pswp, [role='dialog'] img")
+  );
+  await atRest(page);
   const stillOpen = await page.evaluate(
     () =>
       !!document.querySelector(
@@ -1174,7 +1213,16 @@ const reviewLegs = async (
   );
   // 19. A short window: both heads in sight, nothing spills.
   await page.setViewportSize({ width: 1440, height: 520 });
-  await page.waitForTimeout(400);
+  // Files reflowed to the short window: its card inside it, at rest.
+  await comes(
+    page,
+    () =>
+      (document
+        .querySelector("[data-glass-card-frame='files-pop']")
+        ?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY) <=
+      window.innerHeight
+  );
+  await atRest(page);
   const short = await page.evaluate(() => {
     const pop = document
       .querySelector("[data-glass-card-frame='files-pop']")
@@ -1210,7 +1258,7 @@ const reviewLegs = async (
     .locator("[data-files-card]")
     .first()
     .waitFor({ timeout: 30_000 });
-  await zoomed.waitForTimeout(600);
+  await atRest(zoomed);
   const zoomSaid = await zoomed.evaluate(() => {
     const list = document.querySelector(
       '[data-files-region="artifacts"] [data-files-scroll]'
@@ -1296,7 +1344,12 @@ const reviewLegs = async (
     .locator("[data-files-sheet]")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => null);
-  await phone.waitForTimeout(400);
+  // The focus handed back, which the check reads.
+  await comes(
+    phone,
+    () =>
+      (document.activeElement as HTMLElement | null)?.dataset.slot === "burger"
+  );
   const burgerFocus = await focused(phone);
   kit.check(
     "21c: Files opened from the sidebar's row gives the focus back to the burger when it closes",
@@ -1313,7 +1366,13 @@ const reviewLegs = async (
     .first()
     .waitFor({ timeout: 30_000 });
   await narrow.locator("[data-files-search] input").fill("brief");
-  await narrow.waitForTimeout(500);
+  // The search answered: a segment counts its hits ("3 of 9"), at rest.
+  await comes(narrow, () =>
+    [...document.querySelectorAll("[data-files-segment]")].some((segment) =>
+      segment.textContent?.includes(" of ")
+    )
+  );
+  await atRest(narrow);
   // Each run of words inside its segment's padding box, and whole (not
   // clipped). The segment's own scrollWidth also counts its touch area, the
   // `::after` that stands half a pixel past its box on a coarse pointer
@@ -1395,6 +1454,24 @@ const sentAnywhere = (page: Page, words: string) =>
     [COMPOSER, words] as const
   );
 
+/** Waits until the composer holds `words`, the ask put there (the check reads whether it did). */
+const composerHolds = (page: Page, words: string) =>
+  page
+    .waitForFunction(
+      ([selector, text]) =>
+        document.querySelector(selector)?.textContent === text,
+      [COMPOSER, words] as const,
+      { timeout: 15_000 }
+    )
+    .catch(() => undefined);
+
+/**
+ * How long nothing being sent is watched for: a send the press made would
+ * stand in the transcript by then. A wait on what does not happen has no
+ * state to wait on, so it is a window.
+ */
+const SEND_WINDOW_MS = 1500;
+
 /** The ask's words (files.svelte.ts ASK_FOR_A_PAGE). */
 const ASK_WORDS = "Make a page that shows what we've done so far";
 
@@ -1442,9 +1519,9 @@ const askLegs = async (
     .locator("[data-glass-card-frame='files-pop'][data-state='open']")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => null);
-  await onDesk.waitForTimeout(800);
+  await composerHolds(onDesk, ASK_WORDS);
   const deskSaid = await composerSaid(onDesk);
-  await onDesk.waitForTimeout(1500);
+  await onDesk.waitForTimeout(SEND_WINDOW_MS);
   const deskSent = await sentAnywhere(onDesk, ASK_WORDS);
   kit.check(
     '23a (desk): Files with nothing in it offers "Ask Claude Code for a page" once the read answered; pressed, Files goes, the words stand in the session\'s composer with the focus and the caret after them, and nothing is sent',
@@ -1462,7 +1539,7 @@ const askLegs = async (
   await phone.locator("[data-sidebar-files]").click();
   const ask = phone.locator("[data-files-sheet] [data-files-ask]");
   await ask.waitFor({ timeout: 15_000 });
-  await phone.waitForTimeout(600);
+  await atRest(phone);
   const hit = await ask.evaluate((el) => {
     const after = getComputedStyle(el, "::after");
     const box = el.getBoundingClientRect();
@@ -1480,9 +1557,9 @@ const askLegs = async (
     .locator("[data-files-sheet]")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => null);
-  await phone.waitForTimeout(800);
+  await composerHolds(phone, ASK_WORDS);
   const phoneSaid = await composerSaid(phone);
-  await phone.waitForTimeout(1500);
+  await phone.waitForTimeout(SEND_WINDOW_MS);
   const phoneSent = await sentAnywhere(phone, ASK_WORDS);
   kit.check(
     "23b (phone): the ask's touch area is at least 44×44, and pressed, the drawer goes and the words stand in the composer with the focus and the caret after them, nothing sent",
@@ -1538,7 +1615,7 @@ const roundThree = async (
     const page = await openSession(kit, base, view, "light", ids.many);
     await page.locator("[data-files-control]").click();
     await page.locator("[data-files-row]").first().waitFor({ timeout: 30_000 });
-    await page.waitForTimeout(400);
+    await atRest(page);
     const read = await page.evaluate(() => {
       /** Where a control's touch area ends: its ::after's trailing edge, or its own. */
       const touchRight = (el: HTMLElement | null) => {
@@ -1719,10 +1796,29 @@ const roundThree = async (
       reads += 1;
     }
   });
-  await quiet.waitForTimeout(2000);
+  // The page's own reads answered: the bar counts once both lists are in.
+  await quiet.locator("[data-files-count]").waitFor({ timeout: 60_000 });
+  await atRest(quiet);
   const before = reads;
-  await fleet.send(ids.many, "A word with nothing attached");
-  await quiet.waitForTimeout(5000);
+  const sent = await fleet.send(ids.many, "A word with nothing attached");
+  // The send read and its turn answered on the hub, its reply on the page.
+  await until(
+    "the word read",
+    () => fleet.sendRow(sent),
+    (one) => one?.state === "read",
+    60_000
+  );
+  await until(
+    "its turn answered",
+    () =>
+      fleet.query<{ turn_open_at: number | null }>(
+        "SELECT turn_open_at FROM instances WHERE id = ?",
+        ids.many
+      )[0],
+    (one) => one?.turn_open_at === null,
+    60_000
+  );
+  await atRest(quiet);
   kit.check(
     "26: a message and its streamed reply that carry no attachment read the session's attachments 0 times",
     reads - before === 0,
@@ -1785,7 +1881,14 @@ const roundThree = async (
     attach.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null),
     attachButton.click(),
   ]);
-  await attach.waitForTimeout(600);
+  // Files going, which the check reads.
+  await comes(
+    attach,
+    () =>
+      !document.querySelector(
+        "[data-glass-card-frame='files-pop'][data-state='open']"
+      )
+  );
   const attachSaid = await attach.evaluate(() => ({
     filesOpen: !!document.querySelector(
       "[data-glass-card-frame='files-pop'][data-state='open']"
@@ -1817,7 +1920,15 @@ const roundThree = async (
   // Still a desk (900px and up), but Files' card leaves the float under
   // the panel's 320px least width beside the rail (about 270px at 920).
   await narrowing.setViewportSize({ width: 920, height: 900 });
-  await narrowing.waitForTimeout(1200);
+  // The hand-off the check reads: the float gone and the session's panel open.
+  await comes(
+    narrowing,
+    () =>
+      !document.querySelector("[data-files-float]") &&
+      [...document.querySelectorAll('iframe[title="Preview"]')].some(
+        (frame) => !frame.closest("[data-files-float]")
+      )
+  );
   const narrowed = await narrowing.evaluate(() => ({
     float: !!document.querySelector("[data-files-float]"),
     filesOpen: !!document.querySelector(
@@ -1836,14 +1947,19 @@ const roundThree = async (
 
   // 30. Jump's field draws the house ring.
   const jump = await openSession(kit, base, "desk", "light", ids.many);
-  await jump.waitForTimeout(1500);
+  // The page stands hydrated once open (kit `pageReady`), so the shortcut is
+  // its own; the ring is read once the focus is in Jump's field.
   await jump.keyboard.press("Control+KeyK");
   await jump
     .locator(
       "[data-glass-card-frame='jump-pop'] [data-slot='finder-field'] input"
     )
     .waitFor({ timeout: 10_000 });
-  await jump.waitForTimeout(300);
+  await comes(
+    jump,
+    () => !!document.activeElement?.closest("[data-slot='finder-field']")
+  );
+  await atRest(jump);
   const jumpRing = await jump.evaluate(() => {
     const ringed = document.querySelector<HTMLElement>(
       "[data-glass-card-frame='jump-pop'] [data-slot='finder-field']"
@@ -2218,7 +2334,7 @@ const narrowLeg = async (
   const sheet = page.locator("[data-files-sheet]");
   await sheet.waitFor();
   await page.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(700);
+  await atRest(page);
   const drawer = await page.evaluate(() => ({
     // The kit's drawer content is vaul's (components/ui/drawer).
     vaul: !!document.querySelector(
