@@ -275,8 +275,18 @@ interface Pair {
   value: string;
 }
 
+/**
+ * A value as a variant name spells it: a leading minus as `minus-`, so
+ * `data-delta="-1"` is `delta-minus-1:`, not `delta--1:`, which Biome
+ * 2.6.2's Tailwind class parser rejects ("Expected a value but instead
+ * found '-'").
+ */
+const valueName = (value: string): string =>
+  value.startsWith("-") ? `minus-${value.slice(1)}` : value;
 const variantName = ({ kind, attr, value }: Pair) =>
-  kind === "data" ? `${attr}-${value}` : `aria-${attr}-${value}`;
+  kind === "data"
+    ? `${attr}-${valueName(value)}`
+    : `aria-${attr}-${valueName(value)}`;
 const selector = ({ kind, attr, value }: Pair) =>
   `&[${kind}-${attr}="${value}"]`;
 

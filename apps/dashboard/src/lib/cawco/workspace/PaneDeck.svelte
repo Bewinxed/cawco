@@ -79,7 +79,7 @@
          `visible` paints through a hidden ancestor. -->
     <div
       data-slot="pane-deck-card"
-      class="absolute inset-0 flex min-h-0 min-w-0 will-change-transform delta--1:transform-(--park-up) delta-0:transform-(--park-here) delta-1:transform-(--park-down) data-card-hidden:pointer-events-none data-card-hidden:invisible"
+      class="absolute inset-0 flex min-h-0 min-w-0 will-change-transform delta-minus-1:transform-(--park-up) delta-0:transform-(--park-here) delta-1:transform-(--park-down) data-card-hidden:pointer-events-none data-card-hidden:invisible"
       data-delta={delta}
       data-leaf={leaf.id}
       inert={!focused}
