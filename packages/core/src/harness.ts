@@ -2194,12 +2194,23 @@ export interface WorkspaceCheckout {
   path: string;
   /** The repository the clone was cut from. */
   repoRoot: string;
+  /** A cut again from a carry holding an uncommitted diff: whether it was laid on top ({@link CarryRestored}). */
+  restored?: CarryRestored;
   /**
    * The workspace's scratch dir on its machine, its commands' `TMPDIR`
    * (`workspaceScratchDir`): where inputs for the delegate are copied.
    */
   tmp: string;
 }
+
+/**
+ * What a workspace cut again from its carry ({@link WorkspaceCut} `carry`)
+ * made of the carry's uncommitted diff: `applied`, the patch, laid on its
+ * HEAD (changes unstaged, new files untracked); or `refused`, the patch,
+ * left in the carry, and `why` in git's words, which name each file.
+ */
+export type CarryRestored =
+  { applied: string } | { refused: string; why: string };
 
 /** A workspace as the machine that holds it is told about it. */
 export interface WorkspaceRef {

@@ -26,10 +26,17 @@
  * (r) R, landing none, leaves a Go module cache's read-only tree in its
  *     $TMPDIR and finishes: its workspace retires, its scratch dir gone.
  * (d) D leaves a detached grandchild of its shell running (a double fork
- *     under nohup) from its clone, and a process the probe starts on the
- *     host with its working directory in D's clone stands for one the
- *     boundary never started; D finishes: its workspace retires, both are
- *     gone, and the agent's log names the one it ended.
+ *     under nohup) from its clone, and the fleet's keeper runs a process on
+ *     the host with its working directory in D's clone (a session's CLI the
+ *     hub wrote off, which the boundary never started); D finishes: its
+ *     workspace retires, both are gone, and the agent's log names the one
+ *     it ended.
+ * (o) A shell of the person's (started from outside the fleet, its parent
+ *     alive) runs in O's clone: O's retirement leaves it running and waits,
+ *     the hub's log naming it; once it ends, the next sweep retires O.
+ * (c) P's carry holds an uncommitted diff beside its commits: a handoff
+ *     cuts it again with the diff on top and says so; a diff that no
+ *     longer applies is said, naming its file, and stays in the carry.
  * (u) macOS: U's clone holds a file its owner may not unlink (`chflags
  *     uchg`), so its removal stops part-way: the archive fails, said in the
  *     hub's log, and the row is never held for what the cut-off removal left
@@ -48,18 +55,21 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
+import { movedLine, restoredWords } from "../../../packages/core/src/injected";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
 } from "../../../packages/core/src/safe-git";
 import { workWords } from "../../../packages/core/src/words/work";
+import { welcomed } from "../../lib/keeper-dial";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
-const TAG = /PROBE-HOLDS-([NLXSRDUT])\b/;
-type Tag = "N" | "L" | "X" | "S" | "R" | "D" | "U" | "T";
+const TAG = /PROBE-HOLDS-([NLXSRDUOPT])\b/;
+type Tag = "N" | "L" | "X" | "S" | "R" | "D" | "U" | "O" | "P" | "T";
 const FINISH = "mcp__cawco__finish_item";
 const COMMIT =
   "git -c user.name=Delegate -c user.email=d@probe.test commit -qm";
@@ -74,6 +84,12 @@ const goFile = (tag: Tag) => `probe-go-${tag}`;
 /** The sleeps whose arguments name the processes (d) leaves: inside the boundary, and on the host. */
 const INSIDE_SLEEP = "7243";
 const HOST_SLEEP = "7244";
+/** The sleep of (o)'s shell of the person's. */
+const OWNER_SLEEP = "7245";
+/** P's two handoffs, and what it prints after the first. */
+const P_AGAIN = "PROBE-HOLDS-P-AGAIN";
+const P_THIRD = "PROBE-HOLDS-P-THIRD";
+const P_READ = "P-READ-42";
 /** What T prints of its tree as its boundary sees it. */
 const INSIDE_SEEN = /T-INSIDE-(\d+)-END/;
 /** A workspace's settle: its session's sleep, then its machine's archive. */
@@ -101,6 +117,10 @@ const firstCommand = (tag: Tag): string => {
       return `mkdir -p "$TMPDIR/d" && ( nohup sleep ${INSIDE_SLEEP} > /dev/null 2>&1 & ) && echo ${said("MADE-D")}`;
     case "U":
       return `printf 'junk/\\n' > .gitignore && mkdir -p junk && echo locked > junk/locked && git add .gitignore && ${COMMIT} 'Ignore junk' && echo ${said("MADE-U")}`;
+    case "O":
+      return `echo ${said("MADE-O")}`;
+    case "P":
+      return `echo p > held-P.txt && git add held-P.txt && ${COMMIT} 'Holds commit P' && echo ${said("MADE-P")}`;
     case "T":
       return `echo T-INSIDE-$(git status --porcelain | grep -c '^ D')-END && echo ${said("MADE-T")}`;
     default:
@@ -112,7 +132,13 @@ const firstCommand = (tag: Tag): string => {
 const steps: Partial<Record<Tag, { finishes: number; searched?: boolean }>> =
   {};
 /** What the delegates printed that the probe reads. */
-const read: { again?: string; inside?: number } = {};
+const read: {
+  again?: string;
+  inside?: number;
+  moved2?: string;
+  moved3?: string;
+  p2?: string;
+} = {};
 
 const tool = (name: string, input: object): Reply => ({
   everyMs: 5,
@@ -167,6 +193,66 @@ const againTurn = (request: Seen): Reply => {
   return finishOnce(request, "N", 1, done("N"));
 };
 
+/** A Bash step of P's that prints `mark` once done, unless it already did. */
+const pStep = (
+  request: Seen,
+  mark: string,
+  command: string
+): Reply | undefined =>
+  request.all.includes(seen(mark))
+    ? undefined
+    : tool("Bash", {
+        command: `${command} && echo ${said(mark)}`,
+        description: mark,
+      });
+
+/**
+ * P: commits and finishes (landing none), then, past its finish, changes a
+ * tracked file and leaves an untracked one: what a turn that ends without a
+ * finish leaves (finish_item refuses a dirty tree). After its first
+ * handoff it reads its tree, commits it, finishes, and leaves another
+ * change; after its second it finishes.
+ */
+const pTurn = (request: Seen): Reply => {
+  const finishes = steps.P?.finishes ?? 0;
+  if (request.all.includes(P_THIRD)) {
+    read.moved3 ||= movedIn(request.all);
+    return finishOnce(request, "P", 2, done("P"));
+  }
+  if (request.all.includes(P_AGAIN)) {
+    read.moved2 ||= movedIn(request.all);
+    const reading = pStep(request, "P-READ", "git status --porcelain");
+    if (reading) {
+      return reading;
+    }
+    const at = request.all.lastIndexOf(P_READ);
+    read.p2 ||= request.all.slice(at, at + 400);
+    if (finishes < 2) {
+      return (
+        pStep(
+          request,
+          "P-SAVED",
+          `git add -A && ${COMMIT} 'P keeps its changes'`
+        ) ?? finishOnce(request, "P", 1, done("P"))
+      );
+    }
+    return (
+      pStep(request, "P-DIRTY2", "echo 'changed again' >> README.md") ??
+      text("done")
+    );
+  }
+  if (finishes < 1) {
+    return finishOnce(request, "P", 0, done("P"));
+  }
+  return (
+    pStep(
+      request,
+      "P-DIRTY1",
+      "echo 'changed by P' >> README.md && echo new > new-P.txt"
+    ) ?? text("done")
+  );
+};
+
 const waitFor = (tag: Tag): Reply =>
   tool("Bash", {
     command: `while [ ! -f "$TMPDIR/${goFile(tag)}" ]; do sleep 1; done; echo ${said(`WENT-${tag}`)}`,
@@ -187,12 +273,15 @@ const respond = (request: Seen): Reply => {
   if (tag === "N" && request.all.includes(AGAIN)) {
     return againTurn(request);
   }
+  if (tag === "P") {
+    return pTurn(request);
+  }
   if (tag === "T") {
     const inside = INSIDE_SEEN.exec(request.all)?.[1];
     read.inside = inside === undefined ? undefined : Number(inside);
   }
   if (
-    (tag === "L" || tag === "S" || tag === "U") &&
+    (tag === "L" || tag === "S" || tag === "U" || tag === "O") &&
     !request.all.includes(seen(`WENT-${tag}`))
   ) {
     return waitFor(tag);
@@ -452,15 +541,31 @@ const processesLeg = async (kit: Kit, scene: Scene): Promise<void> => {
     (pids) => pids.length > 0,
     ITEM_MS
   ).catch(() => [] as number[]);
-  const host = Bun.spawn(["sleep", HOST_SLEEP], {
-    cwd: wd.path,
-    stdio: ["ignore", "ignore", "ignore"],
-  });
-  host.unref();
+  // A process of CawCo's on the host, as a session's CLI the hub wrote off
+  // is: the keeper's, in D's clone, outside its boundary.
+  const keeper = welcomed(
+    scene.fleet.sessiondSocket,
+    await SessiondClient.connect(scene.fleet.sessiondSocket)
+  );
+  try {
+    await keeper.spawnProc(crypto.randomUUID(), {
+      command: "/bin/sh",
+      args: ["-c", `exec sleep ${HOST_SLEEP}`],
+      cwd: wd.path,
+    });
+  } finally {
+    keeper.close();
+  }
+  const host = await until(
+    "the keeper's sleep in D's clone",
+    () => sleeps(HOST_SLEEP),
+    (pids) => pids.length > 0,
+    30_000
+  ).catch(() => [] as number[]);
   check(
-    "(d) D leaves a detached grandchild running from its clone, and one runs on the host in its clone",
-    inside.length > 0 && (await sleeps(HOST_SLEEP)).length > 0,
-    `inside ${inside.join(", ") || "none"}; host ${host.pid}`
+    "(d) D leaves a detached grandchild running from its clone, and a process of the keeper's runs on the host in its clone",
+    inside.length > 0 && host.length > 0,
+    `inside ${inside.join(", ") || "none"}; host ${host.join(", ") || "none"}`
   );
   const item = await scene.ended(d);
   const retired = await scene.stateBecomes(wd.id, "archived");
@@ -479,7 +584,152 @@ const processesLeg = async (kit: Kit, scene: Scene): Promise<void> => {
       ended !== undefined,
     `${item?.state}; ${retired.state}; left ${left.join(", ") || "none"}; ${ended ?? "no line naming it"}; ${await linesOf(scene.fleet, wd.id)}`
   );
-  host.kill("SIGKILL");
+};
+
+/**
+ * (o) A process of the person's own in a clone: a shell started from
+ * outside the fleet with its working directory there, its parent alive.
+ * Retirement leaves it running and waits, the hub's log naming it; once it
+ * ends, the next sweep retires the workspace.
+ */
+const ownerLeg = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const o = await scene.delegate("O", scene.src, { lands: "none" });
+  const wo = scene.workspaceOf(o.workspaceId);
+  await until(
+    "O's clone",
+    () => existsSync(wo.path),
+    (there) => there,
+    ITEM_MS
+  ).catch(() => false);
+  const shell = Bun.spawn(["sh", "-c", `sleep ${OWNER_SLEEP}; :`], {
+    cwd: wo.path,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  await writeFile(join(wo.tmp ?? "", goFile("O")), "go\n");
+  const item = await scene.ended(o);
+  const waited = await until(
+    "O's retirement waiting on the shell",
+    async () =>
+      (await scene.fleet.logs("hub"))
+        .split("\n")
+        .find(
+          (line) =>
+            line.includes(wo.id) &&
+            line.includes(workWords.notRetired("")) &&
+            line.includes(`pid ${shell.pid} `)
+        ),
+    (line) => line !== undefined,
+    SETTLE_MS
+  ).catch(() => undefined);
+  const row = scene.workspaceOf(wo.id);
+  check(
+    "(o) a shell of the person's in O's clone survives O's retirement, which waits, the hub's log naming it; the clone stands and the row is not held",
+    item?.state === "done" &&
+      waited !== undefined &&
+      shell.exitCode === null &&
+      existsSync(wo.path) &&
+      row.state === "active",
+    `${item?.state}; shell ${shell.exitCode === null ? "runs" : `ended ${shell.exitCode}`}; ${row.state}; ${waited ?? (await linesOf(scene.fleet, wo.id))}`
+  );
+  shell.kill("SIGKILL");
+  await shell.exited;
+  await scene.fleet.api("/api/workspaces/retire", {});
+  const retired = await scene.stateBecomes(wo.id, "archived");
+  check(
+    "(o) once the shell ends, the next sweep retires it",
+    retired.state === "archived" && !existsSync(wo.path),
+    `${retired.state}; ${await linesOf(scene.fleet, wo.id)}`
+  );
+};
+
+/** The moved line's own opening, as the product writes it (core injected.ts `movedLine`). */
+const MOVED_AT = (() => {
+  const line = movedLine({
+    kind: "recut",
+    branch: "b",
+    commit: "0".repeat(40),
+  });
+  return line.slice(0, line.indexOf("000000000"));
+})();
+
+/** The moved line a delegate was handed, from its conversation. */
+const movedIn = (all: string): string => {
+  const at = all.lastIndexOf(MOVED_AT);
+  return at < 0 ? "" : all.slice(at, at + 1500);
+};
+
+/**
+ * (c) A carry's uncommitted diff comes back with a cut again: P lands
+ * none, commits and finishes, then changes a tracked file and leaves an
+ * untracked one in the same turn (finish_item refuses a dirty tree, so this
+ * is what a turn that ends without a finish leaves); its workspace retires
+ * with a carry holding both. A handoff cuts it again: README.md changed and
+ * the new file untracked, as it left them, and its moved line says the diff
+ * was applied. It commits them, finishes and changes README.md again; the
+ * probe breaks the new carry's diff, and a second handoff's moved line says
+ * it did not apply, naming README.md, and leaves it in the carry.
+ */
+const carryDiffLeg = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const p = await scene.delegate("P", scene.src, { lands: "none" });
+  const item = await scene.ended(p);
+  const first = await scene.stateBecomes(p.workspaceId, "archived");
+  const patch = first.carry ? join(first.carry, "uncommitted.patch") : "";
+  check(
+    "(c) P lands none: done with a commit, then leaves a changed file and an untracked one; its workspace retires with all of it in a carry",
+    item?.state === "done" &&
+      first.state === "archived" &&
+      patch !== "" &&
+      existsSync(patch) &&
+      existsSync(join(first.carry ?? "", "commits.bundle")),
+    `${item?.state}; ${first.state}; carry ${first.carry}`
+  );
+  await scene.call("handoff", {
+    target: p.instanceId,
+    message: `${P_AGAIN}: read your tree.`,
+  });
+  await until(
+    "P finishes again in its clone cut again",
+    () => steps.P?.finishes ?? 0,
+    (count) => count >= 2,
+    ITEM_MS
+  ).catch(() => 0);
+  check(
+    "(c) the handoff cuts P's clone again with its diff on top: README.md changed and new-P.txt untracked, and its moved line says the diff was applied",
+    (read.p2 ?? "").includes(" M README.md") &&
+      (read.p2 ?? "").includes("?? new-P.txt") &&
+      (read.moved2 ?? "").includes(restoredWords({ applied: patch })),
+    `read ${read.p2 ?? "nothing"}; moved ${read.moved2 || "none"}`
+  );
+  const second = await scene.stateBecomes(p.workspaceId, "archived");
+  const again = second.carry ? join(second.carry, "uncommitted.patch") : "";
+  const diff = again ? await Bun.file(again).text() : "";
+  await writeFile(
+    again || join(kit.out, "no-patch"),
+    diff.replace(" holds", " nothing like it")
+  );
+  await scene.call("handoff", {
+    target: p.instanceId,
+    message: `${P_THIRD}: carry on.`,
+  });
+  await until(
+    "P finishes a third time",
+    () => steps.P?.finishes ?? 0,
+    (count) => count >= 3,
+    ITEM_MS
+  ).catch(() => 0);
+  const refused =
+    restoredWords({ refused: again, why: "WHY" }).split("WHY")[0] ?? "-";
+  check(
+    "(c) once its carry's diff no longer applies, the next cut says so, naming README.md, and the diff stays in the carry",
+    second.state === "archived" &&
+      diff.includes(" holds") &&
+      (read.moved3 ?? "").includes(refused) &&
+      (read.moved3 ?? "").includes("README.md") &&
+      existsSync(again),
+    `${second.state}; moved ${read.moved3 || "none"}`
+  );
 };
 
 /**
@@ -637,8 +887,9 @@ const spec: Spec = {
     for (const tag of Object.keys(steps) as Tag[]) {
       delete steps[tag];
     }
-    read.again = undefined;
-    read.inside = undefined;
+    for (const key of Object.keys(read) as (keyof typeof read)[]) {
+      delete read[key];
+    }
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
     fleet.launch("sessiond");
@@ -725,6 +976,8 @@ const spec: Spec = {
     await readOnlyLeg(kit, scene);
     await processesLeg(kit, scene);
     await removalLeg(kit, scene);
+    await ownerLeg(kit, scene);
+    await carryDiffLeg(kit, scene);
     await treeLeg(kit, scene, tree);
     // Whatever a failed leg left read-only goes with the fleet.
     await chmod(fleet.sandbox, 0o755).catch(() => undefined);
