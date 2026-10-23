@@ -828,8 +828,8 @@ export function adminTools() {
     // ── hooks ────────────────────────────────────────────────────────────
     ...admin(
       "hooks",
-      "the fleet's hooks: Claude Code settings.json hooks synced to every " +
-        "machine. A hook attaches a command, prompt or agent to a lifecycle event " +
+      "the fleet's hooks: Claude Code hooks synced to every machine, or to one " +
+        "project's sessions. A hook attaches a command, prompt or agent to a lifecycle event " +
         "(SessionStart, PreToolUse, PostToolUse, Stop, etc.) and runs unattended. " +
         "'list' answers the hooks and the templates.",
       ["list"],
@@ -873,6 +873,13 @@ export function adminTools() {
             "A command hook's script body. CawCo writes it to a file on every machine " +
               "and points the registration at that path. Optional for command hooks."
           ),
+        projectId: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "One project's only: every session in its checkouts and workspaces runs it. null: every machine."
+          ),
       },
       async (args) => {
         const { action } = args;
@@ -897,7 +904,15 @@ export function adminTools() {
         // Only the fields given: the hub merges an update over the stored hook
         // and validates the result, so `update {id, enabled: false}` touches
         // nothing else. A create is validated the same way, from nothing.
-        const { action: _action, id: _id, ...given } = args;
+        const { action: _action, id: _id, projectId, ...fields } = args;
+        // A project's hook is bound by its scope as the hub stores it; null
+        // makes it every machine's again.
+        const given = {
+          ...fields,
+          ...(projectId === undefined
+            ? {}
+            : { scope: projectId ? "project" : null, projectId }),
+        };
         const body =
           action === "create"
             ? { ...given, enabled: given.enabled ?? true }

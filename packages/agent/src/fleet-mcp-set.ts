@@ -78,7 +78,8 @@ export const apartSignedOut = (
   ),
 });
 
-const within = (cwd: string, folder: string): boolean =>
+/** Whether `cwd` is `folder` or inside it, on whole path segments. */
+export const within = (cwd: string, folder: string): boolean =>
   cwd === folder ||
   cwd.startsWith(folder.endsWith(sep) ? folder : `${folder}${sep}`);
 

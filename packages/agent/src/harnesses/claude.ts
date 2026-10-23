@@ -39,6 +39,7 @@ import {
   type Options as SdkOptions,
   type SessionStore,
   type SessionStoreEntry,
+  type Settings,
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -173,6 +174,11 @@ import {
   readSkillFiles,
   syncFleetConfig,
 } from "../fleet";
+import {
+  placedAt,
+  readFleetHarnessSet,
+  type SetHook,
+} from "../fleet-harness-set";
 import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import { sessionGitEnv } from "../git-credential";
@@ -1439,22 +1445,75 @@ const LEAD_GATED_ON_CLAUDE: ReadonlySet<string> = new Set(
   LEAD_GATED_TOOLS.claude
 );
 
+/** The `hooks` of flag settings, by event. */
+type FlagHooks = NonNullable<Settings["hooks"]>;
+/** One matcher's entry of a `hooks` event, as flag settings hold it. */
+type FlagHookEntry = FlagHooks[string][number];
+
+/**
+ * A project's hooks as flag settings hold them, by event: each copy placed
+ * at the session's folder (fleet-harness-set.ts `placedAt`), its own entry
+ * under its matcher, in the order the set holds them.
+ *
+ * Written so no entry reads as the boundary's when an agent adopts the CLI
+ * (boundary.ts `launchedHook`, which takes the first `"matcher":…,"hooks":
+ * [{"type":"command","command":…` on the boundary's matchers for its hook,
+ * and stops a CLI whose hook it cannot read): a matcher of every tool is
+ * left out, as Claude Code reads an absent one ("If you omit the matcher or
+ * use `"*"`, the group activates on every occurrence of the event",
+ * code.claude.com/docs/en/hooks), and each handler's `type` comes after its
+ * other fields.
+ */
+const placedHookEntries = (hooks: readonly SetHook[]): FlagHooks => {
+  const byEvent: FlagHooks = {};
+  for (const hook of hooks) {
+    const { type, ...fields } = hook.handler;
+    const handler = { ...fields, type } as FlagHookEntry["hooks"][number];
+    const matcher = hook.matcher?.trim();
+    byEvent[hook.event] = [
+      ...(byEvent[hook.event] ?? []),
+      matcher && matcher !== "*"
+        ? { matcher, hooks: [handler] }
+        : { hooks: [handler] },
+    ];
+  }
+  return byEvent;
+};
+
 /**
  * {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its
- * `settings`, and a lead's {@link LEAD_SETTINGS} or a fenced session's
- * {@link FENCE_SETTINGS} over them.
+ * `settings`, the project's hooks placed at the session's folder (`placed`,
+ * fleet-harness-set.ts) joined to the boundary's, and a lead's
+ * {@link LEAD_SETTINGS} or a fenced session's {@link FENCE_SETTINGS} over
+ * them. The boundary's `PreToolUse` entry comes last of that event's. The
+ * order decides no verdict: "When an event fires, Claude Code runs the
+ * matching hooks in parallel", and "For `PreToolUse` permission decisions,
+ * the most restrictive answer applies" (code.claude.com/docs/en/hooks-guide),
+ * so the boundary's deny refuses the call whatever a placed hook answers.
+ * Nor does it order rewrites: "When multiple `PreToolUse` hooks return
+ * `updatedInput` …, the last one to finish takes effect" (same page), each
+ * hook having been handed the call's original input (anthropics/claude-code#83353).
  */
 const sessionSettingsOptions = (
   boundary: HarnessContext["boundary"],
   lead: boolean,
-  fence: boolean
+  fence: boolean,
+  placed: readonly SetHook[]
 ) => {
   const bounded = claudeBoundaryOptions(boundary);
+  // A boundary's settings carry its `hooks`; no boundary, none.
+  const own =
+    (bounded as { settings?: { hooks?: FlagHooks } }).settings?.hooks ?? {};
+  const hooks: FlagHooks = placedHookEntries(placed);
+  for (const [event, entries] of Object.entries(own)) {
+    hooks[event] = [...(hooks[event] ?? []), ...entries];
+  }
   return {
     ...bounded,
     settings: {
       ...SESSION_SETTINGS,
       ...("settings" in bounded ? bounded.settings : {}),
+      ...(Object.keys(hooks).length > 0 ? { hooks } : {}),
       ...(lead ? LEAD_SETTINGS : {}),
       ...(fence ? FENCE_SETTINGS : {}),
     },
@@ -1762,16 +1821,23 @@ const sessionSpecOf = (
  * The fleet's MCP servers a session takes as it launches ({@link
  * fleetMcpFor}), apart from the caller's: `ClaudeSession` sets them through
  * `setMcpServers`. A caller's server keeps a name it shares with one of the
- * fleet's. `denied`: the tools of a chrome-devtools it cannot take. A fenced
- * session takes no fleet server.
+ * fleet's. `denied`: the tools of a chrome-devtools it cannot take. `hooks`:
+ * the project's hooks placed at its folder (fleet-harness-set.ts), which its
+ * flag settings carry ({@link sessionSettingsOptions}). A fenced session
+ * takes no fleet server and no placed hook.
  */
 const launchFleet = async (
   session: SessionSpec,
   ctx: HarnessContext
-): Promise<{ fleet: Record<string, McpServerConfig>; denied: string[] }> => {
+): Promise<{
+  denied: string[];
+  fleet: Record<string, McpServerConfig>;
+  hooks: SetHook[];
+}> => {
   const fleet = session.fence
     ? { servers: {}, denied: [] }
     : await fleetMcpFor(ctx, ctx.cwd);
+  const set = session.fence ? undefined : await readFleetHarnessSet();
   return {
     fleet: Object.fromEntries(
       Object.entries(fleet.servers).filter(
@@ -1779,6 +1845,7 @@ const launchFleet = async (
       )
     ),
     denied: fleet.denied,
+    hooks: set ? placedAt(set.placedHooks, ctx.cwd) : [],
   };
 };
 
@@ -2024,15 +2091,18 @@ class ClaudeSession implements HarnessSession {
     /**
      * What only a launch has: `conversationKept` says, for a resumed
      * conversation, whether its transcript is still on disk; `fleetMcp` is
-     * the fleet's servers it takes as it starts ({@link launchFleet}). An
-     * attach starts nothing and passes neither.
+     * the fleet's servers it takes as it starts, `placedHooks` its folder's
+     * project hooks ({@link launchFleet}). An attach starts nothing and
+     * passes none of them: its CLI keeps the settings it was launched with.
      */
     {
       conversationKept,
       fleetMcp,
+      placedHooks = [],
     }: {
       conversationKept?: () => Promise<boolean>;
       fleetMcp?: Record<string, McpServerConfig>;
+      placedHooks?: SetHook[];
     },
     /**
      * The sessiond connection this session's CLI child lives under: `spawn()`
@@ -2195,7 +2265,7 @@ class ClaudeSession implements HarnessSession {
         // A work item's session runs every shell command inside its
         // workspace's boundary, through its shell prefix (`sessionEnv`); the
         // hook the CLI itself runs judges every other call's paths.
-        ...sessionSettingsOptions(ctx.boundary, lead, fence),
+        ...sessionSettingsOptions(ctx.boundary, lead, fence, placedHooks),
         ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
@@ -4359,6 +4429,7 @@ export class ClaudeHarness implements Harness {
       {
         ...(conversationKept ? { conversationKept } : {}),
         fleetMcp: launch.fleet,
+        placedHooks: launch.hooks,
       },
       { client, procId: procIdFor("claude", ctx.instanceId), executable }
     );
