@@ -1202,10 +1202,6 @@
   transition: var(--transition-exit-hide);
 }
 
-@utility transition-fade-slide {
-  transition: var(--transition-fade-slide);
-}
-
 @utility transition-fade-blur {
   transition: var(--transition-fade-blur);
 }

@@ -30,7 +30,8 @@
  * cancels). Fork from here runs for real by a mouse (Chromium 1440), a
  * finger (WebKit 390) and the keyboard (WebKit 1440): a new session on the
  * hub, the page on it. Edit message on a queued message lifts its words
- * into the composer. A failed send's recovery (Send again) stands
+ * into the composer, on both engines at 1440, and the row it grows comes
+ * up out of its blur once, from the focus. A failed send's recovery (Send again) stands
  * in its failure block only, never in the row. Last, Send edited message
  * rewinds for real: the edited words stand where the 40-word line was,
  * nothing after it, and a reload says the same.
@@ -738,7 +739,8 @@ const spec: Spec = {
     );
 
     await failedLeg(kit, base, source);
-    await liftLeg(kit, base, held);
+    await liftLeg(kit, base, held, "chromium");
+    await liftLeg(kit, base, held, "webkit");
     await rewindLeg(kit, base, fleet, source);
   },
 };
@@ -809,14 +811,63 @@ async function failedLeg(kit: Kit, base: string, source: string) {
   await page.close();
 }
 
-/** Edit message on a queued message (the run's last) lifts its words into the composer. */
-async function liftLeg(kit: Kit, base: string, held: string) {
-  const text = RUN[2] as string;
-  const page = await sessionPage(kit, base, held, {
-    engine: "chromium",
-    view: "desk",
+/** The queued edit's row as it comes up: each read of its label, and how many label elements it drew. */
+interface RowEntrance {
+  /** Distinct label elements seen: a row drawn afresh mid-entrance makes two. */
+  drawn: number;
+  reads: { blur: number; opacity: number; t: number }[];
+}
+
+/**
+ * In the page, before the lift: reads the edit row's label every 16ms for
+ * 900ms from when it stands, its opacity and blur as its computed style says.
+ */
+function watchRow(): Promise<RowEntrance> {
+  return new Promise((resolve) => {
+    const out: RowEntrance = { drawn: 0, reads: [] };
+    const seen = new Set<Element>();
+    let start: number | null = null;
+    const began = performance.now();
+    const read = () => {
+      const now = performance.now();
+      const label = document.querySelector(
+        '[data-slot="edit-row"] [data-slot="what"]'
+      );
+      if (label) {
+        start ??= now;
+        seen.add(label);
+        const style = getComputedStyle(label);
+        // Its filter is its blur alone: `blur(Npx)`, or `none`.
+        const at = style.filter.indexOf("blur(");
+        out.reads.push({
+          t: Math.round(now - start),
+          opacity: Number(style.opacity),
+          blur: at === -1 ? 0 : Number.parseFloat(style.filter.slice(at + 5)),
+        });
+      }
+      out.drawn = seen.size;
+      if ((start !== null && now - start > 900) || now - began > 15_000) {
+        resolve(out);
+      } else {
+        setTimeout(read, 16);
+      }
+    };
+    read();
   });
+}
+
+/**
+ * Edit message on a queued message (the run's last) lifts its words into the
+ * composer, on each engine at the desk. The row it grows comes up out of its
+ * blur from the focus, once: a read part way (opacity and blur between their
+ * ends), clear at the end, one label drawn (no keyboard rises here, so the
+ * entrance never starts over).
+ */
+async function liftLeg(kit: Kit, base: string, held: string, engine: Engine) {
+  const text = RUN[2] as string;
+  const page = await sessionPage(kit, base, held, { engine, view: "desk" });
   await reveal(page, text, false);
+  const entrance = page.evaluate(watchRow);
   await turnOf(page, text)
     .getByRole("button", { name: transcriptWords.editMessage })
     .click();
@@ -831,10 +882,33 @@ async function liftLeg(kit: Kit, base: string, held: string) {
     () => false
   );
   kit.check(
-    "1440: Edit message on a queued message lifts its words into the composer",
+    `${engine} 1440: Edit message on a queued message lifts its words into the composer`,
     lifted,
     (await field.innerText()).trim()
   );
+  const row = await entrance;
+  const last = row.reads.at(-1);
+  const said = row.reads
+    .filter((_, i) => i % 3 === 0)
+    .map((r) => `${r.t}ms ${r.opacity.toFixed(2)}/${r.blur.toFixed(2)}px`)
+    .join(", ");
+  kit.check(
+    `${engine} 1440: the edit row's label comes up out of its blur from the focus, once (a read part way, clear at the end, one label drawn)`,
+    row.drawn === 1 &&
+      row.reads.some(
+        (r) =>
+          r.opacity > 0.001 &&
+          r.opacity < 0.999 &&
+          r.blur > 0.05 &&
+          r.blur < 3.95
+      ) &&
+      last?.opacity === 1 &&
+      last.blur === 0,
+    `${row.drawn} drawn; ${said}`
+  );
+  // The words go back, so the next engine lifts the same queued message.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(800);
   await page.close();
 }
 

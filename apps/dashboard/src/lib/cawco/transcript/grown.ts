@@ -134,6 +134,12 @@ export class GrownShape {
   /** The sides' inset by height, grown, and the reach it was worked out for. */
   #sides: { ext: number; at: number[]; inset: number[] } | null = null;
   #frame = 0;
+  /**
+   * Whether the morph running now has drawn a frame past its start. A morph
+   * whose frames the browser held (iOS Safari draws none while an
+   * on-screen keyboard rises) has not, and can start over unseen.
+   */
+  moved = false;
   #done: (() => void) | null = null;
   /** What the drop waits on after the next morph lands, besides it. */
   #after: Promise<void> | null = null;
@@ -591,6 +597,7 @@ export class GrownShape {
     const fromOpen = this.open;
     const fromExt = this.ext;
     const fromBase = this.#size.base;
+    this.moved = false;
     return new Promise((done) => {
       this.#done = done;
       const land = () => {
@@ -621,6 +628,7 @@ export class GrownShape {
       const frame = (now: number) => {
         start ??= now;
         const t = Math.min(1, (now - start) / ms);
+        this.moved ||= t > 0;
         this.open = lerp(fromOpen, open, t);
         this.ext = lerp(fromExt, ext, easeDrawer(t));
         this.#size.base = lerp(fromBase, base, easeDrawer(t));

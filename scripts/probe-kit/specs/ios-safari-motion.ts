@@ -25,17 +25,14 @@
  *  - `queued-edit`: a send queued behind a running turn, lifted into the
  *    field as a person does it on a phone (a tap on the queued message, then
  *    its Edit): the page answers within a second, the edit row draws, and
- *    its label and Keep it come up with no filter and stand whole. The
- *    longest gap between frames is noted with when the field took the focus
- *    and when the keyboard's room reached the page: in iOS 27.2 Safari
- *    draws no frame from the focus the lift puts in the field until the
- *    keyboard's room arrives (focus at 810ms, the viewport down to 384px at
- *    1190ms, the next frame at 1210ms after one at 840ms), some 350-440ms in
- *    which the row comes up. So a blur put back on the row (the 4px of the
- *    ask's parts) never drew between its ends, and neither does its fade.
- *    Neither backdrop filters nor CSS motion made the gap: with every
- *    backdrop-filter off it read 427ms, with every transition and animation
- *    off 309ms.
+ *    after the keyboard's room reaches the page its label and Keep it come
+ *    up out of the `--part-blur` blur on frames the page draws (opacity and
+ *    blur read part way), clear at the end. iOS 27.2 Safari draws no frame
+ *    from the focus the lift puts in the field until the keyboard's room
+ *    arrives (focus at 810ms, the viewport down to 384px at 1190ms, the next
+ *    frame at 1210ms after one at 840ms), so the row's entrance starts there
+ *    (Composer `enterWithKeyboard`). The longest gap between frames, the
+ *    focus and the keyboard's room are noted.
  *  - `entrances`: the kit's popover and dropdown menu (the overlays bench,
  *    each opened by a tap) and the composer's / menu (a `/` typed into a
  *    session's field) come in by their `@starting-style` transitions: CSS
@@ -448,23 +445,32 @@ interface Watched {
   found: number | null;
   /** The longest gap between two `requestAnimationFrame` callbacks while it read, in ms. */
   frameGap: number;
-  /** Each read: when, each element's look, and the visual viewport's height (the keyboard's room). */
-  frames: { looks: Look[]; t: number; vh: number }[];
+  /**
+   * Each read: when (`t` from the first match, `at` the page's clock), each
+   * element's look, the visual viewport's height (the keyboard's room), and
+   * how many animation frames the page had run by then (`n`).
+   */
+  frames: { at: number; looks: Look[]; n: number; t: number; vh: number }[];
 }
 
 /**
  * In the page: waits up to `waitMs` for `selector`, then reads every
  * element it matches (its `pseudo` element, when one is named) every 16ms
- * for `forMs`. Read on a timer, not on
- * animation frames: a computed style answers the animation's value at the
- * moment it is read, so the clock is read even where no frame is drawn, and
- * the frames drawn are counted beside it.
+ * for `forMs`. Read on a timer, not on animation frames: a computed style
+ * answers the animation's value at the moment it is read, so the clock is
+ * read even where no frame is drawn, and the frames drawn are counted
+ * beside it. `onFrames` reads in each animation frame instead, and nowhere
+ * else: a read between frames resolves the page's style itself, which
+ * starts a transition its change asked for then rather than at the frame
+ * the browser would have resolved it in, so where frames are held (iOS
+ * Safari as an on-screen keyboard rises) only frame reads say what is drawn.
  */
 function watch(
   selector: string,
   waitMs: number,
   forMs: number,
-  pseudo: string | null = null
+  pseudo: string | null = null,
+  onFrames = false
 ) {
   return new Promise<Watched>((resolve) => {
     const began = performance.now();
@@ -472,16 +478,20 @@ function watch(
     const out: Watched = { first: [], frames: [], found: null, frameGap: 0 };
     let lastFrame: number | null = null;
     let reading = true;
+    let drawn = 0;
     const tick = (at: number) => {
+      drawn += 1;
       if (start !== null && lastFrame !== null) {
         out.frameGap = Math.max(out.frameGap, Math.round(at - lastFrame));
       }
       lastFrame = at;
+      if (onFrames && reading) {
+        frame();
+      }
       if (reading) {
         requestAnimationFrame(tick);
       }
     };
-    requestAnimationFrame(tick);
     const seen = new Map<Element, number>();
     const runs = (el: Element) =>
       (pseudo
@@ -516,6 +526,8 @@ function watch(
           }
         }
         out.frames.push({
+          at: Math.round(now),
+          n: drawn,
           t: Math.round(now - start),
           vh: Math.round(visualViewport?.height ?? innerHeight),
           looks: els.map((el) => {
@@ -534,11 +546,14 @@ function watch(
       if (done) {
         reading = false;
         resolve(out);
-      } else {
+      } else if (!onFrames) {
         setTimeout(frame, 16);
       }
     };
-    frame();
+    requestAnimationFrame(tick);
+    if (!onFrames) {
+      frame();
+    }
   });
 }
 
@@ -809,6 +824,8 @@ interface Lift {
   focus: number | null;
   held: number | null;
   keyboard: number | null;
+  /** When the keyboard's room reached the page, on the page's clock. */
+  keyboardAt: number | null;
   room: number | null;
 }
 
@@ -825,6 +842,7 @@ function hearLift(): void {
     focus: null,
     held: null,
     keyboard: null,
+    keyboardAt: null,
     room: null,
   };
   (window as unknown as { __lift: Lift }).__lift = lift;
@@ -854,6 +872,7 @@ function hearLift(): void {
   );
   visualViewport?.addEventListener("resize", () => {
     lift.keyboard ??= since();
+    lift.keyboardAt ??= Math.round(performance.now());
     lift.room ??= Math.round(visualViewport?.height ?? 0);
   });
 }
@@ -907,7 +926,11 @@ async function queuedEdit(on: On, stood: Stood): Promise<void> {
   await Bun.sleep(600);
   await page.run(hearLift);
   const run = await answering(page, async () => {
-    const watched = page.run(watch, [EDIT_PARTS, 10_000, 1200], 30_000);
+    const watched = page.run(
+      watch,
+      [EDIT_PARTS, 10_000, 1200, null, true],
+      30_000
+    );
     await tapOn(
       on,
       page,
@@ -947,16 +970,40 @@ async function queuedEdit(on: On, stood: Stood): Promise<void> {
     row.drawn && row.words.length > 0,
     JSON.stringify(row)
   );
-  const last = parts.frames.at(-1);
-  const blurred = parts.frames.some((f) =>
-    f.looks.some((l) => blurOf(l.filter) > 0)
+  // After the keyboard's room reached the page: reads on frames the page
+  // drew (its frame count moved since the read before), a part read part
+  // way in both its opacity and its blur.
+  const { keyboardAt } = heard;
+  const after =
+    keyboardAt === null ? [] : parts.frames.filter((f) => f.at >= keyboardAt);
+  const partWay = after.filter(
+    (f, i) =>
+      i > 0 &&
+      f.n > (after[i - 1]?.n ?? f.n) &&
+      f.looks.some(
+        (l) =>
+          l.opacity > 0.001 &&
+          l.opacity < 0.999 &&
+          blurOf(l.filter) > 0.05 &&
+          blurOf(l.filter) < blur - 0.05
+      )
   );
+  const last = parts.frames.at(-1);
   on.kit.check(
-    `${on.tag} queued-edit: its label and Keep it come up with no filter and stand whole`,
-    !blurred &&
-      parts.first.length > 0 &&
-      (last?.looks ?? []).every((l) => l.opacity > 0.99),
-    blurWords(parts, POINTS)
+    `${on.tag} queued-edit: after the keyboard's room reaches the page, its label and Keep it come up out of the ${blur}px blur on drawn frames (opacity and blur read part way) and stand clear`,
+    keyboardAt !== null &&
+      partWay.length > 0 &&
+      (last?.looks ?? []).length > 0 &&
+      (last?.looks ?? []).every(
+        (l) => l.opacity > 0.999 && blurOf(l.filter) === 0
+      ),
+    `keyboard at ${keyboardAt === null ? "never" : `${keyboardAt - (parts.frames[0]?.at ?? keyboardAt) + (parts.frames[0]?.t ?? 0)}ms`}; part way on ${partWay.length} drawn reads after it: ${partWay
+      .slice(0, 4)
+      .map(
+        (f) =>
+          `${f.t}ms ${f.looks.map((l) => `${l.opacity.toFixed(2)}/${blurOf(l.filter).toFixed(2)}px`).join(" ")}`
+      )
+      .join("; ")}; ${blurWords(parts, POINTS)}`
   );
   // Where the page went without a frame: from the focus the lift puts in
   // the field to the keyboard's room reaching the page.

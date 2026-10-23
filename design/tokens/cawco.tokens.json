@@ -7936,7 +7936,7 @@
         "value": 4,
         "unit": "px"
       },
-      "$description": "How far out of focus an ask card's parts (its title, body and foot) come up from as the composer grows into the card, and sink back into as it folds. Web only.",
+      "$description": "How far out of focus the grown composer's parts come up from, and sink back into as it folds: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Web only.",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -8041,23 +8041,6 @@
         }
       }
     },
-    "transition-fade-slide": {
-      "$type": "transition",
-      "$value": {
-        "duration": "{motion.dur-fade}",
-        "delay": {
-          "value": 0,
-          "unit": "ms"
-        },
-        "timingFunction": "{motion.ease-out}"
-      },
-      "$description": "A part that fades as it slides into place on the drawer curve (the queued edit's label, hints and Keep it).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "opacity {motion.dur-fade} {motion.ease-out}, translate {motion.dur-panel} {motion.ease-drawer}"
-        }
-      }
-    },
     "transition-fade-blur": {
       "$type": "transition",
       "$value": {
@@ -8068,7 +8051,7 @@
         },
         "timingFunction": "{motion.ease-out}"
       },
-      "$description": "An ask card's part fading up out of a slight blur (part-blur) in place, with reduced motion: its title, body and foot. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs.",
+      "$description": "A part fading up out of a slight blur (part-blur) in place, with reduced motion: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs.",
       "$extensions": {
         "dev.cawco": {
           "css": "opacity {motion.dur-fade} {motion.ease-out}, filter {motion.dur-fade} {motion.ease-out}"
@@ -8085,7 +8068,7 @@
         },
         "timingFunction": "{motion.ease-out}"
       },
-      "$description": "An ask card's part fading up out of a slight blur (part-blur) as it slides into place on the drawer curve: its title, body and foot. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs.",
+      "$description": "A part fading up out of a slight blur (part-blur) as it slides into place on the drawer curve: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs.",
       "$extensions": {
         "dev.cawco": {
           "css": "opacity {motion.dur-fade} {motion.ease-out}, translate {motion.dur-panel} {motion.ease-drawer}, filter {motion.dur-fade} {motion.ease-out}"

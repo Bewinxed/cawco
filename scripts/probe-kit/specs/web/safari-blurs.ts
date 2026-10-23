@@ -27,8 +27,8 @@
  *  - a skeleton handing its place to its content, out of and into the
  *    reveal's blur (motion/curves `reveal`, the skeleton bench).
  *
- * The queued edit's row hung 1.63.0's WebKit (its blur is gone, Composer `[data-slot="edit-row"]`);
- * every other one draws. A crash or a hang says the page's last frames' running
+ * The queued edit's row hung 1.63.0's WebKit; its blur is back, read in
+ * iOS 27.2 Safari (ios-safari-motion). Every other one draws. A crash or a hang says the page's last frames' running
  * animations, and the browser's own last lines (crash-watch.ts).
  *
  * Each case on a page of its own: its motion happened (read from the DOM),

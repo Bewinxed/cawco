@@ -2366,6 +2366,8 @@
     base: number;
     row: number;
     shown: boolean;
+    /** Its entrance: a new one draws the row afresh (`enterWithKeyboard`). */
+    entry: number;
   } | null>(null);
   let editShape: GrownShape | null = null;
   /** The sizes a lift read before it wrote anything, for the row it grows. */
@@ -2413,6 +2415,7 @@
     draft.lift(message.id, message.instanceId, message.content);
     felt("take");
     field.focus();
+    enterWithKeyboard();
     await tick();
     mentionField?.select(draft.text.length);
     if (!trip) {
@@ -2613,9 +2616,14 @@
       base: size.base,
       row,
       shown: false,
+      entry: 0,
     };
+    growRow(shape, row);
+  }
+
+  /** The row's entrance: the shape grows `row` up, and its parts come up partway, once there is room for them. */
+  function growRow(shape: GrownShape, row: number): void {
     shape.morphTo(1, row, dur("--dur-grow"));
-    // Partway up, once there is room for them.
     setTimeout(
       () => {
         if (edit && editShape === shape) {
@@ -2623,6 +2631,57 @@
         }
       },
       motionOk.current ? dur("--dur-control") : 0
+    );
+  }
+
+  /**
+   * How long after the field takes the focus an on-screen keyboard's room
+   * reaches the page: the keyboard's own animation window. Measured in iOS
+   * 27.2 Safari on seven lifts (probe-kit ios-safari-motion, queued-edit,
+   * 2026-10-23), the focus to the visual viewport's shrink to 384px: 383,
+   * 394, 407, 434, 446, 492 and 513ms. 550 is the longest of them rounded up to the
+   * next 50ms; a shrink later than that is not this focus's keyboard.
+   */
+  const KEYBOARD_ROOM_MS = 550;
+
+  /**
+   * A lift's focus that brings up an on-screen keyboard: iOS Safari draws no
+   * frame from the focus until the keyboard's room reaches the page, so the
+   * row's entrance, started at the focus, would be seen only landed. When
+   * the visual viewport shrinks within KEYBOARD_ROOM_MS of the focus and the
+   * shape has drawn nothing past its start, the entrance starts over there:
+   * the shape from the pill, the row drawn afresh at its starting look.
+   * Where the focus brings up no keyboard (a desk, a hardware keyboard, an
+   * iPad with its keyboard attached) nothing shrinks and the entrance runs
+   * from the focus; where the browser drew it as the keyboard rose (the
+   * shape `moved`), it is left to land.
+   */
+  function enterWithKeyboard(): void {
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      return;
+    }
+    const before = viewport.height;
+    const shrunk = () => {
+      viewport.removeEventListener("resize", shrunk);
+      const shape = editShape;
+      if (
+        !(shape && edit && motionOk.current) ||
+        viewport.height >= before ||
+        shape.moved
+      ) {
+        return;
+      }
+      edit.shown = false;
+      edit.entry += 1;
+      shape.open = 0;
+      shape.paint();
+      growRow(shape, edit.row);
+    };
+    viewport.addEventListener("resize", shrunk);
+    setTimeout(
+      () => viewport.removeEventListener("resize", shrunk),
+      KEYBOARD_ROOM_MS
     );
   }
 
@@ -3472,59 +3531,54 @@
         />
       {/if}
       {#if edit}
-        <!-- What is happening, and the two ways out: the keys on a desk, a
+        {#key edit.entry}
+          <!-- What is happening, and the two ways out: the keys on a desk, a
              button on a touch screen, which has no Esc. The row the
              composer grows while a queued message is edited, inset past the
              shoulders' curve, and clear of the fade at the grown top. The
              label and the hints come up with the shape one after the other,
-             by opacity and translate alone, and sink back as it folds. No
-             filter: a blur transitioning here hung playwright-core 1.63.0's
-             WebKit as the row came up (at an iPhone's size, probe-kit
-             safari-blurs). That hang was only seen in that build, never on
-             the owner's iPhone, and 1.64.1's WebKit does not hang. In iOS
-             27.2 Safari (probe-kit ios-safari-motion, 2026-10-23) the blur
-             put back did not hang, and never drew between its ends: Safari
-             draws no frame from the field taking the focus until the
-             keyboard's room reaches the page (the frames at 842ms and
-             1190ms, the viewport down to 384px at 1191ms), which is when
-             the row comes up; every read of the row 4px, then none (and
-             main's fade the same). The hints and
-             Keep it come up a stagger after the label. Keep it is the kit's Button, addressed from the row
+             out of a `--part-blur` blur as they fade and rise, and sink back
+             as it folds. Under an on-screen keyboard the entrance starts
+             when the keyboard's room reaches the page (`enterWithKeyboard`),
+             a new `entry` drawing the row afresh: iOS 27.2 Safari draws no
+             frame between the focus and then. The hints and Keep it come
+             up a stagger after the label. Keep it is the kit's Button, addressed from the row
              (its own utilities set its display and transition): hidden but
              on a touch screen, which has no Esc. -->
-        <div
-          data-composer-shown={edit.shown || undefined}
-          data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:transition-[opacity] [&_[data-keep]]:duration-(--dur-fade) [&_[data-keep]]:ease-out [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:delay-(--dur-stagger)"
-          bind:this={editRow}
-          style:--edit-inset="{edit.inset}px"
-          style:bottom="{edit.base}px"
-          style:height="{edit.row}px"
-        >
-          <span
-            data-slot="what"
-            class="inline-flex items-center gap-space-2 me-auto text-ink-row opacity-0 transition-[opacity] duration-(--dur-fade) ease-out before:size-(--status-dot-size) before:rounded-pill before:bg-selected-icon motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none"
-            >Editing your queued message</span
+          <div
+            data-composer-shown={edit.shown || undefined}
+            data-slot="edit-row"
+            class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--dur-stagger)"
+            bind:this={editRow}
+            style:--edit-inset="{edit.inset}px"
+            style:bottom="{edit.base}px"
+            style:height="{edit.row}px"
           >
-          <!-- A touch screen has no Esc: a button keeps the message as it
+            <span
+              data-slot="what"
+              class="inline-flex items-center gap-space-2 me-auto text-ink-row opacity-0 blur-(--part-blur) transition-fade-blur before:size-(--status-dot-size) before:rounded-pill before:bg-selected-icon motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
+              >Editing your queued message</span
+            >
+            <!-- A touch screen has no Esc: a button keeps the message as it
                was, and the keys are not shown. -->
-          <span
-            data-slot="hint"
-            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:delay-(--dur-stagger)"
-          >
-            <Kbd>Enter</Kbd>
-            replaces it · <Kbd>Esc</Kbd> keeps it
-          </span>
-          <Button
-            class="touch-hit"
-            data-keep
-            onclick={() => returnEdit()}
-            size="xs"
-            variant="ghost"
-          >
-            Keep it
-          </Button>
-        </div>
+            <span
+              data-slot="hint"
+              class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--dur-stagger)"
+            >
+              <Kbd>Enter</Kbd>
+              replaces it · <Kbd>Esc</Kbd> keeps it
+            </span>
+            <Button
+              class="touch-hit"
+              data-keep
+              onclick={() => returnEdit()}
+              size="xs"
+              variant="ghost"
+            >
+              Keep it
+            </Button>
+          </div>
+        {/key}
       {/if}
       {#if fleet && drawnAsk && askBox}
         <!-- The ask the composer has grown into, on the shell's foot over
