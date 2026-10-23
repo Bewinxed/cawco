@@ -1260,6 +1260,21 @@ export type WorkItemState =
 export type LandingPhase = "completing" | "gating" | "turn";
 
 /**
+ * What a live work item's session cannot be started again without, found
+ * missing as the hub would start it (a wake, a restart's resume): its
+ * delegate type, its machine, or the account it runs on ({@link workItems}
+ * `blocked`). The item is blocked, never failed for it, and goes on once
+ * the missing thing is back (work-items.ts `blockIfMissing`).
+ */
+export interface ItemBlock {
+  kind: "type" | "machine" | "account";
+  /** The missing thing as a person names it: the type's name, the machine's, the account's. */
+  name: string;
+  /** When the hub found it missing, epoch ms. */
+  since: number;
+}
+
+/**
  * A landing gate command that passed on a tree, with the stage it ran in
  * (`at finish_item`, `while gating on top of main`, `in its turn to land on
  * main`), for the line of a step its pass lets skip ({@link workItems}
@@ -1427,6 +1442,13 @@ export const workItems = sqliteTable(
      * the session is between turns (work-items.ts `resumeLandings`).
      */
     lastTurnAt: timestamp("last_turn_at"),
+    /**
+     * Its session cannot be started again: its delegate type, its machine or
+     * its account is missing ({@link ItemBlock}). Live and blocked, never
+     * failed for it: what it is sent waits at the hub, and it shows in Needs
+     * you until the missing thing is back. Null otherwise.
+     */
+    blocked: text("blocked", { mode: "json" }).$type<ItemBlock>(),
     /** A declared wait on work the delegate started; the hub wakes it at this time. */
     waitUntil: timestamp("wait_until"),
     waitReason: text("wait_reason"),

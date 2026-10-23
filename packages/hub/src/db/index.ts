@@ -2384,6 +2384,7 @@ export interface DbShape {
         | "landingSince"
         | "landingPhase"
         | "gatePasses"
+        | "blocked"
         | "lastTurnAt"
         | "submission"
         | "waitUntil"

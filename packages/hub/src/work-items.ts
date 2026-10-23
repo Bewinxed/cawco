@@ -133,6 +133,7 @@ import type {
 } from "./db";
 import type {
   GatePass,
+  ItemBlock,
   LandingPhase,
   Origin,
   WorkBudget,
@@ -916,6 +917,14 @@ export interface WorkItemDeps {
    */
   readonly machinePaused: (machineId: string) => string | undefined;
   /**
+   * What `row`'s session cannot be started again without and is missing
+   * now: its delegate type, its machine, or its account (server.ts); none
+   * when nothing is ({@link WorkItems.blockIfMissing}).
+   */
+  readonly missingFor: (
+    row: InstanceRow
+  ) => Omit<ItemBlock, "since"> | undefined;
+  /**
    * Why `machineId` would not run `model` on `harness`, in words naming the
    * models it does offer from that provider; undefined when it offers it, or
    * when the machine has reported no models to judge by.
@@ -1068,6 +1077,11 @@ export interface WorkItemDeps {
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
   readonly untellYou: (instanceId: string) => void;
+  /**
+   * Item `instanceId`'s block is over: what was kept at the hub for its
+   * session goes now, waking it (server.ts `releaseOwed`).
+   */
+  readonly unblocked: (instanceId: string) => void;
   /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
   readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
@@ -1121,6 +1135,22 @@ const timeOf = (at: string | number | Date | null | undefined): number =>
 
 /** What the sweep's wake tells a session asleep on open work. */
 const STILL_OPEN = "Your work item is still open: continue it.";
+
+/** A blocked item's reason as the person reads it ({@link ItemBlock}): what is missing, and what puts it right. */
+export const blockWords = (block: ItemBlock): string => {
+  switch (block.kind) {
+    case "type":
+      return workWords.missingType(block.name);
+    case "machine":
+      return workWords.missingMachine(block.name);
+    case "account":
+      return workWords.missingAccount(block.name);
+    default: {
+      const unhandled: never = block.kind;
+      throw new Error(`unhandled block: ${String(unhandled)}`);
+    }
+  }
+};
 
 /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
 const REPORT_ARRIVES =
@@ -1654,7 +1684,6 @@ interface StepOutcome {
   where?: string;
 }
 
-
 /** Every path the steps declare as their inputs (`on:`), read once per look at the workspace. */
 const inputPathsOf = (steps: readonly GateStep[]): string[] => [
   ...new Set(steps.flatMap((step) => step.inputs ?? [])),
@@ -2170,6 +2199,8 @@ export const createWorkItems = ({
   inputRefusal,
   inTurn,
   between,
+  missingFor,
+  unblocked,
   leadPlace,
   leadTurn,
   machineFree,
@@ -2887,6 +2918,7 @@ export const createWorkItems = ({
   const leftAsleep = (item: WorkItemRow, row: InstanceRow): boolean =>
     !(row.status === "sleeping" || GONE.has(row.status)) ||
     item.heldAt !== null ||
+    item.blocked !== null ||
     pausedWorkspace(item.workspaceId) !== undefined ||
     !!(item.waitUntil || item.waitResumeBy) ||
     !!item.landingSince ||
@@ -2964,7 +2996,7 @@ export const createWorkItems = ({
       limit.words
     );
     console.log(`[work-items] ${item.id}: held: ${why}`);
-    tellYou(row, workWords.heldAsleepTitle(item.title), why);
+    tellYou(row, workWords.blockedTitle(item.title), why);
   };
 
   /** {@link wakeAsleep} for one item: its session woken, held when it slept past its limit, or the item failed with why. */
@@ -3046,6 +3078,71 @@ export const createWorkItems = ({
   };
 
   /**
+   * THE RULE FOR A BLOCKED ITEM: a live item whose session is to be started
+   * again (a wake for a send, a restart's resume) while its delegate type,
+   * its machine or its account is missing ({@link WorkItemDeps.missingFor})
+   * is blocked, the reason stored on its row and told you in Needs you
+   * (`tellYou`), never failed for it; what it is sent waits at the hub (server.ts
+   * `deliverToSession`). Answers the block, or nothing when nothing is
+   * missing, which ends a block it had ({@link unblock}).
+   */
+  const blockIfMissing = (row: InstanceRow): ItemBlock | undefined => {
+    const item = itemOf(row);
+    if (!(item && LIVE.has(item.state))) {
+      return;
+    }
+    const missing = missingFor(row);
+    if (!missing) {
+      if (item.blocked) {
+        unblock(item);
+      }
+      return;
+    }
+    if (
+      item.blocked?.kind === missing.kind &&
+      item.blocked.name === missing.name
+    ) {
+      return item.blocked;
+    }
+    const block: ItemBlock = { ...missing, since: Date.now() };
+    update(item.id, { blocked: block });
+    console.log(`[work-items] ${item.id} is blocked: ${blockWords(block)}`);
+    // After the send that found it is taken: a person's own message takes
+    // down the notices about its session (fleet-watch.ts `humanSend`).
+    soon(() =>
+      tellYou(row, workWords.blockedTitle(item.title), blockWords(block))
+    );
+    return block;
+  };
+
+  /** `item`'s block is over: its row says so, and what waited for it goes. */
+  const unblock = (item: WorkItemRow): void => {
+    update(item.id, { blocked: null });
+    untellYou(item.instanceId);
+    console.log(
+      `[work-items] ${item.id}: no longer blocked; what it was sent goes now`
+    );
+    unblocked(item.instanceId);
+  };
+
+  /**
+   * Each blocked live item whose missing type, machine or account is back
+   * goes on, at the sweep ({@link BUDGET_SWEEP_MS}): the release rule of a
+   * block.
+   */
+  const unblockReady = (): void => {
+    for (const item of db.liveWorkItems()) {
+      if (!item.blocked) {
+        continue;
+      }
+      const [row] = db.getInstancesByIds([item.instanceId]);
+      if (row && !missingFor(row)) {
+        unblock(item);
+      }
+    }
+  };
+
+  /**
    * Whether someone will hear how an item ends, so waking its work is worth
    * it: its routine (which reads its run's end, routines.ts), its project's
    * Caw while he is off (his thread notes the end, caw.ts `itemEnded`), or a
@@ -3069,6 +3166,7 @@ export const createWorkItems = ({
       }
     }
     followSessions();
+    unblockReady();
     wakeAsleep();
     wakeCapable();
   });
@@ -8738,6 +8836,17 @@ export const createWorkItems = ({
 
       await lastTurn(item);
       return await landOrComplete(item, request);
+    },
+
+    /** {@link blockIfMissing}: the block `row`'s item has as its session is to start again, or nothing. */
+    blockIfMissing,
+
+
+    /** Whether `instanceId`'s live item is blocked ({@link blockIfMissing}): what it is sent waits at the hub. */
+    blockedFor(instanceId: string): boolean {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      return !!item?.blocked && LIVE.has(item.state);
     },
 
     /**

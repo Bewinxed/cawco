@@ -14,8 +14,21 @@ export const workWords = {
     `Host scope refuses ${lines.length === 1 ? "this" : "these"}:\n${lines.map((line) => `- ${line}`).join("\n")}`,
   /** The heading of a report's landing gate section, over its steps' lines. */
   gateHeading: "Landing gate, run by the hub:",
-  /** The title of your notice of an item held because its session slept past its limit (hub work-items.ts `blockAsleep`). */
-  heldAsleepTitle: (title: string) => `${title} is blocked`,
+  /**
+   * The title of your notice of a blocked item: held because its session
+   * slept past its limit (hub work-items.ts `blockAsleep`), or because what
+   * its session starts with is missing (`blockIfMissing`).
+   */
+  blockedTitle: (title: string) => `${title} is blocked`,
+  /** Why an item is blocked: its delegate type was deleted (hub work-items.ts `blockIfMissing`). */
+  missingType: (name: string) =>
+    `Its delegate type “${name}” was deleted, so its session isn't started again without it. Put the type back, or stop the item.`,
+  /** Why an item is blocked: its machine left the fleet. */
+  missingMachine: (name: string) =>
+    `Its machine ${name} is no longer in the fleet, so its session can't start again. Add the machine back, or stop the item.`,
+  /** Why an item is blocked: the account its session runs on is gone. */
+  missingAccount: (name: string) =>
+    `The account it runs on (${name}) is gone, so its session isn't started again on another one. Add the account back, or stop the item.`,
   /** How long a session with no minutes budget may sleep and be woken. */
   aDay: "a day",
   /** The limit of an item with a minutes budget. */

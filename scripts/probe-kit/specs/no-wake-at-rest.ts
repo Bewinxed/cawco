@@ -483,7 +483,7 @@ const asleepItemLeg = async (run: Run, sessionId: string, item: string) => {
     held?.held_at !== null &&
       after?.state === "running" &&
       after.held_at !== null &&
-      told?.title === workWords.heldAsleepTitle(ITEM_TITLE) &&
+      told?.title === workWords.blockedTitle(ITEM_TITLE) &&
       told.body ===
         workWords.heldAsleep("2026-09-15 10:00 UTC", workWords.aDay) &&
       !run.hadProcess.has(sessionId),

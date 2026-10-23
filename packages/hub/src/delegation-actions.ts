@@ -693,11 +693,14 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * interrupt holds its work item and only its parent, its lead or the person
  * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
- * `recut`).
+ * `recut`); or its work item is blocked, its delegate type, machine or
+ * account missing, and it goes once that is back (`blocked`, work-items.ts
+ * `blockIfMissing`).
  */
 export type SendHold =
   | "agent"
   | "behind"
+  | "blocked"
   | "build"
   | "compacting"
   | "finishing"
@@ -728,6 +731,8 @@ export interface SendDelivery {
 
 /** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
 const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
+  blocked:
+    "Its work item is blocked: its delegate type, its machine or its account is missing, and its session isn't started again without it. The message is kept at the hub and goes to it once that is back; Needs you says what is missing.",
   finishing:
     "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the landing gate sends the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",

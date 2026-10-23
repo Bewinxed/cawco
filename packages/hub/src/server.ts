@@ -903,6 +903,7 @@ import {
   sendFrame as writeFrame,
 } from "./wire-socket";
 import {
+  blockWords,
   createWorkItems,
   type ItemPlacement,
   isLive,
@@ -4977,8 +4978,10 @@ export const createServer = (
     // A send to a session whose process is gone wakes it ({@link wakeForSend}),
     // fresh when its harness never began a conversation (core `relaunchOf`);
     // one that can't be woken is refused before it is taken, saying why
-    // ({@link wakeOf}, the one rule every wake asks).
-    if (row && wakesForSend(row)) {
+    // ({@link wakeOf}, the one rule every wake asks). A work item's session
+    // whose type, machine or account is missing is no refusal: its item is
+    // blocked, and the send waits for it (work-items.ts `blockIfMissing`).
+    if (row && wakesForSend(row) && !workItems.blockIfMissing(row)) {
       const wake = wakeOf(row.machineId, row, false);
       if ("refused" in wake) {
         return wake.refused;
@@ -7600,6 +7603,15 @@ export const createServer = (
     relaunch = false
   ): void => {
     const instanceId = row.id;
+    // Its item is blocked: nothing starts it without what is missing, and
+    // nothing it was sent fails for it (work-items.ts `blockIfMissing`).
+    const block = workItems.blockIfMissing(row);
+    if (block) {
+      console.info(
+        `[hub] not launching ${instanceId}, its work item is blocked: ${blockWords(block)}`
+      );
+      return;
+    }
     // Its launch on the way is the one: what it is sent goes behind that.
     const inFlight = inFlightRefusal(instanceId);
     if (inFlight) {
@@ -8935,6 +8947,8 @@ export const createServer = (
       !(refused || keepAlive) && machinePause.until(machineId) !== undefined;
     const held =
       !(refused || keepAlive) && workItems.heldFor(instanceId, message.origin);
+    // Kept while its item is blocked: what it cannot start without is missing.
+    const blocked = !(refused || keepAlive) && workItems.blockedFor(instanceId);
     // Kept while a retired workspace is cut again for it: the cut starts now.
     if (held) {
       workItems.recutFor(instanceId);
@@ -8955,7 +8969,7 @@ export const createServer = (
           command.kind === "send-verdict" && command.verdict === "hold"
       );
     const accepted =
-      Boolean(agent) || away || kept || paused || held || finishing;
+      Boolean(agent) || away || kept || paused || held || finishing || blocked;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
     const waitSummary =
@@ -8967,7 +8981,7 @@ export const createServer = (
           ? `${content}${waitSummary}`
           : [...content, { type: "text", text: waitSummary }];
     }
-    if (agent && !(kept || limited || paused || held || finishing)) {
+    if (agent && !(kept || limited || paused || held || finishing || blocked)) {
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
@@ -8980,6 +8994,7 @@ export const createServer = (
       paused ||
       held ||
       finishing ||
+      blocked ||
       (agent !== undefined &&
         !keepAlive &&
         (limited || (!ahead && sendWaits(instanceId))));
@@ -8995,7 +9010,7 @@ export const createServer = (
     }
     // Kept for its machine alone, not for its session, an interrupt's hold
     // or its item's finish.
-    if (owed && !agent && !(kept || held || finishing)) {
+    if (owed && !agent && !(kept || held || finishing || blocked)) {
       owedForMachine(machineId, message.uuid);
     }
     // Built after the send has gone: the machine is handed the image bytes,
@@ -9037,7 +9052,7 @@ export const createServer = (
     if (
       agent &&
       owed &&
-      !(kept || away || limited || paused || held || finishing)
+      !(kept || away || limited || paused || held || finishing || blocked)
     ) {
       releaseOwed({ instanceId });
     }
@@ -9153,9 +9168,12 @@ export const createServer = (
   const pausedOrHeld = (
     row: InstanceRow,
     origin: SentMessage["origin"] | undefined
-  ): "paused" | "finishing" | "held" | "recut" | undefined => {
+  ): "paused" | "finishing" | "held" | "recut" | "blocked" | undefined => {
     if (machinePause.until(row.machineId) !== undefined) {
       return "paused";
+    }
+    if (workItems.blockedFor(row.id)) {
+      return "blocked";
     }
     if (origin && workItems.finishingFor(row.id, origin)) {
       return "finishing";
@@ -9327,7 +9345,10 @@ export const createServer = (
     ) {
       return true;
     }
-    if (workItems.finishingFor(instanceId, origin)) {
+    if (
+      workItems.finishingFor(instanceId, origin) ||
+      workItems.blockedFor(instanceId)
+    ) {
       return true;
     }
     if (!workItems.heldFor(instanceId, origin)) {
@@ -22654,6 +22675,23 @@ export const createServer = (
     untellYou: (instanceId) => watch?.humanSend(instanceId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     between: (row) => sessionIdle(row),
+    // What a work item's session cannot start again without: the type it
+    // runs as, its machine, the account it runs on.
+    missingFor: (row) => {
+      if (
+        row.delegateType &&
+        !projectTypes.resolveTypeFor(row.delegateTypeProject, row.delegateType)
+      ) {
+        return { kind: "type", name: row.delegateType };
+      }
+      if (!db.listAgents().some((one) => one.machineId === row.machineId)) {
+        return { kind: "machine", name: row.machineId };
+      }
+      if (row.accountId && !db.accounts.get(row.accountId)) {
+        return { kind: "account", name: row.accountId };
+      }
+    },
+    unblocked: (instanceId) => releaseOwed({ instanceId }),
     leadPlace: leadPlaceRef,
     report: (row, body, failed, notice, headline) => {
       reportToParent(row, body, failed, { notice, headline });
@@ -28608,6 +28646,7 @@ export const createServer = (
         { query: t.Object({ parent: t.String() }) },
         ({ query }) => workItems.trayOf(query.parent)
       )
+
       // Dismissed from the tray: gone from it on every screen, and after
       // reload, with why: the reader's reason, or the later item that
       // replaced it.
