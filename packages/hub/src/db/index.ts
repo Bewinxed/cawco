@@ -6565,6 +6565,47 @@ const make = async (path: string): Promise<DbShape> => {
       putToolCells(machineId, [status]);
     },
     fleetConfig: () => {
+      /**
+       * A server's sign-in as the fleet reads it: signed in, waiting on one,
+       * or failed, and a sign-in that ended without the person (Needs you's
+       * item) with when and why.
+       */
+      const mcpAuthOf = (
+        name: string,
+        mode: "direct" | "oauth",
+        error: string | null
+      ): NonNullable<FleetMcpServer["auth"]> => {
+        const oauth =
+          mode === "oauth"
+            ? db
+                .select({
+                  tokens: fleetMcpOauth.tokens,
+                  endedAt: fleetMcpOauth.endedAt,
+                  endedWhy: fleetMcpOauth.endedWhy,
+                })
+                .from(fleetMcpOauth)
+                .where(eq(fleetMcpOauth.name, name))
+                .get()
+            : undefined;
+        if (error) {
+          return { mode, state: "failed", detail: error };
+        }
+        if (mode === "direct" || oauth?.tokens) {
+          return { mode, state: "signed-in" };
+        }
+        return {
+          mode,
+          state: "needs-auth",
+          ...(oauth?.endedAt
+            ? {
+                ended: {
+                  at: oauth.endedAt.getTime(),
+                  why: oauth.endedWhy ?? "",
+                },
+              }
+            : {}),
+        };
+      };
       return {
         mcp: db
           .select()
@@ -6584,36 +6625,15 @@ const make = async (path: string): Promise<DbShape> => {
               projectId,
               platforms,
               shared,
-            }) => {
-              const signedIn =
-                authMode === "direct" ||
-                Boolean(
-                  db
-                    .select({ tokens: fleetMcpOauth.tokens })
-                    .from(fleetMcpOauth)
-                    .where(eq(fleetMcpOauth.name, name))
-                    .get()?.tokens
-                );
-              let state: "failed" | "signed-in" | "needs-auth" = signedIn
-                ? "signed-in"
-                : "needs-auth";
-              if (authError) {
-                state = "failed";
-              }
-              return {
-                name,
-                config,
-                enabled,
-                ...(projectId ? { projectId, scope: "local" as const } : {}),
-                ...(platforms ? { platforms } : {}),
-                ...(shared ? { shared } : {}),
-                auth: {
-                  mode: authMode,
-                  state,
-                  ...(authError ? { detail: authError } : {}),
-                },
-              };
-            }
+            }) => ({
+              name,
+              config,
+              enabled,
+              ...(projectId ? { projectId, scope: "local" as const } : {}),
+              ...(platforms ? { platforms } : {}),
+              ...(shared ? { shared } : {}),
+              auth: mcpAuthOf(name, authMode, authError),
+            })
           ),
         marketplaces: db
           .select()

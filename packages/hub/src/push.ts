@@ -73,6 +73,7 @@ import {
   artifactWords,
   BROWSER_ASK_TOOL,
   causeLine,
+  configurePage,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
   DESK_ACK_MS,
@@ -86,6 +87,7 @@ import {
   installName,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
+  mcpWords,
   type PairingRequest,
   type PermissionRequestFrame,
   PROJECT_SETTINGS_TOOL,
@@ -105,6 +107,7 @@ import {
   artifactCollapseId,
   askCollapseId,
   installCollapseId,
+  mcpCollapseId,
   messageCollapseId,
   type Notifications,
   needsCollapseId,
@@ -307,6 +310,15 @@ export type PushData =
       /** An install of a machine ended: opens its window on its outcome. */
       kind: "install";
       installId: string;
+    }
+  | {
+      /**
+       * The hub's sign-in to a fleet MCP server ended without the person
+       * (fleet-mcp.ts `#end`): it is signed in to again from Configure ›
+       * MCP servers. The app opens the board for a kind it does not know.
+       */
+      kind: "mcp";
+      server: string;
     }
   | { kind: "test" };
 
@@ -2239,6 +2251,47 @@ export const createPush = ({
     installSettled(id: string): void {
       settledInstalls.add(id);
       const collapseId = installCollapseId(id);
+      open?.items.delete(collapseId);
+      settleAtDesk(collapseId);
+      notifications.clear([collapseId], "settled");
+    },
+
+    /**
+     * The hub's sign-in to a fleet MCP server ended without the person
+     * (fleet-mcp.ts `#end`): Needs you's item, in its words, its reason
+     * (the provider's) sealed. It arrives as any item does, so the burst and
+     * the person gate decide where it goes; signed in again before it goes
+     * out, it is over ({@link mcpSignedIn}).
+     */
+    mcpSignInEnded(ended: { at: Date; name: string; why: string }): void {
+      const collapseId = mcpCollapseId(ended.name);
+      const title = mcpWords.signInAgain(ended.name);
+      const body = mcpWords.signInEnded(configurePage("mcp"));
+      console.log(
+        `[push] ${ended.name}'s sign-in ended: arrives as ${collapseId}`
+      );
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: ended.at,
+        still: () => {
+          const row = db.getMcpOauth(ended.name);
+          return Boolean(row && !row.tokens && row.endedAt);
+        },
+        notification: {
+          shown: alertOf(title, null, body),
+          sealed: alertOf(title, null, `${body}\n${ended.why}`),
+          category: PUSH_CATEGORIES.needs,
+          collapseId,
+          threadId: "mcp",
+          data: { kind: "mcp", server: ended.name },
+        },
+      });
+    },
+
+    /** A fleet MCP server signed in to: an ended sign-in's push, if it went, comes down. */
+    mcpSignedIn(name: string): void {
+      const collapseId = mcpCollapseId(name);
       open?.items.delete(collapseId);
       settleAtDesk(collapseId);
       notifications.clear([collapseId], "settled");

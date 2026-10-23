@@ -131,6 +131,8 @@ export const standInPhone = (fleet: KitFleet) => {
         (one) => one.collapseId === turn || bursts.has(one.collapseId ?? "")
       ).length;
     },
+    /** Every push so far, oldest first. */
+    pushes: (): Pushed[] => [...pushed],
     /** Every push's collapse id so far, for a failure's detail. */
     ids: (): string[] => pushed.map((one) => one.collapseId ?? "background"),
     /** The alert of each push so far about install `id` (hub push.ts `install`), oldest first. */

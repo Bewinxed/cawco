@@ -1985,6 +1985,14 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
     expiresAt: number;
   }>("pending"),
   lastOpenedAt: timestamp("last_opened_at"),
+  /**
+   * When the sign-in ended without the person (fleet-mcp.ts `#end`): the
+   * token endpoint refused a refresh, or the server moved its authorization.
+   * Null while signed in, and from the next sign-in on.
+   */
+  endedAt: timestamp("ended_at"),
+  /** Why it ended, in the provider's own words where it gave any: Needs you's Show details. */
+  endedWhy: text("ended_why"),
 });
 
 /**

@@ -125,6 +125,8 @@ export const pairingCollapseId = (userCode: string): string =>
 /** An install of a machine that ended (installs.ts): one per install. */
 export const installCollapseId = (id: string): string =>
   collapseOf("install", id);
+/** A fleet MCP server whose sign-in ended without the person (fleet-mcp.ts): one per server. */
+export const mcpCollapseId = (name: string): string => collapseOf("mcp", name);
 /** A burst of things that need you shown as one notification (push.ts), by when it began. */
 export const needsCollapseId = (firstAt: number): string =>
   collapseOf("needs", firstAt.toString(36));

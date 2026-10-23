@@ -31,6 +31,16 @@ export const mcpWords = {
   /** The machines card's line for a server waiting on the fleet's sign-in, once however many machines report it. */
   needsSignIn: (name: string) =>
     `${name} needs a sign-in for the fleet. Until then, no session gets its tools.`,
+  /**
+   * The hub's sign-in ended without the person (hub fleet-mcp.ts `#end`):
+   * Needs you's item and its push. `where` is Configure's page for the
+   * servers (`configurePage("mcp")`).
+   */
+  signInAgain: (name: string) => `${name} needs you to sign in again`,
+  signInEnded: (where: string) =>
+    `Its tools are off in every session until you sign in again from ${where}. Sessions already running get them back within seconds.`,
+  /** The reason line its Show details unfolds under: the provider's words. */
+  signInEndedWhy: "The sign-in ended without you.",
 
   /** The editor. */
   what: "MCP server",

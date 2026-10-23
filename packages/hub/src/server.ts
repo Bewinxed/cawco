@@ -20138,7 +20138,12 @@ export const createServer = (
     } satisfies Envelope<FramePayload>);
     fleetChanged();
   };
-  const fleetMcp = new FleetMcp(db, announceMcp, lifetime);
+  // A sign-in that ended without the person is pushed, routed by presence;
+  // the next sign-in takes that push down.
+  const fleetMcp = new FleetMcp(db, announceMcp, lifetime, {
+    ended: (ended) => push.mcpSignInEnded(ended),
+    signedIn: (name) => push.mcpSignedIn(name),
+  });
   const mcpReady = Promise.all(
     db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
   );

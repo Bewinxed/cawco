@@ -2651,6 +2651,18 @@ public enum Words {
             "\(name) needs a sign-in for the fleet. Until then, no session gets its tools."
         }
 
+        /// The hub's sign-in ended without the person (hub fleet-mcp.ts `#end`): Needs you's item and its push. `where` is Configure's page for the servers (`configurePage("mcp")`).
+        public static func signInAgain(name: String) -> String {
+            "\(name) needs you to sign in again"
+        }
+
+        public static func signInEnded(`where`: String) -> String {
+            "Its tools are off in every session until you sign in again from \(`where`). Sessions already running get them back within seconds."
+        }
+
+        /// The reason line its Show details unfolds under: the provider's words.
+        public static let signInEndedWhy = "The sign-in ended without you."
+
         /// The editor.
         public static let what = "MCP server"
 

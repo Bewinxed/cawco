@@ -2031,6 +2031,13 @@
       "when": 1792767729147,
       "tag": "0297_fleet_harness_config",
       "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "6",
+      "when": 1792785920303,
+      "tag": "0298_mcp_oauth_ended",
+      "breakpoints": true
     }
   ]
 }

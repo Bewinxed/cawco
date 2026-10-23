@@ -32,6 +32,7 @@ import type {
 import {
   archiveRefusal,
   machineLabel,
+  mcpWords,
   presenceWords,
   projectsFor,
   questionsOf,
@@ -549,8 +550,28 @@ export interface ArtifactItem {
   unsent: number;
 }
 
+/**
+ * The hub's sign-in to a fleet MCP server that ended without the person
+ * (hub fleet-mcp.ts `#end`, the server's `auth.ended`): its tools are off in
+ * every session. It opens Configure › MCP servers, where its row's Sign in
+ * signs in again; the provider's words stand under Show details. It leaves
+ * once the server is signed in again or removed.
+ */
+export interface McpItem {
+  href: string;
+  key: string;
+  kind: "mcp";
+  place: string;
+  raisedAt: number;
+  server: string;
+  title: string;
+  /** Why it ended, in the provider's words. */
+  why: string;
+}
+
 export type NeedsItem =
   | ArtifactItem
+  | McpItem
   | AskItem
   | RunItem
   | CapItem
@@ -1391,10 +1412,29 @@ class Home {
           stale: machine?.status !== "online",
         };
       });
+    // A fleet MCP server's sign-in that ended without the person.
+    const signIns: NeedsItem[] = (cawco.fleetMcp ?? []).flatMap((server) => {
+      const ended = server.auth?.state === "needs-auth" && server.auth.ended;
+      return ended
+        ? [
+            {
+              kind: "mcp" as const,
+              key: `mcp:${server.name}`,
+              server: server.name,
+              title: mcpWords.signInAgain(server.name),
+              why: ended.why,
+              place: mcpWords.what,
+              href: "/config/mcp",
+              raisedAt: ended.at,
+            },
+          ]
+        : [];
+    });
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
       ...artifacts,
+      ...signIns,
       ...runs,
       ...caps,
       ...actions,

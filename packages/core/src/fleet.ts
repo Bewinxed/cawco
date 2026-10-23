@@ -73,6 +73,13 @@ export interface FleetMcpServer extends FleetPlacement {
     mode: "direct" | "oauth";
     state: "signed-in" | "needs-auth" | "failed";
     detail?: string;
+    /**
+     * The hub's sign-in ended without the person (the token endpoint refused
+     * a refresh, or the server moved its authorization): when, epoch ms, and
+     * why in the provider's words. Only while `needs-auth`; the dashboard's
+     * Needs you item. Never sent to a machine (hub fleet-mcp.ts `syncConfig`).
+     */
+    ended?: { at: number; why: string };
   };
   config: FleetMcpConfig;
   /** Disabled rows stay in the hub but are removed from the machines. */

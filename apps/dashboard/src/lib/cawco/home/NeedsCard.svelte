@@ -66,7 +66,9 @@
     artifactWords,
     askWords,
     causeLine,
+    configurePage,
     connectWords,
+    mcpWords,
     pairingWords,
     presenceWords,
     questionsOf,
@@ -103,6 +105,7 @@
     IconFolder,
     IconGlobe,
     IconInteract,
+    IconKey,
     IconLock,
     IconMaximize,
     IconMonitor,
@@ -215,6 +218,8 @@
         return "Waits to join your fleet. Admitted, it runs sessions like your other machines.";
       case "install":
         return causeLine(item.install);
+      case "mcp":
+        return mcpWords.signInEnded(configurePage("mcp"));
       case "task":
         return item.reason === "review"
           ? `Review the draft: it waits on you in ${item.stage}`
@@ -339,6 +344,8 @@
         return ["Machine", item.machine.platform, item.place]
           .filter(Boolean)
           .join(" · ");
+      case "mcp":
+        return item.place;
       case "install":
         return item.install.route === "ssh"
           ? connectWords.addMachineOver("over SSH")
@@ -745,6 +752,8 @@
         <IconServer aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "install"}
         <IconError aria-hidden="true" class="size-icon-md" />
+      {:else if item.kind === "mcp"}
+        <IconKey aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "task"}
         {#if item.reason === "failed"}
           <IconError aria-hidden="true" class="size-icon-md" />
@@ -1502,6 +1511,15 @@
           </Button>
         {/if}
       </div>
+    {:else if item.kind === "mcp" && item.why}
+      <!-- Why the sign-in ended, the provider's own words under Show
+           details, over the row's cover: its press still opens Configure. -->
+      <RowFault
+        class="relative col-start-2 col-end-4 row-4 mt-space-1"
+        data-needs-card-mcp-why
+        details={item.why}
+        reason={mcpWords.signInEndedWhy}
+      />
     {/if}
   </div>
 {/if}

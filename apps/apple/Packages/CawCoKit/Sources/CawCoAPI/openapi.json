@@ -53637,6 +53637,22 @@
               },
               "detail": {
                 "type": "string"
+              },
+              "ended": {
+                "description": "The hub's sign-in ended without the person (the token endpoint refused\na refresh, or the server moved its authorization): when, epoch ms, and\nwhy in the provider's words. Only while `needs-auth`; the dashboard's\nNeeds you item. Never sent to a machine (hub fleet-mcp.ts `syncConfig`).",
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "at",
+                  "why"
+                ]
               }
             },
             "required": [
