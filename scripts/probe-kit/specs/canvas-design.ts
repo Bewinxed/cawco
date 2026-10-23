@@ -125,6 +125,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import { PAGE_SILENT_MS } from "../../../packages/core/src/preview-reach";
 import type {
   CanvasMap,
   CanvasSpec,
@@ -2802,17 +2803,27 @@ async function answeredLeg(
     { method: "POST" }
   ).then((response) => response.status);
   const opened = Date.now();
-  const samples: { card: boolean; drawn: boolean; unreached: boolean }[] = [];
+  const samples: {
+    card: boolean;
+    drawn: boolean;
+    said: string;
+    unreached: boolean;
+  }[] = [];
   for (;;) {
     const canvas = page
       .frames()
       .find((frame) => frame.url().includes("/@cawco/canvas"));
+    // biome-ignore lint/performance/noAwaitInLoops: a sample, one read at a time against the leg's clock
+    const said = await page.evaluate(
+      (pane) =>
+        [...document.querySelectorAll(`${pane} [data-slot="down"]`)]
+          .map((one) => one.textContent?.replace(/\s+/g, " ").trim() ?? "")
+          .join(" | "),
+      SESSION_PANE
+    );
     const sample = {
-      // biome-ignore lint/performance/noAwaitInLoops: a sample, one read at a time against the leg's clock
-      card: await page
-        .locator(`${SESSION_PANE} [data-slot="down"]`)
-        .count()
-        .then((count) => count > 0),
+      card: said !== "",
+      said,
       drawn: canvas
         ? await canvas
             .evaluate(() => !!document.querySelector("[data-cawco-story]"))
@@ -2836,7 +2847,7 @@ async function answeredLeg(
   kit.check(
     '17: the pane stands no "isn\'t answering" card at any sample while that page loads',
     cardAt === -1,
-    `card at sample ${cardAt} of ${samples.length}`
+    `card at sample ${cardAt} of ${samples.length}${cardAt === -1 ? "" : `, saying "${samples[cardAt]?.said.slice(0, 300)}"`}`
   );
   await page.close();
 }
@@ -2876,8 +2887,17 @@ async function unreachedLeg(
   await page.goto(
     `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(path)}&ask=${encodeURIComponent(ASK)}`
   );
+  // The doc's word is said once the pane's own load has had its say: the
+  // frame loaded, and its page silent for PAGE_SILENT_MS (PreviewPane `docDown`).
+  await page
+    .locator('[data-bench-pane] iframe[title="Preview"][data-ready]')
+    .first()
+    .waitFor({ timeout: 60_000 })
+    .catch(() => undefined);
   const card = page.locator('[data-bench-pane] [data-slot="down"]').first();
-  await card.waitFor({ timeout: REFUSED_MS }).catch(() => undefined);
+  await card
+    .waitFor({ timeout: PAGE_SILENT_MS + REFUSED_MS })
+    .catch(() => undefined);
   // The words go in as the read's argument: it runs in the page, where
   // nothing of this module's scope is.
   const said = await card

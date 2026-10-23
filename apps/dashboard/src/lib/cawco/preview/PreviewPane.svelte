@@ -27,6 +27,7 @@
   import { pinName } from "@cawco/core/pin-name";
   import {
     askHubReach,
+    PAGE_SILENT_MS,
     PREVIEW_REACH_API,
     previewsNeedWords,
     previewUnreachedWords,
@@ -808,10 +809,8 @@
    * a page whose overlay said it was ready, or a canvas whose stage stands in
    * this pane and said so, in a tab the person has in view. Could not be is
    * the proxy's own page naming the hop that failed, or a load no overlay
-   * answered within PAGE_SILENT_MS. Said once per revision.
+   * answered within PAGE_SILENT_MS (core preview-reach). Said once per revision.
    */
-  /** How long a loaded frame has for its overlay to answer the pane's hello. Our call: it answers in milliseconds. */
-  const PAGE_SILENT_MS = 3000;
   /** The frame that last finished loading, and whether it then said nothing. */
   let loadedKey = $state<string | null>(null);
   let silentKey = $state<string | null>(null);
@@ -1099,11 +1098,17 @@
   );
   /**
    * The hub's last read couldn't reach the stage (the doc's `meta.unreached`,
-   * which the agent's read says too): said as the proxy's own down is, while
-   * no page here has connected, with its why and since when.
+   * which the agent's read says too): said as the proxy's own down is, with
+   * its why and since when, once this pane's own load has had its say and
+   * the page did not answer (`silentKey`, PAGE_SILENT_MS after it loaded).
+   * While a load is on its way, an earlier read is no word on it: the cover
+   * stands, and a page its stage answers through the hub's relay clears the
+   * doc's word (hub artifacts `stageAnswered`).
    */
   const docDown = $derived(
-    staged && !connected && view?.unreached ? view.unreached : null
+    staged && !connected && silentKey === frameKey && view?.unreached
+      ? view.unreached
+      : null
   );
   const shownDown = $derived(down ?? docDown?.down ?? null);
   const shownWhy = $derived(down ? downWhy : (docDown?.why ?? null));

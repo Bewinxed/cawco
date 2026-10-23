@@ -33,8 +33,9 @@
    * and every other close, gives it back to what had it before the first
    * card opened, or, opened from inside the phone's sheet, which goes as it
    * opens, to what invoked the sheet: the burger (bar-glass `invoker`).
-   * ⌘K in Jump's own field closes it (Shell). Jump's Escape is the finder's:
-   * it folds an open peek first and closes only with nothing folded open.
+   * ⌘K in Jump's own field closes it (Shell). Escape in Jump's field is the
+   * finder's: it folds an open peek first and closes only with nothing
+   * folded open; anywhere else in the card it closes, as on every face.
    * Non-modal: no scrim, no trap, and a press outside closes it
    * and still lands; the glass's own items open, swap or shut it themselves.
    *
@@ -461,13 +462,17 @@
    * would take the first Escape from a popover the page opened before it (a
    * surface a reload brought back open, The Work Outlives Its Surface Rule)
    * and shut nothing anyone sees. While it rehearses it defers, and the
-   * Escape goes to what is really open; so does a press outside.
+   * Escape goes to what is really open; so does a press outside. Open, it
+   * closes on Escape whichever face it shows: the Jump field's own Escape
+   * never reaches it (Finder takes it, to fold a peek first), so an Escape
+   * from anywhere else in Jump, or before its field has the focus, still
+   * closes it.
    */
   const escapeBehavior = $derived.by(() => {
     if (rehearsing) {
       return "defer-otherwise-ignore";
     }
-    return shown === "jump" || lightbox.current ? "ignore" : "close";
+    return lightbox.current ? "ignore" : "close";
   });
 </script>
 

@@ -376,7 +376,9 @@
           data-slot="wait-row"
         >
           {#if !(shaped || slow || screen)}
-            <span class="flex" data-box out:reveal>
+            <!-- The reveal's own box gives way as the bar it holds does (min-w-0):
+                 its words keep the room they had beside the bare bar. -->
+            <span class="flex min-w-0" data-box out:reveal>
               <Skeleton line="meta" width="title" />
             </span>
           {/if}

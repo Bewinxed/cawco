@@ -32,10 +32,10 @@
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import {
+    afterSkeleton,
     CURVE,
     dur,
     motionOk,
-    reveal,
     revealOut,
   } from "../motion/curves.svelte";
   import { sessionAnswer, sessionFacts } from "../session-names.svelte";
@@ -217,6 +217,13 @@
   /* ---- the tail's motion ---------------------------------------------- */
 
   /**
+   * The rows or the facts come by the skeleton's reveal only where its
+   * skeleton stood: drawn in a panel that is coming in (HoverPanel), they
+   * are part of its one entrance, never a second motion a frame behind it.
+   */
+  const { arrive, stood } = afterSkeleton();
+
+  /**
    * The keys on screen, oldest first: SLOTS of them, one more while it
    * leaves. A tail already in the store is there from the first frame.
    */
@@ -359,7 +366,7 @@
       data-slot="column"
       class="flex-none flex flex-col"
       bind:this={column}
-      in:reveal
+      in:arrive
     >
       {#each shown as key (key)}
         {@const row = dataOf(key)}
@@ -430,7 +437,7 @@
     <p
       data-slot="facts"
       class="m-0 flex-none h-(--row) flex items-center min-w-0 text-size-meta text-ink-muted"
-      in:reveal
+      in:arrive
     >
       <span class="min-w-0 truncate">{sessionFacts(answer)}</span>
     </p>
@@ -442,6 +449,7 @@
       class="flex-none flex flex-col"
       role="status"
       out:revealOut
+      {@attach stood}
     >
       <div
         data-slot="row"

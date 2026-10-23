@@ -76,6 +76,7 @@ import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { HOUSE_FACES } from "../../../packages/core/src/house-faces";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { pageReach } from "../decision-embeds";
@@ -2472,6 +2473,9 @@ const facesLeg = async (on: On, frame: Frame, which: string) => {
   );
 };
 
+/** The house's sans face, by the family name its stylesheet gives it. */
+const HOUSE_SANS = HOUSE_FACES.find((face) => face.role === "sans")?.family;
+
 /** (l) A page whose option's label holds `label`. */
 const glyphPage = (
   label: string
@@ -2482,7 +2486,8 @@ drop = Option("drop", "Drop it in", "Drag the file onto the brief.", false, [], 
 
 /**
  * (l) How `glyph`, standing in the clip option's label in `frame`, is drawn:
- * its own width there (a Range over it), beside its width on a canvas in
+ * its advance there (a box of its own in the label; a Range over the
+ * label's own glyph, kept beside it, is whole pixels in WebKit), beside its width on a canvas in
  * the label's font as Figtree alone and as the label's fallback stack
  * alone; and, as the measure's control, ✓ (which Figtree lacks) on the
  * canvas in Figtree-then-fallback and in the fallback alone.
@@ -2516,6 +2521,14 @@ const glyphIn = (frame: Frame, glyph: string) =>
     const from = text.textContent.indexOf(char);
     range.setStart(text, from);
     range.setEnd(text, from + char.length);
+    // The glyph's advance as the label draws it: a box of its own in the
+    // label, whose width is layout's (WebKit snaps a text Range's box out to
+    // whole pixels, Blink does not).
+    const alone = document.createElement("span");
+    alone.textContent = char;
+    label.append(alone);
+    const advance = alone.getBoundingClientRect().width;
+    alone.remove();
     const context = document.createElement("canvas").getContext("2d");
     const width = (family: string, what: string) => {
       if (!context) {
@@ -2532,7 +2545,8 @@ const glyphIn = (frame: Frame, glyph: string) =>
           : Number.parseFloat(style.letterSpacing),
       label: text.textContent.trim(),
       check: document.fonts.check(`${lead} "Figtree Variable"`, char),
-      drawn: Math.round(range.getBoundingClientRect().width * 100) / 100,
+      range: Math.round(range.getBoundingClientRect().width * 100) / 100,
+      drawn: Math.round(advance * 100) / 100,
       figtree: width('"Figtree Variable"', char),
       fallback: width(fallback, char),
       control: {
@@ -2616,7 +2630,9 @@ const glyphLeg = async (on: On) => {
   kit.check(
     "(l) its → is drawn in Figtree: the label's face is Figtree, document.fonts.check holds for →, the glyph as drawn measures as Figtree's on a canvas and not as the fallback's, and the measure tells a glyph Figtree lacks (✓ falls through to the fallback)",
     !!read &&
-      read.family.startsWith('"Figtree Variable"') &&
+      // The family's first name, however the engine writes it out: Blink
+      // quotes a name with a space ("Figtree Variable"), WebKit does not.
+      read.family.split(",")[0]?.trim().replace(/^"|"$/g, "") === HOUSE_SANS &&
       read.check &&
       Math.abs(read.drawn - read.figtree - read.spacing) < 0.5 &&
       Math.abs(read.figtree - read.fallback) > 0.5 &&

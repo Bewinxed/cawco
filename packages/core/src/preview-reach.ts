@@ -30,6 +30,14 @@ export const PREVIEW_REACH_PATH = "/__cawco/reach";
 export const PREVIEW_REACH_API = "/api/preview-reach";
 
 /**
+ * How long a page loaded in a pane's frame has for its overlay to answer
+ * the pane's hello before the pane counts it silent (dashboard PreviewPane:
+ * the hub hears the page wasn't shown; a stage the hub's last read couldn't
+ * reach is said then). Our call: an overlay answers in milliseconds.
+ */
+export const PAGE_SILENT_MS = 3000;
+
+/**
  * Marks the hub's own answer to {@link PREVIEW_PING_PATH}: an answer without
  * it came from something else in front of the origin (a proxy, a CDN's own
  * error page).

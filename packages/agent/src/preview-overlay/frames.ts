@@ -31,8 +31,35 @@ export function frameWindows(doc: Document): Window[] {
   );
 }
 
+/**
+ * Whether the address a frame was given is of its document's origin: none
+ * (about:blank), `srcdoc`, `about:` and `javascript:` inherit it; a `data:`
+ * address is an origin of its own. Decided without touching the frame's
+ * document: WebKit says every reach into another origin's frame on the
+ * console as an error ("Blocked a frame with origin …"), caught or not.
+ */
+const ownOrigin = (frame: FrameElement): boolean => {
+  const src = frame.getAttribute("src");
+  if (frame.hasAttribute("srcdoc") || !src) {
+    return true;
+  }
+  try {
+    const url = new URL(src, frame.ownerDocument.baseURI);
+    return (
+      url.protocol === "about:" ||
+      url.protocol === "javascript:" ||
+      url.origin === (frame.ownerDocument.defaultView ?? window).origin
+    );
+  } catch {
+    return false;
+  }
+};
+
 /** A frame's document when it is of this origin; null for another origin's. */
 export const frameDocument = (frame: FrameElement): Document | null => {
+  if (!ownOrigin(frame)) {
+    return null;
+  }
   try {
     return frame.contentDocument;
   } catch {

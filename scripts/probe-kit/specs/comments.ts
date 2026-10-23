@@ -7470,6 +7470,10 @@ const pointChecks = async (
         const line = chip?.parentElement;
         const dotEl = chip?.querySelector('[data-dot="unread"]');
         return {
+          // The chip has read its pin (PinReference's `data-state`): until
+          // then it draws by its written label, while its pins are asked of
+          // the hub (artifact-names `artifactMarks`).
+          read: chip?.hasAttribute("data-state") ?? false,
           inLine: line ? line.querySelectorAll("[data-pin-chip]").length : 0,
           label:
             chip?.querySelector('[data-slot="label"]')?.textContent?.trim() ??
@@ -7499,7 +7503,12 @@ const pointChecks = async (
       },
       { pinId: `${id}/2`, decisionId: `${did}/reach`, pageId: did }
     );
-  const chips = await readChips();
+  const chips = await until(
+    "the pin chip's pin read",
+    () => readChips(),
+    (now) => now.read,
+    15_000
+  ).catch(() => readChips());
   const [chipDot] = await srgbOf(on.page, [chips.dot ?? ""]);
   const wanted = pinName(pin2);
   on.kit.check(

@@ -105,6 +105,12 @@
   };
 
   function onkeydown(event: KeyboardEvent) {
+    // The field's Escape is the finder's alone: the layer it hangs in (the
+    // glass's card, which closes on an Escape from anywhere else in it)
+    // never hears it, nor one an input method takes.
+    if (event.key === "Escape") {
+      event.stopPropagation();
+    }
     if (event.isComposing) {
       return;
     }
