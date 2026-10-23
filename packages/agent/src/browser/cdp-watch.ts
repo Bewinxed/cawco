@@ -9,15 +9,12 @@
  * One screencast per browser, started by its first view and stopped with
  * its last. When the page in front moves to another, and when the person
  * takes the browser over (whose own screencast is the views' from then on),
- * the views are closed with {@link FRONT_MOVED}, which a view opens again at
- * once.
+ * the views are closed with {@link BROWSER_VIEW_MOVED}, which a view opens
+ * again at once.
  */
-import type { BrowserKey } from "@cawco/core/browser";
+import { BROWSER_VIEW_MOVED, type BrowserKey } from "@cawco/core/browser";
 import { CdpTakeover, type CdpViewer } from "./cdp-takeover";
 import { frontTarget, onFrontMoved } from "./front-origin";
-
-/** The close a view opens again at once: what it shows moved (another page in front, or a take-over's own screencast). */
-export const FRONT_MOVED = 4205;
 
 interface Watched {
   cast: Promise<CdpTakeover>;
@@ -29,7 +26,7 @@ const watched = new Map<BrowserKey, Watched>();
 const why = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/** Ends `key`'s screencast, its views closed with {@link FRONT_MOVED} and `reason`. */
+/** Ends `key`'s screencast, its views closed with {@link BROWSER_VIEW_MOVED} and `reason`. */
 export const endWatch = (key: BrowserKey, reason: string): void => {
   const held = watched.get(key);
   if (!held) {
@@ -37,7 +34,7 @@ export const endWatch = (key: BrowserKey, reason: string): void => {
   }
   watched.delete(key);
   held.cast
-    .then((cast) => cast.stop(FRONT_MOVED, reason))
+    .then((cast) => cast.stop(BROWSER_VIEW_MOVED, reason))
     .catch(() => undefined);
 };
 

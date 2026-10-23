@@ -18,6 +18,7 @@
  *
  * Neither keeps anything of the page: the frames are drawn and dropped.
  */
+import { BROWSER_VIEW_MOVED } from "@cawco/core/browser";
 
 /** Where the stream stands, for the well to say. */
 export type StreamState =
@@ -25,7 +26,7 @@ export type StreamState =
   | { kind: "live" }
   /** The socket closed: it opens again on its own, and Try again opens it now. */
   | { kind: "lost"; why: string }
-  /** The hub refused it (a close code of 4000 and up, its sentence as the reason): opened again only by Try again. */
+  /** The hub refused it (4000 plus an HTTP status, its sentence as the reason): opened again only by Try again. */
   | { kind: "refused"; why: string }
   /** The media found no way to this screen (ICE failed, past its retries). */
   | { kind: "no-stream" }
@@ -53,8 +54,22 @@ export interface BrowserStream extends StreamInput {
   size: () => { width: number; height: number } | null;
 }
 
-/** The hub's refusals close with 4000 + their status (browser-routes.ts `refusalCode`). */
-const REFUSED_FROM = 4000;
+/** The hub's refusals close with 4000 + their HTTP status (browser-routes.ts `refusalCode`, 4401 a device not paired). */
+const REFUSED_FROM = 4400;
+const REFUSED_TO = 4600;
+
+/**
+ * How a view's socket closed: what it shows moved (core
+ * `BROWSER_VIEW_MOVED`: another page in front, or the person's take-over's
+ * own screencast), opened again at once; refused by the hub, opened again
+ * only by Try again; or lost, opened again on its own after a wait.
+ */
+const closedHow = (code: number): "moved" | "refused" | "lost" => {
+  if (code === BROWSER_VIEW_MOVED) {
+    return "moved";
+  }
+  return code >= REFUSED_FROM && code < REFUSED_TO ? "refused" : "lost";
+};
 /** Waits before opening a lost socket again, longest last. Our call. */
 const RETRY_MS = [1000, 2000, 5000, 10_000] as const;
 /** ICE failures in a row before the view says the stream didn't connect. Our call: neko's client gives up after 10 at a growing backoff; a person waits less. */
@@ -338,7 +353,12 @@ export const nekoStream = (
       socket = null;
       closePeer();
       events.session(null);
-      if (event.code >= REFUSED_FROM && event.code < 5000) {
+      const how = closedHow(event.code);
+      if (how === "moved") {
+        open();
+        return;
+      }
+      if (how === "refused") {
         events.state({
           kind: "refused",
           why: event.reason || refusedWhy || `closed with ${event.code}`,
@@ -518,7 +538,14 @@ export const cdpStream = (
         return;
       }
       socket = null;
-      if (event.code >= REFUSED_FROM && event.code < 5000) {
+      const how = closedHow(event.code);
+      // The person took it over: its frames come on the take-over's own
+      // screencast from the socket opened again now.
+      if (how === "moved") {
+        open();
+        return;
+      }
+      if (how === "refused") {
         events.state({
           kind: "refused",
           why: event.reason || `closed with ${event.code}`,

@@ -280,6 +280,13 @@ export const SHIELD_WORDS =
  */
 export const SHIELD_CLOSE_WORDS = "The person took over this browser.";
 
+/**
+ * The close a local browser's view opens again at once (agent cdp-watch.ts):
+ * what it shows moved, to another page in front or to a take-over's own
+ * screencast. Never a refusal: the hub's are 4000 plus an HTTP status.
+ */
+export const BROWSER_VIEW_MOVED = 4205;
+
 /** How long a take-over stands with no view open before the daemon hands it back itself. */
 export const TAKEOVER_UNWATCHED_MS = 2 * 60_000;
 
