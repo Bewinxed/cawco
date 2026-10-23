@@ -21,6 +21,7 @@ import type { Page } from "playwright-core";
 import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { COMPOSER, type Kit, open, type Spec, settle } from "../../kit";
+import { literal } from "../../words";
 
 const GRIP = '[aria-label="Resize sidebar"]';
 const REPLY = "Selection stays on for every word of this reply";
@@ -29,7 +30,7 @@ const STARTER = /^(New session|Start session)$/;
 /** A model id no catalog holds: ModelSection offers it as the dashed custom row. */
 const CUSTOM_MODEL = "probe-custom-model-id";
 /** The custom row's name. */
-const CUSTOM_ROW = /Use custom model id/;
+const CUSTOM_ROW = new RegExp(literal(spawnWords.model.custom));
 
 const respond = (request: Seen): Reply =>
   request.tools

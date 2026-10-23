@@ -62,6 +62,7 @@ import {
   type Spec,
   settle,
 } from "../../kit";
+import { shaped } from "../../words";
 
 /** The form on a desk: the popover. */
 const DESK_FORM = "[data-ns-popover]";
@@ -393,7 +394,7 @@ async function newSessionLegs(
   kit.check(
     `${label}: once the hub answers, the row says it started, and the session is on the hub; no toast`,
     done?.state === "started" &&
-      done.doing.includes("Started on") &&
+      shaped(spawnWords.starting.startedOn).test(done.doing) &&
       made.length === 1 &&
       done.toasts === 0,
     JSON.stringify({ done, made })
@@ -1154,7 +1155,7 @@ async function phoneLegs(
   kit.check(
     `${label}: the row says it started once the hub answers, the session on the hub, no toast`,
     done?.state === "started" &&
-      done.doing.includes("Started on") &&
+      shaped(spawnWords.starting.startedOn).test(done.doing) &&
       instances().some((id) => !before.has(id)) &&
       done.toasts === 0,
     JSON.stringify(done)

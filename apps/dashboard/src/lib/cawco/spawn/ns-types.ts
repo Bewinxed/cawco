@@ -7,7 +7,8 @@ export interface MenuItem {
   hue: string;
   icon: Component;
   key: string;
-  kind: "Machine" | "Project" | "Skill" | "Plugin";
+  /** Its kind, in words (core `spawnWords.form.kinds`). */
+  kind: string;
   label: string;
   /** What the chip becomes in the prompt that is sent: `@name` or `/name`. */
   serial: string;

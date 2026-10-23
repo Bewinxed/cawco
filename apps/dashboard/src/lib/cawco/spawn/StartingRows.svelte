@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   /**
    * The starts the New Session form left running (spawn/parked), each as its
    * own row in the home, over Working and Finished (DESIGN.md, The Work
@@ -53,9 +54,11 @@
       return start.stage;
     }
     if (start.state === "started") {
-      return `Started on ${hostOf(start)}`;
+      return spawnWords.starting.startedOn(hostOf(start));
     }
-    return start.continueFrom ? "Couldn't continue" : "Couldn't start";
+    return start.continueFrom
+      ? spawnWords.starting.couldntContinue
+      : spawnWords.starting.couldntStart;
   };
 
   /** The row's box, for the form to hang from and open out of. */
@@ -75,7 +78,7 @@
 
 {#if parked.list.length > 0}
   <ul
-    aria-label="Starting"
+    aria-label={spawnWords.starting.name}
     class="m-0 flex list-none flex-col gap-space-row p-0"
     data-flip
     data-slot="starting"
@@ -137,11 +140,11 @@
           </button>
           {#if start.state !== "running"}
             <!-- What it came to stands until the reader is done with it. -->
-            <Tip label="Dismiss">
+            <Tip label={spawnWords.starting.dismiss}>
               {#snippet children(tip)}
                 <button
                   {...tip}
-                  aria-label="Dismiss {start.title}"
+                  aria-label={spawnWords.starting.dismissNamed(start.title)}
                   class="select-none touch-hit focus-inset me-space-2 inline-grid size-c-btn-h-sm flex-none place-items-center rounded-xs border-none bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
                   data-parked-dismiss
                   onclick={() => dropStart(start.id)}
@@ -156,7 +159,7 @@
         {#if start.state === "failed"}
           <RowFault
             again={() => reopenStart(start.id, rowOf(start.id))}
-            againLabel="Reopen"
+            againLabel={spawnWords.starting.reopen}
             data-parked-fault
             end="var(--space-3)"
             indent="calc(var(--space-3) + var(--space-5) + var(--space-2))"

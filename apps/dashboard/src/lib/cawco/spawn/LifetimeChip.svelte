@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
@@ -28,15 +29,15 @@
   const OPTIONS = [
     {
       ephemeral: false,
-      name: "Persistent",
-      desc: "Stays on the board after its task, to pick up again.",
+      name: spawnWords.lifetime.persistent,
+      desc: spawnWords.lifetime.persistentDesc,
       icon: Database,
       hue: "var(--hue-blue-500)",
     },
     {
       ephemeral: true,
-      name: "Ephemeral",
-      desc: "A spin-off: ends and clears itself when the task is done.",
+      name: spawnWords.lifetime.ephemeral,
+      desc: spawnWords.lifetime.ephemeralDesc,
       icon: Fire,
       hue: "var(--hue-orange-500)",
     },
@@ -49,7 +50,7 @@
 <NsPopover
   gap={2}
   id="session-lifetime"
-  label={`Session lifetime: ${current.name}`}
+  label={spawnWords.lifetime.chip(current.name)}
   {onchange}
   {open}
   rows="[data-fh]"

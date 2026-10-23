@@ -57,7 +57,7 @@
       title: spawnWords.switchToFullSendTitle,
       body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
       confirmLabel: spawnWords.switchToFullSend,
-      pendingLabel: "Switching…",
+      pendingLabel: spawnWords.switching,
       grant: true,
       // The yes is what this asks for: the change then says how it goes
       // where every pick's does (a running session's feedback line under
@@ -82,7 +82,7 @@
      glide popover's inset, `glide-row-r`. -->
 <div
   data-slot="perms"
-  aria-label="Permission mode"
+  aria-label={spawnWords.permissionModes}
   class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:rounded-none data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
   data-embedded={embedded || undefined}
   role="radiogroup"

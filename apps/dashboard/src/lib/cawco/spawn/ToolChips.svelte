@@ -10,16 +10,16 @@
 
   /** A model with no effort scale: nothing to pick, and the chip says so. */
   export const NO_EFFORT_MODEL: EffortOff = {
-    label: "No effort",
-    reason: "This model has no effort setting",
+    label: spawnWords.effort.none,
+    reason: spawnWords.effort.noneWhy,
   };
 
   const HARNESS_NAMES: Record<HarnessKind, string> = accountsWords.harnesses;
 
   /** A harness that can neither report nor change effort. */
   export const effortNotExposed = (harness: HarnessKind): EffortOff => ({
-    label: "Effort n/a",
-    reason: `${HARNESS_NAMES[harness]} doesn't expose effort`,
+    label: spawnWords.effort.notExposed,
+    reason: spawnWords.effort.notExposedWhy(HARNESS_NAMES[harness]),
   });
 
   /** The run settings that ride on a model: its effort and the session's permission mode. */
@@ -127,7 +127,7 @@
 {#snippet effortChip()}
   <Tuning class="text-hue-orange-500" />
   <span data-slot="chip-label" class="capitalize"
-    >{tools.effort ?? "Default"}</span
+    >{tools.effort ?? spawnWords.effort.default}</span
   >
 {/snippet}
 <!-- The level as plain text, or why there is none: never a picker. -->
@@ -196,7 +196,9 @@
           <NsPopover
             align="end"
             id={`${id}-effort`}
-            label={`Effort: ${tools.effort ?? "Default"}`}
+            label={spawnWords.effort.chip(
+              tools.effort ?? spawnWords.effort.default
+            )}
             onchange={(value) => {
               pop = value ? "effort" : null;
             }}

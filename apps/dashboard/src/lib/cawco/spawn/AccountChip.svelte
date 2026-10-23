@@ -28,6 +28,7 @@
 </script>
 
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * The New session form's account chip, among the chosen model's tool
@@ -57,7 +58,9 @@
   const shown = $derived(
     tool.options.find((option) => option.id === (tool.value ?? tool.auto.id))
   );
-  const label = $derived(shown ? (shown.nick ?? shown.name) : "Auto");
+  const label = $derived(
+    shown ? (shown.nick ?? shown.name) : spawnWords.account.auto
+  );
 
   function pick(value: string | null) {
     tool.onpick(value);
@@ -68,7 +71,7 @@
 <NsPopover
   align="end"
   id={`${id}-account`}
-  label={`Account: ${label}`}
+  label={spawnWords.account.chip(label)}
   {onchange}
   {open}
   rows="[data-account-option]"
@@ -94,7 +97,7 @@
        opacity); its meta line, which says why, stays whole in muted ink. -->
   <div
     data-slot="list"
-    aria-label="Account"
+    aria-label={spawnWords.account.name}
     class="flex flex-col p-space-2"
     role="listbox"
     style:--ring-ground="var(--surface-lift)"
@@ -111,7 +114,7 @@
     >
       <span aria-hidden="true"></span>
       <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
-        <span class="type-label">Auto</span>
+        <span class="type-label">{spawnWords.account.auto}</span>
         {#if tool.auto.why}
           <span class="type-meta text-ink-muted text-pretty"
             >{tool.auto.why}</span

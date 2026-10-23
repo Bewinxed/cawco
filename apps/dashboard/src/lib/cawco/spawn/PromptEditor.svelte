@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   /**
    * The first-prompt editor (§1.4, §2.3): a contenteditable that grows from
    * `c-row-h` to `c-prompt-grown-h`, detects `@` / `/` at the caret and inserts chips. The prompt
@@ -369,7 +370,7 @@
   <!-- biome-ignore lint/a11y/useSemanticElements: a contenteditable is the only element that can hold inline chips; textarea cannot -->
   <div
     data-slot="editor"
-    aria-label="First prompt"
+    aria-label={spawnWords.firstPrompt}
     aria-multiline="true"
     class="fai-scroll h-c-row-h data-grown:h-c-prompt-grown-h max-phone:h-c-prompt-grown-h w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:duration-(--dur-pop) motion-safe:phone:ease-in-out"
     contenteditable="true"
@@ -389,9 +390,9 @@
     <span
       aria-hidden="true"
       class="pointer-events-none absolute inset-x-space-4 top-space-3 truncate font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal text-ink-subtle"
-      >What should the agent do first?
+      >{spawnWords.form.promptPlaceholder}
       <span class="text-ink-subtle max-phone:hidden"
-        >@ machine or project · / skills and plugins</span
+        >{spawnWords.form.promptKeys}</span
       ></span
     >
   {/if}

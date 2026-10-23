@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * Location as a composer chip: where the session works — an existing folder
@@ -60,9 +61,9 @@
   };
   const label = $derived.by(() => {
     if (mode === "repo") {
-      return repo.trim() || "Clone a repository";
+      return repo.trim() || spawnWords.location.cloneRepo;
     }
-    return dir.trim() ? short(dir.trim()) : "Choose folder";
+    return dir.trim() ? short(dir.trim()) : spawnWords.location.chooseFolder;
   });
   const empty = $derived(mode === "repo" ? !repo.trim() : !dir.trim());
 </script>
@@ -70,7 +71,7 @@
 <NsPopover
   gap={2}
   id="session-location"
-  label={`Location: ${label}`}
+  label={spawnWords.location.chip(label)}
   {onchange}
   {onclosefocus}
   {open}

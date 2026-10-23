@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
@@ -35,9 +36,11 @@
   const picked = $derived(machines.filter((row) => selected.includes(row.id)));
   const label = $derived.by(() => {
     if (picked.length === 0) {
-      return "Select machine";
+      return spawnWords.machines.select;
     }
-    return picked.length === 1 ? picked[0].name : `${picked.length} machines`;
+    return picked.length === 1
+      ? picked[0].name
+      : spawnWords.machines.count(picked.length);
   });
   /** Add machine, its focus coming back to this chip as it closes. */
   function addMachine() {
@@ -52,7 +55,7 @@
     if (!row.online) {
       return "off";
     }
-    return row.load === "Idle" ? "online" : "away";
+    return row.load === spawnWords.machines.idle ? "online" : "away";
   };
   const radius = (index: number, on: boolean) =>
     machineRowRadius(
@@ -64,7 +67,7 @@
 
 <NsPopover
   id="session-machines"
-  label={`Machines: ${label}`}
+  label={spawnWords.machines.chip(label)}
   {onchange}
   {open}
   rows="[data-fh]"
@@ -112,7 +115,7 @@
     <div
       class="ns-in px-space-2 py-space-4 text-center type-meta text-ink-subtle"
     >
-      No machines have checked in.
+      {spawnWords.machines.noneCheckedIn}
     </div>
   {/if}
   <div
@@ -131,6 +134,6 @@
     <span data-slot="tile" class={iconTileVariants({ empty: true })}
       ><Add class="size-icon-md" /></span
     >
-    <span class="type-label">Connect a machine…</span>
+    <span class="type-label">{spawnWords.machines.connect}</span>
   </button>
 </NsPopover>

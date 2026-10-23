@@ -61,7 +61,7 @@
     runtime = false,
     tools,
     account,
-    label = "Model",
+    label = spawnWords.form.model,
     unavailable,
   }: {
     harness: HarnessKind;
@@ -316,7 +316,7 @@
         itemClass="ns-in touch-hit press-tint grid size-c-btn-h place-items-center"
         stagger={30}
         items={railItems}
-        label="Harness"
+        label={spawnWords.model.harness}
         onpick={(id: string) => onharness(id as HarnessKind)}
         value={harness}
       >
@@ -329,8 +329,8 @@
           {#if tab.disabled}
             <span class="sr-only"
               >{tab.soon
-                ? "Coming soon"
-                : `Not installed on ${machineName}`}</span
+                ? spawnWords.model.comingSoon
+                : spawnWords.model.notInstalledOn(machineName)}</span
             >
           {/if}
         {/snippet}
@@ -338,12 +338,12 @@
           {#if tab.soon}
             <span
               class="font-body text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
-              >soon</span
+              >{spawnWords.model.soon}</span
             >
           {:else if tab.disabled}
             <span
               class="font-body text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
-              >not installed</span
+              >{spawnWords.model.notInstalled}</span
             >
           {/if}
         {/snippet}
@@ -377,7 +377,7 @@
               query = "";
             }
           }}
-          placeholder="Search or paste a model id…"
+          placeholder={spawnWords.model.search}
           spellcheck="false"
           value={query}
           {@attach autowidth(() => query)}
@@ -385,7 +385,7 @@
         {#if query}
           <button
             data-slot="clear"
-            aria-label="Clear"
+            aria-label={spawnWords.model.clear}
             class={pressVariants({
               press: "scale",
               class:
@@ -403,7 +403,7 @@
 
       <div
         data-slot="list"
-        aria-label={`${harnessName(listHarness)} models`}
+        aria-label={spawnWords.model.list(harnessName(listHarness))}
         class="fai-scroll relative grid h-c-model-list-h content-box-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
         id={`${uid}-models`}
         role="listbox"
@@ -458,7 +458,7 @@
               <span
                 data-slot="name"
                 class="type-label block truncate group-disabled:opacity-50"
-                >Use custom model id</span
+                >{spawnWords.model.custom}</span
               >
               <span
                 data-slot="meta"
@@ -468,7 +468,7 @@
             </span>
             <span
               class="font-body text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
-              >↵ Enter</span
+              >{spawnWords.model.enter}</span
             >
           </button>
         {:else if noResults}
@@ -479,10 +479,10 @@
             out:crossOut
           >
             {#if q}
-              No {harnessName(listHarness)} models match "{query}"
+              {spawnWords.model.noMatch(harnessName(listHarness), query)}
             {:else}
               {models.unread(listHarness, machineIds) ??
-                `No ${harnessName(listHarness)} models reported yet`}
+                spawnWords.model.noneReported(harnessName(listHarness))}
             {/if}
           </div>
         {/if}

@@ -6,6 +6,7 @@
    * No branch API exists, so the design's branch panel is not rendered.
    */
   import type { FsEntry } from "@cawco/core";
+  import { spawnWords } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
@@ -108,7 +109,7 @@
         case "unanswered":
           // The listing on screen stands; this says why it did not move.
           listError = didntAnswer(machineId, read, {
-            missed: "the folder's listing didn't come back",
+            missed: spawnWords.location.listingMissed,
             again: TRY_AGAIN,
           });
           return;
@@ -179,7 +180,7 @@
     <SectionHeader
       hue="var(--hue-amber-500)"
       icon={Folder}
-      label="Location"
+      label={spawnWords.location.name}
       wrap
     >
       {#snippet right()}
@@ -191,10 +192,10 @@
     <Segmented
       class={embedded ? "justify-self-box-start" : ""}
       items={[
-        { value: "dir", label: "Existing files" },
-        { value: "repo", label: "Clone a repository" },
+        { value: "dir", label: spawnWords.location.existingFiles },
+        { value: "repo", label: spawnWords.location.cloneRepo },
       ]}
-      label="Location source"
+      label={spawnWords.location.source}
       onchange={onmode}
       value={mode}
     >
@@ -227,13 +228,13 @@
       />
       <input
         aria-invalid={reading && !informational ? true : undefined}
-        aria-label="Directory"
+        aria-label={spawnWords.location.directory}
         autocapitalize="off"
         class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong placeholder:text-ink-muted"
         id="session-dir"
         oninput={(event) => ondir(event.currentTarget.value)}
         onkeydown={commitOnEnter}
-        placeholder="~/code/project"
+        placeholder={spawnWords.location.directoryPlaceholder}
         readonly={locked}
         spellcheck="false"
         value={dir}
@@ -241,11 +242,11 @@
       {#if locked}
         <span
           class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-body text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
-          ><span>From project</span></span
+          ><span>{spawnWords.location.fromProject}</span></span
         >
         <span class="ns-in flex flex-none" style="--delay:40ms">
           <Button onclick={onoverride} size="sm" tone="quiet" variant="ghost">
-            Override
+            {spawnWords.location.override}
           </Button>
         </span>
       {:else}
@@ -260,11 +261,11 @@
           >
             {#if browsing}
               <Up class="size-icon-md flex-none text-ink-muted" /><span
-                >Close</span
+                >{spawnWords.location.close}</span
               >
             {:else}
               <Search class="size-icon-md flex-none text-ink-muted" />
-              <span>Browse</span>
+              <span>{spawnWords.location.browse}</span>
             {/if}
           </Button>
         </span>
@@ -338,7 +339,8 @@
                 onclick={goUp}
                 type="button"
               >
-                <Left class="size-icon-md flex-none" /><span>Parent folder</span
+                <Left class="size-icon-md flex-none" /><span
+                  >{spawnWords.location.parentFolder}</span
                 >
               </button>
             {/if}
@@ -348,7 +350,7 @@
                 class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-ink-subtle"
                 role="status"
               >
-                Loading folders...
+                {spawnWords.location.loadingFolders}
               </div>
             {:else if listError}
               <div
@@ -382,7 +384,7 @@
                   class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-ink-subtle"
                   role="status"
                 >
-                  No subfolders
+                  {spawnWords.location.noSubfolders}
                 </div>
               {/if}
             {/if}
@@ -405,7 +407,7 @@
               onclick={useFolder}
               size="sm"
             >
-              Use this folder
+              {spawnWords.location.useFolder}
             </Button>
           </div>
         </div>
@@ -432,13 +434,13 @@
           >
             <FolderGit class="size-icon-md flex-none text-hue-amber-500" />
             <input
-              aria-label="Repository"
+              aria-label={spawnWords.location.repository}
               autocapitalize="off"
               class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong placeholder:text-ink-muted"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}
-              placeholder="https://host/owner/repository.git"
+              placeholder={spawnWords.location.repoPlaceholder}
               spellcheck="false"
               tabindex={mode === "repo" ? 0 : -1}
               value={repo}
@@ -451,10 +453,11 @@
         >
           <Refresh class="size-icon-md flex-none text-hue-blue-500" />
           <span class="type-meta min-w-0 text-pretty text-ink-muted"
-            >Cloned into <span
+            >{spawnWords.location.clonedInto}
+            <span
               class="min-w-0 type-meta font-(family-name:--font-mono) text-pretty text-ink-strong"
               >{dir.trim() || "~"}</span
-            > on each machine, pulled fresh before the agent starts.</span
+            >{spawnWords.location.clonedWhere}</span
           >
         </div>
       </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -85,7 +86,7 @@
 <NsPopover
   gap={2}
   id="session-project"
-  label={`Project: ${project?.name ?? "No project"}`}
+  label={spawnWords.project.chip(project?.name ?? spawnWords.project.none)}
   {onchange}
   {open}
   rows="[data-fh]"
@@ -100,7 +101,7 @@
     <Files class="text-hue-amber-500" />
     {#key project?.id}
       <span data-slot="chip-label" class="ns-in"
-        >{project?.name ?? "No project"}</span
+        >{project?.name ?? spawnWords.project.none}</span
       >
     {/key}
     {#if project}
@@ -126,7 +127,7 @@
         }}
         role="button"
         tabindex="0"
-        title="Clear project"><Clear class="size-icon-sm" /></span
+        title={spawnWords.project.clear}><Clear class="size-icon-sm" /></span
       >
     {:else}
       <Down data-slot="chevron" />
@@ -140,11 +141,11 @@
       >
         <Files class="size-icon-md flex-none text-ink-subtle" />
         <input
-          aria-label="Project name"
+          aria-label={spawnWords.project.name}
           autocapitalize="off"
           class="type-body min-w-0 flex-1 border-none border-current bg-transparent p-0 text-ink-strong placeholder:text-ink-muted"
           oninput={(event) => onName(event.currentTarget.value)}
-          placeholder="Project name"
+          placeholder={spawnWords.project.name}
           spellcheck="false"
           value={draft.name}
         />
@@ -155,7 +156,7 @@
       >
         <Folder class="size-icon-md flex-none text-ink-subtle" />
         <input
-          aria-label="Project path"
+          aria-label={spawnWords.project.path}
           autocapitalize="off"
           class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-body font-normal text-ink-strong placeholder:text-ink-muted"
           oninput={(event) => {
@@ -163,7 +164,9 @@
               draft = { ...draft, path: event.currentTarget.value };
             }
           }}
-          placeholder={codeDir ? `${codeDir}/project` : "/path/to/project"}
+          placeholder={codeDir
+            ? `${codeDir}/project`
+            : spawnWords.project.pathPlaceholder}
           spellcheck="false"
           value={draft.path}
         />
@@ -183,15 +186,15 @@
           size="sm"
           variant="outline"
         >
-          Back
+          {spawnWords.form.back}
         </Button>
         <Button
           disabled={!(draft.name.trim() && draft.path.trim())}
           failed={createError !== ""}
-          label="Create"
+          label={spawnWords.project.create}
           onclick={create}
           pending={creating}
-          pendingLabel="Creating…"
+          pendingLabel={spawnWords.project.creating}
           size="sm"
         />
       </div>
@@ -246,7 +249,9 @@
       <span data-slot="tile" class={iconTileVariants({ empty: true })}
         ><Add class="size-icon-md" /></span
       >
-      <span data-slot="name" class="type-label block">New project…</span>
+      <span data-slot="name" class="type-label block"
+        >{spawnWords.project.new}</span
+      >
     </button>
   {/if}
 </NsPopover>

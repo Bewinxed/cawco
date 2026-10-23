@@ -513,9 +513,6 @@
     "Message Caw…": 1,
     "What’s next for": 2
   },
-  "scripts/probe-kit/specs/web/control-select.ts": {
-    "Use custom model id": 1
-  },
   "scripts/probe-kit/specs/web/hub-states.ts": {
     "Searching the hub…": 1,
     "The hub didn't answer (502).": 2
@@ -525,9 +522,6 @@
   },
   "scripts/probe-kit/specs/web/machine-away.ts": {
     "Fetched. The machines": 1
-  },
-  "scripts/probe-kit/specs/web/parked-start.ts": {
-    "Started on": 2
   },
   "scripts/probe-kit/specs/web/project-details.ts": {
     "can't be removed": 1,

@@ -235,11 +235,10 @@
   }
   const STILL_UPLOADING = spawnWords.held.uploading;
   /** The reading line's words while the machine is still read: beside the live dot. */
-  const READING = "Reading…";
+  const READING = spawnWords.form.reading;
   /** Start's word while the machine reads the folder it starts in. */
-  const CHECKING = "Checking the folder…";
-  const NOT_UPLOADED =
-    "A file couldn't upload. Tap it to try again, or remove it.";
+  const CHECKING = spawnWords.form.checkingFolder;
+  const NOT_UPLOADED = spawnWords.form.notUploaded;
   // Either holds Start only while its file does: settled, it is gone.
   $effect(() => {
     const { uploading, unready } = firstMessage;
@@ -535,20 +534,24 @@
         // Only Claude's accounts have rings here; another provider's says
         // nothing it can't read.
         let line: Part[] =
-          provider === CLAUDE_PROVIDER ? ["no reading yet"] : [];
+          provider === CLAUDE_PROVIDER ? [spawnWords.account.noReading] : [];
         if (ring?.state === "limit") {
           line = [
-            "at its limit, back in ",
+            spawnWords.account.atLimit,
             { strong: ring.backAt === null ? "" : fmt(ring.backAt - now) },
           ];
         } else if (one.neverBackup) {
-          line = ["never a backup, only when picked"];
+          line = [spawnWords.account.neverBackup];
         } else if (ring?.w5) {
           line = [
-            { strong: `${ring.w5.left}% left` },
+            { strong: spawnWords.account.left(ring.w5.left) },
             ...(ring.w5.resetsAt === null
-              ? [" of 5 hours"]
-              : [` of 5 hours, resets in ${fmt(ring.w5.resetsAt - now)}`]),
+              ? [spawnWords.account.ofFiveHours]
+              : [
+                  spawnWords.account.ofFiveHoursResets(
+                    fmt(ring.w5.resetsAt - now)
+                  ),
+                ]),
           ];
         }
         return {
@@ -793,11 +796,11 @@
   ];
   const loadLabel = (online: boolean, running: number) => {
     if (!online) {
-      return "Offline";
+      return spawnWords.machines.offline;
     }
     return running === 0
-      ? "Idle"
-      : `${running} session${running === 1 ? "" : "s"}`;
+      ? spawnWords.machines.idle
+      : spawnWords.machines.running(running);
   };
   const machineItems = $derived<MachineItem[]>(
     cawco.machines.map((row, i) => {
@@ -810,8 +813,8 @@
       if (project && !place) {
         moves =
           moveBytes === undefined
-            ? "will clone"
-            : `will clone · ${sizeWords(moveBytes)}`;
+            ? spawnWords.machines.willClone
+            : spawnWords.machines.willCloneSized(sizeWords(moveBytes));
       }
       return {
         id: row.machineId,
@@ -881,10 +884,10 @@
   );
   const locationReading = $derived.by(() => {
     if (offlineMachine) {
-      return `${offlineMachine.hostname} is offline. Pick another machine, or start when it returns.`;
+      return spawnWords.form.machineOffline(offlineMachine.hostname);
     }
     if (unreadable) {
-      return `That directory can't be read on ${machine?.hostname ?? machineId}. Check the path and try again.`;
+      return spawnWords.form.dirUnreadable(machine?.hostname ?? machineId);
     }
     if (unanswered) {
       return unanswered;
@@ -901,7 +904,7 @@
         (id) =>
           cawco.machines.find((row) => row.machineId === id)?.hostname ?? id
       );
-      return `Folder missing. Start creates it on ${names.join(", ")}.`;
+      return spawnWords.form.folderMissing(names.join(", "));
     }
     return "";
   });
@@ -936,12 +939,12 @@
     const size =
       bytes + lfsBytes > 0 ? ` (${sizeWords(bytes + lfsBytes)})` : "";
     const work =
-      uncommittedFiles > 0 ? `, with your uncommitted work on ${source}` : "";
-    return `${project.name} isn't on ${there} yet. ${spawnWords.moveAndStart} clones it there first${work}${size}.`;
+      uncommittedFiles > 0 ? spawnWords.form.moveWork(source ?? "") : "";
+    return spawnWords.form.moveReading(project.name, there, work, size);
   });
   const reading = $derived.by(() => {
     if (cawco.hub !== "connected") {
-      return "No spawn while the hub is unreachable. Reconnect to continue.";
+      return spawnWords.form.hubUnreachable;
     }
     if (moveTo) {
       return failure || moveReading;
@@ -1005,12 +1008,12 @@
   /** The line over the pickers: what the continuation carries, sized. */
   const sizing = $derived.by(() => {
     if (!estimate) {
-      return "Reading the session's context…";
+      return spawnWords.form.readingContext;
     }
     if (carry === "asks") {
-      return `${spawnWords.currentContext} ${tokens(estimate.liveContextTokens)} → your ${estimate.asks} message${estimate.asks === 1 ? "" : "s"}, ${tokens(estimate.openingTokens)}`;
+      return `${spawnWords.currentContext} ${tokens(estimate.liveContextTokens)} → ${spawnWords.form.yourMessages(estimate.asks)}, ${tokens(estimate.openingTokens)}`;
     }
-    return `${spawnWords.currentContext} ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`;
+    return `${spawnWords.currentContext} ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} ${spawnWords.form.toSummarise}`;
   });
   /** Continue mode: the other start, sized afresh by the hub. */
   function chooseCarry(value: "summary" | "asks") {
@@ -1081,16 +1084,16 @@
   );
   const startLabel = $derived.by(() => {
     if (continueFrom) {
-      return "Continue";
+      return spawnWords.form.continue;
     }
     if (forking) {
-      return "Fork";
+      return spawnWords.form.fork;
     }
     if (moving) {
       return moveStep ? spawnWords.moveIt : spawnWords.moveAndStart;
     }
     return machineIds.length > 1
-      ? `Start ${machineIds.length} sessions`
+      ? spawnWords.form.startMany(machineIds.length)
       : spawnWords.startSession;
   });
   function chooseHarness(value: HarnessKind) {
@@ -1412,7 +1415,11 @@
     const where =
       cawco.machines.find((row) => row.machineId === forking.machineId)
         ?.hostname ?? forking.machineId;
-    return `A fork runs where its session ran: ${forking.harness} on ${where}, in ${tilde(forking.cwd)}.`;
+    return spawnWords.form.forkWhere(
+      forking.harness,
+      where,
+      tilde(forking.cwd)
+    );
   }
   function validate() {
     const held = forkHeld();
@@ -1426,7 +1433,7 @@
       return spawnWords.held.repo;
     }
     if (!cwd.trim()) {
-      return "Enter the directory this session should work in.";
+      return spawnWords.form.enterDirectory;
     }
     if (unreadable || offlineMachine) {
       return locationReading;
@@ -1562,7 +1569,7 @@
           .map((row) => ({
             key: `machine:${row.id}`,
             label: row.name,
-            kind: "Machine" as const,
+            kind: spawnWords.form.kinds.machine,
             icon: row.icon,
             hue: row.hue,
             serial: `@${row.name}`,
@@ -1577,7 +1584,7 @@
           .map((row) => ({
             key: `project:${row.id}:${row.machineId}`,
             label: row.name,
-            kind: "Project" as const,
+            kind: spawnWords.form.kinds.project,
             icon: Files,
             hue: row.hue,
             serial: `@${row.name}`,
@@ -1589,7 +1596,7 @@
       ...skills.filter(hit).map((name, i) => ({
         key: `skill:${name}`,
         label: `/${name}`,
-        kind: "Skill" as const,
+        kind: spawnWords.form.kinds.skill,
         icon: Stars,
         hue: HUES[i % 5],
         serial: `/${name}`,
@@ -1600,7 +1607,7 @@
       ...plugins.filter(hit).map((id, i) => ({
         key: `plugin:${id}`,
         label: id,
-        kind: "Plugin" as const,
+        kind: spawnWords.form.kinds.plugin,
         icon: Book,
         hue: HUES[(i + 2) % 5],
         serial: `/${id}`,
@@ -1647,7 +1654,7 @@
         return "";
       case "unanswered":
         return didntAnswer(id, read, {
-          outcome: "whether the folder is there is not known",
+          outcome: spawnWords.form.folderUnknown,
           again: TRY_AGAIN,
         });
       default: {
@@ -1679,7 +1686,7 @@
         await tick();
         document.getElementById("session-dir")?.focus();
       }
-      return `That directory can't be read on ${host}. Check the path and try again.`;
+      return spawnWords.form.dirUnreadable(host);
     }
   }
   /**
@@ -1736,11 +1743,7 @@
       projectId: toAttach,
       ...(draft.account ? { account: draft.account } : {}),
     });
-    const spawned = answeredOr(
-      target,
-      started,
-      "whether the session started is not known"
-    );
+    const spawned = answeredOr(target, started, spawnWords.form.startUnknown);
     // Taken, its first prompt went with it (`spawnSession`).
     sentTo(id, spawned);
     return spawned;
@@ -1762,9 +1765,9 @@
       extras: draft.extras,
     });
     if (forked.kind === "unchosen") {
-      throw new Error("Choose a permission mode for the fork.");
+      throw new Error(spawnWords.form.forkNeedsMode);
     }
-    return answeredOr(target, forked, "whether the fork started is not known");
+    return answeredOr(target, forked, spawnWords.form.forkUnknown);
   }
   /**
    * What holds Start before anything is sent, saying why: a file still on
@@ -1934,10 +1937,7 @@
     const target = moveTo;
     const moved = projectId;
     if (!(ask && target && moved)) {
-      failStart(
-        id,
-        "The move changed before it started. Open it and start it again."
-      );
+      failStart(id, spawnWords.form.moveChanged);
       return;
     }
     stageStart(id, continuationStageWords.starting);
@@ -2120,7 +2120,7 @@
     <div data-slot="back" class="flex flex-none pb-space-2" inert={busy}>
       <Button data-vaul-no-drag onclick={back} size="sm" variant="ghost">
         <IconChevronLeft />
-        <span>Back</span>
+        <span>{spawnWords.form.back}</span>
       </Button>
     </div>
   {/if}
@@ -2137,11 +2137,11 @@
         <!-- Step 2's way back to the form leads the head, where the form's
            mark stands; Esc goes back too. Close keeps the trailing edge
            (DESIGN.md, Dialog and Drawer: the title, then Close). -->
-        <Tip keys="Esc" label="Back">
+        <Tip keys="Esc" label={spawnWords.form.back}>
           {#snippet children(tip)}
             <button
               {...tip}
-              aria-label="Back"
+              aria-label={spawnWords.form.back}
               class={pressVariants({
                 press: "scale",
                 class: ["select-none", sheetHead.close()],
@@ -2173,11 +2173,11 @@
         <MorphText text={headTitle} wrap={moveStep} />
       </h2>
     </div>
-    <Tip keys={moveStep ? undefined : "Esc"} label="Close">
+    <Tip keys={moveStep ? undefined : "Esc"} label={spawnWords.form.close}>
       {#snippet children(tip)}
         <button
           {...tip}
-          aria-label="Close"
+          aria-label={spawnWords.form.close}
           class={pressVariants({
             press: "scale",
             class: ["select-none", sheetHead.close()],
@@ -2262,10 +2262,12 @@
             <span
               data-variant="static"
               class={chipVariants({ variant: "setting" })}
-              title={`The new session starts in ${sourceProject.name}, the project of the session it continues`}
+              title={spawnWords.form.startsInWhy(sourceProject.name)}
             >
               <Files class="text-hue-amber-500" />
-              <span data-slot="chip-label">Starts in {sourceProject.name}</span>
+              <span data-slot="chip-label"
+                >{spawnWords.form.startsIn(sourceProject.name)}</span
+              >
             </span>
           {:else}
             <ProjectChip
@@ -2385,10 +2387,10 @@
         >
           <Segmented
             items={[
-              { value: "summary", label: "From a summary" },
-              { value: "asks", label: "From my asks" },
+              { value: "summary", label: spawnWords.form.fromSummary },
+              { value: "asks", label: spawnWords.form.fromAsks },
             ]}
-            label="What the new session opens on"
+            label={spawnWords.form.opensOn}
             onchange={chooseCarry}
             value={carry}
           />
@@ -2410,7 +2412,7 @@
             <ModelSection
               harness={summarizerHarness}
               installed={installedHarnesses}
-              label="Summarise with"
+              label={spawnWords.form.summariseWith}
               {machineIds}
               machineName={machine?.hostname ?? machineId}
               model={summarizerModel}
@@ -2433,7 +2435,9 @@
             account={accountTool}
             {harness}
             installed={installedHarnesses}
-            label={continueFrom ? "Continue on" : "Model"}
+            label={continueFrom
+              ? spawnWords.form.continueOn
+              : spawnWords.form.model}
             {machineIds}
             machineName={machine?.hostname ?? machineId}
             {model}

@@ -19,7 +19,7 @@
  */
 
 import type { ContinuationJob } from "@cawco/core";
-import { commonWords } from "@cawco/core";
+import { commonWords, spawnWords } from "@cawco/core";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { cawco, followContinuations, sendFirstPrompt } from "../client.svelte";
 import {
@@ -132,7 +132,7 @@ function titleOf(draft: SessionDraft, continueFrom?: ContinueSource): string {
     return first;
   }
   return continueFrom
-    ? `Continue ${continueFrom.title}`
+    ? spawnWords.starting.continueTitle(continueFrom.title)
     : commonWords.newSession;
 }
 
@@ -299,8 +299,8 @@ export function reopenStart(id: string, anchor: HTMLElement | null): void {
 /** What a continuation's failure says, in the hub's words. */
 const continueFailure = (error: string | undefined): string =>
   error
-    ? `Couldn't continue: ${error}`
-    : "Couldn't continue. Open it to start it again.";
+    ? spawnWords.starting.couldntContinueWhy(error)
+    : spawnWords.starting.couldntContinueAgain;
 
 /** The continuation table has been read since this page loaded. */
 let tableRead = false;
@@ -315,10 +315,7 @@ function settleJobs(table: ContinuationJob[]): void {
     if (!job) {
       // Gone from a table read since the reload: how it ended is not known.
       if (tableRead && !running.has(start.id)) {
-        failStart(
-          start.id,
-          "The continuation isn't on the hub any more, so how it ended isn't known. Check the session it continued, then continue it again if no new session started."
-        );
+        failStart(start.id, spawnWords.starting.continuationGone);
       }
       continue;
     }
@@ -340,14 +337,11 @@ followContinuations((table) => {
 });
 
 /** Nothing was asked of the hub before the reload: nothing started. */
-const NOTHING_ASKED =
-  "Nothing started: the page reloaded before the session was asked for. Open it and start it again; your prompt and picks are kept.";
+const NOTHING_ASKED = spawnWords.starting.reloadedBeforeAsk;
 /** The ask went, and its answer was the reload's to lose. */
-const NOT_KNOWN =
-  "Whether it started isn't known: the page reloaded before the hub answered. Check your sessions, then open it and start it again if it isn't there.";
+const NOT_KNOWN = spawnWords.starting.reloadedUnknown;
 /** The ask went, and the board never listed the session. */
-const NOT_LISTED =
-  "The session didn't start: the page reloaded before the hub answered, and the board never listed it. Open it and start it again; your prompt and picks are kept.";
+const NOT_LISTED = spawnWords.starting.reloadedNotListed;
 
 /** A first prompt that never went, sent from the prompt the draft store kept. */
 async function sendKept(start: ParkedStart, ask: ParkedAsk): Promise<void> {
@@ -402,7 +396,7 @@ function recover(start: ParkedStart): void {
       start.target = first.instanceId;
       failStart(
         start.id,
-        `${listed.length} of ${start.asks.length} sessions started: the page reloaded before the rest were asked for. Open it and start the rest again.`
+        spawnWords.starting.reloadedPartly(listed.length, start.asks.length)
       );
     }
     return;

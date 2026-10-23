@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   /**
    * Footer (§1.9): Cancel and Start, and why Start is held when it is,
    * beside it at the row's start (PRODUCT.md: a control that can't act is
@@ -11,7 +12,7 @@
     oncancel,
     onstart,
     startLabel,
-    busyLabel = "Starting…",
+    busyLabel = spawnWords.form.starting,
     disabled,
     busy,
     cancellable = false,
@@ -50,7 +51,7 @@
     <MorphText text={held} wrap />
   </p>
   <Button inert={busy && !cancellable} onclick={oncancel} variant="outline">
-    Cancel
+    {spawnWords.form.cancel}
   </Button>
   <!-- Pending, it takes no press and says so (the kit Button's own
        `pending`, `aria-busy` and idle guard). -->

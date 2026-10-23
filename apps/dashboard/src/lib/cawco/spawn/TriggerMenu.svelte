@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   /**
    * The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide.
    * Its rows and their fill are concentric with the snug surface (The
@@ -29,7 +30,7 @@
 
 <NsPopover
   {anchor}
-  aria-label="Insert"
+  aria-label={spawnWords.form.insert}
   gap={2}
   {id}
   {onchange}
@@ -72,7 +73,7 @@
   {/each}
   {#if items.length === 0}
     <div class="type-meta px-space-2 py-space-3 text-ink-subtle">
-      No matches
+      {spawnWords.form.noMatches}
     </div>
   {/if}
 </NsPopover>

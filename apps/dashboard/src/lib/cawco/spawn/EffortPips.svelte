@@ -5,6 +5,7 @@
    * level nearest the pointer; its centre sits at kw/2 + f * (width - kw).
    */
   import type { EffortLevel } from "@cawco/core";
+  import { spawnWords } from "@cawco/core";
   import { untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -99,7 +100,9 @@
       return { frac: frac(i), on: dist >= kw / 2 + PIP_CLEARANCE };
     })
   );
-  const label = $derived(n ? (efforts[effortIdx] ?? "") : "Default");
+  const label = $derived(
+    n ? (efforts[effortIdx] ?? "") : spawnWords.effort.default
+  );
   function change(level: EffortLevel) {
     if (oncommit) {
       draft = level;
@@ -280,7 +283,7 @@
         ></span>
       {/each}
       <input
-        aria-label="Effort"
+        aria-label={spawnWords.effort.name}
         aria-valuetext={label}
         class="pointer-events-none absolute inset-0 m-0 h-full w-full opacity-0"
         disabled={!n}
