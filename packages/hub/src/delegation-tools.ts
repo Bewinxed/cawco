@@ -145,13 +145,14 @@ const forgeWriteOf = (asked: {
 };
 
 /**
- * What `finish_item` says: the report is the proof, and what the hub does
+ * What `finish_item` says: the report is all the parent reads, carrying the
+ * deliverable and its proof, and what the hub does
  * with the work: the session's own work item's landing (`lands`), so a
  * delegate is never told the hub pushes to the base branch when it does not.
  */
 const finishItemDescription = (lands: LandsMode = "main"): string => {
   const proof =
-    " Your `summary` is the proof: the real output of each command that proves the work, then what your boundary could not run.";
+    " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (in the repository or your outputs) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
   const gate = "the landing gate (install, lint, typecheck, the iOS build)";
   const back =
     " A failing gate or a conflict comes back with its output: fix, commit, call again.";
@@ -744,7 +745,11 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "One or two plain sentences: what changed and whether it passed. No ids or file names."
           ),
-        summary: z.string().describe("The full report."),
+        summary: z
+          .string()
+          .describe(
+            "All your parent reads: the deliverable or its file's path, then the proof."
+          ),
         findings: z
           .array(z.object({ title: z.string(), detail: z.string() }))
           .optional()

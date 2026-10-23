@@ -175,6 +175,7 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { placesChanged } from "./project-placements";
+import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { shipLanded } from "./ship";
 import type { Todo } from "./task-file";
 import type { TodoChanges } from "./tasks";
@@ -7898,6 +7899,13 @@ export const createWorkItems = ({
         return open;
       }
       const { row, item } = open;
+      // The parent reads the report alone: one that points at the chat for
+      // its result hands in nothing, blocked or not (report-pointer.ts).
+      const pointer =
+        chatPointer(request.headline) ?? chatPointer(request.summary);
+      if (pointer) {
+        return chatPointerRefusal(pointer);
+      }
       clearWait(item);
       if (!request.blocked) {
         // The task's to-dos first: unticked ones are listed once, to tick or
