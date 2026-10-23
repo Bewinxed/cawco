@@ -60,6 +60,7 @@
     "./decisions": "./src/decisions.ts",
     "./house-faces": "./src/house-faces.ts",
     "./words/decisions": "./src/words/decisions.ts",
+    "./words/project": "./src/words/project.ts",
     "./words/routines": "./src/words/routines.ts",
     "./words/leaks": "./src/words/leaks.ts",
     "./words/containers": "./src/words/containers.ts",

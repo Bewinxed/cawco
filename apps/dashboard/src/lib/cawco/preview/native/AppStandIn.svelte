@@ -15,7 +15,7 @@
 <script lang="ts">
   /**
    * A stand-in for the iOS app's Project page, drawn from the dashboard's
-   * own phone-width Project page parts (NeedsYouChip, TaskCard, the kit's
+   * own phone-width Project page parts (NeedsYouChip, TaskCardFace, the kit's
    * buttons), because no capture of the app is committed and the app is on
    * hold. Each part that stands for a view in the app's tree carries that
    * view's node (`data-node`, its class; `data-node-label`), so a tree drawn
@@ -27,7 +27,7 @@
    * beside the page.
    */
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
-  import TaskCard from "#lib/cawco/tasks/TaskCard.svelte";
+  import TaskCardFace from "#lib/cawco/tasks/TaskCardFace.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronLeft, IconMore } from "#lib/icons.js";
   import { PICKED, WORKING } from "./fixture";
@@ -122,6 +122,7 @@
     >
       <NeedsYouChip count={3} on={pressed} ontoggle={noop} />
     </span>
+    <!-- mark-line: a column of a heading over task cards; no mark stands beside its words -->
     <div class="flex min-h-0 flex-col gap-space-2">
       <span
         class="border-b border-b-border-hairline pb-space-1 text-ink-muted type-label"
@@ -134,12 +135,17 @@
           data-node="UICollectionViewCell"
           data-node-label={one.title}
         >
-          <TaskCard
+          <TaskCardFace
+            approves={false}
+            asks={false}
+            failed={one.lastAttemptFailed}
             href={`#${one.id}`}
-            kindOf={() => null}
-            movable={false}
-            onopen={noop}
+            live={one.liveAttempt}
+            onclick={(event) => event.preventDefault()}
+            retry={false}
+            startProblem={one.startProblem}
             task={one}
+            waitsOn={[]}
           />
         </div>
       {/each}
