@@ -67,6 +67,8 @@ import { join } from "node:path";
 import type { WorkItemSummary } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { movedLine } from "../../../packages/core/src/injected";
+import { recordOf } from "../../../packages/core/src/tool-answer";
+import type { DelegateList } from "../../../packages/hub/src/delegation-tree";
 import {
   ACCOUNT,
   MACHINE,
@@ -309,7 +311,8 @@ const orchestrator = (request: Seen): Reply => {
   const asked = (word: string): string | undefined =>
     new RegExp(`${word} (${ID})`).exec(request.all)?.[1];
   if (request.all.includes(LIST_ASK) && !("list" in answers) && !asking) {
-    return call("list", LIST, {});
+    // Its fields are read below: the hub's record, not the agent's words.
+    return call("list", LIST, { response_format: "detailed" });
   }
   const source = asked(CONTINUE_ASK);
   if (source && !("continue" in answers) && !asking) {
@@ -749,19 +752,9 @@ const fullLeg = async (
     Boolean,
     60_000
   ).catch(() => undefined);
-  const node = (
-    tree
-      ? (
-          JSON.parse(tree) as {
-            delegates: {
-              instanceId: string;
-              state: string;
-              stalled?: { words: string; until?: string };
-            }[];
-          }
-        ).delegates
-      : []
-  ).find((one) => one.instanceId === instance);
+  const node = (tree ? recordOf<DelegateList>(LIST, tree).delegates : []).find(
+    (one) => one.instanceId === instance
+  );
   const listedUntil = node?.stalled?.until
     ? Date.parse(node.stalled.until)
     : Number.NaN;
