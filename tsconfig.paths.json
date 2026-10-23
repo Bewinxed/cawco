@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Every TypeScript project extends this (tsconfig.base.json does, and the
+  // ones that extend nothing else name it), so an import an installed
+  // package's declarations make without declaring it resolves to the copy
+  // the root declares. Without it TypeScript looks the name up in every
+  // node_modules above the importing file: from the repository's own
+  // node_modules/.bun the walk passes the root first, but from bun's global
+  // store (a package there realpaths into <cache>/links/) it never does, and
+  // ends in whatever a folder above holds, ~/node_modules on the owner's Mac.
+  // `paths` maps "relative to the tsconfig file itself" when no baseUrl is
+  // set (typescriptlang.org/tsconfig/paths.html), and applies to every
+  // import of the program, a store package's included.
+  // scripts/resolution-check.ts fails on any module resolved outside the
+  // checkout; a name it reports is declared in the root package.json and
+  // mapped here.
+  "compilerOptions": {
+    "paths": {
+      // Node's builtins, named bare by @types/node, bun-types and others.
+      "buffer": ["./node_modules/buffer"],
+      "events": ["./node_modules/events"],
+      "process": ["./node_modules/process"],
+      "punycode": ["./node_modules/punycode"],
+      "string_decoder": ["./node_modules/string_decoder"],
+      // bun-types, bun-plugin-svelte, unplugin.
+      "bun": ["./node_modules/@types/bun"],
+      // @volar/typescript, @vue/language-core.
+      "typescript": ["./node_modules/typescript"],
+      // gaxios.
+      "undici-types": ["./node_modules/undici-types"],
+      // playwright-core, jsrepo.
+      "zod": ["./node_modules/zod"],
+      "zod/*": ["./node_modules/zod/*"],
+      // jsrepo.
+      "@clack/prompts": ["./node_modules/@clack/prompts"],
+      "fast-glob": ["./node_modules/fast-glob"],
+      "picocolors": ["./node_modules/picocolors"],
+      // mermaid.
+      "type-fest": ["./node_modules/type-fest"],
+      // remark-parse, remark-stringify.
+      "vfile": ["./node_modules/vfile"],
+      // vaul-svelte (huntabyte/vaul-svelte#130), as the dashboard's
+      // vite.config.ts `resolve.dedupe` does for the bundle.
+      "bits-ui": ["./apps/dashboard/node_modules/bits-ui"]
+    }
+  }
+}

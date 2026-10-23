@@ -7,7 +7,8 @@
  * The projects are the repository's tracked `tsconfig*.json` files, each
  * read as `tsc` reads it (its `include`, `exclude` and `files`, through
  * `extends`). `tsconfig.base.json` is the shared settings every project
- * extends and includes nothing of its own. The dashboard's project extends
+ * extends and includes nothing of its own, and `tsconfig.paths.json` the
+ * `paths` every project extends. The dashboard's project extends
  * SvelteKit's generated config, so `svelte-kit sync` runs before this (the
  * dashboard's own `typecheck` does, earlier in the chain).
  */
@@ -15,7 +16,8 @@ import { dirname, join, relative } from "node:path";
 import ts from "typescript";
 
 const ROOT = join(import.meta.dir, "..");
-const BASE = "tsconfig.base.json";
+/** Configs projects extend, which check nothing themselves. */
+const SHARED = ["tsconfig.base.json", "tsconfig.paths.json"];
 
 const tracked = async (...patterns: string[]): Promise<string[]> =>
   (await Bun.$`git -C ${ROOT} ls-files -- ${patterns}`.text())
@@ -23,7 +25,7 @@ const tracked = async (...patterns: string[]): Promise<string[]> =>
     .filter(Boolean);
 
 const projects = (await tracked("tsconfig*.json", "**/tsconfig*.json")).filter(
-  (path) => !path.endsWith(BASE)
+  (path) => !SHARED.some((config) => path.endsWith(config))
 );
 
 const owners = new Map<string, string[]>();

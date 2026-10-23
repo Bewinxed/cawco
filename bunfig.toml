@@ -11,10 +11,13 @@
 # Types count too: TypeScript looks an import nothing in the checkout answers
 # up in every folder above it, so on the owner's Mac ~/node_modules answered
 # it (scripts/resolution-check.ts fails on that). The root declares what store
-# packages' declarations import undeclared: buffer, events, process, punycode
-# and string_decoder (@types/node, bun-types and others name the builtins
-# bare), undici-types (gaxios), zod (playwright-core, jsrepo), @clack/prompts,
-# fast-glob and picocolors (jsrepo), type-fest (mermaid). openai and
+# packages' declarations import undeclared, and tsconfig.paths.json, which
+# every project extends, maps each name to that copy, so it resolves there
+# from the global store as well: buffer, events, process, punycode and
+# string_decoder (@types/node, bun-types and others name the builtins bare),
+# undici-types (gaxios), zod (playwright-core, jsrepo), @clack/prompts,
+# fast-glob and picocolors (jsrepo), type-fest (mermaid), vfile (remark-parse,
+# remark-stringify), and bun and typescript, declared already. openai and
 # @anthropic-ai/sdk probe undici and node-fetch types in each of ten parent
 # folders by relative path, past any root; their patches drop the probes, and
 # their fetch options are Bun's and the global RequestInit.
@@ -24,7 +27,7 @@
 # Inside a CawCo workspace bun's global store is on (its workspace bunfig), and
 # a package there realpaths into the cache, with no node_modules of ours above
 # it. So the dashboard resolves bits-ui from its own root whatever imports it:
-# vite.config.ts `resolve.dedupe`, and tsconfig.json `paths` for its types.
+# vite.config.ts `resolve.dedupe`, and tsconfig.paths.json for its types.
 # Bun's bundles do the same for react, which tunnel-rat imports undeclared
 # (pmndrs/tunnel-rat#24): core agent-react.ts resolves it from the agent package
 # in every Bun.build, so the root declares no react.
