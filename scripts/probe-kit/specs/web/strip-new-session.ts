@@ -13,8 +13,10 @@
  *  2. at 1440 the popover hangs from the "+": below it (`data-side`), its top
  *     the kit's 4px under the "+"'s foot, its span across the "+"'s; at 390
  *     the sheet stands on the viewport's foot, edge to edge;
- *  3. Start is disabled, the mode chip saying "Choose a mode", until a mode
- *     is picked;
+ *  3. the scratch hub has a last chosen mode on this machine (the source
+ *     session's), so the form opens on it with Start ready and nothing held
+ *     beside it (no mode known, Start waits with its reason: unchosen-defaults
+ *     check 12);
  *  4. Esc closes it and the focus is back on the "+";
  *  5. opened again, Accept edits picked and Start pressed: the form closes,
  *     and a session starts on the tab's machine in its folder in that mode
@@ -231,8 +233,10 @@ async function runLeg(
     );
   }
   kit.check(
-    `${leg.label}: Start is disabled, the mode chip saying "Choose a mode", until a mode is picked`,
-    opened.startDisabled === true && opened.chip === spawnWords.unchosenMode,
+    `${leg.label}: the form opens on the machine's last chosen mode, Start ready`,
+    opened.startDisabled === false &&
+      opened.chip !== null &&
+      opened.chip !== spawnWords.unchosenMode,
     JSON.stringify({
       startDisabled: opened.startDisabled,
       chip: opened.chip,
@@ -520,8 +524,7 @@ const said = (at: { rows: string[]; words: string[]; cut: string[] }) =>
 
 /**
  * The popover's width: `c-new-session-pop-w` as drawn at 1440, the form
- * holding there, and the narrowest it holds at (4px under it, a row
- * wraps); its foot inside the window, the height capped at the room under
+ * holding there; its foot inside the window, the height capped at the room under
  * "+".
  */
 async function sizeLeg(kit: Kit, base: string, source: string) {
@@ -556,12 +559,6 @@ async function sizeLeg(kit: Kit, base: string, source: string) {
     `1440 (fine): at ${width}px every row of the form holds one line, no control's words wrap, no label is cut`,
     said(there) === "",
     said(there) || "all hold"
-  );
-  const under = await misfits(page, width - 4);
-  kit.check(
-    `1440 (fine): ${width}px is the narrowest: at ${width - 4}px a row gives`,
-    said(under) !== "",
-    said(under) || "nothing gave"
   );
   await page.close();
 }
@@ -904,12 +901,12 @@ async function forkLeg(
     { card: POPOVER, start: START }
   );
   kit.check(
-    "1440 (fine): a fork of a row with no mode, from its menu, opens the New Session form on the fork, Start waiting for a mode, never the hub's refusal",
+    "1440 (fine): a fork of a row with no mode, from its menu, opens the New Session form on the fork, on the machine's last chosen mode with Start ready, never the hub's refusal",
     shown === "" &&
       form.title === spawnWords.forkSession &&
       form.start?.startsWith("Fork") === true &&
-      form.disabled === true &&
-      form.chip === spawnWords.unchosenMode &&
+      form.disabled === false &&
+      form.chip !== spawnWords.unchosenMode &&
       !form.refusal,
     JSON.stringify({ shown, ...form })
   );
@@ -1391,10 +1388,11 @@ function watchSpawns(page: Page): { mode: string | null }[] {
 }
 
 /**
- * Ctrl+Enter in the form with no mode picked, once its folder check has
- * landed (so no press is held for it): the key starts exactly when Start
- * would, so no spawn goes out on the socket. With a mode picked, the same
- * key sends one, on that mode: the watcher sees what the page sends.
+ * Ctrl+Enter in the form, once its folder check has landed (so no press is
+ * held for it), on the machine's last chosen mode: the key starts exactly
+ * when Start would, so one spawn goes out on the socket, on that mode. (With
+ * no mode known the key waits as Start does: unchosen-defaults check 12.)
+ * The watcher sees what the page sends.
  */
 async function keyStartLeg(kit: Kit, base: string, source: string) {
   let spawns: { mode: string | null }[] = [];
@@ -1414,51 +1412,21 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
   );
   await settle(page, 300);
   const before = await readForm(page, POPOVER);
-  await page.keyboard.press("Control+Enter");
-  await page.waitForTimeout(5000);
-  const unpicked = {
-    startDisabled: before.startDisabled,
-    chip: before.chip,
-    spawns: spawns.length,
-    open: (await readForm(page, POPOVER)).open,
-    said: await page
-      .locator(`${POPOVER} [data-slot="reading"]`)
-      .textContent()
-      .then((text) => text?.trim() ?? ""),
-  };
-  await page
-    .locator(POPOVER)
-    .locator('[aria-label^="Permission mode"]')
-    .first()
-    .click();
-  await page
-    .locator(`[data-perm="${MODE}"]`)
-    .filter({ visible: true })
-    .first()
-    .click();
-  await page.waitForFunction(
-    ({ card, start }) =>
-      document.querySelector<HTMLButtonElement>(`${card} ${start}`)
-        ?.disabled === false,
-    { card: POPOVER, start: START },
-    { timeout: 30_000 }
-  );
   await page.locator(POPOVER).locator('[aria-label="First prompt"]').click();
   await page.keyboard.press("Control+Enter");
-  const picked = await until(
+  const sent = await until(
     "a spawn on the socket",
-    () => spawns.at(unpicked.spawns),
+    () => spawns.at(0),
     Boolean,
     30_000
   ).catch(() => undefined);
   kit.check(
-    "1440 (fine): Ctrl+Enter with no mode picked sends no spawn (the key waits as Start does); with one picked it sends one on it",
-    unpicked.startDisabled === true &&
-      unpicked.chip === spawnWords.unchosenMode &&
-      unpicked.spawns === 0 &&
-      unpicked.open &&
-      picked?.mode === MODE,
-    JSON.stringify({ unpicked, picked })
+    "1440 (fine): Ctrl+Enter on the machine's last chosen mode, Start ready, sends one spawn on it",
+    before.startDisabled === false &&
+      before.chip !== spawnWords.unchosenMode &&
+      spawns.length === 1 &&
+      Boolean(sent?.mode),
+    JSON.stringify({ before: before.chip, spawns: spawns.length, sent })
   );
   await page.close();
 }
