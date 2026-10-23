@@ -264,6 +264,7 @@ const stage = async (
         GIT_CONFIG_PARAMETERS: [
           door.CAWCO_GIT_PARAMETERS,
           hubGit.guardedPushParameters(),
+          hubGit.quietGitParameters(),
         ].join(" "),
         GIT_TERMINAL_PROMPT: "0",
       })

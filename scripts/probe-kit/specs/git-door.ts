@@ -5,7 +5,8 @@
  * credential, by the project's upstream rule. Run against the real door
  * and real git, with no boundary: git here runs with exactly the helper,
  * door socket, ssh and config a workspace's commands get (`gitDoorEnv`,
- * and `guardedPushParameters` as a guarded workspace's executor adds it),
+ * and `guardedPushParameters` and `quietGitParameters` as a guarded
+ * workspace's executor adds them),
  * against bare repositories git's own http-backend serves on the loopback
  * (`serveGitHttp`): the clone's origin, `probe/origin.git`, and another
  * person's, `someone/else.git`.
@@ -63,6 +64,10 @@
  *     approval (`makeHeldPush`), its object reaches someone/else.git's
  *     LFS with the host's credential before the commit lands, and the trap
  *     is still never called.
+ * A command's git, through the workspace's real executor and runner, on
+ * the host (workspace-git-quiet.ts):
+ * (x) a commit, a fetch and a rebase start no git maintenance or gc, and
+ *     3 s later none runs from the clone.
  * The workspace's gh (workspace-gh.ts, through the workspace's real
  * executor and runner, on the host):
  * (s) under "Let agents post upstream" no forge token is in a command's
@@ -75,6 +80,7 @@ import { join } from "node:path";
 import { serveGitHttp } from "../git-http";
 import type { Spec } from "../kit";
 import { workspaceGhLeg } from "../workspace-gh";
+import { workspaceGitQuietLeg } from "../workspace-git-quiet";
 
 const ORIGIN = "probe/origin.git";
 const ELSE = "someone/else.git";
@@ -139,6 +145,7 @@ const spec: Spec = {
       gitHelperDirOf,
       guardedPushParameters,
       openGitDoor,
+      quietGitParameters,
     } = await import("../../../packages/agent/src/hub-git");
     const { workspaceUpstreamRuleFile } =
       await import("../../../packages/core/src/paths");
@@ -176,6 +183,7 @@ const spec: Spec = {
       GIT_CONFIG_PARAMETERS: [
         door.CAWCO_GIT_PARAMETERS,
         guardedPushParameters(),
+        quietGitParameters(),
       ].join(" "),
       GIT_TERMINAL_PROMPT: "0",
       ...extra,
@@ -685,6 +693,9 @@ const spec: Spec = {
           http.lfsCalls("trap") === 0,
         `held exit ${heldLfs.exitCode}; sent while held ${sentWhileHeld - elseObjects.length}; made ${JSON.stringify(made)}; else LFS ${JSON.stringify(afterApproval)}; trap calls ${http.lfsCalls("trap")}`
       );
+
+      // (x)
+      await workspaceGitQuietLeg(kit, { clone, id, root: scratch });
 
       // (s)
       await workspaceGhLeg(kit, {

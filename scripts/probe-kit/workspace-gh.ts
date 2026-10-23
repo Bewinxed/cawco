@@ -4,9 +4,8 @@
  * workspace's GitHub door (agent github-door.ts), decided there by the
  * project's rule as every door decides (core `decideWrite`).
  *
- * It runs the workspace's real executor and runner as this build writes
- * them (agent boundary.ts `executorUnsandboxed`) on the host, with no
- * sandbox around them: every command goes in through the executor, its
+ * It runs the workspace's real executor and runner on the host
+ * (workspace-executor.ts): every command goes in through the executor, its
  * environment built as a boundary's is, and runs through the runner. The
  * host's own gh is signed in under the scratch HOME (`hosts.yml`, a token
  * the probe made); GitHub's API is the forge stand-in (forge-stubs.ts),
@@ -24,10 +23,11 @@
  *     Under "Ask me first", the same post is held by the door: the hub is
  *     asked once, for github.com/someone/else, and GitHub takes nothing.
  */
-import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { githubStub } from "./forge-stubs";
 import type { Kit } from "./kit";
+import { standExecutor } from "./workspace-executor";
 
 /** What the git-door spec hands the leg. */
 export interface WorkspaceGhAt {
@@ -111,67 +111,18 @@ export const workspaceGhLeg = async (
     { preconnect: realFetch.preconnect }
   ) as typeof fetch;
 
-  const boundary = await import("../../packages/agent/src/boundary");
   const { openGithubDoor, closeGithubDoor } =
     await import("../../packages/agent/src/github-door");
   const { workspaceStateDir, workspaceReadOnlyDir } =
     await import("../../packages/core/src/paths");
-  const stand = (
-    boundary as unknown as {
-      executorUnsandboxed?: (
-        ref: { id: string; path: string },
-        gen: string,
-        pid: number
-      ) => Promise<{
-        exec: string;
-        fifo: string;
-        guarded: string;
-        place: string;
-        runner: string;
-        scratch: string;
-      }>;
-    }
-  ).executorUnsandboxed;
-  if (!stand) {
-    kit.check(
-      "(s) a workspace's executor runs on the host for this leg",
-      false,
-      "this build's boundary.ts exports no executorUnsandboxed"
-    );
+  const stood = await standExecutor(kit, "s", at);
+  if (!stood) {
+    globalThis.fetch = realFetch;
     return;
   }
-  const ref = { id: at.id, path: at.clone };
-  const gen = "probe";
-  const first = await stand(ref, gen, process.pid);
-  await mkdir(dirname(first.fifo), { recursive: true });
-  await mkdir(dirname(first.place), { recursive: true });
-  await mkdir(first.scratch, { recursive: true });
-  await Bun.$`rm -f ${first.fifo} && mkfifo ${first.fifo}`.quiet();
-  const runner = Bun.spawn(
-    ["/bin/bash", "-c", first.runner, "cawco", first.fifo],
-    { stdout: "pipe", stderr: "inherit" }
-  );
-  // Ready once it says so.
-  const reader = runner.stdout.getReader();
-  await reader.read();
-  reader.releaseLock();
-  const parts = await stand(ref, gen, runner.pid);
-  await writeFile(parts.place, `${runner.pid} ${runner.pid}\n`);
-  await writeFile(parts.guarded, "");
-  const exec = join(at.root, "probe-exec");
-  await writeFile(exec, parts.exec);
-  await chmod(exec, 0o755);
+  const { run } = stood;
   await openGithubDoor(at.id);
 
-  /** One command through the executor, with `caller` over this process's environment. */
-  const run = async (command: string, caller: Record<string, string> = {}) => {
-    const ran = await Bun.$`${exec} ${command}`
-      .cwd(at.clone)
-      .env({ ...process.env, ...caller } as Record<string, string>)
-      .quiet()
-      .nothrow();
-    return `${ran.stdout.toString()}${ran.stderr.toString()}`;
-  };
   const SHOW_ENV = `env | grep -E '^(GH_|GITHUB_|GITLAB_|OAUTH_TOKEN|CI_JOB_TOKEN|GITEA_|FORGEJO_|CODEBERG_|BITBUCKET_)' ; echo "GHCONFIG=$(cat "$GH_CONFIG_DIR/config.yml" 2>/dev/null | tr '\\n' ' ')"`;
   const POST = (title: string) =>
     `gh api repos/someone/else/issues -f title='${title}' -f body='from the probe' 2>&1; echo "GHEXIT=$?"`;
@@ -199,7 +150,7 @@ export const workspaceGhLeg = async (
       [
         workspaceStateDir(at.id),
         workspaceReadOnlyDir(at.id),
-        parts.scratch,
+        stood.scratch,
         at.clone,
       ],
       HOST_TOKEN
@@ -236,6 +187,6 @@ export const workspaceGhLeg = async (
   } finally {
     globalThis.fetch = realFetch;
     await closeGithubDoor(at.id);
-    runner.kill();
+    stood.stop();
   }
 };

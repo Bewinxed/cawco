@@ -206,6 +206,7 @@ import {
   gitHelperDirOf,
   guardedPushParameters,
   openGitDoor,
+  quietGitParameters,
 } from "./hub-git";
 import { hubPreviewsPath } from "./hub-previews";
 import { type HeldProc, KeeperPool } from "./keepers";
@@ -6245,12 +6246,20 @@ const commandEnv = (id: string, clone: string): string[] => [
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
 
-/** The git door's variables, its config words joined by those that send every push across the network through it. */
+/**
+ * The git door's variables, its config words joined by those that send every
+ * push across the network through it and those that leave no maintenance
+ * running after a command's git (hub-git.ts `quietGitParameters`).
+ */
 const doorEnv = (id: string, clone: string): Record<string, string> => {
   const door = gitDoorEnv(id, clone);
   return {
     ...door,
-    CAWCO_GIT_PARAMETERS: [door.CAWCO_GIT_PARAMETERS, guardedPushParameters()]
+    CAWCO_GIT_PARAMETERS: [
+      door.CAWCO_GIT_PARAMETERS,
+      guardedPushParameters(),
+      quietGitParameters(),
+    ]
       .filter(Boolean)
       .join(" "),
   };

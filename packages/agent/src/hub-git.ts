@@ -621,6 +621,29 @@ export const guardedPushParameters = (): string =>
     .join(" ");
 
 /**
+ * For every workspace, the git config (as `CAWCO_GIT_PARAMETERS` words)
+ * that keeps a command's git to the command: after a commit, fetch, merge
+ * or rebase git starts `git maintenance run --auto --detach` (git-config(1)
+ * `maintenance.auto`: "This boolean config option controls whether some
+ * commands run `git maintenance run --auto` after doing their normal work.
+ * Defaults to true"), and an auto gc detaches the same way (`gc.auto`:
+ * "Setting this to 0 disables it"). Either outlives the command that
+ * started it, so the agent's leak watch tells the session it left a
+ * process behind. Given as `-c` words, they hold over the clone's and the
+ * user's own config. A workspace is retired, never packed.
+ */
+export const quietGitParameters = (): string =>
+  [
+    ["maintenance.auto", "false"],
+    ["gc.auto", "0"],
+  ]
+    .map(
+      ([key, value]) =>
+        `${shellWord(key as string)}=${shellWord(value as string)}`
+    )
+    .join(" ");
+
+/**
  * What git-lfs would otherwise learn from a server and write into the
  * clone's `.git/config` (`git config --replace-all`, a lock and a rename),
  * given env-only to every git the door runs for a remote outside the hub:
