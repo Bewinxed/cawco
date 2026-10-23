@@ -664,6 +664,8 @@
   --duration-reveal: var(--dur-reveal);
   --duration-hold: var(--dur-hold);
   --duration-loop: var(--dur-loop);
+  --duration-skeleton-pulse: var(--dur-skeleton-pulse);
+  --duration-skeleton-reveal: var(--dur-skeleton-reveal);
   --duration-c-500: var(--c-500);
   --duration-breath: var(--breath);
 
@@ -744,7 +746,8 @@
   --animate-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) both;
   --animate-tip-fade: kit-tip-fade var(--dur-fade) var(--ease-out) both;
   --animate-tip-in: kit-tip-in var(--dur-fade) var(--ease-out) both;
-  --animate-skeleton-sweep: kit-skeleton-sweep var(--dur-loop) linear infinite;
+  --animate-skeleton-pulse: kit-skeleton-pulse var(--dur-skeleton-pulse)
+    var(--ease-crossfade) infinite;
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -982,9 +985,13 @@
       translate: var(--kit-tip-from);
     }
   }
-  @keyframes kit-skeleton-sweep {
-    to {
-      translate: 100% 0;
+  @keyframes kit-skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: var(--skeleton-pulse-floor);
     }
   }
 }

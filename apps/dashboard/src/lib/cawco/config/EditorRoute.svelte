@@ -2,17 +2,13 @@
   /**
    * What an editor URL shows: the editor's skeleton while its section's rows
    * are read, then the editor, or, for a row that is not there, the shared
-   * empty state. The skeleton stands in the editor's layout, so the editor
-   * cross-fades in over it over --dur-control and nothing moves; an editor
-   * opened with its rows already read (a drill from its list) shows at once.
+   * empty state. The skeleton stands in the editor's layout, so it hands its
+   * place to the editor in the skeleton's reveal (motion/curves `reveal`)
+   * and nothing moves; an editor opened with its rows already read (a drill
+   * from its list) shows at once.
    */
   import type { Snippet } from "svelte";
-  import {
-    crossIn,
-    dur,
-    easeOut,
-    lifting,
-  } from "#lib/cawco/motion/curves.svelte.js";
+  import { reveal, revealOutWith } from "#lib/cawco/motion/curves.svelte.js";
   import EditorSkeleton from "./EditorSkeleton.svelte";
   import Missing from "./Missing.svelte";
   import type { ConfigSection } from "./sections";
@@ -47,15 +43,11 @@
    * when this runs, and the skeleton measured then is squeezed to its share.
    */
   function leave(node: HTMLElement) {
-    return lifting(
-      node,
-      () => ({ position: "absolute", inset: "0", "pointer-events": "none" }),
-      {
-        duration: dur("--dur-control"),
-        easing: easeOut,
-        css: (t: number) => `opacity: ${t}`,
-      }
-    );
+    return revealOutWith(node, () => ({
+      position: "absolute",
+      inset: "0",
+      "pointer-events": "none",
+    }));
   }
 </script>
 
@@ -65,7 +57,7 @@
       <EditorSkeleton {problem} {saveLabel} {section} />
     </div>
   {:else if !found}
-    <div class="flex flex-auto flex-col min-w-0 min-h-0" in:crossIn>
+    <div class="flex flex-auto flex-col min-w-0 min-h-0" in:reveal>
       <Missing {section} {what} />
     </div>
   {:else}
@@ -73,7 +65,7 @@
     <div
       class="flex flex-auto flex-col min-w-0 min-h-0"
       data-keeps-draft
-      in:crossIn
+      in:reveal
     >
       {@render children()}
     </div>

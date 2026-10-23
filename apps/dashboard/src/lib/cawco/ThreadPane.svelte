@@ -32,7 +32,12 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
-  import { crossIn, crossOut, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    reveal,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -1098,9 +1103,10 @@
       </div>
       <HeadFade />
     {/if}
-    <!-- The skeleton stands in for rows still on their way and goes the
-         moment they are drawn: its rows are not where the real ones fall, so
-         fading it over them reads as a second, stale transcript. -->
+    <!-- The skeleton stands in for rows still on their way and hands its
+         place to them in its reveal (motion/curves `reveal`) once they are
+         drawn: its blur carries its rows into the real ones, which fall
+         elsewhere. -->
     {#if writable && !docked}
       <FootFade solid={foot.stack ? fadeSolid : undefined} />
     {/if}
@@ -1108,6 +1114,7 @@
       <div
         class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
         in:crossIn
+        out:reveal
       >
         <TranscriptSkeleton />
       </div>

@@ -68,7 +68,7 @@ Under "Motion grammar" (DESIGN.md line 473); rule at line 515.
 
 Under "Motion grammar" (DESIGN.md line 473); rule at line 521.
 
-**The One Loop Rule.** Anything that turns or blinks while something is pending runs one ambient loop, `--dur-loop` (1.2s): a spinner, the task ring's arc, the skeleton's sweep, and Tailwind's `animate-spin`, `animate-pulse` and `animate-ping`, which the theme points at the token. A rotation turns linearly; a pulse runs ease-in-out and a ping ease-out. Longer rhythms are multiples of the breath, never new numbers: the thinking indicator's words change every two breaths. Tailwind's default transition timing (`transition-colors` and its siblings) is `--dur-control` on ease-out.
+**The One Loop Rule.** Anything that turns or blinks while something is pending runs one ambient loop, `--dur-loop` (1.2s): a spinner, the task ring's arc, and Tailwind's `animate-spin`, `animate-pulse` and `animate-ping`, which the theme points at the token. A rotation turns linearly; a pulse runs ease-in-out and a ping ease-out. The skeleton's pulse is the one exception, the owner's pick of transitions.dev's recipe exactly: `--dur-skeleton-pulse` (1s), every skeleton on its own one clock. Longer rhythms are multiples of the breath, never new numbers: the thinking indicator's words change every two breaths. Tailwind's default transition timing (`transition-colors` and its siblings) is `--dur-control` on ease-out.
 
 ## The Steady Swap Rule
 
@@ -262,7 +262,7 @@ Under "Empty, loading and skeleton states" (DESIGN.md line 870); rule at line 87
 
 Under "Empty, loading and skeleton states" (DESIGN.md line 870); rule at line 877.
 
-**The Claim Of Nothing Rule.** An empty state claims there is nothing to show, so it renders only once the data is known to be empty, never while it is still being read. While data loads, the skeleton stands in at the real layout's size, and the first real read replaces it in one cross-fade (120ms) rather than as rows arriving.
+**The Claim Of Nothing Rule.** An empty state claims there is nothing to show, so it renders only once the data is known to be empty, never while it is still being read. While data loads, the skeleton stands in at the real layout's size, and the first real read replaces it in the skeleton's reveal (a 400ms cross-fade with a 2px cross-blur) rather than as rows arriving.
 
 ## The Real Wait Rule
 

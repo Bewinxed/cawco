@@ -1813,7 +1813,7 @@
         "components": [0.993, 0.004, 85],
         "alpha": 0.6
       },
-      "$description": "The band of raised surface that crosses a skeleton once per loop.",
+      "$description": "The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse).",
       "$extensions": {
         "dev.cawco": {
           "css": "oklch(from {color.surface-raised} l c h / 0.6)"
@@ -7605,7 +7605,7 @@
     "ease-crossfade": {
       "$type": "cubicBezier",
       "$value": [0.42, 0, 0.58, 1],
-      "$description": "Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
+      "$description": "Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
     },
     "ease-arrive": {
       "$type": "cubicBezier",
@@ -7819,6 +7819,22 @@
       },
       "$description": "One turn of an ambient loop: spinner, pulse, ping."
     },
+    "dur-skeleton-pulse": {
+      "$type": "duration",
+      "$value": {
+        "value": 1000,
+        "unit": "ms"
+      },
+      "$description": "One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: \"transitions.dev exactly\")."
+    },
+    "dur-skeleton-reveal": {
+      "$type": "duration",
+      "$value": {
+        "value": 400,
+        "unit": "ms"
+      },
+      "$description": "A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms."
+    },
     "c-500": {
       "$type": "duration",
       "$value": {
@@ -7916,6 +7932,19 @@
         "unit": "px"
       },
       "$description": "How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr."
+    },
+    "skeleton-pulse-floor": {
+      "$type": "number",
+      "$value": 0.5,
+      "$description": "The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5."
+    },
+    "skeleton-reveal-blur": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px."
     },
     "transition-control": {
       "$type": "transition",

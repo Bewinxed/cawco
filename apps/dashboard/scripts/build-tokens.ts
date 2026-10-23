@@ -242,11 +242,11 @@ const ANIMATIONS: Record<string, string> = {
   // (`--kit-tip-from`, by its side); with reduced motion it only fades.
   "animate-tip-fade": "kit-tip-fade var(--dur-fade) var(--ease-out) both",
   "animate-tip-in": "kit-tip-in var(--dur-fade) var(--ease-out) both",
-  // The skeleton's sweep (DESIGN.md Skeleton): one band crossing the
-  // placeholder once per --dur-loop, turning linearly as every pending loop
-  // does (The One Loop Rule).
-  "animate-skeleton-sweep":
-    "kit-skeleton-sweep var(--dur-loop) linear infinite",
+  // The skeleton's pulse (DESIGN.md Skeleton; transitions.dev Skeleton loader
+  // and reveal): its opacity down to --skeleton-pulse-floor and back once
+  // per --dur-skeleton-pulse, on ease-in-out, until what it stands for comes.
+  "animate-skeleton-pulse":
+    "kit-skeleton-pulse var(--dur-skeleton-pulse) var(--ease-crossfade) infinite",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
@@ -293,7 +293,8 @@ const KEYFRAMES: Record<string, string> = {
   "kit-dialog-in": "from {\n  opacity: 0;\n  transform: translateY(6px);\n}",
   "kit-dialog-out": "to {\n  opacity: 0;\n  transform: translateY(6px);\n}",
   "kit-tip-in": "from {\n  opacity: 0;\n  translate: var(--kit-tip-from);\n}",
-  "kit-skeleton-sweep": "to {\n  translate: 100% 0;\n}",
+  "kit-skeleton-pulse":
+    "0%,\n100% {\n  opacity: 1;\n}\n50% {\n  opacity: var(--skeleton-pulse-floor);\n}",
 };
 
 /**

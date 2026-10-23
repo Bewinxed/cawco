@@ -63,7 +63,7 @@
     IconUser,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
-  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
+  import { dur, reveal, revealOut } from "../motion/curves.svelte";
   import { LINK_DROPPED, type ListHold } from "./artifact-doc";
   import {
     attachedTo,
@@ -544,7 +544,7 @@
         aria-label={words.readingComments}
         class="px-space-2 py-space-2"
         role="status"
-        out:crossOut
+        out:revealOut
       >
         <!-- Each stands for a row as a row is dressed (The Row Dress Rule): its
              place and age, its words, what came back; at that row's height. -->
@@ -592,7 +592,7 @@
       <div
         data-slot="pin-list-read"
         class="px-space-2 py-space-2"
-        in:crossIn
+        in:reveal
         {@attach keepScroll}
       >
         {#if shown.length > 0}

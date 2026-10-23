@@ -103,6 +103,8 @@ const TOKENS = [
   "--dur-ghost",
   "--dur-stagger",
   "--dur-cascade",
+  "--dur-skeleton-reveal",
+  "--skeleton-reveal-blur",
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
@@ -408,8 +410,8 @@ export function rise(_node: Element, token: "--dur-panel" | "--dur-exit") {
 }
 
 /**
- * One view handing its place to another — a skeleton to what it stood in
- * for, a document to the next, a reader to its editor: the two cross-fade
+ * One view handing its place to another — a document to the next, a reader
+ * to its editor (a skeleton hands its place by `reveal`/`revealOut`): the two cross-fade
  * over --dur-control. The one leaving is taken out of the flow as it starts,
  * pinned where it stands (its parent is `position: relative`), so the box is only ever the size of
  * what arrives and a height morph around it has one change to follow.
@@ -421,6 +423,72 @@ export function crossIn(_node: Element) {
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   };
+}
+
+/** `--ease-crossfade` (CSS ease-in-out): a skeleton's pulse and its reveal. */
+export const easeCrossfade = bezier(0.42, 0, 0.58, 1);
+
+/**
+ * The reveal (transitions.dev Skeleton loader and reveal, DESIGN.md
+ * Skeleton): a skeleton handing its place to what it stood for. Both layers
+ * run on one clock, --dur-skeleton-reveal on --ease-crossfade: the content
+ * fades up out of a --skeleton-reveal-blur blur while the skeleton fades out
+ * into one. Every swap from a skeleton to its content takes it: `in:reveal`
+ * on what arrives, and `out:revealOut` on the skeleton where it leaves the
+ * flow, or `out:reveal` where the two already share one cell. With reduced
+ * motion the swap is at once, as the recipe's guard has it.
+ */
+export function reveal(_node?: Element): TransitionConfig {
+  if (!motionOk.current) {
+    return { duration: 0 };
+  }
+  const blur = numberOf("--skeleton-reveal-blur");
+  return {
+    duration: dur("--dur-skeleton-reveal"),
+    easing: easeCrossfade,
+    css: (t) => `opacity: ${t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`,
+  };
+}
+
+/**
+ * {@link reveal}'s arrival on an element already standing, unveiled where a
+ * skeleton beside it in its cell goes (`out:reveal`): one Web Animation on
+ * it, the same keyframes on the same clock. At once with reduced motion.
+ */
+export function revealHere(node: Element): void {
+  const { duration } = reveal();
+  if (!duration) {
+    return;
+  }
+  const blur = numberOf("--skeleton-reveal-blur");
+  node.animate(
+    [
+      { opacity: 0, filter: `blur(${blur}px)` },
+      { opacity: 1, filter: "blur(0px)" },
+    ],
+    { duration, easing: ease("--ease-crossfade") }
+  );
+}
+
+/**
+ * A skeleton leaving by its {@link reveal}, taken out of the flow where it
+ * stands as it starts (pinned there, as {@link crossOut} pins), so the box
+ * is only ever the size of what arrives. One leaving where nothing is
+ * rendered goes at once, as with reduced motion.
+ */
+export function revealOut(node: HTMLElement): TransitionConfig {
+  return revealOutWith(node, pinned(node));
+}
+
+/** {@link revealOut} lifted by its own `lift` (pinned over its parent's whole box, held at a height). */
+export function revealOutWith(
+  node: HTMLElement,
+  lift: () => Record<string, string>
+): TransitionConfig {
+  if (!(motionOk.current && node.checkVisibility())) {
+    return { duration: 0 };
+  }
+  return lifting(node, lift, reveal());
 }
 
 /**

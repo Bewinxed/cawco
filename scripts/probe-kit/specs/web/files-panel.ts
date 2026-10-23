@@ -1007,9 +1007,9 @@ const reviewLegs = async (
     { ms: 15_000 }
   );
   const arrival = lengths(arriving.runs);
-  const crossMs = await durationOf(slow, "--dur-control");
+  const crossMs = await durationOf(slow, "--dur-skeleton-reveal");
   kit.check(
-    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in one cross-fade over --dur-control (crossIn)",
+    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in the skeleton's reveal over --dur-skeleton-reveal (reveal)",
     atOpen.waits === 0 &&
       atOpen.counts === 0 &&
       atOpen.none === 0 &&
@@ -1018,7 +1018,7 @@ const reviewLegs = async (
       pastGrace.attachmentsWait &&
       pastGrace.counts === 0 &&
       arrival.includes(crossMs),
-    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)}, read by ${arriving.by} (--dur-control ${crossMs}): ${JSON.stringify(arriving.runs)}`
+    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)}, read by ${arriving.by} (--dur-skeleton-reveal ${crossMs}): ${JSON.stringify(arriving.runs)}`
   );
   await slow.close();
 
@@ -1602,7 +1602,7 @@ const lengths = (runs: readonly MotionRun[]) =>
  *  29. E: narrowed under the panel's least width, the float hands the pick
  *      to the session's panel and Files goes;
  *  30. Jump's field draws the house ring (FindField);
- *  31. the skeleton gives its place to the empty state in one cross-fade.
+ *  31. the skeleton gives its place to the empty state in its reveal.
  */
 const roundThree = async (
   kit: Kit,
@@ -2058,7 +2058,7 @@ const roundThree = async (
   );
   await drawn.close();
 
-  // 31. The skeleton gives its place to the empty state in one cross-fade.
+  // 31. The skeleton gives its place to the empty state in its reveal.
   const emptiedReads = heldReads();
   const emptied = await openSession(
     kit,
@@ -2083,11 +2083,11 @@ const roundThree = async (
     { ms: 15_000 }
   );
   const emptyIntro = lengths(emptying.runs);
-  const emptyCross = await durationOf(emptied, "--dur-control");
+  const emptyCross = await durationOf(emptied, "--dur-skeleton-reveal");
   kit.check(
-    "31: the skeleton gives its place to the empty state in one cross-fade over --dur-control",
+    "31: the skeleton gives its place to the empty state in its reveal over --dur-skeleton-reveal",
     emptyIntro.includes(emptyCross),
-    `intros ${JSON.stringify(emptyIntro)}, read by ${emptying.by} (--dur-control ${emptyCross}): ${JSON.stringify(emptying.runs)}`
+    `intros ${JSON.stringify(emptyIntro)}, read by ${emptying.by} (--dur-skeleton-reveal ${emptyCross}): ${JSON.stringify(emptying.runs)}`
   );
   await emptied.close();
 };

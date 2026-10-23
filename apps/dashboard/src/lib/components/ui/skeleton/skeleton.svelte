@@ -4,12 +4,16 @@
 
   /**
    * The one loading placeholder (DESIGN.md, Skeleton): a `surface-fill`
-   * block at exactly the size of what it stands for. One band of the raised
-   * surface at 60% crosses it every `--dur-loop`, by transform only; without
-   * motion it sits still. Each prop names what it stands for, never a number.
+   * block at exactly the size of what it stands for. It pulses while it
+   * waits (transitions.dev Skeleton loader and reveal): its opacity down to
+   * `--skeleton-pulse-floor` and back once a `--dur-skeleton-pulse`, on
+   * ease-in-out; without motion it sits still. Where it hands its place to
+   * what it stood for, its block goes by `revealOut` and the content comes
+   * by `reveal` (motion/curves). Each prop names what it stands for,
+   * never a number.
    */
   export const skeletonVariants = tv({
-    base: "loops relative block overflow-hidden rounded-sm bg-surface-fill motion-safe:after:absolute motion-safe:after:inset-0 motion-safe:after:-translate-x-full motion-safe:after:animate-skeleton-sweep motion-safe:after:bg-linear-to-r motion-safe:after:from-30% motion-safe:after:via-skeleton-sheen motion-safe:after:to-70%",
+    base: "loops block rounded-sm bg-surface-fill motion-safe:animate-skeleton-pulse",
     variants: {
       /** The block it holds the place of, at that block's height. */
       height: {
@@ -88,13 +92,9 @@
       /** Over its whole frame, edge to edge, until what the frame holds
           loads (a shot's picture). */
       fill: { frame: "absolute inset-0" },
-      /** Unseen until the wait has lasted `--dur-wait-grace`, then fading up
-          (The Real Wait Rule); held still once the cover it stands on
-          (`group/cover`) is ready and fading out. */
-      reveal: {
-        "wait-grace":
-          "group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused animate-wait-grace-in",
-      },
+      /** Its pulse held still once the cover it stands on (`group/cover`)
+          is ready and fading out. */
+      hold: { cover: "group-data-ready/cover:animation-paused" },
     },
   });
 
@@ -116,15 +116,15 @@
     cell,
     type,
     fill,
-    reveal,
+    hold,
     ...restProps
   }: WithoutChildren<WithElementRef<HTMLAttributes<HTMLSpanElement>>> &
     SkeletonLooks = $props();
 
   /**
-   * Every sweep on one clock (The One Loop Rule): its start is the document
-   * timeline's origin, so placeholders mounted at different moments cross in
-   * step. Only a running sweep is moved; one already held keeps its hold
+   * Every pulse on one clock (The One Loop Rule): its start is the document
+   * timeline's origin, so placeholders mounted at different moments pulse in
+   * step. Only a running pulse is moved; one already held keeps its hold
    * (setting the start of a running CSS animation leaves it observing
    * `animation-play-state`: drafts.csswg.org/css-animations-2).
    */
@@ -132,7 +132,7 @@
     for (const animation of node.getAnimations({ subtree: true })) {
       if (
         animation instanceof CSSAnimation &&
-        animation.animationName === "kit-skeleton-sweep" &&
+        animation.animationName === "kit-skeleton-pulse" &&
         animation.playState === "running"
       ) {
         animation.startTime = 0;
@@ -153,7 +153,7 @@
       cell,
       type,
       fill,
-      reveal,
+      hold,
     }),
     className
   )}

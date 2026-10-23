@@ -278,7 +278,7 @@ public enum Palette {
     public static let presenceOff = Palette.named("presence-off")
     /// Every scrollbar's thumb, inherited from the root.
     public static let scrollbarThumb = Palette.named("scrollbar-thumb")
-    /// The band of raised surface that crosses a skeleton once per loop.
+    /// The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse).
     public static let skeletonSheen = Palette.named("skeleton-sheen")
     /// List bullets in rendered markdown.
     public static let proseBullet = Palette.named("prose-bullet")
@@ -1359,7 +1359,7 @@ public enum Motion {
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
-    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
+    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
     public static let easeCrossfade = TimingCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
     /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
     public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
@@ -1436,6 +1436,12 @@ public enum Motion {
     /// One turn of an ambient loop: spinner, pulse, ping.
     /// In seconds.
     public static let durLoop: TimeInterval = 1.2
+    /// One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: "transitions.dev exactly").
+    /// In seconds.
+    public static let durSkeletonPulse: TimeInterval = 1
+    /// A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms.
+    /// In seconds.
+    public static let durSkeletonReveal: TimeInterval = 0.4
     /// In seconds.
     public static let c500: TimeInterval = 0.5
     /// In seconds.
@@ -1467,4 +1473,8 @@ public enum Motion {
     public static let popRise: Double = 8
     /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
     public static let foldBlur: Double = 2
+    /// The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5.
+    public static let skeletonPulseFloor: Double = 0.5
+    /// How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px.
+    public static let skeletonRevealBlur: Double = 2
 }

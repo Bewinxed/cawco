@@ -13,7 +13,12 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
-  import { crossIn, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    dur,
+    reveal,
+    revealOut,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { sessionTitle } from "#lib/cawco/session-names.svelte.js";
   import { workflowLaunches } from "#lib/cawco/workflow-launch.svelte.js";
@@ -700,14 +705,18 @@
     </Alert>
   {/if}
   {#if !workflow}
-    <div class="flex min-w-0 flex-col gap-space-4 p-space-6">
+    <!-- It hands its place to the editor in its reveal (motion/curves). -->
+    <div class="flex min-w-0 flex-col gap-space-4 p-space-6" out:revealOut>
       <Skeleton class="w-full" height="block" />
       <Skeleton class="w-full" height="block" />
     </div>
   {:else}
     <!-- One tab's pane gives way to the next in one cell, sliding across in
          tab order (pane-slide). -->
-    <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden">
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden"
+      in:reveal
+    >
       {#key tab}
         <div
           data-slot="pane"

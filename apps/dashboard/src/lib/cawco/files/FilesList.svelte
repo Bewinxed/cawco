@@ -65,7 +65,7 @@
   import { frameObserver } from "../frame-observer";
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
-  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
+  import { crossIn, dur, reveal, revealOut } from "../motion/curves.svelte";
   import Rail from "../motion/Rail.svelte";
   import RowFault from "../RowFault.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
@@ -167,7 +167,7 @@
    * The Claim Of Nothing Rule: inside `--dur-wait-grace` a list still read
    * shows nothing of its own; past it, its skeleton stands, and what the
    * read brings (the list, or its "nothing" line) takes its place in one
-   * cross-fade (motion/curves `crossIn`, `crossOut`). Started again for each
+   * reveal (motion/curves `reveal`, `revealOut`). Started again for each
    * session Files shows.
    */
   let waited = $state(false);
@@ -448,8 +448,8 @@
   style:--row-end="calc(var(--c-btn-h-xs) + var(--space-2))"
 >
   {#if nothing}
-    <!-- What the skeleton stood in for, in one cross-fade (crossIn). -->
-    <div data-files-empty class="flex min-h-0 flex-1 flex-col" in:crossIn>
+    <!-- What the skeleton stood in for, in its reveal (reveal). -->
+    <div data-files-empty class="flex min-h-0 flex-1 flex-col" in:reveal>
       <EmptyState
         class="flex-1"
         icon={IconFiles}
@@ -468,7 +468,7 @@
       </EmptyState>
     </div>
   {:else}
-    <div class="flex min-h-0 flex-1 flex-col" out:crossOut>
+    <div class="flex min-h-0 flex-1 flex-col" out:revealOut>
       <!-- The finder's own field (FindField), as Jump's. -->
       <div class="mb-space-1 flex-none" data-files-search>
         <FindField
@@ -707,9 +707,10 @@
     />
   {:else}
     <!-- The region's one place: its skeleton, then what the read brought,
-         one handing its place to the next (crossIn, crossOut). It holds its
-         skeleton, its read, and the "N more" sign over its foot;
-         `relative` pins the view leaving (crossOut). -->
+         the skeleton handing its place to the read in its reveal (reveal,
+         revealOut), and one read to the next in a cross-fade (crossIn). It
+         holds its skeleton, its read, and the "N more" sign over its foot;
+         `relative` pins the view leaving (revealOut). -->
     <div class="relative flex min-h-0 flex-auto flex-col">
       {#if artifacts === null}
         {#if artifactsGhost}
@@ -719,7 +720,7 @@
             class="min-h-0 flex-auto -me-space-2 overflow-hidden pe-space-2"
             data-files-wait="artifacts"
             role="status"
-            out:crossOut
+            out:revealOut
           >
             <ArtifactCards
               cards={[]}
@@ -734,7 +735,7 @@
              line, wrapping under the words when the line is short. -->
         <div
           class="type-meta flex min-h-c-section-head-h flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-c-row-inset wrap-anywhere text-ink-muted"
-          in:crossIn
+          in:reveal
         >
           <span>Nothing made yet</span>
           <Button
@@ -767,7 +768,7 @@
           class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-artifacts-scroll"
-          in:crossIn
+          in:reveal
           {@attach measured("artifacts", "[data-files-card]")}
         >
           <ArtifactCards {cards} {chosen} {onpick} {view} />
@@ -796,7 +797,7 @@
             class="min-h-0 flex-auto -me-space-2 overflow-hidden pe-space-2"
             data-files-wait="attachments"
             role="status"
-            out:crossOut
+            out:revealOut
           >
             <!-- A row as it will stand (The Claim Of Nothing Rule: the
                  skeleton at the real layout's size). -->
@@ -831,7 +832,7 @@
              attachments, so the composer's own Attach is offered. -->
         <div
           class="type-meta flex min-h-c-section-head-h flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-c-row-inset wrap-anywhere text-ink-muted"
-          in:crossIn
+          in:reveal
         >
           <span>Nothing attached yet</span>
           <Button
@@ -855,7 +856,7 @@
           class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-attachments-scroll"
-          in:crossIn
+          in:reveal
           {@attach measured("attachments", "[data-files-row]")}
         >
           <ul

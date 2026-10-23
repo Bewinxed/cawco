@@ -3459,13 +3459,21 @@
       class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
     >
-      <Skeleton
-        class="w-2/5"
-        data-slot="block"
-        line="body"
-        radius="text"
-        reveal="wait-grace"
-      />
+      <!-- Unseen until the wait has lasted --dur-wait-grace, then fading up
+           (The Real Wait Rule); held still, pulse and all, once the cover is
+           ready and fading out. The wrapper carries the wait, so the
+           skeleton's own opacity is its pulse's. -->
+      <div
+        class="animate-wait-grace-in group-data-ready/cover:animation-paused"
+      >
+        <Skeleton
+          class="w-2/5"
+          data-slot="block"
+          hold="cover"
+          line="body"
+          radius="text"
+        />
+      </div>
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p

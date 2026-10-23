@@ -6,15 +6,15 @@
    * that act on them. An error sits above whatever rows were last read.
    *
    * Loading stands the card at the height it settled at last time (cards),
-   * with skeleton rows filling it, and the rows fade in over them in the
-   * same place: the card does not move. With no height kept yet, three
+   * with skeleton rows filling it, and the skeleton hands its place to the
+   * rows in its reveal (motion/curves `reveal`), in the same place: the card
+   * does not move. With no height kept yet, three
    * skeleton rows.
    */
   import { configureWords } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
-  import { fade } from "svelte/transition";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { appear, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { reveal } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
@@ -181,7 +181,7 @@
           <div
             data-slot="slot"
             class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
-            in:appear
+            in:reveal
             {@attach holding && !settling ? settleThen : undefined}
           >
             {#if toolbar}
@@ -205,7 +205,7 @@
           <div
             data-slot="slot"
             class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
-            out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
+            out:reveal
           >
             <SkeletonRows fill={card !== null} />
           </div>

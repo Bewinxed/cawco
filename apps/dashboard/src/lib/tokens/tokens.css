@@ -406,7 +406,7 @@
     --presence-off: var(--neutral-8);
     /* Every scrollbar's thumb, inherited from the root. */
     --scrollbar-thumb: oklch(from var(--muted-foreground) l c h / 0.35);
-    /* The band of raised surface that crosses a skeleton once per loop. */
+    /* The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse). */
     --skeleton-sheen: oklch(from var(--surface-raised) l c h / 0.6);
     /* List bullets in rendered markdown. */
     --prose-bullet: oklch(from var(--muted-foreground) l c h / 0.55);
@@ -1532,7 +1532,7 @@
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-    /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
+    /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
     --ease-crossfade: cubic-bezier(0.42, 0, 0.58, 1);
     /* A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap. */
     --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
@@ -1585,6 +1585,10 @@
     --dur-hold: 1.2s;
     /* One turn of an ambient loop: spinner, pulse, ping. */
     --dur-loop: 1.2s;
+    /* One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: "transitions.dev exactly"). */
+    --dur-skeleton-pulse: 1000ms;
+    /* A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms. */
+    --dur-skeleton-reveal: 400ms;
     --c-500: 500ms;
     --breath: calc(var(--c-500) * 4);
     --press-scale: 0.97;
@@ -1612,6 +1616,10 @@
     --pop-rise: 8px;
     /* How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr. */
     --fold-blur: 2px;
+    /* The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5. */
+    --skeleton-pulse-floor: 0.5;
+    /* How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px. */
+    --skeleton-reveal-blur: 2px;
     /* A control's colours on one clock: its fill, edge, ink and its gradient's stops (Tailwind's registered --tw-gradient-from and --tw-gradient-to, as its own transition-colors lists them), so a highlight drawn as a gradient over the fill (action-surface) changes with the fill. */
     --transition-control:
       background-color var(--dur-control) var(--ease-out),

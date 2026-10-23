@@ -24,6 +24,7 @@
     crossIn,
     crossOut,
     crossOutWith,
+    reveal,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -1310,9 +1311,10 @@
             </div>
             <HeadFade />
           {/if}
-          <!-- The skeleton stands in for rows still on their way and goes the
-               moment they are drawn: its rows are not where the real ones fall, so
-               fading it over them reads as a second, stale transcript. -->
+          <!-- The skeleton stands in for rows still on their way and hands its
+               place to them in its reveal (motion/curves `reveal`) once they are
+               drawn: its blur carries its rows into the real ones, which fall
+               elsewhere. -->
           {#if writable && browser}
             <FootFade />
           {/if}
@@ -1320,6 +1322,7 @@
             <div
               class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
               in:crossIn
+              out:reveal
             >
               <TranscriptSkeleton />
             </div>
