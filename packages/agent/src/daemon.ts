@@ -176,6 +176,7 @@ import {
   checkBoundaryHost,
   liveWorkItems,
   rearmHooks,
+  settleGonePlaces,
   takeUpstreamRules,
   watchQuietBoundaries,
 } from "./boundary";
@@ -3153,6 +3154,10 @@ export const startDaemon = (rediscover = false) =>
         `[workspace] boundary hooks could not be written again: ${error instanceof Error ? error.message : String(error)}`
       )
     );
+    // Each place whose folder is gone, with nothing of it running, is
+    // settled: its records go, and nothing starts its boundary again.
+    // Begun, not awaited; it never throws.
+    settleGonePlaces();
     checkBoundaryHost();
     // macOS: short names in the socket root CawCo made whose target is gone
     // (a scratch fleet's or a release run's HOME, an archived workspace's

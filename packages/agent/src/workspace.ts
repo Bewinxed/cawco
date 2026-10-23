@@ -62,6 +62,7 @@ import {
   addAccount,
   closeBoundary,
   ensureBoundary,
+  ownInodes,
   setProject,
   shellQuote,
   stopWorkspaceBoundary,
@@ -616,6 +617,13 @@ export const createWorkspace = async (
     // Written before the clone: archive-by-id survives a lost reply or an agent restart.
     await writeStateFile(join(state, "create.json"), JSON.stringify({ path }));
     const base = await prepareClone(repoRoot, path, authed, known);
+    // git linked the source's object files into the clone (`--local`); each
+    // gets its own inode now, before the long fetch and checkout, so a cut
+    // cut short there (an agent's restart) leaves nothing linked to the
+    // source, whose place's boundary would deny every linked file.
+    if (process.platform === "linux") {
+      await ownInodes(path);
+    }
     if (cut) {
       await fetchCut(path, id, base, cut, authed);
     }

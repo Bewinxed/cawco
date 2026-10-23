@@ -21,7 +21,9 @@
  *     clone gone. Armed, the parent hands off to it: the send is kept at the
  *     hub while the clone is cut again, and the cut stops in its checkout,
  *     its mark (`cut.json`) in the workspace's state dir, `.git` and the
- *     files before `zz-hold.bin` at the path.
+ *     files before `zz-hold.bin` at the path, and no file in its
+ *     `.git/objects` sharing an inode with the repository's (the husks of
+ *     2026-10-23 held 4,342, which broke cockpit's Caw: place-deny-bound).
  * (2) The agent is SIGKILLed, and its checkout with it, as a service stop
  *     ends the whole group; the husk stands. The agent starts again, and its
  *     start-up pass clears the cut its last process left under way, and says
@@ -291,6 +293,24 @@ const cutShortPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       husk.includes("README.md") &&
       !husk.includes("zz-hold.bin"),
     `${handed.status} ${handed.text.slice(0, 300)}; send ${JSON.stringify(handed.row ?? "none")}; held by pid ${held ?? "none"}; mark ${existsSync(scene.markFile) ? "there" : "missing"}; at the path: ${husk.join(", ") || "nothing"}`
+  );
+  // git's local clone linked the source's object files (`--local`); the cut
+  // gave each its own inode before its checkout (workspace.ts
+  // `createWorkspace`, boundary.ts `ownInodes`), so a cut cut short leaves no
+  // file the source's place would deny.
+  const objects = join(workspace.path, ".git", "objects");
+  const listed = (await Bun.$`find ${objects} -type f`.quiet().nothrow().text())
+    .split("\n")
+    .filter(Boolean).length;
+  const shared = (
+    await Bun.$`find ${objects} -type f -links +1`.quiet().nothrow().text()
+  )
+    .split("\n")
+    .filter(Boolean);
+  kit.check(
+    "(1) the cut held in its checkout shares no object file's inode with the repository it was cut from",
+    listed > 0 && shared.length === 0,
+    `${listed} object files, ${shared.length} sharing an inode${shared.length > 0 ? `: ${shared.slice(0, 3).join(", ")}` : ""}`
   );
 
   await fleet.stop("agent", "SIGKILL");

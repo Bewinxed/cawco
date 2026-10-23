@@ -905,6 +905,15 @@ const watchHost = async (
         }
         stop();
         client.release(procId, pid);
+        if (exitCode === HOST_GONE_STATUS) {
+          // Its folder is gone: no start would hold it ({@link placeReady}).
+          settleGonePlace({ id, path: held.path }).catch((error: unknown) => {
+            console.warn(
+              `[workspace] ${id}: its boundary ${held.pid} closed as its folder ${held.path} went, and the place could not be settled: ${error instanceof Error ? error.message : String(error)}`
+            );
+          });
+          return;
+        }
         restartUnasked(id, held).catch((error: unknown) => {
           console.warn(
             `[workspace] ${id}: its boundary ${held.pid} ended unasked and could not be started again: ${error instanceof Error ? error.message : String(error)}`
@@ -914,6 +923,66 @@ const watchHost = async (
     },
     afterSeq
   );
+};
+
+/** What a boundary host exits with when the folder it holds is gone (boundary-host.ts `GONE_STATUS`). */
+const HOST_GONE_STATUS = 66;
+
+/**
+ * A place whose folder is gone, settled, once nothing of it runs (no
+ * boundary of it alive on any keeper, no session process holding its hook,
+ * {@link attachedIn}): its records go with its scratch and door dirs
+ * ({@link closeBoundary}), so nothing lists, arms or starts it again. Its
+ * folder was the person's; with it gone the place holds nothing of anyone's.
+ * A session that asks for it again is refused, naming the folder
+ * ({@link placeReady}). A delegate's clone is left to its archive. Answers
+ * whether it was settled.
+ */
+const settleGonePlace = async (ref: WorkspaceRef): Promise<boolean> => {
+  if (!isPlace(ref.id)) {
+    return false;
+  }
+  const folder = await stat(ref.path).catch(() => undefined);
+  if (folder?.isDirectory()) {
+    return false;
+  }
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  if (
+    procs.some((proc) => isBoundaryOf(proc.procId, ref.id)) ||
+    attachedIn(ref.id, ref.path, procs, await commandsNow())
+  ) {
+    return false;
+  }
+  await closeBoundary(ref);
+  console.info(
+    `[workspace] ${ref.id}: its folder ${ref.path} is gone, so the place is settled: its records, scratch and door dirs are gone, and nothing starts it again`
+  );
+  return true;
+};
+
+/**
+ * At this agent's start: each place on record here ({@link readHeld})
+ * whose folder is gone, settled ({@link settleGonePlace}), so no handover,
+ * look or restart starts its boundary only to see its folder gone (exit
+ * {@link HOST_GONE_STATUS}). Never throws.
+ */
+export const settleGonePlaces = async (): Promise<void> => {
+  try {
+    const ids = (
+      await readdir(workspacesDir()).catch(() => [] as string[])
+    ).filter(isPlace);
+    for (const id of ids) {
+      // biome-ignore lint/performance/noAwaitInLoops: one small record read per place, each settled on its own
+      const held = await readHeld(id).catch(() => undefined);
+      if (held) {
+        await settleGonePlace({ id, path: held.path });
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[workspace] the places whose folder is gone could not all be settled: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 };
 
 /** How soon after one unasked start a second is not made ({@link restartUnasked}). Ours: a minute is longer than any start, and short enough that a later crash is started again. */
@@ -5957,7 +6026,28 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   quietTimer.unref();
 };
 
-/** Waits for a process's `line` (the boundary's {@link READY}); answers that line's seq, or rejects with the process's own words if it dies first. */
+/** A line that names an error, as a runtime prints one it was not handed: `LinuxSandboxProfileError: …`, `error: …`. */
+const ERROR_LINE = /^(?:[A-Za-z]*Error|error)\b[^:\n]{0,40}:\s/;
+
+/**
+ * The line of a process's stderr tail that says why it died: the last that
+ * names an error ({@link ERROR_LINE}). Never its last line as such: Bun ends
+ * an uncaught exception's report with its own version (`Bun v1.3.… (Linux
+ * x64)`), after the stack.
+ */
+const stderrReason = (stderr: string | undefined): string | undefined =>
+  (stderr ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .findLast((line) => ERROR_LINE.test(line));
+
+/**
+ * Waits for a process's `line` (the boundary's {@link READY}); answers that
+ * line's seq, or rejects with the process's own words if it dies first: what
+ * it said on stdout, and the error line of the stderr tail its keeper kept
+ * ({@link stderrReason}), so an exception thrown past the host's own lines
+ * is named too.
+ */
 const ready = (
   client: SessiondClient,
   procId: string,
@@ -5997,12 +6087,17 @@ const ready = (
             said.push(text);
           }
         },
-        exit: (code, signal) =>
+        exit: (code, signal, _pid, stderr) => {
+          const reason = stderrReason(stderr);
+          if (reason && !said.includes(reason)) {
+            said.push(reason);
+          }
           finish(
             new Error(
               `${what} exited (${signal ?? `code ${code}`}) as it started${words()}`
             )
-          ),
+          );
+        },
       },
       0
     );
@@ -6740,9 +6835,11 @@ const linkedFiles = async (
  * boundary starts with no sandbox of the workspace running (its first start,
  * a start after a reboot, a replacement once the one before is stopped),
  * never beside an older generation still running in the clone at a handover
- * ({@link launch}).
+ * ({@link launch}); and as a clone is cut, right after git made it
+ * (workspace.ts `createWorkspace`), so a cut cut short before its boundary
+ * leaves no husk sharing the source's objects.
  */
-const ownInodes = async (path: string): Promise<number> => {
+export const ownInodes = async (path: string): Promise<number> => {
   const linked = await linkedFiles(path);
   const cached = new Set(
     linked.length > 0

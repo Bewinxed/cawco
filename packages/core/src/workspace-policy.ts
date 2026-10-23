@@ -628,6 +628,68 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
   );
 
 /**
+ * srt's cap on the words of one bwrap profile (`BWRAP_MAX_ARGS = 9000` in
+ * srt 0.0.81's linux-sandbox-utils.js, the newest release), and what one
+ * path takes of it: "each path takes about three arguments" (its
+ * `too_many_arguments` refusal), `--ro-bind <path> <path>`.
+ */
+const BWRAP_MAX_ARGS = 9000;
+const BWRAP_ARGS_PER_PATH = 3;
+
+/**
+ * The most entries {@link linkedIn} answers: a third of the 3,000 paths srt's
+ * cap holds, so the place's linked files take at most 3,000 of its 9,000
+ * words and the rest of the profile keeps 6,000. The rest ran to 1,320 words
+ * on obelisk's cockpit place on 2026-10-23 (14,370 in all, 4,350 of them
+ * linked files' denies, the profile srt refused), so a place keeps four
+ * times that in hand. Our call, from srt's cap and that profile.
+ */
+export const LINKED_MAX = BWRAP_MAX_ARGS / BWRAP_ARGS_PER_PATH / 3;
+
+const depthOf = (path: string): number => path.split("/").length;
+
+/** `paths` with every one that lies under another left out: the outer one covers it. */
+const outermost = (paths: readonly string[]): string[] => {
+  const all = new Set(paths);
+  return [...all].filter((path) => {
+    for (let up = dirname(path); up !== dirname(up); up = dirname(up)) {
+      if (all.has(up)) {
+        return false;
+      }
+    }
+    return !(path !== "/" && all.has("/"));
+  });
+};
+
+/**
+ * `paths` (each `root` or under it) as at most `max` entries that cover
+ * every one of them: the deepest lifted to the dir that holds them, one level
+ * at a time, so the files that crowd one dir become that dir, until they fit;
+ * at worst `root` itself.
+ */
+const collapsed = (
+  paths: readonly string[],
+  root: string,
+  max: number
+): string[] => {
+  let kept = outermost(paths);
+  const floor = depthOf(root);
+  while (kept.length > max) {
+    const deepest = kept.reduce(
+      (most, path) => Math.max(most, depthOf(path)),
+      0
+    );
+    if (deepest <= floor) {
+      break;
+    }
+    kept = outermost(
+      kept.map((path) => (depthOf(path) === deepest ? dirname(path) : path))
+    );
+  }
+  return kept;
+};
+
+/**
  * What in a place shares its inodes with files elsewhere: each dir its
  * project ignores ({@link ignoredDirs}) that holds such a file, whole (an
  * install that hardlinks from its cache, as bun's and uv's do, fills one with
@@ -636,6 +698,15 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
  * `ownInodes`); a person's own folder is never rewritten, so
  * these are only denied for writing: a write through one would change a file
  * the host runs.
+ *
+ * Never the place's own `.git/objects`: git's objects are named by their
+ * content and written once, read-only (0444), never changed in place, so a
+ * write through one changes nothing anyone runs; and a local clone links
+ * every one of them (git-clone(1) `--local`), 4,342 files on obelisk's
+ * cockpit place from two clones left behind. At most {@link LINKED_MAX}
+ * entries, the files that crowd past it denied as the dirs that hold them
+ * ({@link collapsed}): srt refuses a profile past its cap whole, and the
+ * place's boundary would not start at all.
  */
 export const linkedIn = async (root: string): Promise<string[]> => {
   const ignored = await ignoredDirs(root);
@@ -644,7 +715,7 @@ export const linkedIn = async (root: string): Promise<string[]> => {
       root,
       [
         "-xdev",
-        ...anyPath(ignored),
+        ...anyPath([...ignored, join(root, ".git", "objects")]),
         "-prune",
         "-o",
         "-type",
@@ -669,7 +740,7 @@ export const linkedIn = async (root: string): Promise<string[]> => {
       )
     ),
   ]);
-  return [...dirs.flat(), ...files];
+  return collapsed([...dirs.flat(), ...files], root, LINKED_MAX);
 };
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];

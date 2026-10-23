@@ -292,7 +292,27 @@ if (goneAtStart) {
 // person's own folder, never written into, so there srt starts in the place's
 // scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
 process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
-await SandboxManager.initialize(settings, ask);
+
+/** What this boundary exits with when srt refuses to build its sandbox ({@link srtRefused}). */
+const SRT_REFUSED_STATUS = 1;
+
+/**
+ * srt's refusal, said on stdout as a line, as the host's other refusals
+ * are: the agent names a boundary that did not start by what it heard
+ * (`ready` in boundary.ts), and srt throws its reasons (a profile past
+ * bwrap's cap, `LinuxSandboxProfileError`; dependencies missing) where they
+ * would reach stderr alone.
+ */
+const srtRefused = (error: unknown): string =>
+  `cawco: srt refused to build the sandbox: ${error instanceof Error ? error.message : String(error)}`;
+
+try {
+  await SandboxManager.initialize(settings, ask);
+} catch (error) {
+  console.log(srtRefused(error));
+  await SandboxManager.reset();
+  process.exit(SRT_REFUSED_STATUS);
+}
 
 /**
  * The relay in front of srt's proxy (proxy-relay.ts): it presents srt's
@@ -670,11 +690,29 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
   makePlaces();
   standIn();
   const protect = toProtect();
-  const wrapped = await SandboxManager.wrapWithSandbox(
-    ["/bin/bash", "--norc", "--noprofile", "-c", runner, "cawco-boundary", fifo]
-      .map(quote)
-      .join(" ")
-  );
+  let wrapped: string;
+  try {
+    wrapped = await SandboxManager.wrapWithSandbox(
+      [
+        "/bin/bash",
+        "--norc",
+        "--noprofile",
+        "-c",
+        runner,
+        "cawco-boundary",
+        fifo,
+      ]
+        .map(quote)
+        .join(" ")
+    );
+  } catch (error) {
+    // No sandbox was started and srt holds no profile of it open, so the
+    // boundary closes without the loop's per-command cleanup, which srt
+    // says never to run for a wrap that threw (`LinuxSandboxProfileError`).
+    console.log(srtRefused(error));
+    current = undefined;
+    return await finish({ status: SRT_REFUSED_STATUS });
+  }
   const proc = Bun.spawn(["/bin/sh", "-c", `exec ${wrapped}`], {
     env: runnerEnv,
     stdin: "ignore",
