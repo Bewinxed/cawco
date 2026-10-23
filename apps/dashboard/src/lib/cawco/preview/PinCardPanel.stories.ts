@@ -34,6 +34,26 @@ export const DeskComposing = {
 /** Desk, Comments open: the comment takes the list's place, 400px, the handle on its edge. */
 export const DeskListOpen = { parameters: { viewport: 1320 } };
 
+/** Desk, the panel's edge held and dragged wider, to 600px: the page gives it the room. */
+export const DeskPanelWide = {
+  args: {
+    panelW: 600,
+    dragging: true,
+    caption: "Your screen, the panel dragged wider",
+  },
+  parameters: { viewport: 1320 },
+};
+
+/** Desk, the panel's edge held and dragged in to its narrowest, 300px. */
+export const DeskPanelNarrow = {
+  args: {
+    panelW: 300,
+    dragging: true,
+    caption: "Your screen, the panel dragged narrower",
+  },
+  parameters: { viewport: 1320 },
+};
+
 /** Desk, Comments shut: the same panel opens at 400px. */
 export const DeskListClosed = {
   args: { list: "none", caption: "Your screen, Comments shut" },
@@ -48,6 +68,11 @@ export const TabletListOpen = {
 
 /** Phone 390: the comment is a drawer at the bottom, the page lifting its pin above it. */
 export const Phone = {
-  args: { pane: phone, list: "none", stands: "bottom", caption: "Phone" },
+  args: {
+    pane: phone,
+    list: "none",
+    stands: "bottom",
+    caption: "Phone: the page scrolled to show the spot above the drawer",
+  },
   parameters: { viewport: 390 },
 };

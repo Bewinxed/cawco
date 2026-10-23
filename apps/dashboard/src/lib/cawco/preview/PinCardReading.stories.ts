@@ -55,6 +55,11 @@ export const TabletListClosed = {
 
 /** Phone 390: under 680px the comment is a drawer at the bottom, as today, the page lifting its pin above it. */
 export const Phone = {
-  args: { pane: phone, list: "none", stands: "sheet", caption: "Phone" },
+  args: {
+    pane: phone,
+    list: "none",
+    stands: "sheet",
+    caption: "Phone: the page scrolled to show the spot above the drawer",
+  },
   parameters: { viewport: 390 },
 };

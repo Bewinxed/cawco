@@ -47,6 +47,8 @@
     stands,
     longer = false,
     caption,
+    panelW,
+    dragging = false,
   }: {
     /** The direction drawn. */
     option: "reading" | "short" | "panel";
@@ -73,6 +75,10 @@
     longer?: boolean;
     /** What the person judges in this frame, in words over it: the screen and what is open. */
     caption?: string;
+    /** C's panel as the person dragged it, px; its 400px default when unsaid. */
+    panelW?: number;
+    /** C's handle held: drawn as the kit's split handle draws its drag (`data-active`, the muted ink). */
+    dragging?: boolean;
   } = $props();
 
   const pin = $derived<Pin>(longer ? LONGER_PIN : OPEN_PIN);
@@ -89,6 +95,16 @@
   let mark = $state<{ x: number; y: number; w: number; h: number } | null>(
     null
   );
+  let handle = $state<HTMLElement | null>(null);
+  // Held, the handle is marked as paneforge marks it while a pointer drags
+  // it (`data-active`), so the kit's split look draws it in its drag's ink
+  // (resizable-handle.svelte `data-active:bg-ink-muted`). A real held mouse
+  // would make the frame follow the person's pointer over the page.
+  $effect(() => {
+    if (dragging && handle) {
+      handle.setAttribute("data-active", "pointer");
+    }
+  });
   /** The pill's height: `--c-pin`. */
   const pinH = $derived(numberOf("--c-pin") || 20);
   /** How far clear of a drawer's top the pill stands once lifted: `--space-3`. */
@@ -159,7 +175,7 @@
   );
   /** C's panel in the split, as shares of the pane: 400px, 300px at least, half at most. */
   const panelShare = $derived({
-    size: (numberOf("--c-comments-thread-w") / pane.w) * 100 || 30,
+    size: ((panelW ?? numberOf("--c-comments-thread-w")) / pane.w) * 100 || 30,
     min: (numberOf("--c-thread-panel-min") / pane.w) * 100 || 22,
     max: 50,
   });
@@ -193,6 +209,7 @@
 {#snippet card(held: boolean)}
   <PinCard
     agentName={AGENT}
+    opens="start"
     brief={option === "short" && !held}
     {draft}
     fold={held ? undefined : fold}
@@ -412,6 +429,7 @@
           aria-label={said.resizeThread}
           look="split"
           withHandle
+          bind:ref={handle}
         />
         <Resizable.Pane
           defaultSize={panelShare.size}

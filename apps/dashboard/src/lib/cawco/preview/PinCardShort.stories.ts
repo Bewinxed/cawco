@@ -53,6 +53,11 @@ export const TabletListOpen = {
 
 /** Phone 390: one drawer lists every comment, the picked one opened in place, the page lifting its pin above it. */
 export const Phone = {
-  args: { pane: phone, list: "sheet", stands: "row", caption: "Phone" },
+  args: {
+    pane: phone,
+    list: "sheet",
+    stands: "row",
+    caption: "Phone: the page scrolled to show the spot above the drawer",
+  },
   parameters: { viewport: 390 },
 };

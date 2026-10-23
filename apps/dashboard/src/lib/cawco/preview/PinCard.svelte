@@ -98,7 +98,10 @@
     onrail,
     brief = false,
     onmore,
+    opens = "end",
   }: {
+    /** Where the thread opens: at its end, or at its newest entry's first line, so a long reply reads from its start. */
+    opens?: "end" | "start";
     /**
      * Its head: `line`, the pill, what it stands on in one line and the
      * actions; `quote`, the pill and the actions over what it stands on in
@@ -163,10 +166,22 @@
   });
 
   let roomEl = $state<HTMLDivElement | null>(null);
-  /** The thread is read at its end: a new entry keeps it there. */
+  /** The thread stands where it opened (`opens`) and the person hasn't scrolled it: a new entry keeps it there. */
   let atEnd = true;
-  // The thread opens at its newest entry, beside the field that answers it,
-  // and follows a new one while the person reads at its end.
+  /** The scroll the card last set, so its own scroll is told from the person's. */
+  let placed = -1;
+  /** Where the room stands: its end, or its newest entry's first line. */
+  const settle = (holder: HTMLDivElement) => {
+    const newest = holder.querySelector<HTMLElement>(
+      '[data-slot="thread"] > li:last-child'
+    );
+    holder.scrollTop =
+      opens === "start" && newest ? newest.offsetTop : holder.scrollHeight;
+    placed = holder.scrollTop;
+  };
+  // The thread opens at its newest entry, beside the field that answers it
+  // (at its end, or at that entry's first line), and follows a new one while
+  // the person reads where it stood.
   let shownPin: string | null = null;
   $effect(() => {
     const count = pin.thread.length;
@@ -178,7 +193,7 @@
     if (fresh || atEnd) {
       const holder = roomEl;
       tick().then(() => {
-        holder.scrollTop = holder.scrollHeight;
+        settle(holder);
         atEnd = true;
       });
     }
@@ -234,7 +249,7 @@
     // biome-ignore lint/style/noRestrictedGlobals: the room keeps its end by its scroll, which resizes nothing, in the delivery, so no frame paints it short of its newest entry
     const watch = new ResizeObserver(() => {
       if (atEnd) {
-        holder.scrollTop = holder.scrollHeight;
+        settle(holder);
       }
     });
     watch.observe(list);
@@ -243,7 +258,10 @@
   });
   const readAt = () => {
     if (roomEl) {
-      atEnd = roomEl.scrollTop + roomEl.clientHeight >= roomEl.scrollHeight - 1;
+      atEnd =
+        opens === "start"
+          ? Math.abs(roomEl.scrollTop - placed) <= 1
+          : roomEl.scrollTop + roomEl.clientHeight >= roomEl.scrollHeight - 1;
     }
   };
 

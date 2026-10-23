@@ -21,6 +21,10 @@
  * 6. A card or composer beside its pill stands clear of it.
  * 7. A thread in a sheet or a panel leaves its pill in view, except where
  *    the direction stands it over the pill (COVERS_PILL).
+ * 8. Its caption stands on its own row over its pane, never on it.
+ * 9. A long reply opens at its first line, at the top of the room its
+ *    replies scroll in.
+ * 10. C's dragged panels draw their handle held, in the drag's ink.
  *
  * Then each canvas opened on a page of its own (and StatTile's, a floor):
  * when its page loaded, how many files it fetched by then and in all, when
@@ -68,13 +72,20 @@ const WIDTHS: Record<string, number> = {
   "B TabletListOpen": 400,
   "C DeskComposing": 280,
   "C DeskListOpen": 400,
+  "C DeskPanelWide": 600,
+  "C DeskPanelNarrow": 300,
   "C DeskListClosed": 400,
   "C TabletListOpen": 400,
   "C Phone": 390,
 };
 
 /** Frames whose entries are held to scroll inside the holder: every long thread. */
-const NO_SCROLL = new Set(["B DeskShortThread", "C DeskComposing"]);
+const NO_SCROLL = new Set([
+  "B DeskShortThread",
+  "C DeskComposing",
+  // Dragged to 600px, the panel holds the whole reply.
+  "C DeskPanelWide",
+]);
 
 /**
  * Frames whose sheet or panel stands over the pill it answers: C's tablet
@@ -94,13 +105,21 @@ interface Box {
 /** One rest frame's thread holder as the page reads it: boxes and sizes, nothing judged. */
 interface Raw {
   box: Box | null;
+  /** The frame's caption: the words over it, on their own row. */
+  caption: Box | null;
   /** The head's and the reply's boxes before the entries were scrolled to their middle, and after. */
   feet: [Box | null, Box | null];
   folded: boolean;
   heads: [Box | null, Box | null];
+  /** C's split handle as drawn: whether it is marked held, and its line's ink. */
+  held: { active: boolean; ink: string; rest: string } | null;
   holder: string;
+  /** How far the page is scrolled under a drawer to lift its pin clear, px. */
+  lifted: number;
   maxHeight: string;
   name: { height: number; line: number } | null;
+  /** Where the newest entry's first line stands from the room's top as the thread opened, px. */
+  opensAt: number | null;
   pane: (Box & { client: number; scroll: number }) | null;
   /** The pill, where the holder stands beside it (not a sheet). */
   pill: Box | null;
@@ -117,6 +136,8 @@ interface Raw {
   /** The pill, where the holder is a sheet or a panel. */
   sheetPill: Box | null;
   story: string;
+  /** The page's title, where it stands in the frame. */
+  title: Box | null;
 }
 
 /** Every rest frame of `file`, drawn and settled. */
@@ -223,6 +244,11 @@ async function rawOf(args: { file: string; story: string }): Promise<Raw> {
   const head = found?.querySelector('[data-slot="head"]');
   const foot = found?.querySelector('[data-slot="foot"]');
   const before = [boxOf(head), boxOf(foot)];
+  const newest = room?.querySelector('[data-slot="thread"] > li:last-child');
+  const opensAt =
+    room && newest
+      ? newest.getBoundingClientRect().top - room.getBoundingClientRect().top
+      : null;
   if (room) {
     const kept = room.scrollTop;
     room.scrollTop = (room.scrollHeight - room.clientHeight) / 2;
@@ -270,6 +296,27 @@ async function rawOf(args: { file: string; story: string }): Promise<Raw> {
         ? boxOf(frame?.querySelector('[data-slot="fixture-pill"]'))
         : null,
     sheet: boxOf(found?.closest('[data-slot="rail-sheet"]') ?? found),
+    caption: boxOf(frame?.querySelector('[data-slot="fixture-caption"]')),
+    held: (() => {
+      const grip = frame?.querySelector<HTMLElement>("[data-pane-resizer]");
+      if (!grip) {
+        return null;
+      }
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--border-hairline)";
+      document.body.append(probe);
+      const rest = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return {
+        active: grip.dataset.active !== undefined,
+        ink: getComputedStyle(grip).backgroundColor,
+        rest,
+      };
+    })(),
+    title: boxOf(frame?.querySelector("#title")),
+    opensAt,
+    lifted:
+      frame?.querySelector('[data-slot="fixture-page-scroll"]')?.scrollTop ?? 0,
   };
 }
 
@@ -326,6 +373,39 @@ function holdBeside(
   }
 }
 
+/** A frame's caption on its own row, and its long reply opening at its first line. */
+function holdFrame(
+  kit: Kit,
+  engine: Engine,
+  key: string,
+  raw: Raw,
+  scrolls: boolean
+): void {
+  if (scrolls && raw.opensAt !== null) {
+    kit.check(
+      `${engine} 9 ${key}: the long reply opens at its first line, at the room's top or as near it as the room scrolls`,
+      raw.opensAt >= -1 && raw.opensAt <= (raw.room?.client ?? 0) / 4,
+      `its first line ${Math.round(raw.opensAt)}px from the room's top`
+    );
+  }
+  if (key.startsWith("C DeskPanel")) {
+    kit.check(
+      `${engine} 10 ${key}: its handle is drawn held, in the drag's ink, not the line's at rest`,
+      !!raw.held && raw.held.active && raw.held.ink !== raw.held.rest,
+      raw.held
+        ? `${raw.held.ink} against ${raw.held.rest} at rest`
+        : "no handle"
+    );
+  }
+  kit.check(
+    `${engine} 8 ${key}: its caption stands on its own row over the pane, never on it (the page lifted ${Math.round(raw.lifted)}px under a drawer, its title ${raw.title && raw.pane && raw.title.bottom > raw.pane.top ? "in view" : "scrolled away"})`,
+    !!raw.caption && !!raw.pane && raw.caption.bottom <= raw.pane.top + 0.5,
+    raw.caption && raw.pane
+      ? `caption ${Math.round(raw.caption.top)} to ${Math.round(raw.caption.bottom)}, pane from ${Math.round(raw.pane.top)}`
+      : "no caption"
+  );
+}
+
 /** Story `raw`'s numbers, held to its direction's. */
 function holdRaw(kit: Kit, engine: Engine, letter: string, raw: Raw): void {
   const key = `${letter} ${raw.story}`;
@@ -369,6 +449,7 @@ function holdRaw(kit: Kit, engine: Engine, letter: string, raw: Raw): void {
     `spill ${spill}px, pane spill ${paneSpill}px`
   );
   holdBeside(kit, engine, letter, raw, width);
+  holdFrame(kit, engine, key, raw, scrolls);
 }
 
 async function readEngine(kit: Kit, base: string, engine: Engine) {
