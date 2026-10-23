@@ -1638,6 +1638,66 @@ function describe(el: Element): PinnedElement {
 const THUMB_AREA = 200_000;
 
 /**
+ * How long a thumbnail waits for a page that has drawn nothing but its
+ * ground to draw something: an app behind a port is still starting when the
+ * overlay, in its head, says ready. Our call, inside the 15 s Files gives an
+ * unseen page (files/page-thumbs.ts `PAGE_MS`).
+ */
+const THUMB_WAIT_MS = 10_000;
+/** After the page changes, how long it settles before it is drawn again: the pane's own wait (PreviewPane `CAPTURE_AFTER_MS`). */
+const THUMB_SETTLE_MS = 1000;
+
+/** Resolves true at the page's next change outside the overlay, false once `ms` pass with none. */
+function pageChanges(ms: number): Promise<boolean> {
+  return new Promise((done) => {
+    const ours = document.querySelector("cawco-overlay");
+    const seen = new MutationObserver((records) => {
+      if (records.some((record) => !ours?.contains(record.target))) {
+        finish(true);
+      }
+    });
+    const bound = setTimeout(() => finish(false), ms);
+    function finish(changed: boolean) {
+      clearTimeout(bound);
+      seen.disconnect();
+      done(changed);
+    }
+    seen.observe(document.documentElement, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  });
+}
+
+/**
+ * The viewport's picture once the page has drawn something of its own: a
+ * crop of its bare ground is none (picture.ts), so it is drawn again each
+ * time the page changes and settles, until {@link THUMB_WAIT_MS} pass. Null
+ * when it never drew, or when a part's failure was heard (`failedYet`).
+ */
+async function pageDrawn(
+  heard: (message: string) => void,
+  failedYet: () => boolean
+): Promise<string | null> {
+  const until = performance.now() + THUMB_WAIT_MS;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: one picture at a time, each after the page's last change
+    const png = await cropPicture(
+      { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
+      heard,
+      { area: THUMB_AREA, thumbnail: true }
+    );
+    const left = until - performance.now();
+    if (png || failedYet() || left <= 0 || !(await pageChanges(left))) {
+      return png;
+    }
+    await new Promise((settle) => setTimeout(settle, THUMB_SETTLE_MS));
+  }
+}
+
+/**
  * The page's thumbnail: what stands in its viewport now, drawn by the crop
  * (picture.ts), so its work is what is on screen, never the whole document
  * (a whole tall page drawn once was 1.8 s of the dashboard's own thread,
@@ -1661,11 +1721,7 @@ async function thumbnail(): Promise<{
   const heard = (message: string) => {
     error ??= message;
   };
-  const png = await cropPicture(
-    { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
-    heard,
-    { area: THUMB_AREA, thumbnail: true }
-  );
+  const png = await pageDrawn(heard, () => error !== undefined);
   const shown = themesWithHost() ? hostTheme : null;
   if (!(png && shown)) {
     return {
@@ -1675,7 +1731,8 @@ async function thumbnail(): Promise<{
         (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
       other: null,
       single: !!png,
-      ...(png ? {} : { error: error ?? "Nothing was drawn." }),
+      // A page that drew nothing but its ground is said by no picture alone.
+      ...(png || error === undefined ? {} : { error }),
     };
   }
   // The other scheme undrawn leaves that scheme without a thumbnail, never this one's picture in its place.

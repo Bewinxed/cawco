@@ -38,6 +38,20 @@
  *     many: every card, and everything its thumbnail paints, lies inside the
  *     card's slot in the masonry, every card inside Files' region, and an
  *     overflow scan of Files totals zero.
+ * 34. Thumbnails | List (owner: "i want to be able to toggle this to list or
+ *     thumbnails"): at 390, 680 and 1440, in Chromium and WebKit, with one
+ *     artifact and with many (a 63-character name, a 40-word title), the
+ *     switch stands in the Artifacts head inside Files; in the list the rows
+ *     never overlap and nothing they draw stands past their row or Files'
+ *     edge, the "N more" sign counts the rows below the fold, and back in
+ *     thumbnails the cards keep their slots (33's read);
+ * 35. the choice survives a reload, and holds where Files opens next (the
+ *     bar's card, then the phone's drawer);
+ * 36. a row opens its artifact as its card does (floating on Files' left,
+ *     the row the one on show);
+ * 37. the switch's motion on the clock: every row slides on one clock (one
+ *     start, length and curve) from its card's place to its row's; with
+ *     less motion nothing travels.
  *
  * One capture per state at 390 and 1440, light and dark, in the run's output
  * folder (`kit.out`).
@@ -473,6 +487,7 @@ const run = async (kit: Kit) => {
   await askLegs(kit, base, none, noneOpenCode);
   await roundThree(kit, base, fleet, { many, one, none });
   await slotLegs(kit, base, { many, one });
+  await viewLegs(kit, base, { many, one });
   for (const theme of THEMES) {
     await desk(kit, base, theme, { many, one, none });
     for (const view of ["phone", "narrowDesk"] as const) {
@@ -1166,7 +1181,7 @@ const reviewLegs = async (
       ?.getBoundingClientRect();
     const heads = [
       ...document.querySelectorAll(
-        "[data-glass-card-frame='files-pop'] [data-files-region] > h3"
+        "[data-glass-card-frame='files-pop'] [data-files-region] > [data-files-head]"
       ),
     ].map((head) => head.getBoundingClientRect());
     return {
@@ -1560,7 +1575,7 @@ const roundThree = async (
         ),
       ].map((region) => {
         const head = region
-          .querySelector<HTMLElement>(":scope > h3")
+          .querySelector<HTMLElement>(":scope > [data-files-head]")
           ?.getBoundingClientRect();
         const scroller = region.querySelector<HTMLElement>(
           "[data-files-scroll]"
@@ -2241,6 +2256,382 @@ const narrowLeg = async (
     await shot(page, `drawer-search-none-${width}-${theme}`);
   }
   await sweep(page, `drawer search none ${width} ${theme}`);
+  await page.close();
+};
+
+/** Files' artifacts head's switch, by its way (motion/Rail's radios). */
+const VIEW_PICK = (way: "thumbnails" | "list") =>
+  `[data-files-region="artifacts"] [data-files-head] [data-rail-item="${way}"]`;
+
+/** Opens Files where the width puts it: the bar's card on a desk, the drawer from the sidebar's row else. */
+const openFiles = async (page: Page, view: keyof typeof SLOT_WIDTHS) => {
+  if (view === "desk") {
+    await page.locator("[data-files-control]").click();
+  } else {
+    await page.locator('[data-slot="burger"]').click();
+    await page.locator("[data-sidebar-files]").click();
+  }
+  await page.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
+};
+
+/** The list read in the page: its rows against each other, the region, Files, the switch and the "N more" sign. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every read in it
+const listOf = () => {
+  const SLACK = 0.5;
+  const files =
+    document.querySelector<HTMLElement>("[data-files-sheet]") ??
+    document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
+  const grid = files?.querySelector<HTMLElement>("[data-files-cards]");
+  const region = grid?.closest<HTMLElement>("[data-files-region]");
+  const scroller = grid?.closest<HTMLElement>("[data-files-scroll]");
+  if (!(files && grid && region && scroller)) {
+    return null;
+  }
+  const said = (r: DOMRect) =>
+    `${r.left.toFixed(1)}..${r.right.toFixed(1)}×${r.top.toFixed(1)}..${r.bottom.toFixed(1)}`;
+  const filesBox = files.getBoundingClientRect();
+  const regionBox = region.getBoundingClientRect();
+  const misses: string[] = [];
+  const rows = [...grid.querySelectorAll<HTMLElement>("[data-files-card]")];
+  let last: DOMRect | null = null;
+  for (const row of rows) {
+    const box = row.getBoundingClientRect();
+    if (last && box.top < last.bottom - SLACK) {
+      misses.push(
+        `${row.title}: ${said(box)} over the row above ${said(last)}`
+      );
+    }
+    last = box;
+    if (
+      box.left < regionBox.left - SLACK ||
+      box.right > regionBox.right + SLACK
+    ) {
+      misses.push(
+        `${row.title}: ${said(box)} past the region ${said(regionBox)}`
+      );
+    }
+    for (const el of row.querySelectorAll<HTMLElement>("*")) {
+      const r = el.getBoundingClientRect();
+      if (
+        r.width > 0 &&
+        r.height > 0 &&
+        (r.left < box.left - SLACK || r.right > box.right + SLACK)
+      ) {
+        misses.push(
+          `${row.title}: its ${el.tagName.toLowerCase()} ${said(r)} past the row ${said(box)}`
+        );
+      }
+    }
+  }
+  const rail = region.querySelector<HTMLElement>(
+    '[data-files-head] [data-slot="rail"]'
+  );
+  const head = rail?.closest<HTMLElement>("[data-files-head]");
+  const railBox = rail?.getBoundingClientRect();
+  const headBox = head?.getBoundingClientRect();
+  const switchInside =
+    !!railBox &&
+    !!headBox &&
+    railBox.left >= headBox.left - SLACK &&
+    railBox.right <= headBox.right + SLACK &&
+    railBox.top >= headBox.top - SLACK &&
+    railBox.bottom <= headBox.bottom + SLACK &&
+    railBox.right <= filesBox.right + SLACK;
+  const foot = scroller.getBoundingClientRect().bottom;
+  const past = rows.filter(
+    (row) => row.getBoundingClientRect().bottom > foot + 1
+  ).length;
+  const sign =
+    region.querySelector<HTMLElement>("[data-files-more]")?.dataset.filesMore ??
+    "0";
+  const overflow: string[] = [];
+  for (const el of files.querySelectorAll<HTMLElement>("*")) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) {
+      continue;
+    }
+    const style = getComputedStyle(el);
+    if (r.left < filesBox.left - SLACK || r.right > filesBox.right + SLACK) {
+      overflow.push(
+        `${el.tagName.toLowerCase()}${el.dataset.slot ? `[${el.dataset.slot}]` : ""} ${said(r)} past Files ${said(filesBox)}`
+      );
+    } else if (
+      ["auto", "scroll"].includes(style.overflowX) &&
+      el.scrollWidth > el.clientWidth + 1
+    ) {
+      overflow.push(
+        `${el.tagName.toLowerCase()} scrolls sideways: ${el.scrollWidth}px in ${el.clientWidth}px`
+      );
+    }
+  }
+  return {
+    view: grid.dataset.filesView ?? null,
+    rows: rows.length,
+    tallest: Math.max(...rows.map((row) => row.getBoundingClientRect().height)),
+    misses,
+    switchInside,
+    checked:
+      region
+        .querySelector('[data-rail-item][aria-checked="true"]')
+        ?.getAttribute("data-rail-item") ?? null,
+    past,
+    sign,
+    overflow,
+  };
+};
+
+/**
+ * 34–37: Thumbnails | List, at 390, 680 and 1440 in Chromium and WebKit with
+ * one artifact and many; the choice kept through a reload and from the
+ * bar's card to the drawer; a row's press; the switch's motion.
+ */
+const viewLegs = async (
+  kit: Kit,
+  base: string,
+  ids: { many: string; one: string }
+) => {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["phone", "narrowDesk", "desk"] as const) {
+      for (const count of ["one", "many"] as const) {
+        await viewLeg(kit, base, engine, view, count, ids[count]);
+      }
+    }
+  }
+  await keptLeg(kit, base, ids.many);
+  await rowOpensLeg(kit, base, ids.many);
+  await switchMotionLeg(kit, base, ids.many);
+};
+
+/** One of 34's legs: an engine, a width, one artifact or many. */
+const viewLeg = async (
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  view: keyof typeof SLOT_WIDTHS,
+  count: "one" | "many",
+  id: string
+) => {
+  const leg = `${engine} ${SLOT_WIDTHS[view]} ${count}`;
+  const page = await openSession(
+    kit,
+    base,
+    view,
+    "light",
+    id,
+    undefined,
+    engine
+  );
+  await openFiles(page, view);
+  await page.locator(VIEW_PICK("list")).click();
+  await page
+    .locator('[data-files-cards][data-files-view="list"]')
+    .waitFor({ timeout: 10_000 });
+  // The slide played out, and the sign's count read after it.
+  await page.waitForTimeout(900);
+  const list = await page.evaluate(listOf);
+  kit.check(
+    `34 (${leg}): in the list, one row each (${count === "one" ? 1 : MANY}), no row over another, nothing a row draws past its row or the region, the switch inside the Artifacts head and Files, its List checked`,
+    !!list &&
+      list.view === "list" &&
+      list.rows === (count === "one" ? 1 : MANY) &&
+      list.misses.length === 0 &&
+      list.switchInside &&
+      list.checked === "list",
+    list
+      ? `${list.rows} rows, the tallest ${list.tallest.toFixed(1)}px, switch inside ${list.switchInside}, checked ${list.checked}; ${list.misses.slice(0, 4).join(" | ") || "none past"}`
+      : "Files' list not found"
+  );
+  kit.check(
+    `34 (${leg}): the list's "N more" sign counts the rows below the fold, and an overflow scan of Files totals zero`,
+    !!list &&
+      list.sign === String(list.past) &&
+      (count === "one" || list.past > 0) &&
+      list.overflow.length === 0,
+    list
+      ? `${list.past} rows past the foot, the sign says ${list.sign}; ${list.overflow.length} past Files${list.overflow.length ? `: ${list.overflow.slice(0, 4).join(" | ")}` : ""}`
+      : "Files not found"
+  );
+  if (view !== "narrowDesk" && count === "many") {
+    await shot(page, `list-${SLOT_WIDTHS[view]}-${engine}`);
+  }
+  await sweep(page, `list ${leg}`);
+  await page.locator(VIEW_PICK("thumbnails")).click();
+  await page
+    .locator('[data-files-cards][data-files-view="thumbnails"]')
+    .waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(900);
+  const back = await page.evaluate(slotsOf);
+  kit.check(
+    `34 (${leg}): back in thumbnails every card lies inside its slot again, and an overflow scan of Files totals zero`,
+    !!back &&
+      back.cards === (count === "one" ? 1 : MANY) &&
+      back.misses.length === 0 &&
+      back.overflow.length === 0,
+    back
+      ? `${back.cards} cards in ${back.columns} columns; ${[...back.misses, ...back.overflow].slice(0, 4).join(" | ") || "none past"}`
+      : "Files' cards not found"
+  );
+  await page.close();
+};
+
+/** 35: the list picked on the bar's card, the page reloaded, then at a phone's width. */
+const keptLeg = async (kit: Kit, base: string, id: string) => {
+  const page = await openSession(kit, base, "desk", "light", id);
+  await openFiles(page, "desk");
+  await page.locator(VIEW_PICK("list")).click();
+  await page
+    .locator('[data-files-cards][data-files-view="list"]')
+    .waitFor({ timeout: 10_000 });
+  await page.reload();
+  await page.locator('[data-slot="pane"]').first().waitFor({ timeout: 60_000 });
+  await openFiles(page, "desk");
+  const onDesk = await page.evaluate(() => ({
+    view:
+      document.querySelector<HTMLElement>("[data-files-cards]")?.dataset
+        .filesView ?? null,
+    checked:
+      document
+        .querySelector(
+          '[data-files-head] [data-rail-item][aria-checked="true"]'
+        )
+        ?.getAttribute("data-rail-item") ?? null,
+  }));
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.locator('[data-slot="pane"]').first().waitFor({ timeout: 60_000 });
+  await openFiles(page, "phone");
+  const inDrawer = await page.evaluate(() => ({
+    drawer: !!document.querySelector("[data-files-sheet]"),
+    view:
+      document.querySelector<HTMLElement>(
+        "[data-files-sheet] [data-files-cards]"
+      )?.dataset.filesView ?? null,
+  }));
+  kit.check(
+    "35: List picked on the bar's card survives a reload (the card opens on it, List checked) and holds in the phone's drawer",
+    onDesk.view === "list" &&
+      onDesk.checked === "list" &&
+      inDrawer.drawer &&
+      inDrawer.view === "list",
+    `desk after reload ${JSON.stringify(onDesk)}; drawer ${JSON.stringify(inDrawer)}`
+  );
+  await page.close();
+};
+
+/** 36: in the list, a row's press opens its artifact floating on Files' left, as a card's does (7). */
+const rowOpensLeg = async (kit: Kit, base: string, id: string) => {
+  const page = await openSession(kit, base, "desk", "light", id);
+  await openFiles(page, "desk");
+  await page.locator(VIEW_PICK("list")).click();
+  const row = page.locator(
+    `[data-files-cards][data-files-view="list"] [data-files-card][title="${PRICING}"]`
+  );
+  await row.click();
+  await page.locator("[data-files-float]").waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(600);
+  const opened = await page.evaluate((name) => {
+    const pop = document
+      .querySelector("[data-glass-card-frame='files-pop']")
+      ?.getBoundingClientRect();
+    const float = document
+      .querySelector("[data-files-float]")
+      ?.getBoundingClientRect();
+    const current = document.querySelector<HTMLElement>(
+      '[data-files-card][aria-current="true"]'
+    );
+    return {
+      leftOf: !!pop && !!float && float.right <= pop.left,
+      current: current?.title ?? null,
+      wanted: name,
+      view:
+        document.querySelector<HTMLElement>("[data-files-cards]")?.dataset
+          .filesView ?? null,
+    };
+  }, PRICING);
+  kit.check(
+    "36: a row's press opens its artifact as its card's does: floating on Files' left, the row the one on show, Files still the list",
+    opened.leftOf && opened.current === PRICING && opened.view === "list",
+    JSON.stringify(opened)
+  );
+  await page.close();
+};
+
+/** The first rows' boxes, read for 37. */
+const firstBoxes = () =>
+  [...document.querySelectorAll<HTMLElement>("[data-files-card]")]
+    .slice(0, 6)
+    .map((one) => {
+      const r = one.getBoundingClientRect();
+      return { id: one.dataset.artifact ?? "", x: r.left, y: r.top };
+    });
+
+/** 37: the switch's motion on the clock (Chromium's Animation domain), then with less motion. */
+const switchMotionLeg = async (kit: Kit, base: string, id: string) => {
+  const page = await openSession(kit, base, "desk", "light", id);
+  await openFiles(page, "desk");
+  await page.waitForTimeout(900);
+  const before = await page.evaluate(firstBoxes);
+  const sliding = await readMotion(
+    page,
+    () => page.locator(VIEW_PICK("list")).click(),
+    "[data-files-cards]",
+    { fractions: [0, 0.5, 1], read: () => page.evaluate(firstBoxes) }
+  );
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(firstBoxes);
+  const slides = sliding.runs.filter((one) =>
+    one.target.includes("data-files-card")
+  );
+  const clocks = new Set(
+    slides.map((one) => `${one.start} ${Math.round(one.end)} ${one.easing}`)
+  );
+  const near = (
+    read: { id: string; x: number; y: number }[] | undefined,
+    want: { id: string; x: number; y: number }[]
+  ) =>
+    !!read &&
+    want.every((one, i) => {
+      const at = read[i];
+      return (
+        at?.id === one.id &&
+        Math.abs(at.x - one.x) <= 1.5 &&
+        Math.abs(at.y - one.y) <= 1.5
+      );
+    });
+  const start = sliding.at.find((one) => one.fraction === 0)?.value;
+  const end = sliding.at.find((one) => one.fraction === 1)?.value;
+  const moved = before.some(
+    (one, i) =>
+      Math.abs(one.x - (after[i]?.x ?? one.x)) > 4 ||
+      Math.abs(one.y - (after[i]?.y ?? one.y)) > 4
+  );
+  kit.check(
+    "37a: Thumbnails to List: every row slides on one clock (one start, length and curve), from its card's place at 0 to its row's at 1",
+    sliding.by === "clock" &&
+      slides.length >= before.length &&
+      clocks.size === 1 &&
+      moved &&
+      near(start, before) &&
+      near(end, after),
+    `${slides.length} slides on ${clocks.size} clock(s) ${JSON.stringify([...clocks])}; before ${JSON.stringify(before.slice(0, 2))}, at 0 ${JSON.stringify(start?.slice(0, 2))}, at 1 ${JSON.stringify(end?.slice(0, 2))}, after ${JSON.stringify(after.slice(0, 2))}`
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const still = await readMotion(
+    page,
+    () => page.locator(VIEW_PICK("thumbnails")).click(),
+    "[data-files-cards]",
+    { ms: 2000 }
+  );
+  const travels = still.runs.filter(
+    (one) =>
+      one.target.includes("data-files-card") && one.name.includes("translate")
+  );
+  kit.check(
+    "37b: with less motion, List to Thumbnails moves nothing: no row travels",
+    travels.length === 0,
+    `${still.runs.length} runs, ${travels.length} travelling: ${JSON.stringify(still.runs.slice(0, 3))}`
+  );
   await page.close();
 };
 

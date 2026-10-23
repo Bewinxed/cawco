@@ -26,6 +26,7 @@ import { cawco } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { failureWords } from "../hub-read";
 import { extensionOf } from "../lightbox/extension";
+import { readJson, writeJson } from "../storage";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 
@@ -346,6 +347,35 @@ export function attachToSession(instanceId: string): boolean {
   draft.pickFiles();
   return true;
 }
+
+/* ── How the artifacts are shown ──────────────────────────────────── */
+
+/** The artifacts as their thumbnails' masonry, or one row each as the attachments are. */
+export type ArtifactsView = "thumbnails" | "list";
+
+const VIEW_KEY = "cawco-files-view";
+const view = $state<{ shown: ArtifactsView }>({
+  shown:
+    readJson<unknown>(VIEW_KEY, "thumbnails") === "list"
+      ? "list"
+      : "thumbnails",
+});
+
+/**
+ * Thumbnails or list, the person's pick, kept in this browser as the
+ * home's Working or Finished is (home/work-tab): the bar's card, the
+ * phone's drawer and every session's Files read the one answer, and a
+ * reload keeps it. Thumbnails until the person picks.
+ */
+export const artifactsView = {
+  get shown(): ArtifactsView {
+    return view.shown;
+  },
+  set(shown: ArtifactsView): void {
+    view.shown = shown;
+    writeJson(VIEW_KEY, shown);
+  },
+};
 
 /* ── Where it stands ──────────────────────────────────────────────── */
 

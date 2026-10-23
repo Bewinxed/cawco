@@ -37,6 +37,10 @@
  * 7. A preview (someone's own app) styled the same way: its frame stays
  *    `color-scheme: light`, the page hears light at night too, and its one
  *    picture is flagged single.
+ * 8. A preview whose app paints late (a white page that draws its content
+ *    2.5 s after it loads, as an app behind a port still starting does):
+ *    its picture is the app drawn, never its bare white ground (the
+ *    overlay draws again once the page changes, picture.ts `flat`).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
 import { mkdir, writeFile } from "node:fs/promises";
@@ -73,6 +77,10 @@ const LIVE_DIFF = 0.02;
 /** A page whose colours are fixed: it looks the same in both schemes. */
 /** A page that styles dark only by `prefers-color-scheme`, as a page written for any browser does. */
 const PREFERS = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Prefers</title><style>body{margin:0;padding:24px;background:#fafafa;color:#111;font:16px/1.5 system-ui}@media (prefers-color-scheme: dark){body{background:#121212;color:#eee}}</style></head><body>${CONTENT}</body></html>`;
+/** A white page that draws its content 2.5 s after it loads: an app still starting behind its port when the overlay says ready. */
+const LATE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Late</title><style>html,body{margin:0;background:#fff}main{block-size:60vh;background:#111;color:#eee;font:16px/1.5 system-ui;padding:24px}</style></head><body><script>setTimeout(()=>{const m=document.createElement("main");m.textContent="The app, started.";document.body.append(m)},2500)</script></body></html>`;
+/** A late app's picture is darker than this: its 60vh dark block drawn, not the white ground alone (about 1). Our call. */
+const LATE_BELOW = 0.7;
 const LIGHT_ONLY = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Light only</title><style>html{background:#fafafa}body{margin:0;padding:24px;background:#fafafa;color:#111;font:16px/1.5 system-ui}</style></head><body>${CONTENT}</body></html>`;
 
 const asks = new Map<string, { input: object; name: string }>();
@@ -538,6 +546,17 @@ const run = async (kit: Kit) => {
       !!preview.day?.single &&
       !!preview.night?.single,
     `frame by day ${JSON.stringify(preview.frameDay)}, at night ${JSON.stringify(preview.frameNight)}; day: ${said(preview.day)}; night: ${said(preview.night)}`
+  );
+
+  // 8. A preview whose app paints after the overlay is ready.
+  const lateDir = join(kit.out, "late-preview");
+  await mkdir(lateDir, { recursive: true });
+  await writeFile(join(lateDir, "index.html"), LATE);
+  const late = await leg("8", "late-preview", { dir: lateDir });
+  kit.check(
+    "8: a preview whose app paints 2.5 s after it is ready: its picture is the app drawn (its dark block), never the bare white ground",
+    !!late.day && late.day.luminance < LATE_BELOW,
+    `captures ${late.captures}; day: ${said(late.day)}`
   );
 
   // 3. A page that looks the same in both schemes.

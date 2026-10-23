@@ -129,6 +129,8 @@ export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
 export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
+/** Files' artifacts as their thumbnails' masonry (FilesList's Thumbnails | List). */
+export { default as IconThumbnails } from "~icons/solar/gallery-wide-bold-duotone";
 export {
   default as IconAgent,
   default as IconGhost,
@@ -157,6 +159,8 @@ export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
 /** A connection: Configure › Connections' rail glyph, and a row whose service has no mark. */
 export { default as IconConnection } from "~icons/solar/link-bold-duotone";
 export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
+/** Files' artifacts one row each (FilesList's Thumbnails | List). */
+export { default as IconListRows } from "~icons/solar/list-bold-duotone";
 export { default as IconListCheck } from "~icons/solar/list-check-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";

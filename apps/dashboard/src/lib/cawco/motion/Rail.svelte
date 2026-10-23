@@ -63,6 +63,8 @@
 
   let root = $state<HTMLDivElement>();
   let boxes = $state<Box[]>([]);
+  /** The rail's own width: an across rail's label never stands past its trailing edge. */
+  let railWidth = $state(0);
   /** The thumb glides only once it has been placed: never in from 0,0. */
   let placed = $state(false);
 
@@ -70,6 +72,7 @@
     if (!root) {
       return;
     }
+    railWidth = root.clientWidth;
     boxes = [...root.querySelectorAll<HTMLElement>("[data-rail-item]")].map(
       (node) => ({
         x: node.offsetLeft,
@@ -119,7 +122,17 @@
       shownTip = tip;
     }
   });
-  const tipBox = $derived(boxes[shownTip]);
+  /**
+   * Where the label stands: under its item, held inside the rail's trailing
+   * edge, so a rail at the end of a head (Files' Thumbnails | List) keeps
+   * its label over the panel it heads rather than past its edge.
+   */
+  const tipBox = $derived.by(() => {
+    const box = boxes[shownTip];
+    return box && axis === "x"
+      ? { ...box, x: Math.min(box.x, railWidth - tipWidth) }
+      : box;
+  });
 
   /** Which item the pointer is over, gaps counting toward the one before. */
   function railMove(event: MouseEvent) {

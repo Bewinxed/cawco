@@ -16,7 +16,14 @@
    * `--dur-fade` cross-fade. A read refused says so in its region's place
    * (RowFault), with Try again and the hub's own words.
    *
-   * The artifacts are a masonry of their thumbnails (ArtifactCards). An
+   * The artifacts are a masonry of their thumbnails (ArtifactCards), or one
+   * row each in the attachments' shape, as the person picks in the
+   * Artifacts head (owner: "i want to be able to toggle this to list or
+   * thumbnails"): the house rail (motion/Rail), Thumbnails | List by their
+   * icons, at the head's trailing edge, kept in this browser
+   * (files.svelte.ts `artifactsView`), so the bar's card, the drawer and the
+   * float all open on it. On the drawer, whose segments are the heads, it
+   * stands over the artifacts at the same trailing edge. An
    * attachment row leads with its picture or its file's glyph, its name over
    * "kind · who · age", and ends on Show in conversation. The search is the
    * finder's own field (FindField): artifacts by the hub's search (their
@@ -46,7 +53,9 @@
     IconDocument,
     IconFiles,
     IconLayers,
+    IconListRows,
     IconPaperclip,
+    IconThumbnails,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { searchArtifacts } from "../artifact-api";
@@ -57,12 +66,15 @@
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { crossIn, crossOut, dur } from "../motion/curves.svelte";
+  import Rail from "../motion/Rail.svelte";
   import RowFault from "../RowFault.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
     type ArtifactCard,
+    type ArtifactsView,
     type AttachmentRow,
     artifactsOf,
+    artifactsView,
     attachmentsOf,
     readArtifacts,
     readAttachments,
@@ -296,9 +308,19 @@
     }
     return rows === 1 ? "one" : "own";
   };
-  const artifactsFloor = $derived(
-    cards.length > 0 || artifactsGhost ? "cards" : "own"
-  );
+  /** Thumbnails, or one row each: the person's pick, the same in every Files. */
+  const view = $derived(artifactsView.shown);
+  const VIEWS: { id: ArtifactsView; label: string }[] = [
+    { id: "thumbnails", label: filesWords.thumbnails },
+    { id: "list", label: filesWords.list },
+  ];
+  /** The masonry's floor is its head and a card; the list's, its rows' as the attachments' are. */
+  const artifactsFloor = $derived.by(() => {
+    if (view === "list") {
+      return floor(artifactsGhost ? 2 : cards.length);
+    }
+    return cards.length > 0 || artifactsGhost ? "cards" : "own";
+  });
   const attachmentsFloor = $derived(
     floor(attachmentsGhost ? 2 : attachmentHits.length)
   );
@@ -322,7 +344,11 @@
         const foot = scroller.getBoundingClientRect().bottom;
         let past = 0;
         for (const item of scroller.querySelectorAll(items)) {
-          if (item.getBoundingClientRect().bottom > foot + 1) {
+          // Where it stands once a slide in flight lands (reflow's
+          // `translate`): the sign counts the list as it will rest.
+          const [, y = "0"] = getComputedStyle(item).translate.split(" ");
+          const sliding = Number.parseFloat(y) || 0;
+          if (item.getBoundingClientRect().bottom - sliding > foot + 1) {
             past += 1;
           }
         }
@@ -495,6 +521,16 @@
             layout="column"
             value="artifacts"
           >
+            {#if artifacts && artifacts.length > 0}
+              <!-- The segment is the region's head: its switch stands over
+                   the list at the same trailing edge. -->
+              <div
+                class="flex min-h-c-section-head-h flex-none items-center justify-end pe-c-row-inset"
+                data-files-head
+              >
+                {@render viewSwitch()}
+              </div>
+            {/if}
             {@render artifactsBody()}
           </Tabs.Content>
           <Tabs.Content
@@ -516,13 +552,15 @@
              alone, so both heads stay in sight and the rows scroll under
              them. A card's height: a landscape thumbnail and its two lines. -->
         <div
-          class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--c-section-head-h) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
+          class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--c-section-head-h) short-window:artifacts-floor-one:artifacts-min-(--c-section-head-h) short-window:artifacts-floor-two:artifacts-min-(--c-section-head-h) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:artifacts-floor-one:artifacts-min-(--row-floor) tall-window:artifacts-floor-two:artifacts-min-(--rows-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
           data-artifacts-floor={artifactsFloor}
           data-attachments-floor={attachmentsFloor}
           style:--region-rows={"minmax(var(--artifacts-min, min-content), auto) minmax(var(--attachments-min, min-content), auto)"}
           style:--region-seam="calc(1px + 2 * var(--space-2))"
           style:--seam-head-floor={"calc(var(--c-section-head-h) + var(--region-seam))"}
           style:--cards-floor={"calc(var(--c-section-head-h) + 4 * var(--c-artifact-row-h))"}
+          style:--rows-floor={"calc(var(--c-section-head-h) + 2 * var(--c-artifact-row-h))"}
+          style:--row-floor={"calc(var(--c-section-head-h) + var(--c-artifact-row-h))"}
           style:--two-floor={"calc(var(--c-section-head-h) + 2 * var(--c-artifact-row-h) + var(--region-seam))"}
           style:--one-floor={"calc(var(--c-section-head-h) + var(--c-artifact-row-h) + var(--region-seam))"}
         >
@@ -534,27 +572,35 @@
             <!-- A section's head as Caw's panel heads its sections: its 16px
                  Solar duotone glyph in the rows' lead column, its name in the
                  label role and strong ink, its count in meta at the end, over
-                 its region's scroll. -->
-            <h3
-              class="type-label mark-line flex min-h-c-section-head-h flex-none items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset text-ink-strong"
-              id="{uid}-artifacts"
+                 its region's scroll; the artifacts' Thumbnails | List after
+                 the count, outside the heading, so the heading's name is its
+                 own words. -->
+            <div
+              class="flex min-h-c-section-head-h flex-none items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset"
+              data-files-head
             >
-              <span
-                class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
-                data-box
-                ><IconLayers aria-hidden="true" class="size-icon-md" /></span
+              <h3
+                class="type-label mark-line flex min-w-0 flex-auto items-center gap-c-row-inset text-ink-strong"
+                id="{uid}-artifacts"
               >
-              <span
-                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                >Artifacts</span
-              >
-              {#if artifactsCount}
                 <span
-                  class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
-                  data-files-head-count>{artifactsCount}</span
+                  class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+                  data-box
+                  ><IconLayers aria-hidden="true" class="size-icon-md" /></span
                 >
-              {/if}
-            </h3>
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                  >Artifacts</span
+                >
+                {#if artifactsCount}
+                  <span
+                    class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
+                    data-files-head-count>{artifactsCount}</span
+                  >
+                {/if}
+              </h3>
+              {@render viewSwitch()}
+            </div>
             {@render artifactsBody()}
           </section>
           <!-- The regions part on Caw's panel's vermillion hairline: 1px of
@@ -568,6 +614,7 @@
           >
             <h3
               class="type-label mark-line flex min-h-c-section-head-h flex-none items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset text-ink-strong"
+              data-files-head
               id="{uid}-attachments"
             >
               <span
@@ -593,6 +640,32 @@
     </div>
   {/if}
 </div>
+
+<!-- Thumbnails | List: the house rail (motion/Rail, the new-session
+     dialog's harness switch) across, each way its icon, its name the
+     travelling label and the radio's accessible name. Earned: shown once
+     the session has an artifact to show either way. -->
+{#snippet viewSwitch()}
+  {#if artifacts && artifacts.length > 0}
+    <Rail
+      axis="x"
+      class="flex flex-none gap-space-row rounded-md bg-surface-recess-deep p-space-row"
+      itemClass="touch-hit press-tint grid size-c-btn-h-xs place-items-center"
+      items={VIEWS}
+      label={filesWords.artifactsView}
+      onpick={(id) => artifactsView.set(id as ArtifactsView)}
+      value={view}
+    >
+      {#snippet item(way)}
+        {#if way.id === "list"}
+          <IconListRows aria-hidden="true" class="size-icon-md" />
+        {:else}
+          <IconThumbnails aria-hidden="true" class="size-icon-md" />
+        {/if}
+      {/snippet}
+    </Rail>
+  {/if}
+{/snippet}
 
 <!-- The sign at the region's trailing foot, over its fade, clear of the
      scrollbar. -->
@@ -648,7 +721,12 @@
             role="status"
             out:crossOut
           >
-            <ArtifactCards cards={[]} ghosts={GHOST_CARDS} {onpick} />
+            <ArtifactCards
+              cards={[]}
+              ghosts={view === "list" ? 2 : GHOST_CARDS}
+              {onpick}
+              {view}
+            />
           </div>
         {/if}
       {:else if artifacts.length === 0}
@@ -692,7 +770,7 @@
           in:crossIn
           {@attach measured("artifacts", "[data-files-card]")}
         >
-          <ArtifactCards {cards} {chosen} {onpick} />
+          <ArtifactCards {cards} {chosen} {onpick} {view} />
         </div>
         {@render moreSign("artifacts")}
       {/if}

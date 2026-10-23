@@ -9,4 +9,8 @@ export const filesWords = {
   noAttachmentsMatch: (query: string) => `No attachments match “${query}”`,
   cantReadArtifacts: "Couldn't read this session's artifacts",
   cantReadAttachments: "Couldn't read this session's attachments",
+  /** The Artifacts head's switch, and its two ways: each its icon, its name the travelling label (motion/Rail). */
+  artifactsView: "Show artifacts as",
+  thumbnails: "Thumbnails",
+  list: "List",
 };

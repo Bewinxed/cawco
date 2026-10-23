@@ -242,6 +242,8 @@
 @custom-variant aria-required-false (&[aria-required="false"]);
 @custom-variant aria-selected-false (&[aria-selected="false"]);
 @custom-variant artifacts-floor-cards (&[data-artifacts-floor="cards"]);
+@custom-variant artifacts-floor-one (&[data-artifacts-floor="one"]);
+@custom-variant artifacts-floor-two (&[data-artifacts-floor="two"]);
 @custom-variant attachments-floor-one (&[data-attachments-floor="one"]);
 @custom-variant attachments-floor-two (&[data-attachments-floor="two"]);
 @custom-variant axis-row (&[data-axis="row"]);

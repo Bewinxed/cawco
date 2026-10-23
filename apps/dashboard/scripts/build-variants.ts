@@ -54,6 +54,11 @@ const ARIA_STATIC = [
  */
 const DATA_STATIC: { attr: string; value: string }[] = [
   { attr: "kind", value: "tailnet" },
+  // Files' list of artifacts, its floor one row or two (FilesList
+  // `data-artifacts-floor`, read as `artifacts-floor-one:`), as the
+  // attachments' floors are.
+  { attr: "artifacts-floor", value: "one" },
+  { attr: "artifacts-floor", value: "two" },
 ];
 
 const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that hovers.
