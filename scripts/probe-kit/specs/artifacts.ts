@@ -146,6 +146,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
+import { previewWords } from "../../../packages/core/src/words/preview";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
@@ -2367,7 +2368,7 @@ const fieldChecks = async ({
       deadTook < SHOWN_WAIT_MS &&
       failed?.body.ok === false &&
       failed.body.error === "server" &&
-      !!band?.includes(`Nothing is running on port ${deadPort}`),
+      !!band?.includes(previewWords.nothingOnPort(deadPort)),
     `the tool took ${deadTook} ms; pane said ${JSON.stringify(failed?.body)}; band ${JSON.stringify(band?.trim().slice(0, 160))}; ${dead.slice(dead.indexOf('{"id"'), dead.indexOf('{"id"') + 300)}`
   );
 };

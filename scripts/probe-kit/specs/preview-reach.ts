@@ -48,6 +48,7 @@ import {
   previewsNeedWords,
   previewUnreachedWords,
 } from "../../../packages/core/src/preview-reach";
+import { previewWords } from "../../../packages/core/src/words/preview";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
 
@@ -100,7 +101,7 @@ const paneNow = (page: Page, id: string) =>
   }, id);
 
 /** The pane's own "what next" after a cause. */
-const PANE_NEXT = " Trying again on its own.";
+const PANE_NEXT = ` ${previewWords.tryingAgain}`;
 /** A cause's sentence on the pane's card: its words, then the pane's next step. */
 const paneSays = (words: string) => `${words}${PANE_NEXT}`;
 /** The hub's words a 502 of its own carries (hub preview.ts `pingFailed`). */
@@ -606,9 +607,9 @@ const run = async (kit: Kit) => {
   );
   kit.check(
     "1: a refused first ping: the pane says it can't be reached and why",
-    refused.down.includes("This preview can't be reached") &&
+    refused.down.includes(previewWords.cantBeReached) &&
       refused.down.includes("The hub reaches") &&
-      refused.down.includes("Trying again on its own."),
+      refused.down.includes(previewWords.tryingAgain),
     refused.down
   );
   kit.check(
@@ -653,7 +654,7 @@ const run = async (kit: Kit) => {
   const nextSteps = hubSaid.line.match(NEXT_STEP)?.length ?? 0;
   kit.check(
     "2: its line says one next step, the pane's own: the hub's 502 carries the cause alone",
-    nextSteps === 1 && hubSaid.line.endsWith("Trying again on its own."),
+    nextSteps === 1 && hubSaid.line.endsWith(previewWords.tryingAgain),
     `${nextSteps} next steps: ${hubSaid.line}`
   );
   fleet.launch("agent");

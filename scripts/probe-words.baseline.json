@@ -20,8 +20,7 @@
     "Decision page:": 1
   },
   "scripts/probe-kit/journeys/j7-comments.ts": {
-    "Comments on": 1,
-    "Preview mode": 1
+    "Comments on": 1
   },
   "scripts/probe-kit/specs/account-join.ts": {
     "didn't answer": 1,
@@ -67,7 +66,6 @@
     "did not answer: nothing is listening on that port.": 2,
     "Handed to your parent, not opened": 2,
     "It wasn't handed to your parent.": 1,
-    "Nothing is running on port": 1,
     "only that session changes it": 3,
     "The server on port": 2,
     "This session has no artifact": 3,
@@ -101,7 +99,6 @@
   "scripts/probe-kit/specs/canvas-design.ts": {
     "does not exist": 1,
     "does not exist in": 1,
-    "isn't answering": 1,
     "No states file": 1,
     "Not drawn yet": 1,
     "The canvas draws it once its session writes it.": 1
@@ -425,9 +422,7 @@
   "scripts/probe-kit/specs/preview-reach.ts": {
     "listener didn't answer the hub": 1,
     "Previews need": 1,
-    "The hub reaches": 1,
-    "This preview can't be reached": 1,
-    "Trying again on its own.": 2
+    "The hub reaches": 1
   },
   "scripts/probe-kit/specs/preview-socket.ts": {
     "CawCo refused": 1,
@@ -597,18 +592,12 @@
   "scripts/probe-kit/specs/web/work-outlives.ts": {
     "Caw is off": 2,
     "Delete hook": 1,
-    "did not answer": 2,
     "did not run": 1,
     "didn't allow": 1,
-    "is not connected": 2,
-    "is not connected, so nothing was installed": 1,
-    "is ready": 1,
     "It stays a draft": 1,
-    "No new builds could be looked for": 1,
     "Start run": 2,
     "stays as it was": 1,
     "The turn was not stopped:": 1,
-    "was not installed": 2,
     "was not kept": 1,
     "was not shown": 1,
     "wasn't removed": 1,

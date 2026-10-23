@@ -8,6 +8,9 @@
  * `artifact_create` makes one. The outcome is read from the model: it is
  * asked with the comments notice and the person's words.
  */
+
+import { previewWords } from "../../../packages/core/src/words/preview";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import type { Seen } from "../../scratch-fleet";
 import { type KitFleet, pressAt } from "../kit";
 import { say } from "./mock";
@@ -19,7 +22,6 @@ import {
   shows,
   unmet,
 } from "./suite";
-import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 /** How the comments notice opens (core injected.ts `artifactCommentsNotice`). */
 const NOTICE = "[CawCo] The person commented on the page";
@@ -72,7 +74,7 @@ async function walk(leg: Leg): Promise<void> {
   // where a phone's head has no room for them, one button (`Mode: …`)
   // opening the three.
   const segment = page
-    .getByRole("tablist", { name: "Preview mode" })
+    .getByRole("tablist", { name: previewWords.previewMode })
     .getByRole("tab", { name: "Comment" })
     .filter({ visible: true });
   const modeButton = page

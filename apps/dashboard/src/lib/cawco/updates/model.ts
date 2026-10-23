@@ -3,6 +3,7 @@
  * the Update cell of a machine, the Running cell, the rail's count and the
  * one notice. Nothing here knows Svelte.
  */
+import { updatesWords } from "@cawco/core";
 import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
@@ -560,7 +561,7 @@ function refusedHere({ input, name }: Ctx): Notice | null {
     title:
       refusal.act === "cancel"
         ? `The install on ${name(lead)} was not called off`
-        : `CawCo ${v} was not installed on ${name(lead)}`,
+        : updatesWords.notInstalled(v, name(lead)),
     failed: true,
     lines: asked.map((m) => ({
       state: "plain",
@@ -699,7 +700,7 @@ function waitsForYou({ input, machines }: Ctx): Notice | null {
   return {
     acks: [readyId(waiting.length, v)],
     kind: 4,
-    title: `CawCo ${v} is ready`,
+    title: updatesWords.ready(v),
     failed: false,
     lines: [],
     notes: releaseNotes(state.notes),
@@ -726,7 +727,7 @@ function heldBack({ input, machines }: Ctx): Notice | null {
   return {
     acks: [readyId(held.length, v)],
     kind: 5,
-    title: `CawCo ${v} is ready`,
+    title: updatesWords.ready(v),
     failed: false,
     lines: [],
     notes: releaseNotes(state.notes),

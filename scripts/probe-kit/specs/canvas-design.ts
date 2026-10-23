@@ -136,6 +136,7 @@ import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
+import { shaped } from "../words";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
 /** The artifact's live doc on the dashboard's own origin (artifact-doc.ts `joinArtifact`). */
@@ -2896,7 +2897,7 @@ async function unreachedLeg(
   kit.check(
     `15: ${theme}: a canvas whose stage the hub's last read couldn't reach says so where the page would be: the machine isn't answering, since when and why, and Try again`,
     !!said &&
-      said.text.includes("isn't answering") &&
+      shaped(previewWords.machineNotAnswering).test(said.text) &&
       said.retry &&
       !!said.unreached?.startsWith("Not reached since ") &&
       said.unreached.endsWith(`: ${UNREACHED_WHY}`),

@@ -8,6 +8,16 @@ import { commonWords } from "./common";
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const previewWords = {
+  /** The pane's mode tabs (Preview, Comment, …), as a screen reader names them. */
+  previewMode: "Preview mode",
+  /** A preview the hub couldn't reach, and its line's end. */
+  cantBeReached: "This preview can't be reached",
+  tryingAgain: "Trying again on its own.",
+  /** Its machine, when the hub's last read couldn't reach it. */
+  machineNotAnswering: (machine: string) => `${machine} isn't answering`,
+  /** Its server is down: the port it listened on, and the way back from its session. */
+  nothingOnPort: (port: number) => `Nothing is running on port ${port}`,
+  startFromSession: "Start it again from its session, then try again.",
   /** A canvas's view menu, its motion choice and its check against the design system. */
   canvasView: "Canvas view",
   reducedMotion: "Reduced motion",

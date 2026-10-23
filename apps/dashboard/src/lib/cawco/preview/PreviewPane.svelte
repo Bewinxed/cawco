@@ -702,7 +702,7 @@
       case null:
         break;
     }
-    return `${ownerMachine} isn't answering`;
+    return previewWords.machineNotAnswering(ownerMachine);
   });
   /** Open its session, beside Try again, wherever this pane is not that session's own. */
   const offerSession = $derived(!!owner && (linkSession || ownTab));
@@ -3074,7 +3074,7 @@
       value={mode}
       values={["interact", "comment", "draw"]}
     >
-      <TabsList aria-label="Preview mode">
+      <TabsList aria-label={previewWords.previewMode}>
         <TabItem
           aria-keyshortcuts="V"
           glyphOnly
@@ -3403,10 +3403,10 @@
       role="alert"
       transition:appear
     >
-      <EmptyState icon={IconAlert} title="This preview can't be reached">
+      <EmptyState icon={IconAlert} title={previewWords.cantBeReached}>
         {#snippet line()}
           {unreachedBy?.said}
-          Trying again on its own.
+          {previewWords.tryingAgain}
         {/snippet}
         {#snippet action()}
           <div class="flex flex-wrap items-center gap-space-2">
@@ -3678,12 +3678,12 @@
             session there is back, try again.
           {:else if shownDown === "server"}
             {downPort
-              ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
+              ? `${previewWords.nothingOnPort(downPort)} on ${ownerMachine}, so the page can't load.`
               : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
             {#if served}
               CawCo starts it again by itself; try again in a moment.
             {:else if offerSession}
-              Start it again from its session, then try again.
+              {previewWords.startFromSession}
             {:else}
               Start it again, then try again.
             {/if}

@@ -1025,6 +1025,26 @@ public enum Words {
 
     public enum Preview {
         // packages/core/src/words/preview.ts `previewWords`
+        /// The pane's mode tabs (Preview, Comment, …), as a screen reader names them.
+        public static let previewMode = "Preview mode"
+
+        /// A preview the hub couldn't reach, and its line's end.
+        public static let cantBeReached = "This preview can't be reached"
+
+        public static let tryingAgain = "Trying again on its own."
+
+        /// Its machine, when the hub's last read couldn't reach it.
+        public static func machineNotAnswering(machine: String) -> String {
+            "\(machine) isn't answering"
+        }
+
+        /// Its server is down: the port it listened on, and the way back from its session.
+        public static func nothingOnPort(port: Int) -> String {
+            "Nothing is running on port \(port)"
+        }
+
+        public static let startFromSession = "Start it again from its session, then try again."
+
         /// A canvas's view menu, its motion choice and its check against the design system.
         public static let canvasView = "Canvas view"
 

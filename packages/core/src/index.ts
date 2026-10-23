@@ -2249,6 +2249,7 @@ export * from "./words/spawn";
 export * from "./words/spend";
 export * from "./words/tailnet";
 export * from "./words/transcript";
+export * from "./words/updates";
 export * from "./words/views";
 export * from "./words/work";
 export * from "./words/workspace-needs";

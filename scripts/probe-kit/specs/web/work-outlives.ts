@@ -57,6 +57,7 @@ import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { projectWords } from "../../../../packages/core/src/words/project";
 import { shellWords } from "../../../../packages/core/src/words/shell";
+import { updatesWords } from "../../../../packages/core/src/words/updates";
 import { MACHINE, type Seen } from "../../../scratch-fleet";
 import {
   type Engine,
@@ -66,6 +67,10 @@ import {
   settle,
   type View,
 } from "../../kit";
+import { shaped } from "../../words";
+
+/** What the stand-in release server's refusal says: the spec's own words, which the hub hands on. */
+const RELEASE_SILENT = "The release server did not answer";
 
 /** One run of every leg: an engine at a size. */
 interface Pass {
@@ -478,8 +483,8 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
   await panel();
   const ready = await until(
     async () =>
-      (await textOf(page, '[data-slot="update-card-card"]')).includes(
-        "is ready"
+      shaped(updatesWords.ready).test(
+        await textOf(page, '[data-slot="update-card-card"]')
       ),
     10_000
   );
@@ -494,13 +499,13 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
     .click();
   const notice = '[data-slot="update-card-card"]';
   const refusedHere = await until(
-    async () => (await textOf(page, notice)).includes("was not installed"),
+    async () => shaped(updatesWords.notInstalled).test(await textOf(page, notice)),
     10_000
   );
   const words = await textOf(page, notice);
   kit.check(
     "updates: Install now refused is said in Caw's panel, in words, with Retry",
-    refusedHere && words.includes("is not connected, so nothing was installed"),
+    refusedHere && shaped(updatesWords.notConnected).test(words),
     words
   );
   await reload(page);
@@ -508,14 +513,17 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
   const after = await textOf(page, notice);
   kit.check(
     "updates: after a reload Caw's panel says the refusal again",
-    after.includes("was not installed") && after.includes("is not connected"),
+    shaped(updatesWords.notInstalled).test(after) &&
+      shaped(updatesWords.notConnected).test(after),
     after
   );
   await page.goto(`${base}/config/updates`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(SHELL, { timeout: 60_000 });
   const row = await until(
     async () =>
-      (await textOf(page, "[data-row-fault]")).includes("is not connected"),
+      shaped(updatesWords.notConnected).test(
+        await textOf(page, "[data-row-fault]")
+      ),
     10_000
   );
   kit.check(
@@ -540,7 +548,7 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
       ? route.fulfill({
           status: 502,
           contentType: "application/json",
-          body: JSON.stringify({ error: "The release server did not answer" }),
+          body: JSON.stringify({ error: RELEASE_SILENT }),
         })
       : route.fallback()
   );
@@ -551,7 +559,7 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
   const told = await until(
     async () =>
       (await textOf(page, auto)).includes("locked") &&
-      (await textOf(page, checked)).includes("did not answer"),
+      (await textOf(page, checked)).includes(RELEASE_SILENT),
     10_000
   );
   kit.check(
@@ -561,7 +569,7 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
         "Automatic updates were not turned on"
       ) &&
       (await textOf(page, checked)).includes(
-        "No new builds could be looked for"
+        updatesWords.noNewBuilds(RELEASE_SILENT)
       ),
     JSON.stringify({
       auto: await textOf(page, auto),
@@ -572,7 +580,7 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
   kit.check(
     "updates: a reload keeps each setting's refusal under it",
     (await textOf(page, auto)).includes("locked") &&
-      (await textOf(page, checked)).includes("did not answer"),
+      (await textOf(page, checked)).includes(RELEASE_SILENT),
     JSON.stringify({
       auto: await textOf(page, auto),
       check: await textOf(page, checked),

@@ -4,7 +4,7 @@
  * nothing here polls it. This module does not import the client: callers pass
  * the machines in, so the client can call `loadPolicy` without a cycle.
  */
-import { machineLabel } from "@cawco/core";
+import { machineLabel, updatesWords } from "@cawco/core";
 import type {
   BinaryUpdateChannels,
   BinaryUpdatePolicy,
@@ -226,7 +226,7 @@ class Updates {
         ? await errorText(response)
         : "the hub did not answer";
       this.settingRefused.set("check", {
-        reason: `No new builds could be looked for: ${why}. Machines keep the build they run; Try again to check.`,
+        reason: updatesWords.noNewBuilds(why),
       });
       this.keep();
       return false;
@@ -266,7 +266,7 @@ class Updates {
     if (response.status === 404) {
       this.refuse(machineId, {
         act: "install",
-        reason: `${name} is not connected, so nothing was installed. Retry once it is back.`,
+        reason: updatesWords.notConnected(name),
       });
     } else if (response.status === 500) {
       this.refuse(machineId, {
