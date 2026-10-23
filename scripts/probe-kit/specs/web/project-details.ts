@@ -38,7 +38,8 @@
  *    large text): each column head's name, count and kind word, and each
  *    card's id, title and muted lines (its foot: to-dos and labels, the
  *    line its "attempt working" stands on), as computed, against the
- *    fills under them composited as the browser paints them.
+ *    fills under them composited as the browser paints them; and the same
+ *    card's once picked, on the selection wash in selected-ink.
  *    `PROJECT_DETAILS=ink` runs 7 alone.
  *
  *   bun scripts/probe-kit/run.ts web project-details
@@ -819,6 +820,27 @@ const inkLegs = async (kit: Kit, { url }: Setup) => {
         `${name} ${theme}: 7. the board's quiet words (column name, count, kind; card id, title, foot) each hold 4.5:1 on what they stand on`,
         read.every((one) => one !== null && one.ratio >= 4.5),
         JSON.stringify(read)
+      );
+      // Picked (its tick beside it): the card on selected-bg, its quiet words in selected-ink.
+      const item = page.locator(
+        '[data-slot="project-page"] li:has([data-task-card] [data-slot="foot"])'
+      );
+      await item.first().hover();
+      await item.first().locator("[data-task-column-pick]").click();
+      await page
+        .locator(
+          '[data-slot="project-page"] li[data-picked]:has([data-task-card] [data-slot="foot"])'
+        )
+        .waitFor();
+      await settle(page, 400);
+      const picked = (await readInk(page)).filter((one) =>
+        one?.what.startsWith("card")
+      );
+      kit.check(
+        `${name} ${theme}: 7. a picked card's quiet words (id, title, foot) each hold 4.5:1 on the selection wash`,
+        picked.length === 4 &&
+          picked.every((one) => one !== null && one.ratio >= 4.5),
+        JSON.stringify(picked)
       );
       await page.close();
     }

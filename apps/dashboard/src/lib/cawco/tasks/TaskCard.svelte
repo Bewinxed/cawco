@@ -130,11 +130,14 @@
   >
     <span
       data-slot="id"
-      class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle"
+      class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle group-data-picked/task:text-selected-ink"
       >{task.id}</span
     >
     {#if task.problem}
-      <span class="inline-flex text-ink-muted" title={task.problem}>
+      <span
+        class="inline-flex text-ink-muted group-data-picked/task:text-selected-ink"
+        title={task.problem}
+      >
         <IconWarningTriangle aria-hidden="true" class="size-icon-sm" />
         <span class="sr-only">{task.problem}</span>
       </span>
@@ -167,7 +170,7 @@
   {/if}
   {#if flags.live || task.kind === "you" || asks || approves || date}
     <span
-      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted"
+      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
     >
       {#if asks || approves}
         <!-- Waiting on you outranks working: the attempt is stopped on you. -->
@@ -198,7 +201,7 @@
   {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0}
     <span
       data-slot="foot"
-      class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
+      class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
     >
       {#if task.todos.total > 0}
         <span

@@ -165,18 +165,17 @@ const PAIRS: Pair[] = [
     floor: TEXT,
     source,
   })),
-  // A picked task card's quiet lines (TaskCard on selected-bg: its id in
-  // ink-subtle, its "attempt working" line and foot in ink-muted). The id
-  // measures under its floor in both schemes: ink-subtle is the weakest mix
-  // that holds on fill, hover and raised, not on the selection wash.
-  ...(["ink-muted", "ink-subtle"] as const).map((ink) => ({
-    label: `${ink} on selected-bg (a picked task card)`,
-    fg: ink,
+  // A picked task card's quiet words (TaskCard on selected-bg: its id, its
+  // problem glyph, its "attempt working" line and its foot) take
+  // selected-ink, as the open row's words do (The Row Dress Rule): ink-subtle
+  // measured 4.24 / 4.22:1 there, ink-muted 4.51 by day.
+  {
+    label: "selected-ink on selected-bg (a picked task card's quiet words)",
+    fg: "selected-ink",
     bg: ["selected-bg"],
     floor: TEXT,
-    source: ink === "ink-subtle" ? S.subtle : S.inks,
-    ...(ink === "ink-subtle" ? { known: { light: 4.24, dark: 4.22 } } : {}),
-  })),
+    source: "DESIGN.md The Row Dress Rule; TaskCard picked",
+  },
   // White on coral: the action, every gradient stop, hover, the chosen chip.
   ...(
     [
