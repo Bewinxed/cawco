@@ -395,7 +395,11 @@ import {
 import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
-import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
+import {
+  type FleetItems,
+  fleetItemsOf,
+  itemHash,
+} from "@cawco/core/fleet-items";
 import {
   type HandoverCommand,
   type HandoverEvent,
@@ -925,6 +929,14 @@ import { createWorkspaceRetire } from "./workspace-retire";
  * extension takes (core harness-config.ts): each field optional, `null`
  * clearing it. The row's own check is `harnessConfigProblem`.
  */
+/**
+ * How long a delegate's session in a new workspace waits for its machine to
+ * converge the project's rows placed there (work-items.ts `placeTaken`): a
+ * sync's npm install of a fleet MCP server, plugin or extension, with margin
+ * (mcp-install.ts gives one install 180 s; most places hold none).
+ */
+const PLACE_TAKEN_MS = 60_000;
+
 interface HarnessConfigBody {
   enabled?: boolean;
   module?: string | null;
@@ -22457,6 +22469,23 @@ export const createServer = (
     // and leaves a session to the send already on its way to it.
     inputRefusal,
     awaitsSend: (instanceId) => awaitsSend(instanceId),
+    placeTaken: async (machineId, placeId) => {
+      // Every item placed at the place, by its id's `@<place id>`, at the
+      // hash the machine is to hold it at.
+      const wanted = new Map(
+        [...machineFleetItems(machineId)]
+          .filter(([id]) => id.includes(`@${placeId}`))
+          .map(([id, value]) => [id, itemHash(value)])
+      );
+      if (wanted.size === 0) {
+        return;
+      }
+      if (!(await fleetSyncs.convergedAll(machineId, wanted, PLACE_TAKEN_MS))) {
+        console.warn(
+          `[fleet] ${machineName(machineId)} has not converged the ${wanted.size} row(s) placed at its new place ${placeId} within ${PLACE_TAKEN_MS / 1000} s: its first session starts without what it lacks, and takes what a harness reads live once it lands`
+        );
+      }
+    },
     // A send that wakes its session holds its finished item's workspace.
     sendWakes: (instanceId) => {
       const [row] = db.getInstancesByIds([instanceId]);
