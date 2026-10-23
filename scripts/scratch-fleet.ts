@@ -2435,9 +2435,17 @@ async function standUp(
       ws.removeEventListener("message", heard);
     }
   };
+  /**
+   * A read beside the running hub's own: read-only, and it waits for the
+   * hub's lock (busy_timeout) rather than failing on it. A hub started again
+   * after a kill holds its database through its start (r255:
+   * "SQLiteError: database is locked" at a read's prepare, as the restarted
+   * hub settled a launch).
+   */
   const query = <T>(sql: string, ...params: (string | number)[]): T[] => {
     const db = new Database(dbPath, { readonly: true });
     try {
+      db.exec("PRAGMA busy_timeout = 15000");
       return db.query(sql).all(...params) as T[];
     } finally {
       db.close();
