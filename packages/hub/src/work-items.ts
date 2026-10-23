@@ -5739,11 +5739,31 @@ export const createWorkItems = ({
     return (row?.workItemId && db.workItem(row.workItemId)?.origin) || "you";
   };
 
+  /**
+   * Whether a new item is background work (its `background`): a routine's
+   * run, or what a session starts in a turn an event woke while its own
+   * work is not an event's (Caw's routine turn). Work under a background
+   * item is that item's own tree, not background of its own.
+   */
+  const backgroundOf = (origin: WorkOrigin, parent: Parent): boolean => {
+    if (isRoutineParent(parent.id)) {
+      return true;
+    }
+    if (origin !== "event") {
+      return false;
+    }
+    const [row] = db.getInstancesByIds([parent.id]);
+    const own = row?.workItemId ? db.workItem(row.workItemId) : undefined;
+    return own?.origin !== "event";
+  };
+
   const placing = (request: WorkItemRequest, parent: Parent) => {
     const projectId = request.task?.projectId ?? parent.projectId;
     const project = projectId ? db.project(projectId) : undefined;
+    const origin = originOf(request, parent);
     return {
-      origin: originOf(request, parent),
+      origin,
+      background: backgroundOf(origin, parent),
       byPerson: request.byPerson ?? false,
       ...(request.task ? { taskId: request.task.id } : {}),
       ...(projectId ? { projectId } : {}),
