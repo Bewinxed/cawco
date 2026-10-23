@@ -132,8 +132,18 @@ const spec: Spec = {
       );
       return;
     }
-    const pulled = await podman(["pull", "-q", IMAGE]);
-    check("(c0) the probe's image is here", pulled.code === 0, pulled.out);
+    // Pulled only when missing: a pull of an image already here still asks
+    // its registry, and fails when the registry does not answer (r181: a TLS
+    // timeout to registry-1.docker.io, with the image in storage).
+    const here = async () => (await podman(["image", "exists", IMAGE])).code;
+    const pulled =
+      (await here()) === 0 ? undefined : await podman(["pull", "-q", IMAGE]);
+    const exists = await here();
+    check(
+      "(c0) the probe's image is here",
+      exists === 0,
+      `podman image exists ${IMAGE}: exit ${exists}${pulled ? `; podman pull exit ${pulled.code}: ${pulled.out}` : "; no pull needed"}`
+    );
     const fleet = await kit.fleet(respond);
     fleet.launch("sessiond");
     await fleet.sessiondUp();
