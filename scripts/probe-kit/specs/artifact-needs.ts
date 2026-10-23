@@ -1640,6 +1640,10 @@ const paneDraws = async (
  * (server.ts `reconcilePreviews` keeps each target and starts none). Then
  * each pane's next request (its frame navigated again, as a click would)
  * draws its page, no down page, and only then does a listener stand for it.
+ * Then the port pane is closed and the agent stopped again; the folder
+ * pane's next load lands on the proxy's down page. The machine reconnects
+ * and, with nothing done to it, the pane comes back by itself (PreviewPane's
+ * down probe), while the port preview nobody has on screen starts nothing.
  */
 const reconnectStartsNothing = async (
   at: At,
@@ -1745,10 +1749,64 @@ const reconnectStartsNothing = async (
       started.length >= 2,
     JSON.stringify({ after, started })
   );
-  for (const page of pages) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-    await page.close();
-  }
+
+  // The port pane closed: nobody has that preview on screen now. The
+  // folder pane's next load lands in the outage, on the proxy's down page.
+  const [folderPage, portPage] = pages;
+  await portPage?.close();
+  await fleet.stop("agent");
+  const folderFrame = folderPage ? await paneFrame(folderPage) : null;
+  await folderFrame
+    ?.goto(folderFrame.url(), { waitUntil: "load", timeout: 60_000 })
+    .catch(() => null);
+  const downDrawn = folderPage
+    ? await until(
+        "the folder pane on the down page",
+        () => paneDraws(folderPage),
+        (now) => now.down,
+        LANE_MS
+      ).catch(() => paneDraws(folderPage))
+    : null;
+  fleet.freeze("hub", true);
+  const again = fleet.launch("agent");
+  await Bun.sleep(8000);
+  const ownAgain = await heldBy(again.pid);
+  fleet.freeze("hub", false);
+  await fleet.agentUp();
+  // Nothing is done to the pane: it comes back by itself, or not at all.
+  const backByItself = folderPage
+    ? await until(
+        "the folder pane back by itself",
+        () => paneDraws(folderPage),
+        (now) => now.heading === "Folder pane" && !now.down,
+        90_000
+      ).catch(() => paneDraws(folderPage))
+    : null;
+  await Bun.sleep(3000);
+  const recovered = await heldBy(again.pid);
+  const startedAgain = recovered.listening.filter(
+    (one) => !ownAgain.listening.includes(one)
+  );
+  const processesAgain = recovered.processes.filter(
+    (one) => !ownAgain.processes.includes(one)
+  );
+  kit.check(
+    "a pane on the down page through the outage comes back by itself after the reconnect (its ping probed on a backoff, then a load), and the preview nobody has on screen starts nothing: one new listener, the folder pane's, and no process",
+    !!downDrawn?.down &&
+      backByItself?.heading === "Folder pane" &&
+      !backByItself.down &&
+      startedAgain.length === 1 &&
+      processesAgain.length === 0,
+    JSON.stringify({
+      downDrawn,
+      backByItself,
+      ownAgain,
+      recovered,
+      startedAgain,
+      processesAgain,
+    })
+  );
+  await folderPage?.close();
   await app.stop(true);
 };
 

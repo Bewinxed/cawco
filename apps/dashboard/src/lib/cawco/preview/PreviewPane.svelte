@@ -693,6 +693,60 @@
     downWhy = typeof message.why === "string" ? message.why : null;
     retrying = false;
   }
+  /*
+   * A down page comes back by itself: while the frame stands on the proxy's
+   * down page (any hop but `closed`, which only a show reopens) in a pane
+   * someone has on screen, the origin's ping is probed on the unreached
+   * state's backoff (`PROBE_FIRST_MS` doubling to `PROBE_MOST_MS`), and once
+   * it answers the frame loads again. Only a pane on screen asks, so a
+   * machine coming back starts a listener for the previews being looked at
+   * alone (the hub's register starts none). The tries count across the
+   * loads, so a hop that stays down is asked ever less often; a page that
+   * says it is ready starts the count again.
+   */
+  let downTries = 0;
+  /** Each one probes the down page's origin again: a probe that failed, waiting out its backoff. */
+  let downProbe = $state(0);
+  $effect(() => {
+    const hop = down;
+    const origin = paneOrigin;
+    const seen = inView && onScreen;
+    // biome-ignore lint/complexity/noVoid: read-only dependency — each bump probes again
+    void downProbe;
+    if (!(hop && hop !== "closed" && origin && seen)) {
+      return;
+    }
+    let live = true;
+    const timer = setTimeout(
+      () => {
+        downTries += 1;
+        probePreview(origin, (asked) =>
+          askHubReach(
+            `${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`
+          )
+        ).then((failed) => {
+          if (!live) {
+            return;
+          }
+          if (failed) {
+            downProbe += 1;
+            return;
+          }
+          reload += 1;
+        });
+      },
+      Math.min(PROBE_FIRST_MS * 2 ** downTries, PROBE_MOST_MS)
+    );
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  });
+  $effect(() => {
+    if (connected) {
+      downTries = 0;
+    }
+  });
   const owner = $derived(fleet.session(instanceId));
   const ownerMachine = $derived.by(() => {
     const machine = fleet.machines.find(
