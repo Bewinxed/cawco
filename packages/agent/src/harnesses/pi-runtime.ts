@@ -66,6 +66,7 @@ import type { BrowserDoor } from "../browser/door";
 import { callDelegationTool, delegationTools } from "../delegation";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
+import type { McpGate } from "../mcp-gate";
 import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { accountRuntime } from "./pi-accounts";
@@ -394,9 +395,12 @@ class FleetMcp {
   /** Each registered server's entry, as registered. */
   readonly #held = new Map<string, string>();
   readonly #cwd: string;
+  /** A workspace session's MCP gate, which its servers with a command go through ({@link piMcpServers}). */
+  readonly #gate: McpGate | undefined;
 
-  constructor(cwd: string) {
+  constructor(cwd: string, gate: McpGate | undefined) {
     this.#cwd = cwd;
+    this.#gate = gate;
   }
 
   /** The inline extension: holds pi's API and registers the session's first set. */
@@ -415,7 +419,11 @@ class FleetMcp {
     servers: Record<string, McpServerConfig>;
     skipped: Record<string, string>;
   }> {
-    return piMcpServers(fleetMcpAt(await readFleetMcpSet(), this.#cwd), door);
+    return piMcpServers(
+      fleetMcpAt(await readFleetMcpSet(), this.#cwd),
+      door,
+      this.#gate
+    );
   }
 
   /**
@@ -1389,7 +1397,7 @@ export async function startPiHost(
   // fenced session has none of them, and CawCo's extensions alone
   // ({@link cawcosExtensionsAlone}).
   const fenced = spec.fence === true;
-  const fleetMcp = fenced ? undefined : new FleetMcp(ctx.cwd);
+  const fleetMcp = fenced ? undefined : new FleetMcp(ctx.cwd, ctx.mcpGate);
   const mcp: ExtensionFactory[] = fleetMcp
     ? [
         createToolSearchExtension(),

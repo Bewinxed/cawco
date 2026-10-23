@@ -184,7 +184,7 @@ import { generateImage } from "./image-generation";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
 import { isMachineAgent } from "./machine-agent";
-import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
+import { type HostedConfig, hostedEntry, mcpGateOf, mcpHost } from "./mcp-host";
 import { retireInstalls, syncInstalls } from "./mcp-install";
 import { resolveMcpLauncher } from "./mcp-launcher";
 import { onFleetMcpMoved } from "./mcp-status";
@@ -3292,6 +3292,13 @@ export class SessionSupervisor {
     if (!processGeneration) {
       throw new Error("The hub did not supply this process's generation.");
     }
+    // A workspace session reaches its fleet servers through its workspace's
+    // gate (mcp-gate.ts), held while this process runs: the gate's own
+    // processes end with the last one that holds it.
+    const gateMember = `${instanceId}:${processGeneration}`;
+    if (bounded) {
+      mcpHost.joinGate(bounded.workspace, gateMember);
+    }
     this.#generations.set(instanceId, processGeneration);
     this.#placed.set(instanceId, {
       harness: adapter.kind,
@@ -3344,6 +3351,7 @@ export class SessionSupervisor {
       ...(sessionCredential ? { sessionCredential } : {}),
       ...(browser ? { browserDoor: browser } : {}),
       ...(containerEnv ? { containerEnv } : {}),
+      ...(bounded ? { mcpGate: mcpGateOf(bounded.workspace) } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,
@@ -3512,7 +3520,9 @@ export class SessionSupervisor {
       closed: () => {
         // A session outside any workspace browsed through a door of its own:
         // its pages close with its process, as its browser tool's Chromium did.
-        if (!bounded) {
+        if (bounded) {
+          mcpHost.leaveGate(bounded.workspace, gateMember);
+        } else {
           closeBrowserDoor(instanceId);
         }
         // A dead process is never going to answer anything it asked.

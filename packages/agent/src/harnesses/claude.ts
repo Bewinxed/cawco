@@ -191,6 +191,7 @@ import {
   completeAccountLogin,
   forgetAccount,
 } from "../login";
+import { throughMcpGate } from "../mcp-gate";
 import { CLAUDE_MCP_ENV } from "../mcp-status";
 import {
   homeLoginMovedInto,
@@ -1173,8 +1174,8 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
 
 /**
  * The CLI child's environment: the agent's own as a session gets it (core
- * `sessionEnvironment`), the spec's over it, a workspace session's temp root,
- * and the session's own identity.
+ * `sessionEnvironment`), the spec's over it, a workspace session's temp root
+ * and shell prefix, and the session's own identity.
  *
  * Claude in Chrome follows the session's mode, like every other tool. The
  * CLI's server-side gate `tengu_cowork_chrome_automode_default` (the
@@ -1204,7 +1205,16 @@ const sessionEnv = (
   // and a background task's output is `<root>/claude-<uid>/…/tasks/<id>.output`:
   // under the host's /tmp, which the boundary hides, the shell found "No such
   // file or directory" for every one (leaf 74ec1894, 2026-10-19).
-  ...(ctx.boundary ? { CLAUDE_CODE_TMPDIR: ctx.boundary.claudeTmp } : {}),
+  // And its shell prefix (boundary.ts `claudePrefixScript`): every shell
+  // command, shell-form hook and stdio MCP start of the CLI runs inside the
+  // boundary, after the CLI's permission rules have judged the command as
+  // the model wrote it.
+  ...(ctx.boundary
+    ? {
+        CLAUDE_CODE_TMPDIR: ctx.boundary.claudeTmp,
+        CLAUDE_CODE_SHELL_PREFIX: ctx.boundary.prefix,
+      }
+    : {}),
   // The session's git reaches the hub's remote as this session (git-credential.ts).
   ...sessionGitEnv({ ...process.env, ...specEnv }),
   // Its container runtimes through its own doors (session-containers.ts):
@@ -1647,15 +1657,24 @@ const withInstructions = (
  * its own. A session whose door could not be made loads no chrome-devtools,
  * and `denied` denies its tools: chrome-devtools-mcp reaches for a browser
  * only at a tool's call.
+ *
+ * A workspace session loads no server with a command: its CLI starts every
+ * process through its shell prefix, inside the boundary, where no fleet
+ * server reaches its install, its door or the owner's machines. Each comes
+ * through its workspace's gate on the agent's gateway instead
+ * (`ctx.mcpGate`, mcp-gate.ts), which runs it on the host and makes the
+ * door itself. A project's own `.mcp.json` servers still start through the
+ * prefix, inside.
  */
 const fleetMcpFor = async (
   ctx: HarnessContext,
   workdir: string
 ): Promise<{ denied: string[]; servers: Record<string, McpServerConfig> }> => {
-  const { [CHROME_DEVTOOLS]: browser, ...servers } = fleetMcpAt(
-    await readFleetMcpSet(),
-    workdir
-  );
+  const all = fleetMcpAt(await readFleetMcpSet(), workdir);
+  if (ctx.mcpGate) {
+    return { servers: throughMcpGate(all, ctx.mcpGate), denied: [] };
+  }
+  const { [CHROME_DEVTOOLS]: browser, ...servers } = all;
   if (!(browser && "command" in browser)) {
     return {
       servers: browser ? { ...servers, [CHROME_DEVTOOLS]: browser } : servers,
@@ -2186,7 +2205,8 @@ class ClaudeSession implements HarnessSession {
         cwd: workdir,
         includePartialMessages: true,
         // A work item's session runs every shell command inside its
-        // workspace's boundary: a hook the CLI itself runs rewrites each one.
+        // workspace's boundary, through its shell prefix (`sessionEnv`); the
+        // hook the CLI itself runs judges every other call's paths.
         ...sessionSettingsOptions(ctx.boundary, lead, fence),
         ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and

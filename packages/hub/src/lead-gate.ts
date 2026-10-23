@@ -62,7 +62,6 @@ import {
   type PermissionRequestFrame,
   type PermissionResult,
   type ThreadNote,
-  unboundedCommand,
 } from "@cawco/core";
 import type { DbShape, LeadCallRow } from "./db";
 import type { CawEdits } from "./gate-file";
@@ -1309,9 +1308,8 @@ export const createLeadGate = ({
   const describe = (lead: InstanceRow, ask: PermissionRequestFrame): Call => {
     const kind = kindOf(ask.toolName);
     if (kind === "shell") {
-      const command = unboundedCommand(
-        typeof ask.input.command === "string" ? ask.input.command : ""
-      );
+      const command =
+        typeof ask.input.command === "string" ? ask.input.command : "";
       return {
         kind,
         command,

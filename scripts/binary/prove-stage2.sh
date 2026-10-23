@@ -2673,8 +2673,8 @@ ws_cannot_read() {
   done
 }
 # Hands a shell call to the workspace's hook every second, as a work item's claude session does before each Bash
-# call, and runs the command the hook rewrote it to (stage2-hook-calls.ts), until ws_hook_calls_stop; one line per
-# call in $rigdir/ws-hook-calls.txt.
+# call, and runs it through the workspace's shell prefix as the CLI then does (stage2-hook-calls.ts), until
+# ws_hook_calls_stop; one line per call in $rigdir/ws-hook-calls.txt.
 ws_hook_calls_start() {
   as_user "$joinerc" rm -f /tmp/ws-hook-calls.stop
   # The caller's own words only: the check's trace is off in the subshell (see update_outcomes_start's sender).

@@ -66,6 +66,15 @@
  * - Xcode's `mcpbridge` can be: Xcode keeps the state, each tool names its
  *   window by `tabIdentifier`, and "Permission dialog appears per-process"
  *   (https://github.com/ndrblinov/xcode-mcp-manager), so one process asks once.
+ *
+ * A workspace's sessions reach every other fleet server with a command
+ * through its gate (mcp-gate.ts, `/mcp/gate/<gate id>/<name>`), answered
+ * here the same way: one process per gate and server, started at its first
+ * call in the workspace's own folder, chrome-devtools through the
+ * workspace's browser door with its scratch and folder as its roots
+ * ({@link gateLaunch}). So the process is the gate's alone, as chrome-devtools
+ * needs, and runs outside the boundary its sessions' own processes run in.
+ * It ends with the gate's last session ({@link McpHost.leaveGate}).
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -73,15 +82,31 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { FleetMcpConfig } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
-import { cawcoDataDir, sessionIdentityDir } from "@cawco/core/paths";
+import {
+  cawcoDataDir,
+  sessionIdentityDir,
+  workspaceScratchDir,
+} from "@cawco/core/paths";
 import { processStart } from "@cawco/core/process-identity";
 import { identifiedPid, signal as sendSignal } from "@cawco/core/signal";
 import { writeStateFileSync } from "@cawco/core/state-file";
+import { harnessMcpUrl } from "./delegation";
+import { fleetMcpAt, readFleetMcpSet } from "./fleet-mcp-set";
+import { gatePath, type McpGate } from "./mcp-gate";
 import { MCP_CONNECT_MS } from "./mcp-status";
 import { toolEnv } from "./tools";
+import { workspacePath } from "./workspace-records";
 
-/** A shared server's config: a command this agent starts. */
+/** A hosted server's config: a command this agent starts. */
 export type HostedConfig = Extract<FleetMcpConfig, { command: string }>;
+
+/** How a hosted server's process starts: its command line, environment and working directory. */
+interface Launch {
+  readonly args: readonly string[];
+  readonly command: string;
+  readonly cwd: string;
+  readonly env: Record<string, string | undefined>;
+}
 
 /** The path a harness dials a shared server on, under the gateway. */
 export const HOSTED_PATH = /^\/mcp\/local\/([^/]+)$/;
@@ -159,6 +184,11 @@ interface Kept {
 const hostDir = (): string => join(cawcoDataDir(), "mcp-host");
 const keptFile = (name: string): string =>
   join(hostDir(), `${encodeURIComponent(name)}.json`);
+/** A gate id as a workspace's is written: a word of its state dir's name, never a path. */
+const GATE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+/** A gate's server's listing, by its config's key: every gate on that config lists the same. */
+const gateKeptFile = (configKey: string): string =>
+  join(hostDir(), `gate-${configKey}.json`);
 const startedFile = (): string => join(hostDir(), "started.json");
 /** The shared servers the last fleet sync named, each with its command ({@link McpHost.restore}). */
 const sharedFile = (): string => join(hostDir(), "shared.json");
@@ -169,17 +199,22 @@ const keyOf = (config: HostedConfig): string =>
 
 let key: string | undefined;
 
+/** Where {@link hostKey} is kept: OpenCode's plugin reads it there for its workspace locations' gates. */
+export const hostKeyFile = (): string =>
+  join(sessionIdentityDir(), "mcp-host.key");
+
 /**
  * This machine's host key: what a harness's config carries to call a shared
- * server, kept owner-only beside the sessions' credentials (core paths.ts
- * `sessionIdentityDir`), hidden from every workspace boundary. Made once per
- * boot of that directory; the next fleet sync writes it into every config.
+ * server or a gate's, kept owner-only beside the sessions' credentials (core
+ * paths.ts `sessionIdentityDir`), hidden from every workspace boundary. Made
+ * once per boot of that directory; the next fleet sync writes it into every
+ * config.
  */
 export const hostKey = (): string => {
   if (key) {
     return key;
   }
-  const file = join(sessionIdentityDir(), "mcp-host.key");
+  const file = hostKeyFile();
   try {
     key = readFileSync(file, "utf8").trim() || undefined;
   } catch {
@@ -206,6 +241,12 @@ export const hostedEntry = (
 ): Extract<FleetMcpConfig, { url: string }> => ({
   type: "http",
   url,
+  headers: { Authorization: `Bearer ${hostKey()}` },
+});
+
+/** Gate `gateId` (a workspace's id), as its sessions' harnesses dial it ({@link McpHost.fetchGate}). */
+export const mcpGateOf = (gateId: string): McpGate => ({
+  base: harnessMcpUrl(gatePath(gateId)),
   headers: { Authorization: `Bearer ${hostKey()}` },
 });
 
@@ -241,14 +282,14 @@ class Child {
 
   constructor(
     name: string,
-    config: HostedConfig,
+    launch: Launch,
     cause: string,
     changed: (method: string) => void
   ) {
     this.#changed = changed;
-    this.#proc = Bun.spawn([config.command, ...(config.args ?? [])], {
-      cwd: homedir(),
-      env: { ...toolEnv(), ...config.env },
+    this.#proc = Bun.spawn([launch.command, ...launch.args], {
+      cwd: launch.cwd,
+      env: launch.env,
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
@@ -282,7 +323,7 @@ class Child {
       this.#pending.clear();
     });
     console.info(
-      `[mcp-host] ${name}: started pid ${pid} for ${cause}: ${config.command} ${(config.args ?? []).join(" ")}`
+      `[mcp-host] ${name}: started pid ${pid} for ${cause}: ${launch.command} ${launch.args.join(" ")}`
     );
   }
 
@@ -344,7 +385,7 @@ class Child {
         : rpcError(
             message.id,
             METHOD_NOT_FOUND,
-            `${message.method} is not offered: this server is shared by every session on the machine, and the host that runs it names no client capability.`
+            `${message.method} is not offered: the host that runs this server for CawCo's sessions names no client capability.`
           )
     );
   }
@@ -437,22 +478,69 @@ const failed = (name: string, what: string, message: Message): Error =>
     `The ${name} MCP server refused ${what}: ${JSON.stringify(message.error)}`
   );
 
-/** One shared server: its config, what it said last, and its process once a call needs it. */
+/** A shared server's launch: its config's command, from the agent's home. */
+const sharedLaunch = (config: HostedConfig): Launch => ({
+  command: config.command,
+  args: config.args ?? [],
+  cwd: homedir(),
+  env: { ...toolEnv(), ...config.env },
+});
+
+/**
+ * A gate's server's launch: its config's command in the workspace's folder
+ * `path`, and chrome-devtools through the workspace's browser door (made
+ * here, starting no browser), with the workspace's scratch and folder as
+ * the roots it saves a capture in, as OpenCode's plugin launched it.
+ */
+const gateLaunch = async (
+  gateId: string,
+  name: string,
+  config: HostedConfig,
+  path: string
+): Promise<Launch> => {
+  const door = await import("./browser/door");
+  const args =
+    name === door.CHROME_DEVTOOLS
+      ? [
+          ...door.throughGate(
+            config.args ?? [],
+            await door.browserDoor(gateId)
+          ),
+          `--filesystem-root=${workspaceScratchDir(gateId)}`,
+          `--filesystem-root=${path}`,
+        ]
+      : (config.args ?? []);
+  return {
+    command: config.command,
+    args,
+    cwd: path,
+    env: { ...toolEnv(), ...config.env },
+  };
+};
+
+/** One hosted server: its config, what it said last, and its process once a call needs it. */
 class Hosted {
   readonly name: string;
-  readonly config: HostedConfig;
   readonly key: string;
+  readonly #keptFile: string;
+  readonly #launch: () => Launch | Promise<Launch>;
   #kept: Kept | undefined;
   #child: Promise<Child> | undefined;
   #running: Child | undefined;
 
-  constructor(name: string, config: HostedConfig) {
+  constructor(
+    name: string,
+    config: HostedConfig,
+    kept: string,
+    launch: () => Launch | Promise<Launch>
+  ) {
     this.name = name;
-    this.config = config;
     this.key = keyOf(config);
+    this.#keptFile = kept;
+    this.#launch = launch;
     try {
-      const kept = JSON.parse(readFileSync(keptFile(name), "utf8")) as Kept;
-      this.#kept = kept.key === this.key ? kept : undefined;
+      const read = JSON.parse(readFileSync(kept, "utf8")) as Kept;
+      this.#kept = read.key === this.key ? read : undefined;
     } catch {
       // Nothing kept: its first handshake starts it.
     }
@@ -480,7 +568,8 @@ class Hosted {
   }
 
   async #start(cause: string): Promise<Child> {
-    const child = new Child(this.name, this.config, cause, (method) => {
+    const launch = await this.#launch();
+    const child = new Child(this.name, launch, cause, (method) => {
       this.#list(child, CHANGED[method] ?? []).catch((error: unknown) =>
         console.warn(`[mcp-host] ${this.name}: listing again failed: ${error}`)
       );
@@ -539,7 +628,7 @@ class Hosted {
       }
     }
     mkdirSync(hostDir(), { recursive: true });
-    writeStateFileSync(keptFile(this.name), JSON.stringify(kept));
+    writeStateFileSync(this.#keptFile, JSON.stringify(kept));
   }
 
   /** Every item of one list method, page after page as its cursor names them. */
@@ -568,7 +657,7 @@ class Hosted {
     return all;
   }
 
-  /** Its process ended: a config changed, it is no longer shared, or the agent ends. */
+  /** Its process ended: a config changed, it is no longer shared, its gate's last session ended, or the agent ends. */
   stop(): void {
     this.#running?.stop();
     this.#running = undefined;
@@ -621,7 +710,7 @@ class Hosted {
       return rpcError(
         id,
         METHOD_NOT_FOUND,
-        `${method} is not offered: ${this.name} is shared by every session on the machine, through a host that speaks MCP ${PROTOCOL_VERSION}.`
+        `${method} is not offered: ${this.name} reaches CawCo's sessions through a host that speaks MCP ${PROTOCOL_VERSION}.`
       );
     }
     const child = await this.child(`a session's ${method}`);
@@ -735,8 +824,51 @@ export class McpHost {
     }
     for (const [name, config] of wanted) {
       if (!this.#servers.has(name)) {
-        this.#servers.set(name, new Hosted(name, config));
+        this.#servers.set(
+          name,
+          new Hosted(name, config, keptFile(name), () => sharedLaunch(config))
+        );
       }
+    }
+  }
+
+  /** Each gate's servers, by gate id, with the sessions that hold it ({@link joinGate}). */
+  readonly #gates = new Map<
+    string,
+    { readonly members: Set<string>; readonly servers: Map<string, Hosted> }
+  >();
+
+  #gate(gateId: string) {
+    let gate = this.#gates.get(gateId);
+    if (!gate) {
+      gate = { members: new Set(), servers: new Map() };
+      this.#gates.set(gateId, gate);
+    }
+    return gate;
+  }
+
+  /** A session's process (`member`, its instance and generation) holds gate `gateId` from now. */
+  joinGate(gateId: string, member: string): void {
+    this.#gate(gateId).members.add(member);
+  }
+
+  /**
+   * A session's process no longer holds gate `gateId`: with the last one, the
+   * gate's processes end. A later call starts them again.
+   */
+  leaveGate(gateId: string, member: string): void {
+    const gate = this.#gates.get(gateId);
+    if (!gate?.members.delete(member) || gate.members.size > 0) {
+      return;
+    }
+    for (const hosted of gate.servers.values()) {
+      hosted.stop();
+    }
+    this.#gates.delete(gateId);
+    if (gate.servers.size > 0) {
+      console.info(
+        `[mcp-host] ${gateId}: its gate's last session ended, and its servers with it`
+      );
     }
   }
 
@@ -744,6 +876,11 @@ export class McpHost {
   stopAll(): void {
     for (const hosted of this.#servers.values()) {
       hosted.stop();
+    }
+    for (const gate of this.#gates.values()) {
+      for (const hosted of gate.servers.values()) {
+        hosted.stop();
+      }
     }
   }
 
@@ -791,35 +928,85 @@ export class McpHost {
         { status: 404 }
       );
     }
-    if (request.method !== "POST") {
-      // No stream to hold open, and no session to end.
-      return new Response(null, { status: 405, headers: { Allow: "POST" } });
+    return await serve(hosted, request);
+  }
+
+  /**
+   * One harness request on `/mcp/gate/<gate id>/<name>` (mcp-gate.ts): the
+   * fleet's server `name` with a command, as the fleet's latest sync names it
+   * for the gate's workspace's folder (placed copies too), served as a shared
+   * one is, by its own process for this gate. A config that changed since
+   * its process started ends it; the next call starts the new one.
+   */
+  async fetchGate(
+    gateId: string,
+    name: string,
+    request: Request
+  ): Promise<Response> {
+    if (!carriesKey(request.headers.get("Authorization"))) {
+      return new Response(
+        "This workspace's MCP gate answers only a harness this agent configured.",
+        { status: 401 }
+      );
     }
-    const read = messagesOf(await request.text());
-    if ("error" in read) {
-      return Response.json(read.error, { status: 400 });
+    const id = decodeURIComponent(gateId);
+    const server = decodeURIComponent(name);
+    const path = GATE_ID.test(id) ? await workspacePath(id) : undefined;
+    if (!path) {
+      return new Response(`${id} is not a workspace on this machine.`, {
+        status: 404,
+      });
     }
-    const answers = (
-      await Promise.all(
-        read.messages.map((message) =>
-          hosted
-            .answer(message, request.signal)
-            .catch((error: unknown): Message =>
-              rpcError(
-                message.id,
-                SERVER_ERROR,
-                error instanceof Error ? error.message : String(error)
-              )
-            )
-        )
-      )
-    ).filter((answer): answer is Message => answer !== undefined);
-    if (answers.length === 0) {
-      return new Response(null, { status: 202 });
+    const config = fleetMcpAt(await readFleetMcpSet(), path)[server];
+    if (!(config && "command" in config)) {
+      return new Response(
+        `${server} is not a fleet MCP server this machine runs for ${id}.`,
+        { status: 404 }
+      );
     }
-    return Response.json(read.batch ? answers : answers[0]);
+    const gate = this.#gate(id);
+    let hosted = gate.servers.get(server);
+    if (hosted?.key !== keyOf(config)) {
+      hosted?.stop();
+      hosted = new Hosted(server, config, gateKeptFile(keyOf(config)), () =>
+        gateLaunch(id, server, config, path)
+      );
+      gate.servers.set(server, hosted);
+    }
+    return await serve(hosted, request);
   }
 }
+
+/** One harness request to `hosted` (Streamable HTTP, answered as JSON with no session). */
+const serve = async (hosted: Hosted, request: Request): Promise<Response> => {
+  if (request.method !== "POST") {
+    // No stream to hold open, and no session to end.
+    return new Response(null, { status: 405, headers: { Allow: "POST" } });
+  }
+  const read = messagesOf(await request.text());
+  if ("error" in read) {
+    return Response.json(read.error, { status: 400 });
+  }
+  const answers = (
+    await Promise.all(
+      read.messages.map((message) =>
+        hosted
+          .answer(message, request.signal)
+          .catch((error: unknown): Message =>
+            rpcError(
+              message.id,
+              SERVER_ERROR,
+              error instanceof Error ? error.message : String(error)
+            )
+          )
+      )
+    )
+  ).filter((answer): answer is Message => answer !== undefined);
+  if (answers.length === 0) {
+    return new Response(null, { status: 202 });
+  }
+  return Response.json(read.batch ? answers : answers[0]);
+};
 
 /** This agent's one host, served by its gateway. */
 export const mcpHost = new McpHost();

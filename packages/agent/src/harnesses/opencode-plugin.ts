@@ -48,9 +48,12 @@
  *   tool` and git), and none gets the server's password or CawCo's wiring.
  *   The hook names no session, so the session is the one whose `shell` call
  *   with this very command was just made in this location.
- * - `ctx.mcp.transform`: the project MCP servers CawCo placed, the
- *   workspace's scratch as a root of its chrome-devtools, and every local
- *   server started on the machine's own data dir.
+ * - `ctx.mcp.transform`: the project MCP servers CawCo placed; in a
+ *   workspace's location every fleet server with a command reached through
+ *   the workspace's MCP gate on the agent (mcp-gate.ts), which runs it on
+ *   the host, chrome-devtools through the workspace's browser door, as the
+ *   workspace's Claude Code and pi sessions reach them; and every other
+ *   local server started on the machine's own data dir.
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -59,6 +62,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { CAWCO_ENV, CODE_MODE_TOOL } from "@cawco/core";
 import {
+  fleetMcpSetFile,
   SPILLS_DIR_NAME,
   WORKSPACE_POLICY_NAME,
   workspacesDir,
@@ -67,12 +71,10 @@ import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary";
-import {
-  BROWSER_ARG,
-  CHROME_DEVTOOLS,
-  GATE_CONFIG_NAME,
-} from "../browser/door";
+import { CHROME_DEVTOOLS } from "../browser/door";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
+import { GATE_PREFIX } from "../mcp-gate";
+import { hostKeyFile } from "../mcp-host";
 import { readJson, writeJson } from "./fleet-common";
 import { CAWCO_PLUGIN_ID } from "./opencode-client";
 import { opencodeCredentialFile } from "./opencode-credentials";
@@ -147,8 +149,11 @@ const cawcoQuiet = ${JSON.stringify(OPENCODE_QUIET_DIR)};
 const machineData = ${JSON.stringify(machineDataHome())};
 const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
 const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
-// chrome-devtools-mcp's arguments that pick a browser or a config: the door picks both.
-const browserArg = ${BROWSER_ARG.toString()};
+// The fleet's servers as the agent's last sync wrote them (its fleet-mcp-set.ts),
+// and the host key its gateway's hosted servers answer to (its mcp-host.ts).
+const cawcoFleetMcp = ${JSON.stringify(fleetMcpSetFile())};
+const cawcoHostKey = ${JSON.stringify(hostKeyFile())};
+const gatePrefix = ${JSON.stringify(GATE_PREFIX)};
 // Where this server saves a tool output it cuts (its own data dir's
 // \`opencode/tool-output\`, observed on 2.0.28): every session's, which the
 // judge denies each workspace session.
@@ -398,6 +403,18 @@ const boundedShell = (id, root, directory, bounded, host, permission) => ({
   },
 });
 
+// The names of the fleet's servers, its own and every project's placed copy:
+// in a workspace's location each one with a command goes through the
+// workspace's MCP gate. None when the set cannot be read.
+const fleetNames = () => {
+  let set = {};
+  try { set = JSON.parse(readFileSync(cawcoFleetMcp, "utf8")); } catch { return new Set(); }
+  return new Set([...Object.keys(set.servers ?? {}), ...Object.values(set.placed ?? {}).map((row) => row.name)]);
+};
+// The host key, or none when the agent has made none yet: then no fleet
+// server with a command is reached in a workspace's location.
+const hostKey = () => { try { return readFileSync(cawcoHostKey, "utf8").trim() || undefined; } catch { return undefined; } };
+
 // The project MCP servers CawCo placed at the deepest place holding
 // \`directory\`, real paths on whole path segments, set where the location's
 // config names no server by that name.
@@ -423,7 +440,6 @@ export default {
     // A session anywhere inside a workspace's clone is that workspace's.
     const holding = workspaceOf(directory);
     const workspace = holding?.id;
-    const state = workspace ? cawcoWorkspaces + "/" + workspace : undefined;
     // In a place, a session is bounded by it only when the agent put it
     // there (its spawn named the place: the workspace its record names), or
     // before the agent has recorded it at all, never unbounded on a guess.
@@ -509,15 +525,6 @@ export default {
       if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, inPlace ? editor.get("shell")?.execute : undefined, ctx.permission));
     });
 
-    // The workspace's scratch is a root of its chrome-devtools (and its clone:
-    // in a directory inside it, roots/list names that directory alone).
-    const roots = state ? JSON.parse(readFileSync(state + "/" + ${JSON.stringify(WORKSPACE_POLICY_NAME)}, "utf8")) : undefined;
-    // Its chrome-devtools reaches the project's browser through the
-    // workspace's door alone (the agent's browser/door.ts, made as its
-    // session spawned): a location with none launches no browser tool.
-    // Its config file names the gate and the token, so neither is on the
-    // server's command line, which every local user can read.
-    const door = state && existsSync(state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)}) ? state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)} : undefined;
     await ctx.mcp.transform((editor) => {
       // Servers kept from a location are removed: 2.0.29 starts one set
       // \`enabled = false\` (2026-10-22, a stdio fixture writing its pid; v2's
@@ -531,18 +538,34 @@ export default {
         return;
       }
       placeMcp(editor, directory);
-      if (!door && editor.get(${JSON.stringify(CHROME_DEVTOOLS)})?.type === "local") {
-        editor.remove(${JSON.stringify(CHROME_DEVTOOLS)});
-      }
-      for (const [name, config] of editor.list()) {
+      // In a workspace's location the agent runs each fleet server with a
+      // command, on the host, one process for the workspace, chrome-devtools
+      // through its browser door (the agent's mcp-host.ts): the location
+      // dials its gate, and starts none of them itself. A location in no
+      // workspace has no door, so it launches no browser tool.
+      const gated = workspace ? fleetNames() : new Set();
+      const key = workspace ? hostKey() : undefined;
+      for (const [name, config] of [...editor.list()]) {
         if (config.type !== "local") continue;
+        if (gated.has(name)) {
+          editor.remove(name);
+          if (key) {
+            editor.set(name, {
+              type: "remote",
+              url: cawcoBase + gatePrefix + encodeURIComponent(workspace) + "/" + encodeURIComponent(name),
+              oauth: false,
+              ...(config.timeout ? { timeout: config.timeout } : {}),
+              headers: { Authorization: "Bearer " + key },
+            });
+          }
+          continue;
+        }
+        if (name === ${JSON.stringify(CHROME_DEVTOOLS)}) {
+          editor.remove(name);
+          continue;
+        }
         editor.update(name, (server) => {
           server.environment = { ...(server.environment ?? {}), XDG_DATA_HOME: machineData };
-          if (name !== ${JSON.stringify(CHROME_DEVTOOLS)}) return;
-          server.command = [...server.command.filter((arg) => !browserArg.test(arg)), "--config=" + door];
-          if (typeof roots?.scratch === "string" && typeof roots?.clone === "string") {
-            server.command = [...server.command, "--filesystem-root=" + roots.scratch, "--filesystem-root=" + roots.clone];
-          }
         });
       }
     });

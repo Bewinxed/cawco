@@ -43,6 +43,9 @@ function start(
     instanceId: command.spec.instanceId,
     cwd: command.spec.cwd,
     ...(command.boundary ? { boundary: command.boundary } : {}),
+    // Its workspace's MCP gate, which its agent named: its fleet servers
+    // with a command go through it.
+    ...(command.mcpGate ? { mcpGate: command.mcpGate } : {}),
     // The door its agent made: the host makes none of its own.
     ...(command.door
       ? { browserDoor: () => Promise.resolve(command.door as BrowserDoor) }

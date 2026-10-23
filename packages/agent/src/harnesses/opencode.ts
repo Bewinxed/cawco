@@ -468,15 +468,16 @@ const fleetDigest = (config: Record<string, unknown>): string => {
 
 /**
  * What a status read says of chrome-devtools without reading it. OpenCode
- * runs it only in a workspace's location, through that workspace's browser
- * door; the plugin removes it from every other location, as Claude Code and
- * pi load none without a door. The read runs in the machine server's own
- * location, which no door opens on, so it holds none to read.
+ * reaches it only in a workspace's location, through that workspace's MCP
+ * gate, which runs it through the workspace's browser door; the plugin
+ * removes it from every other location, as Claude Code and pi load none
+ * without a door. The read runs in the machine server's own location, which
+ * no gate opens on, so it holds none to read.
  */
 const DOOR_ONLY: FleetItemState = {
   state: "applied",
   detail:
-    "OpenCode starts it only in a workspace's location, through that workspace's browser door.",
+    "OpenCode reaches it only in a workspace's location, through that workspace's MCP gate.",
 };
 
 /**
@@ -4752,19 +4753,6 @@ export class OpencodeHarness implements Harness {
       await (account === undefined
         ? this.#ensure(true)
         : this.#ensureAccount(account, true));
-    }
-    // Its workspace's browser door, before the location boots: OpenCode's
-    // MCP servers are its location's, so a workspace's location launches its
-    // chrome-devtools through the workspace's door (the plugin reads it), and
-    // a location in no workspace launches none.
-    if (ctx.boundary && ctx.browserDoor) {
-      await ctx
-        .browserDoor()
-        .catch((error: unknown) =>
-          console.warn(
-            `[opencode] ${ctx.instanceId}: its workspace's browser door could not be made, so its location launches no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
     }
     if (spec.resume && !spec.resume.fork) {
       const recovered = await this.reattach(spec, ctx);

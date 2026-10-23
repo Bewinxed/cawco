@@ -50,8 +50,8 @@ import {
  */
 export const CHROME_DEVTOOLS = "chrome-devtools";
 
-/** The name of a gate id's chrome-devtools-mcp config in its state dir: OpenCode's plugin names it for a workspace's location. */
-export const GATE_CONFIG_NAME = "browser-mcp.json";
+/** The name of a gate id's chrome-devtools-mcp config in its state dir. */
+const GATE_CONFIG_NAME = "browser-mcp.json";
 
 /** What a session's browser tool is launched with: its config file. */
 export interface BrowserDoor {
@@ -214,7 +214,7 @@ const sweepDoors = async (
 };
 
 /** chrome-devtools-mcp's arguments that pick a browser or a config: the door picks both now. */
-export const BROWSER_ARG =
+const BROWSER_ARG =
   /^--(?:config|wsEndpoint|wsHeaders|browserUrl|browser-url|executable[Pp]ath|channel|isolated|userDataDir|user-data-dir|headless|autoConnect|auto-connect)(?:=|$)/;
 
 /** A chrome-devtools-mcp command line's arguments through `door`, whatever browser they named before. */

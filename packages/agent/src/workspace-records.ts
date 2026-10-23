@@ -71,6 +71,14 @@ const pathOf = async (
   return damage;
 };
 
+/** Workspace `id`'s folder, by its records; none when no record names one. */
+export const workspacePath = async (
+  id: string
+): Promise<string | undefined> => {
+  const path = await pathOf(id);
+  return typeof path === "string" ? path : undefined;
+};
+
 const scan = async (): Promise<Scan> => {
   const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
   const found = await Promise.all(

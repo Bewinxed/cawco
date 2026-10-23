@@ -7,6 +7,7 @@ import {
 import { portHolder } from "@cawco/core/live-processes";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
+import { GATE_PATH } from "./mcp-gate";
 import { HOSTED_PATH, mcpHost } from "./mcp-host";
 import {
   fenced,
@@ -413,14 +414,19 @@ const accountRoute = (
 };
 
 /**
- * A shared fleet server's request (mcp-host.ts), from loopback only and never
- * from a page. A tool call on it holds a restart as a call on any fleet
- * server does: the restart would end the process answering it.
+ * A hosted fleet server's request (mcp-host.ts), a shared one's or a
+ * workspace gate's (`answer`), from loopback only and never from a page. A
+ * tool call on it holds a restart as a call on any fleet server does: the
+ * restart would end the process answering it.
  */
-async function hostedRoute(name: string, request: Request): Promise<Response> {
+async function hostedRoute(
+  name: string,
+  request: Request,
+  answer: (forward: Request) => Promise<Response>
+): Promise<Response> {
   const incoming = new URL(request.url);
   if (incoming.hostname !== "127.0.0.1" || request.headers.has("Origin")) {
-    return new Response("A shared MCP server answers its harnesses only.", {
+    return new Response("A hosted MCP server answers its harnesses only.", {
       status: 403,
     });
   }
@@ -436,7 +442,7 @@ async function hostedRoute(name: string, request: Request): Promise<Response> {
     ? heldMcpCall(`/mcp/fleet/${name}`, parsed(body))
     : undefined;
   if (call === undefined) {
-    return mcpHost.fetch(name, forward);
+    return answer(forward);
   }
   if (fenced()) {
     return notStarted(body);
@@ -446,12 +452,31 @@ async function hostedRoute(name: string, request: Request): Promise<Response> {
     `${call}#${crypto.randomUUID().slice(0, 8)}`
   );
   try {
-    return holdingUntilEnd(await mcpHost.fetch(name, forward), release);
+    return holdingUntilEnd(await answer(forward), release);
   } catch (error) {
     release();
     throw error;
   }
 }
+
+/** A hosted server's request, a shared one's or a workspace gate's; none for any other path. */
+const hostedRoutes = (
+  url: URL,
+  request: Request
+): Promise<Response> | undefined => {
+  const shared = url.pathname.match(HOSTED_PATH)?.[1];
+  if (shared) {
+    return hostedRoute(shared, request, (forward) =>
+      mcpHost.fetch(shared, forward)
+    );
+  }
+  const [, gate, gated] = url.pathname.match(GATE_PATH) ?? [];
+  return gate && gated
+    ? hostedRoute(gated, request, (forward) =>
+        mcpHost.fetchGate(gate, gated, forward)
+      )
+    : undefined;
+};
 
 export const startMcpGateway = async (hubUrl: () => string) => {
   // Shared servers an agent before this one left running are ended first,
@@ -475,9 +500,9 @@ export const startMcpGateway = async (hubUrl: () => string) => {
         if (accounts) {
           return await accounts;
         }
-        const hosted = url.pathname.match(HOSTED_PATH)?.[1];
+        const hosted = hostedRoutes(url, request);
         if (hosted) {
-          return await hostedRoute(hosted, request);
+          return await hosted;
         }
         if (!(
           MCP_RELAY_PATH.test(url.pathname) ||

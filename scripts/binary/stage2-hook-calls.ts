@@ -1,16 +1,18 @@
 /**
  * Hands a shell call to a workspace's PreToolUse hook every second, as a work item's claude session does before
- * each of its Bash calls, and runs the command the hook rewrote it to, as the CLI then does, on the host. Run inside
- * the joined container by the installed binary acting as bun (BUN_BE_BUN=1), while the machine updates with the
+ * each of its Bash calls (exec form, `perl -T <hook>`, with the workspace's shell prefix in its environment), and
+ * runs the command through that prefix, as the CLI then does (boundary.ts `claudePrefixScript`). Run inside the
+ * joined container by the installed binary acting as bun (BUN_BE_BUN=1), while the machine updates with the
  * workspace open: the hook must be answered by a live judge from before the agent restarts until after the boundary
  * is handed over to the new build's keeper.
  *
  *   cawco stage2-hook-calls.ts <workspace state dir> <clone> <stop file>
  *
- * Output, one line per call: `<epoch ms> ran`, when the hook allowed the call and its command printed what the
- * clone's README.md holds (`proof`); `<epoch ms> refused <what the hook said>`, when the hook refused it;
- * `<epoch ms> failed <why>`, when it allowed the call but its command did not run whole. A last line
- * `done calls=<n> ran=<n> refused=<n> failed=<n>`. It ends once the stop file is there, or after 900 s.
+ * Output, one line per call: `<epoch ms> ran`, when the hook let the call through with no decision of its own and
+ * its command printed what the clone's README.md holds (`proof`); `<epoch ms> refused <what the hook said>`, when
+ * the hook refused it; `<epoch ms> failed <why>`, when it let the call through but decided it itself, or its command
+ * did not run whole. A last line `done calls=<n> ran=<n> refused=<n> failed=<n>`. It ends once the stop file is
+ * there, or after 900 s.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -22,6 +24,7 @@ if (!(state && clone && stop)) {
 const EVERY_MS = 1000;
 const DEADLINE = Date.now() + 900_000;
 const hook = join(state, "hook");
+const prefix = join(state, "claude-prefix");
 /** The call's JSON as the CLI hands a PreToolUse hook a Bash call. */
 const call = `${JSON.stringify({
   session_id: "stage2-hook-calls",
@@ -40,8 +43,9 @@ const oneLine = (text: string): string => text.trim().replaceAll("\n", " | ");
 const counts = { calls: 0, ran: 0, refused: 0, failed: 0 };
 
 const once = async (): Promise<string> => {
-  const asked = Bun.spawn([hook], {
+  const asked = Bun.spawn(["/usr/bin/perl", "-T", hook], {
     stdin: new TextEncoder().encode(call),
+    env: { ...process.env, CLAUDE_CODE_SHELL_PREFIX: prefix },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -54,21 +58,11 @@ const once = async (): Promise<string> => {
     counts.refused += 1;
     return `refused exit ${status}: ${oneLine(why)}`;
   }
-  let command: unknown;
-  try {
-    command = (
-      JSON.parse(said) as {
-        hookSpecificOutput?: { updatedInput?: { command?: unknown } };
-      }
-    ).hookSpecificOutput?.updatedInput?.command;
-  } catch {
-    command = undefined;
-  }
-  if (typeof command !== "string") {
+  if (said.trim() !== "") {
     counts.failed += 1;
-    return `failed: the hook allowed the call with no command: ${oneLine(said)}`;
+    return `failed: the hook decided the shell call itself: ${oneLine(said)}`;
   }
-  const ran = Bun.spawn(["/bin/bash", "-c", command], {
+  const ran = Bun.spawn([prefix, "cat README.md"], {
     cwd: clone,
     stdout: "pipe",
     stderr: "pipe",

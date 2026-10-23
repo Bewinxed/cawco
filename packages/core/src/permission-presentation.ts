@@ -1458,31 +1458,10 @@ function builtIn(
 }
 
 /**
- * A workspace boundary's rewrite of a shell call (agent boundary-judge.ts):
- * the command run through the place's executor, the directory it ended in
- * carried out. Claude Code runs the boundary's PreToolUse hook before it
- * asks, so a bounded session's ask carries the rewrite (a project's Caw's,
- * every time).
- */
-const BOUNDED =
-  /^'[^']+' --session --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; /;
-
-/**
- * The command a shell call runs, out of the boundary's rewrite once when it
- * is in one: what an ask shows and what the hub's gate judges. The call's
- * own input keeps the rewrite, so an answer never runs it unbounded.
- */
-export const unboundedCommand = (command: string): string => {
-  const inner = BOUNDED.exec(command)?.[1];
-  return inner === undefined ? command : inner.replaceAll("'\\''", "'");
-};
-
-/**
  * A shell call, presented: the session's own reason for it as the summary
- * ("Run a command" when it gave none), and the command whole, out of a
- * boundary's rewrite, as `command`. Every surface draws `command` under the
- * summary, the peek and Caw's panel too, since what runs is what the
- * person approves.
+ * ("Run a command" when it gave none), and the command whole, as `command`.
+ * Every surface draws `command` under the summary, the peek and Caw's panel
+ * too, since what runs is what the person approves.
  */
 const shellCall = (input: Record<string, unknown>): Presented => {
   const whole = commandOf(input);
@@ -1496,7 +1475,7 @@ const shellCall = (input: Record<string, unknown>): Presented => {
 
 /** The shell command a permission is about, said whole under the summary. */
 export const commandOf = (input: Record<string, unknown>): string | null =>
-  typeof input.command === "string" ? unboundedCommand(input.command) : null;
+  typeof input.command === "string" ? input.command : null;
 
 /**
  * What a parked tool call will do, for every surface that shows the ask. A

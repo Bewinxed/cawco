@@ -3,10 +3,11 @@
  * a pi host and an OpenCode server started on an older gate form are
  * relaunched onto the current one the first moment they are idle, never
  * mid-turn, and then refuse what the workspace's policy denies; a
- * workspace session's chrome-devtools-mcp, reaching the machine's browser
- * through its workspace's door and the DevTools gate (a local Chromium:
- * the runtime is hidden), writes captures to the workspace's scratch and
- * refuses a path outside the clone and the scratch; two
+ * workspace session's chrome-devtools-mcp, reached through the workspace's
+ * MCP gate on the agent's gateway, which runs it on the host through the
+ * workspace's door and the DevTools gate (a local Chromium: the runtime is
+ * hidden), writes captures to the workspace's scratch and refuses a path
+ * outside the clone and the scratch; two
  * workspaces' sessions on one OpenCode server each read back the output it
  * was told it saved and are refused the other's; a session in a directory
  * inside a clone is judged and bounded as that clone's; the opencode.jsonc
@@ -27,7 +28,7 @@
 import { chmod, copyFile, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { GATE_PATH } from "../packages/agent/src/mcp-gate";
 import { readWithin } from "../packages/core/src/bounded";
 
 const ROOT = join(import.meta.dir, "..");
@@ -539,6 +540,13 @@ const hub = Bun.serve({
     if (url.pathname === "/api/delegation/tools") {
       return Response.json({ tools: [] });
     }
+    // A workspace's MCP gate, as the agent's gateway serves it (mcp-oauth.ts):
+    // this server is the harnesses' gateway here.
+    const [, gate, gated] = url.pathname.match(GATE_PATH) ?? [];
+    if (gate && gated) {
+      const { mcpHost } = await import("../packages/agent/src/mcp-host");
+      return await mcpHost.fetchGate(gate, gated, request);
+    }
     // A session's credential, acknowledged as the hub holds it
     // (session-identity.ts `acknowledgeSessionCredential`).
     if (url.pathname === "/api/session-identities/ack") {
@@ -706,18 +714,16 @@ const workspaceAt = async (id: string, dir: string) => {
     join(state, JUDGE_SCRIPT)
   );
   const exec = join(state, "exec");
-  // The probe's boundary runner, on the real one's contract (boundary.ts
-  // `execScript`: `exec [--session] [--cwd-out FILE] COMMAND`, FILE getting
-  // the directory COMMAND ended in): it tags the command's environment with
-  // its workspace, so a command's output says which boundary ran it.
+  // The probe's boundary runner, on the real one's contract for OpenCode and
+  // pi (boundary.ts `execScript`: `exec [--session] COMMAND`): it tags the
+  // command's environment with its workspace, so a command's output says
+  // which boundary ran it.
   await Bun.write(
     exec,
     [
       "#!/bin/sh",
       'if [ "$1" = --session ]; then shift; fi',
-      "cwd_out=",
-      'if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi',
-      `CAWCO_PROBE_BOUNDARY=${id} /bin/sh -c "$1\nstatus=\\$?; pwd -P > \\"\\$0\\"; exit \\$status" "\${cwd_out:-/dev/null}"`,
+      `CAWCO_PROBE_BOUNDARY=${id} exec /bin/sh -c "$1"`,
       "",
     ].join("\n")
   );
@@ -728,6 +734,7 @@ const workspaceAt = async (id: string, dir: string) => {
     hook: join(state, "hook"),
     pid: process.pid,
     policy,
+    prefix: join(state, "claude-prefix"),
     scratch: tmp,
   };
   await Bun.write(
@@ -792,9 +799,28 @@ const credentialed = async (session: Session, instanceId: string) => {
 // workspace session's chrome-devtools reaches the machine's browser through
 // its workspace's door alone.
 const browsers = await import("../packages/agent/src/browser/browsers");
-const { browserDoor, throughGate } =
-  await import("../packages/agent/src/browser/door");
 await browsers.watchBrowsers();
+// The fleet's chrome-devtools as the agent's sync writes it, and the host
+// key its gateway's hosted servers answer to: a workspace's sessions reach
+// it through the workspace's MCP gate (mcp-gate.ts, served by this probe's
+// hub stand-in, the harnesses' gateway here), which runs it on the host
+// through the workspace's door, for OpenCode (its plugin points the
+// location's entry at the gate) and Claude Code alike.
+const { hostKey, mcpGateOf } = await import("../packages/agent/src/mcp-host");
+const { writeFleetMcpSet } =
+  await import("../packages/agent/src/fleet-mcp-set");
+hostKey();
+await writeFleetMcpSet({
+  servers: {
+    "chrome-devtools": {
+      command: devtools.command,
+      args: devtools.args,
+      env: devtools.env,
+    },
+  },
+  placed: {},
+  signedOut: [],
+});
 
 const sessiond = new SessiondServer();
 await sessiond.listen(endpoint);
@@ -856,7 +882,10 @@ const watch = (
       instanceId,
       cwd: at.clone,
       boundary: at.boundary,
-      browserDoor: () => browserDoor(at.id),
+      // As session.ts gives a workspace's session: its workspace, and the
+      // MCP gate its fleet servers go through.
+      workspace: at.id,
+      mcpGate: mcpGateOf(at.id),
       busy: (active) => {
         seen.busy = active;
         wake();
@@ -1212,9 +1241,8 @@ try {
     }
   );
 
-  // Claude: chrome-devtools-mcp as a workspace session's CLI runs it, its
-  // client answering `roots/list` with the launch directory and the
-  // additional working directory the session is given (its scratch).
+  // Claude: chrome-devtools-mcp as a workspace session's CLI reaches it,
+  // through the workspace's MCP gate on the agent's gateway.
   const claudeShot = await claudeCaptures(
     join(scratch, "claude-shot.png"),
     join(paths.workspaceCacheDir(), "claude-outside.png")
@@ -1233,8 +1261,9 @@ try {
   const hookScratch = hookSays(join(scratch, "claude-shot.png"));
   const hookTmp = hookSays(inTmp);
   check(
-    "claude: chrome-devtools writes a capture to the scratch and refuses one outside the clone and scratch",
-    claudeShot.inScratch &&
+    "claude: chrome-devtools, through the workspace's MCP gate, lists its tools, writes a capture to the scratch and refuses one outside the clone and scratch",
+    claudeShot.listed &&
+      claudeShot.inScratch &&
       claudeShot.outsideRefused &&
       hookScratch.ok &&
       !hookTmp.ok,
@@ -1486,116 +1515,75 @@ try {
 }
 
 /**
- * chrome-devtools-mcp under a minimal MCP client that declares `roots` and
- * answers `roots/list` as Claude Code does for a workspace session: its
- * launch directory (the clone) and its additional working directory (the
- * scratch). Takes a capture into each path; says which were written.
+ * chrome-devtools-mcp as a workspace's Claude Code dials it (claude.ts
+ * `fleetMcpFor`): the workspace's MCP gate on the agent's gateway, over
+ * streamable HTTP with the machine's host key (mcp-host.ts `fetchGate`),
+ * which runs it on the host through the workspace's door, its scratch and
+ * clone its roots. Takes a capture into each path; says which were written.
  */
 async function claudeCaptures(
   inScratch: string,
   outside: string
 ): Promise<{
   inScratch: boolean;
+  listed: boolean;
   outsideRefused: boolean;
   outsideAnswer: string;
   opened: string;
-  stderr: string;
 }> {
-  // As Claude Code launches it for a workspace session: through its
-  // workspace's door (claude.ts `gatedBrowserMcp`).
-  const door = await browserDoor(WS);
-  const [command, ...args] = throughGate(devtoolsCommand, door);
-  const server = Bun.spawn([command as string, ...args], {
-    cwd: clone,
-    stdin: "pipe",
-    stdout: "pipe",
-    // Kept: a server that answers no page says why only here.
-    stderr: "pipe",
-  });
-  const stderr = new Response(server.stderr).text();
-  const pending = new Map<number, (value: unknown) => void>();
+  const gate = mcpGateOf(WS);
   let id = 0;
-  const send = (body: object) =>
-    server.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", ...body })}\n`);
-  const call = (method: string, params: object) => {
+  const call = async (method: string, params: object) => {
     id += 1;
-    const { promise, resolve } = Promise.withResolvers<unknown>();
-    pending.set(id, resolve);
-    send({ id, method, params });
-    return promise;
-  };
-  (async () => {
-    let buffer = "";
-    for await (const bytes of server.stdout) {
-      buffer += new TextDecoder().decode(bytes);
-      let newline = buffer.indexOf("\n");
-      while (newline >= 0) {
-        const line = buffer.slice(0, newline);
-        buffer = buffer.slice(newline + 1);
-        newline = buffer.indexOf("\n");
-        if (!line.trim()) {
-          continue;
-        }
-        const rpc = JSON.parse(line) as {
-          id?: number;
-          method?: string;
-          result?: unknown;
-          error?: unknown;
-        };
-        if (rpc.method === "roots/list" && rpc.id !== undefined) {
-          send({
-            id: rpc.id,
-            result: {
-              roots: [clone, scratch].map((dir) => ({
-                uri: pathToFileURL(dir).href,
-              })),
-            },
-          });
-        } else if (rpc.id !== undefined && !rpc.method) {
-          pending.get(rpc.id)?.(rpc.result ?? rpc.error);
-          pending.delete(rpc.id);
-        }
-      }
-    }
-  })().catch(() => undefined);
-  let seen: Omit<Awaited<ReturnType<typeof claudeCaptures>>, "stderr">;
-  try {
-    await call("initialize", {
-      protocolVersion: "2025-06-18",
-      capabilities: { roots: { listChanged: true } },
-      clientInfo: { name: "claude-code", version: "probe" },
+    const answered = await fetch(`${gate.base}chrome-devtools`, {
+      method: "POST",
+      headers: {
+        ...gate.headers,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
     });
-    send({ method: "notifications/initialized" });
-    // Page-id routing is on (the fleet's launch keeps its default), and
-    // through the gate the workspace sees its own pages alone: it opens one,
-    // and the screenshot names the page new_page selected.
-    const opened = JSON.stringify(
-      await call("tools/call", {
-        name: "new_page",
-        arguments: { url: "about:blank" },
-      })
-    );
-    const pageId = Number(opened.match(SELECTED_PAGE)?.[1]);
-    const shoot = (filePath: string) =>
-      call("tools/call", {
-        name: "take_screenshot",
-        arguments: { filePath, pageId },
-      });
-    await shoot(inScratch);
-    const refused = JSON.stringify(await shoot(outside));
-    seen = {
-      inScratch: await Bun.file(inScratch).exists(),
-      outsideRefused:
-        !(await Bun.file(outside).exists()) &&
-        refused.includes("is not within any of the configured workspace roots"),
-      outsideAnswer: refused.slice(0, 300),
-      opened: opened.slice(0, 600),
+    const body = (await answered.json()) as {
+      result?: unknown;
+      error?: unknown;
     };
-  } finally {
-    server.kill();
-    await server.exited;
-  }
-  return { ...seen, stderr: (await stderr).trim().slice(-1500) };
+    return body.result ?? body.error;
+  };
+  await call("initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "claude-code", version: "probe" },
+  });
+  const listed = JSON.stringify(await call("tools/list", {})).includes(
+    '"take_screenshot"'
+  );
+  // Page-id routing is on (the fleet's launch keeps its default), and
+  // through the gate the workspace sees its own pages alone: it opens one,
+  // and the screenshot names the page new_page selected.
+  const opened = JSON.stringify(
+    await call("tools/call", {
+      name: "new_page",
+      arguments: { url: "about:blank" },
+    })
+  );
+  const pageId = Number(opened.match(SELECTED_PAGE)?.[1]);
+  const shoot = (filePath: string) =>
+    call("tools/call", {
+      name: "take_screenshot",
+      arguments: { filePath, pageId },
+    });
+  await shoot(inScratch);
+  const refused = JSON.stringify(await shoot(outside));
+  return {
+    inScratch: await Bun.file(inScratch).exists(),
+    listed,
+    outsideRefused:
+      !(await Bun.file(outside).exists()) &&
+      refused.includes("is not within any of the configured workspace roots"),
+    outsideAnswer: refused.slice(0, 300),
+    opened: opened.slice(0, 600),
+  };
 }
 
 const failed = checks.filter((one) => !one.ok);

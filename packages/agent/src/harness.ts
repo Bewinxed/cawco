@@ -151,6 +151,13 @@ export interface HarnessContext {
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
   keeperRefused(error: KeeperRefused): void;
+  /**
+   * The gate a workspace session reaches every fleet MCP server with a
+   * command through (mcp-gate.ts): its {@link workspace}'s, on the agent's
+   * gateway. Absent with the boundary: such a session starts its fleet
+   * servers itself.
+   */
+  readonly mcpGate?: import("./mcp-gate").McpGate;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   permission(request: {

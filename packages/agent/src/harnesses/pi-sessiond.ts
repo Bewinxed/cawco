@@ -30,6 +30,7 @@ import {
   type TurnExtras,
 } from "../harness";
 import { KeeperPool } from "../keepers";
+import type { McpGate } from "../mcp-gate";
 import { procIdFor } from "../proc-id";
 import type { SessiondAwareContext } from "../session";
 import {
@@ -47,6 +48,8 @@ export type PiHostCommand =
       gateForm?: string;
       /** The session's browser door, which the fleet's chrome-devtools goes through ({@link piBrowserDoor}). */
       door?: BrowserDoor;
+      /** A workspace session's MCP gate (mcp-gate.ts), which its fleet servers with a command go through. */
+      mcpGate?: McpGate;
     }
   | {
       type: "send";
@@ -131,13 +134,15 @@ export const backgroundShell = (
  * takes (fleet-mcp-set.ts): made here, by the agent, which alone can, and
  * handed to its host, which launches the server through it. None when the
  * fleet runs no local chrome-devtools for its folder, or the door could not
- * be made (said on the log): then the host takes no chrome-devtools.
+ * be made (said on the log): then the host takes no chrome-devtools. None
+ * for a workspace session either, whose chrome-devtools runs through its
+ * MCP gate (`ctx.mcpGate`), which makes the door itself.
  */
 const piBrowserDoor = async (
   ctx: HarnessContext
 ): Promise<BrowserDoor | undefined> => {
   const browser = fleetMcpAt(await readFleetMcpSet(), ctx.cwd)[CHROME_DEVTOOLS];
-  if (!(browser && "command" in browser)) {
+  if (ctx.mcpGate || !(browser && "command" in browser)) {
     return;
   }
   try {
@@ -573,6 +578,7 @@ export async function spawnPi(
     spec: { ...spec, cwd: ctx.cwd },
     ...(ctx.boundary ? { boundary: ctx.boundary, gateForm: form } : {}),
     ...(door ? { door } : {}),
+    ...(ctx.mcpGate ? { mcpGate: ctx.mcpGate } : {}),
   });
   await session.request({ type: "snapshot" });
   const stale = staleHosts.get(ctx.instanceId);

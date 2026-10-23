@@ -23,6 +23,7 @@ import {
   CHROME_DEVTOOLS,
   throughGate,
 } from "../browser/door";
+import { type McpGate, throughMcpGate } from "../mcp-gate";
 import { MCP_CONNECT_MS } from "../mcp-status";
 import { toolEnv } from "../tools";
 
@@ -31,17 +32,22 @@ import { toolEnv } from "../tools";
  * `tool_search` loads it, as Claude Code defers MCP tools behind its
  * ToolSearch), and why any is left out: pi takes no SSE server ("`sse` is
  * rejected", pi.dev/docs/latest/mcp), and chrome-devtools goes through the
- * session's browser gate alone, so with no `door` it is not taken.
+ * session's browser gate alone, so with no `door` it is not taken. A
+ * workspace session takes every server with a command through its
+ * workspace's MCP gate (`gate`, mcp-gate.ts), chrome-devtools too, as
+ * Claude Code's and OpenCode's sessions there do.
  */
 export const piMcpServers = (
-  servers: Record<string, FleetMcpConfig>,
-  door: BrowserDoor | undefined
+  fleet: Record<string, FleetMcpConfig>,
+  door: BrowserDoor | undefined,
+  gate?: McpGate
 ): {
   servers: Record<string, McpServerConfig>;
   skipped: Record<string, string>;
 } => {
   const taken: Record<string, McpServerConfig> = {};
   const skipped: Record<string, string> = {};
+  const servers = gate ? throughMcpGate(fleet, gate) : fleet;
   for (const [name, config] of Object.entries(servers)) {
     const entry = piMcpEntry(config);
     if ("skipped" in entry) {

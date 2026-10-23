@@ -30,12 +30,13 @@
  * Both run the same runner ({@link RUNNER}), which takes every command of the
  * workspace over a FIFO and runs it inside: one network namespace on Linux,
  * so a dev server one command starts answers the next. Commands go in
- * through one executor, `~/.cawco/workspaces/<id>/exec [--session]
- * [--cwd-out FILE] COMMAND` ({@link execScript}), that every harness runs its shell commands
- * through: claude by a PreToolUse hook that rewrites the command (the
- * workspace's `hook` script, which asks its judge, `boundary-judge.ts`), OpenCode by its
- * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
- * `runCommand`. A workspace holds no credential of any host: its git reaches
+ * through one executor, `~/.cawco/workspaces/<id>/exec [--session | --claude]
+ * COMMAND` ({@link execScript}), that every harness runs its shell commands
+ * through: claude by its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`, the
+ * workspace's `claude-prefix` script, {@link claudePrefixScript}), which the
+ * CLI applies after its permission rules have judged the command as the
+ * model wrote it; OpenCode by its plugin's `shell` tool, pi by its bash
+ * tool's operations, a workflow's `runCommand`. A workspace holds no credential of any host: its git reaches
  * its clone's origin, on any host and over any transport, through the git
  * door (hub-git.ts), which signs in on the host with the host's own. Its
  * `gh` reaches GitHub's API through the workspace's GitHub door
@@ -238,7 +239,7 @@ import { workspaceRecords } from "./workspace-records";
 export interface Boundary {
   /** The temp root its sessions' Claude Code CLIs run with (`CLAUDE_CODE_TMPDIR`, core `workspaceClaudeTmpDir`): written on the host, read inside, so a background task's output is there for the session's shell. */
   readonly claudeTmp: string;
-  /** `exec [--session] [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}). */
+  /** `exec [--session | --claude] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}); `--claude` is a claude session's shell prefix's ({@link execScript}). */
   readonly exec: string;
   /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
   readonly hook: string;
@@ -246,6 +247,8 @@ export interface Boundary {
   readonly pid: number;
   /** The workspace's policy file, which every harness judges its file tools by (`workspace-policy.ts`). */
   readonly policy: string;
+  /** A claude session's shell prefix, `CLAUDE_CODE_SHELL_PREFIX` ({@link claudePrefixScript}): every shell command, shell-form hook and stdio MCP start of its CLI runs through it, inside the boundary. */
+  readonly prefix: string;
   /** The workspace's scratch dir, its commands' `TMPDIR` (on macOS by its short name, `workspaceTmpDir`): `~/.cawco/tmp/<id8>` (`workspaceScratchDir`), on disk and outside the clone. */
   readonly scratch: string;
 }
@@ -469,27 +472,32 @@ interface JudgeAt {
 /**
  * The workspace's PreToolUse hook, run before every tool call it is matched
  * to ({@link HOOKED_TOOLS}). It hands the call to the workspace's judge
- * (`boundary-judge.ts`, {@link judgeFor}), which rewrites a shell call's
- * command to run through the executor and judges every other call's paths by
- * the workspace's policy, and says what the judge answered. A Bun started for
- * every call cost each one a process start a loaded Mac takes long to
- * schedule; the judge starts once, and the hook is perl with nothing to load.
+ * (`boundary-judge.ts`, {@link judgeFor}), with the shell prefix its CLI runs
+ * under (`CLAUDE_CODE_SHELL_PREFIX`, from the CLI's environment, which a
+ * settings file's `env` changes), and says what the judge answered: for a
+ * shell call no decision, so the CLI's own permission rules judge the
+ * command as the model wrote it, when the prefix is the workspace's
+ * ({@link claudePrefixScript}), and a refusal otherwise; for every other
+ * call its paths judged by the workspace's policy. A Bun started for every
+ * call cost each one a process start a loaded Mac takes long to schedule;
+ * the judge starts once, and the hook is perl with nothing to load.
  *
- * It refuses the call every way that can fail. Claude Code blocks a call only
- * on exit 2: any other failure — a missing binary, a crash, a signal — is a
- * "non-blocking error", and the call runs as it was written, outside the
- * boundary (code.claude.com/docs/en/hooks#exit-code-2). So it exits 0 only
- * when the judge allowed the call and its answer reached the CLI whole, and 2
- * otherwise: a judge that is not there or answers nothing, and an answer not
- * in by {@link HOOK_LIMIT_S} ({@link BOUNDARY_HOOK_SLOW}), each refuse that
- * call alone. Each refusal's first line names the hook, so a failure the CLI
- * reports is known as this one's.
+ * The CLI runs it in exec form, never through the prefix it judges, and
+ * blocks the call on any failure of it, a script that cannot start, a crash
+ * or a timeout among them (`onFailure: "block"`,
+ * {@link claudeBoundaryOptions}). It exits 0 only when the judge allowed the
+ * call and its answer reached the CLI whole, and 2 otherwise, a perl error
+ * too: a judge that is not there or answers nothing, and an answer not in by
+ * {@link HOOK_LIMIT_S} ({@link BOUNDARY_HOOK_SLOW}), each refuse that call
+ * alone, in words the model reads. Each refusal's first line names the hook,
+ * so a failure the CLI reports is known as this one's.
  *
  * It runs as `perl -T`, which reads no module path or switch from the
  * environment, and loads no module: the socket's address is packed by perl's
  * `Socket` as the agent writes the hook ({@link socketAddress}), and AF_UNIX
  * and SOCK_STREAM are 1 on Linux and macOS alike. The call's JSON goes over
- * on one line (a line break in JSON is whitespace or invalid).
+ * on one line (a line break in JSON is whitespace or invalid), the prefix on
+ * the next, in hex, empty when the CLI has none.
  */
 const hookScript = (
   id: string,
@@ -502,16 +510,18 @@ const hookScript = (
 $hook = ${perlQuote(hook)};
 $judge = ${perlQuote(judge.socket)};
 sub refuse { print STDERR "cawco boundary hook $hook\\n@_\\n"; exit 2 }
+$SIG{__DIE__} = sub { refuse("cawco: the boundary hook failed (@_), so this call did not run") };
 $SIG{ALRM} = sub { refuse(${perlQuote(`${BOUNDARY_HOOK_SLOW} ${HOOK_LIMIT_S}s on a loaded machine, so this call did not run. Run it again.`)}) };
 $SIG{PIPE} = 'IGNORE';
 alarm ${HOOK_LIMIT_S};
 $call = do { local $/; <STDIN> };
 refuse("cawco: the call reached the boundary hook with no input, so it did not run") unless length $call;
 $call =~ tr/\\r\\n/  /;
+$prefix = unpack('H*', defined $ENV{CLAUDE_CODE_SHELL_PREFIX} ? $ENV{CLAUDE_CODE_SHELL_PREFIX} : '');
 socket(JUDGE, 1, 1, 0) or refuse("cawco: the boundary hook could not open a socket ($!), so this call did not run");
 connect(JUDGE, pack('H*', '${judge.address}')) or refuse("cawco: the workspace's judge at $judge did not answer ($!), so this call did not run");
 select((select(JUDGE), $| = 1)[0]);
-print JUDGE $call, "\\n" or refuse("cawco: the call could not be handed to the workspace's judge at $judge ($!), so it did not run");
+print JUDGE $call, "\\n", $prefix, "\\n" or refuse("cawco: the call could not be handed to the workspace's judge at $judge ($!), so it did not run");
 $answer = do { local $/; <JUDGE> };
 $answer =~ /\\A([02])\\n/ or refuse("cawco: the workspace's judge at $judge answered nothing, so this call did not run");
 $allowed = $1 eq '0';
@@ -520,6 +530,31 @@ refuse($said) unless $allowed;
 print STDOUT $said or refuse("cawco: the judge's answer could not be written ($!), so this call did not run");
 close STDOUT or refuse("cawco: the judge's answer could not be written ($!), so this call did not run");
 exit 0;
+`;
+
+/** A workspace's {@link claudePrefixScript}, beside its hook and executor in the state dir, which nothing inside the boundary writes. */
+const claudePrefixOf = (id: string): string =>
+  join(stateDir(id), "claude-prefix");
+
+/**
+ * The shell prefix a claude session of the workspace runs under
+ * (`CLAUDE_CODE_SHELL_PREFIX`, claude.ts `sessionEnv`): "Command prefix that
+ * wraps shell commands Claude Code spawns: Bash tool calls, hook commands,
+ * status line commands, and stdio MCP server startup commands"
+ * (code.claude.com/docs/en/env-vars). The CLI applies it after its permission
+ * rules have judged the call, so every rule a person, repository or
+ * organisation wrote matches the command as the model wrote it, and every
+ * one of those commands runs inside the boundary ({@link execScript}'s
+ * `--claude`). It is a script with no flag of its own: Claude Code 2.1.302
+ * splits a prefix at its last " -" for a Bash call, but spawns the whole
+ * value as one program for a stdio MCP server (`posix_spawn '<path>
+ * --claude'` failed ENOENT), and hands each of them its command as one
+ * argument.
+ */
+const claudePrefixScript = (id: string, exec: string): string => `#!/bin/bash
+# CawCo workspace ${id}: the shell prefix its claude sessions run every shell
+# command through (CLAUDE_CODE_SHELL_PREFIX), inside the workspace's boundary.
+exec ${shellQuote(exec)} --claude "$1"
 `;
 
 const HEX = /^[0-9a-f]+$/;
@@ -678,7 +713,7 @@ const watchedJudges = new Map<string, SessiondClient>();
  */
 const judgeFor = async (
   id: string,
-  held: Pick<Held, "exec" | "scratch">,
+  held: Pick<Held, "exec">,
   hook: string,
   policy: string
 ): Promise<JudgeAt> => {
@@ -690,7 +725,7 @@ const judgeFor = async (
     hook,
     String(HOOK_TIMEOUT_S),
     held.exec,
-    held.scratch,
+    claudePrefixOf(id),
     policy,
   ];
   // The keeper it runs on is part of its form: after a keeper handover, the
@@ -1211,15 +1246,16 @@ const writeWhole = (
  */
 const armHook = (
   id: string,
-  held: Omit<Held, "claudeTmp" | "hook" | "policy">
+  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">
 ): Promise<Held> => whileArming(id, () => armHookNow(id, held));
 
 /** {@link armHook}'s writes and starts, counted as {@link arming}. */
 const armHookNow = async (
   id: string,
-  held: Omit<Held, "claudeTmp" | "hook" | "policy">
+  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">
 ): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
+  const prefix = claudePrefixOf(id);
   const policy = workspacePolicyFile(id);
   // The CLI makes its own `claude-<uid>` in it, 0700, and refuses a root it
   // does not own; inside the boundary it is read only, as the rest of `ro`.
@@ -1249,11 +1285,12 @@ const armHookNow = async (
     execScript(id, { ...held, pid: listedPid(held.pid) }),
     0o755
   );
+  await writeWhole(prefix, claudePrefixScript(id, held.exec), 0o755);
   await openToolDoor(id);
   await openGitDoor({ id, path: held.path });
   await openGithubDoor(id);
   await watchHost(id, held);
-  const armed: Held = { ...held, claudeTmp, hook, policy };
+  const armed: Held = { ...held, claudeTmp, hook, policy, prefix };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
     `${JSON.stringify(armed)}\n`,
@@ -1612,8 +1649,9 @@ const readWorkspaces = async (): Promise<{
  * The tools the boundary hook runs on (a JavaScript regular expression,
  * code.claude.com/docs/en/hooks#matcher-patterns: "Contains any other
  * character | JavaScript regular expression, unanchored"). The shell tools,
- * whose command it rewrites through the executor, and PowerShell, which it
- * refuses; and every tool that names a local path, which it judges by the
+ * which it lets through only while the CLI runs them through the workspace's
+ * shell prefix, and PowerShell, which it refuses; and every tool that names
+ * a local path, which it judges by the
  * workspace's policy: the file tools, LSP, Artifact and SendUserFile (which
  * send a file out), EnterWorktree, and every MCP tool, whose arguments the
  * judge reads for paths. Claude Code runs those in the CLI, on the host. No
@@ -1625,16 +1663,27 @@ const readWorkspaces = async (): Promise<{
 const HOOKED_TOOLS =
   "^(Bash|Monitor|PowerShell|Read|Write|Edit|MultiEdit|NotebookEdit|NotebookRead|Glob|Grep|LS|LSP|Artifact|SendUserFile|EnterWorktree|mcp__.*)$";
 
+/** The hook's arguments before its script: perl's taint mode, which the script's own `#!` line names too. */
+const HOOK_ARGS = ["-T"];
+
 /**
  * The `query()` options that bound a claude session, none for a session with
  * no boundary: flag settings with a PreToolUse hook on {@link HOOKED_TOOLS},
  * and the hook events in the stream, which is how the session hears that the
  * hook failed. The CLI runs the hook itself, so it holds while the agent that
  * started the session restarts; a local settings file cannot turn it off,
- * because flag settings outrank it. `|| exit 2` refuses the call when the
- * hook script itself is gone (the shell's 127 would let it through). The
- * adapter merges these settings with the ones every session carries into the
- * CLI's one `--settings`.
+ * because flag settings outrank it. The adapter merges these settings with
+ * the ones every session carries into the CLI's one `--settings`.
+ *
+ * The hook runs in exec form, `perl -T <hook>`: "A command hook runs as exec
+ * form when `args` is set … Claude Code resolves `command` as an executable
+ * on `PATH` and spawns it directly", and "exec-form hooks run without the
+ * prefix" (code.claude.com/docs/en/hooks, /env-vars), so the judge never runs
+ * inside the boundary it decides about. `onFailure: "block"` refuses the call
+ * on any failure of the hook, a script gone ("Can't open perl script", exit
+ * 2) or a perl gone (it cannot start) among them: "To block the action
+ * instead, set `"onFailure": "block"`" (/hooks, "Block the action when a
+ * hook fails").
  */
 export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
   boundary
@@ -1649,7 +1698,9 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
                 hooks: [
                   {
                     type: "command" as const,
-                    command: `${shellQuote(boundary.hook)} || exit 2`,
+                    command: PERL,
+                    args: [...HOOK_ARGS, boundary.hook],
+                    onFailure: "block" as const,
                     timeout: HOOK_TIMEOUT_S,
                   },
                 ],
@@ -1666,14 +1717,19 @@ const GATING_MATCHERS = new Set(["*", HOOKED_TOOLS]);
 const escapeRegExp = (text: string): string =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** A JSON string, as it stands in the `--settings` JSON. */
+const JSON_STRING = String.raw`"(?:[^"\\]|\\.)*"`;
+
 /**
  * The boundary hook's entry in the `--settings` JSON {@link claudeBoundaryOptions}
  * launches a CLI with: its matcher — {@link HOOKED_TOOLS}, `*` or `Bash|Monitor`
- * as earlier builds wrote it — and its command, still JSON-quoted.
+ * as earlier builds wrote it — its command, still JSON-quoted, and its
+ * exec form's `args`, when it has them.
  */
 const LAUNCHED_HOOK = new RegExp(
-  `"matcher":"(${escapeRegExp(HOOKED_TOOLS)}|\\*|Bash\\|Monitor)","hooks":\\[\\{"type":"command","command":("(?:[^"\\\\]|\\\\.)*")`
+  `"matcher":"(${escapeRegExp(HOOKED_TOOLS)}|\\*|Bash\\|Monitor)","hooks":\\[\\{"type":"command","command":(${JSON_STRING})(?:,"args":(\\[(?:${JSON_STRING}(?:,${JSON_STRING})*)?\\]))?`
 );
+/** The shell form before the exec form: `'<hook>' || exit 2`. */
 const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/;
 /** One word of a command {@link shellQuote} built: `'…'`, with `'\''` for a quote. */
 const QUOTED_WORD = /'((?:[^']|'\\'')*)'/g;
@@ -1705,13 +1761,22 @@ export interface LaunchedHook {
    * fails open with whatever it names gone.
    */
   readonly needs: readonly { readonly path: string; readonly mode: number }[];
+  /**
+   * Whether the CLI runs its shell commands through the workspace's shell
+   * prefix ({@link claudePrefixScript}): one launched with the exec-form hook
+   * was launched with the prefix too (claude.ts `sessionEnv`). One launched
+   * before either had its commands rewritten by the hook, which no longer
+   * rewrites: the judge refuses its shell calls, and it is relaunched
+   * ({@link hookFailsOpen}).
+   */
+  readonly prefixed: boolean;
 }
 
 /**
  * The boundary hook the claude CLI `pid` was launched with, read off its
  * command line (the `--settings` JSON {@link claudeBoundaryOptions} wrote);
  * nothing for a CLI launched without one, and `unknown` for one whose hook
- * is in neither form cawco has written.
+ * is in no form cawco has written.
  */
 export const launchedHook = async (
   pid: number
@@ -1720,16 +1785,26 @@ export const launchedHook = async (
     process.platform === "linux"
       ? (await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " ")
       : ((await commandLineOf(pid)) ?? "");
-  const [, matcher, quoted] = LAUNCHED_HOOK.exec(commandLine) ?? [];
+  const [, matcher, quoted, quotedArgs] = LAUNCHED_HOOK.exec(commandLine) ?? [];
   if (!quoted) {
     return;
   }
   const events = HOOK_EVENTS_FLAG.test(commandLine);
   const gatesFiles = GATING_MATCHERS.has(matcher as string);
   const command = JSON.parse(quoted) as string;
+  if (quotedArgs) {
+    const args = JSON.parse(quotedArgs) as string[];
+    const hook = args.at(-1);
+    return command === PERL &&
+      args.length === HOOK_ARGS.length + 1 &&
+      HOOK_ARGS.every((arg, at) => args[at] === arg) &&
+      hook?.endsWith("/hook")
+      ? { events, gatesFiles, names: [hook], needs: [], prefixed: true }
+      : "unknown";
+  }
   const hook = HOOK_COMMAND.exec(command)?.[1];
   if (hook) {
-    return { events, gatesFiles, names: [hook], needs: [] };
+    return { events, gatesFiles, names: [hook], needs: [], prefixed: false };
   }
   const words = QUOTED_WORDS.test(command)
     ? [...command.matchAll(QUOTED_WORD)].map(([, word]) =>
@@ -1754,25 +1829,34 @@ export const launchedHook = async (
         ? []
         : [{ path: verb, mode: constants.R_OK }]),
     ],
+    prefixed: false,
   };
 };
 
-/** The hook a session launched with a workspace boundary runs: its script, which needs nothing. */
+/** The hook a session launched with a workspace boundary runs: its script, which needs nothing, beside the workspace's shell prefix. */
 export const workspaceHook = (
   boundary: Boundary | undefined
 ): LaunchedHook | undefined =>
   boundary
-    ? { events: true, gatesFiles: true, names: [boundary.hook], needs: [] }
+    ? {
+        events: true,
+        gatesFiles: true,
+        names: [boundary.hook],
+        needs: [],
+        prefixed: true,
+      }
     : undefined;
 
 /**
- * Whether a CLI running `hook` lets a call outside the workspace's policy:
- * its hook runs what can go missing ({@link LaunchedHook.needs}), or it runs
- * on shell tools alone ({@link LaunchedHook.gatesFiles}). Such a CLI is
- * relaunched onto the workspace's hook script between turns.
+ * Whether a CLI running `hook` lets a call outside the workspace's policy or
+ * its rules: its hook runs what can go missing ({@link LaunchedHook.needs}),
+ * it runs on shell tools alone ({@link LaunchedHook.gatesFiles}), or the CLI
+ * runs its shell commands through no shell prefix of the workspace's
+ * ({@link LaunchedHook.prefixed}), whose shell calls the judge refuses. Such
+ * a CLI is relaunched onto the workspace's hook and prefix between turns.
  */
 export const hookFailsOpen = (hook: LaunchedHook): boolean =>
-  hook.needs.length > 0 || !hook.gatesFiles;
+  hook.needs.length > 0 || !hook.gatesFiles || !hook.prefixed;
 
 /** The first thing `hook` needs that is no longer there to run, if any. */
 export const hookMissing = (hook: LaunchedHook): string | undefined =>
@@ -2522,7 +2606,12 @@ const LAUNCH = [
  *
  * A command's stdout and stderr are anonymous pipes, each copied by a `cat`
  * into its request's FIFO (`$req/out`, `$req/err`), never those FIFOs opened
- * as its own fds. A program with a confining AppArmor profile of its own
+ * as its own fds; so is its stdin, copied by a `cat` out of `$req/in` when
+ * its executor hands it one (a claude session's prefix, {@link execScript}),
+ * and `/dev/null` otherwise. That `cat` lives as long as its executor's stdin
+ * stays open, which may outlast the command, so its stderr is no stream of
+ * the command's: holding one, it held the executor waiting on its output
+ * after the command had ended. A program with a confining AppArmor profile of its own
  * passes an exec transition, and the kernel revalidates every fd it inherits
  * against that profile, closing those it may not use: a FIFO or file is
  * checked by its path, which no such profile names, while a pipe is not
@@ -2561,7 +2650,7 @@ while :; do
     esac
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
-      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c 'set -- "$1" "$CAWCO_SEARCHABLE_PATH"; unset CAWCO_SEARCHABLE_PATH; . "$1/env" >/dev/null 2>&1; export PATH="$2"; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
+      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c 'set -- "$1" "$CAWCO_SEARCHABLE_PATH"; unset CAWCO_SEARCHABLE_PATH; if [ -p "$1/in" ]; then exec < <(exec cat "$1/in" 2>/dev/null); fi; . "$1/env" >/dev/null 2>&1; export PATH="$2"; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
@@ -6048,11 +6137,44 @@ if [ "$guarded" = 3 ]; then status=1; elif [ "$guarded" != 0 ]; then echo "cawco
 `
     : "";
 
+/** `text` with every character a POSIX extended regular expression reads as an operator escaped. */
+const ereLiteral = (text: string): string =>
+  text.replace(/[.[\]()*+?{}|^$\\]/g, "\\$&");
+
+/**
+ * The end Claude Code puts on every Bash and Monitor command it hands its
+ * shell prefix ({@link claudePrefixScript}), as an extended regular
+ * expression over the whole command, its group 1 the file: ` && pwd -P >|
+ * <CLAUDE_CODE_TMPDIR>/claude-<id>-cwd`, the file the CLI reads the
+ * session's next working directory from once the command succeeded. The CLI
+ * quotes the file only when it needs it (2.1.302: `&& pwd -P >|
+ * /…/claude-6a33-cwd`), so both forms are taken; its id is four hex digits,
+ * a Bash call's with a tag after it (`${Yt}-${Dn}`). The temp root is the
+ * workspace's own ({@link Boundary.claudeTmp}), read only inside, so the
+ * executor writes the file on the host.
+ */
+const claudeCwdTail = (id: string): string => {
+  const file = `${ereLiteral(workspaceClaudeTmpDir(id))}/claude-[0-9a-f]{4}(-[0-9A-Za-z_]+)?-cwd`;
+  return ` && pwd -P >\\| ('${file}'|${file})$`;
+};
+
 /**
  * The executor's text for the boundary whose host is `held.pid`, which it
  * signals (`kill -USR1`) and looks for (`kill -0`). Undefined for the form's
  * own text ({@link planFor}), which is hashed and never run, and names no
  * process.
+ *
+ * `--claude` is a claude session's shell prefix's ({@link
+ * claudePrefixScript}): COMMAND is whatever its CLI runs through it, a Bash
+ * or Monitor call, a shell-form hook, a stdio MCP server's start, and all of
+ * it runs inside. The executor's stdin reaches the command (`$req/in`, a
+ * FIFO the command reads through a pipe, as its output leaves through one:
+ * {@link RUNNER}), since a hook reads its call there and a server its
+ * requests. A command that ends in the CLI's working-directory tail
+ * ({@link claudeCwdTail}) runs without it, shows the workspace's notice
+ * first, as `--session` does, and on status 0 the directory it ended in is
+ * written to the CLI's file on the host, as the tail's `&&` would. One with
+ * no such tail runs as it is: the tail's write fails inside, never outside.
  */
 const execScript = (
   id: string,
@@ -6070,8 +6192,8 @@ const execScript = (
   const path = `printf '%s' ${shellQuote(helpers)}"$caller_path" > "$req/path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
-# exec [--session] [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND
-# ended in; a session's command (--session) shows the workspace's notice first.
+# exec [--session | --claude] COMMAND — a session's command (--session) shows
+# the workspace's notice first; --claude is a claude session's shell prefix's.
 caller_path=$PATH
 PATH=${SYSTEM_PATH}
 export PATH
@@ -6080,7 +6202,9 @@ export PATH
 marks=${shellQuote(commandsOf(id, held.gen))}
 mark="$marks/$$"
 mkdir -p "$marks" 2>/dev/null && : > "$mark"
-trap 'rm -f "$mark"' EXIT
+# What copies this executor's stdin to the command, once it runs.
+feed=
+trap 'rm -f "$mark"; [ -z "$feed" ] || kill "$feed" 2>/dev/null' EXIT
 # While the agent replaces the boundary, wait, then run through the new one.
 # Waiting runs nothing in this generation, so the mark goes meanwhile: the
 # agent's handover holds the gate up for the marked commands to end, and one
@@ -6099,9 +6223,20 @@ ${linux ? restartWait : ""}  echo ${shellQuote(stoppedLine(id))} >&2
 fi
 ${linux ? mountCheck(id, held.gen, pid) : ""}
 session=
-if [ "$1" = --session ]; then session=1; shift; fi
-cwd_out=
-if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
+claude=
+if [ "$1" = --session ]; then session=1; shift; elif [ "$1" = --claude ]; then claude=1; shift; fi
+command=$1
+# Where the CLI reads a Bash or Monitor call's next working directory from.
+cwd_file=
+if [ -n "$claude" ]; then
+  tail=${shellQuote(claudeCwdTail(id))}
+  if [[ $command =~ $tail ]]; then
+    session=1
+    cwd_file=\${BASH_REMATCH[1]}
+    case $cwd_file in \\'*) cwd_file=\${cwd_file:1:\${#cwd_file}-2} ;; esac
+    command=\${command:0:\${#command}-\${#BASH_REMATCH[0]}}
+  fi
+fi
 # A session's command shows what CawCo did to the work meanwhile, once.
 notice=${shellQuote(noticeOf(id))}
 if [ -n "$session" ] && [ -s "$notice" ] && mv "$notice" "$notice.$$" 2>/dev/null; then
@@ -6112,7 +6247,7 @@ req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 # The mark names the request before the runner hears of it: the agent tells
 # its own commands' processes inside by it.
 { printf '%s\\n' "$req" > "$mark"; } 2>/dev/null
-printf '%s' "$1" > "$req/cmd"
+printf '%s' "$command" > "$req/cmd"
 pwd -P > "$req/cwd"
 {
   export -p
@@ -6122,10 +6257,21 @@ ${commandEnv(id, held.path)
 } > "$req/env"
 ${path}
 mkfifo "$req/out" "$req/err"
+[ -z "$claude" ] || mkfifo "$req/in"
 # Cut off: the runner ends the command's group, in the sandbox's own pid
 # space, where the pid it wrote means that group (RUNNER's "cancel").
 trap 'p=$(cat "$req/pid" 2>/dev/null); [ -n "$p" ] && printf "cancel %s\\n" "$p" > "$fifo"; rm -rf "$req"; exit 143' TERM INT HUP
 ${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
+# This executor's stdin, to the command: an asynchronous command's own is
+# /dev/null unless it names another, so it takes it on fd 3. A closed one is
+# an empty one, so the command still reads its end. Copied by perl, a read at
+# a time: the CLI's stdin is a socket, which uutils' cat 0.8 held until it
+# closed, so a server never saw its first request.
+if [ -n "$claude" ]; then
+  { exec 3<&0; } 2>/dev/null || exec 3</dev/null
+  /usr/bin/perl -e 'while (sysread(STDIN, my $read, 65536)) { syswrite(STDOUT, $read) or last }' <&3 > "$req/in" 3<&- & feed=$!
+  exec 3<&-
+fi
 cat "$req/out" & out=$!
 cat "$req/err" >&2 & err=$!
 wait "$out" "$err"
@@ -6141,7 +6287,7 @@ ${linux ? '  [ -z "$taker" ] && [ -s "$req/sandbox" ] && take' : ""}
   sleep 0.01
 done
 status=$(cat "$req/status")
-${guardAfter(id, held)}if [ -n "$cwd_out" ] && [ -s "$req/cwd-out" ]; then cp "$req/cwd-out" "$cwd_out"; fi
+${guardAfter(id, held)}if [ -n "$cwd_file" ] && [ "$status" = 0 ] && [ -s "$req/cwd-out" ]; then cat "$req/cwd-out" > "$cwd_file"; fi
 rm -rf "$req"
 exit "$status"
 `;
@@ -6156,33 +6302,54 @@ exit "$status"
  * still goes in through the same executor, its environment built by
  * {@link commandEnv}, and runs through the same runner: `bash -c <runner>
  * cawco <fifo>`, its pid both of the boundary's in `place`, `guarded`
- * naming no bind.
+ * naming no bind. With them, what a claude session runs under (the
+ * claude-prefix spec): the paths and text of its shell prefix
+ * ({@link claudePrefixScript}, for the executor at `execAt`) and its hook
+ * ({@link hookScript}, for a judge listening on `socket`).
  */
 export const executorUnsandboxed = async (
   ref: WorkspaceRef,
   gen: string,
   pid: Pid
 ): Promise<{
+  claudeTmp: string;
   exec: string;
+  execAt: string;
   fifo: string;
   guarded: string;
+  hook: (socket: string) => Promise<string>;
+  hookAt: string;
   place: string;
+  prefix: string;
+  prefixAt: string;
   runner: string;
   scratch: string;
 }> => {
   await writeGuardedGhConfig(ref.id);
   await writeWhole(gitSystemConfigOf(ref.id), gitSystemConfig(ref.id), 0o644);
+  const execAt = join(stateDir(ref.id), "exec");
+  const hookAt = join(stateDir(ref.id), "hook");
   return {
+    claudeTmp: workspaceClaudeTmpDir(ref.id),
     exec: execScript(ref.id, {
-      exec: join(stateDir(ref.id), "exec"),
+      exec: execAt,
       gen,
       path: ref.path,
       pid,
       scratch: scratchOf(ref.id),
     }),
+    execAt,
     fifo: fifoOf(ref.id, gen),
     guarded: guardedOf(ref.id, gen),
+    hook: async (socket) =>
+      hookScript(ref.id, hookAt, {
+        socket,
+        address: await socketAddress(ref.id, socket),
+      }),
+    hookAt,
     place: placeOf(ref.id, gen),
+    prefix: claudePrefixScript(ref.id, execAt),
+    prefixAt: claudePrefixOf(ref.id),
     runner: RUNNER,
     scratch: scratchOf(ref.id),
   };
@@ -6851,7 +7018,7 @@ const launch = async (
       "its sandbox's processes could not be found as it started"
     );
   }
-  const held: Omit<Held, "claudeTmp" | "hook" | "policy"> = {
+  const held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix"> = {
     exec: join(stateDir(ref.id), "exec"),
     gen,
     pid: proc.pid,
