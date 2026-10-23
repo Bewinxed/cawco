@@ -5740,6 +5740,10 @@ export class SessionSupervisor {
     // reported them and a hub that had nowhere to read them from.
     const memoryDocs: Record<string, State> = {};
     const hooks: Record<string, State> = {};
+    // The fleet's Claude Code settings, OpenCode plugins and pi extensions
+    // (fleet-harness-config.ts): made ready once for every harness, each
+    // row the worst of the harnesses' words on it.
+    const harnessConfig: Record<string, State> = {};
     // Each harness's word on each hook: Claude Code's registration, and
     // whether OpenCode and pi run it at all (fleet-harness-set.ts
     // `hookStatesOn`), merged below as MCP servers are.
@@ -5820,6 +5824,11 @@ export class SessionSupervisor {
       }
       if (report.hooks) {
         hooksByHarness[adapter.kind] = report.hooks;
+      }
+      for (const [key, item] of Object.entries(report.harnessConfig ?? {})) {
+        harnessConfig[key] = harnessConfig[key]
+          ? worstFleetState([harnessConfig[key], item])
+          : item;
       }
       if (report.memory) {
         memory = memory
@@ -5903,6 +5912,7 @@ export class SessionSupervisor {
       skills,
       memoryDocs,
       hooks,
+      harnessConfig,
       ...(memory ? { memory } : {}),
       ...(toolchain ? { toolchain } : {}),
       have: await this.#fleetHoldings(),
