@@ -14,7 +14,7 @@
    * hub raises a connect ask (connect-ask.ts).
    */
   import { Button } from "#lib/components/ui/button/index.js";
-  import { IconChevronRight, IconKey } from "#lib/icons.js";
+  import { IconChevronRight, IconKey, IconRefresh } from "#lib/icons.js";
   import { type ConnectOutcome, connectWords } from "./connect-ask";
 
   let {
@@ -37,7 +37,7 @@
   const MANAGE = "/config/connections";
 </script>
 
-<div data-slot="connect-row" data-tx-rail class="rail-row">
+<div data-slot="connect-row" data-tx-rail class="@container rail-row">
   <div
     data-slot="trow"
     data-connect={outcome.kind}
@@ -53,7 +53,9 @@
     <!-- The state line gives way last; the Other line's words after it
          take the room it leaves and end in their ellipsis, their whole text
          in the title. Signed out is the one exception: it is what changed,
-         so it keeps its room and the line before it gives way. -->
+         so it keeps its room, Reconnect folds to its glyph before the line
+         before it gives way, and the line ends in its ellipsis only past
+         that. -->
     <span
       class="flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{said}</span
@@ -77,13 +79,22 @@
         ><span>{connectWords.manage}</span><IconChevronRight /></Button
       >
     {:else if outcome.kind === "expired"}
+      <!-- On a row too narrow for every word (a phone), the action is what
+           gives way: Reconnect folds to its glyph, its word kept for the
+           screen reader and the title, and the account and signed out keep
+           theirs. -->
       <Button
         class="flex-none"
         data-box
         onclick={onreconnect}
         size="xs"
+        title={connectWords.reconnect}
         variant="ghost"
-        ><span>{connectWords.reconnect}</span><IconChevronRight /></Button
+        ><span class="@max-connect-row:sr-only">{connectWords.reconnect}</span
+        ><IconChevronRight class="@max-connect-row:hidden" /><IconRefresh
+          aria-hidden="true"
+          class="hidden @max-connect-row:block"
+        /></Button
       >
     {/if}
   </div>

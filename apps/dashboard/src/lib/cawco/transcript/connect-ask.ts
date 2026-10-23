@@ -66,6 +66,25 @@ export function addressParts(url: string): {
     : { head: "", host: url, rest: "" };
 }
 
+/** Where a sign-in path may break: after one of these, never inside a run. */
+const BREAK_AFTER = /(?<=[./&=?])/;
+/** A last run shorter than this joins the run before it, so no line holds a few characters alone. */
+const TAIL_MIN = 12;
+
+/**
+ * An address's path and query as the runs it breaks between: each run ends
+ * after a dot, a slash, `&`, `=` or `?`, and a short last run (`k2Jx9` of
+ * `state=k2Jx9`) is held to the runs before it until it is no orphan.
+ */
+export function addressRuns(rest: string): string[] {
+  const runs = rest.split(BREAK_AFTER).filter((run) => run !== "");
+  while (runs.length > 1 && (runs.at(-1)?.length ?? 0) < TAIL_MIN) {
+    const tail = runs.pop() ?? "";
+    runs[runs.length - 1] += tail;
+  }
+  return runs;
+}
+
 /** The address's host alone: what a strip or a row has room for. */
 export const hostOf = (url: string): string => addressParts(url).host;
 
@@ -114,6 +133,6 @@ export const connectWords = {
   /** Option B's consent step. */
   continueTo: (host: string) => `Continue to ${host}`,
   back: "Back",
-  /** Option C's strip. */
-  needs: (who: string, service: string) => `${who} needs ${service}`,
+  /** Option C's strip: "{who} needs {service}", the service set in strong ink. */
+  needs: "needs",
 };

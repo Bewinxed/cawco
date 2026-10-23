@@ -353,6 +353,12 @@ const CONTAINERS = {
   // of "1/1 machines", the switch and the ⋯ at space-4 apart, 195px) leave
   // the name 3rem (48px). Narrower, the controls take a line of their own.
   "section-row": "312px",
+  // A connect record row that lapsed (transcript/ConnectRow.svelte) keeps
+  // Reconnect's word from here: the glyph (icon-md, 16px), "Connected to
+  // Linear as bewinxed" (195px), "· signed out" (68px) and Reconnect (97px)
+  // with the row's three space-2 gaps. Narrower, Reconnect gives way to its
+  // glyph, and the account and the state keep their words.
+  "connect-row": "400px",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */

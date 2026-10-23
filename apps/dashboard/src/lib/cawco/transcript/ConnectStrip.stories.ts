@@ -2,8 +2,8 @@
  * Option C of the connect ask (Component Story Format 3, live components):
  * the ask arrives as one line standing on the composer, in the offer's
  * place (ConnectStrip), as Grok's and Devin's connect chips do; Connect
- * grows the composer into option A's card for the why, the whole address
- * and consent. Each outcome is said on the same line, and the transcript
+ * grows the strip's own tile upward into the card for the why, the whole
+ * address and consent, the strip's line kept at its foot. Each outcome is said on the same line, and the transcript
  * keeps the record row (ConnectRow). Each moment on a desk (the transcript
  * column about 900px wide) and on a phone (390px). Linear is the service;
  * Claude Code asks.
@@ -36,10 +36,10 @@ export const AskingPhone = {
   parameters: { viewport: 390 },
 };
 
-/** Desk: opened. Connect grows the composer into option A's card: why, the whole address, consent. */
+/** Desk: opened. Connect grows the strip upward into the card: why, the whole address, consent, over the strip's own line. */
 export const Opened = { args: { moment: "opened" } };
 
-/** Phone: opened into the card. */
+/** Phone: the strip opened into the card, its line still at the foot. */
 export const OpenedPhone = {
   args: { moment: "opened", height: PHONE_HEIGHT },
   parameters: { viewport: 390 },

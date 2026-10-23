@@ -34,6 +34,7 @@
   --container-decisions-900px: 900px;
   --container-project-dock: 938px;
   --container-section-row: 312px;
+  --container-connect-row: 400px;
 }
 
 @theme inline {

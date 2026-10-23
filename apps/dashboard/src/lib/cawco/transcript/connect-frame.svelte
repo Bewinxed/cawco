@@ -127,11 +127,15 @@
     ),
   };
 
+  const WHY =
+    "To read the OPS issues it is auditing and leave a comment on each with what it finds.";
+  const SCOPES = ["Read issues", "Write comments"];
+
   const ask = (stage: ConnectAsk["stage"], again = false): ConnectAsk => ({
     service: SERVICE,
-    why: "To read the OPS issues it is auditing and leave a comment on each with what it finds.",
+    why: WHY,
     url: URL,
-    scopes: ["Read issues", "Write comments"],
+    scopes: SCOPES,
     stage,
     again,
     fault: {
@@ -160,13 +164,10 @@
     }
   });
 
-  /** The ask the composer grows into: the ask's own moments, and the strip opened. */
+  /** The ask the composer grows into: the ask's own moments (the strip grows its own tile). */
   const grown = $derived.by((): ConnectAsk | null => {
-    if (option === "card") {
+    if (option !== "ask") {
       return null;
-    }
-    if (option === "strip") {
-      return moment === "opened" ? ask("asking") : null;
     }
     switch (moment) {
       case "asking":
@@ -220,6 +221,7 @@
     }
     switch (moment) {
       case "asking":
+      case "opened":
       case "waiting":
       case "failed":
       case "expired":
@@ -228,7 +230,6 @@
         return { connected: account };
       case "consent":
       case "parked":
-      case "opened":
       case "declined":
       case "reconnect":
         return null;
@@ -267,7 +268,14 @@
 
 {#snippet offer()}
   {#if strip}
-    <ConnectStrip asker={AGENT} service={SERVICE} state={strip} url={URL} />
+    <ConnectStrip
+      asker={AGENT}
+      scopes={SCOPES}
+      service={SERVICE}
+      step={strip}
+      url={URL}
+      why={WHY}
+    />
   {/if}
 {/snippet}
 

@@ -4,9 +4,10 @@
    * transcript, at the point the agent asked, that holds every state in
    * place (v0's paused agent action; Replit's Connect step as the consent).
    * Its head is a rail-led row in the tool rows' recipe; while it asks, the
-   * in-page ask's tile hangs under it at the text column (DESIGN.md, Asking
-   * in the page: hairline, `radius-md`, the raised shadow, 12px in). The
-   * composer stays a pill.
+   * in-page ask's tile hangs under it from the text column to the row's end,
+   * as wide as the tool rows beside it (DESIGN.md, Asking in the page:
+   * hairline, `radius-md`, the raised shadow, 12px in); only the why keeps
+   * the reading measure. The composer stays a pill.
    *
    * Asked, the tile names the service, the agent's why and the address's
    * host; Connect unfolds the consent step in the same tile, the whole
@@ -92,7 +93,7 @@
     </div>
     <section
       aria-label={connectWords.askFrom(asker)}
-      class="rail-hang mt-space-1 mb-space-2 max-w-c-measure grid grid-cols-1 gap-space-2 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+      class="rail-hang mt-space-1 mb-space-2 grid grid-cols-1 gap-space-2 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
     >
       {#if step === "failed" && ask.fault}
         <ConnectFault
@@ -111,7 +112,7 @@
         </p>
       {:else}
         <p
-          class="m-0 text-size-body leading-body text-ink-strong text-pretty wrap-anywhere"
+          class="m-0 max-w-c-measure text-size-body leading-body text-ink-strong text-pretty wrap-anywhere"
         >
           {ask.why}
         </p>
