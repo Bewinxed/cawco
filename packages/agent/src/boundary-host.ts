@@ -11,8 +11,10 @@
  *
  * The wrapped command is a plain bwrap invocation, which this process `exec`s
  * through `sh`, so bwrap is this process's own child: bwrap's
- * `--die-with-parent` then ends the sandbox with everything in it whenever
- * this process goes. Closing a boundary kills that outer bwrap; srt then sees
+ * `--die-with-parent` ends the sandbox with everything in it should this
+ * process go unasked. Every sandbox this process ends itself (a guard's
+ * restart, its close) it ends for certain, its init before its outer bwrap
+ * (sandbox-end.ts `endSandbox`). Closing a boundary kills the same two; srt then sees
  * its child exit, and this process removes srt's proxy, its socat bridges and
  * its mount points before it exits with the sandbox's status (REPORT.md §5e).
  * The one sandbox it ends itself, when the host detaches one of its
@@ -36,8 +38,9 @@
  * core's dependency-free dir names (`claude-dirs.ts`), mount table
  * (`mount-table.ts`), nested-boundary words (`boundary-nesting.ts`), socat
  * backlog (`socat.ts`) and hub preview origins (`hub-previews.ts`),
- * with safe git and state files, and the agent's own dependency-free proxy
- * relay (`proxy-relay.ts`): a binary install runs
+ * with safe git and state files, the signal wall's sending half
+ * (`signal-wall.ts`, through sandbox-end.ts), and the agent's own
+ * dependency-free proxy relay (`proxy-relay.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
  * runs it on bun.
  */
@@ -77,6 +80,7 @@ import {
   RELAY_SOCKET_NAME,
   startProxyRelay,
 } from "./proxy-relay";
+import { endSandbox, parentOf } from "./sandbox-end";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -560,17 +564,6 @@ const mountinfoSpelling = (path: string): string =>
 /** A process's entry in `/proc`. */
 const PID = /^\d+$/;
 
-/** A process's parent, from `/proc/<pid>/stat` (after its name, which may hold `)`); undefined once it is gone. */
-const parentOf = (pid: string): number | undefined => {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
-  } catch {
-    // Gone.
-    return undefined;
-  }
-};
-
 /**
  * `inner` and every process that descends from it, by each one's parent:
  * the sandbox, in its own pid namespace and any nested in it. The agent
@@ -579,7 +572,7 @@ const parentOf = (pid: string): number | undefined => {
 const treeOf = (inner: number): number[] => {
   const children = new Map<number, number[]>();
   for (const pid of readdirSync("/proc").filter((name) => PID.test(name))) {
-    const parent = parentOf(pid);
+    const parent = parentOf(Number(pid));
     if (parent === undefined) {
       continue;
     }
@@ -763,6 +756,18 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
 let current: Sandbox | undefined;
 let stopping = false;
 
+/**
+ * Kills `sandbox` with everything in it, for certain: its init, the pid
+ * namespace's process 1, then its outer bwrap (sandbox-end.ts), never the
+ * outer alone, whose death ends the namespace only through bwrap's
+ * `--die-with-parent`. Its exit then ends the sandbox's run below.
+ */
+const kill = (sandbox: Sandbox): void => {
+  endSandbox({ inner: sandbox.inner, outer: sandbox.proc.pid }, () =>
+    sandbox.proc.kill("SIGKILL")
+  );
+};
+
 /** Kills the sandbox, with everything in it, when one of its protected binds is gone. */
 const guard = (): void => {
   const sandbox = current;
@@ -773,7 +778,7 @@ const guard = (): void => {
   const lost = mounted && sandbox.guarded.find((path) => !mounted.has(path));
   if (lost) {
     sandbox.detached = lost;
-    sandbox.proc.kill("SIGKILL");
+    kill(sandbox);
   }
 };
 
@@ -816,7 +821,9 @@ process.on("SIGUSR1", guard);
 for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
   process.on(signal, () => {
     stopping = true;
-    current?.proc.kill("SIGKILL");
+    if (current) {
+      kill(current);
+    }
   });
 }
 
@@ -831,7 +838,9 @@ let finishing: Promise<never> | undefined;
 const finish = (end: { status: number } | { gone: string }): Promise<never> => {
   finishing ??= (async () => {
     stopping = true;
-    current?.proc.kill("SIGKILL");
+    if (current) {
+      kill(current);
+    }
     rmSync(placeFile, { force: true });
     rmSync(guardedFile, { force: true });
     relay.close();

@@ -1,6 +1,8 @@
 /**
  * `bun run signal:check`: every signal CawCo sends goes through core's
- * signalling module (packages/core/src/signal.ts), the wall that refuses any
+ * signalling module (packages/core/src/signal.ts, which sends through
+ * signal-wall.ts, imported alone by a process that must not load core's
+ * index: the srt host), the wall that refuses any
  * pid that is not an integer above 1 before anything is sent. On 2026-10-18 a
  * probe spec's own `process.kill(… ?? -1, "SIGKILL")` ended every process of
  * the owner's user, and the hub was down for over four hours.
@@ -22,8 +24,11 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
-/** The wall itself, and this check, which names what it looks for. */
-const OWN = new Set(["packages/core/src/signal.ts", "scripts/signal-check.ts"]);
+/** The wall itself (its sending half, which signal.ts re-exports), and this check, which names what it looks for. */
+const OWN = new Set([
+  "packages/core/src/signal-wall.ts",
+  "scripts/signal-check.ts",
+]);
 
 /** Files that may make a Pid of a value the wall must refuse: the probe that proves it does. */
 const FORGES = new Set(["scripts/probe-kit/signal-wall-child.ts"]);
@@ -97,7 +102,7 @@ if (hits.length > 0 || stale.length > 0) {
   const parts = [
     ...(hits.length > 0
       ? [
-          `Every signal goes through core's signalling module (packages/core/src/signal.ts); these send one another way:\n${hits.join("\n")}`,
+          `Every signal goes through core's signalling module (packages/core/src/signal.ts, or signal-wall.ts where core's index cannot load); these send one another way:\n${hits.join("\n")}`,
         ]
       : []),
     ...(stale.length > 0

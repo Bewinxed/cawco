@@ -217,6 +217,7 @@ import {
   parseProcId,
 } from "./proc-id";
 import { RELAY_STEP } from "./proxy-relay";
+import { endSandbox } from "./sandbox-end";
 import type { SessiondClient } from "./sessiond-client";
 import {
   hasLeftDirs,
@@ -6621,32 +6622,9 @@ const endMembers = async (
 };
 
 /**
- * The sandbox's init, the pid namespace's process 1, while it is still the
- * one its outer bwrap started: `inner` on record, whose parent is `outer`.
- * Undefined once it is gone, or the pid names another process.
- */
-const sandboxInit = async (
-  place: Pick<Place, "inner" | "outer">
-): Promise<number | undefined> => {
-  const text = await readFile(`/proc/${place.inner}/stat`, "utf8").catch(
-    () => ""
-  );
-  const parent = Number(text.slice(text.lastIndexOf(")") + 2).split(" ")[1]);
-  return parent === place.outer ? place.inner : undefined;
-};
-
-/**
  * Stops the boundary of workspace `id` that `held` names, as sessiond holds
- * it, with every process in it. Linux: SIGKILL to the sandbox's init, the
- * pid namespace's process 1, ends the namespace with every process in it,
- * by the kernel ("If the "init" process of a PID namespace terminates, the
- * kernel terminates all of the processes in the namespace via a SIGKILL
- * signal", pid_namespaces(7)); then to the outer bwrap. The outer alone
- * ended the namespace only through bwrap's `--die-with-parent`, a
- * PR_SET_PDEATHSIG its init sets on itself, which bwrap's own maintainers
- * call "a convenience to get helper processes cleaned up automatically,
- * rather than a security mechanism, so it's considered to be OK if there are
- * ways it might not work" (github.com/containers/bubblewrap issue 700). srt
+ * it, with every process in it. Linux: its init, then its outer bwrap
+ * (sandbox-end.ts `endSandbox`, as its host ends one itself). srt
  * then sees its child exit, and its host removes srt's proxy, socat bridges
  * and mount points and exits (killing the host instead would leave those
  * behind, REPORT.md §5e), and its keeper ends what is left in its cgroup
@@ -6663,11 +6641,7 @@ const stopBoundary = async (
   const procId = boundaryProcId(id, held.gen);
   const place = await readPlace(id, held.gen);
   if (place && (await isBwrap(place.outer))) {
-    const init = await sandboxInit(place);
-    if (init !== undefined) {
-      signalPid(listedPid(init), "SIGKILL");
-    }
-    signalPid(listedPid(place.outer), "SIGKILL");
+    endSandbox(place, () => signalPid(listedPid(place.outer), "SIGKILL"));
     const deadline = Date.now() + STOP_TIMEOUT_MS;
     while (
       // biome-ignore lint/performance/noAwaitInLoops: polls one process until its host has cleaned up, or the deadline passes
