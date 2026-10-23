@@ -215,6 +215,11 @@ interface Surface {
   /** Whether this leg has it to open; a reason when it does not. */
   present: (page: Page) => Promise<string | null>;
   /**
+   * Shut before its open is read, the pointer off what opens it: whether it
+   * stood open (a panel a pointer resting on its chip opened by its dwell).
+   */
+  shut?: (page: Page) => Promise<boolean>;
+  /**
    * A motion staged on purpose, not one transition, and why: its runs are
    * read and named, and not held to one clock.
    */
@@ -352,6 +357,20 @@ const SURFACES: Surface[] = [
       (await visible(page, CHIP)) ? null : "no working chip in the row",
     within: async (page) =>
       `[id="${await page.locator(CHIP).first().getAttribute("aria-controls")}"]`,
+    // A pointer an earlier surface left resting on the row opens the panel
+    // by its dwell (DelegateTray `DWELL`): its open is then no part of the
+    // press. The pointer goes off the row and the panel shuts first.
+    async shut(page) {
+      const panel = `[id="${await page.locator(CHIP).first().getAttribute("aria-controls")}"]`;
+      const stood = (await page.locator(panel).count()) > 0;
+      await page.mouse.move(1, 1);
+      await page
+        .locator(panel)
+        .waitFor({ state: "detached", timeout: 3000 })
+        .catch(() => undefined);
+      await settle(page, 300);
+      return stood;
+    },
     open: (page) => page.locator(CHIP).first().click(),
     close: (page) => page.locator(CHIP).first().click(),
   },
@@ -463,6 +482,9 @@ async function measure(
   what: string,
   thrown: string[]
 ): Promise<void> {
+  if (await surface.shut?.(page)) {
+    kit.note(`${what}: stood open before its press (shut first)`);
+  }
   const before = await page.evaluate(reading, LOG);
   if (!before) {
     kit.check(`${what}: the transcript is there`, false);

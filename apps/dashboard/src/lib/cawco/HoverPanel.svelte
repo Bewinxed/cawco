@@ -78,6 +78,16 @@
   let held = $state<{ w: number; h: number } | null>(null);
   /** The shown content's size, kept as it changes; a leaving one never counts. */
   let size: { w: number; h: number } | null = null;
+  /**
+   * The panel has come in: from here a change to what it holds tweens its
+   * size (morph). While it is still coming in, what settles in it (a tail
+   * drawn the frame after the panel mounts) is part of its entrance, and
+   * the panel takes that size as it rises: its open is one motion, never
+   * the rise and a size tween a frame behind it.
+   */
+  let entered = $state(false);
+  // What it holds lands within that entrance (hover-entrance.ts).
+  provideEntrance(() => !entered);
   const measure: Attachment<HTMLElement> = (node) => {
     // biome-ignore lint/style/noRestrictedGlobals: reads only: the content's size, kept in a plain variable for the next trigger's hold
     const watcher = new ResizeObserver(() => {
@@ -94,6 +104,9 @@
       held = next && size ? { ...size } : null;
       if (!next) {
         size = null;
+        // Shut, it has come in no longer: the next open comes in afresh,
+        // never morphing what lands in it before its rise has begun.
+        entered = false;
       }
     });
   });
@@ -139,17 +152,6 @@
       );
     };
   });
-
-  /**
-   * The panel has come in: from here a change to what it holds tweens its
-   * size (morph). While it is still coming in, what settles in it (a tail
-   * drawn the frame after the panel mounts) is part of its entrance, and
-   * the panel takes that size as it rises: its open is one motion, never
-   * the rise and a size tween a frame behind it.
-   */
-  let entered = $state(false);
-  // What it holds lands within that entrance (hover-entrance.ts).
-  provideEntrance(() => !entered);
 
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
