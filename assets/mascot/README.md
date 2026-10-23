@@ -221,7 +221,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   drawings outside the line and exits non-zero if there are any. An enter of a status with inks
   of its own is traced in them, and its note is not a white mark (the gates read each ink from
   its own paths, not by colour off the picture). A drawing folds into the landing's two-frame
-  snap only when it is inked as the still on 98% of its pixels, the landing gate's own share.
+  snap only when it is inked as the still on 98% of its pixels, the landing check's own share.
   `--opens <file>` traces a clip that opens on a still instead of an empty page (the head
   files): its opening run is snapped to that still's drawing and gated as the landing is, and
   its eye whites are told from both stills, as a loop's are. `tkA+tkB` traces two takes as one

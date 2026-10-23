@@ -1,5 +1,5 @@
 /**
- * The landing gate's app build builds only what the work reaches: the
+ * The app build in the merge checks builds only what the work reaches: the
  * hub's own decision (app-targets.ts `gateStepFor`, the function its gate
  * calls) over six real commits from this repository's history, each read as
  * the item's diff, against the committed map (apps/apple/targets.json) and

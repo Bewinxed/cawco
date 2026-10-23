@@ -1,6 +1,6 @@
 /**
- * The landing gate runs exactly what the project declares, for any language
- * or toolchain, and says so when it declares nothing (hub gate-file.ts,
+ * The merge checks run exactly what the project declares, for any language
+ * or toolchain, and the report says so when it declares nothing (hub gate-file.ts,
  * work-items.ts `gateSteps`); no session declares what the hub runs, and the
  * report is the proof. On a scratch fleet (real hub, agent and sessiond;
  * Claude Code against the mock model). This spec delegates, so its fleet
@@ -13,7 +13,7 @@
  *   lint:changed`, `bun run typecheck`.
  *   - A: a delegate started with no checks commits a file that type-checks
  *     and calls finish_item. Its item is done; its report is its own
- *     summary, then "Landing gate, run by the hub:" with those three steps
+ *     summary, then "Merge checks, run by the hub:" with those three steps
  *     passing and no other, and "Landed on main at …"; the commit is on main.
  *   - B: a delegate commits a deliberate type error. The answer it reads
  *     says it did not land, that `bun run typecheck` failed, and carries
@@ -110,7 +110,7 @@ interface ItemRow {
   state: string;
 }
 
-/** The report's landing gate lines: every `- …` line under its heading. */
+/** The report's merge check lines: every `- …` line under its heading. */
 const gateLinesOf = (result: string): string[] => {
   const at = result.indexOf(`${workWords.gateHeading}\n`);
   if (at < 0) {
@@ -204,7 +204,7 @@ const run = async (kit: Kit) => {
   await writeFile(join(repo, ".gitignore"), "node_modules\n");
   await Bun.$`bun install`.cwd(repo).env(env).quiet();
   await commitAll(repo);
-  const ts = await projectOn(repo, "Landing gate", JS_GATE);
+  const ts = await projectOn(repo, "Declared checks", JS_GATE);
 
   const itemOf = (id: string) =>
     fleet.query<ItemRow>(

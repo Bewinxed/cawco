@@ -9,8 +9,8 @@
 # files every build reads (Package.swift, Package.resolved, project.yml and
 # the map itself): a change to one builds every target.
 #
-# The landing gate reads only this map (packages/hub app-targets.ts): a file
-# belongs to the target whose folder holds it, and the gate builds the
+# The merge checks read only this map (packages/hub app-targets.ts): a file
+# belongs to the target whose folder holds it, and the merge checks build the
 # targets the work changed plus every target that depends on them
 # (build-both.sh --targets). A file no target holds (README, scripts/,
 # StoreKit/) builds nothing.

@@ -1,5 +1,5 @@
 /**
- * A scratch project's landing gate, declared as the person declares one:
+ * A scratch project's merge checks, declared as the person declares one:
  * `gate.md` written into its hub folder through the folder route (hub
  * gate-file.ts). Specs that land work declare the gate their legs need.
  */

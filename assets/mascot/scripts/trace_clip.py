@@ -53,7 +53,7 @@ LOOPS_REPO = T.LOOPS
 CLIPS = LOOPS_REPO.parent / "clips"
 SIZE = 512
 # Share of a landing's (or an opening's) inked pixels that carry its still's ink: a drawing that
-# alike is the still, folded into its two-frame snap, and the landing gate. One threshold for
+# alike is the still, folded into its two-frame snap, and the landing check. One threshold for
 # both: folded at 0.95 while gated at 0.98, the bar's smile folded the drawing its head rises back
 # out of its dip on (0.951) into the landing, and the gate then failed on it.
 LANDING = 0.98

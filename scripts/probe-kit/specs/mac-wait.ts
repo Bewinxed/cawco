@@ -1,5 +1,5 @@
 /**
- * A task whose landing gate needs a Mac, with no Mac online, waits for one
+ * A task whose merge checks need a Mac, with no Mac online, waits for one
  * and never fails for the want of it; a Mac coming online wakes it, and it
  * lands (hub work-items.ts `landSubmitted` → `declareWait`, `waitingTurn`,
  * `wakeCapable`; gate-file.ts `capableRefusal`, `capableWaitReason`,

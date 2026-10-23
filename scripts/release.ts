@@ -7,7 +7,7 @@
  * worktree of it under ~/.worktrees/release-<sha>, on real disk, made here
  * and removed when the build ends, whichever way, that builds, signs and
  * proves. The repository's check (`bun run check --all`) runs only when the
- * hub's landing gate did not pass it on the commit's tree (`GET
+ * hub's merge checks did not pass it on the commit's tree (`GET
  * /api/landing-gate`, hub work-items.ts `gatePassesOn`): then in a second
  * worktree, beside the builds, so it reads no file a build rewrites
  * (SvelteKit's sync writes each route's `$types.d.ts` with a plain
@@ -157,11 +157,11 @@ const treesOf = (commit: string) => {
   return { build: base, check: `${base}-check` };
 };
 
-/** The landing gate's step a release takes as its check (gate.md). */
+/** The merge check a release takes as its check (gate.md). */
 const LANDING_CHECK = "bun run check --all";
 
 /**
- * Whether the hub's landing gate passed {@link LANDING_CHECK} on the tree
+ * Whether the hub's merge checks passed {@link LANDING_CHECK} on the tree
  * `commit` holds: the hub on this host is asked (`GET /api/landing-gate`,
  * as this machine). No hub, no answer, or no such pass: the release runs
  * the check itself, and says why.
@@ -254,7 +254,7 @@ const releaseSteps = (
   secrets: ReturnType<typeof takeReleaseSecrets>,
   /** Holds a GitHub call from starting while a stop is clearing the run: it never returns then. */
   notStopped: () => Promise<void>,
-  /** The landing gate passed the check on this commit's tree ({@link gatePassed}). */
+  /** The merge checks passed the check on this commit's tree ({@link gatePassed}). */
   gated: boolean
 ): Step[] => {
   const trees = treesOf(current.commit);
@@ -433,7 +433,7 @@ const releaseSteps = (
     ),
     ...tree("build"),
     // The check reads its own tree, beside the builds; it gates notarization
-    // and promotion, never the builds. None when the landing gate passed it
+    // and promotion, never the builds. None when the merge checks passed it
     // on this tree.
     ...(gated
       ? []

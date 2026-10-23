@@ -4,7 +4,7 @@
 # directory, so edit it here and run `bun install` again.
 #
 # A push that updates main runs the repository's one check over the whole
-# tree, `bun run check --all` (scripts/check.ts), as the landing gate does. It
+# tree, `bun run check --all` (scripts/check.ts), as the merge checks do. It
 # runs on this checkout, so the commit pushed must be its HEAD, with nothing
 # uncommitted or untracked beside it (a file left out of the commit can make
 # the check pass here and fail on main). Pushes to other branches, and

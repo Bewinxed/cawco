@@ -20,7 +20,7 @@
  *   workspace: the stand-in records it there, in the delegate's clone.
  * - A, the `--bun` node shim the agent makes for workspaces (bun-node-shim.ts)
  *   links to the stand-in.
- * - A, the landing gate: the delegate commits and finishes; its item lands
+ * - A, the merge checks: the delegate commits and finishes; its item lands
  *   with the three declared steps passing, and the stand-in recorded
  *   `install --frozen-lockfile`, `run lint:changed` and `run typecheck`, each
  *   run in a clone, not the project's checkout.
@@ -38,7 +38,7 @@
  * CawCo's own scripts do (agent boundary.ts `bunScriptRuntime`), so its
  * workspaces' boundaries start:
  *
- * - C, the landing gate: a second delegate commits and finishes; its
+ * - C, the merge checks: a second delegate commits and finishes; its
  *   finish_item answer says it did not land, its first step `bun install
  *   --frozen-lockfile` failing with exit 127, the shell's "no such command",
  *   and it does not land: not done, its commit not on main (what the
@@ -273,7 +273,7 @@ export const One = { args: {} };
 `,
 });
 
-/** The landing gate's lines in a report or answer: every `- …` line under its heading. */
+/** The merge check lines in a report or answer: every `- …` line under its heading. */
 const gateLinesOf = (said: string): string[] => {
   const at = said.indexOf(`${workWords.gateHeading}\n`);
   if (at < 0) {
@@ -437,7 +437,7 @@ const run = async (kit: Kit) => {
     `${STAND_IN_SHIM}/bun -> ${shimBun}`
   );
 
-  // A: the landing gate's steps.
+  // A: the merge checks.
   const aRow = await until(
     "A's item ended",
     () => itemOf(a.workItemId),
@@ -546,7 +546,7 @@ const run = async (kit: Kit) => {
   fleet.launch("agent", [], { PATH: noBun });
   await fleet.agentUp();
 
-  // C: the landing gate refuses at its install.
+  // C: the merge checks refuse at the install.
   const c = await delegate("C");
   const answer = await until(
     "C's finish_item answered",

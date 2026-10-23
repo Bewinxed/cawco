@@ -45292,7 +45292,7 @@
         ]
       },
       "RestartHoldReason": {
-        "description": "Kinds of work a restart of the agent or the hub would cut. A turn is not one:\nthe session keeper runs it, and the next agent takes it over where it stands.\n\n- `custody`: the agent is still taking over the sessions the keeper holds.\n- `starting`: a session start the agent is in the middle of.\n- `image`: an image generation the agent is running.\n- `workspace`: a delegate's workspace the agent is cutting or archiving.\n- `command`: a command the hub asked the agent to run (a landing gate step).\n- `tool-call`: a tool call the agent relays to its hub.\n- `hub-tool-call`: a CawCo tool call the hub is answering, from any machine.\n- `write`: a message or an answer the agent is handing to a harness.\n- `opencode`: an OpenCode server operation the agent runs (a config apply,\n  a session opening, an MCP change, a handoff between server generations).\n- `opencode-send`: messages the agent holds for OpenCode, not yet handed over.",
+        "description": "Kinds of work a restart of the agent or the hub would cut. A turn is not one:\nthe session keeper runs it, and the next agent takes it over where it stands.\n\n- `custody`: the agent is still taking over the sessions the keeper holds.\n- `starting`: a session start the agent is in the middle of.\n- `image`: an image generation the agent is running.\n- `workspace`: a delegate's workspace the agent is cutting or archiving.\n- `command`: a command the hub asked the agent to run (a merge check).\n- `tool-call`: a tool call the agent relays to its hub.\n- `hub-tool-call`: a CawCo tool call the hub is answering, from any machine.\n- `write`: a message or an answer the agent is handing to a harness.\n- `opencode`: an OpenCode server operation the agent runs (a config apply,\n  a session opening, an MCP change, a handoff between server generations).\n- `opencode-send`: messages the agent holds for OpenCode, not yet handed over.",
         "type": "string",
         "enum": [
           "command",
@@ -50529,7 +50529,7 @@
         "type": "object",
         "properties": {
           "checkQueue": {
-            "description": "While its landing waits between `finish_item` and its outcome (the\nlanding gate's shared machine slot, a machine's pause, its turn to land):\n\"queued for the Mac's build slot behind …\", and since when (epoch ms);\nnull otherwise. Named for the checks it once was: shipped iOS builds\ndecode it under this key.",
+            "description": "While its landing waits between `finish_item` and its outcome (the\nmerge checks' shared machine slot, a machine's pause, its turn to land):\n\"queued for the Mac's build slot behind …\", and since when (epoch ms);\nnull otherwise. Named for the checks it once was: shipped iOS builds\ndecode it under this key.",
             "type": "object",
             "properties": {
               "words": {

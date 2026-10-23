@@ -1,5 +1,5 @@
 /**
- * The landing gate's check on the bundles Bun builds at runtime for a
+ * The merge check on the bundles Bun builds at runtime for a
  * browser: the canvas host, the decision host (whose dashboard components'
  * styles Lightning CSS compiles, core page-css.ts), the preview overlay and
  * the stage host. Each is built as the hub builds it, and each builder

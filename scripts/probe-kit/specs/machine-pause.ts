@@ -30,13 +30,13 @@
  *     A runs meanwhile.
  * B reports itself a Mac (`darwin-arm64`) and the project's gate.md
  * declares CawCo's iOS build step (`needs: apple`), so an item on A that commits
- * under apps/apple has a landing gate step on B: the iOS build, a stub
+ * under apps/apple has a merge check on B: the iOS build, a stub
  * `apps/apple/scripts/build-both.sh` here. That step is the hub's one
  * command on another machine.
  * p4. The iOS build step of an item on A waits, its item's status naming
  *     the pause and its end.
  * p5. The hub restarted mid-pause, with a minute of it left, keeps the
- *     pause, and the landing gate waits on B again, still saying why. (B's
+ *     pause, and the merge checks wait on B again, still saying why. (B's
  *     register reports Linux, so the probe marks it a Mac again. If its
  *     resumed landing found no Mac, the item waits for one: the delegate ends
  *     its turn, and calls finish_item again when the hub wakes it with B
@@ -73,7 +73,7 @@ const SLEEP = /PROBE-SLEEP-([A-Z])/;
 const HELLO = "PROBE-HELLO-Q";
 const FINISH_C = "PROBE-FINISH-C";
 const FINISH_D = "PROBE-FINISH-D";
-/** The landing gate's iOS build step, as its lines name it (the project's gate.md, probe-kit gate.ts). */
+/** The iOS build among the merge checks, as its lines name it (the project's gate.md, probe-kit gate.ts). */
 const GATE = "iOS build compiles";
 /** The file each delegate commits: under apps/apple, so its gate builds on B. */
 const FILES = { C: "apps/apple/Checker.swift", D: "apps/apple/Long.swift" };

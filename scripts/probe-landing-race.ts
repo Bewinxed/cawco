@@ -6,7 +6,7 @@
  * must not stop the boundary under the push (boundary-host.ts `markLfs`).
  *
  * One project whose origin is the hub's own remote, branch `main`, whose
- * package.json's `typecheck` the landing gate runs after each rebase. Each
+ * package.json's `typecheck` the merge checks run after each rebase. Each
  * item's delegate (the mock drives its tools) commits a file and calls
  * finish_item. On each of its first `n` gate runs that typecheck has the
  * probe, outside the boundary, push someone else's commit to the hub's
@@ -56,7 +56,7 @@ const delegateCommand = (tag: string) =>
   ].join(" && ");
 
 /**
- * The repository's `typecheck`, which the landing gate runs on the rebased
+ * The repository's `typecheck`, which the merge checks run on the rebased
  * tree, between the hub's rebase and its push: on each of its first
  * `race-n` runs it asks for main to move (a `probe-want-<run>` file in its
  * git dir) and waits for the probe, outside the boundary, to push someone
@@ -297,7 +297,7 @@ try {
     mainA.replaceAll("\n", " | ")
   );
   check(
-    "a: report says it rebased, and its landing gate ran typecheck",
+    "a: report says it rebased, and its merge checks ran typecheck",
     (a.item.result ?? "").includes(", rebased onto the newer main.") &&
       (a.item.result ?? "").includes("- bun run typecheck: pass ("),
     (a.item.result ?? "")

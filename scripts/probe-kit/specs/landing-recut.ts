@@ -278,7 +278,7 @@ const makeRepo = async (
     .quiet();
 };
 
-/** Whether a report's landing gate is the declared one, every step passing, in order. */
+/** Whether a report's merge checks are the declared ones, every step passing, in order. */
 const declaredPassed = (result: string): boolean => {
   const at = result.indexOf(`${workWords.gateHeading}\n`);
   const lines = result.slice(at).split("\n").slice(1, 4);

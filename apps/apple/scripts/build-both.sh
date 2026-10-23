@@ -13,10 +13,10 @@
 # generic iOS Simulator build compiles arm64 alone: the Mac's simulators are
 # Apple silicon, and the x86_64 slice the generic destination adds doubles
 # the compile for code no simulator here runs.
-# `--gate` is the landing gate's iOS build step, as the cockpit project's
+# `--gate` is the iOS build among the merge checks, as the cockpit project's
 # gate.md declares it (packages/hub gate-file.ts, `needs: apple`): it
 # compiles as `--compile-only` does, in the one build root `gate` every
-# item's gate shares instead of the checkout's own. That root stays warm
+# item's merge checks share instead of the checkout's own. That root stays warm
 # between items, so Xcode rebuilds only what the item's tree changed against
 # the last tree it compiled: the rsync below makes the root's apps/apple
 # that tree exactly (--checksum --delete; a changed file is written anew,
@@ -24,7 +24,7 @@
 # `--targets A,B,…` (with --compile-only or --gate) builds only those
 # schemes, in the order given (deps first), for each destination, and says
 # which in one TARGETS line; without it the one scheme built is the app,
-# CawCo, which compiles every target. The landing gate passes the targets
+# CawCo, which compiles every target. The merge checks pass the targets
 # its map gives the item's change (apps/apple/targets.json, packages/hub
 # app-targets.ts) and runs nothing on the Mac when they are none. A --gate
 # run also holds the map to Package.swift and project.yml

@@ -497,7 +497,7 @@ export const listTasksWaiting = async (
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
 
-/** The project's landing gate as the hub reads its gate.md now (hub gate-file.ts `gateRoutes`). */
+/** The project's merge checks as the hub reads its gate.md now (hub gate-file.ts `gateRoutes`). */
 export const readGate = (
   projectId: string
 ): Promise<{ file: string; gate: ProjectGate }> =>

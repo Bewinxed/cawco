@@ -8,7 +8,7 @@
  * TypeScript's own parser, from what the page loads: its own route files,
  * the root layout and the client hooks. A type-only import is erased and
  * not followed; a dynamic `import()` loads on demand and is not followed.
- * No build: the landing gate runs none, and the static graph holds
+ * No build: the merge checks run none, and the static graph holds
  * everything a build's chunk for the page can hold (a bundler only drops
  * from it), so a path it finds is one to cut.
  *

@@ -17,7 +17,7 @@
  *   message joined the turn after finish_item's answer, was read after the
  *   item had landed, reopened nothing, and the delegate ended its turn on it.
  * - B, while it lands: the handoff is made once the item's row says its
- *   landing gate runs; the hub answers that it keeps it until the call
+ *   merge checks run; the hub answers that it keeps it until the call
  *   answers.
  *
  * For each: the first landing is done; the first model request that carries
@@ -218,7 +218,7 @@ const leg = async (
     asItCalls = handoff;
   } else {
     await until(
-      `${label}: its landing gate runs`,
+      `${label}: its merge checks run`,
       () => itemRow(fleet, started.workItemId),
       (row) => row?.landing_since !== null && row?.landing_since !== undefined,
       300_000

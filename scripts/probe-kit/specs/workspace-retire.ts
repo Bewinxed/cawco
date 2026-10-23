@@ -46,8 +46,8 @@
  * (q) Q commits a file and a package.json whose typecheck sleeps, then
  *     passes; pushes its commit to origin's `probe-keep-Q` (as the conductor
  *     pushed K1's by hand on 2026-10-17), and calls finish_item; its parent
- *     stops it while its landing gate runs. The stop ends the landing: the
- *     gate passes and nothing is pushed to main all the same. Its workspace
+ *     stops it while its merge checks run. The stop ends the landing: the
+ *     checks pass and nothing is pushed to main all the same. Its workspace
  *     retires once the landing has ended (not under it), and its row records
  *     its head as that commit on `probe-keep-Q`. A handoff cuts its clone
  *     again there, not at main: the same session's shell reads the same path,
@@ -889,7 +889,7 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   });
   const wq = workspaceOf(started.workspaceId);
   const landing = await until(
-    "Q's landing gate running",
+    "Q's merge checks running",
     () => itemRow(fleet, started.workItemId),
     (row) => Boolean(row?.landing_since),
     300_000
@@ -909,7 +909,7 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     60_000
   ).catch(() => itemRow(fleet, started.workItemId));
   check(
-    "(q) Q pushed its commit to probe-keep-Q and called finish_item; stopped while its landing gate ran, its item is cancelled",
+    "(q) Q pushed its commit to probe-keep-Q and called finish_item; stopped while its merge checks ran, its item is cancelled",
     Boolean(landing?.landing_since) &&
       stopped.status === 200 &&
       cancelled?.state === "cancelled",
