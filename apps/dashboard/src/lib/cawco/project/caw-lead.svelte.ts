@@ -43,7 +43,7 @@ import {
   type ProjectRow,
   threadsOf,
 } from "../client.svelte";
-import type { CawStatus } from "../home/Caw.svelte";
+import type { CawStatus } from "../home/caw-status";
 import { dur } from "../motion/curves.svelte";
 import type { TaskSummary } from "../project-tasks";
 import { store, stored } from "../storage";

@@ -149,9 +149,18 @@ function spelledInScript(text: string, file: string): void {
   visit(source);
 }
 
+// Typed here, not as `typeof import("svelte/compiler")`: scripts/ declares no
+// svelte, so tsc resolves that import up past the checkout, and a svelte 4
+// there (`~/node_modules`) declares `svelte/compiler` ambiently for the whole
+// program, over core's svelte 5 (decision-host.ts `generate: "client"`).
 const { parse } = (await import(
   Bun.resolveSync("svelte/compiler", DASHBOARD)
-)) as typeof import("svelte/compiler");
+)) as {
+  parse: (
+    source: string,
+    options: { filename: string; modern: true }
+  ) => unknown;
+};
 
 /** The text one node of a Svelte page's tree spells, if it spells any. */
 function svelteText(record: Record<string, unknown>): string | null {
