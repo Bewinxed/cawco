@@ -362,7 +362,8 @@ const respond = (request: Seen): Reply => {
   }
   if (issued.has(marker)) {
     if (!answered.has(marker)) {
-      answered.set(marker, request.last);
+      // Its whole answer: a delivery may join at the tool's boundary.
+      answered.set(marker, request.final);
       answeredAt.set(marker, Date.now());
     }
     return slow.has(marker)
@@ -1859,6 +1860,17 @@ const innerButtonBox = (outer: Frame) =>
  * 2026-10-18). The error's stack, when there is one, is in the line.
  */
 const rootlessFrameCheck = async (on: On, outer: Frame) => {
+  // At rest means its pin already went: its delivery turns the pill filled, a draw of its own.
+  await until(
+    "the frame page's pins delivered",
+    () => docOf(outer),
+    (doc) =>
+      Object.values(doc.pins).every(
+        (pin) => !!(pin as { sentAt?: string }).sentAt
+      ),
+    DELIVERY_MS + QUIET_MS
+  ).catch(() => undefined);
+  await settle(on.page, 600);
   const said = await outer.evaluate(async (idleMs) => {
     const errors: string[] = [];
     let phase = "at rest";
@@ -6120,9 +6132,13 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
   const { frame, numberOn, pinsNow, pressOn, submit } = rig;
   // No Send: each comment goes by itself, its attachments by reference.
   const onC = await numberOn("#c");
+  // This page's deliveries alone: another page's pins share its numbers.
   const delivered = (text: string) =>
     heard.find(
-      (request) => NOTICE.test(request.last) && request.last.includes(text)
+      (request) =>
+        NOTICE.test(request.last) &&
+        request.last.includes(`id=${artifactId}`) &&
+        request.last.includes(text)
     );
   const message = await until(
     "the picture-alone comment's delivery",
@@ -8706,10 +8722,12 @@ const refusedChecks = async (on: On) => {
 
 /**
  * A hub restart between the marking and the delivery keeps the marks'
- * pictures (research/pi-durable.md §13.9 C): a comment's picture reaches
- * the hub's disk as soon as the page posts it; the hub stops then, inside
- * its quiet before it delivers, and starts; it delivers the comment by
- * itself once up (service.ts `resumeMarks`), with its picture.
+ * pictures (research/pi-durable.md §13.9 C). The comment is written while
+ * the page's doc link is held down, so the hub can't deliver it before the
+ * restart: its picture reaches the hub's disk all the same, over the page's
+ * own post (overlay page.ts `postPictures`); the hub stops and starts; with
+ * the link let through, the comment reaches the hub and goes to the session
+ * by itself, with the picture the hub kept through its restart.
  */
 const restartChecks = async (on: On) => {
   const made = await on.call(CREATE, {
@@ -8720,23 +8738,37 @@ const restartChecks = async (on: On) => {
     html: SEND_PAGE,
   });
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
-  const frame = await frameHolding(on.page, id, "the restart page in the pane");
+  const { origin } = new URL(on.page.url());
+  const tab = await on.kit.page("desk");
+  const link: { down: boolean } = { down: true };
+  await tab.routeWebSocket(PAGE_SOCKET, (ws) => {
+    if (link.down) {
+      ws.close({ code: 1011, reason: "The probe held the page's link." });
+      return;
+    }
+    ws.connectToServer();
+  });
+  const there: On = { ...on, page: tab };
+  await open(tab, `${origin}/session/${on.session}`, COMPOSER);
+  const frame = await frameHolding(tab, id, "the restart page, its link held");
   if (!frame) {
     on.kit.check("restart: the page is shown", false, made.slice(0, 300));
+    await tab.close();
     return;
   }
-  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await frame.waitForSelector("#one");
+  await tab.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(frame, true);
-  const b = await screenBox(on, frame, "#one");
+  const b = await screenBox(there, frame, "#one");
+  const heardBefore = heard.length;
   await commentAt(
-    on,
+    there,
     frame,
     b.x + b.w * 0.3,
     b.y + b.h / 2,
     "Keep my picture through a restart."
   );
-  const heardBefore = heard.length;
-  await on.page.keyboard.press("Escape");
+  await tab.keyboard.press("Escape");
   const marks = join(
     dirname(on.fleet.env.CAWCO_DB_PATH as string),
     "artifacts",
@@ -8744,7 +8776,7 @@ const restartChecks = async (on: On) => {
     "marks"
   );
   const pin = await until(
-    "the comment in the doc",
+    "the comment in the page's doc",
     async () => pinNumbered((await docOf(frame)).pins, 1),
     Boolean,
     10_000
@@ -8759,29 +8791,21 @@ const restartChecks = async (on: On) => {
     Boolean,
     15_000
   ).catch(() => false);
-  const saidBefore = on.said.length;
-  // Inside the hub's quiet: nothing delivered yet.
-  const raced = heard
+  const early = heard
     .slice(heardBefore)
-    .some((one) => NOTICE.test(one.last) && one.last.includes("restart-keeps"));
+    .filter(
+      (one) => NOTICE.test(one.last) && one.last.includes("restart-keeps")
+    ).length;
+  const saidBefore = on.said.length;
   await on.fleet.stop("hub");
   on.fleet.launch("hub");
   await on.fleet.hubUp();
-  const { origin } = new URL(on.page.url());
   await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
-  const back = await frameHolding(
-    on.page,
-    id,
-    "the restart page after the hub's restart"
-  );
   // The hub down a moment, on purpose: the page's failed requests and sockets then are the restart's, not an error of the pages.
   const during = on.said.splice(saidBefore);
   on.said.push(...during.filter((line) => !HUB_DOWN.test(line)));
-  if (raced) {
-    on.kit.note(
-      "restart: the comment was delivered before the hub stopped (its picture landed late in the quiet), so this run reads its delivery from before the restart"
-    );
-  }
+  // The link let through: the comment reaches the hub, then the session.
+  link.down = false;
   const delivered = await until(
     "the delivery after the restart",
     () =>
@@ -8794,12 +8818,39 @@ const restartChecks = async (on: On) => {
     DELIVERY_MS * 2
   ).catch(() => undefined);
   const pictures = delivered?.body.match(IMAGE_BLOCK)?.length ?? 0;
-  const sent = back ? pinNumbered((await docOf(back)).pins, 1) : undefined;
+  // The pane may have drawn its page again over the hub's restart: read the frame it holds now.
+  const sent = await until(
+    "the comment stamped sent",
+    async () => {
+      const now = await frameHolding(
+        tab,
+        id,
+        "the restart page, its link back"
+      );
+      if (!now) {
+        return null;
+      }
+      try {
+        return pinNumbered((await docOf(now)).pins, 1);
+      } catch {
+        // Drawn again while read: the next look reads the new one.
+        return null;
+      }
+    },
+    (now) => !!now?.sentAt,
+    20_000
+  ).catch(() => undefined);
   on.kit.check(
-    "restart: a comment's picture is on the hub's disk once the page posts it; after the hub stops and starts, the comment is delivered by itself with its picture",
-    onDisk && !!delivered && pictures >= 1 && !!sent?.sentAt,
-    `on disk ${onDisk}; delivered ${!!delivered}; pictures ${pictures}; sentAt ${String(sent?.sentAt)}`
+    "restart: written while the page's link is held, a comment's picture is on the hub's disk once the page posts it and nothing is delivered; after the hub stops and starts and the link is let through, the comment goes by itself with its picture",
+    !!pin &&
+      onDisk &&
+      early === 0 &&
+      !!delivered?.last.includes("Keep my picture through a restart.") &&
+      pictures >= 1 &&
+      !!sent?.sentAt,
+    `pin ${String(pin?.id)}; on disk ${onDisk}; delivered before the restart ${early}; delivered ${!!delivered}; pictures ${pictures}; sentAt ${String(sent?.sentAt)}`
   );
+  await tab.close();
   await shutList(on);
 };
 

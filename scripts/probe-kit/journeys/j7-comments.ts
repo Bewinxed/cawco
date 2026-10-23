@@ -157,7 +157,7 @@ async function walk(leg: Leg): Promise<void> {
 
 const journey: Journey = {
   name: "j7-comments",
-  flow: "Previews and comments: open a preview, comment on it, Send, the agent receives it",
+  flow: "Previews and comments: open a preview, comment on it, the agent receives it by itself",
   respond: (seen: Seen) =>
     seen.tools && seen.last.includes(NOTICE)
       ? say("Read your comment; putting the version first.")

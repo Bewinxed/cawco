@@ -137,6 +137,12 @@ export interface Seen {
   /** The request's body as sent: where a catalog tool (OpenCode's Code Mode) is named. */
   body: string;
   /**
+   * The newest message's whole text: a tool's result with the words read
+   * mid-turn beside it, where {@link last} keeps only those words. What a
+   * tool answered, when a delivery joined at its boundary.
+   */
+  final: string;
+  /**
    * What started this request: the last user message's text, or, when the
    * newest message carries words read mid-turn, those words from
    * {@link MID_TURN} on (then {@link lastMidTurn}).
@@ -543,6 +549,18 @@ const textOf = (content: unknown): string => {
       typeof part.text === "string" ? part.text : textOf(part.content)
     )
     .join(" ");
+};
+
+/** What a request's newest message says: its words from `MID_TURN` on when it carries any ({@link Seen.last}), and whole ({@link Seen.final}). */
+const newestOf = (
+  words: { midTurn: boolean; said: string; text: string }[]
+): Pick<Seen, "final" | "last" | "lastMidTurn"> => {
+  const newest = words.at(-1);
+  return {
+    last: newest?.said ?? "",
+    final: newest?.text ?? "",
+    lastMidTurn: newest?.midTurn === true,
+  };
 };
 
 const encoder = new TextEncoder();
@@ -1711,8 +1729,7 @@ async function standUp(
         toolFailed: toolFailed(final?.content),
         all: words.map((said) => said.text).join("\n"),
         body: JSON.stringify(body),
-        last: words.at(-1)?.said ?? "",
-        lastMidTurn: words.at(-1)?.midTurn === true,
+        ...newestOf(words),
         tools: (body.tools?.length ?? 0) > 0,
         // Anthropic names a tool at its top; chat completions, in `function`.
         toolNames: (body.tools ?? []).flatMap((tool) => {

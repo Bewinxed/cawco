@@ -302,7 +302,8 @@ const respond = (request: Seen): Reply => {
   }
   if (issued.has(marker)) {
     if (!answered.has(marker)) {
-      answered.set(marker, request.last);
+      // Its whole answer: a delivery may join at the tool's boundary.
+      answered.set(marker, request.final);
     }
     return text("done");
   }
@@ -1453,10 +1454,32 @@ const endedWriterChecks = async (
         ),
       `pin ${JSON.stringify(still && { sentAt: still.sentAt, heard: still.heard, thread: still.thread })}; failed row ${JSON.stringify(failed)}; lines ${JSON.stringify(drawn)}`
     );
+    // The person sees it on the pin, not silence: its row says why, with Try again.
+    const pinRow = (await rowsOf(tab)).locator(
+      'li:has([data-slot="pin-row"][data-pin-row="1"])'
+    );
+    const notSentLine = pinRow.locator("[data-not-sent]");
+    const lineWords = async () =>
+      (await notSentLine.count()) > 0
+        ? ((await notSentLine.first().textContent()) ?? "").trim()
+        : "";
+    const rowSays = await until(
+      "pin 1's row saying it wasn't sent",
+      lineWords,
+      (words) => words.startsWith("Not sent: "),
+      10_000
+    ).catch(lineWords);
+    const retry = await pinRow.locator('[data-slot="pin-retry"]').count();
+    await shutList(tab);
+    kit.check(
+      '7a: the pin no one took says so where the person reads it: its row says "Not sent: …" with Caw\'s refusal, and offers Try again',
+      rowSays.includes("Caw couldn't take them") && retry === 1,
+      `row ${JSON.stringify(rowSays)}; Try again ${retry}; notSent ${JSON.stringify(still?.notSent)}`
+    );
   } else {
     const agentSaid = outcome.pin?.thread.find((entry) => entry.by === "agent");
     kit.check(
-      "7a: a comment on an ended writer's page, sent, wakes the project's Caw, the delivery naming the pin's id",
+      "7a: a comment on an ended writer's page goes by itself and wakes the project's Caw, the delivery naming the pin's id",
       !!pin &&
         writerEvents === 0 &&
         caw.pin === pin.id &&
