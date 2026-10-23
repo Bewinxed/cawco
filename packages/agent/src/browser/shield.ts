@@ -41,7 +41,6 @@ import {
   type BrowserRow,
   type BrowserShieldArgs,
   isBrowserKey,
-  SHIELD_WORDS,
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -304,7 +303,7 @@ export const shieldBrowser = async (
     throw new Error(`${String(key)} is no browser key.`);
   }
   // Closed before anything else: no agent reads the page from here on.
-  gateOf(key)?.closeAll(SHIELD_WORDS);
+  gateOf(key)?.closeAll();
   const before = held.get(key);
   // A take-over this daemon holds already (sent again with a viewer) keeps
   // its browser as it runs: it is never started again under the person.
@@ -317,7 +316,7 @@ export const shieldBrowser = async (
       `${key}'s gate is not served on this machine, so it could not be closed; nothing was given to the person.`
     );
   }
-  gate.closeAll(SHIELD_WORDS);
+  gate.closeAll();
   const record = await readBrowser(key);
   if (!record) {
     throw new Error(`${key} has no record on this machine.`);

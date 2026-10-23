@@ -22451,6 +22451,10 @@ export const createServer = (
         })
       );
     },
+    // A held item's notice in Needs you: fleet watch keeps them, made once
+    // the hub is up (`watch`), before any sweep runs.
+    tellYou: (row, title, body) => watch?.tellYou(row, title, body),
+    untellYou: (instanceId) => watch?.humanSend(instanceId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     leadPlace: leadPlaceRef,
     report: (row, body, failed, notice, headline) => {

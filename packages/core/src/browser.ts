@@ -265,11 +265,20 @@ export const browserMount = (key: BrowserKey): string =>
 
 /**
  * What every agent's browser tool is told while the person holds the
- * browser privately (agent shield.ts): the gate's refusal and close reason,
- * and the line the project's other sessions are told (hub browsers.ts).
+ * browser privately (agent shield.ts): the gate's refusal of every
+ * connection (423), and the line the project's other sessions are told (hub
+ * browsers.ts). Whole, in the owner's words (ASD-STE100).
  */
 export const SHIELD_WORDS =
   "The person took over this browser in CawCo. Do not use your browser tools. Your browser tools work again when the person presses Hand back.";
+
+/**
+ * The close reason of a connection the take-over cuts (agent gate.ts
+ * `closeAll`): a WebSocket carries 123 bytes at most, which
+ * {@link SHIELD_WORDS} is past, so the cut says this whole and the tool's
+ * next connection is refused with SHIELD_WORDS.
+ */
+export const SHIELD_CLOSE_WORDS = "The person took over this browser.";
 
 /** How long a take-over stands with no view open before the daemon hands it back itself. */
 export const TAKEOVER_UNWATCHED_MS = 2 * 60_000;

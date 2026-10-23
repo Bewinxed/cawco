@@ -25,7 +25,8 @@
  *   refuses `chrome:` itself), and the gate's own sentence answers a
  *   `Page.navigate` to it on A's page and a `new_page file://…`;
  * - `Network.getAllCookies` answers the sign-ins sentence;
- * - the shield's `closeAll` drops A and B with 4423, a new connection gets
+ * - the shield's `closeAll` drops A and B with 4423 and its short close
+ *   sentence whole, a new connection gets
  *   423 with its sentence until `open()`, then connects;
  * - with B connected and holding a page, A's `performance_start_trace` is
  *   refused with the gate's sentence (a trace records every page); B's
@@ -63,6 +64,7 @@ import {
   type BrowserKey,
   type BrowserRow,
   browserSlug,
+  SHIELD_CLOSE_WORDS,
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -550,7 +552,7 @@ const gateChecks = async (
       JSON.stringify(cookies)
     );
 
-    await gateHost.call("closeAll", { key, why: PRIVATE });
+    await gateHost.call("closeAll", { key });
     const [aClosed, bClosed] = await Promise.all([rawA.closed, rawB.closed]);
     const refused = await upgradeAnswer(port, who.A.id, who.A.token);
     await gateHost.call("open", { key });
@@ -562,10 +564,11 @@ const gateChecks = async (
       () => false
     );
     check(
-      `${host}: closeAll drops A and B with 4423, a new connection gets 423 "${PRIVATE}" until open(), then connects`,
+      `${host}: closeAll drops A and B with 4423 and "${SHIELD_CLOSE_WORDS}" whole, a new connection gets 423 with the owner's words whole, "${PRIVATE}", until open(), then connects`,
       aClosed.code === 4423 &&
         bClosed.code === 4423 &&
-        aClosed.reason === PRIVATE &&
+        aClosed.reason === SHIELD_CLOSE_WORDS &&
+        bClosed.reason === SHIELD_CLOSE_WORDS &&
         refused.status === 423 &&
         refused.text === PRIVATE &&
         again,
@@ -816,7 +819,7 @@ const run = async (kit: Kit): Promise<void> => {
     } | null;
     // Routed to this key's gate (a key with none answers 404, GATE_WORDS.none):
     // its shield's sentence comes back, and no browser starts for it.
-    await gateHost.call("closeAll", { key, why: PRIVATE });
+    await gateHost.call("closeAll", { key });
     const before = await upgradeAnswer(gatePort, who.A.id, who.A.token);
     await gateHost.call("open", { key });
     const still = (await gateHost.call("record", { key })) as {

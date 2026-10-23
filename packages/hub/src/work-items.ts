@@ -1031,6 +1031,11 @@ export interface WorkItemDeps {
     taskId: string
   ) => string | undefined;
   /**
+   * A notice about the session in Needs you (fleet-watch.ts `tellYou`), and
+   * its end once the hold it told of is over (`untellYou`).
+   */
+  readonly tellYou: (row: InstanceRow, title: string, body: string) => void;
+  /**
    * A project task's to-dos (tasks.ts), for the plan ↔ to-do link: read them,
    * and tick or propose them as the hub. Without it the link is off.
    */
@@ -1045,6 +1050,7 @@ export interface WorkItemDeps {
   };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
+  readonly untellYou: (instanceId: string) => void;
   /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
   readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
@@ -1074,6 +1080,27 @@ const SESSION_FAILED_UNSAID =
  * stopping the session, which a wake would only feed.
  */
 const SLEEP_WAKES = 2;
+
+/**
+ * How long an item's session may sleep and still be woken by the sweep, when
+ * its item has no minutes budget: a day (our call). A process lost to a
+ * restart, a reboot or an idle sleep is found within the sweep's minutes; a
+ * session asleep a day is work nobody is waiting on, and the obelisk storm's
+ * (2026-10-23) had slept for weeks.
+ */
+const ASLEEP_WAKE_LIMIT_MS = 24 * 60 * 60_000;
+
+/** The longest `item`'s session may sleep and be woken: its budget's minutes, else {@link ASLEEP_WAKE_LIMIT_MS}. */
+const asleepLimit = (item: WorkItemRow): { ms: number; words: string } => {
+  const minutes = item.budget?.minutes;
+  return minutes === undefined
+    ? { ms: ASLEEP_WAKE_LIMIT_MS, words: workWords.aDay }
+    : { ms: minutes * 60_000, words: workWords.budgetMinutes(minutes) };
+};
+
+/** A row's time as ms, 0 when it has none. */
+const timeOf = (at: string | number | Date | null | undefined): number =>
+  at === null || at === undefined ? 0 : new Date(at).getTime() || 0;
 
 /** What the sweep's wake tells a session asleep on open work. */
 const STILL_OPEN = "Your work item is still open: continue it.";
@@ -2147,8 +2174,10 @@ export const createWorkItems = ({
   spawnedUnder,
   stageRuns,
   taskTitle,
+  tellYou,
   todos,
   types,
+  untellYou,
   workspaceChanged,
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
@@ -2161,6 +2190,13 @@ export const createWorkItems = ({
    * counts from none.
    */
   const woken = new Map<string, { count: number; turns: number }>();
+  /**
+   * Items the sweep held because their session slept past its limit
+   * ({@link blockAsleep}): the hold's end takes its notice down. In memory:
+   * after a hub start, the notice goes when you write to the session or
+   * the item ends.
+   */
+  const asleepHeld = new Set<string>();
   const waitTimers = new Map<string, HubTimer>();
   /**
    * Waits whose declaring turn ended. From then on a tool call of the
@@ -2841,11 +2877,43 @@ export const createWorkItems = ({
     }
   };
 
-  /** {@link wakeAsleep} for one item: its session woken, or the item failed with why. */
+  /**
+   * An item whose session has slept past {@link asleepLimit} is held, not
+   * failed: the sweep no longer wakes it, nothing the hub sends on its own
+   * does ({@link heldFor}), and you are told in Needs you. Its parent's, its
+   * lead's or your word to it carries the work on ({@link unhold}).
+   * 2026-10-23, obelisk: items from September asleep for weeks were woken
+   * at every sweep after each turn.
+   */
+  const blockAsleep = (
+    item: WorkItemRow,
+    row: InstanceRow,
+    since: number,
+    limit: { ms: number; words: string }
+  ): void => {
+    quiet.delete(item.id);
+    woken.delete(item.id);
+    update(item.id, { heldAt: new Date() });
+    asleepHeld.add(item.id);
+    const why = workWords.heldAsleep(
+      `${new Date(since).toISOString().slice(0, 16).replace("T", " ")} UTC`,
+      limit.words
+    );
+    console.log(`[work-items] ${item.id}: held: ${why}`);
+    tellYou(row, workWords.heldAsleepTitle(item.title), why);
+  };
+
+  /** {@link wakeAsleep} for one item: its session woken, held when it slept past its limit, or the item failed with why. */
   const wakeOrFail = (item: WorkItemRow, row: InstanceRow): void => {
     const refused = asleepRefusal(item, row);
     if (refused) {
       sessionFailed(row, refused);
+      return;
+    }
+    const since = Math.max(timeOf(row.updatedAt), timeOf(row.turnEndedAt));
+    const limit = asleepLimit(item);
+    if (since > 0 && Date.now() - since > limit.ms) {
+      blockAsleep(item, row, since, limit);
       return;
     }
     const before = woken.get(item.id);
@@ -8050,7 +8118,10 @@ export const createWorkItems = ({
         return false;
       }
       update(item.id, { heldAt: null });
-      console.log(`[work-items] ${item.id}: woken from its interrupt's hold`);
+      if (asleepHeld.delete(item.id)) {
+        untellYou(instanceId);
+      }
+      console.log(`[work-items] ${item.id}: woken from its hold`);
       return true;
     },
 

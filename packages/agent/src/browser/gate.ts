@@ -43,7 +43,12 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import { type BrowserKey, browserGatePort } from "@cawco/core/browser";
+import {
+  type BrowserKey,
+  browserGatePort,
+  SHIELD_CLOSE_WORDS,
+  SHIELD_WORDS,
+} from "@cawco/core/browser";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -391,11 +396,17 @@ export class Gate {
     this.#unwatch();
   }
 
-  /** The shield: every connection cut with {@link SHIELD_CLOSE} and `why`, and new ones refused with it. */
-  closeAll(why: string): void {
-    this.#closedWhy = why;
+  /**
+   * The shield: every connection cut with {@link SHIELD_CLOSE} and the
+   * close's short sentence (core `SHIELD_CLOSE_WORDS`, whole in a close's
+   * 123 bytes), and every new one refused with the owner's words whole
+   * (core `SHIELD_WORDS`, the 423's body), which a tool reads as it
+   * connects again.
+   */
+  closeAll(): void {
+    this.#closedWhy = SHIELD_WORDS;
     for (const link of this.#links) {
-      link.close(SHIELD_CLOSE, why);
+      link.close(SHIELD_CLOSE, SHIELD_CLOSE_WORDS);
     }
   }
 

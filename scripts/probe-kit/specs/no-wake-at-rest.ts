@@ -18,6 +18,9 @@
  *
  * - (r1) The hub and agent start on those rows, then each restarts again:
  *   the 5 stale rows end `sleeping`.
+ * - (w1) One of the September sessions is a delegate of L1's whose work
+ *   item is still open: the work-item sweep holds the item (blocked, not
+ *   failed), tells you in Needs you, and never wakes its session.
  * - (n1) The hub's own words reach each of the 35 as their senders send
  *   them (a browser take-over's notice, a rule's reply, a leak notice, a
  *   pause's carry-on, a containers notice): each is kept at the hub, owed.
@@ -43,7 +46,7 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: the fleet's steps happen one after another
 import { Database } from "bun:sqlite";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseProcId } from "../../../packages/agent/src/proc-id";
 import { SHIELD_WORDS } from "../../../packages/core/src/browser";
@@ -53,6 +56,7 @@ import {
   signal as signalPid,
 } from "../../../packages/core/src/signal";
 import { leakWords } from "../../../packages/core/src/words/leaks";
+import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -77,6 +81,8 @@ const WAKE_TAG = "PROBE-WAKE-K";
 const LEFTOVER = "600.0952";
 const LEAVE = `setsid sleep ${LEFTOVER} < /dev/null > /dev/null 2>&1 & sleep 15; echo LEFT-DONE`;
 const PAUSED = "Your machine was paused until";
+/** The September delegate's open item ({@link seedOpenItem}). */
+const ITEM_TITLE = "September delegate";
 
 /** The hub's own words, as each sender sends them (server.ts `tellSession`, rules.ts `#fire`, `pauseBegan`, `tellContainers`). */
 const NOTICES: { name: string; quiet?: true; words: string }[] = [
@@ -360,10 +366,12 @@ const seedRest = (
     const sessionId = crypto.randomUUID();
     const stale = n >= ASLEEP - 1;
     const spawnedAt = stale ? now - 10 * 60_000 : SEPTEMBER;
-    writeFileSync(
-      join(dirname(from.file), `${sessionId}.jsonl`),
-      conversation.replaceAll(from.sessionId, sessionId)
-    );
+    const path = join(dirname(from.file), `${sessionId}.jsonl`);
+    writeFileSync(path, conversation.replaceAll(from.sessionId, sessionId));
+    // When it last moved, as the register reads it from the file (db
+    // `dateStoredSessions`): September, or a minute ago for a stale row.
+    const moved = (stale ? now - 60_000 : SEPTEMBER) / 1000;
+    utimesSync(path, moved, moved);
     seeded.push({ id, stale, spawnedAt });
     rows.push({
       id,
@@ -374,6 +382,8 @@ const seedRest = (
         // A stale row moved a minute ago, inside the restore's horizon: as
         // obelisk's September rows had, woken that evening.
         updated_at: stale ? now - 60_000 : SEPTEMBER,
+        // Its last turn ended when it last moved, not as the template's did.
+        turn_ended_at: stale ? now - 60_000 : SEPTEMBER,
         created_at: SEPTEMBER,
         spawned_at: spawnedAt,
         turn_open_at: null,
@@ -385,6 +395,97 @@ const seedRest = (
     `seeded ${ASLEEP - 1} September sessions asleep beside the template and ${STALE} rows marked running with no process, each with a conversation in ${dirname(from.file)}`
   );
   return seeded;
+};
+
+/**
+ * The first September session made a delegate of L1's with its work item
+ * still open, in a workspace of the fleet's repository: as obelisk's
+ * September items stood. Its item's id.
+ */
+const seedOpenItem = (
+  fleet: KitFleet,
+  sessionId: string,
+  parentId: string
+): string => {
+  const workspace = crypto.randomUUID();
+  const item = crypto.randomUUID();
+  const db = new Database(fleet.env.CAWCO_DB_PATH ?? "");
+  try {
+    db.query(
+      "INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)"
+    ).run(
+      workspace,
+      MACHINE,
+      fleet.repo,
+      fleet.repo,
+      "probe-september",
+      parentId,
+      SEPTEMBER
+    );
+    db.query(
+      "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state, created_at) VALUES (?, ?, ?, ?, ?, ?, 'claude', 'running', ?)"
+    ).run(
+      item,
+      workspace,
+      parentId,
+      sessionId,
+      "Carry on with the September work.",
+      ITEM_TITLE,
+      SEPTEMBER
+    );
+    db.query(
+      "UPDATE instances SET work_item_id = ?, parent_instance_id = ? WHERE id = ?"
+    ).run(item, parentId, sessionId);
+  } finally {
+    db.close();
+  }
+  return item;
+};
+
+/**
+ * (w1) The work-item sweep finds the September delegate asleep with its item
+ * open: past a day asleep, the item is held and you are told, and its
+ * session is not woken (work-items.ts `blockAsleep`).
+ */
+const asleepItemLeg = async (run: Run, sessionId: string, item: string) => {
+  const { fleet } = run;
+  const held = await until(
+    "the September item held",
+    () =>
+      fleet.query<{ held_at: number | null; state: string }>(
+        "SELECT held_at, state FROM work_items WHERE id = ?",
+        item
+      )[0],
+    (row) => row.held_at !== null,
+    // Two sweeps of 30 s and room.
+    90_000
+  ).catch(
+    () =>
+      fleet.query<{ held_at: number | null; state: string }>(
+        "SELECT held_at, state FROM work_items WHERE id = ?",
+        item
+      )[0]
+  );
+  const [told] = fleet.query<{ body: string; title: string }>(
+    "SELECT title, body FROM fleet_watch_notices WHERE instance_id = ?",
+    sessionId
+  );
+  await Bun.sleep(35_000);
+  const [after] = fleet.query<{ held_at: number | null; state: string }>(
+    "SELECT held_at, state FROM work_items WHERE id = ?",
+    item
+  );
+  run.check(
+    "w1: a September delegate's open item, its session asleep past a day, is held (still running, not failed) with a notice in Needs you naming why, and its session is not woken by the next sweeps",
+    held?.held_at !== null &&
+      after?.state === "running" &&
+      after.held_at !== null &&
+      told?.title === workWords.heldAsleepTitle(ITEM_TITLE) &&
+      told.body ===
+        workWords.heldAsleep("2026-09-15 10:00 UTC", workWords.aDay) &&
+      !run.hadProcess.has(sessionId),
+    `item: ${JSON.stringify(held)} → ${JSON.stringify(after)}; notice: ${JSON.stringify(told ?? null)}; its session had a process: ${run.hadProcess.has(sessionId)}`
+  );
 };
 
 /** (r1) The hub and agent start on the seeded rows, then each restarts again. */
@@ -709,6 +810,8 @@ async function runSpec(kit: Kit): Promise<void> {
   await fleet.stop("agent");
   await fleet.stop("hub");
   const seeded = seedRest(kit, fleet, live);
+  const delegate = (seeded[0] as Run["seeded"][number]).id;
+  const item = seedOpenItem(fleet, delegate, live.l1);
   const hadProcess = new Map<string, number>();
   const sampler = sampleProcesses(fleet, hadProcess);
   const state: Run = {
@@ -724,6 +827,7 @@ async function runSpec(kit: Kit): Promise<void> {
   };
   try {
     await restartLeg(state);
+    await asleepItemLeg(state, delegate, item);
     const before = turnsOf(fleet, [...state.rest, state.l1, state.l2]);
     await noticeLeg(state);
     await presenceLeg(state);

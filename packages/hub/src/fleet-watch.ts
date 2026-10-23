@@ -1066,6 +1066,15 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     },
 
     /**
+     * The hub's own notice about a session in Needs you, beside the watch's
+     * (work-items.ts `blockAsleep`): kept, pushed, and gone as the watch's
+     * are, when you write to the session or its item ends.
+     */
+    tellYou(row: InstanceRow, title: string, body: string): void {
+      raiseNotice(row, title, body);
+    },
+
+    /**
      * A session that never runs again (stopped, ended, deleted; never a
      * launch or a restart, which is the same session going on): what was
      * read of it goes, a triage run that was it frees its slot, and its

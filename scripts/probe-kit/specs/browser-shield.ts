@@ -15,7 +15,9 @@
  *   push goes as `CAWCO_BROWSER`;
  * - `/takeover` with A's session credential answers 403 "Only the person
  *   takes over";
- * - `/takeover` from the dashboard: A's gate connection is cut with 4423, a
+ * - `/takeover` from the dashboard: A's gate connection is cut with 4423
+ *   and the close's short sentence, A connecting again is refused 423 with
+ *   the owner's words whole, a
  *   new connection as B is refused 423 with the shield's sentence, and B's
  *   conversation hears the notice line;
  * - container host: a viewer's neko session given control (`host_id`);
@@ -50,6 +52,7 @@ import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import {
   type BrowserKey,
+  SHIELD_CLOSE_WORDS,
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
 import { browserAnsweredWords } from "../../../packages/hub/src/browser-tools";
@@ -442,6 +445,9 @@ async function leg(
   );
   const cut = await readWithin(30_000, () => rawA.closed);
   const refused = await upgradeAnswer(doorB);
+  // A's tool, connected as the take-over came, connects again: the owner's
+  // words whole, where a close reason's 123 bytes could not carry them.
+  const againA = await upgradeAnswer(doorA);
   const notice = await until(
     "B heard the notice",
     () => heard.notice,
@@ -449,14 +455,17 @@ async function leg(
     60_000
   ).catch(() => false);
   kit.check(
-    `${host}: POST /takeover (dashboard) → A's gate closed 4423; B's connection answers the refusal sentence; B's transcript holds the notice line`,
+    `${host}: POST /takeover (dashboard) → A's gate closed 4423 with "${SHIELD_CLOSE_WORDS}" whole, and A's next connection, like B's, answers the owner's words whole; B's transcript holds the notice line`,
     taken.status === 200 &&
       cut.kind === "answered" &&
       cut.value.code === 4423 &&
+      cut.value.reason === SHIELD_CLOSE_WORDS &&
+      againA.status === 423 &&
+      againA.text === SHIELD &&
       refused.status === 423 &&
       refused.text === SHIELD &&
       notice,
-    JSON.stringify({ taken, cut, refused, notice })
+    JSON.stringify({ taken, cut, againA, refused, notice })
   );
 
   // The person's neko session: control is given to it, and what it copies is

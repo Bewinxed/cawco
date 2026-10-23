@@ -38,7 +38,7 @@ import type {
   BrowserStartArgs,
   BrowserViewerSession,
 } from "@cawco/core/browser";
-import { isBrowserKey, SHIELD_WORDS } from "@cawco/core/browser";
+import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
 import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
@@ -355,7 +355,7 @@ const gateFor = (record: BrowserRecord): void => {
   // mid-take-over, its record read back) starts closed, as the shield
   // closed it: no agent connects until the hand-back opens it.
   if (made && record.takeover) {
-    gate.closeAll(SHIELD_WORDS);
+    gate.closeAll();
   }
 };
 

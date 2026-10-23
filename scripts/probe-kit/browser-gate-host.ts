@@ -37,7 +37,6 @@ interface Command {
   id: number;
   key?: BrowserKey;
   verb: string;
-  why?: string;
   workspace?: string;
 }
 
@@ -83,7 +82,7 @@ const act = async (command: Command): Promise<unknown> => {
         : { endpoint: found.endpoint };
     }
     case "closeAll":
-      gateFor(command.key).closeAll(command.why ?? "");
+      gateFor(command.key).closeAll();
       return null;
     case "open":
       gateFor(command.key).open();
