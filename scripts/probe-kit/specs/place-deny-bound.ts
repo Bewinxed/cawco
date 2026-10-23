@@ -13,9 +13,9 @@
  * host, outside every workspace.
  *
  * - A: project "Bound", Caw on, its place a repository holding 3,100 files
- *   in 31 dirs, each hard-linked to a copy outside it, all committed, and a
- *   local clone of it beside it (`git clone --local`), which links every
- *   object file in its `.git/objects` (over 3,000). Your words in a thread
+ *   in 31 dirs, each hard-linked to a copy outside it, all committed, and
+ *   every object file in its `.git/objects` (over 3,000) linked from a
+ *   husk's objects beside it, as a local clone links them. Your words in a thread
  *   wake Caw: his place's boundary starts and runs, and the policy it started
  *   with denies at most `LINKED_MAX` linked entries, none under
  *   `.git/objects`, the 31 dirs standing for their files; and the place's
@@ -49,7 +49,7 @@ import {
   realpath,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { isAlive, listedPid } from "../../../packages/core/src/signal";
 import { SRT_REFUSED } from "../../../packages/core/src/srt-refusal";
@@ -227,8 +227,8 @@ const wokenPlace = async (
 
 /** A: linked files past srt's cap, and a git object tree linked whole. */
 const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
-  // By its real path: on macOS the sandbox is under /var, a link to
-  // /private/var, and a local clone through a linked path is refused.
+  // By its real path, as the policy names it: on macOS the sandbox is under
+  // /var, a link to /private/var.
   await mkdir(join(fleet.sandbox, "bound"), { recursive: true });
   const place = await realpath(join(fleet.sandbox, "bound"));
   const elsewhere = join(dirname(place), "elsewhere");
@@ -243,16 +243,31 @@ const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
       .env({ ...process.env, HOME: home }),
     "the linked files' commit"
   );
-  await ran(
-    Bun.$`git clone --quiet --no-checkout --local ${place} ${join(dirname(place), "husk")}`.env(
-      { ...process.env, HOME: home }
-    ),
-    "the local clone beside the place"
+  // A husk's objects beside it, each object file linked as a local clone
+  // links them (git-clone(1) `--local`). Linked here one by one rather than
+  // by `git clone --local`: on the Mac (r242) that left 4 of the place's
+  // object files linked, not its 3,000 and more.
+  const objectsDir = join(place, ".git", "objects");
+  const husk = join(dirname(place), "husk-objects");
+  const objectFiles = (
+    await Bun.$`find ${objectsDir} -type f -print0`.quiet().nothrow().text()
+  )
+    .split("\0")
+    .filter(Boolean);
+  await Promise.all(
+    [...new Set(objectFiles.map((file) => dirname(file)))].map((dir) =>
+      mkdir(join(husk, relative(objectsDir, dir)), { recursive: true })
+    )
   );
-  const objects = await linkedCount(join(place, ".git", "objects"));
+  await Promise.all(
+    objectFiles.map((file) =>
+      link(file, join(husk, relative(objectsDir, file)))
+    )
+  );
+  const objects = await linkedCount(objectsDir);
   const shared = await linkedCount(join(place, "shared"));
   kit.check(
-    `A: the place holds ${DIRS * FILES} files hard-linked outside it, and over ${SRT_PATHS} of its .git/objects files are linked to a local clone beside it`,
+    `A: the place holds ${DIRS * FILES} files hard-linked outside it, and over ${SRT_PATHS} of its .git/objects files are linked to a husk's objects beside it`,
     shared === DIRS * FILES && objects > SRT_PATHS,
     `${shared} linked files in shared/, ${objects} in .git/objects`
   );
