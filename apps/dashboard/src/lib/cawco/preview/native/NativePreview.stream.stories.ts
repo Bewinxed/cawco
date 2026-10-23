@@ -21,5 +21,5 @@ export default {
 /** Desk: the live app beside the inspector, the Needs you label picked with pin 1. */
 export const Desk = { parameters: { viewport: 720 } };
 
-/** Phone: the head keeps Send and folds the rest into More; the app whole above its caption; the picked node in a sheet docked under it. */
+/** Phone: the app whole above its caption; the picked node in a sheet docked under it, its pin first and its rows scrolling under a fade. */
 export const Phone = { parameters: { viewport: 390 } };

@@ -4,9 +4,12 @@
    * DESIGN.md "A sheet's inspector"): beside the well on a pane 640px or
    * wider, `c-sheet-inspector-w` on the raised surface with a hairline seam;
    * narrower, a sheet docked under the well, edge to edge, at most 40% of
-   * the pane, so nothing on the app's screen stands under it. It says the node's class and label, where its view is made when the
-   * build stamps it, its frame, and its type, ink, fill and radius by the
-   * design system's token names; under them, the comment pinned on it.
+   * the pane, so nothing on the app's screen stands under it; its body
+   * scrolls under the house's edge fade. It says the node's class and
+   * label and where its view is made when the build stamps it, then (the
+   * mirror's) that it was written, not read; the comment pinned on it;
+   * then its frame, and its type, ink, fill and radius by the design
+   * system's token names. What a short sheet must show stands first.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose, IconFileCode } from "#lib/icons.js";
@@ -17,8 +20,11 @@
     node,
     pin,
     note = null,
+    same = null,
     onclose,
   }: {
+    /** Where else this node stands picked under the same pin (the both option's canvas still). */
+    same?: string | null;
     node: NativeNode;
     /** A line on what the node is not: the mirror's, that it was written, not read. */
     note?: string | null;
@@ -52,7 +58,10 @@
     >
       {#if pin}<span class="mark-cell"
           ><PinMark number={pin.number} state="sent" tail="none" /></span
-        >{/if}<span>Picked</span>
+        >{/if}<span>Picked</span>{#if same}<span
+          class="min-w-0 text-ink-muted type-meta"
+          data-slot="same-node">{same}</span
+        >{/if}
     </h2>
     <Button
       aria-label="Close"
@@ -65,7 +74,7 @@
     />
   </header>
   <div
-    class="grid min-h-0 flex-1 content-start gap-space-3 overflow-auto overscroll-contain px-space-4 py-space-3"
+    class="kit-edge-fade-block fade-len-c-edge-fade-len grid min-h-0 flex-1 content-start gap-space-3 overflow-auto overscroll-contain px-space-4 py-space-3"
   >
     <div class="grid gap-space-1">
       <span class="text-ink-muted type-code liga-none">{node.kind}</span>
@@ -96,18 +105,6 @@
         {note}
       </p>
     {/if}
-    <dl class="m-0 grid gap-y-space-1 type-meta">
-      {#each rows as [name, value] (name)}
-        <div class="flex gap-space-3">
-          <dt class="w-1/4 flex-none text-ink-muted">{name}</dt>
-          <dd
-            class="m-0 min-w-0 text-ink-strong type-code liga-none wrap-anywhere num"
-          >
-            {value}
-          </dd>
-        </div>
-      {/each}
-    </dl>
     {#if pin}
       <div
         class="grid gap-space-2 border-t border-t-border-hairline pt-space-3"
@@ -130,5 +127,19 @@
         </div>
       </div>
     {/if}
+    <dl
+      class="m-0 grid gap-y-space-1 border-t border-t-border-hairline pt-space-3 type-meta"
+    >
+      {#each rows as [name, value] (name)}
+        <div class="flex gap-space-3">
+          <dt class="w-1/4 flex-none text-ink-muted">{name}</dt>
+          <dd
+            class="m-0 min-w-0 text-ink-strong type-code liga-none wrap-anywhere num"
+          >
+            {value}
+          </dd>
+        </div>
+      {/each}
+    </dl>
   </div>
 </aside>

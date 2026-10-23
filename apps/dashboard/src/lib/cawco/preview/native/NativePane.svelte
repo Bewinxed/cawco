@@ -31,7 +31,10 @@
     kind,
     still = false,
     wire = $bindable(false),
+    same = null,
   }: {
+    /** Words on the picked box naming it the node another picture picks too. */
+    same?: string | null;
     /** The live app with its tree over it, or the agent's HTML mirror of it. */
     kind: "stream" | "mirror";
     /** The band stands Still (a frame sent to the canvas) and Wire: the tree shared with the canvas. */
@@ -108,7 +111,8 @@
             >mirror/ProjectPage.svelte</span
           >
         </span>
-        <Badge class="flex-none" data-slot="agent-written" variant="secondary"
+        <!-- What this option rests on: the kit's ink-strong chip, not its muted one. -->
+        <Badge class="flex-none" data-slot="agent-written"
           ><IconToolCode /><span>Agent-written</span></Badge
         >
       {/if}
@@ -151,6 +155,7 @@
           note={kind === "mirror"
             ? `Written to look like ${PICKED.kind} “${PICKED.label}” at ${PICKED.at}; not read from it.`
             : null}
+          {same}
           onclose={() => {
             picked = false;
           }}

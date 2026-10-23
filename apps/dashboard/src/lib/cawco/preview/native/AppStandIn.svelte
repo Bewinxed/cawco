@@ -52,6 +52,16 @@
   const noop = () => undefined;
 </script>
 
+{#snippet title(inBar: boolean)}
+  <h2
+    class={["m-0 min-w-0 truncate type-title", inBar ? "flex-1" : "flex-none"]}
+    data-node="UILabel"
+    data-node-label="CawCo iOS"
+  >
+    CawCo iOS
+  </h2>
+{/snippet}
+
 <div
   bind:this={root}
   class={[
@@ -90,14 +100,17 @@
       data-node="UINavigationBar"
       data-node-label="Project"
     >
-      {#if !wide}
+      {#if wide}
+        <!-- An iPad's regular width names the page in its bar, the projects beside it. -->
+        {@render title(true)}
+      {:else}
         <span data-node="UIButton" data-node-label="Back to Projects">
           <Button pad="none" size="sm" variant="ghost"
             ><IconChevronLeft /><span>Projects</span></Button
           >
         </span>
+        <span class="flex-1"></span>
       {/if}
-      <span class="flex-1"></span>
       <span data-node="UIButton" data-node-label="More">
         <Button
           aria-label="More"
@@ -107,13 +120,9 @@
         />
       </span>
     </div>
-    <h2
-      class="m-0 flex-none truncate type-title"
-      data-node="UILabel"
-      data-node-label="CawCo iOS"
-    >
-      CawCo iOS
-    </h2>
+    {#if !wide}
+      {@render title(false)}
+    {/if}
     <span
       class="flex flex-none *:flex-1"
       data-node={PICKED.kind}

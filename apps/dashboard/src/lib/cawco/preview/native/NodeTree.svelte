@@ -5,7 +5,9 @@
    * (`data-node`), as the app's accessibility tree would give them. A box
    * is invisible at rest; under the pointer it draws its edge, and a press
    * picks it, its edge in the action ink with the comment's pill on its
-   * corner. `wire` draws every box at once, the picture dimmed by its owner.
+   * corner. Under the pointer or the focus, a box names its class (UILabel,
+   * UIButton) in a tag on its top-left. `wire` draws every box at once, the
+   * picture dimmed by its owner.
    */
   import { frameObserver } from "../../frame-observer";
   import PinMark from "../PinMark.svelte";
@@ -126,10 +128,11 @@
 >
   {#each boxes as box (box.id)}
     {@const isPicked = picked && box.id === chosen}
+    <!-- mark-line: the class tag stands above the box, the pill inside its end; neither sits beside the other -->
     <button
       aria-label={`${box.kind} “${box.label}”`}
       aria-pressed={isPicked}
-      class="pointer-events-auto absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-1 outline-offset-(--space-1) outline-transparent outline-solid transition-[outline-color] duration-(--dur-control) ease-out focus-visible:ring-2 focus-visible:ring-focus-ring not-aria-pressed:can-hover:hover:outline-2 not-aria-pressed:can-hover:hover:outline-action-solid border border-transparent in-data-wire:border-border-control-strong aria-pressed:outline-2 aria-pressed:outline-action-solid data-window:pointer-events-none"
+      class="group/node pointer-events-auto absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-1 outline-offset-(--space-1) outline-transparent outline-solid transition-[outline-color] duration-(--dur-control) ease-out focus-visible:ring-2 focus-visible:ring-focus-ring not-aria-pressed:can-hover:hover:outline-2 not-aria-pressed:can-hover:hover:outline-action-solid border border-transparent in-data-wire:border-border-control-strong aria-pressed:outline-2 aria-pressed:outline-action-solid data-window:pointer-events-none"
       data-window={box.depth < 0 || undefined}
       data-node-box={box.kind}
       onclick={() => {
@@ -143,6 +146,10 @@
       title={`${box.kind} “${box.label}”`}
       type="button"
     >
+      <span
+        class="pointer-events-none absolute bottom-full start-0 mb-space-1 whitespace-nowrap rounded-xs bg-surface-raised px-space-1 text-ink-strong type-code liga-none shadow-xs opacity-0 transition-opacity duration-(--dur-control) ease-out group-hover/node:opacity-100 group-focus-visible/node:opacity-100"
+        data-slot="node-kind">{box.kind}</span
+      >
       {#if isPicked && pin !== null}
         <span class="absolute end-space-2 top-1/2 flex -translate-y-1/2">
           <PinMark number={pin} state="sent" tail="none" />

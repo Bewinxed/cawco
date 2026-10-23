@@ -92,8 +92,8 @@
             // Wire is what this canvas is for: it gives up the head last, as a browser's own control does.
             priority: HEAD_PRIORITY.control,
             bar: wireBar,
-            compact: wireCompact,
             menu: wireMenu,
+            words: true,
           },
         ]
       : []),
@@ -188,17 +188,7 @@
     size="sm"
     title="Wire: draw every box of the app's tree"
   >
-    <IconLayers /><span>Wire</span>
-  </Toggle>
-{/snippet}
-{#snippet wireCompact()}
-  <Toggle
-    aria-label="Wire"
-    bind:pressed={wire}
-    size="sm"
-    title="Wire: draw every box of the app's tree"
-  >
-    <IconLayers />
+    <IconLayers /><span class="in-form-compact:hidden">Wire</span>
   </Toggle>
 {/snippet}
 {#snippet wireMenu()}

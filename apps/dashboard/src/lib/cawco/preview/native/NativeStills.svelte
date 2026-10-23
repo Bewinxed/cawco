@@ -11,6 +11,7 @@
    * Each still's pixels are a stand-in (AppStandIn), captioned so.
    */
   import { IconArrowDown, IconArrowRight } from "#lib/icons.js";
+  import PinMark from "../PinMark.svelte";
   import AppStandIn, { screenShape } from "./AppStandIn.svelte";
   import { DEVICE, PIN } from "./fixture";
   import NodeTree from "./NodeTree.svelte";
@@ -18,7 +19,10 @@
   let {
     wire = false,
     drawn = true,
+    same = null,
   }: {
+    /** Words under Default's caption, beside its pin, naming its picked node the one the panel picks too. */
+    same?: string | null;
     /** The section says when its stills were drawn (the panel's head says it otherwise); it always says where. */
     drawn?: boolean;
     /** Every box of each still's tree drawn, the stills dimmed. */
@@ -35,7 +39,20 @@
     class="m-0 grid min-w-0 max-w-full grid-cols-1 gap-space-2"
     data-still={name}
   >
-    <figcaption class="text-ink-muted type-meta">{name}</figcaption>
+    {#if name === "Default" && same}
+      <!-- The pin the panel's picked node wears, named so: one node in two places. -->
+      <figcaption
+        class="mark-line flex flex-wrap items-center gap-x-space-2 gap-y-space-1 text-ink-muted type-meta"
+      >
+        <span>{name}</span>
+        <span class="mark-cell"
+          ><PinMark number={PIN.number} state="sent" tail="none" /></span
+        >
+        <span class="text-ink-strong" data-slot="same-node">{same}</span>
+      </figcaption>
+    {:else}
+      <figcaption class="text-ink-muted type-meta">{name}</figcaption>
+    {/if}
     <div
       class={[
         "relative aspect-(--shape)",
@@ -72,12 +89,14 @@
 >
   <header class="grid gap-space-1">
     <h3 class="m-0 text-ink-strong type-title text-balance">Project page</h3>
-    <span class="text-ink-muted type-meta wrap-anywhere">
-      <span class="type-code liga-none"
+    <!-- The file breaks anywhere; when and where each stay whole. -->
+    <span class="text-ink-muted type-meta">
+      <span class="type-code liga-none wrap-anywhere"
         >ios/CawCo/ProjectViewController.swift</span
       >
-      · {#if drawn}drawn <span class="num">12 s</span> ago
-      {/if}on {DEVICE.machine}
+      ·{#if drawn}{" "}<span class="whitespace-nowrap"
+          >drawn <span class="num">12 s</span> ago</span
+        >{/if}{" "}<span class="whitespace-nowrap">on {DEVICE.machine}</span>
     </span>
     <span class="text-ink-muted type-meta">Stand-ins for the app's screens</span
     >

@@ -19,7 +19,12 @@
         >In the preview panel: the running app</span
       >
       <div class="relative h-c-bench-phone-h min-w-0">
-        <NativePane bind:wire kind="stream" still />
+        <NativePane
+          bind:wire
+          kind="stream"
+          same="· same node as the canvas's Default"
+          still
+        />
       </div>
     </div>
     <div class="grid min-w-0 content-start gap-space-2">
@@ -29,7 +34,7 @@
       <div
         class="min-w-0 rounded-lg border border-border-hairline bg-surface-page"
       >
-        <NativeStills {wire} />
+        <NativeStills same="same node as the panel's" {wire} />
       </div>
     </div>
   </div>

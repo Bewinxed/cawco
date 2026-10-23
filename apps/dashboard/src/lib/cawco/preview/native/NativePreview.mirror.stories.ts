@@ -18,5 +18,5 @@ export default {
 /** Desk: the mirror, marked Agent-written, beside the inspector; its Needs you element picked with pin 1. */
 export const Desk = { parameters: { viewport: 720 } };
 
-/** Phone: the band says Agent-written; the mirror whole above its caption; the picked element in a sheet docked under it. */
+/** Phone: the band says Agent-written; the mirror whole above its caption; the picked element in a sheet docked under it, its written-not-read line and pin first. */
 export const Phone = { parameters: { viewport: 390 } };
