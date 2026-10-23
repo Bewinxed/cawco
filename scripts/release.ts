@@ -378,12 +378,13 @@ const releaseSteps = (
     ...tree("lint"),
     ...tree("typecheck"),
     // Lint and typecheck read their own trees, beside the builds; they gate
-    // notarization and promotion, never the builds.
+    // notarization and promotion, never the builds. A release checks every
+    // project, not what changed since a base.
     step("lint", ["install lint"], 14, () =>
       run([process.execPath, "run", "lint"], trees.lint)
     ),
     step("typecheck", ["install typecheck"], 23, () =>
-      run([process.execPath, "run", "typecheck"], trees.typecheck)
+      run([process.execPath, "run", "typecheck", "--all"], trees.typecheck)
     ),
     step("live database", ["install build"], 15, () =>
       liveDatabase(run, trees.build, staging)
