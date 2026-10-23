@@ -52,7 +52,7 @@ function sheetTitleRead() {
 /**
  * On a phone, Settings in the step inspector sheet's head moves the sheet
  * to the workflow's settings: the sheet's title swaps in place through
- * MorphText (DESIGN.md L515, The Steady Swap Rule), its letters morphing
+ * MorphText (DESIGN.md, The Steady Swap Rule), its letters morphing
  * from the step's name to the settings', then the plain words again.
  */
 async function titleSwap(page: Page) {

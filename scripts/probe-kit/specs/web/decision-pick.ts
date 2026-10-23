@@ -219,8 +219,8 @@ const foldOf = (page: Page, id: string) =>
   }, id);
 
 /**
- * A decided chip at rest in its head (DESIGN.md L633, "the actions centred
- * on the pair"): beside the question, its middle on the question's first
+ * A decided chip at rest in its head (the actions centred
+ * on the question and the chip pair): beside the question, its middle on the question's first
  * line; where the head wraps under a finger, on its own row at the head's
  * start.
  */
@@ -295,7 +295,7 @@ const flightOf = (page: Page, id: string, option: string) =>
 
 /**
  * Every element in card `id`'s head with words of its own, and the ones
- * whose ink is a brand colour (DESIGN.md L580: coral marks the chosen
+ * whose ink is a brand colour (DESIGN.md, The Coral Is Where You Act Rule: coral marks the chosen
  * option, never words about it).
  */
 const brandWordsIn = (page: Page, id: string) =>
@@ -1522,7 +1522,7 @@ async function keyLeg(
   );
   await keys.keyboard.press("Control+Enter");
   await settle(keys, 300);
-  // Sent, Send runs the kit's pending (DESIGN.md L736, Buttons, Pending):
+  // Sent, Send runs the kit's pending (DESIGN.md, Buttons, Pending):
   // the spinner, then its check in its slot held for --dur-hold, its label
   // morphing to "Sent" (the X7 review's ruling: Send says it is done) and its
   // keycaps gone while what went still stands; no "Sent." line of words is
@@ -1649,8 +1649,8 @@ async function manyLeg(
 }
 
 /**
- * 8. The reader's scroll ends the ride (DESIGN.md L489, The Interruptible
- * Rule; L491-492): a pointer's Continue folds the card, and at ½ of its held
+ * 8. The reader's scroll ends the ride (DESIGN.md, The Interruptible
+ * Rule and The Stay In Context Rule): a pointer's Continue folds the card, and at ½ of its held
  * clock the reader scrolls 200px (a real wheel at 1440, a touch drag at 390,
  * through the DevTools input domain). Played on, the scroll stays where the
  * reader put it on every frame, and the fold and the chosen option's flight

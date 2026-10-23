@@ -26,7 +26,7 @@
  * the prompt keeps the focus through the link's cleanup.
  * The popover at 1440: `c-new-session-pop-w` wide, the narrowest the form's
  * own rows hold one line at; recessed under the form's raised body in both
- * themes; its open and close scrubbed on the clock against DESIGN.md L768.
+ * themes; its open and close scrubbed on the clock against The Fast Exit Rule (DESIGN.md).
  * A fork of a row with no mode opens the form on the fork, never the hub's
  * refusal, and forks once a mode is picked; from Fork from here on a stopped
  * session, at that button.
@@ -224,7 +224,7 @@ async function runLeg(
       JSON.stringify({ card, viewport })
     );
     kit.check(
-      `${leg.label}: the sheet's one header is the kit's, titled with the form's own name through MorphText (DESIGN.md L515), the form drawing none of its own`,
+      `${leg.label}: the sheet's one header is the kit's, titled with the form's own name through MorphText (DESIGN.md, The Steady Swap Rule), the form drawing none of its own`,
       opened.heads.kit === 1 &&
         opened.heads.title === commonWords.newSession &&
         opened.heads.morphs &&
@@ -675,7 +675,7 @@ async function popoverNode(
 }
 
 /**
- * DESIGN.md L768: the popover opens from its trigger's side over 260ms on
+ * The Fast Exit Rule (DESIGN.md; the motion is in popover-content.svelte's `floatingSurface` doc): the popover opens from its trigger's side over 260ms on
  * the drawer curve, rising 8px and growing from 0.92 as it fades in, and
  * leaves the same way over 160ms. Scrubbed on the clock (the DevTools
  * Animation domain) at 0, ½ and 1 of its own runs.
