@@ -2092,25 +2092,28 @@ export const handoffActions = ({
       ledBy,
       forkOrigins()
     );
-    emit({
-      verb: "stop",
-      machineId: peer.row.machineId,
-      instanceId: peer.row.id,
-      payload: { instanceId: peer.row.id, from: instanceId },
+    // The hub walks its tree (tree-stops.ts): what is under it ends first.
+    const response = await fetch(`${hubHttpUrl()}/api/work-items/stop`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+      body: JSON.stringify({ from: instanceId, instanceId: peer.row.id }),
     });
-    if (!peer.row.workItemId) {
-      return `Stopped your delegate ${peer.label}${continuesWords(followed)}.`;
-    }
-    const response = await fetch(
-      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
-    );
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const item = (await response.json()) as WorkItemView;
-    const live = item.state === "starting" || item.state === "running";
+    const { under } = (await response.json()) as { under: number };
+    const stopping = workWords.stopAsked(
+      `${peer.label}${continuesWords(followed)}`,
+      under
+    );
+    if (!peer.row.workItemId) {
+      return stopping;
+    }
     const read = await fetch(
-      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(item.id)}/unlanded`
+      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}/unlanded`
     );
     const unlanded = read.ok
       ? (
@@ -2119,7 +2122,14 @@ export const handoffActions = ({
           }
         ).unlanded
       : { error: await read.text() };
-    return `Stopped your delegate ${peer.label}${continuesWords(followed)}. Its work item ${item.id} ${live ? "is cancelled" : `was already ${item.state}`}. ${stoppedHoldWords(item.workspaceId, unlanded)}`;
+    const item = await fetch(
+      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
+    );
+    if (!item.ok) {
+      throw new Error(await item.text());
+    }
+    const { workspaceId } = (await item.json()) as WorkItemView;
+    return `${stopping} ${stoppedHoldWords(workspaceId, unlanded)}`;
   },
 
   interruptDelegate(target: string): string {

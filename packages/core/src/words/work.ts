@@ -79,4 +79,21 @@ export const workWords = {
   /** `stop_delegate`'s word on a stopped item whose workspace is gone. */
   stopGone: (ws: string) =>
     `Its workspace ${ws} is gone or archived: nothing is held.`,
+  /** What a session a stop is walking hears when it calls finish_item or starts more work (hub tree-stops.ts). */
+  stoppingRefused:
+    "This session is being stopped: every delegate under it ends first, then it does. Nothing new starts and nothing is finished or landed meanwhile. End your turn.",
+  /** `stop_delegate`'s answer: the stop walks `label`'s tree, `under` sessions below it (hub tree-stops.ts). */
+  stopAsked: (label: string, under: number) =>
+    under === 0
+      ? `Stopping your delegate ${label}. Its report comes once its machine confirms its session ended.`
+      : `Stopping your delegate ${label} and the ${under === 1 ? "delegate" : `${under} delegates`} under it: each ends before the session that started it, ${label} last. Its report, with how each one ended, comes once its machine confirms every end.`,
+  /** The headline of a stopped item's report (hub tree-stops.ts). */
+  stoppedHeadline: (title: string, under: number) =>
+    under === 0
+      ? `${title} was stopped; its session ended.`
+      : `${title} was stopped after the ${under === 1 ? "delegate" : `${under} delegates`} under it ended.`,
+  /** Who asked a stop, as a stopped item's report says it. */
+  stoppedBy: (who: string) => `Stopped by ${who}.`,
+  /** The heading over a stopped item's delegates and how each ended. */
+  stoppedDelegates: "How each delegate under it ended:",
 };

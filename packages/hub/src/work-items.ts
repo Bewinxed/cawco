@@ -2194,7 +2194,7 @@ export const createWorkItems = ({
   recutDone,
   recutFailed,
   recutKept,
-  report,
+  report: reportTo,
   resolveHanded,
   inputRefusal,
   inTurn,
@@ -2221,6 +2221,25 @@ export const createWorkItems = ({
   untellYou,
   workspaceChanged,
 }: WorkItemDeps) => {
+  /**
+   * THE HELD STOP: once a stop of an item's session is asked (its
+   * `stoppingAt`, tree-stops.ts), nothing reports for the item until its
+   * machine confirmed the session ended and the stop gave the item its final
+   * state ({@link finish} with `stopped`). The workflow engine held a step's
+   * stop the same way (156e913bb): a stop not yet confirmed is a session that
+   * may still run, and a report, a retry or a failure filed meanwhile was
+   * read as the work's outcome while it went on.
+   */
+  const report: WorkItemDeps["report"] = (row, body, ...rest) => {
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    if (item?.stoppingAt && LIVE.has(item.state)) {
+      console.log(
+        `[work-items] ${item.id}: a report held while its stop waits on its machine: ${firstLine(body)}`
+      );
+      return;
+    }
+    reportTo(row, body, ...rest);
+  };
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
   const quiet = new Map<string, number>();
   /**
@@ -2862,12 +2881,23 @@ export const createWorkItems = ({
    * (server.ts, off the database's change log of `instances`); without it,
    * every live item (the sweep, which reads what a hub before this one wrote).
    */
+  /**
+   * Whether {@link followSessions} leaves a live item as it is: its session
+   * moved on to another item, or its landing runs.
+   */
+  const leftToFollow = (
+    item: WorkItemRow,
+    row: InstanceRow | undefined
+  ): boolean => !!row && (row.workItemId !== item.id || !!item.landingSince);
+
   const followSessions = (only?: ReadonlySet<string>): void => {
     const live = db
       .liveWorkItems()
       .filter(
         (item) =>
-          (!only || only.has(item.instanceId)) && !finishing.has(item.id)
+          (!only || only.has(item.instanceId)) &&
+          !finishing.has(item.id) &&
+          !item.stoppingAt
       );
     if (live.length === 0) {
       return;
@@ -2879,7 +2909,7 @@ export const createWorkItems = ({
     );
     for (const item of live) {
       const row = rows.get(item.instanceId);
-      if (row && (row.workItemId !== item.id || item.landingSince)) {
+      if (leftToFollow(item, row)) {
         continue;
       }
       if (row) {
@@ -2919,6 +2949,7 @@ export const createWorkItems = ({
     !(row.status === "sleeping" || GONE.has(row.status)) ||
     item.heldAt !== null ||
     item.blocked !== null ||
+    item.stoppingAt !== null ||
     pausedWorkspace(item.workspaceId) !== undefined ||
     !!(item.waitUntil || item.waitResumeBy) ||
     !!item.landingSince ||
@@ -3161,7 +3192,7 @@ export const createWorkItems = ({
 
   lifetime.every(BUDGET_SWEEP_MS, () => {
     for (const item of db.liveWorkItems()) {
-      if (item.budget) {
+      if (item.budget && !item.stoppingAt) {
         enforceBudget(item);
       }
     }
@@ -5410,6 +5441,10 @@ export const createWorkItems = ({
     given?: Parent
   ): Promise<WorkItemStart> => {
     const { request, parent, projectId } = admitted(asked, given);
+    // A session a stop walks starts nothing more: its tree is ending.
+    if (db.treeStops.get(parent.id)) {
+      throw new WorkItemRefusal(409, workWords.stoppingRefused);
+    }
     const inputs = await readInputs(request.inputs, parent);
     const release = claimOwns(request, parent, projectId);
     try {
@@ -6029,10 +6064,17 @@ export const createWorkItems = ({
    */
   const finish = (
     item: WorkItemRow,
-    change: Parameters<DbShape["updateWorkItem"]>[1]
+    change: Parameters<DbShape["updateWorkItem"]>[1],
+    { stopped = false }: { stopped?: boolean } = {}
   ): WorkItemRow => {
     if (!LIVE.has(item.state)) {
       return item;
+    }
+    // A held stop ({@link report}): only the stop itself ends it, once its
+    // session's end is confirmed.
+    const current = db.workItem(item.id) ?? item;
+    if (current.stoppingAt && !stopped) {
+      return current;
     }
     // Its landing, if one runs, ends with it: every command of it stops.
     landingStops.get(item.id)?.abort();
@@ -6382,6 +6424,9 @@ export const createWorkItems = ({
         409,
         `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`
       );
+    }
+    if (item.stoppingAt) {
+      throw new WorkItemRefusal(409, workWords.stoppingRefused);
     }
     // A completing item's submission waits on its own delegates: a new
     // call replaces it ({@link completeIfDrained}).
@@ -8725,7 +8770,7 @@ export const createWorkItems = ({
       // failed its item ("[ede_diagnostic] result_type=user … stop_reason=
       // tool_use", seen on the host, 2026-10-15), or, ending quietly, got the
       // "still open" reminder. Here before every such branch.
-      if (item.heldAt) {
+      if (item.heldAt || item.stoppingAt) {
         quiet.delete(item.id);
         return undefined;
       }
@@ -8975,21 +9020,67 @@ export const createWorkItems = ({
     followSessions,
 
     /**
-     * Its session was stopped or archived while the work was live, by `by`
+     * A stop of its session was asked while the work was live, by `by`
      * (null: a stop whose stopper the hub did not hear), kept on the item so
-     * its task says who stopped it.
+     * its task says who stopped it. The item is held where it stands (its
+     * `stoppingAt`, {@link report}): its landing, if one runs, is cut, its
+     * wait cleared, and it takes its final state only once its machine
+     * confirms the session ended ({@link stopConfirmed}).
      */
-    cancelled(row: InstanceRow, by: EndedBy | null): void {
-      const item = itemOf(row);
-      if (item) {
-        quiet.delete(item.id);
-        finish(item, {
+    stopping(row: Pick<InstanceRow, "workItemId">, by: EndedBy | null): void {
+      const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+      if (!(item && LIVE.has(item.state)) || item.stoppingAt) {
+        return;
+      }
+      quiet.delete(item.id);
+      clearWait(item);
+      landingStops.get(item.id)?.abort();
+      update(item.id, {
+        stoppingAt: new Date(),
+        stoppedBy: by,
+        landingSince: null,
+        submission: null,
+      });
+      console.log(
+        `[work-items] ${item.id}: stopping; held until its machine confirms its session ended`
+      );
+    },
+
+    /**
+     * The machine confirmed `row`'s session ended on a stop: its live item
+     * is `cancelled` now, `by` the stop's asker when it named none before.
+     * Answers the item as it ended, or nothing when its session ran none
+     * that was live.
+     */
+    stopConfirmed(
+      row: Pick<InstanceRow, "workItemId">,
+      by: EndedBy | null = null
+    ): WorkItemRow | undefined {
+      const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+      if (!(item && LIVE.has(item.state))) {
+        return undefined;
+      }
+      quiet.delete(item.id);
+      const ended = finish(
+        item,
+        {
           state: "cancelled",
-          stoppedBy: by,
+          stoppedBy: item.stoppedBy ?? by,
+          stoppingAt: null,
           landingSince: null,
           submission: null,
-        });
-      }
+        },
+        { stopped: true }
+      );
+      console.log(
+        `[work-items] ${item.id}: its session's end is confirmed; ${ended.state}`
+      );
+      return ended;
+    },
+
+    /** The reports of `report`, as {@link WorkItemDeps.report} hands them on: a stop's own report (tree-stops.ts). */
+    reportStopped(row: InstanceRow, body: string, headline: string): void {
+      report(row, body, false, false, headline);
     },
 
     /** One item, as `stop_delegate` and its callers read it. */

@@ -888,6 +888,7 @@ import {
   type HistoryRead,
   type TranscriptPayload,
 } from "./transcripts";
+import { createTreeStops } from "./tree-stops";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
 import { upstreamRuleOf, upstreamRules } from "./upstream";
@@ -15287,6 +15288,9 @@ export const createServer = (
     confirmed: (row) => {
       // A forget waiting on this session's end hears it now, not at the ask.
       projectStops.confirmed(row.id);
+      // Its held item takes its final state, and a stop walking its tree
+      // moves on to the session above it (tree-stops.ts).
+      treeStops.confirmed(row);
       // Ended, it holds its finished item's workspace no longer.
       workItems.settleFor(row.id);
     },
@@ -15517,16 +15521,18 @@ export const createServer = (
     }
   };
   /**
-   * What a session's work leaves behind as its end is decided. What it was
-   * sent and has not read is settled when its machine says it `stopped`, not
-   * now: its process runs until then, and may take its queue up as the stop
-   * cuts its turn (Claude Code does), which its transcript then holds.
+   * What a session's work leaves behind as its end is decided. Its live
+   * item is held until its machine confirms the end (work-items.ts
+   * `stopping`, tree-stops.ts `confirmed`). What it was sent and has not
+   * read is settled when its machine says it `stopped`, not now: its process
+   * runs until then, and may take its queue up as the stop cuts its turn
+   * (Claude Code does), which its transcript then holds.
    */
   const sessionEnding = (
-    row: { id: string } & Parameters<typeof workItems.cancelled>[0],
+    row: { id: string } & Parameters<typeof workItems.stopping>[0],
     by: EndedBy
   ) => {
-    workItems.cancelled(row, by);
+    workItems.stopping(row, by);
     forgetPending(row.id, UNREAD.stopped, false, "all");
     endPreviews(row.id);
   };
@@ -15665,13 +15671,19 @@ export const createServer = (
     );
     waiting.set(requestId, (frame) => settle({ frame }));
     try {
-      endSession(
-        instanceId,
-        discard ? "discard" : "stop",
-        { kind: "person" },
-        requestId
-      );
-      if (db.ownedInstance(instanceId)?.endConfirmedAt) {
+      // A Stop walks the session's tree (tree-stops.ts): its delegates end
+      // first, so its own end is asked later, and the receipt is the
+      // stop's being filed. A session with none under it ends now, its
+      // machine's answer the receipt.
+      const under = discard
+        ? 0
+        : treeStops.stop(instanceId, { kind: "person" }, requestId).under;
+      if (discard) {
+        endSession(instanceId, "discard", { kind: "person" }, requestId);
+      }
+      if (under > 0) {
+        settle({ frame: { kind: "control_result", requestId, ok: true } });
+      } else if (db.ownedInstance(instanceId)?.endConfirmedAt) {
         settle({ frame: { kind: "control_result", requestId, ok: true } });
       } else if (!registry.agent(message.machineId)) {
         settle({
@@ -22804,13 +22816,27 @@ export const createServer = (
     finishOver: (instanceId) => releaseOwed({ instanceId }),
     workspaceChanged: (workspace) => publishInstances(workspace.machineId),
   });
-  // A hub crash after intent persistence cannot leave its work item reading
-  // live. Who asked for the stop was not kept with its intent.
+  // A stop walks a session's tree (tree-stops.ts): each session's end asked
+  // once nothing under it is left, its item's final state once its machine
+  // confirms it.
+  const treeStops = createTreeStops({
+    db,
+    workItems,
+    end: (instanceId, by, requestId) => {
+      endSession(instanceId, "stop", by, requestId);
+      endPreviews(instanceId);
+      noteInterrupt(instanceId);
+    },
+  });
+  // A hub crash after intent persistence leaves no work item reading live
+  // and unheld: its stop holds it until the machine confirms the end. Who
+  // asked for the stop was not kept with its intent.
   for (const row of db.sessionOwnership()) {
     if (row.endIntent && !row.endConfirmedAt) {
-      workItems.cancelled(row, null);
+      workItems.stopping(row, null);
     }
   }
+  treeStops.resume();
   offBoot.push(() => {
     // Moves go on from their records: an approval is asked again, every
     // other step waits for its machine's register.
@@ -24601,14 +24627,11 @@ export const createServer = (
         return;
       }
       const control = envelope.payload as ControlPayload;
-      if (
-        envelope.verb !== "stop" &&
-        !(
-          envelope.verb === "control" &&
-          (control.method === CONTROL_INTERRUPT ||
-            control.method === RESOLVE_PERMISSION)
-        )
-      ) {
+      if (!(
+        envelope.verb === "control" &&
+        (control.method === CONTROL_INTERRUPT ||
+          control.method === RESOLVE_PERMISSION)
+      )) {
         throw new Error(`Unsupported delegation operation ${envelope.verb}`);
       }
       // A delegate named by a former id is acted on by its id now.
@@ -24626,14 +24649,6 @@ export const createServer = (
           403,
           "you can only control your own delegates, or the work items of a project you lead"
         );
-      }
-      if (envelope.verb === "stop") {
-        const by: EndedBy = { kind: "session", name: sessionName(requester) };
-        endSession(row.id, "stop", by);
-        endPreviews(row.id);
-        noteInterrupt(row.id);
-        workItems.cancelled(row, by);
-        return;
       }
       const retired = workItems.refusal(row, {
         kind: "peer",
@@ -31123,6 +31138,54 @@ export const createServer = (
           }
         }
       )
+      // `stop_delegate`: a delegate and its tree stopped by its parent or its
+      // project's lead (tree-stops.ts), answering how many sessions under it
+      // end first. Its report comes once every end is confirmed.
+      .post(
+        "/api/work-items/stop",
+        {
+          ...hidden,
+          body: t.Object({
+            from: t.String({ minLength: 1 }),
+            instanceId: t.String({ minLength: 1 }),
+          }),
+        },
+        ({ body, request, status }) => {
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.from) {
+            return status(
+              403,
+              "Session credential does not belong to the stop's requester"
+            );
+          }
+          const [requester] = db.getInstancesByIds([body.from]);
+          // A delegate named by a former id is stopped by its id now.
+          const [row] = db.getInstancesByIds([
+            db.instanceIdOf(body.instanceId),
+          ]);
+          if (!(
+            requester &&
+            row &&
+            (row.parentInstanceId === requester.id ||
+              workItems.ledBy(row.id, requester.id))
+          )) {
+            return status(
+              403,
+              "you can only stop your own delegates, or the work items of a project you lead"
+            );
+          }
+          return treeStops.stop(row.id, {
+            kind: "session",
+            name: sessionName(requester),
+          });
+        }
+      )
       // `stop_delegate` on a queued delegate: withdrawn by its parent or its
       // project's lead; 404 when the target names no queued delegate.
       .post(
@@ -33256,7 +33319,6 @@ export const createServer = (
                 break;
               }
               if (kind === "stopped" && message.instanceId) {
-                const ended = ownedSession;
                 if (
                   !lifecycle.confirm(
                     message.machineId,
@@ -33284,13 +33346,9 @@ export const createServer = (
                   );
                 heldSessions.delete(message.instanceId);
                 endPreviews(message.instanceId);
-                // Stopped by anyone while its work was live: the work is over.
-                // Read before the row is filed away, which a discard hides. A
-                // stop the hub asked for cancelled it already, naming who; one
-                // still live here stopped without the hub hearing who did.
-                if (ended) {
-                  workItems.cancelled(ended, null);
-                }
+                // Its live work took its final state as the end was confirmed
+                // (lifecycle `confirmed`, tree-stops.ts), naming who stopped it
+                // when the hub heard.
                 // What it was sent and had not read did not go, unless it wrote
                 // some of it down as it stopped.
                 forgetPending(message.instanceId, UNREAD.stopped);

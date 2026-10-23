@@ -1469,6 +1469,23 @@ export const workItems = sqliteTable(
      * hub restart. Null for an interrupt's hold, and once the hold ends.
      */
     heldAsleepAt: timestamp("held_asleep_at"),
+    /**
+     * When a stop of its session was asked (tree-stops.ts), while its
+     * machine has not confirmed the session ended: the item is held where
+     * it stands. Nothing reports, retries, wakes or fails it, and it takes
+     * its final state (`cancelled`, {@link stoppedBy} who) only once the end
+     * is confirmed, after every delegate under it has ended.
+     */
+    stoppingAt: timestamp("stopping_at"),
+    /**
+     * Background work: started by a routine, or by a session in a turn an
+     * event woke (its {@link origin} `event` where its parent's own work is
+     * not). It outlives whoever asked: a stop of the session that asked, or
+     * of any session above it, does not walk into it (tree-stops.ts).
+     */
+    background: integer("background", { mode: "boolean" })
+      .notNull()
+      .default(false),
     /** Routine waits since the last message handed to the parent. */
     waitHistory: text("wait_history", { mode: "json" }).$type<{
       count: number;
@@ -1559,6 +1576,34 @@ export const workItems = sqliteTable(
     index("work_items_workspace").on(table.workspaceId, table.state),
     index("work_items_parent").on(table.parentInstanceId, table.state),
     index("work_items_task").on(table.projectId, table.taskId),
+  ]
+);
+
+/**
+ * One session of a stop that walks a delegation tree (tree-stops.ts): every
+ * delegate an orchestrator started ends before it, deepest first, and the
+ * orchestrator last. A row stands from the stop's ask until its session's
+ * end is confirmed by its machine and its item took its final state, so a
+ * hub that restarts mid-stop carries it on.
+ */
+export const treeStops = sqliteTable(
+  "tree_stops",
+  {
+    /** The session this row stops. */
+    instanceId: text("instance_id").primaryKey(),
+    /** The session the stop was asked of: the top of the walk. */
+    rootId: text("root_id").notNull(),
+    /** The session above it in the walk, whose end waits on this one's; null for the root. */
+    parentId: text("parent_id"),
+    /** Who asked for the stop (core `EndedBy`). */
+    by: text("by", { mode: "json" }).$type<EndedBy>().notNull(),
+    askedAt: timestamp("asked_at").notNull(),
+    /** When its own end was asked of its machine: once every row under it was gone. */
+    endedAt: timestamp("ended_at"),
+  },
+  (table) => [
+    index("tree_stops_root").on(table.rootId),
+    index("tree_stops_parent").on(table.parentId),
   ]
 );
 

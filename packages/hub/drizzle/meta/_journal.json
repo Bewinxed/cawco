@@ -2080,6 +2080,13 @@
       "when": 1792790285278,
       "tag": "0304_session_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 305,
+      "version": "6",
+      "when": 1792794794796,
+      "tag": "0305_tree_stops",
+      "breakpoints": true
     }
   ]
 }

@@ -249,6 +249,7 @@ import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
+import { type TreeStopsDb, treeStopsDb } from "./tree-stops";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
@@ -2276,6 +2277,8 @@ export interface DbShape {
     ledProjectIds: string[],
     endedSince: Date
   ) => WorkItemRow[];
+  /** The stops that walk a delegation tree, a row per session until it ended (tree-stops.ts). */
+  readonly treeStops: TreeStopsDb;
   /** Each completed turn's tokens, on the account it ran on. */
   readonly turnUsage: TurnUsageDb;
   /**
@@ -2396,6 +2399,7 @@ export interface DbShape {
         | "waitHistory"
         | "heldAt"
         | "heldAsleepAt"
+        | "stoppingAt"
         | "prUrl"
         | "groupReportedAt"
         | "digest"
@@ -9762,6 +9766,7 @@ const make = async (path: string): Promise<DbShape> => {
     accounts: accountsDb(db),
     turnUsage: turnUsageDb(db),
     toolCallKeys: toolCallKeysDb(db),
+    treeStops: treeStopsDb(db),
     atLimit: atLimitDb(db),
     designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),
