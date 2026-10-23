@@ -1,0 +1,21 @@
+diff --git a/postcss-selector-parser.d.ts b/postcss-selector-parser.d.ts
+index 9f0a233cd1cd975fd41762b99d6c31b8e2638925..e52ecf77308bb081dffe4907b98d6d44ff3a9596 100644
+--- a/postcss-selector-parser.d.ts
++++ b/postcss-selector-parser.d.ts
+@@ -347,10 +347,14 @@ declare namespace parser {
+     function root(opts: ContainerOptions): Root;
+     function isRoot(node: any): node is Root;
+ 
+-    interface _Selector<S> extends Container<string, Diff<Node, S>> {
++    // cawco: a selector's children named one by one, where the type alias
++    // instantiated itself (`_Selector<Selector>`): TypeScript 7.1 reads that
++    // as infinitely circular (TS5115 "Container", "Diff"; after
++    // microsoft/TypeScript#64372). The same type. Drop this when the
++    // package or TypeScript stops tripping on it.
++    interface Selector extends Container<string, Tag | String | Root | Pseudo | Nesting | Identifier | Comment | Combinator | ClassName | Attribute | Universal> {
+         type: "selector";
+     }
+-    type Selector = _Selector<Selector>;
+     function selector(opts: ContainerOptions): Selector;
+     function isSelector(node: any): node is Selector;
+ 

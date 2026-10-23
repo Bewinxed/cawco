@@ -232,7 +232,9 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
         .run();
       return seq;
     }),
-  changes: (id, { after, by } = {}) =>
+  // The pattern names its type: TypeScript 7.1 no longer types a defaulted
+  // binding pattern from the interface (TS7031, microsoft/TypeScript#64431).
+  changes: (id, { after, by }: Parameters<ArtifactsDb["changes"]>[1] = {}) =>
     db
       .select({
         key: artifactChanges.key,

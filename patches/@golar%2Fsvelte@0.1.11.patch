@@ -1,0 +1,77 @@
+diff --git a/dist/index.js b/dist/index.js
+index 044e0a5706f07666e0a02c65834f6a17cdb34dfd..c08e0707f38de03ab8e9e5d75fc66ec2029c7d4f 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -6,6 +6,48 @@ import util from "node:util";
+ import { sourceMapToMappings } from "@golar/sourcemap";
+ import { pathToFileURL } from "node:url";
+ //#region src/index.ts
++// cawco: svelte-check's two filters, which @golar/svelte 0.1.11 lacks, the
++// same code as the Golar fork's branch fix/svelte-ignore-regions
++// (Bewinxed/golar). Drop this patch when the fork's packages land as
++// `overrides` in the root package.json.
++//
++// 1. What svelte2tsx writes between `/*Ωignore_startΩ*/` and
++//    `/*Ωignore_endΩ*/` is its own scaffolding, and no diagnostic in it is the
++//    component's (svelte-check isInGeneratedCode): each region goes to Golar
++//    as an ignore mapping.
++// 2. A transition with three required parameters (node, params, options) is
++//    called by svelte2tsx with one inside `__sveltets_2_ensureTransition(`,
++//    so TypeScript says "Expected 3 arguments, but got 1" (TS2554) of a call
++//    Svelte makes right (svelte-check expectedTransitionThirdArgument): the
++//    mapping at that call suppresses 2554.
++const IGNORE_START = "/*Ωignore_startΩ*/";
++const IGNORE_END = "/*Ωignore_endΩ*/";
++const ENSURE_TRANSITION = "__sveltets_2_ensureTransition(";
++const EXPECTED_N_ARGUMENTS = 2554;
++function ignoredRegions(code) {
++	const regions = [];
++	for (let start = code.indexOf(IGNORE_START); start !== -1; start = code.indexOf(IGNORE_START, start + 1)) {
++		const end = code.indexOf(IGNORE_END, start);
++		if (end === -1) break;
++		regions.push({
++			serviceOffset: start,
++			serviceLength: end + IGNORE_END.length - start
++		});
++		start = end;
++	}
++	return regions;
++}
++function suppressTransitionArity(code, mappings) {
++	for (let at = code.indexOf(ENSURE_TRANSITION); at !== -1; at = code.indexOf(ENSURE_TRANSITION, at + 1)) {
++		const call = at + ENSURE_TRANSITION.length;
++		for (const m of mappings) {
++			const end = m.serviceOffset + (m.serviceLength ?? m.sourceLength);
++			if (m.serviceOffset <= call && call < end) {
++				m.suppressedDiagnostics = [...m.suppressedDiagnostics ?? [], EXPECTED_N_ARGUMENTS];
++			}
++		}
++	}
++}
+ const require = createRequire(process.cwd());
+ const svelteTsxFilesByProject = /* @__PURE__ */ new Map();
+ let packages = null;
+@@ -56,15 +98,18 @@ new JsCodegenPlugin({
+ 				mode: "ts",
+ 				parse: svelteCompiler.parse
+ 			});
++			const mappings = sourceMapToMappings({
++				sourceText,
++				serviceText: tsx.code,
++				sourceMap: tsx.map.mappings
++			});
++			suppressTransitionArity(tsx.code, mappings);
+ 			return {
+ 				serviceText: tsx.code + "\n\n" + svelteTsxFiles.map((p) => `import ${JSON.stringify(p)}`).join("\n"),
+ 				scriptKind: "tsx",
+ 				declarationFile: fileName.includes("/node_modules/"),
+-				mappings: sourceMapToMappings({
+-					sourceText,
+-					serviceText: tsx.code,
+-					sourceMap: tsx.map.mappings
+-				})
++				mappings,
++				ignoreMappings: ignoredRegions(tsx.code)
+ 			};
+ 		} catch (e) {
+ 			const error = {

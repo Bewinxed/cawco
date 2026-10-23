@@ -1072,6 +1072,18 @@ type Held = Omit<WorkspaceHolding, "bytes">;
 const NOTHING_HELD: Held = { ahead: 0, dirty: 0, stashes: 0 };
 
 /**
+ * What a {@link closedCloneGit} run is given besides its argv. Its
+ * destructuring names this type itself: TypeScript 7.1 no longer types a
+ * defaulted binding pattern from the return type it stands in (TS7031,
+ * microsoft/TypeScript#64431).
+ */
+interface GitGiven {
+  env?: Readonly<Record<string, string>>;
+  exits?: readonly number[];
+  input?: string;
+}
+
+/**
  * git on this host in workspace `workspace`'s clone, once its boundary is
  * closed ({@link closeClone}, {@link workspaceAt}): nothing can write the
  * clone meanwhile, so its config cannot change between the look below and
@@ -1085,16 +1097,7 @@ const NOTHING_HELD: Held = { ahead: 0, dirty: 0, stashes: 0 };
  */
 const closedCloneGit = async (
   workspace: WorkspaceRef
-): Promise<
-  (
-    args: readonly string[],
-    given?: {
-      env?: Readonly<Record<string, string>>;
-      exits?: readonly number[];
-      input?: string;
-    }
-  ) => Promise<string>
-> => {
+): Promise<(args: readonly string[], given?: GitGiven) => Promise<string>> => {
   const dotGit = join(workspace.path, ".git");
   const found = await lstat(dotGit);
   if (!found.isDirectory()) {
@@ -1108,7 +1111,7 @@ const closedCloneGit = async (
       `Workspace ${workspace.id} was not archived: ${problem}, so nothing was deleted.`
     );
   }
-  return async (args, { env = {}, exits = [0], input } = {}) => {
+  return async (args, { env = {}, exits = [0], input }: GitGiven = {}) => {
     const command =
       input === undefined
         ? Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args}`
