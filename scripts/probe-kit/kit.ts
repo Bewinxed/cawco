@@ -1922,6 +1922,8 @@ export interface MotionRun {
   last?: Record<string, string>;
   /** A CSS animation's name, a CSS transition's property, a Web Animation's id (else its keyframes' properties). */
   name: string;
+  /** One iteration's length with its delay, ms: a loop's period (read with `loops`). */
+  period?: number;
   /** Its start on the document's timeline, ms, once it played; null where none was given. */
   start: number | null;
   /**
@@ -1949,6 +1951,13 @@ export interface MotionRead<T> {
 export interface MotionOptions<T> {
   /** Fractions of the clock to seek and `read` at. */
   fractions?: number[];
+  /**
+   * Whether a loop the action starts (live work's breath, a spinner's turn)
+   * is caught and read too, each fraction a fraction of one iteration: a
+   * loop never ends, so it is let go and never `ended`. The DevTools clock
+   * only (Chromium); a held read refuses it.
+   */
+  loops?: boolean;
   /** How long the action has to start its runs, and they to end once let go, ms. */
   ms?: number;
   /** The run whose length the fractions are of; the longest unset. */
@@ -2014,6 +2023,11 @@ export async function readMotion<T = undefined>(
   options: MotionOptions<T> = {}
 ): Promise<MotionRead<T>> {
   const ms = options.ms ?? 3000;
+  if (options.loops && !onChromium(page)) {
+    throw new Error(
+      "readMotion: a loop is read on the DevTools clock alone (Chromium)"
+    );
+  }
   const moving = await stillWithin(page, within, {
     own: options.own,
     ms,
@@ -2119,7 +2133,7 @@ async function clockRead<T>(
   try {
     caught = (
       await clock.catchRuns(action, within, ms, {
-        loops: false,
+        loops: options.loops ?? false,
         own: options.own,
       })
     ).filter((run) => !run.scroll);
@@ -2170,6 +2184,7 @@ async function clockRead<T>(
       start: run.start,
       delay: run.delay,
       end: run.loop ? Number.POSITIVE_INFINITY : run.end,
+      period: run.end,
       easing: run.easing,
       heldAt: null,
       ended: playedTo(targets[index] ?? "", run.name),

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { failureWords as message } from "./hub-read";
   import { loadRuleActivity, type RuleActivity, since, times } from "./rules";
 
@@ -58,8 +59,12 @@
      follows sliding (motion/rows.svelte.ts). -->
 <div data-slot="activity" class="flex flex-col gap-space-2" {@attach reflow()}>
   {#if loading}
-    <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
-      Loading…
+    <p
+      data-slot="note"
+      class="mark-line flex max-w-c-measure items-center gap-space-2 type-meta text-ink-muted"
+      role="status"
+    >
+      <LiveDot /><span>Loading…</span>
     </p>
   {:else if failed}
     <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>

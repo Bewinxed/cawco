@@ -5,7 +5,8 @@
    * kind of breather (`data-breather`): Find's working row (the real
    * FindRow), the session status's Working glyph (the real SessionStatus),
    * a plan step under way (the real PlanTree), the catch-up tag (the real
-   * CatchUp, its dot on the tag's own surface), and the in-flight tool glyph
+   * CatchUp, its dot on the tag's own surface), the live dot (ui/live-dot)
+   * beside words that say what runs, and the in-flight tool glyph
    * as the transcript draws it (`ic breathe` in each tool family's ink, and
    * the muted ink an unknown tool takes), so the probe reads each one's
    * opacity at the breath's floor against the surface under it.
@@ -15,6 +16,7 @@
   import PlanTree, { type PlanNode } from "#lib/cawco/plan/PlanTree.svelte";
   import CatchUp from "#lib/cawco/transcript/CatchUp.svelte";
   import SessionStatus from "#lib/cawco/workspace/SessionStatus.svelte";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconToolGeneric, IconRenew as Working } from "#lib/icons.js";
 
   const SURFACES = [
@@ -83,6 +85,7 @@
         <PlanTree nodes={steps} />
       </div>
       <div class="relative" data-breather="catch-up"><CatchUp /></div>
+      <div class="flex" data-breather="live-dot"><LiveDot /></div>
       <div class="flex flex-wrap gap-space-2">
         {#each INKS as ink (ink)}
           <span class="breathe loops inline-flex {ink}" data-breather={ink}

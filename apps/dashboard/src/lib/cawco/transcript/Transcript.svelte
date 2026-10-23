@@ -42,6 +42,7 @@
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { stopWords } from "../accounts/switch.svelte";
@@ -3919,9 +3920,9 @@
   {#if (session.loading || session.cursor !== null) && renderedRows.length === 0}
     <p
       data-slot="transcript-empty"
-      class="isolate text-size-meta font-normal text-ink-muted py-space-5"
+      class="mark-line isolate flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
     >
-      Loading transcript…
+      <LiveDot /><span>Loading transcript…</span>
     </p>
   {:else if renderedRows.length === 0 && !bare}
     <!-- Only once the read has said the conversation is empty, fading in
@@ -3984,9 +3985,9 @@
     {:else if renderedRows.length > 0 && session.cursor !== null}
       <p
         data-slot="transcript-empty"
-        class="text-size-meta font-normal text-ink-muted py-space-5"
+        class="mark-line flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
       >
-        Loading transcript…
+        <LiveDot /><span>Loading transcript…</span>
       </p>
     {/if}
   </div>

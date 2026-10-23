@@ -319,7 +319,7 @@ under the same exemption: no visible label, the placeholder **"What should chang
 reopen"** once it is resolved. Their send glyph is labelled **Comment** or **Reply**. Nothing reaches
 the agent until **Send** ("Send 3" counts every pick, comment, reply and stroke the session hasn't
 heard), with the rail's note, **"Add a note for the agent"**. A row says **"Unsent"** while the session
-hasn't heard its comment, **"Working on it…"** while the agent works on it, and nothing once it is
+hasn't heard its comment; while the agent works on it the pill's live dot says so, and a screen reader hears **"The agent is working on it"** (no words on screen); nothing once it is
 sent and unanswered (its filled pill says so). A row's place is the element's name, **"Whole page"**
 or **"Element gone"**. The rail: **"Comments"**, **"Search comments"**, **"Sort"** (**"Newest first"**,
 **"Top of page first"**), **"Comment on the whole page"**, **"Close comments"**, Open and Resolved;

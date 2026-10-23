@@ -6,6 +6,7 @@
    * session at that line), and its delegates. Each moment is an option of
    * the finder's listbox, so ↑↓ walk into it and ↵ opens there.
    */
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { hiddenAt } from "./FindRow.svelte";
   import type { FindMoment, MomentAuthor } from "./find-client";
   import { age, momentParts, ownParts } from "./find-rows";
@@ -139,8 +140,12 @@
     </span>
   {:else if momentsState.state === "asking"}
     <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
-    <span data-slot="value" class="min-w-0 text-ink-muted"
-      >Asking {momentsState.machine}…</span
+    <span
+      data-slot="value"
+      class="mark-line flex min-w-0 items-start gap-space-2 text-ink-muted"
+      ><span class="mark-cell"><LiveDot /></span><span class="min-w-0"
+        >Asking {momentsState.machine}…</span
+      ></span
     >
   {:else if momentsState.state === "missing"}
     <span data-slot="find-peek-label" class="text-ink-subtle">said</span>

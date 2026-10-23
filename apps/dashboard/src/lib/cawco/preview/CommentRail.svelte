@@ -17,8 +17,9 @@
    * the line's end in meta; the words in body, two lines at most; what it
    * carries as a strip of 20px thumbs, four at most, then "+N"; what came
    * back in meta, after its speaker's glyph (the agent's ghost in the line's
-   * ink, the person's in the brand ink), in the strong ink while unread,
-   * "Working on it…" while the agent works on it, "Not sent: why" in the
+   * ink, the person's in the brand ink), in the strong ink while unread
+   * (while the agent works on it, the pill's live dot says so and the line
+   * keeps what was said last: The Row Dress Rule), "Not sent: why" in the
    * fail ink when its delivery reached no one or it stands only on the page,
    * and nothing for a comment sent and unanswered (its filled pill says so).
    * A comment goes to the session by itself once written; one not sent has
@@ -217,9 +218,6 @@
     if (why) {
       return { kind: "notSent" as const, why };
     }
-    if (live.has(pin.id)) {
-      return { kind: "live" as const };
-    }
     const last = pin.thread.length > 1 ? pin.thread.at(-1) : undefined;
     if (!last) {
       return null;
@@ -272,6 +270,8 @@
         />
         {#if dotOf(pin) === "unread"}<span class="sr-only"
             >{said.pinNewAnswer(pin.number)}</span
+          >{:else if dotOf(pin) === "live"}<span class="sr-only"
+            >{said.working}</span
           >{/if}
       </span>
       <span class="flex flex-1 min-w-0 flex-col">
@@ -344,22 +344,6 @@
             ]}
             data-line="back"
             data-not-sent="">{said.notSent(back.why)}</span
-          >
-        {:else if back?.kind === "live"}
-          <span
-            class={[
-              "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
-              ink(washed, "text-ink-muted"),
-            ]}
-            data-line="back"
-            ><span class="sr-only">Agent: </span><span
-              aria-hidden="true"
-              class="grid size-icon-sm flex-none place-items-center"
-              data-box
-              data-speaker="agent"><IconAgent class="size-icon-sm" /></span
-            ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{said.working}</span
-            ></span
           >
         {:else if back?.kind === "said"}
           {@const Speaker = back.by === "agent" ? IconAgent : IconUser}

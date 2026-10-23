@@ -12,6 +12,7 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
@@ -72,6 +73,11 @@
       is signed in for the whole fleet. You can close this tab.
     </p>
   {:else}
-    <p class="type-body text-ink-muted" role="status">Finishing sign-in…</p>
+    <p
+      class="mark-line flex items-center gap-space-2 type-body text-ink-muted"
+      role="status"
+    >
+      <LiveDot /><span>Finishing sign-in…</span>
+    </p>
   {/if}
 </div>

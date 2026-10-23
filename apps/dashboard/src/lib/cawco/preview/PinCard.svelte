@@ -33,8 +33,9 @@
    * entry's age at the end of its words' first line on their baseline, the
    * words wrapping as prose does (no word alone on a last line); what an entry
    * carries under its words in the transcript's gallery (a picture as the
-   * 48px Shot, a text or a file as its DocThumb); "Working on it…" while
-   * the agent works on it. At its foot the chat composer as the reply, with
+   * 48px Shot, a text or a file as its DocThumb); while the agent works on
+   * it, the agent's speaker line where its reply will stand, its mark
+   * wearing the live dot. At its foot the chat composer as the reply, with
    * its own Attach and the send glyph "Reply" ("Reply to reopen" once
    * resolved, and its reply reopens it).
    *
@@ -551,14 +552,15 @@
       {/each}
     </ol>
     {#if live}
-      <!-- The agent's turn on this comment runs: its thinking state, swapped for the reply when it lands. -->
-      <p
-        data-slot="working"
-        class="m-0 mt-space-2 text-ink-muted type-meta motion-safe:animate-pulse loops"
-        role="status"
-      >
-        {said.working}
-      </p>
+      <!-- The agent's turn on this comment runs: its speaker line stands
+           where its reply will, its mark wearing the live dot, and the reply
+           takes its place when it lands. Said once to a screen reader. -->
+      <Turn data-slot="working">
+        <div aria-hidden="true">
+          <Who name={agentName} working />
+        </div>
+        <p class="sr-only" role="status">{said.working}</p>
+      </Turn>
     {/if}
   </div>
 {/if}

@@ -31,6 +31,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -362,10 +363,9 @@
   };
 
   /** Why there is nothing to draw: a normal state, never a fake 0%. */
+  const limitsRead = $derived(cawco.usageLimitsRead && usage.read);
   const empty = $derived(
-    cawco.usageLimitsRead && usage.read
-      ? "Sign in to see limits"
-      : "Reading limits…"
+    limitsRead ? "Sign in to see limits" : "Reading limits…"
   );
 
   /**
@@ -487,7 +487,16 @@
 </script>
 
 {#snippet face()}
-  {#if !shown}
+  {#if !(shown || gap || limitsRead)}
+    <!-- The limits are on their way: the live dot beside the words. -->
+    <span
+      class="mark-line flex min-w-0 items-center gap-space-2 type-meta text-ink-muted"
+      ><LiveDot /><span
+        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        >{empty}</span
+      ></span
+    >
+  {:else if !shown}
     <span class="truncate type-meta text-ink-muted">{gap?.short ?? empty}</span>
   {:else}
     <!-- Claude's cell asks for its whole first line and caption, and never
@@ -865,8 +874,13 @@
     {@attach morph()}
   >
     {#if !(shown || gap) && notes.length === 0}
-      <p class="p-space-3 type-meta text-ink-muted">
-        {empty}
+      <p
+        class={[
+          "p-space-3 type-meta text-ink-muted",
+          !limitsRead && "mark-line flex items-center gap-space-2",
+        ]}
+      >
+        {#if !limitsRead}<LiveDot />{/if}<span>{empty}</span>
       </p>
     {/if}
     {#if claude}

@@ -31,6 +31,7 @@
   import { Button, pressVariants } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     machineHue,
     machineIcon,
@@ -233,6 +234,8 @@
     step: boolean;
   }
   const STILL_UPLOADING = "Wait for your file to finish uploading.";
+  /** The reading line's words while the machine is still read: beside the live dot. */
+  const READING = "Reading…";
   /** Start's word while the machine reads the folder it starts in. */
   const CHECKING = "Checking the folder…";
   const NOT_UPLOADED =
@@ -894,7 +897,7 @@
       return moveAnswer.error;
     }
     if (!moveEstimated) {
-      return "Reading…";
+      return READING;
     }
     if (moveEstimated.refused) {
       return moveEstimated.refused;
@@ -923,7 +926,7 @@
     if (moveTo) {
       return failure || moveReading;
     }
-    return failure || locationReading || (locationUnverified ? "Reading…" : "");
+    return failure || locationReading || (locationUnverified ? READING : "");
   });
   const locationInformational = $derived(
     moveTo
@@ -2302,7 +2305,13 @@
         title={reading}
         {@attach readingMorph}
       >
-        {reading || "\u00a0"}
+        {#if reading === READING}
+          <span class="mark-line inline-flex items-center gap-space-2"
+            ><LiveDot /><span>{reading}</span></span
+          >
+        {:else}
+          {reading || "\u00a0"}
+        {/if}
       </p>
       {#if moveStep && moveEstimated?.ask}
         <div data-slot="tray" class="pt-space-2" in:unfold out:unfold>

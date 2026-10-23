@@ -42,6 +42,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Resizable from "#lib/components/ui/resizable/index.js";
@@ -685,8 +686,11 @@
       </div>
       <span
         data-slot="num"
-        class="num ms-auto w-c-workflow-save-w text-end type-meta text-ink-muted"
-        role="status"><MorphText text={saveState} /></span
+        class="num mark-line ms-auto flex w-c-workflow-save-w items-center justify-end gap-space-2 text-end type-meta text-ink-muted"
+        role="status"
+        >{#if !workflow || saving}<LiveDot />{/if}<MorphText
+          text={saveState}
+        /></span
       >
     </div>
   </header>

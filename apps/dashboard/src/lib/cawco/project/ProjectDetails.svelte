@@ -84,6 +84,7 @@
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
@@ -667,8 +668,13 @@
       </fieldset>
     {/if}
   {:else if !ghFault}
-    <p data-slot="note" class="type-meta text-ink-muted">
-      Reading the GitHub Projects {pickConnection} reaches…
+    <p
+      data-slot="note"
+      class="mark-line flex items-start gap-space-2 type-meta text-ink-muted"
+    >
+      <span class="mark-cell"><LiveDot /></span><span class="min-w-0"
+        >Reading the GitHub Projects {pickConnection} reaches…</span
+      >
     </p>
   {/if}
 {/snippet}
@@ -1086,8 +1092,11 @@
         class="flex min-w-0 flex-col gap-space-1 pt-space-1"
       >
         {#if gateRead.state === "reading"}
-          <p data-slot="note" class="type-meta text-ink-muted">
-            Reading gate.md…
+          <p
+            data-slot="note"
+            class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"
+          >
+            <LiveDot /><span>Reading gate.md…</span>
           </p>
         {:else if gateRead.state === "failed"}
           <RowFault
@@ -1217,9 +1226,11 @@
             {#if usable === null}
               <p
                 data-slot="note"
-                class="col-span-full type-meta wrap-anywhere text-ink-muted"
+                class="mark-line col-span-full flex items-start gap-space-2 type-meta wrap-anywhere text-ink-muted"
               >
-                Reading the {service} connections…
+                <span class="mark-cell"><LiveDot /></span><span class="min-w-0"
+                  >Reading the {service} connections…</span
+                >
               </p>
             {:else if usable.length === 0}
               <p
@@ -1279,9 +1290,11 @@
               {:else if !targetsFault}
                 <p
                   data-slot="note"
-                  class="col-span-full type-meta wrap-anywhere text-ink-muted"
+                  class="mark-line col-span-full flex items-start gap-space-2 type-meta wrap-anywhere text-ink-muted"
                 >
-                  Reading what {pickConnection} reaches…
+                  <span class="mark-cell"><LiveDot /></span><span
+                    class="min-w-0">Reading what {pickConnection} reaches…</span
+                  >
                 </p>
               {/if}
             {/if}
@@ -1348,13 +1361,19 @@
               variant="ghost"
             />
           </div>
+          <!-- mark-line: a line of facts in running text; while it syncs, the live dot stands in it on vertical-align: middle before the word -->
           <p
             data-slot="note"
             class="type-meta text-ink-muted"
             data-tracker-state={bound.state}
           >
             Through {bound.connection} · {bound.linked}
-            {bound.linked === 1 ? "task" : "tasks"} linked · {syncWords(bound)}
+            {bound.linked === 1 ? "task" : "tasks"} linked ·
+            {#if bound.state === "syncing"}
+              <span class="me-space-1 inline-flex align-middle" data-box
+                ><LiveDot /></span
+              >
+            {/if}{syncWords(bound)}
           </p>
           {#if bound.githubProject}
             <p

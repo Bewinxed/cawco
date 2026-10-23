@@ -35,6 +35,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { followTail } from "#lib/hooks/follow-tail.js";
   import {
     IconClose,
@@ -576,7 +577,9 @@
       {@attach followTail()}
     >
       {#if session?.loading && tail.length === 0}
-        <p class="text-meta">Reading…</p>
+        <p class="mark-line flex items-center gap-space-2 text-meta">
+          <LiveDot /><span>Reading…</span>
+        </p>
       {:else if session?.readFault && tail.length === 0}
         <!-- A read that failed is not a session with nothing to say. -->
         <p class="text-meta text-error-9">

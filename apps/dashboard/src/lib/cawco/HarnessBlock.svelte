@@ -12,6 +12,7 @@
    */
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconDownload, IconWarningTriangle } from "#lib/icons.js";
   import { didntAnswer } from "./client.svelte";
   import {
@@ -95,10 +96,14 @@
       variant="outline"
     />
     {#if running}
+      <!-- The live dot breathes beside the words (Live work breathes); the words hold still. -->
       <span
         data-slot="progress"
-        class="breathe min-w-0 type-meta text-ink-muted"
-        role="status">{words.running(block)}</span
+        class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
+        role="status"
+        ><span class="mark-cell"><LiveDot /></span><span class="min-w-0"
+          >{words.running(block)}</span
+        ></span
       >
     {/if}
   </div>

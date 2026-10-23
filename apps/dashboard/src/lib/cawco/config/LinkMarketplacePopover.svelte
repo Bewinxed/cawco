@@ -65,6 +65,7 @@
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconShop } from "#lib/icons.js";
@@ -306,7 +307,9 @@
       >
         {#snippet hint()}
           {#if reading}
-            {words.readingManifest}
+            <span class="mark-line inline-flex items-center gap-space-2"
+              ><LiveDot /><span>{words.readingManifest}</span></span
+            >
           {:else}
             <Coded text={words.installsAs(own ?? "name")} />
           {/if}

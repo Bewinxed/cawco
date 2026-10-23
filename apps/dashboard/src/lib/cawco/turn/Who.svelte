@@ -23,6 +23,7 @@
    * 14 − 9 = 5 cannot split evenly, so the glyph landed 2px from one edge and
    * 3px from the other and read visibly off-centre. 18 − 12 = 6 splits 3/3.
    */
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconAgent, IconUser } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { useVoice } from "./voice";
@@ -34,6 +35,8 @@
     timestamp,
     note,
     live = false,
+    working = false,
+    noteLive = false,
     shown = false,
   }: {
     you?: boolean;
@@ -42,6 +45,12 @@
      * it at work.
      */
     live?: boolean;
+    /**
+     * The speaker is at work on what it says next and has said none of it
+     * yet: its mark wears the live dot on its corner, breathing (DESIGN.md,
+     * Status dot; Live work breathes), where its words will come.
+     */
+    working?: boolean;
     /**
      * The speaker's turn right above said who this is: no mark and no name on
      * screen (the name stays for a screen reader, so every turn is still a
@@ -58,6 +67,8 @@
      * the reader hovers for, this is the row's whole status.
      */
     note?: string;
+    /** The note says something on its way ("sending…"): the live dot stands before it. */
+    noteLive?: boolean;
     /**
      * The clock stands at rest and says the turn's age ("2h"), the string a
      * list row says for the same moment: in a short thread (a pin's, a Caw
@@ -117,13 +128,17 @@
         data-slot="dot"
         data-a={!you || undefined}
         aria-hidden="true"
-        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-row-mark data-u:bg-action-surface not-data-a:data-u:text-on-action data-a:bg-brand-solid data-a:text-on-brand"
+        class="relative size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-row-mark data-u:bg-action-surface not-data-a:data-u:text-on-action data-a:bg-brand-solid data-a:text-on-brand"
         data-box
       >
         {#if you}
           <IconUser class="block size-(--row-mark-glyph)" />
         {:else}
           <IconAgent class="block size-icon-sm" />
+          {#if working}
+            <!-- The status dot on the mark's top-end corner, as a pin's pill wears it. -->
+            <LiveDot class="absolute -end-space-row -top-space-row" cut />
+          {/if}
         {/if}
       </span>
     {/if}
@@ -132,9 +147,15 @@
     >
   {/if}
   {#if note}
+    {#if noteLive}
+      <LiveDot class="ms-auto" />
+    {/if}
     <span
       data-slot="note"
-      class="ms-auto text-size-meta font-normal text-ink-muted">{note}</span
+      class={[
+        "text-size-meta font-normal text-ink-muted",
+        !noteLive && "ms-auto",
+      ]}>{note}</span
     >
   {/if}
   {#if validAt}

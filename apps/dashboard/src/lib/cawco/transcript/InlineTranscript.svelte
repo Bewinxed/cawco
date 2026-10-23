@@ -15,6 +15,7 @@
   import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     cawco,
     faultMessage,
@@ -152,9 +153,9 @@
       {#if loading}
         <p
           data-slot="inline-transcript-empty"
-          class="p-space-2 text-size-meta font-normal text-ink-muted"
+          class="mark-line flex items-center gap-space-2 p-space-2 text-size-meta font-normal text-ink-muted"
         >
-          Loading its transcript…
+          <LiveDot /><span>Loading its transcript…</span>
         </p>
       {:else if shown.length === 0 && fault}
         <p

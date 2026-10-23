@@ -52,6 +52,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import {
@@ -3493,10 +3494,12 @@
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p
-          class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
+          class="mark-line mt-space-3 mx-0 mb-0 flex items-start gap-space-2 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
           data-slot="cover-state"
         >
-          {stageWaiting}
+          <span class="mark-cell"><LiveDot /></span><span class="min-w-0"
+            >{stageWaiting}</span
+          >
         </p>
       {/if}
     </div>

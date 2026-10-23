@@ -272,55 +272,55 @@ Under "Empty, loading and skeleton states" (DESIGN.md line 870); rule at line 87
 
 ## The Composer Layer Rule
 
-Under "Composer" (DESIGN.md line 901); rule at line 906.
+Under "Composer" (DESIGN.md line 902); rule at line 907.
 
 - **The Composer Layer Rule.** Nothing that comes out of the composer moves the transcript (owner: "WHY WOULD ANYTHING THAT COMES OUT OF THE COMPOSER EVEN MOVE THE TRANSCRIPT"). The slash and @ menu, the delegate tray's "+N" and failures shelf and its chip panel, the plan its ring opens, the recall wheel and the grown shape are layers of the composer's dock over the transcript's foot, anchored to what opened them, in no flow and never a size the transcript is told: its box, its scroll and its rows hold still to the pixel while one opens or closes, by construction (probe-kit `composer-layers`). The shelf and the plan are the menu's floating surface across the composer's width, a `space-2` step over the tray row, as tall as what they hold up to the room under the dock's top; each comes in by `popIn` (one animation: opacity, rise and scale, `--dur-pop` on the drawer curve, from its foot) and leaves by `popOut` over `--dur-exit` (`motion/pop.svelte.ts`), never by `@starting-style`, which WebKit sometimes skips for an element just added (bugs.webkit.org 275184).
 
 ## The Composer Touch Rule
 
-Under "Composer" (DESIGN.md line 901); rule at line 907.
+Under "Composer" (DESIGN.md line 902); rule at line 908.
 
 - **The Composer Touch Rule.** The textarea sits above its label's touch area, so a press on the text lands on the field itself and iOS hold-to-select and Paste reach it.
 
 ## The One Target Rule
 
-Under "Artifact panel, canvas and ink" (DESIGN.md line 916); rule at line 930.
+Under "Artifact panel, canvas and ink" (DESIGN.md line 917); rule at line 931.
 
 - **The One Target Rule.** On a page in Comment mode, coral is the target and nothing else, and no mark on the page is wider than 1px.
 
 ## The Peer Rule
 
-Under "Permission gate" (DESIGN.md line 948); rule at line 951.
+Under "Permission gate" (DESIGN.md line 949); rule at line 952.
 
 **The Peer Rule.** Approve and Deny are peers: the same size (`sm`, 30px; 44px of touch area on a coarse pointer), the same label type, the same fill strength, and neither is ever made the more inviting. Why the rule exists (4ca69663): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. It takes two forms on purpose, one per surface (the owner's decision); each guards the thumb its own way, and both keep the two at one strength. **Caw's panel: a filled tinted pair, together at the trailing edge.** Its rows are a list scanned at a glance, every row's last control on one edge, so the pair stands together at the row's trailing edge, Deny then Approve, `--space-2` apart, each tinted by what it does: Deny in the fail status's fill and ink (`status-fail-bg`, `status-fail-ink`, a cross), Approve in the done status's, the house's success pair (`status-done-bg`, `status-done-ink`, a tick), so yes reads as go; live's blue says "working", not yes. Both pairs are their hue's 3-step mixed 24% toward its 9-step, so neither fill is the stronger. They do not change under the pointer, as the grant variant holds still, so the hand's last move never makes one brighter. What guards the thumb is that the two read apart at a glance by hue and glyph, and that on a coarse pointer their gap opens to `--space-4`, so the two 44px areas meet at the midpoint and never overlap (The 44 Touch Rule). **The transcript's permission card (`transcript/Prompt.svelte`): apart, with tinted outlines.** It stands over the composer, where the operator is already in the session reading what is asked, so distance guards the thumb: Approve and Deny at opposite ends of the row, the row's full width between them and never less than `--space-8`, no third control in that gap. Both keep the one untinted recessed fill (`surface-recess`), and each wears a 1px outline in its tint, Approve `status-done-ink` and Deny `status-fail-ink`, so they read apart by hue as well as glyph without either fill leaning toward an answer. Both labels are in `ink-strong`, so neither leans. Neither the fill nor the outline changes under the pointer. **The peek's answer row (`PeekPane.svelte`): the same apart form.** The peek is read beside the board, where the operator is reading the session's tail, so it takes the transcript card's form exactly: Deny and Approve at opposite ends, never less than `--space-8` apart, the one untinted recessed fill, Approve's 1px `status-done-ink` outline and Deny's 1px `status-fail-ink`, both labels and glyphs in `ink-strong`, and no change under the pointer. The transcript card and the peek are the two places the pair stands apart.
 
 ## The Consequential Grant Rule
 
-Under "Permission gate" (DESIGN.md line 948); rule at line 953.
+Under "Permission gate" (DESIGN.md line 949); rule at line 954.
 
 **The Consequential Grant Rule.** A standing grant ("Always allow … for …") is a wider grant than the request, so it is kept apart: under a 32px break and a hairline, after a sentence saying what it would allow, and drawn in the warning tint with warning ink, a shield glyph and a real edge. It is the most salient control on the card on purpose. Above the answer row the card says who asks (its title), what will happen and to what (one strong line), and how much changes; then the change itself, open (the transcript's diff, at most `c-ask-diff-share` of the screen tall, scrolling inside), and the other input fields in a recess well, each value scrolling past 200px. Nothing is behind a disclosure: a grant is made on what it changes.
 
 ## The Solar Duotone Rule
 
-Under "Icons" (DESIGN.md line 972); rule at line 973.
+Under "Icons" (DESIGN.md line 973); rule at line 974.
 
 **The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph keeps its hue (`status-*-glyph`) at that 0.5 and holds 3:1 or more as a whole on the surfaces it sits on, so a row's state reads in colour at a glance (9ca3b2154). Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Minus, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, because Solar has no bare version.
 - **Sizes:** 12px beside meta text, 16px in controls and rows (the default for any unsized icon), 20px in nav and headers.
 
 ## The One Ring Rule
 
-Under "Focus and hit areas" (DESIGN.md line 976); rule at line 977.
+Under "Focus and hit areas" (DESIGN.md line 977); rule at line 978.
 
 **The One Ring Rule.** Every focusable element shows one ring on keyboard focus only: a 2px solid outline in `focus-ring`, 2px outside the element. Text fields, list rows, tabs, options and anything flush against a container or inside a clipping scroller carry the ring inset on their own border box instead, so it never stacks on a border or gets cut. The ring's colour is set at rest, so focus only switches it on. A scroller brings a focused control into view with room for its ring. Pointer focus shows nothing. The one exception is the composer grown for the recall wheel or a queued edit: its shape keeps its border and draws no ring (The grown shape).
 
 ## The 44 Touch Rule
 
-Under "Focus and hit areas" (DESIGN.md line 976); rule at line 979.
+Under "Focus and hit areas" (DESIGN.md line 977); rule at line 980.
 
 **The 44 Touch Rule.** On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`, WCAG 2.5.8), while its drawn size and the layout stay the same. Where neighbours sit closer, `--hit-gap-x` and `--hit-gap-y` stop each area at the midpoint so areas never overlap; clusters open their gap on touch (8 to 14px for a row's controls, to 16px in the top bar). A scroller that would clip the areas pads into an equal negative margin. Menu items and nav rows are 44px tall on touch. One exception: a chip set in running text (ui/chip `inline`: a session, mention or skill in the composer or the transcript) takes its line's height as its hit area, as a link does, because a 44px area there would cover the lines above and below it. WCAG 2.2 SC 2.5.8 exempts it: "Inline: The target is in a sentence or its size is otherwise constrained by the line-height of non-target text" (w3.org/WAI/WCAG22/Understanding/target-size-minimum). Every other chip keeps its 44px under a finger.
 
 ## The 24 Pointer Rule
 
-Under "Focus and hit areas" (DESIGN.md line 976); rule at line 981.
+Under "Focus and hit areas" (DESIGN.md line 977); rule at line 982.
 
 **The 24 Pointer Rule.** On a fine pointer, a control drawn smaller than 24×24 reaches 24px through `.pointer-hit`, with the same midpoint stops. `--hit-scale` keeps the area at 24px on screen inside a zoomed canvas.

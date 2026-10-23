@@ -17,6 +17,7 @@
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
@@ -413,14 +414,14 @@
   const recoverable = $derived(offered.retry);
   /** Edit hands the whole payload back to the composer, which only the outbox holds. */
   const editable = $derived(offered.edit === "restore");
+  /** The note while the message is on its way, beside the live dot. */
+  const SENDING = "sending…";
   const whoNote = $derived.by(() => {
     if (ghost) {
-      return commandRecord(message.id)?.waiting
-        ? "waiting for hub"
-        : "sending…";
+      return commandRecord(message.id)?.waiting ? "waiting for hub" : SENDING;
     }
     if (failed) {
-      return retrying ? "sending…" : "not sent";
+      return retrying ? SENDING : "not sent";
     }
     if (waiting) {
       const here = cawco.session(message.instanceId);
@@ -666,6 +667,7 @@
       <Who
         name="You"
         note={whoNote}
+        noteLive={whoNote === SENDING}
         timestamp={ghost || failed || waiting ? undefined : message.timestamp}
         you
       />
@@ -689,6 +691,7 @@
             grouped
             name="You"
             note={whoNote}
+            noteLive={whoNote === SENDING}
             timestamp={ghost || failed || waiting
               ? undefined
               : message.timestamp}
@@ -841,9 +844,11 @@
               <p
                 data-slot="reason"
                 data-going={line === SENDING_AGAIN || undefined}
-                class="text-size-meta font-normal text-status-fail-ink data-going:text-ink-muted"
+                class="mark-line flex items-start gap-space-2 text-size-meta font-normal text-status-fail-ink data-going:text-ink-muted"
               >
-                {line}
+                {#if line === SENDING_AGAIN}
+                  <span class="mark-cell"><LiveDot /></span>
+                {/if}<span class="min-w-0">{line}</span>
               </p>
               <!-- The way back, right under why, and only here: recovery is
                    read and acted on, never a hover's. While what refused it

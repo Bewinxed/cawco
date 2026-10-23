@@ -15,6 +15,7 @@
    */
   import { onMount } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import ErrorText from "./ErrorText.svelte";
   import Caw from "./home/Caw.svelte";
   import { clock } from "./home/home-state.svelte";
@@ -79,11 +80,13 @@
           <p
             data-num
             data-slot="meta"
-            class="num m-0 type-meta text-center text-ink-muted"
+            class="num mark-line m-0 flex items-start justify-center gap-space-2 type-meta text-center text-pretty text-ink-muted"
           >
-            Waiting for approval… The code expires {left < 60_000
-              ? "in under a minute"
-              : `in ${Math.ceil(left / 60_000)} min`}.
+            <span class="mark-cell"><LiveDot /></span><span
+              >Waiting for approval… The code expires {left < 60_000
+                ? "in under a minute"
+                : `in ${Math.ceil(left / 60_000)} min`}.</span
+            >
           </p>
         {:else if stage.kind === "denied"}
           <h1
@@ -133,9 +136,11 @@
           </h1>
           <p
             aria-live="polite"
-            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+            class="mark-line m-0 flex max-w-c-page-line items-start justify-center gap-space-2 type-body text-center text-pretty text-ink-muted"
           >
-            Asking the hub for a code…
+            <span class="mark-cell"><LiveDot /></span><span
+              >Asking the hub for a code…</span
+            >
           </p>
         {/if}
       </div>

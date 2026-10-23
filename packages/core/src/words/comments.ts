@@ -31,7 +31,8 @@ export const commentWords = {
   deleteComment: "Delete comment",
   deleteTitle: (n: number) => `Delete comment ${n}?`,
   deleting: "Deleting…",
-  working: "Working on it…",
+  /** The agent at work on a comment: its mark's live dot, said to a screen reader. */
+  working: "The agent is working on it",
   resolvedAgo: (age: string) =>
     age === "now" ? "Resolved just now" : `Resolved ${age} ago`,
   close: "Close",

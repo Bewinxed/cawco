@@ -16,6 +16,7 @@
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
     IconChevronDown as Down,
@@ -649,13 +650,17 @@
   {:else if pending(slot)}
     <p
       data-slot="feedback"
-      class="mt-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+      class="mark-line mt-space-2 flex items-start gap-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
       role="status"
       in:crossIn
       out:crossOut
     >
       <!-- A move says when it takes effect, in its rows' words (switch.svelte.ts). -->
-      {slot === "account" && row ? movingWords(row) : "Applying change…"}
+      <span class="mark-cell"><LiveDot /></span><span class="min-w-0"
+        >{slot === "account" && row
+          ? movingWords(row)
+          : "Applying change…"}</span
+      >
     </p>
   {:else if done[slot]}
     <p
@@ -961,7 +966,9 @@
           `${percent}% · ${tokens(stats.totalTokens)}/${tokens(stats.maxTokens)}`
         )}
       {:else if reading}
-        <span>Reading…</span>
+        <span class="mark-line inline-flex items-center gap-space-2"
+          ><LiveDot /><span>Reading…</span></span
+        >
       {:else if refusal}
         <span data-slot="refusal" class="min-w-0 wrap-anywhere" title={refusal}
           >{refusal}</span
