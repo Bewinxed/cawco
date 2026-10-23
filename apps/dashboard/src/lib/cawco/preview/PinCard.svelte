@@ -1,18 +1,3 @@
-<script lang="ts" module>
-  import type { Component } from "svelte";
-
-  /**
-   * The thread's words as the transcript sets them (MessageBody and its
-   * markdown), loaded the first time a thread opens (an artifact's own tab
-   * never draws one before then) and held for every thread after it, so a
-   * thread opened again draws its entries in its first frame.
-   */
-  let loadedBody: Component<{
-    source: string;
-    wrap?: "stable" | "pretty";
-  }> | null = null;
-</script>
-
 <script lang="ts">
   import { commentWords as said, artifactWords as words } from "@cawco/core";
   /**
@@ -60,6 +45,7 @@
   import type { SendExtras } from "../client.svelte";
   import RowMenu from "../config/RowMenu.svelte";
   import { copyRefused, copyToClipboard } from "../copy";
+  import MessageBody from "../MessageBody.svelte";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -129,17 +115,6 @@
     onfind: () => void;
     ondraft?: () => void;
   } = $props();
-
-  /** The thread's words' component ({@link loadedBody}): at hand from the second thread on. */
-  let Body = $state<typeof loadedBody>(loadedBody);
-  $effect(() => {
-    if (!Body) {
-      import("../MessageBody.svelte").then((loaded) => {
-        loadedBody = loaded.default;
-        Body = loaded.default;
-      });
-    }
-  });
 
   let roomEl = $state<HTMLDivElement | null>(null);
   /** The thread is read at its end: a new entry keeps it there. */
@@ -478,90 +453,87 @@
     />
   </div>
 {/if}
+<!-- A later entry of one speaker's run: its words, and its age at the end
+     of their first line, on its baseline (a row's meta on its words' line,
+     The Row Dress Rule), the words wrapping in their own column as prose
+     does. -->
+{#snippet later(text: string, at: string, who: string, you: boolean)}
+  <div class="flex items-baseline" data-slot="later">
+    <div class="min-w-0 flex-1">
+      {#if text.trim()}
+        <MessageBody source={text} wrap="pretty" />
+      {/if}
+    </div>
+    <Who grouped name={who} shown timestamp={at} {you} />
+  </div>
+{/snippet}
 <!-- What the comment holds, the one part that scrolls: the head stands over
      it and the reply under it, never a scroll away; the house edge fade says
      there is more above or below. -->
-{#if Body}
-  {@const Words = Body}
-  <!-- A later entry of one speaker's run: its words, and its age at the end
-       of their first line, on its baseline (a row's meta on its words' line,
-       The Row Dress Rule), the words wrapping in their own column as prose
-       does. -->
-  {#snippet later(text: string, at: string, who: string, you: boolean)}
-    <div class="flex items-baseline" data-slot="later">
-      <div class="min-w-0 flex-1">
-        {#if text.trim()}
-          <Words source={text} wrap="pretty" />
-        {/if}
-      </div>
-      <Who grouped name={who} shown timestamp={at} {you} />
-    </div>
-  {/snippet}
-  <div
-    class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
-    data-whole={squeezed || undefined}
-    data-pin-room
-    onscroll={readAt}
-    bind:this={roomEl}
-  >
-    <!-- The transcript's turns: a run of one speaker's entries is one turn
-         (its later entries under the first's speaker line), the person's
-         run one well. -->
-    <ol data-slot="thread" class="m-0 p-0 list-none">
-      {#each pin.thread as entry, i (entry.id)}
-        {@const grouped = pin.thread[i - 1]?.by === entry.by}
-        <li data-slot="entry" class="group/entry" data-by={entry.by}>
-          {#if entry.by === "person"}
-            {@const runsOn = pin.thread[i + 1]?.by === "person"}
-            <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
-              {#if !grouped}
-                <Who name="You" shown timestamp={entry.at} you />
-              {/if}
-              <Well {grouped} {runsOn}>
-                {#if grouped}
-                  {@render later(entry.text, entry.at, "You", true)}
-                {:else if entry.text.trim()}
-                  <Words source={entry.text} wrap="pretty" />
-                {/if}
-                {@render gallery(entry.attachments)}
-              </Well>
-            </Turn>
-          {:else}
-            <Turn class="group-first/entry:mt-0" {grouped}>
+<div
+  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
+  data-whole={squeezed || undefined}
+  data-pin-room
+  onscroll={readAt}
+  bind:this={roomEl}
+>
+  <!-- The transcript's turns: a run of one speaker's entries is one turn
+       (its later entries under the first's speaker line), the person's
+       run one well. -->
+  <ol data-slot="thread" class="m-0 p-0 list-none">
+    {#each pin.thread as entry, i (entry.id)}
+      {@const grouped = pin.thread[i - 1]?.by === entry.by}
+      <li data-slot="entry" class="group/entry" data-by={entry.by}>
+        {#if entry.by === "person"}
+          {@const runsOn = pin.thread[i + 1]?.by === "person"}
+          <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
+            {#if !grouped}
+              <Who name="You" shown timestamp={entry.at} you />
+            {/if}
+            <Well {grouped} {runsOn}>
               {#if grouped}
-                {@render later(entry.text, entry.at, agentName, false)}
-              {:else}
-                <Who name={agentName} shown timestamp={entry.at} />
-                <Words source={entry.text} wrap="pretty" />
+                {@render later(entry.text, entry.at, "You", true)}
+              {:else if entry.text.trim()}
+                <MessageBody source={entry.text} wrap="pretty" />
               {/if}
-              {#if entry.files?.length}
-                <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
-                  {#each entry.files as file (file)}
-                    <code
-                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
-                      >{file}</code
-                    >
-                  {/each}
-                </p>
-              {/if}
-            </Turn>
-          {/if}
-        </li>
-      {/each}
-    </ol>
-    {#if live}
-      <!-- The agent's turn on this comment runs: its speaker line stands
-           where its reply will, its mark wearing the live dot, and the reply
-           takes its place when it lands. Said once to a screen reader. -->
-      <Turn data-slot="working">
-        <div aria-hidden="true">
-          <Who name={agentName} working />
-        </div>
-        <p class="sr-only" role="status">{said.working}</p>
-      </Turn>
-    {/if}
-  </div>
-{/if}
+              {@render gallery(entry.attachments)}
+            </Well>
+          </Turn>
+        {:else}
+          <Turn class="group-first/entry:mt-0" {grouped}>
+            {#if grouped}
+              {@render later(entry.text, entry.at, agentName, false)}
+            {:else}
+              <Who name={agentName} shown timestamp={entry.at} />
+              <MessageBody source={entry.text} wrap="pretty" />
+            {/if}
+            {#if entry.files?.length}
+              <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
+                {#each entry.files as file (file)}
+                  <code
+                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                    >{file}</code
+                  >
+                {/each}
+              </p>
+            {/if}
+          </Turn>
+        {/if}
+      </li>
+    {/each}
+  </ol>
+  {#if live}
+    <!-- The agent's turn on this comment runs: its speaker line stands
+         where its reply will, its mark wearing the live dot, and the reply
+         takes its place when it lands. Said once to a screen reader. -->
+    <Turn data-slot="working">
+      <div aria-hidden="true">
+        <Who name={agentName} working />
+      </div>
+      <p class="sr-only" role="status">{said.working}</p>
+    </Turn>
+  {/if}
+</div>
 <div
   bind:this={foot}
   data-slot="foot"
