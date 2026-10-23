@@ -3478,10 +3478,11 @@
              shoulders' curve, and clear of the fade at the grown top. The
              label and the hints come up with the shape one after the other,
              by opacity and translate alone, and sink back as it folds. No
-             filter: a blur transitioning here hung WebKit's web process for
-             good as the row came up (Playwright WebKit 2359 at an iPhone's
-             size, probe-kit safari-blurs), as the ask card's parts did on the
-             owner's iPhone. The hints and Keep it come up a stagger after
+             filter: a blur transitioning here hung playwright-core 1.63.0's
+             WebKit as the row came up (at an iPhone's size, probe-kit
+             safari-blurs). That hang was only seen in that build, never on
+             the owner's iPhone, and 1.64.1's WebKit does not hang. The hints and
+             Keep it come up a stagger after
              the label. Keep it is the kit's Button, addressed from the row
              (its own utilities set its display and transition): hidden but
              on a touch screen, which has no Esc. -->

@@ -12,7 +12,7 @@
  */
 import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { constants, homedir } from "node:os";
+import { constants } from "node:os";
 import { join, resolve } from "node:path";
 import {
   type Browser,
@@ -83,7 +83,7 @@ export const VIEWS = {
   phoneWide: { width: 430, height: 932, touch: true },
   /** The simulators the iOS specs pair with: iPhone 16 Pro and iPad Pro 13-inch (M4), portrait. */
   iphone: { width: 402, height: 874, touch: true },
-  /** An iPhone 15 Pro, portrait: the owner's phone. */
+  /** An iPhone 15 Pro, portrait. */
   iphone15Pro: { width: 393, height: 852, touch: true },
   ipad: { width: 1032, height: 1376, touch: true },
   /** An iPad Pro 11-inch (M4), portrait: the simulator ios-config and ios-views pair with. */
@@ -246,13 +246,6 @@ export interface PageOptions {
   scrollbars?: boolean;
   theme?: Theme;
   /**
-   * The WebKit build a WebKit page runs on, by its Playwright revision,
-   * where a spec reads a bug a phone's Safari still has and a newer build
-   * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
-   * expects, or the one `PROBE_WEBKIT` names.
-   */
-  webkit?: string;
-  /**
    * Chromium only: every tile rastered whole whenever it changes
    * (`--disable-partial-raster`), on a browser of its own. Partial raster
    * redraws only what was invalidated into a tile it keeps, so the
@@ -269,31 +262,6 @@ const networkOf = (options: PageOptions) => ({
   ...(options.ignoreHTTPSErrors ? { ignoreHTTPSErrors: true } : {}),
   ...(options.proxy ? { proxy: { server: options.proxy } } : {}),
 });
-
-/**
- * WebKit 2359 (playwright-core 1.63.0's) hangs its web process on a blur
- * transitioning in the page, as the owner's iPhone Safari does; 2370
- * (1.64.1's) does not. The specs that guard against that hang run on it.
- */
-export const PINNED_WEBKIT = "2359";
-
-/**
- * A WebKit build in Playwright's browser cache, by its revision: its
- * `pw_run.sh`. Missing, the spec cannot read what it is for, and says how
- * to install it.
- */
-function pinnedWebkit(revision: string): string {
-  const cache =
-    process.env.PLAYWRIGHT_BROWSERS_PATH ??
-    join(homedir(), ".cache", "ms-playwright");
-  const run = join(cache, `webkit-${revision}`, "pw_run.sh");
-  if (!existsSync(run)) {
-    throw new Error(
-      `WebKit ${revision} is not installed at ${run}: install it with \`bunx playwright-core@1.63.0 install webkit\``
-    );
-  }
-  return run;
-}
 
 /** A spec: one surface, a short list of assertions on the kit's helpers. */
 export interface Spec {
@@ -949,7 +917,6 @@ export class Run {
 
   browser(
     engine: Engine,
-    revision?: string,
     oneProcess = false,
     own?: string,
     wholeRaster = false,
@@ -958,7 +925,6 @@ export class Run {
   ): Promise<Browser> {
     const key = [
       engine,
-      revision,
       oneProcess && "one-process",
       wholeRaster && "whole-raster",
       own,
@@ -978,8 +944,7 @@ export class Run {
     );
     this.sharedLaunches.add(tagOf(env));
     // `PROBE_WEBKIT` names a WebKit build to run (its `pw_run.sh`) where the
-    // one this playwright-core expects is not installed; a page's own
-    // `webkit` revision names one in Playwright's browser cache.
+    // one this playwright-core expects is not installed.
     // A WebKit launch keeps what its process says, and a disconnect the run
     // did not ask for is said with it (crash-watch.ts).
     const log = browserLog();
@@ -988,9 +953,7 @@ export class Run {
         webkit
           .launch({
             env,
-            executablePath: revision
-              ? pinnedWebkit(revision)
-              : process.env.PROBE_WEBKIT,
+            executablePath: process.env.PROBE_WEBKIT,
             logger: log.logger,
           })
           .then((browser) => {
@@ -1180,7 +1143,6 @@ export class Run {
         const engine = options.engine ?? RUN_ENGINE;
         const browser = await this.browser(
           engine,
-          engine === "webkit" ? options.webkit : undefined,
           options.oneProcess,
           options.browser,
           options.wholeRaster,

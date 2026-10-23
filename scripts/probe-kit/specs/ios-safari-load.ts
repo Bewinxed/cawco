@@ -19,12 +19,9 @@
  *
  * First, the static page alone in a fresh Safari paints: the control.
  *
- * The runtimes: the newest iOS installed, and iOS 26.0 when it is (the iOS 26
- * family the owner's iPhone Safari belongs to). Not iOS 26.3: on a macOS 27
- * host its JavaScriptCore crashes (SIGBUS, KERN_PROTECTION_FAILURE) on
- * JS-heavy pages, the dashboard and public sites (react.dev, figma.com) alike,
- * while 26.0, 18.5 and 27.2 run them clean (README "A spec that delegates
- * runs on the host").
+ * The runtimes: the newest iOS installed, and iOS 27.0 on an iPhone 17 Pro
+ * Max when it is installed: the owner's phone is an iPhone18,2 on iOS 27.0
+ * (24A5418b), as its MetricKit reports and TestFlight 20261018 say.
  *
  * The spec takes a Mac slot (lib/mac-sim.ts) per runtime, one at a time.
  * `PROBE_SIM_UDID` (comma separated) names simulators already booted to run
@@ -44,8 +41,9 @@ import { colours, type Rgb } from "../ink";
 import { type Kit, type KitFleet, open, type Spec, THEMES } from "../kit";
 
 const SAFARI = "com.apple.mobilesafari";
-const IOS_26_0 = "com.apple.CoreSimulator.SimRuntime.iOS-26-0";
-const IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro";
+const IOS_27_0 = "com.apple.CoreSimulator.SimRuntime.iOS-27-0";
+/** iPhone18,2. */
+const IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max";
 /** What a runtime identifier carries before its name (`iOS-27-2`). */
 const RUNTIME_PREFIX = /^.*SimRuntime\./;
 /**
@@ -262,16 +260,16 @@ async function targets(): Promise<Target[]> {
   const runtimes = JSON.parse(await sh("xcrun simctl list runtimes -j")) as {
     runtimes: { identifier: string; isAvailable: boolean }[];
   };
-  const has26 = runtimes.runtimes.some(
-    (r) => r.identifier === IOS_26_0 && r.isAvailable
+  const has27 = runtimes.runtimes.some(
+    (r) => r.identifier === IOS_27_0 && r.isAvailable
   );
   return [
     { kind: "slot", choice: { newest: "iPhone \\d+ Pro" } },
-    ...(has26
+    ...(has27
       ? [
           {
             kind: "slot",
-            choice: { runtime: IOS_26_0, device: IPHONE },
+            choice: { runtime: IOS_27_0, device: IPHONE },
           } as const,
         ]
       : []),

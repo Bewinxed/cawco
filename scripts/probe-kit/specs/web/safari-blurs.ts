@@ -1,10 +1,10 @@
 /**
- * Every blur the dashboard moves, driven where a phone's Safari draws it:
- * WebKit 2359 (kit `PINNED_WEBKIT`, whose web process hangs on a
- * transitioned blur as the owner's iPhone Safari does) at an iPhone 15
- * Pro's size, touch, 3x. The ask card's parts hung it (safari-long-ask);
- * this is each other place a `filter` sits under a transition, an
- * animation or a script's motion:
+ * Every blur the dashboard moves, driven in the kit's WebKit at an iPhone 15
+ * Pro's size, touch, 3x. playwright-core 1.63.0's WebKit hung its web process
+ * on a transitioned blur; that hang was never seen on the owner's iPhone, and
+ * 1.64.1's WebKit does not hang. The ask card's parts hung 1.63.0's
+ * (safari-long-ask); this is each other place a `filter` sits under a
+ * transition, an animation or a script's motion:
  *
  *  - the session page and `/`, loaded cold in light and dark, with every
  *    blur and fade that comes in with the page;
@@ -27,7 +27,7 @@
  *  - a skeleton handing its place to its content, out of and into the
  *    reveal's blur (motion/curves `reveal`, the skeleton bench).
  *
- * The queued edit's row hung it (its blur is gone, Composer `[data-slot="edit-row"]`);
+ * The queued edit's row hung 1.63.0's WebKit (its blur is gone, Composer `[data-slot="edit-row"]`);
  * every other one draws. A crash or a hang says the page's last frames' running
  * animations, and the browser's own last lines (crash-watch.ts).
  *
@@ -48,7 +48,6 @@ import {
   type Kit,
   type KitFleet,
   open,
-  PINNED_WEBKIT,
   type Spec,
   settle,
   THEMES,
@@ -99,11 +98,10 @@ const respond = (request: Seen): Reply => {
   return { everyMs: 5, words: ["ok"] };
 };
 
-/** A phone's page on the pinned WebKit. */
+/** A phone's page in WebKit. */
 async function phone(kit: Kit, theme: Theme = "light"): Promise<Page> {
   const page = await kit.page("iphone15Pro", {
     engine: "webkit",
-    webkit: PINNED_WEBKIT,
     scale: 3,
     theme,
   });

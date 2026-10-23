@@ -7,11 +7,12 @@
  * description "Slim the exports to text and file lists", with `timeout
  * 300000` among its fields.
  *
- * It hung there (Playwright WebKit 2359): the composer grew into the card,
- * its parts came up out of a transitioning blur (Prompt `.part`), and the
- * web process stopped answering until it was killed some 20s later. WebKit
- * 2370 has the bug fixed and the owner's Safari does not, so this runs on
- * 2359 (kit `PINNED_WEBKIT`).
+ * What hung on his phone was never traced there. playwright-core 1.63.0's
+ * WebKit hung on the same card: the composer grew into it, its parts came up
+ * out of a transitioning blur (Prompt `.part`), and the web process stopped
+ * answering until it was killed some 20s later. That blur hang was only ever
+ * seen in that build, not on his iPhone, and 1.64.1's WebKit does not hang;
+ * this runs on the kit's WebKit.
  *
  * Read twice: once as WebKit hands the page its storage, once with the
  * storage refused (`localStorage` and `sessionStorage` answering null, as
@@ -37,7 +38,6 @@ import {
   type Kit,
   type KitFleet,
   open,
-  PINNED_WEBKIT,
   type Spec,
 } from "../../kit";
 
@@ -145,7 +145,6 @@ async function leg(
   );
   const page = await kit.page("iphone15Pro", {
     engine: "webkit",
-    webkit: PINNED_WEBKIT,
     scale: 3,
     init: storage ? [hearErrors] : [hearErrors, refuseStorage],
   });

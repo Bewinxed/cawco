@@ -589,10 +589,10 @@
      other, by opacity and translate alone, and sink back together as it
      folds, each a stagger after the one before (`--part`); the delay
      outranks the shorthand, which resets it. No filter: a blur
-     transitioning on a part hung WebKit's web process for good as the card
-     came up (Playwright WebKit 2359 at an iPhone's size, the owner's iPhone
-     Safari: "stop responding and it didn't even show"; with the blur
-     snapped instead of transitioned, or none, it never hung). -->
+     transitioning on a part hung playwright-core 1.63.0's WebKit at an
+     iPhone's size as the card came up (with the blur snapped instead of
+     transitioned, or none, it never hung). That hang was only seen in that
+     build, never on the owner's iPhone, and 1.64.1's WebKit does not hang. -->
 {#snippet title(text: string)}
   <h2
     class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"

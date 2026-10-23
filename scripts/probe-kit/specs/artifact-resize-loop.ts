@@ -1031,9 +1031,8 @@ const oneClock = (
 };
 
 /**
- * The preview sheet on a phone, in WebKit (the owner's iPhone Safari's
- * engine) at `view`, beside its session (`/session/<id>`), whose preview
- * is open:
+ * The preview sheet on a phone, in Playwright's WebKit at `view`, beside
+ * its session (`/session/<id>`), whose preview is open:
  *
  * - Open, the sheet's floor is the screen's foot less the home indicator's
  *   room, and every part of the composer that paints (the pill, the tray's

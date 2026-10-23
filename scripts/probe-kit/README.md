@@ -86,16 +86,13 @@ delivers such a `pointerout` to no listener.
 `PROBE_ENGINE=webkit` (or `firefox`) runs every page a spec does not pin to
 an engine on that engine.
 
-## A pinned WebKit
+## WebKit
 
 WebKit pages run on the build this playwright-core expects, or the one
-`PROBE_WEBKIT` names (its `pw_run.sh`). A spec that reads a bug a phone's
-Safari still has and a newer build has fixed names that build instead:
-`kit.page(view, { engine: "webkit", webkit: PINNED_WEBKIT })`. That is
-WebKit 2359, which hangs its web process on a transitioned blur as the
-owner's iPhone Safari does (`safari-long-ask`, `safari-blurs`); it is
-read from Playwright's browser cache, installed with
-`bunx playwright-core@1.63.0 install webkit`.
+`PROBE_WEBKIT` names (its `pw_run.sh`). Playwright's WebKit is not the
+Safari on the owner's iPhone (iPhone18,2, iOS 27.0): what a spec reads in
+it is that build's behaviour, and a spec says so rather than claiming his
+phone does the same.
 
 ## A browser leaves nothing behind
 
@@ -231,7 +228,8 @@ while 26.0, 18.5 and 27.2 load the same pages clean. Older runtimes on
 macOS 27 crash the same way
 (https://blog.rinsuki.net/articles/old-ios-simulators-on-xcode-27/). A page
 that never painted there, and a Safari that started no load after it, was
-this crash. `ios-safari-load` runs on the newest runtime and on 26.0.
+this crash. `ios-safari-load` runs on the newest runtime and on 27.0 (the
+owner's iPhone18,2 runs iOS 27.0).
 
 ## A spec with its own git and HOME
 
