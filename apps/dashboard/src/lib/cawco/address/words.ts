@@ -18,28 +18,29 @@ const NET_NAMES: Record<AddressNet, string> = {
 };
 
 export const addressWords = {
-  /** The title: thing and action; `cawco` is drawn as a typed word. */
-  title: "Open CawCo at cawco",
+  /** The title: thing and action; the word is drawn as a typed word. */
+  title: (word: string) => `Open CawCo at ${word}`,
   titleBefore: "Open CawCo at ",
+  /** The device's name, and the word typed: `cawco`, or what the tailnet gave it when that was taken. */
   word: "cawco",
   meta: (net: AddressNet, host: string) =>
     `Onboarding · ${NET_NAMES[net]} on ${host}`,
 
-  lead: (host: string) =>
-    `Type cawco in any browser on your tailnet and CawCo opens. One sign-in adds CawCo's own device, named cawco, to your tailnet. Nothing on ${host} changes.`,
-  /** The narrow card's lead: the last sentence dropped. */
-  leadShort:
-    "Type cawco in any browser on your tailnet and CawCo opens. One sign-in adds CawCo's own device, named cawco, to your tailnet.",
+  lead: (word: string, host: string) =>
+    `Type ${word} in any browser on your tailnet and CawCo opens. One sign-in adds CawCo's own device, named ${word}, to your tailnet. Nothing on ${host} changes.`,
+  /** The phone's lead: the last sentence dropped. */
+  leadShort: (word: string) =>
+    `Type ${word} in any browser on your tailnet and CawCo opens. One sign-in adds CawCo's own device, named ${word}, to your tailnet.`,
 
   signIn: "Sign in on Tailscale",
   signInNote:
     "Tailscale's connect page opens in a new tab. On a phone it opens there.",
   signInWaiting:
     "Waiting for Tailscale… Finish the sign-in in the tab that opened, or press the link again.",
-  approval:
-    "Signed in. An admin approves cawco on Tailscale's Machines page; it ticks here by itself.",
+  approval: (word: string) =>
+    `Signed in. An admin approves ${word} on Tailscale's Machines page; it ticks here by itself.`,
   openMachines: "Open the Machines page",
-  signInDone: "cawco is on your tailnet",
+  signInDone: (word: string) => `${word} is on your tailnet`,
 
   answers: (address: string) => `Check that ${address} answers`,
   answersChecking: (host: string) => `Checking from ${host}…`,
@@ -59,17 +60,17 @@ export const addressWords = {
   httpsSkipped: "Skipped: HTTPS",
   httpsChecking: "Checking…",
 
-  expiry: "Keep cawco signed in",
-  expiryNote:
-    "On the Machines page, cawco › Disable key expiry. Left on, Tailscale asks for a fresh sign-in every 180 days.",
+  expiry: (word: string) => `Keep ${word} signed in`,
+  expiryNote: (word: string) =>
+    `On the Machines page, ${word} › Disable key expiry. Left on, Tailscale asks for a fresh sign-in every 180 days.`,
   expiryDone: "Key expiry is off",
   expirySkipped: "Skipped: key expiry",
 
   later: "Later",
 
   /** R: before the key lapses. */
-  lapsing: (days: number) =>
-    `cawco's key runs out in ${days} days. Sign in again, or turn key expiry off so it never asks.`,
+  lapsing: (word: string, days: number) =>
+    `${word}'s key runs out in ${days} days. Sign in again, or turn key expiry off so it never asks.`,
 
   /** G: the row's tick. */
   doneLine: (http: string, https: string | null) =>
@@ -120,6 +121,7 @@ export const addressWords = {
   useSuffix: (name: string) => `Use ${name}`,
   openDnsPage: "Open Tailscale's DNS page",
   checkAgain: "Check again",
+  checking: "Checking…",
   signInAgain: "Sign in again",
   remove: "Remove",
   disableExpiry: "Disable key expiry",
@@ -135,7 +137,7 @@ export const addressWords = {
   httpsOn: "HTTPS is on",
   answeredFrom: (host: string, ago: string) =>
     `Answered from ${host} ${ago} ago`,
-  removeTitle: "Remove cawco from your tailnet?",
+  removeTitle: (word: string) => `Remove ${word} from your tailnet?`,
   removeBody: "Your other devices stop opening CawCo by that word.",
 
   /** The status card (the alternative): its badge words. */

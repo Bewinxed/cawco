@@ -153,6 +153,16 @@ export const WireGuard = {
 };
 /** K · LAN only: a word needs port 80, which CawCo doesn't take. */
 export const Lan = { args: { ...noWord, noWord: "lan" }, parameters: desk };
+/** K · WireGuard, on a phone. */
+export const WireGuardPhone = {
+  args: { ...noWord, noWord: "wireguard" },
+  parameters: phone,
+};
+/** K · LAN only, on a phone. */
+export const LanPhone = {
+  args: { ...noWord, noWord: "lan" },
+  parameters: phone,
+};
 
 const netbird = {
   net: "netbird",

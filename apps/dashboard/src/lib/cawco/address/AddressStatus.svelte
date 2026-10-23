@@ -14,7 +14,7 @@
    */
   import { presenceWords } from "@cawco/core";
   import JourneyCard from "#lib/cawco/journey/JourneyCard.svelte";
-  import { CONTROLS, META } from "#lib/cawco/journey/journey.js";
+  import { META } from "#lib/cawco/journey/journey.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
@@ -23,6 +23,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconExternal, IconGlobe } from "#lib/icons.js";
   import FailurePlace from "./FailurePlace.svelte";
+  import { END_PEERS } from "./looks";
   import type { AddressAct, AddressFailure, AddressNet } from "./model";
   import { addressPages, addressWords as words } from "./words";
 
@@ -102,14 +103,14 @@
         <JourneyCard
           data-address-status={view}
           icon={IconGlobe}
-          title={words.expiry}
+          title={words.expiry(words.word)}
           under="gap-space-2"
         >
           <p class="text-body text-ink-strong text-pretty wrap-anywhere">
-            {words.expiryNote}
+            {words.expiryNote(words.word)}
           </p>
           <p class={META} data-address-meta>{words.meta(net, host)}</p>
-          <div class="{CONTROLS} justify-end">
+          <div class={END_PEERS}>
             {@render link(words.openMachines, addressPages.machines)}
             <Button
               label={presenceWords.skip}
@@ -126,7 +127,7 @@
           end={state}
           {heading}
           icon={IconGlobe}
-          title={words.title}
+          title={words.title(words.word)}
           under="gap-space-2"
         >
           {#if view === "failure"}
@@ -144,17 +145,26 @@
           {/if}
           <p class={META} data-address-meta>{words.meta(net, host)}</p>
           {#if view === "ready"}
-            <div class="{CONTROLS} justify-end">
+            <!-- Open, the one primary action, on the trailing edge at the
+                 desk and first on a phone; Copy beside it. -->
+            <div class={END_PEERS}>
+              <Button
+                href={http}
+                icon={IconExternal}
+                label={words.openAt(http)}
+                rel="noopener"
+                size="sm"
+                target="_blank"
+              />
               <CopyButton
                 aria-label={words.copyNamed(http)}
                 size="sm"
                 text={http}
                 variant="secondary">{words.copy}</CopyButton
               >
-              {@render link(words.openAt(http), http)}
             </div>
           {:else if view !== "failure"}
-            <div class="{CONTROLS} justify-end">
+            <div class={END_PEERS}>
               {@render link(words.signIn, signIn, "sign-in")}
             </div>
           {/if}

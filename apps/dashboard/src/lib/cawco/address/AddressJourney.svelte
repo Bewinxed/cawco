@@ -1,6 +1,8 @@
 <script lang="ts" module>
   /** An address's scheme, which a typed address leaves off. */
   const SCHEME = /^https?:\/\//;
+  /** How long the preview's stand-in for the hub takes to answer Check again. */
+  const ANSWER_MS = 1200;
 </script>
 
 <script lang="ts">
@@ -30,13 +32,13 @@
   import { presenceWords, tailnetWords } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import CopyBox from "#lib/cawco/CopyBox.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import JourneyCard from "#lib/cawco/journey/JourneyCard.svelte";
   import JourneyCopy from "#lib/cawco/journey/JourneyCopy.svelte";
   import JourneyStep from "#lib/cawco/journey/JourneyStep.svelte";
   import JourneySummary from "#lib/cawco/journey/JourneySummary.svelte";
   import {
-    CONTROLS,
     type JourneyMark as Mark,
     META,
     NOTE,
@@ -50,6 +52,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconExternal, IconGlobe } from "#lib/icons.js";
   import FailurePlace from "./FailurePlace.svelte";
+  import { END_PEERS, STEP_PEERS } from "./looks";
   import type {
     AddressAct,
     AddressFailure,
@@ -74,6 +77,7 @@
     noWord = "zerotier",
     days = 12,
     summary = null,
+    word = words.word,
     onact,
   }: {
     view?:
@@ -101,6 +105,8 @@
     /** Days until the key runs out, for `lapsing`. */
     days?: number;
     summary?: AddressSummary | null;
+    /** The device's name and the word typed: `cawco`, or what the tailnet gave it when that was taken. */
+    word?: string;
     onact?: (act: AddressAct) => void;
   } = $props();
 
@@ -156,11 +162,13 @@
     const done = markOf(step) === "done";
     switch (step.step) {
       case "sign-in":
-        return step.state === "done" ? words.signInDone : words.signIn;
+        return step.state === "done" ? words.signInDone(word) : words.signIn;
       case "setup-key":
-        return step.state === "done" ? words.signInDone : words.setupKey;
+        return step.state === "done" ? words.signInDone(word) : words.setupKey;
       case "headscale":
-        return step.state === "done" ? words.signInDone : words.headscaleSignIn;
+        return step.state === "done"
+          ? words.signInDone(word)
+          : words.headscaleSignIn;
       case "answers":
         return done ? words.answersDone(place.http) : words.answers(place.http);
       case "https":
@@ -179,7 +187,7 @@
     if (step.state === "skipped") {
       return words.expirySkipped;
     }
-    return done ? words.expiryDone : words.expiry;
+    return done ? words.expiryDone : words.expiry(word);
   }
 
   /** The setup key typed. */
@@ -206,7 +214,7 @@
   const askRemove = () =>
     asker.ask({
       at: "address-remove",
-      title: words.removeTitle,
+      title: words.removeTitle(word),
       body: words.removeBody,
       confirmLabel: words.remove,
       pendingLabel: "Removing…",
@@ -216,12 +224,24 @@
         return Promise.resolve();
       },
     });
+
+  /**
+   * Check again on its way: the button holds "Checking…" until the hub's
+   * answer lands. The preview has no hub, so the answer is a beat later.
+   */
+  let checking = $state(false);
+  async function checkAgain(): Promise<void> {
+    checking = true;
+    onact?.("check-again");
+    await new Promise((done) => setTimeout(done, ANSWER_MS));
+    checking = false;
+  }
 </script>
 
-<!-- The title: thing and action, `cawco` set in the mono face as the word
-     to type. -->
+<!-- The title: thing and action, the word set in the mono face as the
+     word to type. -->
 {#snippet heading()}
-  {words.titleBefore}<code class="font-mono">{words.word}</code>
+  {words.titleBefore}<code class="font-mono">{word}</code>
 {/snippet}
 
 <!-- A page to open in a new tab: the kit's secondary button with the
@@ -248,18 +268,22 @@
   />
 {/snippet}
 
-<!-- Where it answers, with Copy and Open: the house's copy box wide, the
-     address across the card and Copy under it narrow; Open beside. -->
+<!-- Where it answers: the house's copy box, the address and its Copy on
+     one line, and Open beside it, the card's one primary action (under it,
+     the column's width, on a phone). -->
 {#snippet address()}
-  <div class={CONTROLS} data-address-place>
+  <div class={STEP_PEERS} data-address-place>
     <div class="min-w-0 flex-1">
-      <JourneyCopy
-        copyLabel={words.copy}
-        label={words.addressLabel}
-        text={shownAddress}
-      />
+      <CopyBox label={words.addressLabel} text={shownAddress} />
     </div>
-    {@render link(words.open, shownAddress)}
+    <Button
+      href={shownAddress}
+      icon={IconExternal}
+      label={words.open}
+      rel="noopener"
+      size="sm"
+      target="_blank"
+    />
   </div>
 {/snippet}
 
@@ -286,12 +310,12 @@
       {#if step.state === "needs"}
         {words.signInNote}
       {:else if step.state === "approval"}
-        {words.approval}
+        {words.approval(word)}
       {:else}
         {words.signInWaiting}
       {/if}
     </p>
-    <div class={CONTROLS}>
+    <div class={STEP_PEERS}>
       {#if step.state === "approval"}
         {@render link(words.openMachines, addressPages.machines)}
       {:else}
@@ -300,7 +324,7 @@
     </div>
   {:else if step.step === "setup-key"}
     <p class={NOTE}>{words.setupKeyNote}</p>
-    <div class={CONTROLS}>
+    <div class={STEP_PEERS}>
       {@render link(words.openSetupKeys, addressPages.netbirdKeys)}
     </div>
     <Field id="address-setup-key" label={words.setupKeyLabel}>
@@ -314,7 +338,7 @@
         bind:value={key}
       />
     </Field>
-    <div class={CONTROLS}>
+    <div class={STEP_PEERS}>
       <Button
         disabled={key.trim() === ""}
         label={words.addCawco}
@@ -324,7 +348,7 @@
     </div>
   {:else if step.step === "headscale"}
     <p class={NOTE}>{words.headscaleNote(server)}</p>
-    <div class={CONTROLS}>
+    <div class={STEP_PEERS}>
       {@render link(words.headscaleButton(server), signIn, "sign-in")}
     </div>
     {#if step.command}
@@ -340,13 +364,13 @@
     <p class={NOTE}>
       {step.state === "checking" ? words.httpsChecking : tailnetWords.adminNote}
     </p>
-    <div class={CONTROLS}>
+    <div class={STEP_PEERS}>
       {@render link(tailnetWords.openDnsPage, tailnetWords.dnsPage)}
       {@render skip("skip-https")}
     </div>
   {:else}
-    <p class={NOTE}>{words.expiryNote}</p>
-    <div class={CONTROLS}>
+    <p class={NOTE}>{words.expiryNote(word)}</p>
+    <div class={STEP_PEERS}>
       {@render link(words.openMachines, addressPages.machines)}
       {@render skip("skip-expiry")}
     </div>
@@ -359,26 +383,27 @@
     data-address-journey
     {heading}
     icon={IconGlobe}
-    title={words.title}
+    title={words.title(word)}
     under="gap-space-3"
   >
     {#if lead}
       {@const long =
         net === "netbird"
           ? words.netbirdLead(bare(place.http), host)
-          : words.lead(host)}
+          : words.lead(word, host)}
       {@const short =
         net === "netbird"
           ? words.netbirdLeadShort(bare(place.http))
-          : words.leadShort}
+          : words.leadShort(word)}
+      <!-- Whole at the desk; on a phone its last sentence is dropped. -->
       <div class="flex min-w-0 flex-col" out:unfold>
         <p
-          class="text-body text-ink-strong text-pretty wrap-anywhere @max-field-group:hidden"
+          class="text-body text-ink-strong text-pretty wrap-anywhere max-phone:hidden"
         >
           {long}
         </p>
         <p
-          class="hidden text-body text-ink-strong text-pretty wrap-anywhere @max-field-group:block"
+          class="hidden text-body text-ink-strong text-pretty wrap-anywhere max-phone:block"
         >
           {short}
         </p>
@@ -426,10 +451,10 @@
           data-address-journey
           {heading}
           icon={IconGlobe}
-          title={words.title}
+          title={words.title(word)}
           under="gap-space-2"
         >
-          <FailurePlace {failure} {host} {onact} {signIn} />
+          <FailurePlace {failure} {host} {onact} {signIn} {word} />
           {@render foot()}
         </JourneyCard>
       {:else if view === "done"}
@@ -438,7 +463,7 @@
           done
           {heading}
           icon={IconGlobe}
-          title={words.title}
+          title={words.title(word)}
           under="gap-space-2"
         >
           <p class="text-body text-ink-strong text-pretty wrap-anywhere">
@@ -447,14 +472,21 @@
           {#if row}
             <p class={META} data-address-meta>{words.meta(net, host)}</p>
           {/if}
-          <div class="{CONTROLS} justify-end">
+          <div class={END_PEERS}>
+            <Button
+              href={place.http}
+              icon={IconExternal}
+              label={words.openAt(place.http)}
+              rel="noopener"
+              size="sm"
+              target="_blank"
+            />
             <CopyButton
               aria-label={words.copyNamed(place.http)}
               size="sm"
               text={place.http}
               variant="secondary">{words.copy}</CopyButton
             >
-            {@render link(words.openAt(place.http), place.http)}
           </div>
         </JourneyCard>
       {:else if view === "lapsing"}
@@ -462,18 +494,18 @@
           data-address-lapsing
           {heading}
           icon={IconGlobe}
-          title={words.title}
+          title={words.title(word)}
           under="gap-space-2"
         >
           <p class="text-body text-ink-strong text-pretty wrap-anywhere">
-            {words.lapsing(days)}
+            {words.lapsing(word, days)}
           </p>
           {#if row}
             <p class={META} data-address-meta>{words.meta(net, host)}</p>
           {/if}
-          <div class="{CONTROLS} justify-end">
-            {@render link(words.disableExpiry, addressPages.machines)}
+          <div class={END_PEERS}>
             {@render link(words.signInAgain, signIn, "sign-in-again")}
+            {@render link(words.disableExpiry, addressPages.machines)}
           </div>
         </JourneyCard>
       {:else if view === "summary" && summary}
@@ -481,19 +513,25 @@
           {badge}
           data-address-summary
           hook="address"
-          label={words.title}
-          name={words.word}
+          label={words.title(word)}
+          name={word}
         >
+          <!-- Both addresses on one line in a wide card; each on a line of
+               its own in a narrow one. -->
           {#snippet line()}
             <code class="font-mono text-ink-strong">{place.http}</code
-            >{#if place.https}{" · "}<code class="font-mono text-ink-strong"
+            >{#if place.https}<span class="@max-field-group:hidden"
+                >{" · "}</span
+              ><code class="font-mono text-ink-strong @max-field-group:block"
                 >{place.https}</code
               >{/if}
           {/snippet}
           {#snippet actions()}
             <Button
               label={words.checkAgain}
-              onclick={() => onact?.("check-again")}
+              onclick={checkAgain}
+              pending={checking}
+              pendingLabel={words.checking}
               size="sm"
               variant="outline"
             />
@@ -506,14 +544,18 @@
               variant="destructive"
             />
           {/snippet}
-          <div class="col-span-full {CONTROLS}">
+          <!-- Copy then Open from the start edge at the desk; Open first,
+               stacked, on a phone. -->
+          <div
+            class="col-span-full flex min-w-0 flex-row-reverse flex-wrap items-center justify-end gap-space-2 max-phone:grid max-phone:grid-cols-1"
+          >
+            {@render link(words.open, shownAddress)}
             <CopyButton
               aria-label={words.copyNamed(shownAddress)}
               size="sm"
               text={shownAddress}
               variant="secondary">{words.copy}</CopyButton
             >
-            {@render link(words.open, shownAddress)}
           </div>
           <p class="col-span-full {NOTE}">
             {words.summaryWhere(net, host, summary.account)}
@@ -542,7 +584,7 @@
                 state="needs"
                 step="https"
               >
-                <div class={CONTROLS}>
+                <div class={STEP_PEERS}>
                   {@render link(tailnetWords.openDnsPage, tailnetWords.dnsPage)}
                 </div>
               </JourneyStep>
@@ -558,14 +600,14 @@
               />
             {:else}
               <JourneyStep
-                label={words.expiry}
+                label={words.expiry(word)}
                 mark="standing"
                 n={2}
                 open
                 state="needs"
                 step="expiry"
               >
-                <div class={CONTROLS}>
+                <div class={STEP_PEERS}>
                   {@render link(words.openMachines, addressPages.machines)}
                 </div>
               </JourneyStep>
@@ -583,7 +625,7 @@
           data-address-none
           {heading}
           icon={IconGlobe}
-          title={words.title}
+          title={words.title(word)}
           under="gap-space-3"
         >
           <p class="text-body text-ink-strong text-pretty wrap-anywhere">
