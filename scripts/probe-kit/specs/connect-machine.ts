@@ -28,7 +28,7 @@
  * - the tabs and each tab's details fit at 390, 680 and 1440 in Chromium
  *   and WebKit with nothing past the window's edge or scrolling, and
  *   nothing outside the window moves while it stands; each tab captured,
- *   dark, at 390 and 1440 (captures/add-machine);
+ *   dark, at 390 and 1440 (the run's output folder, add-machine/);
  * - no scroll inside the window at any step (the dialog grid's scrollHeight
  *   ≤ its clientHeight, a finger's touch areas included), and the phone's
  *   Reach variants with a field to type in inside the visual viewport with
@@ -2351,9 +2351,6 @@ async function chipAdds(
   }
 }
 
-/** Where a review's captures of the window are kept (the repo's captures/). */
-const CAPTURES = join(import.meta.dir, "../../../captures/add-machine");
-
 /**
  * The tabs and each tab's details fit the window at 390, 680 and 1440, in
  * Chromium and WebKit: the tab list and every tab's name inside the
@@ -2362,7 +2359,9 @@ const CAPTURES = join(import.meta.dir, "../../../captures/add-machine");
  * either tab, against the same page with it closed. The hub's addresses
  * read as a tailnet hub's would (a workspace's machine lists none), so the
  * command tab holds its longest rows. Dark in Chromium at 390 and 1440,
- * each tab is captured for review (captures/add-machine).
+ * each tab is captured for review, into the run's output folder
+ * (`kit.out`/add-machine): a capture is the run's output, never a tracked
+ * file a plain run would rewrite.
  */
 async function tabsFit(
   kit: Kit,
@@ -2370,7 +2369,8 @@ async function tabsFit(
   dashboard: string
 ): Promise<void> {
   await clearInstalls(fleet);
-  mkdirSync(CAPTURES, { recursive: true });
+  const captures = join(kit.out, "add-machine");
+  mkdirSync(captures, { recursive: true });
   const saved: string[] = [];
   const said: string[] = [];
   let fits = true;
@@ -2473,8 +2473,9 @@ async function tabsFit(
         said.push(`${engine} ${view} ${tab}: ${JSON.stringify(at)}`);
         if (engine === "chromium" && view !== "narrowDesk") {
           const name = `${view}-dark-${file}.png`;
-          await page.screenshot({ path: join(CAPTURES, name) });
-          saved.push(`captures/add-machine/${name}`);
+          const path = join(captures, name);
+          await page.screenshot({ path });
+          saved.push(path);
         }
       }
       await page.locator(CLOSE).click();

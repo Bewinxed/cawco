@@ -708,7 +708,7 @@
           </h2>
           <Button
             data-slot="icon-action"
-            aria-label="Copy link"
+            aria-label={commonWords.copyLink}
             class="flex-none"
             onclick={() => copy("Link", new URL(href, location.origin).href)}
             size="icon-sm"

@@ -63,6 +63,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
+import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, type Spec, settle } from "../kit";
@@ -352,7 +353,7 @@ const sendNow = async (page: Page, note = "") => {
   if (note) {
     const rail = await rowsOf(page);
     await rail
-      .getByRole("textbox", { name: "Add a note for the agent" })
+      .getByRole("textbox", { name: commentWords.note })
       .fill(note);
     const at = Date.now();
     await rail.locator('[data-slot="rail-send"]').click();

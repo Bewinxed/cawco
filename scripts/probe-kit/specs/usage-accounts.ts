@@ -411,7 +411,7 @@ const run = async (kit: Kit) => {
   // organizations.
   await page.goto(`${base}/config/accounts`, { waitUntil: "domcontentloaded" });
   const listed = await until(
-    "every account's row on Configure → Accounts",
+    "every account's row on Configure › Accounts",
     () =>
       page.evaluate(
         (ids) =>
@@ -431,7 +431,7 @@ const run = async (kit: Kit) => {
     60_000
   ).catch((error: unknown) => ({ error: String(error) }));
   kit.check(
-    "Configure → Accounts names the accounts on a shared email with their organizations",
+    "Configure › Accounts names the accounts on a shared email with their organizations",
     JSON.stringify(listed) === JSON.stringify(NAMED),
     JSON.stringify({ want: NAMED, got: listed })
   );

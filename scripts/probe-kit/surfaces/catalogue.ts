@@ -14,6 +14,7 @@
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
 import { deviceDocName } from "../../../packages/core/src/doc-link";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
+import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { CONFIG_SECTIONS } from "../../../packages/core/src/words/configure";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
@@ -191,11 +192,11 @@ const COMPOSER_PLACED =
   "[data-slot=pin-composer]:is([data-sheet], [data-side=end], [data-side=start], [data-side=below])";
 /** The card's notice for a pin whose element is gone, and its line while the next tap places it. */
 const GONE_SAYS = /^Its element is gone from the page/;
-const PLACING_SAYS = /^Tap the page where it goes/;
+const PLACING_SAYS = startsWith(commentWords.placeHere);
 const TAB_RESOLVED = /^Resolved/;
 /** The panel's empty lines, each tab's. */
-const NO_OPEN = /^No open comments/;
-const NO_RESOLVED = /^Nothing resolved yet/;
+const NO_OPEN = startsWith(commentWords.noneOpen);
+const NO_RESOLVED = startsWith(commentWords.noneResolved);
 /** The pane's Comment mode, as its compact mode menu names it. */
 const COMMENT_MODE = /^Comment/;
 /** The pane's artifact doc socket on the hub. */
@@ -4182,7 +4183,7 @@ export const SURFACES: Surface[] = [
         act: inComments(openRow(3), (page) =>
           page
             .locator(pinCard(3))
-            .getByRole("button", { name: "Pin it somewhere else" })
+            .getByRole("button", { name: commentWords.placeElsewhere })
             .click()
         ),
         root: "body",
@@ -4322,7 +4323,7 @@ export const SURFACES: Surface[] = [
           (page) =>
             page
               .locator(pinCard(3))
-              .getByRole("button", { name: "Pin it somewhere else" })
+              .getByRole("button", { name: commentWords.placeElsewhere })
               .click(),
           async (page) => {
             const frame = page.frameLocator(PREVIEW_FRAME);

@@ -10,7 +10,7 @@
    * unread (core `newAnswer`). Pressed, the artifact comes to the front of
    * the panel with the pin's thread open (reference-open.svelte.ts).
    */
-  import { pinReference } from "@cawco/core";
+  import { commentWords, pinReference } from "@cawco/core";
   import { newAnswer } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
   import { Portal } from "bits-ui";
@@ -18,7 +18,6 @@
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { artifactMarks } from "./artifact-names.svelte";
   import { dur } from "./motion/curves.svelte";
-  import { commentWords } from "./preview/comment-words";
   import PinMark, { markState } from "./preview/PinMark.svelte";
   import PinPeek from "./preview/PinPeek.svelte";
   import RowFault from "./RowFault.svelte";

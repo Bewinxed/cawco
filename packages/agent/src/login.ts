@@ -1,10 +1,10 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import {
+import { 
   type AccountIdentity,
   type AccountKind,
   type AccountSigninResult,
-  accountsWords,
+  accountsWords,configurePage,
   sameIdentity,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -264,7 +264,7 @@ const noLink = (
     several:
       "Claude Code on this machine showed more than one sign-in link, so the sign-in stopped rather than pick one.",
   }[why];
-  return `${what} Nothing was signed in or out. If Claude Code there is out of date, update it from its row in Configure → CLI tools, then open the sign-in link again. Its screen said:\n${lastLines(signIn)}`;
+  return `${what} Nothing was signed in or out. If Claude Code there is out of date, update it from its row in ${configurePage("cli-tools")}, then open the sign-in link again. Its screen said:\n${lastLines(signIn)}`;
 };
 
 /**

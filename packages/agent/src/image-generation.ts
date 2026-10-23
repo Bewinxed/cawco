@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, stat } from "node:fs/promises";
 import { arch, platform, release } from "node:os";
 import { dirname, extname, resolve } from "node:path";
-import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
+import { configurePage, type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { credentialAccountIds } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -33,7 +33,7 @@ interface ChatgptAuth {
 /** Codex's image backend: CHATGPT_CODEX_BASE_URL + images/{generations,edits} (openai/codex codex-api). */
 const codexImages = (): string => `${chatgptBaseUrl()}/codex/images`;
 const SIGN_IN =
-  "Run `opencode auth login` and choose OpenAI → ChatGPT (CawCo moves that login into a ChatGPT account), or add a ChatGPT account in Configure → Accounts.";
+  `Run \`opencode auth login\` and choose OpenAI → ChatGPT (CawCo moves that login into a ChatGPT account), or add a ChatGPT account in ${configurePage("accounts")}.`;
 const SIZE = /^(\d+)x(\d+)$/;
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const activeOutputs = new Set<string>();

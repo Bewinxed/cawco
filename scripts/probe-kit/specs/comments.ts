@@ -162,7 +162,7 @@
  * The One Target Rule (DESIGN.md):
  * 7c. In Comment mode, resting on an element tints it (`c-target-tint`)
  *    with no line; the page's root takes a 1px dashed `brand-solid` line
- *    inset `space-1`, no tint, its tag "Whole page" at rest and none once
+ *    inset `space-1`, no tint, its tag commentWords.wholePage at rest and none once
  *    chosen (its composer open), as any target; a tap chooses the
  *    element: a 1px `brand-solid` line at offset 0, the tint and no label,
  *    its text 4.5:1 under the tint by day and night, the composer opened by
@@ -183,7 +183,7 @@
  * pin's pill, The Comments rail, A thread beside its pin, Sending
  * comments), each a leg:
  * - The 280px card: the composer at the element 280px wide, its field 178px
- *   or wider, the hint "What should change?" uncut, its pill one line.
+ *   or wider, the hint commentWords.composeHint.full uncut, its pill one line.
  * - The attachment pill: one pill for every kind, a file's name and size on
  *   one baseline (0.5px), every ✕ centred on its pill (0.5px).
  * - Pick 6: a picture alone sends (`hasContent`), kept by reference, and
@@ -250,6 +250,8 @@ import type { Pin } from "../../../packages/core/src/comments";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { pinName } from "../../../packages/core/src/pin-name";
+import { commentWords } from "../../../packages/core/src/words/comments";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
 import {
@@ -841,7 +843,7 @@ const commentChecks = async (on: On, frame: Frame) => {
     }))
     .catch(() => null);
   on.kit.check(
-    'pick 5, the composer at the element: a press opens the chat composer beside a hollow pill with no number, its field focused, the target chip naming the paragraph, the field saying "What should change?", the send glyph labelled Comment and off while empty; the doc holds no pin',
+    'pick 5, the composer at the element: a press opens the chat composer beside a hollow pill with no number, its field focused, the target chip naming the paragraph, the field saying commentWords.composeHint.full, the send glyph labelled Comment and off while empty; the doc holds no pin',
     opened.shown &&
       opened.focused &&
       provisional?.state === "provisional" &&
@@ -849,7 +851,7 @@ const commentChecks = async (on: On, frame: Frame) => {
       written === 0 &&
       parts?.width === 280 &&
       parts.chip === "Hero · A paragraph to comment on, long enough to tap." &&
-      parts.hint === "What should change?" &&
+      parts.hint === commentWords.composeHint.full &&
       parts.send === "Comment" &&
       parts.sendOff === true,
     `opened ${JSON.stringify(opened)}; pill ${JSON.stringify(provisional)}; pins in the doc ${written}; composer ${JSON.stringify(parts)}`
@@ -1146,7 +1148,7 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   );
 
   await rail
-    .getByRole("textbox", { name: "Add a note for the agent" })
+    .getByRole("textbox", { name: commentWords.note })
     .fill("Both together, please: one pass.");
   await rail.locator('[data-slot="rail-send"]').click();
   const message = await until(
@@ -1433,7 +1435,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
       resolved === 1 &&
       standing === "resolved" &&
       !!band?.startsWith("Resolved") &&
-      hint === "Reply to reopen",
+      hint === commentWords.reopenHint.full,
     `pills left ${left}; open rows ${openRows}; resolved row ${resolved}; pill ${standing}; band ${JSON.stringify(band)}; field ${hint}`
   );
 
@@ -1661,7 +1663,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   const notice = card.locator('[data-slot="gone"]');
   const said = (await notice.textContent().catch(() => null))?.trim() ?? null;
-  await notice.getByRole("button", { name: "Pin it somewhere else" }).click();
+  await notice.getByRole("button", { name: commentWords.placeElsewhere }).click();
   await pageInComment(frame, true);
   const during = await commentButton.getAttribute("aria-selected");
   const placingSaid =
@@ -1671,7 +1673,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
     "5: the gone pin's row opens its card, which says the element is gone; Pin it somewhere else turns Comment on with the card still open, saying where to tap beside Cancel",
     said?.startsWith("Its element is gone from the page") === true &&
       during === "true" &&
-      placingSaid?.startsWith("Tap the page where it goes") === true &&
+      placingSaid?.startsWith(commentWords.placeHere) === true &&
       cancel === 1,
     `said ${JSON.stringify(said)}; Comment ${during}; then ${JSON.stringify(placingSaid)}; Cancel ${cancel}`
   );
@@ -2430,7 +2432,7 @@ const embedChecks = async (on: On) => {
     on.kit.check(
       `l: in Comment mode, moving across a canvas Preview of another origin never names the whole page, and a story's frame reads by its story ("Story Off", "Story On"), never by its section (${STEPS + 1} steps read)`,
       !(
-        labels.includes("Whole page") ||
+        labels.includes(commentWords.wholePage) ||
         labels.some((one) => one.startsWith("section"))
       ) &&
         labels.includes("Story Off") &&
@@ -2863,7 +2865,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   on.kit.check(
     "c: the thread's head holds Resolve, Delete comment, its ⋯ and Close on one row with the name; its foot is the chat composer, Attach and the Reply glyph",
     parts.named[0] === "Resolve" &&
-      parts.named[1] === "Delete comment" &&
+      parts.named[1] === commentWords.deleteComment &&
       parts.named.at(-1) === "Close" &&
       parts.named.length === 4 &&
       new Set(parts.tops).size === 1 &&
@@ -2881,7 +2883,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const blocking = await on.page.evaluate(
     () => document.querySelectorAll("dialog[open], [aria-modal='true']").length
   );
-  await ask.getByRole("button", { name: "Delete comment" }).click();
+  await ask.getByRole("button", { name: commentWords.deleteComment }).click();
   const after = await until(
     "the pin gone from the doc",
     numbersNow,
@@ -4259,8 +4261,8 @@ const targetChecks = async (on: On) => {
     JSON.stringify(root)
   );
   on.kit.check(
-    '7c: at rest the page\'s root shows its label, which reads "Whole page"',
-    !!root && root.root && root.label === "Whole page",
+    '7c: at rest the page\'s root shows its label, which reads commentWords.wholePage',
+    !!root && root.root && root.label === commentWords.wholePage,
     JSON.stringify(root)
   );
 
@@ -6024,10 +6026,10 @@ const pickChecks = async (on: On, rig: RailRig) => {
   const empty = await composerRead(on.page);
   await capture(on.page, "p4-element-empty-light-desk", on.page.locator(PANE));
   on.kit.check(
-    `the 280px card: the composer at the element is ${empty.card?.w}px wide, its field ${empty.field?.w}px (178px or wider), its hint "What should change?" uncut, its pill ${empty.pill?.h}px at one line (about 87px), Attach the ghost paperclip`,
+    `the 280px card: the composer at the element is ${empty.card?.w}px wide, its field ${empty.field?.w}px (178px or wider), its hint commentWords.composeHint.full uncut, its pill ${empty.pill?.h}px at one line (about 87px), Attach the ghost paperclip`,
     Math.round(empty.card?.w ?? 0) === 280 &&
       (empty.field?.w ?? 0) >= 178 &&
-      empty.hint === "What should change?" &&
+      empty.hint === commentWords.composeHint.full &&
       empty.hintFits &&
       (empty.pill?.h ?? 0) >= 78 &&
       (empty.pill?.h ?? 0) <= 92 &&
@@ -6296,7 +6298,7 @@ const hierarchyChecks = async (
       unread.name.weight === "500" &&
       unread.name.color === ink.row &&
       unread.name.text === "A heading the comments stand on" &&
-      gone.name?.text === "Element gone" &&
+      gone.name?.text === commentWords.elementGone &&
       gone.name.color === ink.subtle &&
       unread.age?.size === "12px" &&
       unread.age.weight === "400" &&
@@ -6391,7 +6393,7 @@ const railUseChecks = async (
   // Sort: Top of page first, by the anchors' boxes.
   await railNow.getByRole("button", { name: "Sort" }).click();
   await on.page
-    .getByRole("menuitemradio", { name: "Top of page first" })
+    .getByRole("menuitemradio", { name: commentWords.topOfPageFirst })
     .click();
   await settle(on.page, 300);
   const order = await railNow
@@ -6412,7 +6414,7 @@ const railUseChecks = async (
     JSON.stringify({ order, ys })
   );
   await railNow.getByRole("button", { name: "Sort" }).click();
-  await on.page.getByRole("menuitemradio", { name: "Newest first" }).click();
+  await on.page.getByRole("menuitemradio", { name: commentWords.newestFirst }).click();
 
   // The pointer rests on a pill: its peek stands; then a row opens another
   // comment's thread, and no peek stands while it does.
@@ -8082,7 +8084,7 @@ const pillOn = (frame: Frame, number: number, selector: string) =>
  * stands on that row's value, by its place in the panel; through 4 s of
  * redraws it is never moved aside and its pill stands on the value. The
  * panel emptied for good, it is said gone only once it has stood missing a
- * while (2 s), its row "Element gone"; the panel back, the pin is on its
+ * while (2 s), its row commentWords.elementGone; the panel back, the pin is on its
  * element again, out of the tray.
  */
 const redrawChecks = async (on: On) => {
@@ -8192,7 +8194,7 @@ const redrawChecks = async (on: On) => {
   )?.trim();
   on.kit.check(
     "redraw: the panel emptied for good, the pin is moved aside only once its element has stood missing for 2 s, its row saying Element gone",
-    !!moved?.movedAt && after >= 1800 && said === "Element gone",
+    !!moved?.movedAt && after >= 1800 && said === commentWords.elementGone,
     `moved after ${after} ms; row ${JSON.stringify(said)}`
   );
 
@@ -8236,9 +8238,6 @@ const callIn = async (
     180_000
   )) as string;
 };
-
-/** A reason's own full stop, which the "Not sent:" line puts back. */
-const FULL_STOP = /\.$/;
 
 /** A plain page of two paragraphs for a comment's own Send. */
 const SEND_PAGE = `<!doctype html>
@@ -8471,12 +8470,12 @@ const pinSendChecks = async (on: On) => {
     "pin send: a comment's own Send no one takes (the writer's conversation gone, no project) leaves it unsent with why on the pin; its row and its thread say \"Not sent: …\" in words, each with Send again",
     !!why &&
       !failed?.sentAt &&
-      rowSays === `Not sent: ${why.replace(FULL_STOP, "")}.` &&
-      again === "Send again" &&
+      rowSays === commentWords.notSent(why) &&
+      again === commonWords.sendAgain &&
       cardSays === rowSays &&
       (
         await goneCard.locator('[data-slot="pin-send"]').textContent()
-      )?.trim() === "Send again",
+      )?.trim() === commonWords.sendAgain,
     `why ${JSON.stringify(why)}; row ${JSON.stringify(rowSays)} / ${JSON.stringify(again)}; card ${JSON.stringify(cardSays)}`
   );
   // Its conversation back: Send again sends it, and the line goes.
@@ -8589,11 +8588,11 @@ const pageOnlyChecks = async (on: On, id: string) => {
   on.kit.check(
     'page only: a comment written while the page\'s link is down stands only on the page; its row says "Not sent: …" why, with Send again, and it stays through a reload',
     !heldBefore &&
-      !!down.said?.startsWith("Not sent: ") &&
-      down.send === "Send again" &&
+      !!down.said?.startsWith(`${commentWords.notSentHead} `) &&
+      down.send === commonWords.sendAgain &&
       !!kept &&
-      !!afterReload.said?.startsWith("Not sent: ") &&
-      afterReload.send === "Send again",
+      !!afterReload.said?.startsWith(`${commentWords.notSentHead} `) &&
+      afterReload.send === commonWords.sendAgain,
     `before ${JSON.stringify(down)}; on the hub ${heldBefore}; after a reload ${JSON.stringify(afterReload)}; kept ${!!kept}`
   );
   // The link back: Send again takes it to the hub, then to the session.
@@ -8725,10 +8724,10 @@ const refusedChecks = async (on: On) => {
   on.kit.check(
     'refused: a comment the hub refuses is kept on the device, never let go: its row says "Not sent: …" in the hub\'s words with Send again, and still after a reload; the hub holds none of it',
     !onHub &&
-      !!told.said?.startsWith("Not sent: ") &&
-      told.send === "Send again" &&
+      !!told.said?.startsWith(`${commentWords.notSentHead} `) &&
+      told.send === commonWords.sendAgain &&
       afterReload.said === told.said &&
-      afterReload.send === "Send again",
+      afterReload.send === commonWords.sendAgain,
     `first ${JSON.stringify(told)}; after a reload ${JSON.stringify(afterReload)}; on the hub ${onHub}`
   );
   // Send again: written once more, refused once more, still kept and saying why.
@@ -8748,7 +8747,7 @@ const refusedChecks = async (on: On) => {
   ).catch(() => notSentRow(on, 1));
   on.kit.check(
     "refused: Send again writes it once more; refused again, it is still kept with why and Send again",
-    !!again.said?.startsWith("Not sent: ") && again.send === "Send again",
+    !!again.said?.startsWith(`${commentWords.notSentHead} `) && again.send === commonWords.sendAgain,
     JSON.stringify(again)
   );
   // Its thread's Delete lets it go from the device.
@@ -8761,7 +8760,7 @@ const refusedChecks = async (on: On) => {
   await card.locator('[data-slot="delete"]').click();
   await card
     .locator('[data-ask="delete"]')
-    .getByRole("button", { name: "Delete comment" })
+    .getByRole("button", { name: commentWords.deleteComment })
     .click();
   const left = await until(
     "the refused comment's row gone",
@@ -8951,7 +8950,7 @@ const deleteHeadChecks = async (on: On) => {
         document.querySelectorAll("dialog[open], [aria-modal='true']").length
     );
     const pin = pinNumbered(await pinsNow(), n);
-    await ask.getByRole("button", { name: "Delete comment" }).click();
+    await ask.getByRole("button", { name: commentWords.deleteComment }).click();
     const left = await until(
       `pin ${n} deleted`,
       pinsNow,
@@ -8961,7 +8960,7 @@ const deleteHeadChecks = async (on: On) => {
     return {
       head,
       menu: menu.map((item) => item.trim()),
-      asked: asked?.includes(`Delete comment ${n}?`) ?? false,
+      asked: asked?.includes(commentWords.deleteTitle(n)) ?? false,
       blocking,
       deleted: !!pin && !pinNumbered(left, n),
     };
@@ -8972,12 +8971,12 @@ const deleteHeadChecks = async (on: On) => {
     JSON.stringify(desk.head.named.filter((name) => name !== "")) ===
       JSON.stringify([
         "Resolve",
-        "Delete comment",
+        commentWords.deleteComment,
         "More for comment 1",
         "Close",
       ]) &&
       new Set(desk.head.tops).size === 1 &&
-      JSON.stringify(desk.menu) === JSON.stringify(["Copy link"]) &&
+      JSON.stringify(desk.menu) === JSON.stringify([commonWords.copyLink]) &&
       desk.asked &&
       desk.blocking === 0 &&
       desk.deleted,
@@ -9006,8 +9005,8 @@ const deleteHeadChecks = async (on: On) => {
     .catch(() => null);
   on.kit.check(
     "delete (phone): the thread's sheet holds Delete comment in its head; one tap asks in the sheet (no dialog), and its confirm deletes the pin",
-    small.head.named.includes("Delete comment") &&
-      JSON.stringify(small.menu) === JSON.stringify(["Copy link"]) &&
+    small.head.named.includes(commentWords.deleteComment) &&
+      JSON.stringify(small.menu) === JSON.stringify([commonWords.copyLink]) &&
       small.asked &&
       small.blocking === 0 &&
       small.deleted,

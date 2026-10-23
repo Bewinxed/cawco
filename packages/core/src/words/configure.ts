@@ -257,6 +257,12 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
 export const configureWords = {
   /** The place, as the sidebar and a page's title name it. */
   title: "Configure",
+  /**
+   * A Configure page named in a sentence ("Configure › Accounts"), with
+   * WORDS.md's arrow: everything that points the person at a page names it
+   * through here (configurePage, by its slug, on the web and the machines).
+   */
+  page: (label: string) => `Configure › ${label}`,
   /** A page's document title: "Accounts · Configure · CawCo". */
   documentTitle: (title: string) => `${title} · Configure · CawCo`,
   /** A rail row whose editor holds edits not saved yet. */
@@ -292,3 +298,9 @@ export const configureWords = {
   removed: (what: string) => `Removed ${what}`,
   unlinked: (what: string) => `Unlinked ${what}`,
 };
+
+/** A Configure page as a sentence names it, by its slug: `configurePage("accounts")` is "Configure › Accounts". */
+export const configurePage = (slug: ConfigSlug): string =>
+  configureWords.page(
+    CONFIG_SECTIONS.find((section) => section.slug === slug)?.label ?? slug
+  );

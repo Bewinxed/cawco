@@ -104,7 +104,7 @@ import type {
   UsageSpend,
   WorkspaceRef,
 } from "@cawco/core";
-import {
+import { 
   ACCOUNT_HUES,
   ACCOUNT_KINDS,
   ACCOUNT_MOVE,
@@ -217,7 +217,7 @@ import {
   type CommandRun,
   type ContinuationRead,
   CUSTODY_HELD,
-  clockWords,
+  clockWords,configurePage,
   connectWords,
   contextFitRefusal,
   continuedInWords,
@@ -4384,7 +4384,7 @@ export const createServer = (
       ? accountNameAmong(account, db.accounts.list())
       : accountId;
     return {
-      refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`,
+      refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in ${configurePage("accounts")}, or continue the session on another account.`,
       cause: { kind: "account-signed-out", accountId, machineId },
     };
   };
@@ -5000,7 +5000,7 @@ export const createServer = (
       reason: word.reason,
     });
     console.warn(
-      `[accounts] ${where} is signed out: ${sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${machineName(machineId)} in Configure → Accounts; the session it stopped is moved to another account.`
+      `[accounts] ${where} is signed out: ${sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${machineName(machineId)} in ${configurePage("accounts")}; the session it stopped is moved to another account.`
     );
     publishUsage(machineId);
     return word;
@@ -18367,7 +18367,7 @@ export const createServer = (
     const name = machineName(machineId);
     // The machine is in the fleet whatever this meets (installs.ts `ready`):
     // what could not be brought up stands on it with its press.
-    const fix = `${name} is in the fleet: each stands on its row in Configure → CLI tools, with Retry.`;
+    const fix = `${name} is in the fleet: each stands on its row in ${configurePage("cli-tools")}, with Retry.`;
     say(`asking ${name} which Claude Code, OpenCode and pi it has`);
     const tools = await toolsOn(machineId);
     if ("said" in tools) {
@@ -18414,7 +18414,7 @@ export const createServer = (
       return Promise.resolve(
         harness === "claude"
           ? {
-              failed: `${machineName(machineId)} runs a CawCo build that doesn't manage Claude Code, so it wasn't checked. Update CawCo there from Configure → Updates.`,
+              failed: `${machineName(machineId)} runs a CawCo build that doesn't manage Claude Code, so it wasn't checked. Update CawCo there from ${configurePage("updates")}.`,
             }
           : { skipped: true }
       );
@@ -25880,7 +25880,7 @@ export const createServer = (
     }
     refusedFailures.set(instanceId, {
       accountId: from.id,
-      words: `${accountNameAmong(from, db.accounts.list())}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
+      words: `${accountNameAmong(from, db.accounts.list())}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in ${configurePage("accounts")}.`,
     });
   };
 
@@ -30539,7 +30539,7 @@ export const createServer = (
         if (account.id !== params.id) {
           return status(
             409,
-            `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in Configure → Accounts.`
+            `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in ${configurePage("accounts")}.`
           );
         }
         const signins = db.accounts

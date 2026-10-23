@@ -129,6 +129,7 @@ import type {
   StageError,
   StageState,
 } from "../../../packages/core/src/stage";
+import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { MACHINE, until } from "../../scratch-fleet";
@@ -3069,7 +3070,7 @@ async function readMore(page: Page) {
   if (opened) {
     await page
       .locator('[data-slot="comment-rail"]')
-      .getByRole("button", { name: "Close comments" })
+      .getByRole("button", { name: commentWords.closeComments })
       .click();
   } else {
     await page.keyboard.press("Escape");

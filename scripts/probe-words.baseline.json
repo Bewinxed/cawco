@@ -74,7 +74,6 @@
     "sessions in": 1
   },
   "scripts/probe-kit/specs/artifact-needs.ts": {
-    "changed since you looked": 1,
     "Needs you,": 1
   },
   "scripts/probe-kit/specs/artifact-orphan-delete.ts": {
@@ -133,7 +132,6 @@
   },
   "scripts/probe-kit/specs/canvas-design.ts": {
     "Canvas view": 1,
-    "Close comments": 1,
     "does not exist": 1,
     "does not exist in": 1,
     "Hide details": 1,
@@ -166,7 +164,6 @@
   },
   "scripts/probe-kit/specs/comment-delivery.ts": {
     "- I wrote:": 6,
-    "Add a note for the agent": 1,
     "Caw couldn't take them": 1,
     "Comments aren't reaching the agent": 1,
     "Comments on": 2,
@@ -181,25 +178,13 @@
   },
   "scripts/probe-kit/specs/comments.ts": {
     "## The person's note on this Send": 1,
-    "Add a note for the agent": 1,
     "Attach a file or image": 2,
     "Attached file:": 1,
-    "Delete comment": 6,
     "Draft comment, not sent": 1,
-    "Element gone": 2,
     "Its element is gone from the page": 1,
-    "Newest first": 1,
-    "Not sent:": 5,
-    "Pin it somewhere else": 1,
-    "Reply to reopen": 1,
-    "Send again": 7,
-    "Tap the page where it goes": 1,
     "This pin is gone from the page already, so there was nothing to delete.": 1,
     "This pin is gone from the page, so the reply wasn't kept.": 1,
-    "Top of page first": 1,
-    "Turn off": 3,
-    "What should change?": 2,
-    "Whole page": 2
+    "Turn off": 3
   },
   "scripts/probe-kit/specs/component-canvas.ts": {
     "Hide details": 2,
@@ -393,9 +378,6 @@
     "landed late": 1,
     "landed late; dropped": 1,
     "Session details": 1
-  },
-  "scripts/probe-kit/specs/ios-send-outbox.ts": {
-    "Send again": 1
   },
   "scripts/probe-kit/specs/ios-unreadable-event.ts": {
     "backlog for": 1
@@ -691,7 +673,6 @@
     "Couldn't send that message.": 1,
     "Edit message": 4,
     "Fork from here": 1,
-    "Send again": 1,
     "Send edited message": 2
   },
   "scripts/probe-kit/specs/web/parked-start.ts": {
@@ -744,7 +725,6 @@
   "scripts/probe-kit/specs/web/work-outlives.ts": {
     "Caw is off": 2,
     "Caw settings…": 1,
-    "Copy link": 1,
     "Delete hook": 1,
     "did not answer": 2,
     "did not run": 1,
@@ -804,23 +784,19 @@
     "Login password for": 1,
     "Move & start": 1,
     "New workflow": 1,
-    "No open comments": 1,
     "None of your machines are online": 1,
-    "Nothing resolved yet": 1,
     "Other people's repositories": 1,
     "Page not found": 1,
     "Pairing didn't start": 1,
     "Pause until": 1,
     "Permission mode:": 1,
     "Pick stages": 1,
-    "Pin it somewhere else": 2,
     "Reading what runs in": 1,
     "Show every limit": 1,
     "Show the whole error": 1,
     "Sign-in didn't finish": 1,
     "Sort sessions": 1,
     "Switch to Full Send": 1,
-    "Tap the page where it goes": 1,
     "This project has no stages of its own yet": 2,
     "Unlock keychain…": 1
   }

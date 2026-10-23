@@ -6,7 +6,7 @@
  * (a) Until a CawCo account is signed in on a machine, a Claude session start
  *     there is refused in the hub's sentence (hub placement.ts
  *     `noAccountRefusal`): "No Claude account is signed in on <machine>. Add
- *     one in Configure → Accounts and sign it in there. Nothing was started."
+ *     one in Configure › Accounts and sign it in there. Nothing was started."
  *     The hub keeps no row
  *     for it and the machine's keeper holds nothing under it.
  * (b) The capability report (core capabilities.ts, reported as the agent
@@ -41,14 +41,17 @@ import type {
   FleetSyncReport,
 } from "../../../packages/core/src/index";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { noAccountRefusal } from "../../../packages/hub/src/placement";
 import { MACHINE, until } from "../../scratch-fleet";
 import { open, type Spec } from "../kit";
+import { literal } from "../words";
 
 /** The npx row whose npm never reaches its registry. */
 const HELD_ROW = "probe-held-npm";
 
-const REFUSAL =
-  /^No Claude account is signed in on (.+)\. Add one in Configure → Accounts and sign it in there\. Nothing was started\.$/;
+/** The hub's refusal around the machine it names (placement.ts noAccountRefusal), the machine caught. */
+const [BEFORE, AFTER] = noAccountRefusal("\n").split("\n");
+const REFUSAL = new RegExp(`^${literal(BEFORE ?? "")}(.+?)${literal(AFTER ?? "")}`);
 
 interface AgentRow {
   fleet?: FleetSyncReport;

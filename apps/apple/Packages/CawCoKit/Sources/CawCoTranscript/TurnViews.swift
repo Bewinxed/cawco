@@ -485,7 +485,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
             reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
                                                   color: Palette.statusFailInk, lineBreak: .byWordWrapping)
         }
-        retry.setAttributedTitle(Styled.string(sending ? "Sending again…" : "Send again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
+        retry.setAttributedTitle(Styled.string(sending ? "Sending again…" : Words.Common.sendAgain, TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = !sending
         retry.isHidden = env.hub.map { $0.state != .connected || $0.fleet.byId[env.sessionId]?.isListed != true } ?? true
         retry.layer.borderColor = Palette.wellEdge.resolvedColor(with: traitCollection).cgColor
@@ -643,7 +643,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
         retrying = nil
         reason.attributedText = Styled.string("Couldn't send that message. \(why)", TypeScale.typeMeta,
                                               color: Palette.statusFailInk, lineBreak: .byWordWrapping)
-        retry.setAttributedTitle(Styled.string("Send again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
+        retry.setAttributedTitle(Styled.string(Words.Common.sendAgain, TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = true
     }
 }

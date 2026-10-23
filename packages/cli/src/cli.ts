@@ -9,10 +9,10 @@ import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
 import type { AgentRow } from "@cawco/core";
-import {
+import { 
   CAWCO_ENV,
   CAWCO_HUB_PORT,
-  CAWCO_MDNS_TYPE,
+  CAWCO_MDNS_TYPE,configurePage,
   pinnedTools,
   readEnv,
 } from "@cawco/core";
@@ -135,7 +135,7 @@ Options
 
 Signing in
   Claude sessions run on CawCo's own accounts: add one in the dashboard's
-  Configure → Accounts and sign it in there on each machine. Each keeps its
+  ${configurePage("accounts")} and sign it in there on each machine. Each keeps its
   login in its own folder on the machine (~/.cawco/accounts/<id>/claude); the
   login Claude Code keeps on the machine itself is not used.
 

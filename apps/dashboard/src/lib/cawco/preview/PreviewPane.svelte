@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    artifactWords,
+    artifactWords,commentWords, 
     commonWords,
     hostModeDomain,
     machineLabel,
@@ -11,7 +11,7 @@
     previewWords,
     projectPagePlace,
     type ShownFailure,
-    sheetWords,
+    sheetWords
   } from "@cawco/core";
   import {
     type ChangedItem,
@@ -140,7 +140,6 @@
     NEXT_COMMENT,
     type RailSort,
   } from "./comment-rows";
-  import { commentWords } from "./comment-words";
   import { loadedPanes } from "./loaded.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";

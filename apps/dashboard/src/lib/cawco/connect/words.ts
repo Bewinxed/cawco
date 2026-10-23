@@ -6,8 +6,8 @@
  * what was left on the machine. A fix with a command carries it whole, to
  * copy.
  */
-import {
-  CHECK_WORDS,
+import { 
+  CHECK_WORDS,configurePage,
   type Install,
   type InstallProblem,
   installerRan,
@@ -202,7 +202,7 @@ export function problemWords(
         why: `The hub couldn't find the build it offers its fleet, which ${name} is to be left on. The hub said: ${problem.said}`,
         where: null,
         command: null,
-        fix: "On the hub, check Configure › Updates.",
+        fix: `On the hub, check ${configurePage("updates")}.`,
         next: `Then Retry. ${left(install, name)}`,
       };
     case "check": {

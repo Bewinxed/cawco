@@ -1,10 +1,10 @@
-import {
+import { 
   type Account,
   type AccountBench,
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
-  clockWords,
+  clockWords,configurePage,
   keepsGoingOnExtraUsage,
   type LimitWindow,
   modelScope,
@@ -81,7 +81,7 @@ export type Placement =
  * signed in: it never runs on the machine's own Claude Code login.
  */
 export const noAccountRefusal = (machine: string): string =>
-  `No Claude account is signed in on ${machine}. Add one in Configure → Accounts and sign it in there.`;
+  `No Claude account is signed in on ${machine}. Add one in ${configurePage("accounts")} and sign it in there.`;
 
 /** Each harness as a sentence names it. */
 const HARNESS_NAMES: Record<string, string> = {

@@ -18,6 +18,7 @@
 import { RESTART_WAIT_CAP_MS } from "./binary-updates";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
+import { configurePage } from "./words/configure";
 
 /**
  * Who bills the account: a provider id. `anthropic` is a Claude subscription
@@ -1617,7 +1618,7 @@ export const accountMoveWords = (
     case "signed-out":
       return {
         line: `Sign in to ${move.account.name} · its sign-in was refused`,
-        detail: `No other account can take it, so what it is sent waits until ${move.account.name} is signed in again in Configure → Accounts`,
+        detail: `No other account can take it, so what it is sent waits until ${move.account.name} is signed in again in ${configurePage("accounts")}`,
       };
     case "ended":
       return endedWords(move.by);
@@ -1677,7 +1678,7 @@ const unmovedNext = (
     return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends, or once it has been held ${RESTART_WAIT_CAP_MS / 60_000} minutes: then the move ends it, and the session is told there what ended`;
   }
   return move.signedOut
-    ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in Configure → Accounts`
+    ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in ${configurePage("accounts")}`
     : `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} when ${from} resets`;
 };
 

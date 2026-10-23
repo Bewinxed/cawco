@@ -42,6 +42,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Fleet, type Reply, until } from "../../scratch-fleet";
@@ -446,7 +447,7 @@ async function refused(p: Probe): Promise<void> {
     },
     (all) =>
       all.some((label) => label.includes(REFUSED_LINE)) &&
-      all.includes("Send again"),
+      all.includes(commonWords.sendAgain),
     30_000
   ).catch(() => undefined);
   if (!says) {

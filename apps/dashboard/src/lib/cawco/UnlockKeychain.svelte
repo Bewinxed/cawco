@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
+  import { configurePage } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -60,7 +61,7 @@
     },
     unauthenticated: {
       title: `No account is signed in on ${machine.hostname}`,
-      body: `${machine.hostname} unlocked, but no Claude account is signed in there. Add one in Configure → Accounts and sign it in there.`,
+      body: `${machine.hostname} unlocked, but no Claude account is signed in there. Add one in ${configurePage("accounts")} and sign it in there.`,
     },
     "unreadable-credentials": {
       title: `${machine.hostname} cannot read its logins`,

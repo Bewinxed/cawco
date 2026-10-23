@@ -35,7 +35,7 @@
    * with Try again (RowFault). While a link of the comments' stands lost the
    * same fault line stands over the rows, which keep their last read.
    */
-  import { artifactWords as words } from "@cawco/core";
+  import { commentWords as said, artifactWords as words } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
   import { parse } from "@cawco/core/find-match";
   import { pinName } from "@cawco/core/pin-name";
@@ -77,7 +77,6 @@
     searched,
     sortedPins,
   } from "./comment-rows";
-  import { commentWords as said } from "./comment-words";
   import PinMark, { markState } from "./PinMark.svelte";
 
   let {

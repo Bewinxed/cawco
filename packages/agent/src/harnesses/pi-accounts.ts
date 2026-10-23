@@ -15,7 +15,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { mcpGatewayPort } from "@cawco/core";
+import { configurePage, mcpGatewayPort } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
 import type {
@@ -158,7 +158,7 @@ class AccountCredentials implements CredentialStore {
     }
     return Promise.reject(
       new Error(
-        "A CawCo account's sign-in is forgotten in Configure → Accounts, not by a session."
+        `A CawCo account's sign-in is forgotten in ${configurePage("accounts")}, not by a session.`
       )
     );
   }
@@ -226,7 +226,7 @@ class MachineWithAccounts implements CredentialStore {
     return accountProviders().has(providerId)
       ? Promise.reject(
           new Error(
-            "A CawCo account's sign-in is forgotten in Configure → Accounts."
+            `A CawCo account's sign-in is forgotten in ${configurePage("accounts")}.`
           )
         )
       : this.#machine.delete(providerId, options);
@@ -252,7 +252,7 @@ export const accountRuntime = async (
   const held = readAccount(accountId);
   if (!held) {
     throw new Error(
-      `CawCo account ${accountId} holds no sign-in on this machine; sign it in on this machine in Configure → Accounts.`
+      `CawCo account ${accountId} holds no sign-in on this machine; sign it in on this machine in ${configurePage("accounts")}.`
     );
   }
   return await ModelRuntime.create({

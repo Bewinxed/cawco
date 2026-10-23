@@ -1,11 +1,17 @@
 /**
  * The comments' words on the web (DESIGN.md, Placing a comment, The Comments
  * rail, A thread beside its pin, Sending comments; WORDS.md). The app keeps
- * its own until its parity with the rail (core words/artifacts.ts holds the
- * words both say).
+ * its own until its parity with the rail (words/artifacts.ts holds the
+ * words both say). The dashboard renders them from here, and the probe kit
+ * finds them by these same words (scripts/probe-words-check.ts refuses a
+ * copy).
  */
+import { commonWords } from "./common";
+
 /** A reason's own full stop, which the line that quotes it puts back. */
 const FINAL_STOP = /\.$/;
+/** A Send no one took, before its reason. */
+const NOT_SENT = "Not sent:";
 
 export const commentWords = {
   // The composer at the element.
@@ -19,7 +25,7 @@ export const commentWords = {
   reply: "Reply",
   resolve: "Resolve",
   reopen: "Reopen",
-  copyLink: "Copy link",
+  copyLink: commonWords.copyLink,
   placeElsewhere: "Pin it somewhere else",
   placeHere: "Tap the page where it goes.",
   deleteComment: "Delete comment",
@@ -51,10 +57,11 @@ export const commentWords = {
   send: "Send",
   sendCount: (n: number) => `Send ${n}`,
   // One comment's own Send, and a Send of it no one took.
-  sendAgain: "Send again",
+  sendAgain: commonWords.sendAgain,
   sendComment: (n: number) => `Send comment ${n}`,
   sendCommentAgain: (n: number) => `Send comment ${n} again`,
-  notSent: (why: string) => `Not sent: ${why.replace(FINAL_STOP, "")}.`,
+  notSentHead: NOT_SENT,
+  notSent: (why: string) => `${NOT_SENT} ${why.replace(FINAL_STOP, "")}.`,
   notOnHub: "it hasn't reached the hub yet, and is kept on this device",
   // Changed since you looked: the tag over the page, and what a screen reader hears.
   changedSince: (n: number) => `${n} changed since you looked`,

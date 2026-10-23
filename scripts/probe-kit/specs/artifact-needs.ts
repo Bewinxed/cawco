@@ -66,6 +66,7 @@ import {
 } from "../../../packages/core/src/artifact-needs";
 import type { Envelope } from "../../../packages/core/src/index";
 import { artifactWords } from "../../../packages/core/src/words/artifacts";
+import { commentWords } from "../../../packages/core/src/words/comments";
 import {
   HARNESSES,
   type Harness,
@@ -565,7 +566,7 @@ const pins = async (at: At, session: string, id: string) => {
   kit.check(
     "a revision with nothing asked is the notice 'routine-form: N changed since you looked', never a need",
     !!words?.startsWith("routine-form: ") &&
-      words.endsWith(" changed since you looked") &&
+      words.endsWith(commentWords.changedSince(0).slice(1)) &&
       (await lineOf(fleet, id)) === null,
     String(words)
   );

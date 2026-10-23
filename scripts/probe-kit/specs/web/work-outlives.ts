@@ -1793,7 +1793,7 @@ async function copyLeg(
       });
     }
   });
-  const item = page.getByRole("menuitem", { name: "Copy link" }).first();
+  const item = page.getByRole("menuitem", { name: commonWords.copyLink }).first();
   await openTabMenu(page, pass, item);
   await item.click();
   const line = "[data-copy-refused]";

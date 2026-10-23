@@ -1,5 +1,5 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
-import { type AgentRow, machineLabel } from "@cawco/core";
+import { type AgentRow, configurePage, machineLabel } from "@cawco/core";
 
 /**
  * Splits the daemon's `platform-arch` fingerprint into something readable.
@@ -53,7 +53,7 @@ export function signInWarning(
     case "unreadable-credentials":
       return `${machineLabel(machine.hostname)} has Claude Code credentials it cannot read: they are in the login keychain, and its agent is running outside the desktop session. On that machine, run \`cawco service install\` — a LaunchAgent can read the keychain — or use Unlock keychain… in its menu.`;
     case "unauthenticated":
-      return `No Claude account is signed in on ${machineLabel(machine.hostname)}, so sessions there will answer "Not logged in". Add one in Configure → Accounts and sign it in there.`;
+      return `No Claude account is signed in on ${machineLabel(machine.hostname)}, so sessions there will answer "Not logged in". Add one in ${configurePage("accounts")} and sign it in there.`;
     case "authenticated":
     case "unknown":
       return undefined;

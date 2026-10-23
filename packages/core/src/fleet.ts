@@ -15,6 +15,7 @@ import type {
   McpStdioServerConfig,
 } from "./harness";
 import type { FleetHook } from "./hooks";
+import { configurePage } from "./words/configure";
 import { memoryWords } from "./words/memory";
 
 /**
@@ -1011,7 +1012,7 @@ export type FleetItemState =
  */
 export const MCP_NEEDS_SIGN_IN: FleetItemState = {
   state: "needs-auth",
-  detail: "Sign in to this server from Configure → MCP servers.",
+  detail: `Sign in to this server from ${configurePage("mcp")}.`,
 };
 
 /** Every runtime uses this translation; an unknown status cannot claim success. */

@@ -5,6 +5,8 @@
  * finds them by these same words (scripts/probe-words-check.ts refuses a
  * copy).
  */
+import { configurePage } from "./configure";
+
 export const connectWords = {
   /** Stops an install that runs, and confirms the stop. */
   stopInstall: "Stop install",
@@ -26,5 +28,5 @@ export const connectWords = {
   alreadyInstalled:
     "Updates are installed from the CawCo app, automatically when this machine is idle or with Install now. Nothing was changed.",
   /** Where the builds the fleet runs are chosen. */
-  updatesPlace: "Configure → Updates",
+  updatesPlace: configurePage("updates"),
 };

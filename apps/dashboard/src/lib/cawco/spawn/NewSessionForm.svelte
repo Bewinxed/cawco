@@ -1,9 +1,9 @@
 <script lang="ts">
-  import {
+  import { 
     type AccountProvider,
     accountNameAmong,
     CLAUDE_PROVIDER,
-    commonWords,
+    commonWords,configurePage,
     contextFitRefusal,
     type EffortLevel,
     HARNESSES,
@@ -2423,7 +2423,7 @@
       <AlertDescription>
         <a
           class="rounded-xs text-link-ink no-underline hover:text-link-hover"
-          href="/config/accounts">Open Configure → Accounts</a
+          href="/config/accounts">Open {configurePage("accounts")}</a
         >
       </AlertDescription>
     </Alert>

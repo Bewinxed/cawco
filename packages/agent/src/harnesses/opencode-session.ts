@@ -39,7 +39,7 @@ import type {
   UserAnswers,
   UserQuestion,
 } from "@cawco/core";
-import {
+import { 
   ASK_USER_QUESTION,
   atProviderLimit,
   CODE_MODE_TOOL,
@@ -54,7 +54,7 @@ import {
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
-  CONTROL_SUPPORTED_MODELS,
+  CONTROL_SUPPORTED_MODELS,configurePage,
   EFFORT_READ,
   INSTALL_SESSION_CREDENTIAL,
   LEAD_GATED_TOOLS,
@@ -3058,7 +3058,7 @@ export class OpencodeSession implements HarnessSession {
         await this.#client.mcp.disconnect(target);
       } else if (verb === "auth" || verb === "login" || verb === "logout") {
         throw new Error(
-          `OpenCode 2.0 signs an MCP server in or out only on its own machine (opencode mcp ${verb === "logout" ? "logout" : "auth"} ${server}). A fleet server signs in from the dashboard: Configure → MCP servers.`
+          `OpenCode 2.0 signs an MCP server in or out only on its own machine (opencode mcp ${verb === "logout" ? "logout" : "auth"} ${server}). A fleet server signs in from the dashboard: ${configurePage("mcp")}.`
         );
       } else {
         throw new Error(`Unknown /mcp verb "${verb}". ${MCP_USAGE}`);

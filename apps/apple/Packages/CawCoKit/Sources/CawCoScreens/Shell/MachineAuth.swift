@@ -175,7 +175,7 @@ final class UnlockKeychainView: UIView, UITextFieldDelegate {
         [
             .authenticated: ("\(host) is unlocked", "New sessions on \(host) can read its accounts' logins again."),
             .unauthenticated: ("No account is signed in on \(host)",
-                               "\(host) unlocked, but no Claude account is signed in there. Add one in Configure → Accounts and sign it in there."),
+                               "\(host) unlocked, but no Claude account is signed in there. Add one in \(Words.Configure.page(label: ConfigSections.accounts.label)) and sign it in there."),
             .unreadableCredentials: ("\(host) cannot read its logins", "\(host) unlocked, but its accounts' logins still cannot be read."),
         ]
     }

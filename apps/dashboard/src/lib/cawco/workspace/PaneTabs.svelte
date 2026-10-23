@@ -1572,7 +1572,7 @@
             text={new URL(tab.href, location.origin).href}
             what="Link"
           >
-            Copy link
+            {commonWords.copyLink}
           </ContextMenu.CopyItem>
         {/snippet}
         <ContextMenu.Root

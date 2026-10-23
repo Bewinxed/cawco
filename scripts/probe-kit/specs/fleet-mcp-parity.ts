@@ -74,6 +74,7 @@ import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
 } from "../../../packages/core/src/claude-dirs";
+import { MCP_NEEDS_SIGN_IN } from "../../../packages/core/src/fleet";
 import {
   ACCOUNT,
   type Harness,
@@ -102,7 +103,7 @@ const DOCS_TOOL = {
  */
 const QUIET_MS = 90_000;
 /** The words every harness says a server waiting on the hub's sign-in with (core `MCP_NEEDS_SIGN_IN`). */
-const SIGN_IN_WORDS = "Sign in to this server from Configure → MCP servers.";
+const SIGN_IN_WORDS = MCP_NEEDS_SIGN_IN.detail ?? "";
 /** His own OpenCode agent, beside the plan agent. */
 const HIS_AGENT = "hisagent";
 /** A project's server, bound to its places (the fixture). */

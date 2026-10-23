@@ -1,4 +1,4 @@
-import {
+import { 
   type Account,
   type AccountBench,
   type AccountMove,
@@ -7,7 +7,7 @@ import {
   type AtLimit,
   accountNameAmong,
   accountsWords,
-  clockWords,
+  clockWords,configurePage,
   type HeldReason,
   keepsGoingOnExtraUsage,
   type LimitWindow,
@@ -2443,7 +2443,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       const named = accountNameAmong(current, db.accounts.list());
       console.info(
-        `[at-limit] ${ports.named(row)}'s turn ended because Claude Code refused ${named}'s sign-in, so ${named} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${named} is signed in again in Configure → Accounts.`
+        `[at-limit] ${ports.named(row)}'s turn ended because Claude Code refused ${named}'s sign-in, so ${named} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${named} is signed in again in ${configurePage("accounts")}.`
       );
       await act(row, current, "refused-credential");
     },

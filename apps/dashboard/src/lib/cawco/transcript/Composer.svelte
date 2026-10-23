@@ -3384,7 +3384,7 @@
             disabled={pending}
             onclick={() => submit()}
             size="sm"
-            variant="ghost">Send again</Button
+            variant="ghost">{commonWords.sendAgain}</Button
           >
         {:else if faultAgain && sendError === sendNotice}
           <Button

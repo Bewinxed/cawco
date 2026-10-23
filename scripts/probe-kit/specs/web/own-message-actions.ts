@@ -39,6 +39,7 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person takes them
 import type { Page } from "playwright-core";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { scan } from "../../journeys/scan";
 import {
@@ -788,7 +789,7 @@ async function failedLeg(kit: Kit, base: string, source: string) {
   kit.check(
     "1440: a failed send's row holds Copy message alone; Send again stands in its failure block under the reason",
     row.join("|") === "Copy message" &&
-      failure.actions.some((one) => one?.startsWith("Send again")) &&
+      failure.actions.some((one) => one?.startsWith(commonWords.sendAgain)) &&
       (failure.reason ?? "").startsWith("Couldn't send that message."),
     JSON.stringify({ row, failure })
   );

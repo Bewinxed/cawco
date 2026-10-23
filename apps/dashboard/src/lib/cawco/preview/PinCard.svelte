@@ -14,7 +14,7 @@
 </script>
 
 <script lang="ts">
-  import { artifactWords as words } from "@cawco/core";
+  import { commentWords as said, artifactWords as words } from "@cawco/core";
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
    * A thread beside its pin). Its head: the pin's pill, what it stands on
@@ -67,7 +67,6 @@
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
   import CommentComposer from "./CommentComposer.svelte";
-  import { commentWords as said } from "./comment-words";
   import PinMark, { markState } from "./PinMark.svelte";
 
   let {

@@ -12,12 +12,12 @@ import {
 import { platform, userInfo } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import {
+import { 
   type AccountIdentity,
   type AccountKind,
   type AccountProbe,
   type AccountReport,
-  type AuthState,
+  type AuthState,configurePage,
   identityOf,
   type MachineHarnessReport,
   type ModelInfo,
@@ -537,7 +537,7 @@ export const claudeAuthNote = (state: AuthState): string | undefined => {
   }
   return state === "unreadable-credentials"
     ? "A Claude account is signed in on this machine, but this process can't read its login: it is in the login keychain, which opens only inside the desktop session. Run the daemon as a service (`cawco service install`)."
-    : "No Claude account is signed in on this machine. Add one in Configure → Accounts and sign it in there.";
+    : `No Claude account is signed in on this machine. Add one in ${configurePage("accounts")} and sign it in there.`;
 };
 
 /** How long a probe may take to be answered at initialize. */

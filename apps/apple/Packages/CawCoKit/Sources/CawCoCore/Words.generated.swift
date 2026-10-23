@@ -17,6 +17,11 @@ public enum Words {
         /// The place, as the sidebar and a page's title name it.
         public static let title = "Configure"
 
+        /// A Configure page named in a sentence ("Configure › Accounts"), with WORDS.md's arrow: everything that points the person at a page names it through here (configurePage, by its slug, on the web and the machines).
+        public static func page(label: String) -> String {
+            "Configure › \(label)"
+        }
+
         /// A page's document title: "Accounts · Configure · CawCo".
         public static func documentTitle(title: String) -> String {
             "\(title) · Configure · CawCo"
@@ -740,6 +745,45 @@ public enum Words {
             /// The terms that cover moving a conversation between Claude subscriptions.
             public static let termsUrl = "https://code.claude.com/docs/en/legal-and-compliance"
         }
+    }
+
+    public enum Common {
+        // packages/core/src/words/common.ts `commonWords`
+        /// Asks again for what failed to be read or done.
+        public static let tryAgain = "Try again"
+
+        /// An editor's save, once what it edits exists.
+        public static let saveChanges = "Save changes"
+
+        /// Starts a session: the strip's +, the dialog's title.
+        public static let newSession = "New session"
+
+        /// Asks every source whether a newer version is out.
+        public static let checkForUpdates = "Check for updates"
+
+        /// Fetches a refused or stale copy again.
+        public static let fetchAgain = "Fetch again"
+
+        /// No machine has joined the fleet, where a page needs one.
+        public static let noMachines = "No machines yet"
+
+        /// The fleet is not read yet: the home's status line, a session's surface.
+        public static let readingTheFleet = "Reading the fleet…"
+
+        /// Copies a command to run in a terminal.
+        public static let copyCommand = "Copy command"
+
+        /// The session a thing came from, when its title isn't known.
+        public static let itsSession = "Its session"
+
+        /// A session, a task or a page waits on the person: the state word.
+        public static let needsYou = "Needs you"
+
+        /// Copies a thing's own address: a tab's menu, a sheet's head, a pin's thread.
+        public static let copyLink = "Copy link"
+
+        /// Sends again what the hub never took: a message's, a comment's line.
+        public static let sendAgain = "Send again"
     }
 
     public enum Sidebar {

@@ -64,7 +64,7 @@ import type {
   UserQuestionAnswered,
   UserQuestionResult,
 } from "@cawco/core";
-import {
+import { 
   ACCOUNT_READ,
   ASK_USER_QUESTION,
   BOUNDARY_RELAUNCH,
@@ -84,7 +84,7 @@ import {
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
-  CONTROL_WITHDRAW_SEND,
+  CONTROL_WITHDRAW_SEND,configurePage,
   conversationGone,
   EFFORT_READ,
   INSPECT_CONFIG,
@@ -637,7 +637,7 @@ async function launchAccountOf(
   const move = spec.homeLoginMove;
   if (!move) {
     throw new Error(
-      "This Claude session has no account to run on. Add one in Configure → Accounts and sign it in on this machine."
+      `This Claude session has no account to run on. Add one in ${configurePage("accounts")} and sign it in on this machine.`
     );
   }
   return (await homeLoginMovedInto(move.accountId))

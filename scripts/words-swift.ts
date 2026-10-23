@@ -66,6 +66,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     ],
   },
   {
+    // Words many places say alike: a retry, a copy, a send again.
+    swift: "Common",
+    members: [{ file: "words/common.ts", export: "commonWords", as: "" }],
+  },
+  {
     swift: "Sidebar",
     members: [{ file: "words/sidebar.ts", export: "sidebarWords", as: "" }],
   },
