@@ -10,6 +10,7 @@ import { dimensionBindings, rawDurationReads } from "./restricted.mjs";
 import {
   arbitraryValues,
   inlineStyles,
+  rawSvgColors,
   restyle,
   staticClasses,
   unknownClasses,
@@ -294,6 +295,7 @@ const FIND = {
   "design/no-restyle": restyle,
   "design/require-static-classes": staticClasses,
   "design/no-inline-styles": inlineStyles,
+  "design/no-raw-svg-colors": rawSvgColors,
 };
 
 /** A file's path as the options name it: from apps/dashboard. */
