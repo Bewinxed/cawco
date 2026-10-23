@@ -315,6 +315,7 @@
   --spacing-c-pin-pad: var(--c-pin-pad);
   --spacing-c-pin-gone-ring: var(--c-pin-gone-ring);
   --spacing-c-comments-w: var(--c-comments-w);
+  --spacing-c-comments-compact-w: var(--c-comments-compact-w);
   --spacing-c-pin-card-w: var(--c-pin-card-w);
   --spacing-c-pin-card-reading-w: var(--c-pin-card-reading-w);
   --spacing-c-pin-card-reading-room: var(--c-pin-card-reading-room);

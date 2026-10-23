@@ -1103,7 +1103,10 @@
   [data-bits-floating-content-wrapper][data-session-details] {
     will-change: transform;
   }
-  [data-bits-floating-content-wrapper][data-details-morph] {
+  [data-bits-floating-content-wrapper]:is(
+    [data-details-morph],
+    [data-thread-glide]
+  ) {
     @variant motion-safe {
       transition: transform var(--dur-pop) var(--ease-drawer);
     }

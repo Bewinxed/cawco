@@ -303,6 +303,7 @@ export type TokenSize =
   | "size.c-pin-pad"
   | "size.c-pin-gone-ring"
   | "size.c-comments-w"
+  | "size.c-comments-compact-w"
   | "size.c-pin-card-w"
   | "size.c-pin-card-reading-w"
   | "size.c-pin-card-reading-room"

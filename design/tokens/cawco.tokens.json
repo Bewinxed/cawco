@@ -4217,6 +4217,19 @@
       },
       "$description": "The Comments rail beside the page (DESIGN.md, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot."
     },
+    "c-comments-compact-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The Comments panel's compact form, a narrow window used with a mouse (proposal, comment-card-sizing's tablet note): a row's pill, its place and its first words, each one line; a thread grows out of its row as Caw's panel does out of his glass. Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
     "c-pin-card-w": {
       "$type": "dimension",
       "$value": {
