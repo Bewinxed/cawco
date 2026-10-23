@@ -1314,13 +1314,13 @@
    * place first and tells the session of the page's picks. A refusal is
    * said in the band over the page, and the picks stay unsent.
    */
-  async function sendAll() {
+  async function sendAll(control: "panel-head" | "panel-more") {
     if (!artifact || sending) {
       return;
     }
     sending = true;
     try {
-      await sendArtifact(instanceId, artifact.id);
+      await sendArtifact(instanceId, artifact.id, control);
     } catch (error) {
       failure = { message: failureWords(error), again: null };
     } finally {
@@ -2922,7 +2922,7 @@
   <Button
     data-slot="send"
     aria-label={`${commentWords.send}, ${unsentCount} unsent`}
-    onclick={sendAll}
+    onclick={() => sendAll("panel-head")}
     pending={sending}
     size="sm"
     title="Send what the session hasn't heard"
@@ -2937,7 +2937,10 @@
 {#snippet sendMenu()}
   <DropdownMenu.Item
     disabled={sending}
-    onSelect={whileIdle(() => sending, sendAll)}
+    onSelect={whileIdle(
+      () => sending,
+      () => sendAll("panel-more")
+    )}
   >
     <IconSend /><span>{commentWords.sendCount(unsentCount)}</span>
   </DropdownMenu.Item>

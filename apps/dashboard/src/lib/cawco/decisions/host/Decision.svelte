@@ -14,10 +14,13 @@
   never pick; a click, Space or the option's digit picks; Enter goes to the
   card's Continue and never picks). The option takes its chosen look where
   it stands, a press on another moves the pick, a press on the chosen one
-  keeps it ("Kept <option>"), and a several-pick card toggles each. Once the
-  card holds a pick, Continue (the primary button, ↵ on its keycap) grows
-  out of its foot on the card's own height tween (motion/morph; with reduced
-  motion it fades in where it stands), and leaves folded shut with the body.
+  lets it go ("Cleared <option>"; pick.ts writes the card with no option),
+  and a several-pick card toggles each. Once the card holds a pick, its foot
+  grows out of the card on the card's own height tween (motion/morph; with
+  reduced motion it fades in where it stands) and leaves folded shut with
+  the body: Clear (the ghost button, the pick let go, said the same way,
+  focus on the option that held it) and Continue (the primary button, ↵ on
+  its keycap). The owner: "i have no way to deselect".
 
   Continue, or Enter, folds the card to one line: its question, then the
   chosen option's chip itself ("Decided: <option>" its accessible name),
@@ -25,8 +28,8 @@
   is one. Its body (why, media, options, note, Continue) folds shut but stays
   mounted, so the overlay's marks, the media's frames and a Dials panel stay.
   The fold is this view's own: the picks the hub keeps, and artifact_read,
-  are the same. Change reopens it in place, its pick standing chosen;
-  Continue folds it back unchanged. A stored pick on an option a revision
+  are the same. Change reopens it in place, its pick standing chosen and
+  clearable (a press on it, or Clear); Continue folds it back unchanged. A stored pick on an option a revision
   took out is no pick here (core `pickOf`, as the graph and the count read
   it): the card stands open, its kept options counted, never folded to an
   empty "Decided:". A pick that arrives (a reload, another device, a
@@ -54,7 +57,7 @@
   when the program says (`note`).
 
   The page's one polite live region hears "Picked <option>" on a pick,
-  "Kept <option>" on a press on the chosen one, and "Decided: <option>" with
+  "Cleared <option>" when the pick is let go, and "Decided: <option>" with
   the count on Continue.
 
   The clock is page-length travel (the card's height and the page's scroll
@@ -67,6 +70,7 @@
 -->
 <script lang="ts">
   import { pickOf } from "@cawco/core/decisions";
+  import { decisionHostWords } from "@cawco/core/words/decision-host";
   import { getContext, setContext, tick } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -307,26 +311,39 @@
   // for Continue. Only the person's own press speaks: the overlay's other
   // writes to the page's doc (a pin re-anchored as the card opens) and a
   // pick from elsewhere say nothing. The press is armed before its pick is
-  // written: the overlay writes on the click at the window, and a browser's
-  // own click runs the microtasks after each listener, so the pick is drawn
-  // before any listener on the card hears the click.
-  let pressed = false;
-  /** What the card held when the press began: a press on it keeps it. */
+  // written (the overlay writes on the click at the window), and the change
+  // it makes is heard within PRESS_HEARD_MS of it: the page hears its own
+  // write after the click's task in WebKit (decision-unpick, a key's
+  // Space), so a press is not let go at its click.
+  /** When the person's press began (`performance.now()`); 0 with none under way. */
+  let pressed = 0;
+  /** How long after a press its pick is still its own, ms: the page's own write lands well inside it. Our call. */
+  const PRESS_HEARD_MS = 1500;
+  /** What the card held when the press began: a press on it lets it go. */
   let held: string[] = [];
   let seen = "";
+  /** The options' labels, by id, joined as the page says them. */
+  const labelsOf = (ids: readonly string[]) =>
+    ids
+      .map((one) => options.find((option) => option.id === one)?.label ?? one)
+      .join(", ");
   $effect(() => {
     const now = chosen.join("\n");
-    if (pressed && now !== seen) {
-      pressed = false;
-      if (chips.length > 0) {
-        page?.say(`Picked ${decidedLine}`);
-      }
+    if (
+      now !== seen &&
+      pressed > 0 &&
+      performance.now() - pressed < PRESS_HEARD_MS
+    ) {
+      pressed = 0;
+      page?.say(
+        chips.length > 0 ? `Picked ${decidedLine}` : `Cleared ${labelsOf(held)}`
+      );
     }
     seen = now;
   });
   /** A press on an option, by a key or a pointer, about to write its pick. */
   function arm(key: boolean) {
-    pressed = true;
+    pressed = performance.now();
     held = [...chosen];
     instant = key;
     open = true;
@@ -370,22 +387,10 @@
         arm(true);
       }
     };
-    // A press that wrote no pick (a drag off the option) arms nothing past
-    // its click; a task later, after the pick's own effects have run. A
-    // press on the one chosen option of a one-pick card keeps it.
+    // A press that wrote no pick (a drag off the option, words selected on
+    // it) arms nothing past PRESS_HEARD_MS.
     const clicked = (event: Event) => {
-      const option = optionAt(event);
-      if (option === null) {
-        return;
-      }
-      if (pressed && !multiple && held.length === 1 && held[0] === option) {
-        const label = options.find((one) => one.id === option)?.label;
-        page?.say(`Kept ${label ?? option}`);
-      }
-      setTimeout(() => {
-        pressed = false;
-      });
-      if (instant) {
+      if (optionAt(event) !== null && instant) {
         afterInstant();
       }
     };
@@ -401,6 +406,28 @@
       group.removeEventListener("focusin", stood);
     };
   });
+
+  /**
+   * Clear: the card's pick let go on the hub, said as a press on the chosen
+   * option says it; the foot goes with the pick, so focus goes to the option
+   * that held it, the group's tab stop.
+   */
+  async function clear(event: MouseEvent) {
+    const was = [...chosen];
+    instant = pressBy(event) === "key";
+    if (instant) {
+      afterInstant();
+    }
+    page?.work(id);
+    try {
+      await bridge()?.choose(id, null);
+    } catch {
+      return;
+    }
+    page?.say(`Cleared ${labelsOf(was)}`);
+    await tick();
+    chipOf(was[0] ?? "")?.focus({ preventScroll: true });
+  }
 
   /** Continue: the card folds to its decided line, said with the count. */
   function proceed(by: "key" | "pointer") {
@@ -994,16 +1021,18 @@
       <div bind:this={noteField}>
         <div class="flex flex-col gap-space-2">
           <div class="flex items-center justify-between gap-space-2">
-            <label class="type-label text-ink-muted" for={`note-${id}`}
-              >Note</label
+            <!-- Its field has no id or name, as the kit's note has none (RECIPES.md, `[data-dp-note]`): the overlay keeps a page's named fields as answers of their own (preview-overlay fields.ts `keyOf`), and the note is this card's, written through `cawco.note` alone. Named by this line instead. -->
+            <span
+              class="type-label text-ink-muted"
+              id={`decision-${id}-note-label`}>Note</span
             >
             <Button onclick={noteDone} size="sm" variant="ghost">Done</Button>
           </div>
           <Textarea
             bind:ref={field}
             bind:value={note}
+            aria-labelledby={`decision-${id}-note-label`}
             disabled={!bridge()}
-            id={`note-${id}`}
             onblur={() => {
               typing = false;
             }}
@@ -1015,8 +1044,18 @@
       </div>
     </div>
     {#if pick.picked}
-      <!-- Continue grows out of the card's foot on its height tween (morph) and folds shut with the body. -->
-      <div class="flex justify-end" data-slot="decision-foot" {@attach footIn}>
+      <!-- The foot grows out of the card on its height tween (morph) and folds shut with the body: Clear, then Continue at its end. -->
+      <div
+        class="flex flex-wrap items-center justify-end gap-space-2 coarse:gap-space-4"
+        data-slot="decision-foot"
+        {@attach footIn}
+      >
+        <Button
+          data-clear
+          onclick={clear}
+          size={coarse.current ? "lg" : "default"}
+          variant="ghost">{decisionHostWords.clearPick(multiple)}</Button
+        >
         <Button
           aria-keyshortcuts="Enter"
           data-continue

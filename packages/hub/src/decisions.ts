@@ -10,11 +10,14 @@
  *   draws them (RECIPES.md: `article.dp-card`, its `h2`, `.dp-why`, its
  *   `[data-cawco-choice]` and their `[data-option]`s). So the record holds
  *   what the person saw and to-tasks needs no page definitions of its own.
- * - **A send** (I'm done picking, a comment) goes to the session that wrote
- *   the page, as its own Send does (artifacts/service.ts `send`), which
- *   revives a session at rest; when that session was ended, Caw is woken
- *   with it in a thread of the project, and reads the picks himself (a
- *   project's lead reads every page of his project).
+ * - **A send** goes to the session that wrote the page: I'm done picking
+ *   as the page's own Send does (artifacts/service.ts `send`), which
+ *   revives a session at rest; a note from the tab's composer as the
+ *   person's words about the page, never a Send of its picks (a note is
+ *   talk, as a comment is: a Send is pressed, never typed). When that
+ *   session was ended, Caw is woken with it in a thread of the project, and
+ *   reads the picks himself (a project's lead reads every page of his
+ *   project); only I'm done picking stamps the page sent.
  * - **Make tasks** writes `record.json` and `log.md` in one commit, then
  *   asks the same session (or Caw) to run to-tasks over them, each task
  *   carrying `decided: <page>#<card>`. A refusal to ask takes the record
@@ -344,14 +347,14 @@ export interface DecisionsDeps {
   place: (artifactId: string, places: Record<string, GraphPlace>) => void;
   /** Whether the project is the hub's. */
   projectExists: (projectId: string) => boolean;
-  /** The person's Send on a session's artifact (artifacts/service.ts `send`). */
+  /** The person's I'm done picking on a session's artifact: its Send (artifacts/service.ts `send`), through `route`. */
   send: (
     instanceId: string,
     artifactId: string,
-    text: string | undefined
+    route: string
   ) => Promise<void>;
   /** Stamps a page's send when Caw took it in place of its ended session. */
-  stampSent: (artifactId: string, text: string | undefined) => void;
+  stampSent: (artifactId: string) => void;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
   tasks: (projectId: string) => Promise<DecidedTask[]>;
   /** The person's own words to a session, through the one send path. */
@@ -939,8 +942,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
     },
 
     /**
-     * The person's send on a page: I'm done picking (no words) or a comment.
-     * Its session hears it as from its own panel; an ended one's goes to Caw.
+     * The person's send on a page: I'm done picking (no words), the page's
+     * Send; or a note (words), said to its session as the person's own
+     * words and never a Send of the page. Its session hears it; an ended
+     * one's goes to Caw.
      */
     async send(
       projectId: string,
@@ -956,19 +961,30 @@ export const createDecisions = (deps: DecisionsDeps) => {
       }
       const words = text?.trim() || undefined;
       const to = heardBy(read);
+      const noted = `On the decision page “${read.title}” (decisions/${name}/) I wrote: ${words}`;
       if ("instance" in to) {
-        await deps.send(to.instance.id, read.artifactId, words);
+        if (words) {
+          deps.tell(to.instance, noted);
+        } else {
+          await deps.send(
+            to.instance.id,
+            read.artifactId,
+            `POST /api/projects/${projectId}/decisions/${name}/send`
+          );
+        }
         deps.changed(projectId);
         return { to: "session" };
       }
       const said = words
-        ? `On the decision page “${read.title}” (decisions/${name}/) I wrote: ${words}`
+        ? noted
         : `I'm done picking on the decision page “${read.title}” (decisions/${name}/).`;
       const threadId = await deps.wakeCaw(
         projectId,
         `${said}\n\n${handedToCaw(read)}`
       );
-      deps.stampSent(read.artifactId, words);
+      if (!words) {
+        deps.stampSent(read.artifactId);
+      }
       deps.changed(projectId);
       return { to: "caw", threadId };
     },

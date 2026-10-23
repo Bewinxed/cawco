@@ -147,7 +147,8 @@
   const sendPicks = async () => {
     send.disabled = true;
     try {
-      await bridge.send();
+      // The control pressed, as the hub's journal names a page's Send.
+      await bridge.send(undefined, "page-send");
       if (sentLine) {
         sentLine.textContent = "Sent. Change anything and send again.";
       }

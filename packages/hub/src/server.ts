@@ -384,7 +384,7 @@ import {
   CANVAS_SCREEN_CLOSE,
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
-import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
@@ -23065,9 +23065,9 @@ export const createServer = (
     },
     projectExists: (projectId) => db.project(projectId) !== undefined,
     // The artifact's refusal ("Nothing new to send…"), as the tab's route says it.
-    send: async (instanceId, artifactId, text) => {
+    send: async (instanceId, artifactId, route) => {
       const refusal = await artifacts
-        .send(instanceId, artifactId, text ? { text } : {})
+        .send(instanceId, artifactId, { control: "decisions-done" }, route)
         .then(
           () => null,
           (error: unknown) => {
@@ -23087,12 +23087,21 @@ export const createServer = (
         );
       }
     },
-    stampSent: (artifactId, text) =>
+    stampSent: (artifactId) => {
+      console.log(
+        artifactToolWords.pageSent(
+          artifactId,
+          SEND_CONTROLS["decisions-done"],
+          "the Decisions tab",
+          "its session ended, so its project's Caw reads it"
+        )
+      );
       artifactDocs.transact(artifactId, "hub", (doc) => {
         const meta = doc.getMap("meta");
         meta.set("sentAt", new Date().toISOString());
-        meta.set("sentText", text ?? null);
-      }),
+        meta.set("sentText", null);
+      });
+    },
     tasks: async (projectId) =>
       decidedTasks((await tasks.list(projectId)).tasks),
     tell: (instance, text) => {

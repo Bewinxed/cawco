@@ -42,7 +42,7 @@
  *     and dark, Change reopens it with focus on the pick and the hub's
  *     picks the same as before, and Continue folds it again. A finger's tap
  *     on the artifact's own route picks and Continue folds; a tap on the
- *     chosen option of a reopened card keeps it. At 390 under a finger Change's hit
+ *     chosen option of a reopened card clears it. At 390 under a finger Change's hit
  *     area reaches 44px; at 320 a several-pick card of three long unbroken
  *     labels folds inside its card. A click inside an option's embed
  *     reaches the embed and picks nothing.
@@ -2892,8 +2892,8 @@ const tapLeg = async (on: On) => {
   );
 
   // The card opened again by Change keeps its pick, and a tap on the
-  // chosen option keeps it (the overlay's pick, preview-overlay pick.ts: a
-  // one-pick choice is never let go), for a finger as for a mouse.
+  // chosen option clears it (the overlay's pick, preview-overlay pick.ts),
+  // for a finger as for a mouse.
   await pressIn(frame, "#decision-tall [data-change]", { tap: true });
   await until(
     "the tall card open again",
@@ -2907,12 +2907,12 @@ const tapLeg = async (on: On) => {
   await settle(phone, 600);
   const stayed = await foldOf(frame, "tall");
   kit.check(
-    "(g) 390 dark, a finger: on a card opened again by Change, a tap on its chosen option keeps it: still marked, the card open with Continue",
+    "(g) 390 dark, a finger: on a card opened again by Change, a tap on its chosen option clears it: nothing marked, the card open with no Continue",
     JSON.stringify(reopened.marked) === '["stages"]' &&
       reopened.next &&
-      JSON.stringify(stayed.marked) === '["stages"]' &&
+      stayed.marked.length === 0 &&
       !stayed.decided &&
-      stayed.next,
+      !stayed.next,
     JSON.stringify({ reopened, stayed })
   );
   await pressIn(frame, '#decision-tall [data-option="skim"]', { tap: true });

@@ -36,7 +36,7 @@ export async function readDecision(
   );
 }
 
-/** I'm done picking (no words), or a comment: its session hears it, or Caw. */
+/** I'm done picking (no words), the page's Send; or a note (words), said to its session as the person's words, never a Send: its session hears it, or Caw. */
 export async function sendDecision(
   projectId: string,
   name: string,

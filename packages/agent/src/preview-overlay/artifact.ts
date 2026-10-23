@@ -31,6 +31,7 @@ import {
 import {
   goneOf,
   honourDeletions,
+  isSendControl,
   type MarkPictures,
   type Pin,
 } from "@cawco/core/comments";
@@ -723,10 +724,12 @@ export const artifact = {
   /**
    * The person sends (`cawco.send`): the session hears it has new
    * responses to read, `text` kept with them, through the listener's send
-   * beside the doc's socket. Waits for the doc to hold the hub's state first, so what
-   * this page wrote is on the hub before the hub reads it.
+   * beside the doc's socket, with the control the page says was pressed
+   * (core `SEND_CONTROLS`; the hub's journal names it). Waits for the doc to
+   * hold the hub's state first, so what this page wrote is on the hub
+   * before the hub reads it.
    */
-  send: async (text?: string): Promise<void> => {
+  send: async (text?: string, control?: unknown): Promise<void> => {
     if (!syncPath) {
       throw new Error(NO_ARTIFACT);
     }
@@ -734,7 +737,10 @@ export const artifact = {
     const response = await fetch(`${syncPath}/send`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(text ? { text } : {}),
+      body: JSON.stringify({
+        ...(text ? { text } : {}),
+        ...(isSendControl(control) ? { control } : {}),
+      }),
     });
     if (!response.ok) {
       throw new Error(

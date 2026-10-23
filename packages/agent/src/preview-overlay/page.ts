@@ -894,8 +894,8 @@ declare global {
       ) => Promise<void>;
       note: (choice: string, text: string) => Promise<void>;
       set: (key: string, value: unknown) => Promise<void>;
-      /** The person's Send: the session hears it has new responses to read; `text` is kept with them. */
-      send: (text?: string) => Promise<void>;
+      /** The person's Send: the session hears it has new responses to read; `text` is kept with them; `control` names what was pressed (core `SEND_CONTROLS`). */
+      send: (text?: string, control?: string) => Promise<void>;
       on: (event: "picks", listener: (picks: State) => void) => () => void;
       /**
        * Asks the person for a machine and a folder on it, with CawCo's own
@@ -934,9 +934,9 @@ Object.defineProperty(window, "cawco", {
       change({ choice, pageHash, note: text }),
     set: (key: string, value: unknown) =>
       change({ choice: key, pageHash, value }),
-    send: async (text = "") => {
+    send: async (text = "", control?: string) => {
       try {
-        await artifact.send(text.trim());
+        await artifact.send(text.trim(), control);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         failed("send", message);
@@ -2304,6 +2304,16 @@ const PANE_KEYS = new Set([
   "Escape",
 ]);
 
+/**
+ * The page's own controls: Enter on one presses it (a card's Clear, its
+ * Continue, Change), and is never the pane's Enter, which opens the focused
+ * pin's thread; the pane's own rule for its controls (PreviewPane
+ * `PANE_CONTROL`). Enter on a card's Clear opened the newest comment's
+ * thread over the page (decision-unpick, 390).
+ */
+const PAGE_CONTROL =
+  "a[href], button, input, select, textarea, summary, [contenteditable], [role=button], [role=checkbox], [role=link], [role=menuitem], [role=option], [role=radio], [role=switch], [role=tab]";
+
 /** Whether `target` takes typing: the page's own keys stay its own there. */
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -2337,6 +2347,9 @@ window.addEventListener(
       event.ctrlKey ||
       event.altKey ||
       typing(event.target) ||
+      (key === "Enter" &&
+        event.target instanceof Element &&
+        !!event.target.closest(PAGE_CONTROL)) ||
       !artifact.keeps() ||
       artifact.kind() === "canvas"
     ) {

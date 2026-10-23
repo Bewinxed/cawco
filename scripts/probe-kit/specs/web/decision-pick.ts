@@ -16,7 +16,9 @@
  *    Continue grows out of the card's foot on the card's own height tween
  *    (motion/morph, --dur-morph on the drawer curve), its fade on that
  *    clock, read at 0, ½ and 1. The live region says "Picked <option>". A
- *    press on the chosen option keeps it.
+ *    press on the chosen option clears it (the owner: "i have no way to
+ *    deselect"): no pick, no Continue, the card open, "Cleared <option>";
+ *    pressed again, it is the pick once more.
  * 2. Continue folds the card: the body's height, margin and opacity, the
  *    card's padding and the chosen option's flight on one clock (one start
  *    time, duration and easing: --dur-settle on --ease-crossfade,
@@ -32,7 +34,8 @@
  *    the count.
  * 3. Change pressed with the fold held at ½ turns it back from the height
  *    drawn there (L489), opening over --dur-settle on --ease-crossfade,
- *    focus on the pick, which stands chosen; a press on it keeps it.
+ *    focus on the pick, which stands chosen; a press on it clears it, and
+ *    one more picks it again.
  * 4. Played live, Continue folds its card in the press's own task, moves
  *    the page's scroll only forward on its way and never by the browser's
  *    anchoring; each painted frame's step is read (a ResizeObserver on the
@@ -964,18 +967,26 @@ async function pickStep(
     words === "Picked Straight to sign up",
     words
   );
-  // A press on the chosen option keeps it.
+  // A press on the chosen option clears it; one more picks it again.
   await pressOn(page.locator('#decision-path [data-option="direct"]'), view);
   await settle(page, 400);
-  const kept = await pickedIn(page, "path");
-  const keptSaid = await saidOf(page);
+  const cleared = await pickedIn(page, "path");
+  const clearedSaid = await saidOf(page);
   kit.check(
-    `${label}: a press on the chosen option keeps it: still the pick, the card open, Continue standing, and the live region says "Kept Straight to sign up"`,
-    JSON.stringify(kept.picked) === '["direct"]' &&
-      !kept.decided &&
-      kept.next &&
-      keptSaid === "Kept Straight to sign up",
-    JSON.stringify({ ...kept, said: keptSaid })
+    `${label}: a press on the chosen option clears it: no pick, the card open, no Continue, and the live region says "Cleared Straight to sign up"`,
+    cleared.picked.length === 0 &&
+      !cleared.decided &&
+      !cleared.next &&
+      clearedSaid === "Cleared Straight to sign up",
+    JSON.stringify({ ...cleared, said: clearedSaid })
+  );
+  await pressOn(page.locator('#decision-path [data-option="direct"]'), view);
+  await settle(page, 400);
+  const again = await pickedIn(page, "path");
+  kit.check(
+    `${label}: pressed again, it is the pick once more, Continue standing`,
+    JSON.stringify(again.picked) === '["direct"]' && again.next,
+    JSON.stringify(again)
   );
 }
 
@@ -1229,11 +1240,19 @@ async function changeStep(
   );
   await pressOn(page.locator('#decision-path [data-option="direct"]'), view);
   await settle(page, 400);
-  const kept = await pickedIn(page, "path");
+  const cleared = await pickedIn(page, "path");
+  await pressOn(page.locator('#decision-path [data-option="direct"]'), view);
+  await settle(page, 400);
+  const again = await pickedIn(page, "path");
   kit.check(
-    `${label}: on the reopened card a press on its pick keeps it, the card open`,
-    JSON.stringify(kept.picked) === '["direct"]' && !kept.decided && kept.next,
-    JSON.stringify(kept)
+    `${label}: on the reopened card a press on its pick clears it, the card open with no Continue; one more picks it again`,
+    cleared.picked.length === 0 &&
+      !cleared.decided &&
+      !cleared.next &&
+      JSON.stringify(again.picked) === '["direct"]' &&
+      !again.decided &&
+      again.next,
+    JSON.stringify({ cleared, again })
   );
 }
 

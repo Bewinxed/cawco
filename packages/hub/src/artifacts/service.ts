@@ -75,6 +75,7 @@ import {
   pinHeard,
   pinSaid,
   pinUnsent,
+  SEND_CONTROLS,
   type SendBody,
   seeChanges,
   seenOf,
@@ -509,7 +510,7 @@ export interface ArtifactRead {
   changed?: string[];
   /** A canvas's elements you replaced that the person had changed since your last read: "<id> changed under you". */
   changedUnderYou?: string[];
-  /** A page's choices in page order, each answered or not ({@link DecisionAnswer}); on a whole read of a page that asks any. */
+  /** A page's choices in page order, each answered or not ({@link DecisionAnswer}); on every read of a page that asks any. */
   decisions?: DecisionAnswer[];
   /** Elements an update deleted, and the ids it named that the canvas does not hold. */
   deleted?: string[];
@@ -1237,6 +1238,29 @@ const sayNoHolder = (row: ArtifactRow, owed: number) => {
     console.warn(artifactToolWords.marksUnheld(labelOf(row)));
   }
 };
+
+/**
+ * One page Send in the journal: which route took it and which control the
+ * sender named, then what it carried, or why it was refused. The owner,
+ * after a Send no one could trace: "make every page send log one line
+ * naming its route and control".
+ */
+const saySend = (
+  row: ArtifactRow,
+  body: SendBody,
+  route: string,
+  outcome: string
+) =>
+  console.log(
+    artifactToolWords.pageSent(
+      labelOf(row),
+      body.control
+        ? SEND_CONTROLS[body.control]
+        : artifactToolWords.sendUnnamed,
+      route,
+      outcome
+    )
+  );
 
 /** One delivery of artifact `row`'s marks in the journal: what it carried, for which session, and whether someone took it. */
 const sayDelivery = (
@@ -2711,7 +2735,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ...(docs.viewers(row.id) > 0 ? { openedRevision: row.revision + 1 } : {}),
   });
 
-  /** A whole read's `decisions`: each choice the page asks, answered or not; nothing for a page that asks none. */
+  /** A read's `decisions`: each choice the page asks, answered or not, on every read (one `since` a seq too); nothing for a page that asks none. */
   const decisionsOf = (
     row: ArtifactRow,
     state: Record<string, ChoiceEntry>,
@@ -2752,8 +2776,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const removed = changed
       ? [...changed].filter((key) => !(key in state))
       : [];
+    // Every card the page asks, with or without `since`: a read since a
+    // seq is the changed state, never a page whose cards are gone, which
+    // listed every pick as a loose value (the owner's read of a program
+    // page: no "Choices", its note under "set beside them").
     return {
-      ...(since === undefined ? decisionsOf(row, state, current) : {}),
+      ...decisionsOf(row, state, current),
       id: row.id,
       kind: row.kind,
       name: row.name,
@@ -6706,12 +6734,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * are not its to carry: they go by themselves ({@link marked}). With
      * `body.pins`, a comment's Try again after a delivery no one took: those
      * comments go now ({@link retry}), and the page's Send time stands. A
-     * Send with nothing new is refused.
+     * Send with nothing new is refused. Each Send says in the journal which
+     * `route` took it and which control (`body.control`) it came from
+     * ({@link saySend}).
      */
     send: async (
       instanceId: string,
       id: string,
-      body: SendBody
+      body: SendBody,
+      route: string
     ): Promise<ArtifactChoices> => {
       const instance = sessionOf(instanceId);
       const row = own(instance, id);
@@ -6721,7 +6752,30 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         await retry(row, new Set(body.pins));
         return { choices: state, ...metaOf(doc) };
       }
-      const { picked, note } = sendOwes(doc, state, body);
+      let owes: ReturnType<typeof sendOwes>;
+      try {
+        owes = sendOwes(doc, state, body);
+      } catch (error) {
+        saySend(
+          row,
+          body,
+          route,
+          artifactToolWords.sendRefused(
+            error instanceof Error ? error.message : String(error)
+          )
+        );
+        throw error;
+      }
+      const { picked, note } = owes;
+      saySend(
+        row,
+        body,
+        route,
+        artifactToolWords.sendCarried(
+          unsentChoices(state, metaOf(doc).sentAt),
+          note !== null
+        )
+      );
       if (picked) {
         await deps.sending(instance, row, state);
       }

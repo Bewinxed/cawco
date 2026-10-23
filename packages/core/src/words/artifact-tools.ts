@@ -58,6 +58,21 @@ export const artifactToolWords = {
     retry: boolean
   ) =>
     `[artifacts] ${id}: ${carried} delivered${retry ? " on the person's Try again" : ""}, for session ${session}`,
+  /**
+   * The hub's log: one page Send, the control its sender named and the
+   * route that took it, then what it carried or why it was refused (the
+   * owner: "make every page send log one line naming its route and
+   * control").
+   */
+  pageSent: (id: string, control: string, route: string, outcome: string) =>
+    `[artifacts] ${id}: Send by ${control} through ${route}: ${outcome}`,
+  /** A page Send's control, when its sender named none. */
+  sendUnnamed: "a control it didn't name",
+  /** What a page Send carried, in its log line. */
+  sendCarried: (changes: number, note: boolean) =>
+    `${changes} choice change(s) since the last Send${note ? ", with a note" : ""}`,
+  /** A page Send refused, in its log line. */
+  sendRefused: (why: string) => `refused, ${why}`,
   /** The hub's log: the person's marks on an artifact no session holds. */
   marksUnheld: (id: string) =>
     `[artifacts] ${id}: the person's marks found no session holding it, and stay owed`,

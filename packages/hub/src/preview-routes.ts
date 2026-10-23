@@ -131,7 +131,7 @@ export const previewRoutes = (deps: {
           return refused(error);
         }
       })
-      // The pane's Send (picks, comments and ink, with the note), as the page's own send would.
+      // The dashboard's Send of a page's picks (the panel head's, a Needs you row's: `control` names it), as the page's own send would.
       .post(
         "/api/instances/:id/artifacts/:artifact/send",
         ({ params, request }) =>

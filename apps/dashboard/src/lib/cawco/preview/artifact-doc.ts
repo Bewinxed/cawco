@@ -8,6 +8,7 @@ import {
   replyToPin,
   resolvePin,
   type Said,
+  type SendBody,
   seeChanges,
   seenOf,
   seePin,
@@ -160,7 +161,7 @@ export const artifactSyncPath = (artifactId: string): string =>
 async function postSend(
   instanceId: string,
   artifactId: string,
-  body: { pins?: string[] },
+  body: Pick<SendBody, "control" | "pins">,
   again: string
 ): Promise<void> {
   const response = await fetch(
@@ -176,12 +177,18 @@ async function postSend(
   }
 }
 
-/** The person's Send (the head's, a Needs you row's): the page's picks go to the session. Their comments go by themselves. */
+/** The person's Send (the head's, a Needs you row's, named by `control`): the page's picks go to the session. Their comments go by themselves. */
 export const sendArtifact = (
   instanceId: string,
-  artifactId: string
+  artifactId: string,
+  control: "needs-you" | "panel-head" | "panel-more"
 ): Promise<void> =>
-  postSend(instanceId, artifactId, {}, "so nothing was sent. Send again.");
+  postSend(
+    instanceId,
+    artifactId,
+    { control },
+    "so nothing was sent. Send again."
+  );
 
 /** A comment's Try again, after a delivery no one took: it goes to the session now. */
 export const retryComment = (

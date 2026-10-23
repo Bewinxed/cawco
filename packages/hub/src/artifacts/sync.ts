@@ -29,8 +29,10 @@ import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
   COMMENT_LIMITS,
   goneProblem,
+  isSendControl,
   type MarkPictures,
   pinsProblem,
+  SEND_CONTROLS,
   type SendBody,
   seenProblem,
 } from "@cawco/core/comments";
@@ -403,7 +405,7 @@ const MARK_ID_MAX = 100;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
 
-const SEND_SHAPE = "Send takes JSON: { text?, pins? }.";
+const SEND_SHAPE = "Send takes JSON: { text?, pins?, control? }.";
 
 const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
 
@@ -421,6 +423,10 @@ const sendBodyProblem = (body: unknown): string | null => {
     !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
   ) {
     return `text is a string of at most ${CHOICE_LIMITS.note} characters.`;
+  }
+  const { control } = body;
+  if (control !== undefined && !isSendControl(control)) {
+    return `control is one of ${Object.keys(SEND_CONTROLS).join(", ")}.`;
   }
   const { pins } = body;
   if (
@@ -524,6 +530,13 @@ export const artifactPictures =
     }
   };
 
+/** A checked send's body as the service takes it: its text trimmed, and only the fields it holds. */
+const sentBody = ({ text, pins, control }: SendBody): SendBody => ({
+  ...(text?.trim() ? { text: text.trim() } : {}),
+  ...(pins ? { pins } : {}),
+  ...(control ? { control } : {}),
+});
+
 /**
  * The person sends their picks (`cawco.send`): what the send applies first
  * (a project's setup page: its fleet choices and place), then the session
@@ -535,7 +548,8 @@ export const artifactSend =
     send: (
       instanceId: string,
       artifactId: string,
-      body: SendBody
+      body: SendBody,
+      route: string
     ) => Promise<ArtifactChoices>
   ) =>
   async (
@@ -566,13 +580,14 @@ export const artifactSend =
     if (problem) {
       return new Response(problem, { status: 400 });
     }
-    const { text, pins } = body as SendBody;
     try {
       return Response.json(
-        await send(instanceId, artifactId, {
-          ...(text?.trim() ? { text: text.trim() } : {}),
-          ...(pins ? { pins } : {}),
-        })
+        await send(
+          instanceId,
+          artifactId,
+          sentBody(body as SendBody),
+          `POST ${new URL(request.url).pathname}`
+        )
       );
     } catch (error) {
       if (error instanceof ArtifactRefusal) {

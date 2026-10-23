@@ -82,7 +82,8 @@ export interface Bridge {
     event: "picks",
     listener: (picks: Record<string, ChoiceEntry>) => void
   ) => () => void;
-  send: (text?: string) => Promise<void>;
+  /** `control` names what the person pressed: the hub's journal says it. */
+  send: (text?: string, control?: "page-send" | "page-key") => Promise<void>;
   set: (key: string, value: unknown) => Promise<void>;
 }
 

@@ -2,12 +2,13 @@
  * The pick: a press on an option (`data-option`) inside a choice
  * (`data-cawco-choice`) is heard at the window, in capture, before anything
  * on the page hears it, and written at once: a one-pick choice takes the
- * option, and a press on the option it holds keeps it (a radio's pick is
- * never let go: WAI-ARIA APG, Radio Group, "checks the focused radio button
- * if it is not already checked"), so nothing is written; a several-pick
- * choice (`data-cawco-multiple`) toggles it among its picks. The overlay runs it
- * against the page's doc (page.ts); the probe kit runs this same module
- * against its stand-in bridge (probe-kit decision-embeds.ts).
+ * option, and a press on the option it holds lets it go (the choice is
+ * written with no option: cleared); a several-pick choice
+ * (`data-cawco-multiple`) toggles it among its picks. A press that leaves
+ * words selected in the choice (a drag over an option's line, a double or
+ * triple click on its words) is the person reading them, never a pick. The
+ * overlay runs it against the page's doc (page.ts); the probe kit runs this
+ * same module against its stand-in bridge (probe-kit decision-embeds.ts).
  */
 
 /** The choice an option belongs to. */
@@ -25,8 +26,38 @@ export interface PickWiring {
   refused: () => void;
 }
 
+/** The words selected in `at`'s document, and the range they stand in; none when nothing is. */
+function selected(at: Window): { range: Range; words: string } | null {
+  const selection = at.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  const words = range.toString().trim();
+  return words ? { range, words } : null;
+}
+
 /** Hears every press on an option in `at`'s document and writes its pick. */
 export function listenForPicks(at: Window, wiring: PickWiring): void {
+  /** The words selected as the press began: a selection the press made is new. */
+  let before = "";
+  const began = () => {
+    before = selected(at)?.words ?? "";
+  };
+  // A key's press (Space, a digit) begins with its keydown: it selects nothing.
+  for (const type of ["pointerdown", "keydown"] as const) {
+    at.addEventListener(type, began, { capture: true, passive: true });
+  }
+  /** Whether the press that ended selected words inside `holder`: a read. */
+  const readingIn = (holder: Element) => {
+    const now = selected(at);
+    return (
+      !!now &&
+      now.words !== before &&
+      (holder.contains(now.range.startContainer) ||
+        holder.contains(now.range.endContainer))
+    );
+  };
   at.addEventListener(
     "click",
     (event) => {
@@ -40,19 +71,20 @@ export function listenForPicks(at: Window, wiring: PickWiring): void {
       if (!(holder && choice && value)) {
         return;
       }
-      const current = wiring.picked(choice);
-      if (holder.hasAttribute("data-cawco-multiple")) {
-        wiring
-          .choose(
-            choice,
-            current.includes(value)
-              ? current.filter((picked) => picked !== value)
-              : [...current, value]
-          )
-          .catch(wiring.refused);
-      } else if (!current.includes(value)) {
-        wiring.choose(choice, value).catch(wiring.refused);
+      if (readingIn(holder)) {
+        event.preventDefault();
+        return;
       }
+      const current = wiring.picked(choice);
+      let next: string[] | string | null;
+      if (holder.hasAttribute("data-cawco-multiple")) {
+        next = current.includes(value)
+          ? current.filter((picked) => picked !== value)
+          : [...current, value];
+      } else {
+        next = current.includes(value) ? null : value;
+      }
+      wiring.choose(choice, next).catch(wiring.refused);
     },
     true
   );

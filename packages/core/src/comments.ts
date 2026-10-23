@@ -127,15 +127,40 @@ export interface MarkPictures {
 
 /**
  * What a Send carries beside the doc: the person's note (the page's
- * `cawco.send(text)`, the Decisions tab's composer) with their picks; or,
+ * `cawco.send(text)`) with their picks, and the control pressed; or,
  * for a comment's Try again after a delivery no one took, that comment
  * alone by its pin's id. The person's comments are never a Send's: they go
  * by themselves.
  */
 export interface SendBody {
+  /** The control the person pressed, as the sender names it: the journal's line says it. */
+  control?: SendControl;
   pins?: string[];
   text?: string;
 }
+
+/**
+ * The controls that send a page, each as the journal names it: the page's
+ * own foot Send and its ⌘/Ctrl+↵, the app's Send picks, the panel head's
+ * Send and its More entry, a Needs you row's Send, and the Decisions tab's
+ * I'm done picking. The owner, after a Send no one could trace: "make every
+ * page send log one line naming its route and control".
+ */
+export const SEND_CONTROLS = {
+  "page-send": "the page's Send",
+  "page-key": "the page's ⌘/Ctrl+Enter",
+  "app-send": "the app's Send picks",
+  "panel-head": "the panel head's Send",
+  "panel-more": "the panel's More › Send",
+  "needs-you": "a Needs you row's Send",
+  "decisions-done": "the Decisions tab's I'm done picking",
+} as const;
+
+export type SendControl = keyof typeof SEND_CONTROLS;
+
+/** Whether `value` names a control that sends a page. */
+export const isSendControl = (value: unknown): value is SendControl =>
+  typeof value === "string" && Object.hasOwn(SEND_CONTROLS, value);
 
 /**
  * What a page's mark stands on: the element, by where it is written, its

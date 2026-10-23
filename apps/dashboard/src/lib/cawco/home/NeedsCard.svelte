@@ -404,7 +404,7 @@
     sendingArtifact = true;
     sendRefused = null;
     try {
-      await sendArtifact(item.instanceId, item.artifactId);
+      await sendArtifact(item.instanceId, item.artifactId, "needs-you");
     } catch (error) {
       sendRefused = failureWords(error);
     } finally {

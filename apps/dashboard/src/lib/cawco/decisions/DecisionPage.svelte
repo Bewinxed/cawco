@@ -5,8 +5,10 @@
    * and its figure (flown from the tile), its state pill. Under it, while it
    * is picked on, the page itself, live (PageFrame); once decided, its
    * record: the cards as they were settled (RecordCard), on the page's own
-   * grid. At its foot, one docked composer: a note for the session (Send)
-   * and the page's one coral act, the next step: I'm done picking, then
+   * grid. At its foot, one docked composer: a note for the session (its
+   * send says the words to the session and never sends the page's picks:
+   * talk is never a Send) and the page's one coral act, the next step: I'm
+   * done picking, then
    * Make tasks, then none. A refusal stays the page as it was and says why
    * in the composer's line.
    */

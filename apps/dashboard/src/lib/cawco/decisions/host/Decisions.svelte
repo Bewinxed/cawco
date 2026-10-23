@@ -237,11 +237,11 @@
       !event.defaultPrevented
     ) {
       event.preventDefault();
-      send();
+      send("page-key");
     }
   }
 
-  async function send() {
+  async function send(control: "page-send" | "page-key") {
     const cawco = bridge();
     if (!cawco || sending) {
       return;
@@ -249,7 +249,7 @@
     sending = true;
     const going = standing;
     try {
-      await cawco.send();
+      await cawco.send(undefined, control);
       sentPicks = going;
     } catch (error) {
       console.error("[decision-page] send failed:", error);
@@ -341,7 +341,7 @@
         aria-keyshortcuts="Meta+Enter Control+Enter"
         data-send
         disabled={!bridge()}
-        onclick={send}
+        onclick={() => send("page-send")}
         pending={sending}
         size={coarse.current ? "lg" : "default"}
         variant={opened.size > 0 ? "outline" : "default"}
