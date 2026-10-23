@@ -1803,22 +1803,23 @@ function syncSashes() {
   if (stackedGraphs()) set($("sashS"), splitGraphs()[0].offsetHeight, splitFloor(), splitCeil());
 }
 function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); if (tl) layoutDock(); sizeDockRoom(); if (pop) placePop(); }
-// ---- The resize handle (round 28): iPadOS 26's window handle, one path per handle ----
+// ---- The resize handle (round 29): iPadOS 26's window handle, one path, one shape through every state ----
 // One filled ribbon round a centreline: run-out A (GRIP_RUN points, from its tip in to the body), the body
 // (GRIP_BODY + 1 points), run-out B (GRIP_RUN points, out to its tip). Every frame is drawn exactly from one
-// number, its progress p (0 at rest, 1 held), so each frame is a true member of the family.
+// number, its progress p (0 at rest, H = --c-grip-hover under the pointer, 1 held), so each frame is a true
+// member of the family and every state is a point on one path between rest and held.
 //   At rest (p = 0) the run-outs have no length: the body alone with round caps, Apple's arc, inset.
-//   Held (p = 1) the stroke is the border itself: the border's own width, on the border's line, round the
-//   border's curve and on along both edges, its ink (the edge ink) fading to nothing along the run through one
-//   radial gradient centred on the corner, so both edges fade alike. One line, one width all the way round.
-//   Between, the stroke narrows from Apple's to the border's as it moves out onto the border, and each run-out
-//   bends onto the border, the bend shortening to nothing as p reaches 1. At every p the stroke has one width
-//   from tip to tip, so nothing kinks where the corner's curve meets a straight run.
-// Under it, the hover pad: the rest stroke's own shape widened to fill the gap to the border (the house hover
-// fill, style.css), so a pointer resting on a grip lights an area a person sees.
-// The clock: CSS transitions one registered number, --grip-p, out over --dur-reveal and back over --dur-exit;
-// paintGrip draws the path's `d` attribute and its gradient from it (Safari and iPadOS draw nothing from the
-// `d` CSS property).
+//   From 0 to H the run-outs grow (their length runs with p the whole way) while the body stays where it
+//   stands, Apple's stroke and inset: the arc's ends reach on round the corner and bend onto each edge, fading
+//   out. Under the pointer that is all that changes.
+//   From H to 1 the stroke moves out onto the border and narrows from Apple's width to the border's, each
+//   run-out's bend onto the border shortening with it (one radius under the pointer, nothing held), and the
+//   run-outs carry on to their full length. Held (p = 1) the stroke is the border itself: the border's own
+//   width, on the border's line, round the border's curve and on along both edges, fading to nothing along the
+//   run through one radial gradient centred on the corner, so both edges fade alike.
+//   At every p the stroke has one width from tip to tip, so nothing kinks where the corner's curve meets a run.
+// The clock: CSS transitions one registered number, --grip-p, on the svg (style.css); paintGrip draws the
+// path's `d` attribute and its gradient from it (Safari and iPadOS draw nothing from the `d` CSS property).
 const GRIP_RUN = 48, GRIP_BODY = 16, GRIP_CAP = 8, GRIP_STOPS = 16;
 function ribbon(C) {
   const A = [], B = [];
@@ -1830,16 +1831,18 @@ function ribbon(C) {
 // The measured handle (style.css, --c-grip-*), scaled to the panel's radius R: concentric with the corner, its
 // centreline d in from the outer edge, stroke w, its rest length `len` (fine pointers: the measured 65.6° of
 // the circle; a finger: Apple's own length, the quarter circle and a straight leg on along each edge). Held,
-// each run-out reaches L from the body's end; B is its bend onto the border at the start of the drag; bw the
-// border's width.
+// each run-out reaches L from the body's end; B is its bend onto the border under the pointer and at the start of the drag; bw the
+// border's width; H the progress a pointer takes it to (--c-grip-hover).
 function gripGeo(tool) {
   const R = px("--radius-panel"), d = px("--c-grip-inset"), w = px("--c-grip-stroke"), len = px("--c-grip-len"), L = px("--c-grip-run"), B = px("--c-grip-bend"), r = R - d;
-  const sweep = Math.min(len / r, Math.PI / 2), legs = Math.max(0, (len - r * sweep) / 2);
-  return { R, d, w, len, L, B, sweep, legs, bw: parseFloat(getComputedStyle(tool).borderLeftWidth) };
+  const sweep = Math.min(len / r, Math.PI / 2), legs = Math.max(0, (len - r * sweep) / 2), H = parseFloat(getComputedStyle(rootEl).getPropertyValue("--c-grip-hover"));
+  return { R, d, w, len, L, B, H, sweep, legs, bw: parseFloat(getComputedStyle(tool).borderLeftWidth) };
 }
 const smooth = (u) => { const t = Math.min(1, Math.max(0, u)); return t * t * (3 - 2 * t); };
-// The stroke's one width at progress p: Apple's at rest, the border's held.
-const gripW = (g, p) => g.w + (g.bw - g.w) * p;
+// How far the stroke has moved out onto the border at progress p: nothing up to H, all of it at 1.
+const gripOut = (g, p) => Math.min(1, Math.max(0, (p - g.H) / (1 - g.H)));
+// The stroke's one width at progress p: Apple's at rest and under the pointer, the border's held.
+const gripW = (g, p) => g.w + (g.bw - g.w) * gripOut(g, p);
 // A straight run-out's place across its edge, s along it from where it straightens: from the body's inset di
 // it bends over `bend` onto the border's line (its outer edge on the border's outer edge).
 const gripAcross = (wp, s, di, bend) => di + (wp / 2 - di) * smooth(s / bend);
@@ -1849,7 +1852,7 @@ function along(at, s, ds = 0.01) { const a = at(Math.max(0, s - ds)), b = at(s +
 // The corner's circle is centred on (R, −R); t = π points at the width edge, π/2 at the foot. Run-out A goes up
 // the width edge; B is its mirror about the diagonal, along the foot.
 function cornerShape(g, p) {
-  const { R, d, L, B, sweep, legs } = g, wp = gripW(g, p), di = d + (wp / 2 - d) * p, ri = R - di, tA = (3 * Math.PI) / 4 + sweep / 2, sc = (ri * (Math.PI / 2 - sweep)) / 2, bend = B * (1 - p) + 0.5;
+  const { R, d, L, B, sweep, legs } = g, m = gripOut(g, p), wp = gripW(g, p), di = d + (wp / 2 - d) * m, ri = R - di, tA = (3 * Math.PI) / 4 + sweep / 2, sc = (ri * (Math.PI / 2 - sweep)) / 2, bend = B * (1 - m) + 0.5;
   // Where A stands s along it from the body's end: round the circle to the edge, then up it.
   const at = (s) => (s <= sc ? [R + ri * Math.cos(tA + s / ri), -R + ri * Math.sin(tA + s / ri)] : [gripAcross(wp, s - sc, di, bend), -R - (s - sc)]);
   const a = legs + p * (L - legs), C = [];
@@ -1865,7 +1868,7 @@ function cornerShape(g, p) {
 // The dock's: the same stroke straightened into a capsule `len` long, d down from its top edge and centred on
 // it; held, it is the top border, running out along it either way the same way.
 function edgeShape(g, p) {
-  const { d, len, L, B } = g, half = len / 2, wp = gripW(g, p), di = d + (wp / 2 - d) * p, bend = B * (1 - p) + 0.5;
+  const { d, len, L, B } = g, half = len / 2, m = gripOut(g, p), wp = gripW(g, p), di = d + (wp / 2 - d) * m, bend = B * (1 - m) + 0.5;
   const at = (s) => [half + s, gripAcross(wp, s, di, bend)];
   const a = p * L, C = [];
   for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x: -x, y, tx, ty: -ty, w: wp }); }
@@ -1878,9 +1881,6 @@ function edgeShape(g, p) {
 // centreline points from index `from` to the mirror index, the rest mark), and at least `floor` (the corner's
 // curve; the capsule's half-length).
 function gripSolid(C, from, floor, wp) { let m = floor; for (let i = from; i < C.length - from; i++) m = Math.max(m, Math.hypot(C[i].x, C[i].y) + wp / 2); return m; }
-// The hover pad: the rest stroke's shape, as wide as the gap it stands in (from the border's inner edge to as
-// far in again past its centreline), round-capped.
-const padShape = (shape, g) => shape({ ...g, w: 2 * (g.d - g.bw) }, 0).pts;
 // Each handle's path: its shape, its geometry, its gradient and the progress last painted.
 const gripShapes = new Map();
 function paintGrip(path) {
@@ -1903,7 +1903,7 @@ function paintGrips() { let moved = false; for (const [path, s] of gripShapes) {
 let gripLoop = 0;
 function runGrips() {
   if (gripLoop) return;
-  const tick = () => { const moved = paintGrips(), running = [...gripShapes.keys()].some((p) => p.getAnimations().some((a) => a.transitionProperty === "--grip-p" && a.playState === "running")); gripLoop = running || moved ? requestAnimationFrame(tick) : 0; };
+  const tick = () => { const moved = paintGrips(), running = [...gripShapes.keys()].some((p) => p.ownerSVGElement.getAnimations().some((a) => a.transitionProperty === "--grip-p" && a.playState === "running")); gripLoop = running || moved ? requestAnimationFrame(tick) : 0; };
   gripLoop = requestAnimationFrame(tick);
 }
 // What moves the progress: its transition starting (a drag, a let-go), a sash's focus, a key or a press.
@@ -1914,16 +1914,17 @@ function drawGrips() {
   c.setAttribute("width", S); c.setAttribute("height", S); c.setAttribute("viewBox", "0 " + -S + " " + S + " " + S);
   const g = $("gripD"), gd = gripGeo($("dock")), W = 2 * Math.ceil(gd.len / 2 + gd.L + gd.w), H = Math.ceil(2 * gd.d);
   g.setAttribute("width", W); g.setAttribute("height", H); g.setAttribute("viewBox", -W / 2 + " 0 " + W + " " + H);
-  const r3 = (n) => Math.round(n * 1000) / 1000;
   for (const [svg, shape, geo] of [[c, cornerShape, gc], [g, edgeShape, gd]]) {
     const grad = svg.querySelector("radialGradient");
     if (!grad.children.length) for (let i = 0; i <= GRIP_STOPS; i++) grad.append(document.createElementNS("http://www.w3.org/2000/svg", "stop"));
-    svg.querySelector(".handle-pad").setAttribute("d", "M " + padShape(shape, geo).map(([x, y]) => r3(x) + " " + r3(y)).join(" L ") + " Z");
     gripShapes.set(svg.querySelector(".handle-ink"), { shape, g: geo, grad, p: null });
   }
   paintGrips();
 }
 drawGrips();
+// A drag's let-go: the handle goes back from the border over --dur-exit (style.css, data-released), to the
+// pointer's state wherever the pointer stands.
+const letGo = (owner) => { owner.dataset.released = ""; clearTimeout(owner.letGoTimer); owner.letGoTimer = setTimeout(() => delete owner.dataset.released, ms("--dur-exit")); };
 for (const sash of document.querySelectorAll(".sash")) {
   const edge = sash.dataset.edge, owner = sash.closest(".tool");
   sash.onpointerenter = () => { owner.dataset.edge = edge; };
@@ -1932,9 +1933,10 @@ for (const sash of document.querySelectorAll(".sash")) {
     e.preventDefault();
     const x0 = e.clientX, y0 = e.clientY, w0 = panel.offsetWidth, h0 = graphOf(tab).offsetHeight, d0 = $("dock").offsetHeight, s0 = splitGraphs()[0].offsetHeight;
     sash.setPointerCapture(e.pointerId);
+    clearTimeout(owner.letGoTimer); delete owner.dataset.released;
     owner.dataset.edge = edge; owner.dataset.resizing = edge; rootEl.dataset.resizing = edge;
     sash.onpointermove = (ev) => { if (edge === "d") setDockH(d0 - (ev.clientY - y0)); else if (edge === "s") setSplit(s0 + ev.clientY - y0); else setSize(edge.includes("w") ? w0 + x0 - ev.clientX : null, edge.includes("h") ? h0 + ev.clientY - y0 : null); };
-    sash.onpointerup = sash.onpointercancel = () => { sash.onpointermove = null; delete owner.dataset.resizing; delete rootEl.dataset.resizing; relayoutAfterResize(); };
+    sash.onpointerup = sash.onpointercancel = () => { sash.onpointermove = null; delete owner.dataset.resizing; delete rootEl.dataset.resizing; letGo(owner); relayoutAfterResize(); };
   };
   // The APG window splitter: arrows move the edge 8px, 32px with Shift; Home and End go to the floor and ceiling.
   let keyTimer = null;
@@ -2081,7 +2083,7 @@ if (demoOf) {
       else { dock0 ??= d0(); $("dock").dataset.resizing = rootEl.dataset.resizing = "d"; tween(800, (e) => setDockH(dock0 + 40 * e)); }
     }],
     // Let go with the pointer still on the grip: the highlight runs back into the handle, still bright.
-    ["release", 1400, () => { delete owner.dataset.resizing; delete rootEl.dataset.resizing; }],
+    ["release", 1400, () => { delete owner.dataset.resizing; delete rootEl.dataset.resizing; letGo(owner); }],
     // The pointer leaves; the handle settles to its rest ink as the size goes back for the next loop.
     ["reset", 700, () => { delete owner.dataset.pointing; if (which === "corner") tween(500, (e) => setSize(w0 + 40 * (1 - e), h0 + 30 * (1 - e))); else tween(500, (e) => setDockH(dock0 + 40 * (1 - e))); }],
   ];

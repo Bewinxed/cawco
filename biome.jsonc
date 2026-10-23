@@ -15,6 +15,8 @@
     "maxSize": 2097152,
     "includes": [
       "!mocks",
+      // Design mockups: hand-built prototype pages on review branches (built page.html, inlined vendor code).
+      "!.mockups",
       "!.design-foundations",
       "!.mcp.json",
       "!packages/jsonl-parser",

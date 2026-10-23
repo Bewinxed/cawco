@@ -1,6 +1,7 @@
 # `bun fmt` (scripts/fmt.ts) leaves these as they are: what biome.jsonc's and
 # site/biome.json's `files.includes` left out, each for the reason given there.
 mocks/
+.mockups/
 .design-foundations/
 .mcp.json
 packages/jsonl-parser/

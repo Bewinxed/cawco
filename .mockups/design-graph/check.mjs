@@ -516,7 +516,7 @@ const compactViews = [
 ];
 
 const browser = await chromium.launch({ executablePath: CHROME });
-// CHECK_ONLY=views,classes,reduced,twox,engines,grep runs those parts alone (a whole run is the proof).
+// CHECK_ONLY=views,classes,reduced,twox,engines,morph,grep runs those parts alone (a whole run is the proof).
 const only = (part) => !process.env.CHECK_ONLY || process.env.CHECK_ONLY.split(",").includes(part);
 // CHECK_VIEWS=1440-light,1180-touch runs those views alone.
 const pick = (v) => !process.env.CHECK_VIEWS || process.env.CHECK_VIEWS.split(",").includes(v.id);
@@ -525,6 +525,7 @@ if (only("classes")) for (const view of compactViews.filter(pick)) await runClas
 if (only("reduced")) await runReduced();
 if (only("twox")) { await runTwoX("light"); await runTwoX("dark"); await runRestInk("light"); await runRestInk("dark"); }
 if (only("engines")) for (const engine of ["webkit", "firefox"]) for (const scheme of ["light", "dark"]) await runEngine(engine, scheme);
+if (only("morph")) for (const engine of (process.env.MORPH_ENGINES || "chromium,webkit,firefox").split(",")) for (const scheme of ["light", "dark"]) await runMorph(engine, scheme);
 if (only("grep")) grepCheck();
 await browser.close();
 console.log("\n" + passes + " passed, " + fails + " failed");
@@ -805,27 +806,29 @@ async function runView(view) {
     const svg = document.getElementById(id), path = svg.querySelector(".handle-ink"), T = svg.closest(".tool"), q = (n) => Math.round(n * 100) / 100;
     for (let i = 0; i < 20 && !window.__held; i++) await new Promise((r) => requestAnimationFrame(r));
     if (window.__unarm) window.__unarm();
-    const a = window.__held || path.getAnimations().find((x) => x.transitionProperty === "--grip-p");
+    const a = window.__held || svg.getAnimations().find((x) => x.transitionProperty === "--grip-p");
     window.__held = null;
     if (!a) return null;
     a.pause();
     const tm = a.effect.getTiming(), out = [];
     for (const f of [0, 0.25, 0.5, 0.75, 1]) { a.currentTime = tm.delay + f * tm.duration; const b = T.getBoundingClientRect(), g = __k.grip(svg), p = __k.gripProfile(svg); out.push({ f, up: q(b.bottom - g.box.top), right: q(g.box.right - b.left), half: q((g.box.right - g.box.left) / 2), ends: [q(g.w0), q(g.wN)], wMax: q(g.wMax), points: g.points, p }); }
     a.play();
-    return { delay: tm.delay, dur: tm.duration, easing: tm.easing, clocks: path.getAnimations().length, out };
+    return { delay: tm.delay, dur: tm.duration, easing: tm.easing, clocks: svg.getAnimations().length + path.getAnimations().length, out };
   }, id);
-  const tok = await ev(() => { const s = getComputedStyle(document.documentElement), t = (n) => s.getPropertyValue(n).trim(); return { reveal: parseFloat(t("--dur-reveal")), exit: parseFloat(t("--dur-exit")), control: parseFloat(t("--dur-control")), easeOut: t("--ease-out") }; });
+  const tok = await ev(() => { const s = getComputedStyle(document.documentElement), t = (n) => s.getPropertyValue(n).trim(); return { reveal: parseFloat(t("--dur-reveal")), exit: parseFloat(t("--dur-exit")), control: parseFloat(t("--dur-control")), easeOut: t("--ease-out"), easeInOut: t("--ease-in-out") }; });
   const runTo = want.runTo;
   const rest0 = reach(g0);
-  // Pointing at an edge or the corner: the resize cursor, and the handle brightens to the strong ink.
+  // Pointing at an edge or the corner (round 29): the resize cursor, and the handle grows its ends into the start
+  // of the run, the arc where it stood at rest and Apple's width, its ink up to the strong ink.
   if (!touch && !stackPanel) for (const [sashId, cur] of [["sashW", "ew-resize"], ["sashH", "ns-resize"], ["sashC", "nesw-resize"]]) {
     if (!(await page.locator("#" + sashId).isVisible())) continue;
     const c = await center("#" + sashId);
     await page.mouse.move(c.x, c.y); await settle(tok.control + 200);
-    const at = await ev(([id, x, y]) => ({ hover: document.getElementById(id).matches(":hover"), cursor: getComputedStyle(document.elementFromPoint(x, y)).cursor, moving: document.querySelector("#gripC .handle-ink").getAnimations().filter((a) => a.playState === "running").length }), [sashId, c.x, c.y]);
+    const at = await ev(([id, x, y]) => ({ hover: document.getElementById(id).matches(":hover"), cursor: getComputedStyle(document.elementFromPoint(x, y)).cursor, moving: document.getElementById("gripC").getAnimations().filter((a) => a.playState === "running").length }), [sashId, c.x, c.y]);
     const g = await gripAt("gripC");
     if (sashId === "sashC") await shot("corner-hover", await cornerClip());
-    ok(V, "3 pointing at " + sashId + ": the " + cur + " cursor, and the handle brightens from its rest ink to the strong ink, nothing still moving, its shape the rest arc", at.hover && at.cursor === cur && at.moving === 0 && inkIs(g.fill, g.strong) && !inkIs(g.rest, g.strong) && Math.abs(reach(g).up - rest0.up) <= 0.1, JSON.stringify({ at, fill: g.fill.slice(0, 3), up: reach(g).up }));
+    ok(V, "3 pointing at " + sashId + ": the " + cur + " cursor, and the handle's ends grow into the start of the run (up the edge and along the foot alike, past the rest arc's " + rest0.up + "px), the arc where it stood at Apple's width, its ink from the rest ink to the strong ink, nothing still moving", at.hover && at.cursor === cur && at.moving === 0 && inkIs(g.fill, g.strong) && !inkIs(g.rest, g.strong) && reach(g).up > rest0.up + 4 && Math.abs(reach(g).up - reach(g).right) <= 0.1 && Math.abs(g.wMid - want.w) <= 0.05 && Math.abs(g.r - g0.r) <= 0.1, JSON.stringify({ at, fill: g.fill.slice(0, 3), up: reach(g).up, right: reach(g).right, w: r2(g.wMid), r: r2(g.r) }));
+    { const hp = await profile("gripC"); ok(V, "3 pointing at " + sashId + ", the line read end to end: one opaque fill, mirrored, never wider than the arc, one line with the border (no second line beside it, no gap of 2px)", lineOK(hp, want) && seamOK(hp, want), JSON.stringify(hp)); }
     await page.mouse.move(5, 5); await settle(tok.control + 100);
   }
   // The drag (pin 26): from the corner, the arc's stroke runs out along both edges, thinning to nothing at its
@@ -833,35 +836,37 @@ async function runView(view) {
   if (G.sashC && !stackPanel) {
     const c = await center("#sashC");
     await page.mouse.move(c.x, c.y); await settle(300);
-    await arm("#gripC .handle-ink", "--grip-p");
+    const pre = reach(await gripAt("gripC"));
+    await arm("#gripC", "--grip-p");
     await page.mouse.down(); await page.mouse.move(c.x - 12, c.y + 9, { steps: 2 });
     const s = await gripScrub("gripC");
     const mono = s && s.out.every((o, i) => !i || (o.up >= s.out[i - 1].up - 0.01 && o.right >= s.out[i - 1].right - 0.01));
-    ok(V, "3 corner drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-out); the arc's stroke runs out up the width edge and along the foot alike to " + r2(runTo) + "px from the corner, growing at every step, its tips the hairline's width with their ink gone (the fade reaching nothing at each tip), never wider than the arc", !!s && s.clocks <= 2 && s.dur === tok.reveal && s.delay === 0 && s.easing === tok.easeOut && mono && Math.abs(s.out[0].up - rest0.up) <= 0.5 && Math.abs(s.out[4].up - runTo) <= 1 && Math.abs(s.out[4].right - runTo) <= 1 && s.out[4].ends.every((w) => w <= want.bw + 0.01) && s.out[4].p.fadeEnd <= 1 && s.out.every((o) => o.wMax <= want.w + 0.05 && o.points === g0.points && Math.abs(o.up - o.right) <= 0.1) && s.out[2].up > s.out[0].up + 20, JSON.stringify(s && s.out.map((o) => [o.f, o.up, o.right, o.ends, o.wMax])) + " " + JSON.stringify(s && { dur: s.dur, easing: s.easing, clocks: s.clocks }));
+    ok(V, "3 corner drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-in-out, the stroke moving onto the border); from where the press found it (" + pre.up + "px) the stroke runs out up the width edge and along the foot alike to " + r2(runTo) + "px from the corner, growing at every step, its tips the hairline's width with their ink gone (the fade reaching nothing at each tip), never wider than the arc", !!s && s.clocks === 1 && s.dur === tok.reveal && s.delay === 0 && s.easing === tok.easeInOut && mono && Math.abs(s.out[0].up - pre.up) <= 0.5 && Math.abs(s.out[4].up - runTo) <= 1 && Math.abs(s.out[4].right - runTo) <= 1 && s.out[4].ends.every((w) => w <= want.bw + 0.01) && s.out[4].p.fadeEnd <= 1 && s.out.every((o) => o.wMax <= want.w + 0.05 && o.points === g0.points && Math.abs(o.up - o.right) <= 0.1) && s.out[2].up > s.out[0].up + 10, JSON.stringify(s && s.out.map((o) => [o.f, o.up, o.right, o.ends, o.wMax])) + " " + JSON.stringify(s && { dur: s.dur, easing: s.easing, clocks: s.clocks }));
     ok(V, "3 corner drag, the line read end to end at 0, ¼, ½, ¾ and 1: one opaque fill; mirrored about the diagonal in width and place; the width never growing from the arc out to either tip; no step in width, place or heading across the corner", !!s && s.out.every((o) => lineOK(o.p, want)), JSON.stringify(s && s.out.map((o) => ({ f: o.f, sym: o.p.sym, place: o.p.place, grow: o.p.grow, dw: o.p.dw, step: o.p.step, turn: o.p.turn, solid: o.p.solid }))));
     ok(V, "3 corner drag against the border, at 0, ¼, ½, ¾ and 1: one line, never a pair (at most " + r2(want.B) + "px of run-out standing over 0.5px clear of the hairline, no gap of 2px or more, the two together never wider than border + stroke " + r2(1 + want.w) + "px); held, the run " + r2(want.L) + "px (≤ 64), its width over the hairline halved within its first quarter, its tip the hairline itself", !!s && s.out.every((o) => seamOK(o.p, want)) && heldOK(s.out[4].p, want), JSON.stringify(s && s.out.map((o) => ({ f: o.f, run: o.p.run, gap: o.p.gap, parallel: o.p.parallel, span: o.p.span, wide: o.p.wide, tip: o.p.tip }))));
     if (s) console.log("INFO [" + V + "] 3 corner drag, the line's samples [index, in from the width edge, up from the foot, width] at each fraction: " + s.out.map((o) => o.f + ": " + JSON.stringify(o.p.samples)).join(" ; "));
     await settle(tok.reveal + 100);
     const held = await gripAt("gripC"), hr = reach(held);
     await shot("corner-drag", await cornerClip());
-    ok(V, "3 corner held: the whole highlight in the edge ink (--border-contrast), " + r2(runTo) + "px up and along from the corner", held.resizing === "wh" && inkIs(held.fill, held.edge) && Math.abs(hr.up - runTo) <= 1 && Math.abs(hr.right - runTo) <= 1, JSON.stringify({ hr, fill: held.fill.slice(0, 3) }));
-    await arm("#gripC .handle-ink", "--grip-p");
+    ok(V, "3 corner held: the whole highlight in the strong ink, the stroke the pointer lit carried onto the border, " + r2(runTo) + "px up and along from the corner", held.resizing === "wh" && inkIs(held.fill, held.strong) && Math.abs(hr.up - runTo) <= 1 && Math.abs(hr.right - runTo) <= 1, JSON.stringify({ hr, fill: held.fill.slice(0, 3) }));
+    await arm("#gripC", "--grip-p");
     await page.mouse.up();
     const back = await gripScrub("gripC");
     await page.mouse.move(5, 5); await settle(tok.reveal + 200);
     const g1 = await gripAt("gripC");
-    ok(V, "3 corner let go: it runs back into the arc on one clock over --dur-exit (" + tok.exit + "ms), from the highlight to the rest arc, the line whole at every step", !!back && back.dur === tok.exit && Math.abs(back.out[0].up - runTo) <= 1 && Math.abs(back.out[4].up - rest0.up) <= 0.5 && back.out.every((o) => lineOK(o.p, want) && seamOK(o.p, want)) && Math.abs(reach(g1).up - rest0.up) <= 0.5 && inkIs(g1.fill, g1.rest), JSON.stringify(back && back.out.map((o) => ({ f: o.f, up: o.up, right: o.right, sym: o.p.sym, gap: o.p.gap, parallel: o.p.parallel, run: o.p.run, turn: o.p.turn, dw: o.p.dw, step: o.p.step, grow: o.p.grow, place: o.p.place, opacity: o.p.opacity, line: lineOK(o.p, want), seam: seamOK(o.p, want) }))) + " rest " + JSON.stringify({ up: reach(g1).up, rest: rest0.up, fill: g1.fill.slice(0, 3), restInk: g1.rest.slice(0, 3), dur: back && back.dur }));
+    ok(V, "3 corner let go: it runs back on one clock over --dur-exit (" + tok.exit + "ms, --ease-in-out), from the highlight to where the press found it (" + pre.up + "px, the pointer still on the grip), the line whole at every step; the pointer gone, the rest arc in the rest ink", !!back && back.dur === tok.exit && back.easing === tok.easeInOut && Math.abs(back.out[0].up - runTo) <= 1 && Math.abs(back.out[4].up - pre.up) <= 0.5 && back.out.every((o) => lineOK(o.p, want) && seamOK(o.p, want)) && Math.abs(reach(g1).up - rest0.up) <= 0.5 && inkIs(g1.fill, g1.rest), JSON.stringify(back && back.out.map((o) => ({ f: o.f, up: o.up, right: o.right, sym: o.p.sym, gap: o.p.gap, parallel: o.p.parallel, run: o.p.run, turn: o.p.turn, dw: o.p.dw, step: o.p.step, grow: o.p.grow, place: o.p.place, opacity: o.p.opacity, line: lineOK(o.p, want), seam: seamOK(o.p, want) }))) + " rest " + JSON.stringify({ up: reach(g1).up, rest: rest0.up, fill: g1.fill.slice(0, 3), restInk: g1.rest.slice(0, 3), dur: back && back.dur }));
   }
   // The dock's handle does the same along its top edge.
   if (dockOn && (await page.locator("#sashD").isVisible())) {
     const d0 = await gripAt("gripD"), c = await center("#sashD");
     await page.mouse.move(c.x, c.y); await settle(300);
-    if (!touch) { const dh = await gripAt("gripD"); await shot("dock-hover", await dockClip()); ok(V, "3 pointing at the dock's edge: its handle brightens to the strong ink", inkIs(dh.fill, dh.strong), JSON.stringify(dh.fill.slice(0, 3))); }
-    await arm("#gripD .handle-ink", "--grip-p");
+    const dpre = await gripAt("gripD");
+    if (!touch) { await shot("dock-hover", await dockClip()); const hp = await profile("gripD"); ok(V, "3 pointing at the dock's edge: its handle's ends grow either way into the start of the run, the capsule where it stood at Apple's width, in the strong ink, one line with the border", inkIs(dpre.fill, dpre.strong) && reach(dpre).half > reach(d0).half + 4 && Math.abs(reach(dpre).mid) <= 0.5 && Math.abs(dpre.wMid - wantD.w) <= 0.05 && lineOK(hp, wantD) && seamOK(hp, wantD), JSON.stringify({ fill: dpre.fill.slice(0, 3), half: reach(dpre).half, rest: reach(d0).half, w: r2(dpre.wMid), seam: { gap: hp.gap, parallel: hp.parallel } })); }
+    await arm("#gripD", "--grip-p");
     await page.mouse.down(); await page.mouse.move(c.x, c.y - 12, { steps: 2 });
     const s = await gripScrub("gripD"), half = wantD.half;
     const mono = s && s.out.every((o, i) => !i || o.half >= s.out[i - 1].half - 0.01);
-    ok(V, "3 dock drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-out); its stroke runs out either way along the top edge to " + r2(half) + "px from the middle, growing at every step, its tips the hairline's width with their ink gone", !!s && s.dur === tok.reveal && s.easing === tok.easeOut && mono && Math.abs(s.out[4].half - half) <= 1 && s.out[4].ends.every((w) => w <= wantD.bw + 0.01) && s.out[4].p.fadeEnd <= 1 && s.out.every((o) => o.wMax <= wantD.w + 0.05) && Math.abs(s.out[0].half - reach(d0).half) <= 0.5, JSON.stringify(s && s.out.map((o) => [o.f, o.half, o.ends, o.wMax])));
+    ok(V, "3 dock drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-in-out); from where the press found it its stroke runs out either way along the top edge to " + r2(half) + "px from the middle, growing at every step, its tips the hairline's width with their ink gone", !!s && s.clocks === 1 && s.dur === tok.reveal && s.easing === tok.easeInOut && mono && Math.abs(s.out[4].half - half) <= 1 && s.out[4].ends.every((w) => w <= wantD.bw + 0.01) && s.out[4].p.fadeEnd <= 1 && s.out.every((o) => o.wMax <= wantD.w + 0.05) && Math.abs(s.out[0].half - reach(dpre).half) <= 0.5, JSON.stringify(s && s.out.map((o) => [o.f, o.half, o.ends, o.wMax])));
     ok(V, "3 dock drag, the line read end to end at 0, ¼, ½, ¾ and 1: one opaque fill, mirrored about its middle, thinning only outward, no step", !!s && s.out.every((o) => lineOK(o.p, wantD)), JSON.stringify(s && s.out.map((o) => ({ f: o.f, sym: o.p.sym, place: o.p.place, grow: o.p.grow, dw: o.p.dw, step: o.p.step, turn: o.p.turn, solid: o.p.solid, opacity: o.p.opacity }))));
     ok(V, "3 dock drag against its top border, at 0, ¼, ½, ¾ and 1: one line, never a pair, no gap of 2px or more, never wider than border + stroke; held, the run ≤ 64px, its width over the hairline halved within its first quarter, its tips the hairline itself", !!s && s.out.every((o) => seamOK(o.p, wantD)) && heldOK(s.out[4].p, wantD), JSON.stringify(s && s.out.map((o) => ({ f: o.f, run: o.p.run, gap: o.p.gap, parallel: o.p.parallel, span: o.p.span, wide: o.p.wide, tip: o.p.tip }))));
     if (s) console.log("INFO [" + V + "] 3 dock drag, the line's samples [index, from the middle, down from the top, width] at each fraction: " + s.out.map((o) => o.f + ": " + JSON.stringify(o.p.samples)).join(" ; "));
@@ -880,7 +885,7 @@ async function runView(view) {
     await page.keyboard.press("Shift"); await settle(100);
     const s0 = await size(); await page.keyboard.press(key); const s1 = await size(); await page.keyboard.press("Shift+" + key); const s2 = await size();
     const held = await ev(() => document.getElementById("panel").dataset.resizing || "");
-    const gf = await gripAt("gripC"), fr = reach(gf), moving = await ev(() => document.querySelector("#gripC .handle-ink").getAnimations().filter((a) => a.transitionProperty === "--grip-p").length);
+    const gf = await gripAt("gripC"), fr = reach(gf), moving = await ev(() => document.getElementById("gripC").getAnimations().filter((a) => a.transitionProperty === "--grip-p").length);
     ok(V, "3 " + sashId + ": a key steps the edge 8px, 32px with Shift, held as it moves; its focus draws the highlight along both edges in the focus ink at once (no --grip-p transition)", r2(s1 - s0) === 8 && r2(s2 - s1) === 32 && !!held && inkIs(gf.fill, gf.focus) && moving === 0 && Math.abs(fr.up - runTo) <= 1 && Math.abs(fr.right - runTo) <= 1, s0 + " → " + s1 + " → " + s2 + ", data-resizing=" + held + ", reach " + JSON.stringify(fr));
     await ev(() => document.activeElement.blur());
     await settle(300);
@@ -895,7 +900,7 @@ async function runView(view) {
     const g = await gripAt("gripC"), r = reach(g);
     await page.mouse.up();
     const arms = Math.abs(r.up - runTo) <= 1 && Math.abs(r.right - runTo) <= 1;
-    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want_ + "), and the handle runs out along both edges of its curve alike (the owner: no fade on one side only), in the edge ink", cur.html === want_ && cur.under === want_ && arms && inkIs(g.fill, g.edge) && g.op === "1", JSON.stringify({ cur, r, op: g.op }));
+    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want_ + "), and the handle runs out along both edges of its curve alike (the owner: no fade on one side only), in the strong ink", cur.html === want_ && cur.under === want_ && arms && inkIs(g.fill, g.strong) && g.op === "1", JSON.stringify({ cur, r, op: g.op }));
     await settle(300);
   }
   // ---- Round 27: pins 27, 28 and 30, read on the engine ----
@@ -1884,9 +1889,11 @@ async function runEngine(name, scheme) {
   ok(V, "the handle draws in " + name + " at rest: Apple's arc (r " + rest.r + "px, stroke " + rest.w + "px, " + rest.points + " points), one opaque fill, mirrored", rest.points === 2 * (2 * 48 + 17) + 16 && Math.abs(rest.r - W.r) <= 0.1 && Math.abs(rest.w - W.w) <= 0.05 && Math.abs(rest.up - rest.right) <= 0.1 && rest.up < W.R && rest.solid && rest.sym <= 0.02, JSON.stringify(rest));
   const c = await page.locator("#sashC").boundingBox(), x = c.x + c.width / 2, y = c.y + c.height / 2;
   await page.mouse.move(x, y); await page.waitForTimeout(300);
-  await ev(() => { window.__held = null; const el = document.querySelector("#gripC .handle-ink"); const on = (e) => { if (e.target !== el || e.propertyName !== "--grip-p") return; const a = el.getAnimations().find((x) => x.transitionProperty === "--grip-p"); if (a) { a.pause(); window.__held = a; document.removeEventListener("transitionrun", on, true); } }; document.addEventListener("transitionrun", on, true); });
+  // The press's change is made by its own attribute (what pointerdown sets) and its transition taken and paused in
+  // the same task (WebKit dispatches transitionrun late enough to miss it), sought to ½, then let run; the real
+  // press and drag then hold it.
+  const half = await ev(async () => { const svg = document.getElementById("gripC"), panel = document.getElementById("panel"); panel.dataset.resizing = document.documentElement.dataset.resizing = "wh"; const a = svg.getAnimations().find((x) => x.transitionProperty === "--grip-p"); if (!a) return null; a.pause(); await a.ready; const t = a.effect.getTiming(); a.currentTime = t.duration / 4; a.currentTime = t.duration / 2; await new Promise((r) => requestAnimationFrame(r)); const g = __k.grip(svg), b = panel.getBoundingClientRect(), p = __k.gripProfile(svg); a.finish(); return { dur: t.duration, easing: t.easing, up: Math.round((b.bottom - g.box.top) * 100) / 100, right: Math.round((g.box.right - b.left) * 100) / 100, sym: p.sym, gap: p.gap, parallel: p.parallel }; });
   await page.mouse.down(); await page.mouse.move(x - 12, y + 9, { steps: 2 });
-  const half = await ev(async () => { for (let i = 0; i < 20 && !window.__held; i++) await new Promise((r) => requestAnimationFrame(r)); const a = window.__held; if (!a) return null; const t = a.effect.getTiming(); a.currentTime = t.duration / 2; const g = __k.grip(document.getElementById("gripC")), b = document.getElementById("panel").getBoundingClientRect(), p = __k.gripProfile(document.getElementById("gripC")); a.play(); return { dur: t.duration, easing: t.easing, up: Math.round((b.bottom - g.box.top) * 100) / 100, right: Math.round((g.box.right - b.left) * 100) / 100, sym: p.sym, gap: p.gap, parallel: p.parallel }; });
   await page.waitForTimeout(400);
   const held = await read();
   inkVerdict(V, "corner", await inkProfile(page, ev, "corner"));
@@ -1895,6 +1902,162 @@ async function runEngine(name, scheme) {
   const back = await read();
   ok(V, name + " let go: back to the rest arc", Math.abs(back.up - rest.up) <= 0.5 && errors.length === 0, JSON.stringify(back) + (errors.length ? " errors " + errors.join(" | ") : ""));
   await wk.close();
+}
+
+// One shape through every state (round 29): rest, the pointer on the grip, the press and drag, the let-go.
+// At 1440 and 2× in Chromium, WebKit and Firefox, by day and at night, for the panel's corner and the dock's
+// edge: each change between states is paused the moment its transition is created and sought through its own
+// clock (the Web Animations API on the CSS transition, the engine-neutral face of the DevTools Animation
+// domain's pause and seek) at 0, ¼, ½, ¾ and 1, the shape read off the path at each. At every fraction:
+//   - one clock: the handle's one transition, on --grip-p, nothing else on the handle animating;
+//   - one shape: one element in the handle paints (one path, one subpath, one fill), no second shade;
+//   - the stroke's length (its centreline, run-outs and all) and its reach along the edges move one way only,
+//     growing out to the pointer and the drag, shrinking on the let-go;
+//   - its width never jumps more than 0.5px between neighbouring fractions, at its middle or its widest;
+//   - it starts where the state before it stood (no jump at the change) and ends on the next state's shape.
+// Then the captures for the review: rest | hover | drag | released, each a 2× crop of the corner and the dock's
+// edge, and one sheet of the four (review-r29/, Chromium and WebKit).
+async function runMorph(name, scheme) {
+  const REVIEW = join(here, "review-r29");
+  const V = "1440-" + scheme + "-" + name + "-morph";
+  const pw = await import(join(here, "../../node_modules/playwright-core/index.mjs"));
+  const { existsSync } = await import("node:fs");
+  const exe = name === "chromium" ? CHROME : (name === "firefox" && process.env.FIREFOX) || pw[name].executablePath();
+  if (!existsSync(exe)) { ok(V, "the " + name + " build is installed", false, exe + " is missing: node node_modules/playwright-core/cli.js install " + name); return; }
+  const eng = name === "chromium" ? browser : await pw[name].launch({ executablePath: exe });
+  const ctx = await eng.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
+  const ev = (fn, arg) => page.evaluate(fn, arg);
+  await page.goto(URL_); await page.waitForTimeout(700); await ev(install);
+  const tok = await ev(() => { const s = getComputedStyle(document.documentElement), t = (n) => s.getPropertyValue(n).trim(); return { control: parseFloat(t("--dur-control")), reveal: parseFloat(t("--dur-reveal")), exit: parseFloat(t("--dur-exit")), easeOut: t("--ease-out"), easeInOut: t("--ease-in-out"), hover: parseFloat(t("--c-grip-hover")) }; });
+  // The handle as it stands: its progress, its shape off the path, what in it paints, what on it animates.
+  const read = (id) => ev((id) => {
+    const svg = document.getElementById(id), path = svg.querySelector(".handle-ink"), T = svg.closest(".tool"), b = T.getBoundingClientRect(), g = __k.grip(svg), pr = __k.gripProfile(svg), q = (n) => Math.round(n * 100) / 100;
+    const painting = [...svg.querySelectorAll("path, rect, circle, ellipse, line, polyline, polygon, use, image, text")].filter((el) => { const cs = getComputedStyle(el), r = el.getBoundingClientRect(); return cs.display !== "none" && cs.visibility !== "hidden" && +cs.opacity > 0 && (cs.fill !== "none" || cs.stroke !== "none") && r.width > 0 && r.height > 0 && (el.tagName !== "path" || (el.getAttribute("d") || "").trim()); }).length;
+    const subpaths = ((path.getAttribute("d") || "").match(/[Mm]/g) || []).length;
+    const clocks = [svg, ...svg.querySelectorAll("*")].flatMap((el) => el.getAnimations()).map((a) => a.transitionProperty || "keyframes");
+    const corner = id === "gripC";
+    return { p: Math.round(parseFloat(getComputedStyle(path).getPropertyValue("--grip-p")) * 10000) / 10000, len: q(g.len), wMid: q(g.wMid), wMax: q(g.wMax), reach: corner ? q(b.bottom - g.box.top) : q((g.box.right - g.box.left) / 2), along: corner ? q(g.box.right - b.left) : q((g.box.right + g.box.left) / 2 - (b.left + b.width / 2)), ink: g.fill.slice(0, 3), painting, subpaths, clocks, sym: pr.sym, turn: pr.turn, solid: pr.solid, gap: pr.gap };
+  }, id);
+  // The change is made in the page by the state's own attribute (the one the real input sets: data-pointing is
+  // the hover's own rule, data-resizing what a press sets, the let-go what a release does), and its transition
+  // is taken and paused in the same task, before any frame of it is drawn: WebKit dispatches transitionrun
+  // late enough that a short transition can be over before the event. The real pointer then lands on the same
+  // state (each step reads it after the real input too).
+  const change = (id, step) => ev(async ([id, step]) => {
+    const svg = document.getElementById(id), owner = svg.closest(".tool"), corner = id === "gripC";
+    if (step === "hover") owner.dataset.pointing = "";
+    else if (step === "drag") { owner.dataset.resizing = document.documentElement.dataset.resizing = corner ? "wh" : "d"; }
+    else if (step === "release") { delete owner.dataset.resizing; delete document.documentElement.dataset.resizing; letGo(owner); }
+    else if (step === "leave") delete owner.dataset.pointing;
+    const a = svg.getAnimations().find((x) => x.transitionProperty === "--grip-p");
+    window.__held = a || null;
+    if (!a) return null;
+    a.pause(); await a.ready;
+    const t = a.effect.getTiming();
+    return { delay: t.delay, dur: t.duration, easing: t.easing };
+  }, [id, step]);
+  const scrub = async (id, step) => {
+    const tm = await change(id, step);
+    if (!tm) return null;
+    const out = [];
+    // (Firefox keeps the value it drew before the pause until the clock is moved: seek off 0 first.)
+    await ev((at) => { window.__held.currentTime = at; }, tm.delay + tm.dur / 2);
+    for (const f of [0, 0.25, 0.5, 0.75, 1]) { await ev(async (at) => { window.__held.currentTime = at; await new Promise((r) => requestAnimationFrame(r)); }, tm.delay + f * tm.dur); out.push({ f, ...(await read(id)) }); }
+    await ev(() => { window.__held.finish(); window.__held = null; });
+    return { ...tm, out };
+  };
+  const near = (a, b, t) => Math.abs(a - b) <= t;
+  // The verdict on one change: from `from` (the state read before it) to `to` (read after it settles).
+  const verdict = (which, label, s, from, to, dir, dur, easing) => {
+    if (!s) { ok(V, which + " " + label + ": its transition on --grip-p ran", false, "no --grip-p transition caught"); return; }
+    const o = s.out, mono = (k) => o.every((x, i) => !i || dir * (x[k] - o[i - 1][k]) >= -0.01);
+    const dMid = Math.max(...o.slice(1).map((x, i) => Math.abs(x.wMid - o[i].wMid))), dMax = Math.max(...o.slice(1).map((x, i) => Math.abs(x.wMax - o[i].wMax)));
+    const inkStep = Math.max(...o.slice(1).map((x, i) => Math.max(...x.ink.map((c, j) => Math.abs(c - o[i].ink[j])))));
+    ok(V, which + " " + label + ": one clock (" + dur + "ms on " + easing + "), one path painting at every fraction, the stroke " + (dir > 0 ? "growing" : "shrinking") + " at every step (length and reach), its width never jumping more than 0.5px between neighbouring fractions, starting where the state before it stood and ending on the next",
+      s.dur === dur && s.delay === 0 && s.easing === easing && o.every((x) => (x.f === 1 ? x.clocks.length <= 1 : x.clocks.length === 1) && x.clocks.every((k) => k === "--grip-p") && x.painting === 1 && x.subpaths === 1 && x.solid && x.sym <= 0.02 && x.turn <= 12) && mono("len") && mono("reach") && dir * (o[4].len - o[0].len) > 1 && dMid <= 0.5 && dMax <= 0.5 && near(o[0].len, from.len, 0.2) && near(o[0].wMid, from.wMid, 0.05) && near(o[0].reach, from.reach, 0.2) && near(o[4].len, to.len, 0.2) && near(o[4].wMid, to.wMid, 0.05) && near(o[4].p, to.p, 0.01),
+      JSON.stringify({ dur: s.dur, easing: s.easing, widthStep: { mid: Math.round(dMid * 100) / 100, max: Math.round(dMax * 100) / 100 }, inkStep, from: { p: from.p, len: from.len, w: from.wMid, reach: from.reach }, to: { p: to.p, len: to.len, w: to.wMid, reach: to.reach }, at: o.map((x) => ({ f: x.f, p: x.p, len: x.len, reach: x.reach, wMid: x.wMid, wMax: x.wMax, ink: x.ink, painting: x.painting, subpaths: x.subpaths, clocks: x.clocks.join("+") })) }));
+    console.log("SCRUB [" + V + "] " + which + " " + label + " — " + o.map((x) => "f" + x.f + ": p " + x.p + ", length " + x.len + "px, reach " + x.reach + "px, width " + x.wMid + "/" + x.wMax + "px, painting " + x.painting).join(" | "));
+  };
+  const grab = async (which) => {
+    const c = await ev((which) => { const r = document.getElementById(which === "corner" ? "panel" : "dock").getBoundingClientRect(); return which === "corner" ? { x: Math.floor(r.left - 24), y: Math.floor(r.bottom - 156), width: 184, height: 180 } : { x: Math.floor(r.left + r.width / 2 - 92), y: Math.floor(r.top - 40), width: 184, height: 90 }; }, which);
+    return page.screenshot({ clip: c });
+  };
+  const shots = {};
+  const keep = name !== "firefox";
+  const run = async (which, id, sashSel, drag) => {
+    shots[which] = {};
+    await page.mouse.move(5, 5); await page.waitForTimeout(400);
+    const rest = await read(id);
+    ok(V, which + " at rest: progress 0, Apple's stroke, one path painting, nothing animating", rest.p === 0 && rest.painting === 1 && rest.subpaths === 1 && rest.clocks.length === 0, JSON.stringify(rest));
+    if (keep) shots[which].rest = await grab(which);
+    const b = await page.locator(sashSel).boundingBox(), x = b.x + b.width / 2, y = b.y + b.height / 2;
+    // The real input after each scrubbed change must land on the same state, with nothing left to move.
+    const same = (label, a, z) => ok(V, which + " " + label + ": the real pointer lands on the state the scrub ended on, nothing moving", near(a.p, z.p, 0.0001) && near(a.len, z.len, 0.05) && near(a.wMid, z.wMid, 0.01) && z.clocks.length === 0, JSON.stringify({ scrubbed: { p: a.p, len: a.len, w: a.wMid }, real: { p: z.p, len: z.len, w: z.wMid, clocks: z.clocks } }));
+    // Rest → hover; then the pointer comes onto the grip.
+    const s1 = await scrub(id, "hover");
+    const hover = await read(id);
+    verdict(which, "rest → hover", s1, rest, hover, 1, tok.control, tok.easeOut);
+    await page.mouse.move(x, y); await page.waitForTimeout(tok.control + 200);
+    same("pointer on the grip", hover, await read(id));
+    ok(V, which + " hover: the arc where it stood at rest, Apple's width, its ends grown into the start of the run (progress " + tok.hover + "), in the strong ink, nothing else drawn", near(hover.p, tok.hover, 0.001) && near(hover.wMid, rest.wMid, 0.05) && near(hover.wMax, rest.wMax, 0.05) && hover.len > rest.len + 4 && hover.reach > rest.reach + 4 && hover.painting === 1, JSON.stringify({ rest: { len: rest.len, reach: rest.reach, w: rest.wMid, ink: rest.ink }, hover: { len: hover.len, reach: hover.reach, w: hover.wMid, ink: hover.ink } }));
+    if (keep) shots[which].hover = await grab(which);
+    // Hover → drag; then the press and the drag itself.
+    const s2 = await scrub(id, "drag");
+    const held = await read(id);
+    verdict(which, "hover → drag", s2, hover, held, 1, tok.reveal, tok.easeInOut);
+    await page.mouse.down(); await page.mouse.move(x + drag[0], y + drag[1], { steps: 2 }); await page.waitForTimeout(200);
+    same("pressed and dragged", held, await read(id));
+    ok(V, which + " held: progress 1, the stroke on the border at the border's width, in the same ink as the hover", held.p === 1 && near(held.wMid, 1, 0.05) && held.ink.every((c, i) => Math.abs(c - hover.ink[i]) <= 1) && held.painting === 1, JSON.stringify({ p: held.p, w: held.wMid, ink: held.ink, hoverInk: hover.ink, reach: held.reach }));
+    if (keep) shots[which].drag = await grab(which);
+    // Drag → release, the pointer still on the grip: back to the hover's shape; then the button comes up.
+    const s3 = await scrub(id, "release");
+    const back = await read(id);
+    verdict(which, "drag → release", s3, held, back, -1, tok.exit, tok.easeInOut);
+    await page.mouse.up(); await page.waitForTimeout(tok.exit + 200);
+    same("button up on the grip", back, await read(id));
+    ok(V, which + " released with the pointer on the grip: the hover's shape again", near(back.p, tok.hover, 0.001) && near(back.len, hover.len, 0.2) && near(back.wMid, hover.wMid, 0.05), JSON.stringify({ back: { p: back.p, len: back.len, w: back.wMid }, hover: { p: hover.p, len: hover.len, w: hover.wMid } }));
+    if (keep) shots[which].released = await grab(which);
+    // The pointer leaves: hover → rest.
+    await page.mouse.move(5, 5); await page.waitForTimeout(100);
+    const s4 = await scrub(id, "leave");
+    const after = await read(id);
+    verdict(which, "hover → rest", s4, back, after, -1, tok.control, tok.easeOut);
+    await page.waitForTimeout(tok.control + 100);
+    same("pointer gone", after, await read(id));
+    ok(V, which + " back at rest: the rest shape and ink exactly", after.p === 0 && near(after.len, rest.len, 0.05) && near(after.wMid, rest.wMid, 0.01) && after.ink.every((c, i) => Math.abs(c - rest.ink[i]) <= 1), JSON.stringify({ after: { len: after.len, w: after.wMid, ink: after.ink }, rest: { len: rest.len, w: rest.wMid, ink: rest.ink } }));
+  };
+  await run("corner", "gripC", "#sashC", [-12, 9]);
+  await ev(() => { if (document.getElementById("dock").dataset.open !== "true") { const n = document.querySelector(".node:not(.kept)"); if (n) n.click(); } });
+  await page.waitForTimeout(600);
+  if (await page.locator("#sashD").isVisible()) await run("dock", "gripD", "#sashD", [0, -10]);
+  else ok(V, "the dock stands for its morph", false, "no #sashD");
+  ok(V, "no page errors", errors.length === 0, errors.join(" | "));
+  if (keep) {
+    mkdirSync(REVIEW, { recursive: true });
+    const states = ["rest", "hover", "drag", "released"];
+    for (const which of Object.keys(shots)) for (const st of states) if (shots[which][st]) writeFileSync(join(REVIEW, name + "-1440-" + scheme + "-" + which + "-" + st + ".png"), shots[which][st]);
+    // The sheet: the four states in a row, the corner over the dock's edge, each labelled, on the page's ground.
+    const sheet = await ev(async ([sh, states, title]) => {
+      const load = async (b64) => { const i = new Image(); i.src = "data:image/png;base64," + b64; await i.decode(); return i; };
+      const rows = Object.keys(sh), pad = 24, gap = 16, lab = 28, imgs = {};
+      for (const r of rows) for (const s of states) imgs[r + s] = await load(sh[r][s]);
+      const cw = Math.max(...Object.values(imgs).map((i) => i.width)), rh = rows.map((r) => Math.max(...states.map((s) => imgs[r + s].height)));
+      const cv = document.createElement("canvas"); cv.width = 2 * pad + states.length * cw + (states.length - 1) * gap; cv.height = 2 * pad + 2 * lab + rh.reduce((a, b) => a + b, 0) + (rows.length - 1) * gap;
+      const cx = cv.getContext("2d"), cs = getComputedStyle(document.body);
+      cx.fillStyle = cs.backgroundColor; cx.fillRect(0, 0, cv.width, cv.height);
+      cx.fillStyle = cs.color; cx.font = "600 26px " + cs.fontFamily; cx.fillText(title, pad, pad + 22);
+      cx.font = "22px " + cs.fontFamily;
+      states.forEach((s, i) => cx.fillText(s, pad + i * (cw + gap), pad + lab + 22));
+      let y = pad + 2 * lab;
+      rows.forEach((r, j) => { states.forEach((s, i) => cx.drawImage(imgs[r + s], pad + i * (cw + gap), y)); y += rh[j] + gap; });
+      return cv.toDataURL("image/png").split(",")[1];
+    }, [Object.fromEntries(Object.entries(shots).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).map(([s, b]) => [s, b.toString("base64")]))])), states, name + " · 1440 · " + scheme + " · 2×"]);
+    writeFileSync(join(REVIEW, "sheet-" + name + "-1440-" + scheme + ".png"), Buffer.from(sheet, "base64"));
+  }
+  await ctx.close();
+  if (eng !== browser) await eng.close();
 }
 
 function same(a, b) { return a.length === b.length && a.every((x, i) => x === b[i]); }
