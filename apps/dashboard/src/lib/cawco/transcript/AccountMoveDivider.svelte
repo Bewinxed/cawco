@@ -33,7 +33,7 @@
   import { hueVar } from "../accounts/model.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { unfold } from "../motion/fold.svelte";
-  import type { Row } from "./rows";
+  import { moveOf, type Row } from "./rows";
 
   let {
     row,
@@ -49,6 +49,9 @@
     stop?: string;
   } = $props();
 
+  /** What the line says now: the hub says it again in its place. */
+  const move = $derived(moveOf(row));
+
   /** How often a counting row reads the clock: its words are in minutes. */
   const TICK_MS = 15_000;
 
@@ -58,12 +61,12 @@
 
   /** The moment the row stops counting: the reset it names; null when it names none. */
   const countsTo = $derived.by(() => {
-    switch (row.move.kind) {
+    switch (move.kind) {
       case "waiting":
-        return row.move.until;
+        return move.until;
       case "moved":
       case "stopped":
-        return row.move.resetsAt;
+        return move.resetsAt;
       case "continued":
       case "ended":
       case "signed-out":
@@ -87,16 +90,16 @@
     return () => clearInterval(tick);
   });
 
-  const words = $derived(accountMoveWords(row.move, now));
+  const words = $derived(accountMoveWords(move, now));
   /** The account the line is drawn in: where it went, the one it waits for, or the one it stayed on. */
   const hue = $derived.by(() => {
-    switch (row.move.kind) {
+    switch (move.kind) {
       case "waiting":
       case "stopped":
       case "signed-out":
-        return row.move.account.hue;
+        return move.account.hue;
       case "unmoved":
-        return (row.move.from ?? row.move.to)?.hue ?? null;
+        return (move.from ?? move.to)?.hue ?? null;
       // A stop names no account: drawn in the neutral ink, never a failure's.
       case "ended":
         return null;
@@ -104,7 +107,7 @@
       case "moved":
         break;
     }
-    return row.move.to?.hue ?? null;
+    return move.to?.hue ?? null;
   });
 </script>
 

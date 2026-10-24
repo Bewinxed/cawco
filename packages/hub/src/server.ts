@@ -604,7 +604,7 @@ import {
 } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
-import type { LimitCompaction } from "./db/at-limit";
+import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { OwedMove } from "./db/owed-moves";
 import { projectOrigin } from "./db/previews";
 import type {
@@ -26334,7 +26334,14 @@ export const createServer = (
     });
   };
 
-  /** Writes a line into a session's transcript: kept, and folded into what its screens show now. */
+  /**
+   * Writes a line into a session's transcript: kept, and folded into what
+   * its screens show now. A move waiting for work in flight is one line per
+   * session ({@link waitsLine}): said again, by another attempt to another
+   * account or for another reason, it is what the line standing says now,
+   * where it stands; any other line ends the wait, and the standing line
+   * gives way to it.
+   */
   const noteAtLimit = (
     row: {
       derivedTitle?: string | null;
@@ -26349,7 +26356,14 @@ export const createServer = (
     /** When the line stands in the transcript; absent, now. */
     at: number = Date.now()
   ): void => {
-    const event = { id, at, move };
+    const standing = db.atLimit.waitingMove(row.id);
+    const event =
+      standing && waitsLine(move)
+        ? { id: standing.id, at: standing.at, move }
+        : { id, at, move };
+    if (standing && standing.id !== event.id) {
+      unnoteAtLimit(row, standing.id);
+    }
     db.atLimit.putEvent({ ...event, instanceId: row.id });
     transcripts.ingest(row.id, {
       kind: "frame",

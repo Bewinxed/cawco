@@ -72,7 +72,20 @@ export interface AtLimitDb {
   /** Writes a line; one already written under its id is what it says now (a compaction's move line as it goes). */
   readonly putEvent: (event: LimitEvent) => void;
   readonly putHold: (hold: LimitHold) => void;
+  /**
+   * The line of `instanceId`'s move waiting for work in flight, while it
+   * waits ({@link waitsLine}): one per session, said again in its place.
+   */
+  readonly waitingMove: (instanceId: string) => LimitEvent | undefined;
 }
+
+/**
+ * Whether `move` is a move waiting for work in flight ("Can't move from A to
+ * B yet"): a session's one line of it stands while it waits, each attempt
+ * saying it again in place, and goes when the move lands or the wait ends.
+ */
+export const waitsLine = (move: AccountMove): boolean =>
+  move.kind === "unmoved" && move.action === "move" && move.waits === true;
 
 type HoldRow = typeof limitHolds.$inferSelect;
 
@@ -177,6 +190,15 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
           .orderBy(asc(limitEvents.at))
           .all()
           .map(toEvent),
+  waitingMove: (instanceId) =>
+    db
+      .select()
+      .from(limitEvents)
+      .where(eq(limitEvents.instanceId, instanceId))
+      .orderBy(asc(limitEvents.at))
+      .all()
+      .map(toEvent)
+      .findLast((event) => waitsLine(event.move)),
   forget: (instanceIds) => {
     if (instanceIds.length === 0) {
       return;

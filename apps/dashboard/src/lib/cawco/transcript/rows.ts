@@ -92,13 +92,14 @@ export type Row =
     }
   /**
    * The hub's line where the session's account reached its limit: it moved,
-   * waited for the reset, or went on from a summary (core `AccountMove`).
+   * waited for the reset, or went on from a summary (core `AccountMove`),
+   * as its message says it now ({@link moveOf}).
    */
   | {
       kind: "account";
       key: string;
-      move: AccountMove;
-      timestamp?: string;
+      /** Its `system.account_move` message, which carries its `accountMove`. */
+      message: Message;
       /**
        * A `continued` line's: the message its fresh conversation opened on
        * (the summary, the artifact index and the last turns), folded under
@@ -106,6 +107,15 @@ export type Row =
        */
       brief: string | null;
     };
+
+/**
+ * What an account row's line says now, read off its message each time: the
+ * hub says a line again in its place (a move waiting for work in flight
+ * taking another target, a compaction's move line as it goes), and a row
+ * folded before the last turn opener is never folded again.
+ */
+export const moveOf = (row: Extract<Row, { kind: "account" }>): AccountMove =>
+  row.message.metadata?.accountMove as AccountMove;
 
 /**
  * Who has the floor, row by row: a speaker line appears only when the speaker
@@ -497,8 +507,7 @@ function continuedAt(
       row: {
         kind: "account",
         key: `am:${keyOf(m, i)}`,
-        move,
-        timestamp: m.timestamp,
+        message: m,
         brief: next.content,
       },
       span: 2,
@@ -593,13 +602,11 @@ function ownRow(
   i: number,
   subagents: Record<string, SubagentState>
 ): Row | null {
-  const move = m.type === "system.account_move" && m.metadata?.accountMove;
-  if (move) {
+  if (m.type === "system.account_move" && m.metadata?.accountMove) {
     return {
       kind: "account",
       key: `am:${keyOf(m, i)}`,
-      move,
-      timestamp: m.timestamp,
+      message: m,
       brief: null,
     };
   }
@@ -1111,12 +1118,16 @@ export function withoutEndedWaits(rows: Row[]): Row[] {
   const last = rows.findLastIndex((row) => row.kind === "account");
   const ended = rows.some(
     (row, at) =>
-      at < last && row.kind === "account" && row.move.kind === "waiting"
+      at < last && row.kind === "account" && moveOf(row).kind === "waiting"
   );
   return ended
     ? rows.filter(
         (row, at) =>
-          !(at < last && row.kind === "account" && row.move.kind === "waiting")
+          !(
+            at < last &&
+            row.kind === "account" &&
+            moveOf(row).kind === "waiting"
+          )
       )
     : rows;
 }

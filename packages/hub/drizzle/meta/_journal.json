@@ -2101,6 +2101,13 @@
       "when": 1792848369505,
       "tag": "0307_presence_desk_input",
       "breakpoints": true
+    },
+    {
+      "idx": 308,
+      "version": "6",
+      "when": 1792860821351,
+      "tag": "0308_waiting_moves_folded",
+      "breakpoints": true
     }
   ]
 }

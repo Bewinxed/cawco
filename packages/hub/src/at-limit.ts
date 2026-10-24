@@ -39,7 +39,7 @@ import {
 } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
-import type { LimitHold } from "./db/at-limit";
+import { type LimitHold, waitsLine } from "./db/at-limit";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   type AccountRow,
@@ -906,7 +906,12 @@ export interface AtLimitPorts {
   ) => Promise<{ kept: Kept } | Carried>;
   /** `row` as a line names it: its title. */
   named: (row: LimitRow) => string;
-  /** Writes one line into `row`'s transcript; under `id`, the line already written there is what it says now. */
+  /**
+   * Writes one line into `row`'s transcript; under `id`, the line already
+   * written there is what it says now. A move waiting for work in flight
+   * ({@link waitsLine}) is said again in the place of the one standing, and
+   * any other line takes that one's place.
+   */
   note: (row: LimitRow, move: AccountMove, id?: string) => void;
   /** What adding an account set moving, for the Accounts page. */
   noticed: (notice: RebalanceNotice) => void;
@@ -936,7 +941,7 @@ export interface AtLimitPorts {
    */
   startedBy: (row: LimitRow) => Handed | undefined;
   /** Takes the line `id` out of `row`'s transcript. */
-  unnote: (row: LimitRow, id: string) => void;
+  unnote: (row: Pick<LimitRow, "id">, id: string) => void;
   /**
    * Whether a person waits on `row`: a question or permission of it is
    * pending, or it is a top-level session whose last turn a person sent.
@@ -1209,6 +1214,19 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * ({@link RESTART_WAIT_CAP_MS}), across a hub restart too.
    */
   const later = new Map<string, { since: number; to: string; why: string }>();
+
+  /**
+   * `instanceId`'s move no longer waits for work in flight, and nothing is
+   * said in its place (it carries on where it is, or never runs again): its
+   * one line of that wait goes. A line said instead takes its place itself
+   * ({@link AtLimitPorts.note}).
+   */
+  const waitEnded = (instanceId: string): void => {
+    const line = db.atLimit.waitingMove(instanceId);
+    if (line) {
+      ports.unnote({ id: instanceId }, line.id);
+    }
+  };
 
   const readingOf = (accountId: string): AccountReading | undefined =>
     db.accounts.readings().find((one) => one.accountId === accountId);
@@ -1544,12 +1562,18 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       waits: boolean;
     }
   ): void => {
-    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    // A move waiting for work in flight is one line, said again in its
+    // place when its target or reason changes ({@link AtLimitPorts.note});
+    // any other is said once for the same failure.
+    const last = how.waits
+      ? db.atLimit.waitingMove(row.id)?.move
+      : db.atLimit.events([row.id]).at(-1)?.move;
     const repeated =
       last?.kind === "unmoved" &&
       last.action === "move" &&
       last.reason === reason &&
-      last.to?.id === target.id;
+      last.to?.id === target.id &&
+      last.from?.id === current.id;
     if (!repeated) {
       // Said once, as the line written the first time logged itself: it
       // already says the hub tries again.
@@ -1975,6 +1999,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     settling.delete(row.id);
     // Whatever it waited for before, this decision keeps it here now.
     later.delete(row.id);
+    waitEnded(row.id);
     if (cause === "extra-usage") {
       stillOnExtraUsage(row, current, decision);
       return;
@@ -2036,6 +2061,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     );
     const held = db.atLimit.hold(row.id);
     db.atLimit.dropHold(row.id);
+    waitEnded(row.id);
     const last = db.atLimit.events([row.id]).at(-1)?.move;
     if (!(
       last?.kind === "stopped" &&
@@ -2089,6 +2115,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (over(row) || !row || !current) {
       db.atLimit.dropHold(held.instanceId);
       later.delete(held.instanceId);
+      waitEnded(held.instanceId);
       return;
     }
     // A person moved it: its hold ends at that move, not at its reset.
@@ -2121,6 +2148,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (await ports.idle(row)) {
       db.atLimit.dropHold(row.id);
       later.delete(row.id);
+      waitEnded(row.id);
       console.info(
         `[at-limit] ${ports.named(row)}: ${accountNameAmong(current, db.accounts.list())}'s limit has reset, so it carries on there, told to pick up where the limit stopped it.`
       );
@@ -2361,6 +2389,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       towards.delete(instanceId);
       later.delete(instanceId);
+      waitEnded(instanceId);
       extraUsageSaid.delete(instanceId);
       const held = db.atLimit.hold(instanceId);
       db.atLimit.dropHold(instanceId);
