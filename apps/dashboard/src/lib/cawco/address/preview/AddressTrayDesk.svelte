@@ -30,9 +30,11 @@
   // svelte-ignore state_referenced_locally — the story's starting network, once
   const tray = new AddressTray({ network });
   onDestroy(() => tray.dispose());
-  // The picture opens on the tray at its first step, the row already grown
-  // into it (its press is the story's own: Start again puts it back).
-  tray.show();
+  // The picture opens on the tray at the first step the person acts on
+  // (Found it: Join), held still by the story's own jump, the row already
+  // grown into it. The probe before it is the control's S0a, or Start
+  // again and the row's press.
+  tray.jump("found");
   /** The tray stood open as the story began: its first draw is still, no entrance. */
   let entered = false;
 
