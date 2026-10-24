@@ -29,6 +29,8 @@ export const downloadWords = {
   cut: (code: string) => `the connection was cut (${code})`,
   /** An answer that is no body: the host is busy or failing. */
   answered: (status: number) => `the host answered ${status}`,
+  /** How a log line of a stopped attempt at `what` begins ({@link downloadWords.retrying}). */
+  stopped: (what: string) => `the download of ${what} stopped at`,
   /** A log line: one attempt stopped, and the next asks for the rest. */
   retrying: (
     what: string,
@@ -38,7 +40,7 @@ export const downloadWords = {
     attempt: number,
     waitMs: number
   ) =>
-    `the download of ${what} stopped at ${tenths(received)} of ${tenths(total)} MB: ${why}; attempt ${attempt} asks for the rest, from byte ${received}, in ${Math.round(waitMs / 1000)} s`,
+    `${downloadWords.stopped(what)} ${tenths(received)} of ${tenths(total)} MB: ${why}; attempt ${attempt} asks for the rest, from byte ${received}, in ${Math.round(waitMs / 1000)} s`,
   /** A log line: the host sent the rest from where the last attempt stopped. */
   resumed: (what: string, from: number, total: number) =>
     `the download of ${what} goes on from byte ${from} of ${total}: the host sends only the rest (206)`,

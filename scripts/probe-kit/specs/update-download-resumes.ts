@@ -73,7 +73,6 @@ import {
   until,
 } from "../binary-install";
 import type { Kit, Spec } from "../kit";
-import { shaped } from "../words";
 
 type Artifact = ReleaseManifest["artifacts"][number];
 
@@ -495,7 +494,6 @@ interface Stage {
   version: string;
 }
 
-const retried = shaped(downloadWords.retrying);
 const STALLED = downloadWords.stalled(Math.round(STALL_MS / 1000));
 const CUT = downloadWords.cut("ECONNRESET");
 
@@ -689,8 +687,8 @@ async function trickled(
       one?.ended === "whole" &&
       one.sent === artifact.size &&
       took >= forMs &&
-      !(await logLines(fleet, role)).some(
-        (line) => retried.test(line) && line.includes(downloadOf(stage, leg))
+      !(await logLines(fleet, role)).some((line) =>
+        line.includes(downloadWords.stopped(downloadOf(stage, leg)))
       ),
     `${took} ms; ${JSON.stringify(served)}`
   );

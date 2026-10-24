@@ -146,19 +146,20 @@ const updaterFiles = (fleet: Fleet) => {
 async function checkCutIsNoFailure(
   check: Kit["check"],
   fleet: Fleet,
-  version: string
+  version: string,
+  archive: string | undefined
 ): Promise<void> {
   const files = updaterFiles(fleet);
   const kept = await readJson<Failure>(files.failures);
   const local = await readJson<BinaryUpdateState>(files.state);
   const dropped = shaped(updatesWords.hubDropped);
-  const retried = shaped(downloadWords.retrying);
   const lines = (await fleet.logs("agent")).split("\n");
   const said = lines.filter((line) => dropped.test(line));
   const codes = new Set(said.map((line) => dropped.exec(line)?.[2]));
   const cutThenAsked = lines.filter(
     (line) =>
-      retried.test(line) && line.includes(downloadWords.cut("ECONNRESET"))
+      line.includes(downloadWords.stopped(`${archive} from its hub`)) &&
+      line.includes(downloadWords.cut("ECONNRESET"))
   );
   check(
     "a hub killed mid-download is a cut the download goes on from at once (ECONNRESET, its next attempt logged), and a hub refusing every ask after it through an update tick is one that did not answer (ECONNREFUSED): both said so in the agent's log",
@@ -469,7 +470,7 @@ const spec: Spec = {
       await fleet.stop("hub");
       await standIn.stop(true);
       await Bun.sleep(65_000);
-      await checkCutIsNoFailure(check, fleet, next.manifest.version);
+      await checkCutIsNoFailure(check, fleet, next.manifest.version, archive);
 
       // 6. The hub comes back, and answers the archive 500.
       archivePlays = "500";
