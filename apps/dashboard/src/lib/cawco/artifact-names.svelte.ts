@@ -19,7 +19,7 @@
  */
 import type { ArtifactKind, ChoiceEntry } from "@cawco/core";
 import type { Pin } from "@cawco/core/comments";
-import { SvelteMap } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
 import { ArtifactRefused, findArtifact } from "./artifact-api";
 
@@ -42,6 +42,8 @@ const answered = new SvelteMap<string, NamedArtifact | null>();
 const held = new SvelteMap<string, HeldMarks>();
 /** Each artifact's pins as the hub last answered them, for one no pane holds. */
 const read = new SvelteMap<string, HeldMarks>();
+/** Artifacts whose pins the hub was asked for and has answered, or refused: what a pin's chip can know of them, it knows. */
+const pinsAnswered = new SvelteSet<string>();
 /** Ids asked of the hub and not answered yet: never asked twice at once. */
 const asking = new Set<string>();
 
@@ -100,6 +102,7 @@ function askPins(id: string, instanceId: string): void {
     })
     .finally(() => {
       asking.delete(key);
+      pinsAnswered.add(id);
     });
 }
 
@@ -159,6 +162,16 @@ export function artifactMarks(id: string): HeldMarks | null {
     askPins(id, named.instanceId);
   }
   return null;
+}
+
+/**
+ * Whether what a chip can know of artifact `id`'s pins is known: a pane
+ * holds its doc, or the hub answered (or refused) the pins it was asked
+ * for. A pin's chip is drawn once it is, so the name it shows at its first
+ * paint is the one it keeps (references.ts).
+ */
+export function artifactMarksKnown(id: string): boolean {
+  return artifactMarks(id) !== null || pinsAnswered.has(id);
 }
 
 /** Where a press opens an artifact: at a pin's thread, at a decision card, at a spot an update changed (its anchor), or at its top. */

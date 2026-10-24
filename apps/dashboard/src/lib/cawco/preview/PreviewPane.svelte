@@ -2643,6 +2643,7 @@
     if (!id) {
       return;
     }
+    focusPast(id, resolved);
     if (onlyOnPage(id)) {
       cardError = null;
       post({ type: "cawco:resolve", pin: id, resolved });
@@ -2655,6 +2656,34 @@
       cardError = refused;
     } else if (refused) {
       failure = { message: refused, again: null };
+    }
+  }
+  /**
+   * The rail's rows as it last drew them, in its tab and its order: what the
+   * focus steps through once the comment it stood on leaves that tab. Kept
+   * while the rail stands aside (a phone's sheet, while a thread stands).
+   */
+  let railOrder: string[] = [];
+  /**
+   * Comment `id` resolved (or reopened) leaves the tab in front of him when
+   * that tab is Open (or Resolved): the tab stays, and the focus, when it
+   * stood on it, moves to the row after it there, else the one before it,
+   * else to none (the tab's empty state). So J and K walk the rows he sees,
+   * and the rail never follows the comment to its new tab.
+   */
+  function focusPast(id: string, resolved: boolean) {
+    const leaves =
+      (listFilter === "open" && resolved) ||
+      (listFilter === "resolved" && !resolved);
+    if (!(leaves && focusedPin === id)) {
+      return;
+    }
+    const at = railOrder.indexOf(id);
+    const rest = railOrder.filter((one) => one !== id);
+    const next = at === -1 ? null : (rest[at] ?? rest[at - 1] ?? null);
+    focusedPin = next;
+    if (next) {
+      post({ type: "cawco:focus-pin", id: next, scroll: false });
     }
   }
   /**
@@ -3856,6 +3885,9 @@
     onresolve={(id, resolved) => resolvePin(resolved, id)}
     onretry={relink}
     onretrypin={retryPin}
+    onshown={(ids) => {
+      railOrder = ids;
+    }}
     open={openPin}
     whyNotSent={notSentWhy}
     {pins}

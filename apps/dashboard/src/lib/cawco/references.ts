@@ -21,7 +21,7 @@ import {
 } from "@cawco/core";
 import type { Component } from "svelte";
 import ArtifactReference from "./ArtifactReference.svelte";
-import { artifactNamed } from "./artifact-names.svelte";
+import { artifactMarksKnown, artifactNamed } from "./artifact-names.svelte";
 import ChangeReference from "./ChangeReference.svelte";
 import DecisionReference from "./DecisionReference.svelte";
 import {
@@ -74,9 +74,23 @@ export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
       return SessionReference;
     },
   },
-  /** A pin, by its artifact and number (`<artifact>/<number>`): its artifact held or named (artifact-names.svelte.ts). */
+  /**
+   * A pin, by its artifact and number (`<artifact>/<number>`): its artifact
+   * held or named, and its pins known (artifact-names.svelte.ts
+   * `artifactMarksKnown`). Its chip shows what the pin stands on (DESIGN.md,
+   * "its label what it stands on"), so it is drawn once that is known, never
+   * before with the written label and again with the pin's name: a chip
+   * keeps its words and its width from its first paint.
+   */
   pin: {
-    find: (id) => ofArtifact(id, pinReference(id)?.artifact),
+    find: (id) => {
+      const artifact = pinReference(id)?.artifact;
+      return ofArtifact(id, artifact) &&
+        artifact &&
+        artifactMarksKnown(artifact)
+        ? id
+        : null;
+    },
     get element() {
       return PinReference;
     },

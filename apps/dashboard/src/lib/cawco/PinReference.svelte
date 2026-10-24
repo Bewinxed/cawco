@@ -4,8 +4,8 @@
    * core references.ts), drawn as its chip: the inline chip (ui/chip
    * `inline`) with the pin's pill as its mark (PinMark, the inline chip's
    * line tall) and what it stands on as its label (core pin-name.ts), read
-   * from the artifact's doc as the dashboard holds it now, else the written
-   * label. Its state is the pill's: recessed once resolved, its dashed ring
+   * from the artifact's doc as the dashboard holds it as the chip is first
+   * drawn, else the written label, and kept from then on. Its state is the pill's: recessed once resolved, its dashed ring
    * once its element is gone, the needs-you dot while an answer there is
    * unread (core `newAnswer`). Pressed, the artifact comes to the front of
    * the panel with the pin's thread open (reference-open.svelte.ts).
@@ -14,6 +14,7 @@
   import { newAnswer } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
   import { Portal } from "bits-ui";
+  import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { artifactMarks } from "./artifact-names.svelte";
@@ -37,7 +38,16 @@
         ) ?? null)
       : null;
   });
-  const words = $derived(pin ? pinName(pin) : label);
+  /*
+   * Its words, as its first paint draws them, kept: what the pin stands on
+   * (core pin-name.ts; DESIGN.md, a pin's chip: "its label what it stands
+   * on"), known by then (references.ts draws the chip once its artifact's
+   * pins are), else the written label where the hub couldn't say. A press
+   * that opens the artifact, and its doc loading, never rewrite them: a chip
+   * keeps its words and its width from its first paint. Its state (resolved,
+   * gone, unread) stays live; none of it moves its width.
+   */
+  const words = untrack(() => (pin ? pinName(pin) : label));
   const unread = $derived(!!pin && newAnswer(pin));
 
   /*

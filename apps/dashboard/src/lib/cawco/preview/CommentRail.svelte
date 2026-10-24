@@ -64,7 +64,13 @@
     IconUser,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
-  import { dur, reveal, revealOut } from "../motion/curves.svelte";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+    reveal,
+    revealOut,
+  } from "../motion/curves.svelte";
   import { LINK_DROPPED, type ListHold } from "./artifact-doc";
   import {
     attachedTo,
@@ -93,6 +99,7 @@
     onpage,
     onresolve,
     onretrypin,
+    onshown,
     whyNotSent = () => null,
     checks,
     filter = $bindable("open"),
@@ -127,6 +134,8 @@
     onresolve: (id: string, resolved: boolean) => void;
     /** A comment not sent, tried again: it goes to the session once more. */
     onretrypin: (id: string) => void;
+    /** The rows as drawn, by pin id, in the tab in front and its order. */
+    onshown?: (ids: string[]) => void;
     /** Why a comment hasn't reached the session, in words, when its delivery reached no one or it stands only on the page; null while it is on its way. */
     whyNotSent?: (pin: Pin) => string | null;
     /**
@@ -188,16 +197,17 @@
 
   /*
    * The focused comment's own filter shows, so J and K never land on a
-   * hidden row: as the focus moves to a comment, or it is resolved or
-   * reopened. One To check holds keeps To check; its row leaving To check
-   * (looked at) leaves the tab where it is.
+   * hidden row: as the focus moves to a comment (a key, a press on its pill
+   * or its chip, an address). One To check holds keeps To check; its row
+   * leaving To check (looked at) leaves the tab where it is. A comment
+   * resolved or reopened moves no tab: the focus moves instead (below).
    */
   let toldFor: string | null = null;
   /** The rail as it mounts (a phone's sheet standing back after a thread): its tab is what it was, To check included. */
   let mounting = true;
   $effect(() => {
     const pin = pins.find((one) => one.id === focused);
-    const state = pin ? `${pin.id}:${!!pin.resolvedAt}` : null;
+    const state = pin ? pin.id : null;
     const first = mounting;
     mounting = false;
     if (!pin || state === toldFor) {
@@ -213,6 +223,43 @@
       }
     });
   });
+
+  /*
+   * The rows as drawn, in the tab in front and its order, told to the pane
+   * (`onshown`): a comment resolved or reopened there leaves the tab, and the
+   * focus moves to the row after it in that order (PreviewPane `focusPast`),
+   * never the tab. The tab they were drawn in is kept, so a row leaving
+   * because its tab changed goes at once (`rowOut`).
+   */
+  let tabWas: typeof filter = untrack(() => filter);
+  $effect(() => {
+    const now = shown.map((pin) => pin.id);
+    const front = filter;
+    untrack(() => {
+      tabWas = front;
+      onshown?.(now);
+    });
+  });
+
+  /**
+   * A row leaving the tab in front of him folds shut as it fades, over
+   * `--dur-exit` on `--ease-out`; with less motion it fades. One that goes
+   * with its tab (another tab chosen) goes at once.
+   */
+  function rowOut(node: HTMLElement) {
+    if (filter !== tabWas) {
+      return { duration: 0 };
+    }
+    const height = node.offsetHeight;
+    return {
+      duration: dur("--dur-exit"),
+      easing: easeOut,
+      css: motionOk.current
+        ? (t: number) =>
+            `opacity: ${t}; height: ${t * height}px; overflow: clip`
+        : (t: number) => `opacity: ${t}`,
+    };
+  }
 
   /** The rows come back where they were read: the rail shut and open again keeps its scroll. */
   const keepScroll = (read: HTMLElement) => {
@@ -275,7 +322,7 @@
   {@const washed = pin.id === current}
   {@const firstWords =
     pin.thread[0]?.text.trim() || attached.map((one) => one.name).join(", ")}
-  <li class="group/row relative">
+  <li class="group/row relative" out:rowOut>
     <!-- The row is the comment and the press that opens its thread; Resolve
          stands over its end. On the selection wash (its thread open) every
          word is `selected-ink` (DESIGN.md, Colors: Selected); off it, each

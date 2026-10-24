@@ -123,7 +123,9 @@
   const POINTING_CALL =
     /(^|_)(artifact_update|artifact_create|comment_reply|comment_resolve)$/;
   /** A change's or a pin's link in a call's answer, its label escaped as markdown (and JSON) write it. */
-  const POINTED = /\[((?:[^\]\\]|\\.)*)\]\((cawco:(?:change|pin)\/[^)\s"]+)\)/g;
+  // A label holds no bracket of its own (references.ts escapes it), so a JSON answer's own `[` never opens one.
+  const POINTED =
+    /\[((?:[^[\]\\]|\\.)*)\]\((cawco:(?:change|pin)\/[^)\s"]+)\)/g;
   const ESCAPED = /\\(.)/g;
 
   /**
