@@ -73,6 +73,7 @@ import {
   xdgDataHome,
 } from "@cawco/core/paths";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { isAlive, listedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import type {
   CredentialCreateInput,
@@ -1987,6 +1988,7 @@ export class OpencodeHarness implements Harness {
    * fleet's servers) applies whatever runs.
    */
   async #configTick(now = false): Promise<void> {
+    this.#cutOnDeadServers();
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure, a different method
     if (!this.#converging) {
       return;
@@ -4108,6 +4110,29 @@ export class OpencodeHarness implements Harness {
     this.#pumps.delete(key);
     this.#pumpReady.delete(key);
     this.#pumpConnected.delete(key);
+  }
+
+  /**
+   * THE SERVER-DEATH CUT, on every tick of the config watcher: a session
+   * whose turn is open on a server process that is gone (killed from
+   * outside, crashed: no shutdown it announced) has that turn ended cut, as
+   * a shutdown cuts it ({@link OpencodeSession.serverGone}), which the hub
+   * hands back to it on the next server, and the agent ends what its
+   * commands left running (left-running.ts). Said in the log, with each
+   * session it cut.
+   */
+  #cutOnDeadServers(): void {
+    const cut = [...this.#sessions.values()].filter((session) => {
+      const pid = session.serverPidNow();
+      return (
+        pid !== undefined && !isAlive(listedPid(pid)) && session.serverGone()
+      );
+    });
+    if (cut.length > 0) {
+      console.warn(
+        `[opencode] the server process under ${cut.map((session) => `${session.instanceId} (pid ${session.serverPidNow()})`).join(", ")} died; their open turns end cut`
+      );
+    }
   }
 
   /** One event of a generation, to the session or subagent it is of, and to the generation's activity. */

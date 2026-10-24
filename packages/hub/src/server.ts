@@ -34434,11 +34434,14 @@ export const createServer = (
                   const [row] = db.listedInstancesByIds([message.instanceId]);
                   const parentId = row?.parentInstanceId;
                   // A turn an interrupt cut ({@link interruptedTurns}), on
-                  // any harness: nothing is handed back for it, no rule
-                  // answers it and no push says it ended.
+                  // any harness, or one its server's stop cut (OpenCode's
+                  // `serverStopped`, which the session is handed back,
+                  // `resumeCutTurn`): nothing is handed back for it, no rule
+                  // answers it, no push says it ended, and it fails no item.
                   const cut =
                     interruptedTurns.delete(message.instanceId) ||
-                    neutral.subtype === "aborted";
+                    neutral.subtype === "aborted" ||
+                    neutral.serverStopped === true;
                   if (row && neutral.subtype === "aborted") {
                     // OpenCode's own word: its wait is over; whether it is
                     // held was the interrupt's to say ({@link noteInterrupt}).

@@ -106,6 +106,11 @@ export const workWords = {
    */
   providerRetryEnded: (message: string, deadline: string, next?: string) =>
     `Its provider refused the turn and kept retrying ("${message}"), so the item ended at its deadline for a provider's retry, ${deadline}${next ? `: the provider's next attempt was at ${next}, past it` : ""}. Delegate the work again once the provider answers.`,
+  /** The agent's log line on what a dead harness process left running and it ended (agent left-running.ts), before the processes it names. */
+  leftRunningEnded:
+    "its harness process died, so what it left running was ended",
+  /** Beside a process of that line that had ended before the agent came to it. */
+  leftRunningGoneFirst: "it had ended already",
   /**
    * A command a crash cut (hub server.ts, core `CutCommand`): the command,
    * as it was asked, and what it had printed by then; `output` undefined

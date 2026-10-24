@@ -4602,10 +4602,13 @@ export class SessionSupervisor {
         this.#leftGone(instanceId);
       }
       running.clear();
+      this.#leftRunning.commandsEnded(instanceId);
       return;
     }
     if (shellCallsOf(message, running)) {
       this.#recordShell(instanceId, holder);
+    } else if (running.size === 0) {
+      this.#leftRunning.commandsEnded(instanceId);
     }
   }
 

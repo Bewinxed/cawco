@@ -704,6 +704,30 @@ export class OpencodeSession implements HarnessSession {
   processId(): Promise<number | undefined> {
     return Promise.resolve(this.#serverPid());
   }
+
+  /** The pid of the server it runs on now. */
+  serverPidNow(): number | undefined {
+    return this.#serverPid();
+  }
+
+  /**
+   * The server its turn ran in died (its process gone, not a shutdown it
+   * announced): the open turn ends cut, as a shutdown's does
+   * (`serverStopped`), so the hub hands it back and the agent ends what its
+   * commands left running. Answers whether it had a turn open to cut.
+   */
+  serverGone(): boolean {
+    if (!this.#turnOpen) {
+      return false;
+    }
+    this.#turnEnded({
+      subtype: "error_during_execution",
+      is_error: true,
+      errors: [SERVER_STOPPED_MID_TURN],
+      serverStopped: true,
+    });
+    return true;
+  }
   sessionId: string | null;
   readonly instanceId: string;
   /** The CawCo account this session runs on, whose own server it runs in; undefined: the machine's. */
