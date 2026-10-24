@@ -27,16 +27,19 @@ function install() {
     const r = face.getBoundingClientRect(), m = getComputedStyle(face).clipPath.match(/inset\(([^)]*)\)/);
     let [t, rt, b, l] = [0, 0, 0, 0];
     if (m) { const v = m[1].split(" round ")[0].trim().split(/\s+/).map(parseFloat); [t, rt, b, l] = [v[0], v[1] ?? v[0], v[2] ?? v[0], v[3] ?? v[1] ?? v[0]]; }
-    return { left: r.left + Math.max(0, l), right: r.right - Math.max(0, rt), top: r.top + Math.max(0, t), bottom: r.bottom - Math.max(0, b) };
+    // Where the inset is negative the clip lets the face's shadow draw that far out: that counts as drawn.
+    return { left: r.left + l, right: r.right - rt, top: r.top + t, bottom: r.bottom - b };
   };
   // The real hit area: from the element's centre out along each axis, half a pixel at a time, while
   // elementFromPoint still lands on it (or inside it).
   K.hitSpan = (el) => {
     const b = el.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
     const on = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t)); };
-    if (!on(cx, cy)) return { covered: true, w: 0, h: 0 };
-    const run = (dx, dy) => { let d = 0; while (d < 60 && on(cx + dx * (d + 0.5), cy + dy * (d + 0.5))) d += 0.5; return d; };
-    return { w: run(-1, 0) + run(1, 0), h: run(0, -1) + run(0, 1) };
+    const name = (t) => (t ? (t.className && (t.className.baseVal ?? t.className)) || t.tagName : "nothing");
+    if (!on(cx, cy)) return { covered: true, w: 0, h: 0, by: name(document.elementFromPoint(cx, cy)) };
+    const by = [];
+    const run = (dx, dy) => { let d = 0; while (d < 60 && on(cx + dx * (d + 0.5), cy + dy * (d + 0.5))) d += 0.5; if (d < 22) by.push(name(document.elementFromPoint(cx + dx * (d + 0.5), cy + dy * (d + 0.5)))); return d; };
+    return { w: run(-1, 0) + run(1, 0), h: run(0, -1) + run(0, 1), by: [...new Set(by)].join("/") };
   };
   // The arc's drawn lengths (each leg's path) and its body, painted from the clock as it stands.
   K.arc = (id) => { window.__paintArcs(); const s = document.getElementById(id), len = (p) => (p.getAttribute("d") ? p.getTotalLength() : 0); return { a: len(s.querySelector('[data-leg="a"]')), b: len(s.querySelector('[data-leg="b"]')), body: s.querySelector(".arc-body").getAttribute("d"), color: getComputedStyle(s).color, state: s.dataset.state, node: s }; };
@@ -347,8 +350,9 @@ async function reviewFixes(browser, engine) {
     const { page, ev } = await openPage(browser, 1440, 900, scheme);
     const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
     await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
-    const row = await ev(() => { const r = document.querySelector('.clip[data-key="reveal"]'), cs = getComputedStyle(r, "::before"); return { chosen: r.hasAttribute("data-chosen"), fill: cs.backgroundColor, wash: __k.color("--brand-wash"), frame: cs.boxShadow, coral: __k.color("--brand-solid") }; });
-    ok(V, "the chosen row's computed background is the brand wash (" + row.fill + "), the 1px coral ring kept", row.chosen && row.fill === row.wash && row.frame.includes(row.coral) && /0px 0px 0px 1px inset/.test(row.frame), JSON.stringify(row));
+    const row = await ev(() => { const r = document.querySelector('.clip[data-key="reveal"]'), cs = getComputedStyle(r, "::before"), dock = getComputedStyle(document.getElementById("dock")).backgroundColor; const lum = (c) => { const m = __k.over(dock, c).match(/\d+/g).map(Number), lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * lin(m[0]) + 0.7152 * lin(m[1]) + 0.0722 * lin(m[2]); }; return { chosen: r.hasAttribute("data-chosen"), fill: cs.backgroundColor, token: __k.color("--c-chosen-wash"), wash: __k.color("--brand-wash"), frame: cs.boxShadow, coral: __k.color("--brand-solid"), lum: Math.round(lum(cs.backgroundColor) * 1000) / 1000, washLum: Math.round(lum(__k.color("--brand-wash")) * 1000) / 1000, failLum: Math.round(lum(__k.color("--status-fail-bg")) * 1000) / 1000 }; });
+    if (scheme === "dark") ok(V, "at night the chosen row's computed background is the brand wash (" + row.fill + "), the 1px coral ring kept", row.chosen && row.fill === row.wash && row.fill === row.token && row.frame.includes(row.coral) && /0px 0px 0px 1px inset/.test(row.frame), JSON.stringify(row));
+    else ok(V, "by day the chosen row's wash is the house wash at 40% (" + row.fill + "): lighter than the solid wash and the Save-failed card's fill (luminance " + row.lum + " against " + row.washLum + " and " + row.failLum + "), the 1px coral ring kept", row.chosen && row.fill === row.token && /\/ 0\.4\)|0\.4\)$/.test(row.fill) && row.lum > row.washLum && row.lum > row.failLum && row.frame.includes(row.coral), JSON.stringify(row));
     // Its figures still read as text on the wash (the wash laid over the dock, the figure's ink on that).
     const fig = await ev(() => { const r = document.querySelector('.clip[data-key="reveal"]'), wash = getComputedStyle(r, "::before").backgroundColor, ground = __k.over(getComputedStyle(document.getElementById("dock")).backgroundColor, wash); return [...r.querySelectorAll(".fig")].map((f) => __k.ratio(getComputedStyle(f).color, ground)); });
     ok(V, "on the wash the row's figures hold text contrast (" + fig.join(", ") + ":1)", fig.every((x) => x >= 4.5), JSON.stringify(fig));
@@ -407,20 +411,22 @@ async function reviewFixes(browser, engine) {
     const V = w + "-" + engine + "-door-slide";
     const { page, ev } = await openPage(browser, w, h);
     const res = await ev(() => new Promise((done) => {
-      const g = document.querySelector(".gsec[data-current] .graph"), well = g.parentNode, frames = [], worst = { out: 0, raw: 0, seen: 0 };
+      const g = document.querySelector(".gsec[data-current] .graph"), well = g.parentNode, frames = [], worst = { out: 0, raw: 0, seen: 0, flips: 0, band: {} };
       const sample = () => {
         const wb = well.getBoundingClientRect();
         for (const f of well.querySelectorAll(".door-face")) { if (+getComputedStyle(f).opacity === 0) continue; worst.seen++; const d = __k.drawn(f), q = f.getBoundingClientRect(); worst.raw = Math.max(worst.raw, wb.top - q.top, q.bottom - wb.bottom); const out = Math.max(wb.left - d.left, d.right - wb.right, wb.top - d.top, d.bottom - wb.bottom, 0); if (out > worst.out) { worst.out = out; worst.door = f.textContent; worst.t = getComputedStyle(f).translate; } }
+        for (const d of well.querySelectorAll(".door[data-on]")) { const k = d.dataset.machine; if (worst.band[k] && worst.band[k] !== d.dataset.band) worst.flips++; worst.band[k] = d.dataset.band; }
+        for (const d of well.querySelectorAll(".door:not([data-on])")) delete worst.band[d.dataset.machine];
         frames.push(1);
       };
       // Doors come (scrolled to the foot), go (back to the top), and come again, each sampled to its end.
-      const steps = [() => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }, () => { g.scrollTop = g.scrollHeight; }];
+      const steps = [() => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }, () => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }];
       let i = 0, t0 = performance.now();
       const tick = (now) => { sample(); if (now - t0 > 320) { if (i === steps.length) { done({ frames: frames.length, worst }); return; } steps[i++](); g.dispatchEvent(new Event("scroll")); t0 = now; } requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
     }));
     const hit = await ev(() => { const d = document.querySelector(".gsec[data-current] .door[data-on]"); if (!d) return null; const pb = getComputedStyle(d, "::before"); return { door: Math.round(d.getBoundingClientRect().height), layer: pb.content !== "none" ? Math.round(parseFloat(pb.height)) : null }; });
-    ok(V, "no frame of a door's slide in or out draws past the well (" + res.frames + " frames, " + res.worst.seen + " face samples; the face itself rode up to " + Math.round(res.worst.raw * 100) / 100 + "px out, its drawing at most " + Math.round(res.worst.out * 100) / 100 + "px)", res.frames >= 12 && res.worst.seen > 20 && res.worst.raw > 1 && res.worst.out <= 0.5, JSON.stringify(res));
+    ok(V, "no frame of a door's slide in or out, nor of a band change (" + res.worst.flips + " seen), draws past the well, its shadow's reach included (" + res.frames + " frames, " + res.worst.seen + " face samples; the face itself rode up to " + Math.round(res.worst.raw * 100) / 100 + "px out, its drawing at most " + Math.round(res.worst.out * 100) / 100 + "px)", res.frames >= 12 && res.worst.seen > 20 && res.worst.raw > 1 && res.worst.out <= 0.5, JSON.stringify(res));
     if (w === 390) ok(V, "its touch layer is still 44px over its 28px door", !!hit && hit.door === 28 && hit.layer === 44, JSON.stringify(hit));
     await page.close();
   }
@@ -444,6 +450,62 @@ async function reviewFixes(browser, engine) {
     }, LONG);
     ok(V, "every tab's words stay inside its tab, every tab inside its groove, every groove on the screen (" + res.grooves.join(", ") + ")", res.out.length === 0, res.out.join(", "));
     ok(V, "a long component name is cut at its end inside its tab, the whole name in its title", res.cut && res.ellipsis === "ellipsis" && res.title === LONG, JSON.stringify(res));
+    await page.close();
+  }
+  // Third review, #1: every pressable thing at 390 and 320 takes a press over 44 × 44 by elementFromPoint,
+  // centre to each edge, on the graph face, the timeline face and in the popover; no neighbour's layer steals.
+  for (const [w, h] of [[390, 844], [320, 700]]) {
+    const V = w + "-" + engine + "-hits";
+    const { page, ev } = await openPage(browser, w, h);
+    const sweepAll = (where) => ev((where) => {
+      const vis = (el) => { for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity === 0 || e.hidden) return false; } const r = el.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth)) return false; const g = el.closest(".graph"); if (!g) return true; const v = g.getBoundingClientRect(); return r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5 && r.left >= v.left - 0.5 && r.right <= v.right + 0.5; };
+      const sel = where === "pop" ? ".pop button, .pop .fld, .pop .dslider" : ".review-bar .t-tab, #tabs .t-tab, #faces .t-tab, #sheetTitle, #sheetHide, .gsec[data-current] .door[data-on], .zoom-fit, .toolbar .icon-btn, .gsec[data-current] .region-head, .gsec[data-current] .var, .gsec[data-current] .node, .dock-head .tbtn, .dock-head .ghost-btn, #compare .t-tab, .clip .fact, .clip .bar";
+      // A node's own text and chips are the node's; a chip is measured on its own.
+      return [...document.querySelectorAll(sel)].filter(vis).map((el) => ({ el: (el.id || (el.className.baseVal ?? el.className).split(" ")[0]) + "|" + (el.getAttribute("aria-label") || el.textContent).trim().slice(0, 14), ...__k.hitSpan(el) })).filter((x) => x.covered || x.w < 43.5 || x.h < 43.5).map((x) => where + ":" + x.el + " " + x.w + "×" + x.h + (x.covered ? " covered" : "") + (x.by ? " by " + x.by : ""));
+    }, where);
+    const graph = await sweepAll("graph");
+    await page.click('#faces [data-face="move"]'); await page.waitForTimeout(400);
+    const tl = await sweepAll("timeline");
+    const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
+    await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
+    const pop = await sweepAll("pop");
+    // The Duration field's wrapper takes the press and hands it to its input, anywhere on its 44px box.
+    const fb = await ev(() => { const l = document.querySelector('.pop .fld:has(input[data-f="dur"])'), b = l.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height, r: parseFloat(getComputedStyle(l).borderTopLeftRadius) }; });
+    const field = { w: Math.round(fb.w), h: Math.round(fb.h), points: [] };
+    // Its four edges' middles and two points just inside its rounded corners, each a real press.
+    for (const [px_, py_] of [[fb.x + 2, fb.y + fb.h / 2], [fb.x + fb.w - 2, fb.y + fb.h / 2], [fb.x + fb.w / 2, fb.y + 2], [fb.x + fb.w / 2, fb.y + fb.h - 2], [fb.x + fb.r, fb.y + fb.r / 2], [fb.x + fb.w - fb.r, fb.y + fb.h - fb.r / 2]]) {
+      await ev(() => document.activeElement && document.activeElement.blur());
+      await page.mouse.click(px_, py_);
+      field.points.push(await ev(() => document.activeElement && document.activeElement.dataset.f === "dur"));
+    }
+    field.corner = field.focused = field.points.every(Boolean);
+    ok(V, "graph face, timeline face and popover: every pressable thing takes a press over 44 × 44 (slab names, chips, states, doors, facts, bars, tabs, Hide, play, loop, fields)", graph.length === 0 && tl.length === 0 && pop.length === 0, graph.concat(tl, pop).join(", "));
+    ok(V, "the Duration field is a " + field.w + "×" + field.h + " press: its wrapper takes a press at each edge and inside its corners and hands it to its input", field.w >= 44 && field.h >= 44 && field.corner && field.focused, JSON.stringify(field));
+    await page.close();
+  }
+  // Third review, #4: a pinned slab name never stands on a state's words, scrolled through the whole view at 390
+  // and 1440 in 12px steps.
+  for (const [w, h] of [[390, 844], [1440, 900]]) {
+    const V = w + "-" + engine + "-pinned";
+    const { page, ev } = await openPage(browser, w, h);
+    const res = await ev(() => new Promise((done) => {
+      const g = document.querySelector(".gsec[data-current] .graph"), hits = [], max = g.scrollHeight - g.clientHeight;
+      let y = 0, pinnedSeen = 0;
+      const step = () => {
+        g.scrollTop = y; g.dispatchEvent(new Event("scroll"));
+        requestAnimationFrame(() => {
+          for (const head of g.querySelectorAll(".region-head[data-pinned]")) {
+            pinnedSeen++;
+            const hb = head.getBoundingClientRect();
+            for (const n of g.querySelectorAll(".node")) { const q = n.getBoundingClientRect(); if (Math.min(q.right, hb.right) - Math.max(q.left, hb.left) > 0.5 && Math.min(q.bottom, hb.bottom) - Math.max(q.top, hb.top) > 0.5) hits.push(y + ":" + head.textContent + " on " + n.dataset.state); }
+          }
+          if (y >= max) { done({ hits: hits.slice(0, 6), count: hits.length, pinnedSeen, steps: Math.ceil(max / 12) }); return; }
+          y = Math.min(max, y + 12); step();
+        });
+      };
+      step();
+    }));
+    ok(V, "scrolled through the view in 12px steps (" + res.steps + "), a pinned slab name (" + res.pinnedSeen + " pinned frames) never stands on a state", res.count === 0, JSON.stringify(res));
     await page.close();
   }
   // Critique fixes (impeccable P2s): a band stands only while it holds a door, the view taking an empty one's

@@ -64,6 +64,10 @@
   --c-graph-edge-ink: light-dark(var(--border-contrast), var(--border-row-outline));
   --c-graph-edge-chosen: light-dark(var(--brand-ink-strong), var(--brand-solid));
   --c-graph-label-bg: light-dark(var(--surface-recess), var(--surface-recess-deep));
+  /* The chosen clip row's wash: by day the house wash at 40%, so a choice reads as chosen and not as the red of
+     a failure or the action (the third review: the solid day wash read as the Save-failed card's pink); at
+     night the house wash itself. */
+  --c-chosen-wash: light-dark(color-mix(in oklab, var(--brand-wash) 40%, transparent), var(--brand-wash));
   /* Edges (section F): the elbow's radius, the open chevron's legs, the playback dash. */
   --c-edge-elbow-r: var(--radius-sm);
   --c-edge-head-leg: 7px;
@@ -237,16 +241,17 @@ button { font: inherit; color: inherit; }
 /* The door is the press: still, transparent, its 44px touch layer standing where it stands. Its face is the
    drawing: it slides 4px in from the well's edge while a clip on the same clock keeps every frame inside the
    door's own box, so nothing of it draws past the well (the second review: "clip the drawing, not its touch
-   layer"). Its shadow is kept on the three inner sides; the edge side's is the well's edge. */
+   layer"). Its shadow is kept --space-2 out on the three inner sides (a door stands --space-2 in from the view's
+   sides, so that reach stays in the well); the edge side's is the well's edge. */
 .door { all: unset; box-sizing: border-box; position: absolute; display: flex; block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; pointer-events: none; }
 .door[data-on] { pointer-events: auto; }
 .door-face { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-1); flex: 1 1 auto; min-inline-size: 0; padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); opacity: 0; translate: var(--door-out); clip-path: var(--door-clip-out); transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), clip-path var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door[data-on] .door-face { opacity: 1; translate: 0 0; clip-path: var(--door-clip-in); transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), clip-path var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .door svg { flex: none; inline-size: var(--icon-sm); block-size: var(--icon-sm); rotate: var(--door-turn, 0deg); }
-.door[data-band="bottom"] { inset-block-end: 0; --door-out: 0 4px; --door-clip-out: inset(-8px -8px 4px -8px); --door-clip-in: inset(-8px -8px 0 -8px); }
+.door[data-band="bottom"] { inset-block-end: 0; --door-out: 0 4px; --door-clip-out: inset(calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 4px calc(-1 * var(--space-2))); --door-clip-in: inset(calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-2))); }
 .door[data-band="bottom"] .door-face { border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
-.door[data-band="top"] { inset-block-start: 0; --door-out: 0 -4px; --door-clip-out: inset(4px -8px -8px -8px); --door-clip-in: inset(0 -8px -8px -8px); }
+.door[data-band="top"] { inset-block-start: 0; --door-out: 0 -4px; --door-clip-out: inset(4px calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) calc(-1 * var(--space-2))); --door-clip-in: inset(0 calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) calc(-1 * var(--space-2))); }
 .door[data-band="top"] .door-face { border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
 @media (hover: hover) { .door:hover .door-face { background: var(--surface-hover); color: var(--ink-strong); } }
 .door:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
@@ -488,7 +493,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 /* The chosen clip: the brand wash with the card's 1px brand-solid ring (the second review: the recess alone
    with a ring read as a focused input, not "this one is chosen"). The hover ghost glides under the row a
    pointer is on. */
-.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--brand-wash); box-shadow: inset 0 0 0 1px var(--brand-solid); }
+.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--c-chosen-wash); box-shadow: inset 0 0 0 1px var(--brand-solid); }
 .row-ghost { position: absolute; z-index: 0; inset-inline: calc(-1 * var(--space-2)); inset-block-start: 0; block-size: var(--ghost-h, 0px); translate: 0 var(--ghost-y, 0px); border-radius: var(--radius-sm); background: var(--surface-hover); opacity: 0; pointer-events: none; transition: translate var(--dur-ghost) var(--ease-in-out), block-size var(--dur-ghost) var(--ease-in-out), opacity var(--dur-control) var(--ease-out); }
 .row-ghost[data-on] { opacity: 1; }
 .row-ghost[data-fresh] { transition: opacity var(--dur-control) var(--ease-out); }
@@ -743,7 +748,7 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
   .tl { --rows: stacked; }
   .tl-row { grid-template-columns: minmax(0, 1fr); }
   .ruler-row .ruler { grid-column: 1; }
-  .lane { margin-block-start: var(--space-2); grid-column: 1; }
+  .lane { margin-block-start: max(var(--space-2), var(--lane-gap, 0px)); grid-column: 1; }
   .end-area { display: none; }
   .playhead::after { display: none; }
   .lane::before, .ruler::before { content: ""; position: absolute; inset-block: 0; inset-inline: var(--end-x, 100%) 0; background: var(--surface-recess-deep); pointer-events: none; }
@@ -763,8 +768,21 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
    controls far enough apart that their 44px layers meet without crossing. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .t-tabs { overflow: visible; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-end { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
-/* The toolbar's layers reach 4px under it and a door's 8px over its band: --space-4 between keeps them apart. */
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .toolbar { margin-block-end: var(--space-4); }
+/* The toolbar's layers reach up to 7px under it (a 24px zoom figure in its 30px row) and a door's 10px over
+   its band: --space-5 between keeps them apart. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .toolbar { margin-block-end: var(--space-5); }
+/* A door's layer reaches 10px out over the well's edge (into the toolbar's foot margin, clear of its layers)
+   and only 6px into the view, so a slab's name at the view's top keeps its own 44px. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .door::before { inset-block: auto; block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .door[data-band="top"]::before { inset-block-start: -10px; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .door[data-band="bottom"]::before { inset-block-end: -10px; }
+/* The head's last control keeps its layer on the screen: the head stands its end that much in. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) #sheetHead { padding-inline-end: calc((var(--c-touch-floor) - var(--c-btn-h-sm)) / 2 + 1px); }
+/* Hide keeps its 30px; the title gives way first. */
+#sheetHide { flex: none; }
+/* Stacked rows: a bar's 44px layer reaches 10px over and under its lane, so the lane stands 10px under its
+   facts and the row keeps 10px under it, and no row's layer reaches into a neighbour's. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip { padding-block: calc((var(--c-touch-floor) - var(--c-pill-h)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
@@ -772,6 +790,7 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .pop input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar { touch-action: none; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-hit { display: block; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .tl { --lane-gap: calc((var(--c-touch-floor) - var(--c-pill-h)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .edge .hit { stroke-width: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ceditor .knob-hit { display: inline; }
 html:is([data-input="touch"], [data-input="touch-hover"]) :is(.node, .var) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
