@@ -62,13 +62,13 @@
     {
       "id": "stop-idle",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
-      "bar": "Only if you pick the line cut above. Stopped and Idle go together. A filled square can't fill the row's footprint and keep the row's ink: at Solar's own size it reads as a bullet beside 12px glyphs; at the row's size it outweighs every neighbour. Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "outlined",
+      "bar": "Only if you pick the line cut above. Stopped and Idle go together. A filled square at the row's footprint would carry 4–5× the row's ink, so filled means Solar's own size. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "recommended": "filled",
       "candidates": [
         {
-          "id": "outlined",
-          "label": "Both outlined",
-          "result": "Both in outline at the row's size and ink, like the rest; Stopped reads as an empty checkbox.",
+          "id": "filled",
+          "label": "Both filled, Solar's size",
+          "result": "Reads as pause and stop, at the row's ink (0.90–1.37×); smaller than their neighbours (5.3px at 16px).",
           "items": [
             {
               "label": "Status rows, in their inks",
@@ -81,36 +81,19 @@
           ]
         },
         {
-          "id": "filled-solar",
-          "label": "Both filled, Solar's size",
-          "result": "Even ink with the row (0.90–1.37×), but 5.3px at 16px beside 11.7px glyphs: they read as bullets.",
+          "id": "outlined",
+          "label": "Both outlined",
+          "result": "The row's size and ink, but Stopped reads as an empty checkbox.",
           "items": [
             {
               "label": "Status rows, in their inks",
               "before": "img/stop-idle-today-0.svg",
-              "after": "img/stop-idle-filled-solar-0.svg"
+              "after": "img/stop-idle-outlined-0.svg"
             },
             {
               "label": "16 · 20 · 24, beside a folder",
               "before": "img/stop-idle-today-1.svg",
-              "after": "img/stop-idle-filled-solar-1.svg"
-            }
-          ]
-        },
-        {
-          "id": "filled-row",
-          "label": "Both filled, the row's size",
-          "result": "11.7px at 16px like their neighbours, but 3.7–5.7× the row's ink: the heaviest marks in the row.",
-          "items": [
-            {
-              "label": "Status rows, in their inks",
-              "before": "img/stop-idle-today-0.svg",
-              "after": "img/stop-idle-filled-row-0.svg"
-            },
-            {
-              "label": "16 · 20 · 24, beside a folder",
-              "before": "img/stop-idle-today-1.svg",
-              "after": "img/stop-idle-filled-row-1.svg"
+              "after": "img/stop-idle-outlined-1.svg"
             }
           ]
         }
