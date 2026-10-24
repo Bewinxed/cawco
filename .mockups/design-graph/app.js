@@ -762,6 +762,16 @@ function drawDoors(c) {
     box.append(d);
   }
 }
+// A door that is showing and changes band takes the new band's clip and place in the same frame, its face's
+// transitions held for that frame, so no frame draws the old band's clip at the new place (the third review:
+// a flipped door's shadow reached below the well for a few frames).
+function setBand(d, band) {
+  if (d.dataset.band === band) return;
+  const f = d.querySelector(".door-face");
+  if (!d.hasAttribute("data-on") || !f) { d.dataset.band = band; return; }
+  f.style.transition = "none"; d.dataset.band = band; void f.offsetWidth;
+  requestAnimationFrame(() => { f.style.transition = ""; });
+}
 // The chevron points out through the edge its door stands on.
 const DOOR_TURN = { bottom: "0deg", top: "180deg", right: "-90deg", left: "90deg" };
 // Every scroll, zoom and redraw: the names that pin and the doors that show.
@@ -807,7 +817,7 @@ function viewChanged(cid) {
       if (total > room) for (const x of shown) x.d.style.maxInlineSize = Math.floor(room / shown.length) + "px";
     }
     let next = s2;
-    const places = shown.map((x) => { x.d.dataset.band = band; const w = x.d.offsetWidth; const want = clamp(x.at - w / 2, s2, span - s2 - w); const at = Math.max(want, next); next = at + w + s1; return { x, at, w }; });
+    const places = shown.map((x) => { setBand(x.d, band); const w = x.d.offsetWidth; const want = clamp(x.at - w / 2, s2, span - s2 - w); const at = Math.max(want, next); next = at + w + s1; return { x, at, w }; });
     let limit = span - s2;
     for (let i = places.length - 1; i >= 0; i--) { places[i].at = Math.min(places[i].at, limit - places[i].w); limit = places[i].at - s1; }
     // The band's own left is the view's (the well's edge and the view's share one inline start).
@@ -827,13 +837,20 @@ function viewChanged(cid) {
     return viewChanged(cid);
   }
   // A slab's name sticks to the view's top while its top has left the view and the slab is still in it, so the
-  // room the view is in is always named; it stops --space-5 short of its slab's foot.
+  // room the view is in is named; it stops --space-5 short of its slab's foot, stands --space-2 under the view's
+  // top (clear of a door's touch layer, which reaches 6px in), and never stands on a state: where pinned it
+  // would cover one, it scrolls away with its slab instead (the third review).
   for (const r of g.querySelectorAll(".region")) {
     const head = r.querySelector(".region-head"), rb = r.getBoundingClientRect();
-    const natural = rb.top + head.offsetTop * z, want = top + s1;
+    const natural = rb.top + head.offsetTop * z, want = top + s2;
     const most = (r.offsetHeight - head.offsetTop - head.offsetHeight - px("--space-5")) * z;
     const inView = rb.bottom > top + 0.5 && rb.top < top + H - 0.5;
-    const shift = inView ? clamp(want - natural, 0, Math.max(0, most)) : 0;
+    let shift = inView ? clamp(want - natural, 0, Math.max(0, most)) : 0;
+    if (shift > 0.5) {
+      const hb = head.getBoundingClientRect(), t = natural + shift, b = t + head.offsetHeight * z;
+      const covers = [...r.querySelectorAll(".node")].some((n) => { const q = n.getBoundingClientRect(); return Math.min(q.right, hb.right) - Math.max(q.left, hb.left) > 0.5 && Math.min(q.bottom, b) - Math.max(q.top, t) > 0.5; });
+      if (covers) shift = 0;
+    }
     head.style.translate = shift > 0.5 ? "0 " + Math.round((shift / z) * 100) / 100 + "px" : "";
     head.toggleAttribute("data-pinned", shift > 0.5);
   }
