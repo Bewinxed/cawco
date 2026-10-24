@@ -50,11 +50,15 @@
  * 10. One id resolver (hub handles.ts `byId`): a working delegate per form
  *    of naming it (its full id, six and eight characters of it, its handle
  *    `<folder>#<id8>`, a mention chip `@Title <handle>`) is reached by the
- *    parent's `handoff` (its words reach that leaf), `interrupt_delegate`,
- *    `answer_delegate` and `stop_delegate` (each answer names it, the stop
- *    cancels its item), and `find`'s `around` reads that session.
+ *    parent's `handoff` (its words reach that leaf), `interrupt_delegate`
+ *    and `stop_delegate` (each answer names it, the stop cancels its item),
+ *    `answer_delegate` (the leaf asks its parent a real question; the answer
+ *    names it and the leaf reads the label picked), and `find`'s `around`
+ *    reads that session once its words are indexed.
  *    Two leaves, each continued by the parent's `continue_session` (one
- *    session from then, its old id a former id of the new): handed off by
+ *    session from then, its old id a former id of the new; the note carries
+ *    the leaf's tag, since a delegate's brief is no person's message and the
+ *    continuation opens on none of it): handed off by
  *    the old id and by the new, each reaches the continuation (the answer
  *    names it, the words reach it); one is stopped by its old id, the other
  *    by its new, and each time the continuation's item is cancelled. Two
@@ -139,6 +143,8 @@ const FORMS: Record<string, (id: string, folder: string) => string> = {
   "a mention chip": (id, folder) => `@Forms leaf <${folder}#${id.slice(0, 8)}>`,
 };
 const TAG_FORM = `PROBE-HANDED-FORM-${RUN}`;
+/** Claude Code's question tool: a delegate's ask its parent answers. */
+const ASK_TOOL = "AskUserQuestion";
 const LAN_CODE = /lan:\d+/;
 const LAN_DIRECT_CODE = /lan-direct:\d+/;
 /** artifact_browse's answer: the address its browser loads. */
@@ -288,6 +294,8 @@ const otherLeg = (harness: Other): OtherLeg => ({
 
 interface Progress {
   a: { finished: boolean; made: boolean; wrote: boolean };
+  /** Step 10: each leaf's question, by the words that make it ask: asked yet, its words, the label answered. */
+  asks: Map<string, { asked: boolean; label: string; question: string }>;
   b: {
     finished: boolean;
     /** The hub's own port that serves no preview, on the pass's host: refused. */
@@ -307,6 +315,7 @@ interface Progress {
 const state: Progress = {
   a: { made: false, wrote: false, finished: false },
   refused: { called: false, path: "" },
+  asks: new Map(),
   b: {
     read: false,
     opened: false,
@@ -417,6 +426,29 @@ const leafShort = (request: Seen): Reply =>
   answerOf(request.body, (use) => use.name === FINISH)
     ? say("ok")
     : found(request, FINISH, { headline: "Done.", summary: "Done." });
+
+/** Step 10's leaves: their question, once, when the words asking for it reach them; else work until stopped. */
+const formLeaf = (request: Seen): Reply => {
+  for (const [token, ask] of state.asks) {
+    if (!ask.asked && request.all.includes(token)) {
+      ask.asked = true;
+      return call(ASK_TOOL, {
+        questions: [
+          {
+            question: ask.question,
+            header: "Probe",
+            multiSelect: false,
+            options: [
+              { label: ask.label, description: "Go on." },
+              { label: "Stop here", description: "Stop." },
+            ],
+          },
+        ],
+      });
+    }
+  }
+  return call("Bash", { command: "sleep 3", description: "Work" });
+};
 
 /** Step 9's parent: one delegate call naming a path under ~/.ssh, then words. */
 const refusedParent = (request: Seen, repo: string): Reply => {
@@ -1054,13 +1086,14 @@ const stillRefused = async (
  * answer names it; the stop cancels its item), and find's `around` reads it.
  */
 const reachedAs = async (
-  { check }: Kit,
+  kit: Kit,
   fleet: KitFleet,
   session: ToolSession,
   form: string,
   written: (id: string, folder: string) => string,
   delegate: (tag: string) => Promise<Started>
 ): Promise<void> => {
+  const { check } = kit;
   const tag = `${TAG_FORM} ${form}`;
   const leaf = await delegate(tag);
   const id8 = leaf.instanceId.slice(0, 8);
@@ -1085,28 +1118,37 @@ const reachedAs = async (
   check(
     `10: handoff to ${form} (${target}) reaches that leaf`,
     !handed.refused && reached,
-    `${handed.status} ${handed.text.slice(0, 200)}${reached ? "" : "; its leaf never read it"}`
+    `${handed.status} ${handed.text.slice(0, 300)} | read by the leaf: ${reached}`
   );
   const names = async (tool: string, args: Record<string, unknown>) => {
     const answer = await toolWords(session, tool, { target, ...args });
     check(
       `10: ${tool} to ${form} (${target}) names that leaf`,
       !answer.refused && answer.text.includes(id8),
-      `${answer.status} ${answer.text.slice(0, 200)}`
+      `${answer.status} ${answer.text.slice(0, 300)}`
     );
   };
   await names("interrupt_delegate", {});
-  await names("answer_delegate", { requestId: `probe-${id8}`, deny: true });
-  const around = await toolRecord<{ around?: { id?: string } }>(
-    session,
-    "find",
-    { around: target }
+  await answered(kit, fleet, session, form, target, leaf.instanceId, tag);
+  // Its words reach find's index a moment after they are said.
+  const around = await until(
+    `find's around ${target}`,
+    () =>
+      toolRecord<{ around?: { id?: string } }>(session, "find", {
+        around: target,
+      }),
+    (read) => !read.refused,
+    90_000
+  ).catch(() =>
+    toolRecord<{ around?: { id?: string } }>(session, "find", {
+      around: target,
+    })
   );
   check(
     `10: find's around ${form} (${target}) reads that session`,
     !around.refused && around.record.around?.id === leaf.instanceId,
     around.refused
-      ? around.text.slice(0, 200)
+      ? around.text.slice(0, 300)
       : JSON.stringify(around.record.around ?? null)
   );
   await names("stop_delegate", {});
@@ -1115,6 +1157,61 @@ const reachedAs = async (
     `10: stop_delegate to ${form} cancels that leaf's item`,
     stopped?.state === "cancelled",
     stopped?.state ?? "still running"
+  );
+};
+
+/**
+ * Step 10's answer: words handed to the leaf make it ask its parent a
+ * question (Claude Code's own), routed to the parent; `answer_delegate`
+ * to `target` with the ask's request id answers it, names the leaf, and
+ * the leaf reads the label picked.
+ */
+const answered = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  session: ToolSession,
+  form: string,
+  target: string,
+  leaf: string,
+  tag: string
+): Promise<void> => {
+  const token = `forms-ask-${crypto.randomUUID()}`;
+  const label = `Go on ${leaf.slice(0, 8)}`;
+  const question = `Go on with ${token}?`;
+  state.asks.set(token, { asked: false, label, question });
+  await toolWords(session, "handoff", { target: leaf, message: token });
+  const requestId = await until(
+    "the leaf's question, routed to its parent",
+    () =>
+      fleet.query<{ request_id: string }>(
+        "SELECT request_id FROM delegate_events WHERE instance_id = ? AND kind = 'ask' ORDER BY id DESC",
+        leaf
+      )[0]?.request_id,
+    Boolean,
+    120_000
+  ).catch(() => "");
+  const answer = await toolWords(session, "answer_delegate", {
+    target,
+    requestId,
+    answers: { [question]: label },
+  });
+  const read = await until(
+    "the leaf reading its answer",
+    () =>
+      fleet.seen
+        .filter((one) => one.all.includes(tag))
+        .map((one) => answerOf(one.body, (use) => use.name === ASK_TOOL))
+        .find((one) => one?.answer?.includes(label)),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    `10: answer_delegate to ${form} (${target}) answers that leaf's question: its answer names the leaf, the leaf reads the label`,
+    !!requestId &&
+      !answer.refused &&
+      answer.text.includes(leaf.slice(0, 8)) &&
+      !!read,
+    `ask ${requestId || "never routed"} | ${answer.status} ${answer.text.slice(0, 300)} | read by the leaf: ${!!read}`
   );
 };
 
@@ -1169,11 +1266,15 @@ const continuedAs = async (
   ).catch(() => undefined);
   // Idle first: a turn in flight would hold its continuation back.
   await toolWords(session, "interrupt_delegate", { target: old });
+  // A delegate's brief is its parent's words, not the person's: the
+  // continuation opens on none of them, so its next step carries the tag
+  // its turns are answered by.
   const continued = await toolWords(session, "continue_session", {
     session: old,
     from: "asks",
     target_harness: "claude",
     target_model: MODEL.claude,
+    note: `${tag}: keep working.`,
   });
   const now = (continued.text.match(UUIDS) ?? []).find((id) => id !== old);
   check(
@@ -1193,7 +1294,7 @@ const continuedAs = async (
     check(
       `10: handoff to a continued leaf by ${by} reaches the continuation`,
       !answer.refused && answer.text.includes(now) && reached,
-      `${answer.status} ${answer.text.slice(0, 200)}${reached ? "" : "; the continuation never read it"}`
+      `${answer.status} ${answer.text.slice(0, 300)} | read by the continuation: ${reached}`
     );
   }
   const stop = await toolWords(session, "stop_delegate", {
@@ -1205,7 +1306,7 @@ const continuedAs = async (
     !stop.refused &&
       stop.text.includes(now.slice(0, 8)) &&
       stopped?.state === "cancelled",
-    `${stop.status} ${stop.text.slice(0, 200)}; item ${stopped?.state ?? "still running"}`
+    `${stop.status} ${stop.text.slice(0, 300)} | item: ${stopped?.state ?? "still running"}`
   );
 };
 
@@ -1279,8 +1380,7 @@ const spec: Spec = {
         }
       }
       if (request.all.includes(TAG_FORM)) {
-        // Working until it is stopped, so every tool finds it running.
-        return call("Bash", { command: "sleep 3", description: "Work" });
+        return formLeaf(request);
       }
       if (request.all.includes(TAG_REFUSED)) {
         return refusedParent(request, repo);

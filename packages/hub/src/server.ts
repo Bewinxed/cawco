@@ -24740,10 +24740,19 @@ export const createServer = (
             "That ask is Caw's own shell or edit call waiting on the person; only they answer it."
           );
         }
-        await answerPermission(pending, row.id, answer.requestId, result, {
-          via: "session",
-          name: sessionName(requester),
-        });
+        // Its refusal says which delegate the target named: an ask that is
+        // no longer pending reads the same for every session otherwise.
+        try {
+          await answerPermission(pending, row.id, answer.requestId, result, {
+            via: "session",
+            name: sessionName(requester),
+          });
+        } catch (error) {
+          throw new Error(
+            `Your delegate ${sessionLabel(row).tag}, ask ${answer.requestId}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error }
+          );
+        }
         return;
       }
       const agent = registry.agent(row.machineId);

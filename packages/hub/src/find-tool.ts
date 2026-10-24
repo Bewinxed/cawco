@@ -1039,12 +1039,18 @@ export const createFindTool = (deps: FindToolDeps) => {
     return one && more.length === 0 ? one : asked;
   };
 
-  /** `around`: a hit's ref or id, read as turns. */
+  /**
+   * `around`: a hit's ref (its id, a mark, its record) or an id, read as
+   * turns. What has the mark and is no ref (its part before the mark names
+   * nothing) is a handle, `cockpit#5a167bde` or a mention chip, read whole.
+   */
   const around = async (ref: string, format: "concise" | "detailed") => {
     const { side, chars } = AROUND[format];
     const mark = ref.indexOf(REF_MARK);
-    const id = wholeId((mark < 0 ? ref : ref.slice(0, mark)).trim());
-    const centre: Centre = mark < 0 ? {} : centreOf(ref.slice(mark + 1));
+    const head = wholeId((mark < 0 ? ref : ref.slice(0, mark)).trim());
+    const asRef = mark >= 0 && targetOf(head) !== undefined;
+    const id = mark < 0 || asRef ? head : wholeId(ref.trim());
+    const centre: Centre = asRef ? centreOf(ref.slice(mark + 1)) : {};
     const target = targetOf(id);
     if (!target) {
       throw new FindToolRefusal(
