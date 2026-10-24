@@ -284,6 +284,9 @@ html:not([data-cawco-commenting]) .cawco-frame[data-cawco-current] > .cawco-fram
 .cawco-edge-label { font: var(--type-meta); fill: var(--ink-muted); paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; }
 .cawco-edge-label[data-cawco-move] { pointer-events: auto; cursor: pointer; fill: var(--brand-ink); }
 .cawco-rig { position: fixed; inset-inline-start: -20000px; inset-block-start: 0; visibility: visible; pointer-events: none; }
+/* A probe held still while its values are read (runtime.ts probeState): no keyframes run and no transition starts in it. */
+.cawco-rig .cawco-held, .cawco-rig .cawco-held *, .cawco-rig .cawco-held *::before, .cawco-rig .cawco-held *::after {
+  animation-name: none !important; transition-property: none !important; }
 /* The docks stand as chrome, never on each other: a move's timeline across the floor over the foot; on a desk the dials at the
    inline end under the band, left of an open outline, above the timeline; on a phone the dials across the floor over the timeline. */
 .cawco-dock-timeline { position: fixed; inset-inline: var(--space-3); inset-block-end: calc(var(--foot) + var(--space-2)); z-index: 2147483001; }

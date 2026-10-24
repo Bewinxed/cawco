@@ -46,12 +46,16 @@ import { Chrome } from "./chrome";
 import {
   deltaOf,
   drew,
+  firedBetween,
   firstWords,
   fromRoot,
+  type Motion,
+  motionOf,
   pageError,
   partsOf,
   readAnimation,
   snapshot,
+  valuesOf,
 } from "./measure";
 import { queriesIn, userEventIn } from "./play";
 import {
@@ -153,6 +157,8 @@ const DECIDES: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
   focus: ["focus", "focus-visible", "focus-within"],
   pressed: ["active"],
 };
+/** The class a probe's body carries while its values are read: nothing in it moves (chrome.ts PAGE_CSS). */
+const HELD = "cawco-held";
 const FOCUSABLE =
   'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]';
 
@@ -206,6 +212,15 @@ interface Probe {
   >;
 }
 
+/** A story mounted in the rig for its probe, and what it reads. */
+interface RigProbe {
+  body: HTMLElement;
+  mounted: Mounted | undefined;
+  reached: Interaction[];
+  read: Probe;
+  story: Story;
+}
+
 export interface Section {
   el: HTMLElement;
   /** Why its module didn't load, which it says where its frames would stand; null while it hasn't failed. */
@@ -237,6 +252,9 @@ const sectionOfPath = (path: string): string | null => {
   const encoded = path.match(SECTION_PATH)?.[1];
   return encoded ? decodeURIComponent(encoded) : null;
 };
+
+/** The next task: the page draws and answers between two. */
+const nextTask = () => new Promise<void>((done) => setTimeout(done, 0));
 
 const frameTick = () =>
   new Promise<void>((done) =>
@@ -1749,7 +1767,7 @@ export function boot(options: BootOptions): void {
 
   /* --- Probes: each story's states read off screen ----------------------- */
 
-  /** How many of the sweep's rig passes run now, the world out of the page's rendering for each ({@link apart}). */
+  /** How many of the sweep's move passes run now, the world out of the page's rendering for each ({@link apart}). */
   let apartRuns = 0;
   /** What waits for the world to be back in the page's rendering: a report, which reads the frames' boxes. */
   const backWaiters = new Set<() => void>();
@@ -1760,19 +1778,18 @@ export function boot(options: BootOptions): void {
           backWaiters.add(done);
         });
   /**
-   * What the stage's sweep plays in the rig (a section's probes, its
-   * moves), played with the world out of the page's rendering
-   * (`display: none`) and put back after. Each probe asks the engine for
-   * its body's animations (`getAnimations({ subtree: true })`), which walks
-   * and sorts every animation the document holds, not the body's alone,
-   * and lands them; and each step waits two of the page's frames. Every
-   * drawn frame's loops held thousands of CSS animations on a canvas of
-   * dot clouds (the pairing canvas: 10,869 over its 80 frames, 128 ms a
-   * call, so its probes ran past the render's limit), and a frame of the
-   * page drew all of them. Taken out of rendering, the frames' CSS
-   * animations end (CSS Animations: an element with `display: none` runs
-   * none) and begin again once they are back, the report posted then
-   * ({@link worldBack}); a person's panel never hides what it shows.
+   * A section's moves as the stage's sweep plays them in the rig, played
+   * with the world out of the page's rendering (`display: none`) and put
+   * back after. A move is read from the engine's own animations, its body's
+   * asked for each frame it plays (`playIn`), and Chromium's
+   * `getAnimations` costs as many animations as the page holds; every drawn
+   * frame's loops held thousands of CSS animations on a canvas of dot
+   * clouds (the pairing canvas: 10,869 over its 80 frames, 128 ms a call),
+   * and a frame of the page drew all of them. Taken out of rendering, the
+   * frames' CSS animations end (CSS Animations: an element with
+   * `display: none` runs none) and begin again once they are back, the
+   * report posted then ({@link worldBack}); a person's panel never hides
+   * what it shows.
    */
   async function apart<T>(run: () => Promise<T>): Promise<T> {
     if (!sweeping) {
@@ -1810,88 +1827,154 @@ export function boot(options: BootOptions): void {
     }
     const probed = asked.filter((one) => one.reached.length > 0);
     if (probed.length > 0) {
-      await apart(async () => {
-        for (const { story, reached } of probed) {
-          // biome-ignore lint/performance/noAwaitInLoops: one probe in the rig at a time
-          section.probes.set(story.name, await probe(section, story, reached));
-        }
-      });
+      await probeTogether(section, probed);
     }
     later();
   }
 
   /**
-   * An animation brought to its end: `finish()` throws on one that never
-   * ends (an `infinite` loop, a working dot's pulse; Web Animations,
-   * "finishing an animation": an infinite effect end is an
-   * InvalidStateError), and the throw ended the whole sweep, so a loop is
-   * cancelled instead.
+   * A section's stories that reach an interaction, probed together in the
+   * rig: each mounted in a body of its own, then each interaction forced on
+   * every body that reaches it and released, all read from computed style
+   * (measure.ts `motionOf`, `firedBetween`): the delta, and the transitions
+   * and keyframes each state fires. The engine's animation list is never
+   * asked: Chromium's `getAnimations` costs as many animations as the page
+   * holds, whatever it is asked on (a body, one element or the document
+   * took 1,038 ms each with 10,000 looping elsewhere on the page, 9 ms with
+   * 1,000), and a person's panel of the pairing canvas held 10,869, the
+   * heavy probe canvas 32,400. So a pass costs its own section's elements,
+   * whatever the page around it holds.
    */
-  const land = (one: Animation): void => {
-    if (one.effect?.getComputedTiming().endTime === Number.POSITIVE_INFINITY) {
-      one.cancel();
-    } else {
-      one.finish();
+  async function probeTogether(
+    section: Section,
+    asked: { reached: Interaction[]; story: Story }[]
+  ): Promise<void> {
+    const probes: RigProbe[] = asked.map(({ story, reached }) => {
+      const body = document.createElement("div");
+      // Held from its first frame: nothing in the rig runs while it waits to be read.
+      body.className = `cawco-frame-body ${HELD}`;
+      sizeBody(body, widthOf(story, "own"));
+      rig.append(body);
+      const mounted = mountInto(
+        body,
+        section,
+        story.name,
+        argsOf(section, story.name),
+        {}
+      );
+      return { body, mounted, read: { delta: new Map() }, reached, story };
+    });
+    try {
+      // Once mounted, as a frame stands: its stories' first frames done.
+      await frameTick();
+      for (const interaction of ["hover", "focus", "pressed"] as const) {
+        const now = probes.filter((one) => one.reached.includes(interaction));
+        if (now.length === 0) {
+          continue;
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: one read a task, the page's frames between
+        await probeInteraction(now, interaction);
+      }
+    } finally {
+      for (const one of probes) {
+        one.mounted?.unmount();
+        one.body.remove();
+      }
+    }
+    for (const one of probes) {
+      section.probes.set(one.story.name, one.read);
+    }
+  }
+
+  /** A probe phase run as one task, named for the page's timeline (`cawco probe`, its interaction and phase in its detail). */
+  function probePhase<T>(
+    interaction: Interaction,
+    phase: string,
+    run: () => T
+  ): T {
+    const start = performance.now();
+    try {
+      return run();
+    } finally {
+      performance.measure("cawco probe", {
+        start,
+        end: performance.now(),
+        detail: { interaction, phase },
+      });
+    }
+  }
+
+  /** `interaction` forced on every probe that reaches it, or let go. */
+  const forced = (
+    probes: RigProbe[],
+    interaction: Exclude<Interaction, "rest">,
+    on: boolean
+  ) => {
+    for (const one of probes) {
+      for (const state of FORCED[interaction]) {
+        one.body.classList.toggle(allClass(state), on);
+      }
     }
   };
-  /** Every animation in `body` landed: what it has fired so far, played to its end or, a loop, cancelled. */
-  const landAll = (body: HTMLElement): void => {
-    for (const one of body.getAnimations({ subtree: true })) {
-      land(one);
+  const stillProbes = (probes: RigProbe[], on: boolean) => {
+    for (const one of probes) {
+      one.body.classList.toggle(HELD, on);
     }
   };
 
-  /** One story mounted in the rig, each of its interactions forced and released: the delta and the transitions each fires. */
-  async function probe(
-    section: Section,
-    story: Story,
-    reached: Interaction[]
-  ): Promise<Probe> {
-    const body = document.createElement("div");
-    body.className = "cawco-frame-body";
-    sizeBody(body, widthOf(story, "own"));
-    rig.append(body);
-    const fake: { error?: PageError } = {};
-    const mounted = mountInto(
-      body,
-      section,
-      story.name,
-      argsOf(section, story.name),
-      fake
+  /**
+   * One interaction read on every probe that reaches it, in four tasks, a
+   * read of their styles each, the page's frames between: their declared
+   * motion at rest and forced (measure.ts `motionOf`, the hold let go only
+   * within the task, so what it would run never starts), then, held still
+   * (`cawco-held`, PAGE_CSS: no keyframes, no transitions, so each read is
+   * the base style, never a frame of a loop or a transition on its way),
+   * their values at rest and forced: the delta, and what the state fires
+   * (measure.ts `firedBetween`). Each read restyles the page, as many
+   * animations as it holds, so a task holds one.
+   */
+  async function probeInteraction(
+    probes: RigProbe[],
+    interaction: Exclude<Interaction, "rest">
+  ): Promise<void> {
+    const declared = (on: boolean) =>
+      probePhase(interaction, on ? "motion forced" : "motion at rest", () => {
+        stillProbes(probes, false);
+        forced(probes, interaction, on);
+        const motion = probes.map((one) => motionOf(one.body));
+        forced(probes, interaction, false);
+        stillProbes(probes, true);
+        return motion;
+      });
+    const rest = declared(false);
+    await nextTask();
+    const atState = declared(true);
+    await nextTask();
+    const before = probePhase(interaction, "values at rest", () =>
+      probes.map((one, at) => ({
+        watched: snapshot(one.body),
+        moved: valuesOf(atState[at] as Motion),
+      }))
     );
-    const result: Probe = { delta: new Map() };
-    try {
-      await frameTick();
-      for (const interaction of reached) {
-        if (interaction === "rest") {
-          continue;
-        }
-        // What runs at rest landed first (a loop cancelled), so both snapshots read the base style, never a frame of a loop.
-        landAll(body);
-        const before = snapshot(body);
-        const t0 = document.timeline.currentTime as number;
-        for (const state of FORCED[interaction]) {
-          body.classList.add(allClass(state));
-        }
-        // biome-ignore lint/performance/noAwaitInLoops: each state read alone
-        await frameTick();
-        const animations = body
-          .getAnimations({ subtree: true })
-          .map((one) => readAnimation(one, t0));
-        landAll(body);
-        const changed = deltaOf(before, snapshot(body), root);
-        for (const state of FORCED[interaction]) {
-          body.classList.remove(allClass(state));
-        }
-        await frameTick();
-        landAll(body);
-        result.delta.set(interaction, { animations, changed });
-      }
-    } finally {
-      mounted?.unmount();
-      body.remove();
-    }
-    return result;
+    await nextTask();
+    probePhase(interaction, "values forced", () => {
+      forced(probes, interaction, true);
+      probes.forEach((one, at) => {
+        const was = before[at] as (typeof before)[number];
+        const motion = atState[at] as Motion;
+        one.read.delta.set(interaction, {
+          animations: firedBetween(
+            rest[at] as Motion,
+            motion,
+            was.moved,
+            valuesOf(motion)
+          ),
+          changed: deltaOf(was.watched, snapshot(one.body), root),
+        });
+      });
+      forced(probes, interaction, false);
+    });
+    await nextTask();
   }
 
   /* --- Moves: `from` + `play` ------------------------------------------ */

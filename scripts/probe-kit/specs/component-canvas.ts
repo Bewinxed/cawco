@@ -109,13 +109,19 @@
  *     300 dots on loops of their own (32,400 CSS animations standing), every
  *     frame drawn with its box and every hover frame's delta probed (the
  *     pairing canvas's render timed out at 90 s on its 80 frames and 10,869
- *     animations).
+ *     animations); once it answers, no process of the render's browser is
+ *     left, its crash handlers included (23b).
+ * 24. A person's panel probes that canvas with nothing it shows hidden and
+ *     every frame drawn, in four tasks an interaction for the whole section
+ *     (its `cawco probe` measures), each one read of the page's style: the
+ *     probe reads computed style, never the engine's animation list, whose
+ *     cost is the whole page's.
  *
  *   bun scripts/probe-kit/run.ts component-canvas
  *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 and 19 alone
  *   bun scripts/probe-kit/run.ts component-canvas --leg workspace-package  # 20 to 22 alone
  *   bun scripts/probe-kit/run.ts component-canvas --leg dashboard-cold     # the dashboard's own stage, cold
- *   bun scripts/probe-kit/run.ts component-canvas --leg heavy              # 23 alone
+ *   bun scripts/probe-kit/run.ts component-canvas --leg heavy              # 23 and 24 alone
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -129,6 +135,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { browserExecutable } from "../../../packages/agent/src/capabilities";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { renderCanvas } from "../../../packages/agent/src/stage-render";
 import {
@@ -1471,6 +1478,7 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
  */
 async function heavy(kit: Kit, stage: Stage): Promise<void> {
   const port = Number(new URL(stage.base).port);
+  const before = new Set(browserProcesses().map(pidOf));
   const started = performance.now();
   const rendered = await renderCanvas("host", port, {
     files: ["src/Cloud.stories.js"],
@@ -1500,6 +1508,146 @@ async function heavy(kit: Kit, stage: Stage): Promise<void> {
       ? `${ms} ms: ${rendered.message.split("\n")[0]}`
       : `${ms} ms: ${frames.length} frames (${["rest", "hover", "focus", "pressed"].map((one) => `${one} ${columns(one).length}`).join(", ")}), states ${[...new Set(frames.map((one) => one.state))].join(",")}, boxes ${frames.filter((one) => one.box.w > 0 && one.box.h > 0).length} with area, hover deltas on the button ${hovers.filter((one) => (one.delta?.changed ?? []).some((change) => change.selector.startsWith("button.go"))).length}`
   );
+  // The render's browser is gone once it answers: no process of its own left, its crash handlers included.
+  const answered = performance.now();
+  const its = () => browserProcesses().filter((one) => !before.has(pidOf(one)));
+  const left = await until(
+    "the render's browser processes gone",
+    its,
+    (now) => now.length === 0,
+    5000
+  ).catch(its);
+  kit.check(
+    "23b: once the render answers, no browser process it started is left (its crash handlers included)",
+    left.length === 0,
+    left.length === 0
+      ? `none left ${Math.round(performance.now() - answered)} ms after it answered; ${before.size} browser processes stood before it, none of them its own`
+      : `left after 5 s: ${left.map((one) => one.slice(0, 160)).join(" | ")}`
+  );
+}
+
+/** What a panel's page keeps of its own probe pass: its long tasks, when its frames stood, whether its world was ever hidden. */
+const PROBE_WATCH = () => {
+  const page = window as unknown as {
+    __hidden: number;
+    __longTasks: { at: number; ms: number }[];
+    __framesAt: number | null;
+  };
+  page.__longTasks = [];
+  page.__hidden = 0;
+  page.__framesAt = null;
+  new PerformanceObserver((list) => {
+    for (const one of list.getEntries()) {
+      page.__longTasks.push({ at: one.startTime, ms: one.duration });
+    }
+  }).observe({ type: "longtask", buffered: true });
+  new MutationObserver(() => {
+    const world = document.querySelector<HTMLElement>(".cawco-world");
+    if (world && getComputedStyle(world).display === "none") {
+      page.__hidden += 1;
+    }
+    if (
+      page.__framesAt === null &&
+      document.querySelectorAll(".cawco-frame").length >= 108
+    ) {
+      page.__framesAt = performance.now();
+    }
+  }).observe(document, { attributes: true, childList: true, subtree: true });
+};
+
+/**
+ * Leg 24: a person's panel (by=panel) probes the heavy canvas with nothing
+ * it shows hidden: each of its probe's tasks, as the runtime measures them
+ * (`cawco probe`), and beside them the page's longest task once its frames
+ * stand, which their own animations starting costs.
+ */
+async function panelProbes(kit: Kit, stage: Stage): Promise<void> {
+  const page = await kit.page("desk", { init: [PROBE_WATCH] });
+  try {
+    const started = performance.now();
+    await page.goto(canvasUrl(stage, ["src/Cloud.stories.js"]));
+    await page.waitForFunction(
+      () => {
+        const frames = (
+          window as unknown as {
+            __cawcoCanvas?: { report: RenderReport | null };
+          }
+        ).__cawcoCanvas?.report?.sections.flatMap((one) => one.frames);
+        const hovers = (frames ?? []).filter(
+          (one) => one.interaction === "hover"
+        );
+        return (
+          (frames ?? []).length === 108 &&
+          hovers.length === 27 &&
+          hovers.every((one) => (one.delta?.changed ?? []).length > 0)
+        );
+      },
+      null,
+      { timeout: 180_000, polling: 500 }
+    );
+    const ms = Math.round(performance.now() - started);
+    const read = await page.evaluate(() => {
+      const watched = window as unknown as {
+        __hidden: number;
+        __longTasks: { at: number; ms: number }[];
+        __framesAt: number | null;
+        __cawcoCanvas?: { report: RenderReport | null };
+      };
+      const from = watched.__framesAt ?? 0;
+      const tasks = watched.__longTasks.filter((one) => one.at >= from);
+      const phases = performance.getEntriesByName("cawco probe");
+      const frames = (watched.__cawcoCanvas?.report?.sections ?? []).flatMap(
+        (one) => one.frames
+      );
+      return {
+        hidden: watched.__hidden,
+        phases: phases.length,
+        probeLongest: Math.round(
+          Math.max(0, ...phases.map((one) => one.duration))
+        ),
+        probeTotal: Math.round(
+          phases.reduce((sum, one) => sum + one.duration, 0)
+        ),
+        pageLongest: Math.round(Math.max(0, ...tasks.map((one) => one.ms))),
+        drawn: frames.filter(
+          (one) => one.state === "drawn" && one.box.w > 0 && one.box.h > 0
+        ).length,
+      };
+    });
+    kit.check(
+      "24: a person's panel probes the heavy canvas with its world never hidden and every frame drawn, its probe pass four tasks an interaction for the whole section (12 for its 27 stories' hover, focus and pressed), each a single read of the page's style",
+      read.hidden === 0 && read.drawn === 108 && read.phases === 12,
+      `${ms} ms to every hover delta; its probe ran in ${read.phases} tasks (\`cawco probe\` measures), the longest ${read.probeLongest} ms, ${read.probeTotal} ms in all; the page's longest task once its 108 frames stood ${read.pageLongest} ms (its frames' own 32,400 animations starting); world hidden ${read.hidden} times; ${read.drawn} frames drawn with boxes`
+    );
+  } finally {
+    await page.close();
+  }
+}
+
+/** A `pid args` line's pid. */
+const pidOf = (line: string): string => line.split(" ")[0] ?? "";
+
+/**
+ * The processes of the render's browser build standing now, `pid args`
+ * each: every one whose command runs from the browser's own install (its
+ * folder on Linux, its app bundle on the Mac), helpers and crash handlers
+ * among them.
+ */
+function browserProcesses(): string[] {
+  const executable = browserExecutable();
+  if (!executable) {
+    return [];
+  }
+  const app = executable.indexOf(".app/");
+  const install =
+    app === -1
+      ? executable.slice(0, executable.lastIndexOf("/") + 1)
+      : executable.slice(0, app + ".app/".length);
+  return Bun.spawnSync(["ps", "-A", "-o", "pid=,command="])
+    .stdout.toString()
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.includes(install));
 }
 
 /** Leg 17: the stage's sweep ends on a story with an `infinite` animation, its hover probed. */
@@ -1948,7 +2096,7 @@ async function dashboardCold(kit: Kit, host: string): Promise<void> {
   }
 }
 
-/** `--leg comment-and-stray`: legs 18 and 19 alone; `--leg workspace-package`: legs 20 to 22 alone; `--leg heavy`: leg 23 alone; on the Svelte stage. `--leg dashboard-cold`: the dashboard's own stage alone. */
+/** `--leg comment-and-stray`: legs 18 and 19 alone; `--leg workspace-package`: legs 20 to 22 alone; `--leg heavy`: legs 23 and 24 alone; on the Svelte stage. `--leg dashboard-cold`: the dashboard's own stage alone. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -2225,6 +2373,7 @@ const spec: Spec = {
       }
       if (ONLY_LEG === "heavy") {
         await heavy(kit, svelte);
+        await panelProbes(kit, svelte);
         return;
       }
       if (ONLY_LEG === "workspace-package") {
@@ -2242,13 +2391,15 @@ const spec: Spec = {
       await floor(kit, svelte);
       await daemonRender(kit, svelte);
       await endless(kit, svelte);
-      await heavy(kit, svelte);
       await commentMarksOne(kit, svelte);
       await strayRequest(kit, svelte);
       // The pre-bundle's legs: 20 rebuilds it, a restart of the stage's Vite each time, so it goes last.
       await coldCount(kit, svelte);
       await failedRedraws(kit, svelte);
       await workspacePackage(kit, svelte);
+      // The heavy canvas last: its 32,400 animations load the machine, and the pre-bundle legs above time a rebuild.
+      await heavy(kit, svelte);
+      await panelProbes(kit, svelte);
     } finally {
       svelte.stop();
     }

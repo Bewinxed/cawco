@@ -235,6 +235,158 @@ export function deltaOf(
   return deltas;
 }
 
+/** A computed list property split at its top-level commas (`cubic-bezier(…)` keeps its own). */
+const listOf = (value: string): string[] => {
+  const parts: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let at = 0; at < value.length; at += 1) {
+    const c = value[at];
+    depth += Number(c === "(") - Number(c === ")");
+    if (c === "," && depth === 0) {
+      parts.push(value.slice(from, at).trim());
+      from = at + 1;
+    }
+  }
+  parts.push(value.slice(from).trim());
+  return parts.filter(Boolean);
+};
+
+/** A CSS time (`0.3s`, `300ms`) in ms. */
+const msOf = (time: string): number =>
+  time.endsWith("ms")
+    ? Number.parseFloat(time)
+    : (Number.parseFloat(time) || 0) * 1000;
+
+/** The `at`th entry of a CSS list, repeated as the list repeats to the names' length (CSS Animations, Transitions). */
+const nth = (list: string[], at: number): string =>
+  list.length === 0 ? "" : (list[at % list.length] as string);
+
+/** An element's motion as its computed style declares it: the properties it transitions and the keyframes it runs, each with its timing. */
+interface ElementMotion {
+  animation: {
+    delay: string[];
+    duration: string[];
+    easing: string[];
+    name: string[];
+  };
+  transition: {
+    delay: string[];
+    duration: string[];
+    easing: string[];
+    property: string[];
+  };
+}
+export type Motion = Map<Element, ElementMotion>;
+
+export function motionOf(body: Element): Motion {
+  const motion: Motion = new Map();
+  for (const el of elementsOf(body)) {
+    const style = getComputedStyle(el);
+    motion.set(el, {
+      transition: {
+        property: listOf(style.transitionProperty),
+        duration: listOf(style.transitionDuration),
+        delay: listOf(style.transitionDelay),
+        easing: listOf(style.transitionTimingFunction),
+      },
+      animation: {
+        name: listOf(style.animationName),
+        duration: listOf(style.animationDuration),
+        delay: listOf(style.animationDelay),
+        easing: listOf(style.animationTimingFunction),
+      },
+    });
+  }
+  return motion;
+}
+
+/** The properties an element transitions by name (`all` stands for every watched one). */
+const transitioned = (lists: ElementMotion): string[] =>
+  lists.transition.property.flatMap((one) => {
+    if (one === "all") {
+      return [...WATCHED];
+    }
+    return one === "none" ? [] : [one];
+  });
+
+/** Each element's value of every property it transitions, now: what a state's change is read from. */
+export type Values = Map<Element, Map<string, string>>;
+
+export function valuesOf(motion: Motion): Values {
+  const values: Values = new Map();
+  for (const [el, lists] of motion) {
+    const names = transitioned(lists);
+    if (names.length === 0) {
+      continue;
+    }
+    const style = getComputedStyle(el);
+    values.set(
+      el,
+      new Map(names.map((name) => [name, style.getPropertyValue(name)]))
+    );
+  }
+  return values;
+}
+
+/**
+ * What a state fires, read from computed style alone, never from the
+ * engine's animation list: a transition for each property an element
+ * transitions (a duration past 0) whose value the state changed, and a CSS
+ * animation for each keyframes name the state adds to an element. A probe
+ * forces a state by its class, so no script hears it, and what it fires
+ * is CSS's: its declared motion is all of it.
+ */
+export function firedBetween(
+  rest: Motion,
+  forced: Motion,
+  before: Values,
+  after: Values
+): AnimationRead[] {
+  const fired: AnimationRead[] = [];
+  for (const [el, lists] of forced) {
+    const { transition, animation } = lists;
+    transition.property.forEach((named, at) => {
+      const duration = msOf(nth(transition.duration, at));
+      if (duration <= 0 || named === "none") {
+        return;
+      }
+      const properties = named === "all" ? [...WATCHED] : [named];
+      for (const property of properties) {
+        const was = before.get(el)?.get(property);
+        const now = after.get(el)?.get(property);
+        if (was !== undefined && now !== undefined && was !== now) {
+          fired.push({
+            kind: "transition",
+            property,
+            duration,
+            delay: msOf(nth(transition.delay, at)),
+            easing: nth(transition.easing, at) || "ease",
+            start: 0,
+            target: describe(el),
+          });
+        }
+      }
+    });
+    const had = new Set(rest.get(el)?.animation.name ?? []);
+    animation.name.forEach((name, at) => {
+      if (name === "none" || had.has(name)) {
+        return;
+      }
+      fired.push({
+        kind: "animation",
+        property: name,
+        duration: msOf(nth(animation.duration, at)),
+        delay: msOf(nth(animation.delay, at)),
+        easing: nth(animation.easing, at) || "ease",
+        start: 0,
+        target: describe(el),
+      });
+    });
+  }
+  return fired;
+}
+
 /** One animation as the report says it: its kind, property, timing, element and when it began after `t0`. */
 export function readAnimation(animation: Animation, t0: number): AnimationRead {
   const effect = animation.effect as KeyframeEffect | null;
