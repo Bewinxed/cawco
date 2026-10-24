@@ -13,19 +13,26 @@
  *    changes nothing; its `--dry-run` reads beside the hub.
  * 3. With the hub stopped, the same repair runs to its end (exit 0) and
  *    lets the hub's lock go: the hub starts again on its database.
- *
- * `cawco pairing off` (cli pairing.ts) still writes beside a running hub:
- * how it reaches the hub instead is the owner's pick, not made here.
+ * 4. `cawco pairing off` beside the running hub, paired devices required:
+ *    with the database file made read-only on disk (the hub's own handle
+ *    stays writable), so a direct write from the command would fail, it
+ *    exits 0 and anonymous calls reach the hub as soon as it ends; the
+ *    hub's file is still open once, and no request or answer is left.
+ * 5. The same with the hub stopped: the command writes the setting itself
+ *    under the hub's lock, says what it said through the hub, and lets the
+ *    lock go; the hub started again trusts its network.
  *
  *   bun scripts/probe-kit/run.ts hub-one-writer
  */
 import { Database } from "bun:sqlite";
-import { readdirSync, readlinkSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, readdirSync, readlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { databaseHolder } from "../../../packages/core/src/db-lock";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const REPAIR = join(ROOT, "scripts", "repair-account-history.ts");
+const CLI = join(ROOT, "packages", "cli", "src", "cli.ts");
 const TYPE = "probe-one-writer";
 const ACCOUNT = "probe-one-writer-account";
 
@@ -63,6 +70,36 @@ const repair = async (db: string, extra: string[] = []) => {
   ]);
   return { code, said: `${out}${err}`.trim() };
 };
+
+/** `cawco pairing off` on the fleet's machine: its exit, what it said, and how long it took. */
+const pairingOff = async (env: Record<string, string | undefined>) => {
+  const from = performance.now();
+  const child = Bun.spawn([process.execPath, CLI, "pairing", "off"], {
+    cwd: ROOT,
+    env: { ...process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [code, out, err] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return {
+    code,
+    out: out.trim(),
+    err: err.trim(),
+    ms: Math.round(performance.now() - from),
+  };
+};
+
+/** What an anonymous call to an owner route answers: 200 trusted, refused while paired devices are required. */
+const anonymous = (base: string): Promise<number> =>
+  fetch(`${base}/api/delegate-types`).then((r) => r.status);
+
+/** Pairing-off requests or answers left beside the database. */
+const leftOver = (db: string): string[] =>
+  readdirSync(dirname(db)).filter((name) => name.startsWith("pairing-off."));
 
 const spec: Spec = {
   name: "hub-one-writer",
@@ -145,6 +182,75 @@ const spec: Spec = {
       "the repair let the hub's lock go: the hub starts again on its database",
       opensOf(again.pid, db) === 1,
       `hub ${again.pid} up, ${opensOf(again.pid, db)} open file(s) of the database`
+    );
+
+    // 4. cawco pairing off beside the running hub goes through the hub.
+    const on = await fetch(`${fleet.base}/api/auth/pairing`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ required: true, kind: "app", name: "Probe" }),
+    });
+    const refusedWhilePaired = await anonymous(fleet.base);
+    kit.check(
+      "paired devices required: an anonymous call to an owner route is refused",
+      on.ok && refusedWhilePaired !== 200,
+      `PUT ${on.status}; anonymous ${refusedWhilePaired}`
+    );
+    chmodSync(db, 0o444);
+    let viaHub: Awaited<ReturnType<typeof pairingOff>>;
+    try {
+      viaHub = await pairingOff(fleet.env);
+    } finally {
+      chmodSync(db, 0o644);
+    }
+    const trusted = await anonymous(fleet.base);
+    kit.check(
+      "beside the running hub, cawco pairing off takes effect through the hub at once, with the database file read-only to every other writer",
+      viaHub.code === 0 && viaHub.out.length > 0 && trusted === 200,
+      `exit ${viaHub.code} in ${viaHub.ms} ms; anonymous then ${trusted}; said ${viaHub.out}${viaHub.err ? `; stderr ${viaHub.err}` : ""}`
+    );
+    kit.check(
+      "the hub's database is still open once in the hub, and no request or answer is left",
+      opensOf(again.pid, db) === 1 && leftOver(db).length === 0,
+      `${opensOf(again.pid, db)} open file(s); left ${leftOver(db).join(", ") || "none"}`
+    );
+
+    // 5. With the hub stopped, the command writes itself, under the lock.
+    await fleet.stop("hub");
+    const require = new Database(db);
+    try {
+      require
+        .query(
+          "UPDATE pairing_settings SET required = 1, changed_at = ? WHERE id = 'pairing'"
+        )
+        .run(Date.now());
+    } finally {
+      require.close();
+    }
+    const direct = await pairingOff(fleet.env);
+    const read = new Database(db, { readonly: true });
+    const required = (
+      read
+        .query("SELECT required FROM pairing_settings WHERE id = 'pairing'")
+        .get() as { required: number } | null
+    )?.required;
+    read.close();
+    const holder = await databaseHolder(db);
+    kit.check(
+      "with the hub stopped, cawco pairing off writes the setting itself, says what it said through the hub, and lets the hub's lock go",
+      direct.code === 0 &&
+        direct.out === viaHub.out &&
+        required === 0 &&
+        holder === undefined,
+      `exit ${direct.code}; same words ${direct.out === viaHub.out}; required ${required}; lock held by ${holder ?? "none"}${direct.err ? `; stderr ${direct.err}` : ""}`
+    );
+    fleet.launch("hub");
+    await fleet.hubUp();
+    const after = await anonymous(fleet.base);
+    kit.check(
+      "the hub started again trusts its network",
+      after === 200,
+      `anonymous ${after}`
     );
     await fleet.stop("hub");
   },

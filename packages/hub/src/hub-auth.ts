@@ -398,6 +398,27 @@ export const createHubAuth = ({
   const changed = () => hooks?.changed(frame());
 
   /**
+   * Paired devices no longer required: the hub trusts its network again,
+   * and every device and machine key is forgotten. The person's switch
+   * (`PUT /api/auth/pairing`) acts only while they are required;
+   * `cawco pairing off` (pairing-requests.ts) writes the setting and forgets
+   * them whatever the mode (`always`), as the command always has.
+   */
+  const pairingOff = (always: boolean): void => {
+    const was = mode();
+    if (was !== "pairing" && !always) {
+      return;
+    }
+    db.setPairingRequired(false);
+    runs.clear();
+    touched.clear();
+    if (was === "pairing") {
+      console.log("[hub-auth] paired devices are no longer required");
+      changed();
+    }
+  };
+
+  /**
    * Whether `machineId` proves a key `check` accepts: its own, or one an SSH
    * add wrote to its machine over its own connection (ssh-tunnels.ts
    * `admit`), which is its own from then on. An SSH add is the person
@@ -1072,13 +1093,7 @@ export const createHubAuth = ({
         ({ body, request, server, set }) => {
           const caller = callerOf(request, addressOf(server, request));
           if (!body.required) {
-            if (mode() === "pairing") {
-              db.setPairingRequired(false);
-              runs.clear();
-              touched.clear();
-              console.log("[hub-auth] paired devices are no longer required");
-              changed();
-            }
+            pairingOff(false);
             return { mode: mode(), device: null };
           }
           if (mode() === "pairing") {
@@ -1144,6 +1159,7 @@ export const createHubAuth = ({
     mintMachineKey,
     mode,
     modeFor,
+    pairingOff,
     provesFormer,
     proveSocket,
     refusalOf,

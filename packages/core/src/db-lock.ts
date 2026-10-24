@@ -123,6 +123,14 @@ export const lockDatabase = async (path: string): Promise<void> => {
   }
 };
 
+/** The process that holds `<path>.lock` while it lives; undefined when none does. */
+export const databaseHolder = async (
+  path: string
+): Promise<number | undefined> => {
+  const holder = await readHolder(`${path}.lock`);
+  return (await markerIsLive(holder)) ? holder.pid : undefined;
+};
+
 /**
  * Lets `<path>.lock` go when this process holds it; a lock naming any other
  * process is left as it is. A hub never calls it (every way it ends frees the

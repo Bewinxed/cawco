@@ -932,6 +932,30 @@ export const hubUpdatePolicyPath = (): string =>
   join(dirname(hubDbPath()), "update-policy.json");
 
 /**
+ * `cawco pairing off`'s request to a running hub (cli pairing.ts, hub
+ * pairing-requests.ts): an empty file beside the hub's database, the user's
+ * own (0600), named for the request's id. The hub takes it, turns paired
+ * devices off on its own connection, and answers in
+ * {@link pairingOffAnswerPath}: while the hub runs, only it writes its
+ * database.
+ */
+export const pairingOffRequestPath = (db: string, id: string): string =>
+  join(dirname(db), `pairing-off.${id}.request`);
+
+/** The hub's answer to the request named `id` ({@link PairingOffAnswer}). */
+export const pairingOffAnswerPath = (db: string, id: string): string =>
+  join(dirname(db), `pairing-off.${id}.answer`);
+
+/** A request's file name; its one group is the request's id. */
+export const PAIRING_OFF_REQUEST = /^pairing-off\.([0-9a-f-]{36})\.request$/;
+
+/** An answer's file name, which a hub at its start clears. */
+export const PAIRING_OFF_ANSWER = /^pairing-off\.[0-9a-f-]{36}\.answer$/;
+
+/** What the hub answers a pairing-off request: done, or why not. */
+export type PairingOffAnswer = { ok: true } | { error: string };
+
+/**
  * The caches a workspace writes besides its clone and scratch dir: the
  * workspaces' own cache, and on macOS the provisioning profile folders
  * automatic signing fills. Every host cache is read-only to a workspace: a

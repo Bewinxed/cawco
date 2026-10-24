@@ -728,7 +728,7 @@ const runConnections = async (args: Args): Promise<number> => {
 };
 
 /** `cawco pairing off`: the hub trusts its network again, from its own machine (pairing.ts). */
-const runPairing = (args: Args): number => {
+const runPairing = (args: Args): Promise<number> => {
   if (args.action !== "off") {
     throw new UsageError("cawco pairing takes one verb: off");
   }

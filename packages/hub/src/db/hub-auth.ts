@@ -39,7 +39,7 @@ export const hubAuthDb = (db: BunSQLiteDatabase): HubAuthDb => {
   // Read at every request the gate sees (hub-auth.ts `mode`): prepared once.
   // Built and prepared afresh each time, it was the gate's largest cost in
   // a restarted hub's profile (hub-restart-load, 2026-10-23). Still read
-  // each time, never kept: `cawco pairing off` writes it from another process.
+  // each time, never kept: one row, from the page cache.
   const pairing = db
     .select({ required: pairingSettings.required })
     .from(pairingSettings)

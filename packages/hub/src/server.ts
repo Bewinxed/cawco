@@ -741,6 +741,7 @@ import {
   turnCollapseId,
 } from "./notifications";
 import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
+import { watchPairingRequests } from "./pairing-requests";
 import {
   type AnswerFrom,
   answerPermission,
@@ -6850,6 +6851,11 @@ export const createServer = (
       adopted: (id) => db.sshMachines.update(id, { pendingKey: null }),
     },
   });
+  // `cawco pairing off` while this hub runs: its request, taken and answered
+  // here, so the hub stays its database's one writer (pairing-requests.ts).
+  offBoot.push(() =>
+    watchPairingRequests(DB_PATH, () => hubAuth.pairingOff(true), lifetime)
+  );
   /**
    * Every install of a machine, kept from its start to the person's act on
    * its outcome (installs.ts): any dashboard reads them, a reload finds them,
