@@ -124,7 +124,12 @@ export * from "./tools";
 export * from "./trackers";
 // Transcripts: the hub folds each session's frames into blocks once
 // (TranscriptBuilder) and every client renders what it serves.
-export { TRANSCRIPT_PAGE, TranscriptBuilder } from "./transcript";
+export {
+  type HubLine,
+  type LinePlaced,
+  TRANSCRIPT_PAGE,
+  TranscriptBuilder,
+} from "./transcript";
 export {
   COMPACT_SUMMARY_KIND,
   getToolGlance,

@@ -2122,6 +2122,13 @@
       "when": 1792875100435,
       "tag": "0310_session_origin",
       "breakpoints": true
+    },
+    {
+      "idx": 311,
+      "version": "6",
+      "when": 1792878573701,
+      "tag": "0311_line_anchors",
+      "breakpoints": true
     }
   ]
 }

@@ -32118,20 +32118,6 @@
               "record",
               "type"
             ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "reset"
-                ]
-              }
-            },
-            "required": [
-              "type"
-            ]
           }
         ]
       },
@@ -32185,6 +32171,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TranscriptBlock"
+            }
+          },
+          "removed": {
+            "description": "Newest page only: the blocks this transcript took out on purpose since\nthe hub built it (a rewind's cut, one of the hub's lines taken back), by\nid. A row a client holds stays where it is until its `block.remove`\nreaches it or this lists it: a read that lacks a row is no word that it\nwent.",
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "seq": {

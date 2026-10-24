@@ -97,7 +97,12 @@ import {
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import { GATE_FORM_ENV, gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
-import type { Harness, HarnessContext, HarnessSession } from "../harness";
+import type {
+  Harness,
+  HarnessContext,
+  HarnessSession,
+  TranscriptSpan,
+} from "../harness";
 import {
   HarnessRecoveryRefused,
   ReattachFailed,
@@ -5353,11 +5358,20 @@ export class OpencodeHarness implements Harness {
    * ({@link toTranscript}), with the sends admitted and not yet read after
    * it, and each subagent's transcript under the `subagent` call that
    * started it (the call's `metadata.sessionID`).
+   *
+   * Every span is the same read: OpenCode keeps each message of a session
+   * after a compaction (its `compaction` message stands where it ran, and
+   * the server leaves the earlier messages out only of what the model reads
+   * next), and a session never branches (a fork is a session of its own), so
+   * its message list is the conversation as it was said and every message it
+   * stored. A staged rewind's hidden messages are none of them.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reads the session, its rewind point, its waiting sends and its subagents in one pass
   async getSessionMessages(
     sessionKey: string,
-    _dir?: string
+    _dir?: string,
+    _tail?: number,
+    _span?: TranscriptSpan
   ): Promise<SessionMessage[]> {
     if ((await opencodeBinary()) === undefined) {
       return [];

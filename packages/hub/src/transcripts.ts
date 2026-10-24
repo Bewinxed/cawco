@@ -6,7 +6,11 @@
  * already built, and every client renders the same blocks (`TranscriptBuilder`,
  * @cawco/core). A session the hub has not built since it started is read from
  * its machine once, on its first frame or its first page, and the frames that
- * arrive during that read are held and folded in behind it.
+ * arrive during that read are held and folded in behind it. A transcript
+ * read again (a rewind, a continuation folded in, frames lost, its machine's
+ * agent on a new build) is merged into what is built, never put in its place
+ * (`TranscriptBuilder.merge`): a row once served stays where it stands under
+ * its id, and what the merge changed goes out as events like any fold's.
  *
  * What a fold changes goes out on the session's Ledger stream as one
  * `transcript` frame of events, sequenced like everything else the stream
@@ -15,6 +19,8 @@
  */
 import {
   type FramePayload,
+  type HarnessKind,
+  type HubLine,
   type NeutralMessage,
   type SendRecord,
   type SessionCommands,
@@ -34,6 +40,8 @@ import type { HubLifetimeShape } from "./lifetime";
 export type HistoryRead =
   | {
       entries: SessionMessage[];
+      /** The hub's own lines, placed by the builder after the rows each followed ({@link HubLine}). */
+      lines: HubLine[];
       records: Record<string, SendRecord>;
       where: TranscriptWhere;
     }
@@ -47,6 +55,16 @@ export interface HistoryFault {
 }
 
 export interface TranscriptPorts {
+  /**
+   * Keeps where one of the hub's lines, `lineId`, stands: after the rows
+   * `after` names, the nearest first, as it was first placed (live, or by a
+   * read that placed it by its clock). Every later read puts it there.
+   */
+  readonly anchor: (
+    instanceId: string,
+    lineId: string,
+    after: readonly string[]
+  ) => void;
   /** The commit the agent on `machineId` runs, as it last registered. */
   readonly build: (machineId: string) => string | undefined;
   /**
@@ -96,6 +114,16 @@ export type TranscriptPayload = Extract<
   { kind: "frame" | "send" }
 >;
 
+/** One of the hub's own lines, folded in as a frame is and anchored where it lands. */
+interface LinePayload {
+  harness: HarnessKind;
+  kind: "line";
+  message: NeutralMessage;
+}
+
+/** What waits behind a read in flight: a session's frame or record, or one of the hub's lines. */
+type Held = TranscriptPayload | LinePayload;
+
 /** A frame that paints the reply being written: a partial, or the reply so far re-sent whole. */
 const partial = (message: NeutralMessage): boolean =>
   message.type === "stream_event" ||
@@ -106,7 +134,7 @@ const partial = (message: NeutralMessage): boolean =>
  * loop's message written (its final frame, or its stream's end), the turn's
  * end, or the reply so far re-sent whole.
  */
-const endsPartials = (payload: TranscriptPayload): boolean => {
+const endsPartials = (payload: Held): boolean => {
   if (payload.kind !== "frame") {
     return false;
   }
@@ -138,7 +166,7 @@ interface Entry {
    */
   build: string | undefined;
   builder: TranscriptBuilder;
-  held: TranscriptPayload[];
+  held: Held[];
   /** The read in flight, while one is; frames meanwhile wait in `held`. */
   loading: Promise<HistoryRead> | null;
   usedAt: number;
@@ -149,16 +177,26 @@ export interface TranscriptsShape {
   /** A session frame or a send's record, folded in; its changes go out on the stream. */
   readonly ingest: (instanceId: string, payload: TranscriptPayload) => void;
   /**
+   * One of the hub's own lines (`message`, a system frame under its line's
+   * id), folded in at the end of what is built, or said again in its place;
+   * where it first lands is kept ({@link TranscriptPorts.anchor}).
+   */
+  readonly line: (
+    instanceId: string,
+    message: NeutralMessage,
+    harness: HarnessKind
+  ) => void;
+  /**
    * A machine's agent has registered, running `instanceIds`. One machine
    * read at a time:
    *
    * - Every transcript of that machine built through an agent on another
-   *   commit is read again and replaced. What a read returns is the agent's
+   *   commit is read again and merged in. What a read returns is the agent's
    *   to decide, and a session that ran through its agent's upgrade would
-   *   otherwise keep what the old agent read for as long as it ran — a live
-   *   transcript is never swept, and is never built twice. So is one whose
-   *   read was in flight as the agent registered: the agent that answered it
-   *   may be the one that went away.
+   *   otherwise lack what only the new agent reads for as long as it ran — a
+   *   live transcript is never swept, and is never built twice. A read in
+   *   flight as the agent registered is waited for, never made again: the
+   *   hub holds such a read for the agent coming back, which answers it.
    * - Every session it runs that has no transcript yet gets one, so opening
    *   it is a page off what is built, before any of them speaks.
    *
@@ -181,7 +219,8 @@ export interface TranscriptsShape {
   readonly removeLine: (instanceId: string, blockId: string) => void;
   /**
    * Read the session again from its machine — its stored transcript changed
-   * under it — cut after the entry `at` when given (a rewind).
+   * under it — and merge it in; cut after the entry `at` when given (a
+   * rewind), when what is held after the read's last row goes.
    */
   readonly reread: (instanceId: string, at?: string) => void;
 }
@@ -200,24 +239,40 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     } satisfies TranscriptStreamFrame);
   };
 
-  /** One held or live payload into a built transcript. */
-  const fold = (entry: Entry, payload: TranscriptPayload): TranscriptEvent[] =>
-    payload.kind === "send"
+  /** One held or live payload into a built transcript; a line's anchor kept where it lands. */
+  const fold = (
+    instanceId: string,
+    entry: Entry,
+    payload: Held
+  ): TranscriptEvent[] => {
+    if (payload.kind === "line") {
+      const { events, after } = entry.builder.applyLine(
+        payload.message,
+        payload.harness
+      );
+      const id = "uuid" in payload.message ? payload.message.uuid : undefined;
+      if (after && id) {
+        ports.anchor(instanceId, id, after);
+      }
+      return events;
+    }
+    return payload.kind === "send"
       ? entry.builder.applyRecord(payload.record)
       : entry.builder.applyFrame(
           payload.message as NeutralMessage,
           payload.harness
         );
+  };
 
   /**
-   * Reads the stored transcript and folds it in, then whatever arrived while
-   * it was read ({@link replayHeld}). A read that fails leaves no transcript:
-   * the next frame or page reads again.
+   * Reads the stored transcript and merges it in, then whatever arrived
+   * while it was read ({@link replayHeld}). A first read that fails leaves no
+   * transcript: the next frame or page reads again; a later one leaves what
+   * is built as it was, and folds in what arrived meanwhile.
    */
   const load = (
     instanceId: string,
     entry: Entry,
-    reset: boolean,
     at?: string
   ): Promise<HistoryRead> => {
     const began = Date.now();
@@ -229,7 +284,11 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         }
         entry.loading = null;
         if ("fault" in read) {
-          entries.delete(instanceId);
+          if (entry.where === null) {
+            entries.delete(instanceId);
+          } else {
+            emit(instanceId, replayHeld(instanceId, entry));
+          }
           return read;
         }
         entry.where = read.where;
@@ -239,11 +298,16 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         const building = Date.now();
         try {
           ports.laws.raise(() => {
-            entry.builder.seed(read.entries, read.records);
-            emit(instanceId, [
-              ...(reset ? [{ type: "reset" } as const] : []),
-              ...replayHeld(entry),
-            ]);
+            const { events, placed } = entry.builder.merge(
+              read.entries,
+              read.records,
+              read.lines,
+              at !== undefined
+            );
+            for (const line of placed) {
+              ports.anchor(instanceId, line.id, line.after);
+            }
+            emit(instanceId, [...events, ...replayHeld(instanceId, entry)]);
           });
         } catch (error) {
           entries.delete(instanceId);
@@ -279,7 +343,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
    * the reply whole. Those before it are dropped: what they painted is in the
    * read, or in what came after them.
    */
-  const replayHeld = (entry: Entry): TranscriptEvent[] => {
+  const replayHeld = (instanceId: string, entry: Entry): TranscriptEvent[] => {
     const held = entry.held.splice(0);
     const settled = held.findLastIndex(endsPartials);
     return held.flatMap((payload, index) => {
@@ -291,7 +355,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
           return [];
         }
       }
-      return fold(entry, payload);
+      return fold(instanceId, entry, payload);
     });
   };
 
@@ -315,26 +379,31 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       usedAt: Date.now(),
     };
     entries.set(instanceId, entry);
-    load(instanceId, entry, false).catch((error) =>
+    load(instanceId, entry).catch((error) =>
       console.error(`[hub] transcript read for ${instanceId} failed:`, error)
     );
     return entry;
   };
 
-  const ingest = (instanceId: string, payload: TranscriptPayload): void => {
+  const ingest = (instanceId: string, payload: Held): void => {
     const entry = entryFor(instanceId);
     if (entry.loading !== null) {
       entry.held.push(payload);
       return;
     }
-    emit(instanceId, ports.laws.hold(() => fold(entry, payload)) ?? []);
+    emit(
+      instanceId,
+      ports.laws.hold(() => fold(instanceId, entry, payload)) ?? []
+    );
   };
 
   const page: TranscriptsShape["page"] = async (instanceId, limit, before) => {
     const entry = entryFor(instanceId);
     if (entry.loading !== null) {
       const read = await entry.loading;
-      if ("fault" in read) {
+      // A read again that failed leaves what is built as it was: that is
+      // the page.
+      if ("fault" in read && entry.where === null) {
         return read;
       }
     }
@@ -361,7 +430,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     if (!entry || entry.loading !== null) {
       return;
     }
-    load(instanceId, entry, true, at).catch((error) =>
+    load(instanceId, entry, at).catch((error) =>
       console.error(`[hub] transcript reread for ${instanceId} failed:`, error)
     );
   };
@@ -389,6 +458,8 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   return {
     ingest,
+    line: (instanceId, message, harness) =>
+      ingest(instanceId, { kind: "line", message, harness }),
     page,
     noteInterrupt: (instanceId) =>
       entries.get(instanceId)?.builder.noteInterrupt(),
@@ -408,15 +479,14 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
           console.error(`[hub] transcript read on ${machineId} failed:`, error)
         );
       for (const [instanceId, entry] of [...entries]) {
-        const inFlight = entry.loading;
         // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose
-        await settled(inFlight);
+        await settled(entry.loading);
         const stale =
           entries.get(instanceId) === entry &&
           entry.where?.machineId === machineId &&
-          (inFlight !== null || entry.build !== build);
+          entry.build !== build;
         if (stale && !entry.loading) {
-          await settled(load(instanceId, entry, true));
+          await settled(load(instanceId, entry));
         }
       }
       for (const instanceId of instanceIds) {

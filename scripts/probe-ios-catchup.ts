@@ -162,7 +162,7 @@ const LIVE_LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const SHOWN =
   / because |catch-up |stream: (reset|resync|backlog)|transcript read for|page adopted|toast/;
 const BECAUSE = / because /;
-const HUB_ASKED = /because (streamReset|transcriptReset|backlogBroken)/;
+const HUB_ASKED = /because (streamReset|backlogBroken)/;
 const APPLIED = / applied/;
 const SHOWN_FAILING = / because |toast:|transcript read for|catch-up /;
 const TOAST_HEAD = /^.*toast: /;
@@ -272,14 +272,9 @@ if (LIVE) {
             typeof event.data === "string"
               ? event.data
               : new TextDecoder().decode(event.data as ArrayBuffer);
-          // The hub's own word that the history must be read again: a stream reset, or a transcript reset event.
-          if (
-            text.includes(full) &&
-            (text.includes('"stream.reset"') || text.includes('"type":"reset"'))
-          ) {
-            notes.push(
-              `${stamp()} hub frame: ${text.includes('"stream.reset"') ? "stream.reset" : "transcript reset"} for ${short}`
-            );
+          // The hub's own word that the history must be read again: a stream reset.
+          if (text.includes(full) && text.includes('"stream.reset"')) {
+            notes.push(`${stamp()} hub frame: stream.reset for ${short}`);
           }
           ws.send(event.data as string | ArrayBuffer);
         };

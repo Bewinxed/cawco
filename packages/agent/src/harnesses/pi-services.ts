@@ -46,6 +46,7 @@ import {
   readFleetHarnessSet,
 } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
+import type { TranscriptSpan } from "../harness";
 import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
 import { toolGate } from "../tools";
@@ -660,9 +661,20 @@ export class PiProfile {
     );
   }
 
+  /**
+   * The session's stored entries as transcript entries. pi keeps a session
+   * as a tree of entries, a compaction one of them where it ran (what the
+   * model reads next starts at the entry it kept, `firstKeptEntryId`), so
+   * the path from the root to the current leaf (`getBranch`) is the
+   * conversation as it was said, every compaction in its place, and no
+   * branch the session left: the `chain` and `said` spans alike. `whole` is
+   * every entry stored, abandoned branches too (`getEntries`).
+   */
   async getSessionMessages(
     sessionKey: string,
-    dir?: string
+    dir?: string,
+    _tail?: number,
+    span: TranscriptSpan = "chain"
   ): Promise<SessionMessage[]> {
     if (!dir) {
       return [];
@@ -673,7 +685,8 @@ export class PiProfile {
     }
     const manager = SessionManager.open(path, undefined, dir);
     const entries: SessionMessage[] = [];
-    const stored = manager.getEntries();
+    const stored =
+      span === "whole" ? manager.getEntries() : manager.getBranch();
     const placeOf = new Map(stored.map((entry, index) => [entry.id, index]));
     /** The first transcript entry each stored entry made, in stored order. */
     const made: { index: number; uuid: string }[] = [];

@@ -90,6 +90,13 @@ export type Row =
       state: "compacting" | "done" | "failed";
       /** Why it failed, in the harness's words, when it said. */
       error?: string;
+      /**
+       * The messages it draws (its boundary, its summary, the `/compact`'s
+       * report), when it has any: what a kept place finds it by
+       * (open-at.svelte.ts `rowHolding`). None on one only this view saw
+       * begin, whose boundary has not come.
+       */
+      records?: Message[];
     }
   /**
    * The hub's lines about the session's account (core `AccountMove`: it
@@ -490,6 +497,7 @@ function compactionAt(
   }
   const own = `c:${keyOf(first, i)}`;
   const pair = boundary && brief ? 2 : 1;
+  const span = pair + (isCompactReport(messages[i + pair]) ? 1 : 0);
   return {
     row: {
       kind: "compaction",
@@ -506,8 +514,9 @@ function compactionAt(
       preTokens: boundary?.metadata?.preTokens,
       trigger: boundary?.metadata?.trigger,
       timestamp: first.timestamp,
+      records: messages.slice(i, i + span),
     },
-    span: pair + (isCompactReport(messages[i + pair]) ? 1 : 0),
+    span,
   };
 }
 

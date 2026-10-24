@@ -263,6 +263,7 @@ import {
   type HomeLogin,
   type HomeLoginMoved,
   type HomeStore,
+  type HubLine,
   harnessConfigProblem,
   harnessNamed,
   hookProblem,
@@ -2204,6 +2205,9 @@ const peekCustody = (payload: unknown): SessionCustody => {
 const heldProcesses = (custody: SessionCustody | undefined): string[] =>
   custody?.state === "available" ? custody.instances : [];
 
+/** One of the hub's own lines in a session's transcript: a system frame under the line's own id. */
+type HubLineMessage = NeutralSystemMessage & { uuid: string };
+
 /**
  * One line the hub writes into a session's transcript at its account's limit
  * (core `ACCOUNT_MOVE`), as its live stream and a later read both carry it.
@@ -2211,7 +2215,7 @@ const heldProcesses = (custody: SessionCustody | undefined): string[] =>
 const limitLine = (
   row: { sessionId: string | null },
   event: { id: string; at: number; move: AccountMove }
-): NeutralSystemMessage => ({
+): HubLineMessage => ({
   type: "system",
   subtype: ACCOUNT_MOVE,
   move: event.move,
@@ -2229,7 +2233,7 @@ const limitLine = (
 const freshStartLine = (
   row: { id: string; sessionId: string | null },
   at: number
-): NeutralSystemMessage => ({
+): HubLineMessage => ({
   type: "system",
   subtype: FRESH_START,
   uuid: `fresh-start-${row.id}`,
@@ -2244,7 +2248,7 @@ const freshStartLine = (
 const movedHereLine = (
   row: { id: string; sessionId: string | null },
   line: { at: number; moved: string; stayed?: string }
-): NeutralSystemMessage => ({
+): HubLineMessage => ({
   type: "system",
   subtype: MOVED_HERE,
   uuid: `moved-here-${row.id}`,
@@ -2264,7 +2268,7 @@ const movedHereLine = (
 const custodyLine = (
   row: { id: string; sessionId: string | null },
   reason: string
-): NeutralSystemMessage => ({
+): HubLineMessage => ({
   type: "system",
   subtype: CUSTODY_HELD,
   uuid: `custody-held-${row.id}`,
@@ -2294,7 +2298,7 @@ const machineLineKind = (subtype: string): MachineLineKind | undefined =>
 const machineLine = (
   row: { sessionId: string | null },
   note: MachineLine
-): NeutralSystemMessage => ({
+): HubLineMessage => ({
   type: "system",
   subtype: MACHINE_LINE_SUBTYPE[note.kind],
   uuid: note.id,
@@ -2310,7 +2314,7 @@ const machineLine = (
 const watchLine = (
   row: { sessionId: string | null },
   line: { at: number; id: string; content: string }
-): NeutralSystemMessage => ({
+): HubLineMessage => ({
   type: "system",
   subtype: FLEET_WATCH,
   uuid: line.id,
@@ -3803,6 +3807,15 @@ export const createServer = (
     string,
     { machineId: string; since: number; reason: string }
   >();
+  /**
+   * A session no longer held in custody: its notice is taken back out of its
+   * transcript, on every screen ({@link custodyLine}).
+   */
+  const releaseHeld = (id: string): void => {
+    if (heldSessions.delete(id)) {
+      transcripts.removeLine(id, `custody-held-${id}`);
+    }
+  };
   const machineCustody = new Map<string, SessionCustody>();
   /**
    * A machine's custody as it read it now. A reading that decides what was
@@ -22049,7 +22062,14 @@ export const createServer = (
       ? awayStatus(set, machineId)
       : { code: 504, said: machineFault(machineId, "silent") };
 
-  /** The stored entries under `where`, as its machine answers, or why it could not. */
+  /**
+   * The stored entries under `where`, as its machine answers, or why it
+   * could not: the conversation as it was said (`said`), every turn across
+   * its compactions. A compaction changes what the model reads next, never
+   * what the transcript shows; read as the active chain alone, a transcript
+   * the hub read again began at the newest compaction, and every turn before
+   * it was gone from the list, on every screen and after a reload.
+   */
   const storedEntries = async (
     where: TranscriptWhere
   ): Promise<
@@ -22059,7 +22079,7 @@ export const createServer = (
     const answer = await readAgent(
       machineId,
       CONTROL_GET_SESSION_MESSAGES,
-      [where.sessionKey, { dir: where.cwd || undefined }],
+      [where.sessionKey, { dir: where.cwd || undefined, said: true }],
       READ_TIMEOUT_MS,
       where.harness
     );
@@ -22145,16 +22165,14 @@ export const createServer = (
     externalizeImages(stored);
     const records = recordMap(sendLines(row?.id, stored, true, true));
     const transcript = withoutPings(stored, records);
-    if (row) {
-      readRowHistory(row, transcript);
-    }
+    const lines = row ? readRowHistory(row, transcript) : [];
     const done = Date.now();
     if (done - began >= SLOW_HISTORY_MS) {
       console.info(
         `[transcripts] ${instanceId.slice(0, 8)}'s history: ${earlier.length} entries of ${prior.length} conversation(s) before read in ${priorRead - began} ms, ${current.length} of its own in ${currentRead - priorRead} ms, put together here in ${done - currentRead} ms`
       );
     }
-    return { entries: transcript, records, where };
+    return { entries: transcript, lines, records, where };
   };
 
   /**
@@ -22270,40 +22288,47 @@ export const createServer = (
    * What a whole stored transcript says about the row it belongs to: its
    * oldest user turn is the unambiguous answer to what the session is called
    * (write-once), and a session the hub holds in custody ends on the notice
-   * that says so.
+   * that says so. Returns the hub's own lines for the builder to place, each
+   * after the rows it followed when it was first placed (core `HubLine`,
+   * `line_anchors`): the account lines but the one between two of its
+   * conversations, which stands between them already ({@link priorEntries}),
+   * the lines its machine said ({@link noteMachineLine}), fleet watch's
+   * ({@link noteWatch}), and where it started again fresh
+   * ({@link noteFreshStart}).
    */
   const readRowHistory = (
     row: InstanceRow,
     transcript: SessionMessage[]
-  ): void => {
+  ): HubLine[] => {
     if (!(row.title || row.derivedTitle)) {
       const first = firstTurnOf(transcript);
       if (first) {
         nameFromFirstTurn(row.machineId, row.id, first);
       }
     }
-    // The hub's own lines at the account's limit, each where it happened;
-    // the one between two of its conversations stands between them already
-    // ({@link priorEntries}).
+    const lineAnchors = db.lineAnchorsOf(row.id);
+    const placed = (entry: SessionMessage, at: number): HubLine => ({
+      entry,
+      at,
+      after: lineAnchors.get(entry.uuid) ?? null,
+    });
     const between = new Set(
       db.priorConversations(row.id).map((conversation) => conversation.next)
     );
-    for (const event of db.atLimit.events([row.id])) {
-      if (between.has(event.id)) {
-        continue;
-      }
-      const at = transcript.findIndex(
-        (entry) =>
-          entry.timestamp !== undefined &&
-          Date.parse(entry.timestamp) > event.at
-      );
-      transcript.splice(
-        at < 0 ? transcript.length : at,
-        0,
-        limitEntry(row, event)
-      );
+    const lines = db.atLimit
+      .events([row.id])
+      .filter((event) => !between.has(event.id))
+      .map((event) => placed(limitEntry(row, event), event.at));
+    for (const note of db.machineLinesOf(row.id)) {
+      lines.push(placed(lineEntry(row, machineLine(row, note)), note.at));
     }
-    placeLimitNotes(row, transcript);
+    for (const said of db.watchLinesOf(row.id)) {
+      lines.push(placed(lineEntry(row, watchLine(row, said)), said.at));
+    }
+    const fresh = db.freshStartOf(row.id);
+    if (fresh !== null) {
+      lines.push(placed(lineEntry(row, freshStartLine(row, fresh)), fresh));
+    }
     const held = heldSessions.get(row.id);
     if (
       held &&
@@ -22319,47 +22344,23 @@ export const createServer = (
         message: custodyLine(row, held.reason),
       });
     }
-    placeFreshStart(row, transcript);
     placeMovedHere(row, transcript);
+    return lines;
   };
 
-  /** The lines its machine said about the session ({@link noteMachineLine}), and fleet watch's lines, each where it happened. */
-  const placeLimitNotes = (
-    row: InstanceRow,
-    transcript: SessionMessage[]
-  ): void => {
-    for (const note of db.machineLinesOf(row.id)) {
-      const at = transcript.findIndex(
-        (entry) =>
-          entry.timestamp !== undefined && Date.parse(entry.timestamp) > note.at
-      );
-      transcript.splice(at < 0 ? transcript.length : at, 0, {
-        type: "system",
-        uuid: note.id,
-        session_id: row.sessionId ?? "",
-        parent_tool_use_id: null,
-        parent_agent_id: null,
-        message: machineLine(row, note),
-        timestamp: new Date(note.at).toISOString(),
-      });
-    }
-    // Fleet watch's lines ({@link noteWatch}), each where it happened.
-    for (const line of db.watchLinesOf(row.id)) {
-      const at = transcript.findIndex(
-        (entry) =>
-          entry.timestamp !== undefined && Date.parse(entry.timestamp) > line.at
-      );
-      transcript.splice(at < 0 ? transcript.length : at, 0, {
-        type: "system",
-        uuid: line.id,
-        session_id: row.sessionId ?? "",
-        parent_tool_use_id: null,
-        parent_agent_id: null,
-        message: watchLine(row, line),
-        timestamp: new Date(line.at).toISOString(),
-      });
-    }
-  };
+  /** One of the hub's lines, `message`, as a stored transcript entry holds it. */
+  const lineEntry = (
+    row: { sessionId: string | null },
+    message: HubLineMessage
+  ): SessionMessage => ({
+    type: "system",
+    uuid: message.uuid,
+    session_id: row.sessionId ?? "",
+    parent_tool_use_id: null,
+    parent_agent_id: null,
+    message,
+    ...(message.timestamp ? { timestamp: message.timestamp } : {}),
+  });
 
   /** Where the session's project was moved to its machine for it: the transcript's first row. */
   const placeMovedHere = (
@@ -22381,30 +22382,6 @@ export const createServer = (
     });
   };
 
-  /** Where a session started again fresh ({@link noteFreshStart}), at that moment. */
-  const placeFreshStart = (
-    row: InstanceRow,
-    transcript: SessionMessage[]
-  ): void => {
-    const fresh = db.freshStartOf(row.id);
-    if (fresh === null) {
-      return;
-    }
-    const at = transcript.findIndex(
-      (entry) =>
-        entry.timestamp !== undefined && Date.parse(entry.timestamp) > fresh
-    );
-    transcript.splice(at < 0 ? transcript.length : at, 0, {
-      type: "system",
-      uuid: `fresh-start-${row.id}`,
-      session_id: row.sessionId ?? "",
-      parent_tool_use_id: null,
-      parent_agent_id: null,
-      message: freshStartLine(row, fresh),
-      timestamp: new Date(fresh).toISOString(),
-    });
-  };
-
   /** A stored transcript's machine is away, as its routes answer it: 503 with {@link awayHeaders}. */
   const historyAway = (fault: HistoryFault): Response =>
     new Response(fault.message, {
@@ -22417,6 +22394,8 @@ export const createServer = (
     lifetime,
     laws,
     readHistory,
+    anchor: (instanceId, lineId, after) =>
+      db.anchorLine(instanceId, lineId, after),
     build: (machineId) =>
       db.listAgents().find((agent) => agent.machineId === machineId)?.build
         ?.commit,
@@ -25347,7 +25326,7 @@ export const createServer = (
       unanswered.delete(id);
       pulses.delete(id);
       touched.delete(id);
-      heldSessions.delete(id);
+      releaseHeld(id);
     }
   };
 
@@ -26604,12 +26583,11 @@ export const createServer = (
     console.log(
       `[hub] ${row.id} starts again fresh: its first start never began`
     );
-    transcripts.ingest(row.id, {
-      kind: "frame",
-      instanceId: row.id,
-      harness: row.harness,
-      message: freshStartLine(row, at),
-    });
+    // Said again where it last happened: the line moves there.
+    const line = freshStartLine(row, at);
+    transcripts.removeLine(row.id, line.uuid);
+    db.unanchorLine(row.id, line.uuid);
+    transcripts.line(row.id, line, row.harness);
   };
 
   /**
@@ -26646,12 +26624,7 @@ export const createServer = (
       return;
     }
     console.warn(`[hub] ${row.id}: ${content}`);
-    transcripts.ingest(row.id, {
-      kind: "frame",
-      instanceId: row.id,
-      harness,
-      message: machineLine(row, note),
-    });
+    transcripts.line(row.id, machineLine(row, note), harness);
   };
 
   /** The leaks and container endings each session was told of, by `<session> <id>` ({@link LEAKS_KEPT}). */
@@ -26856,12 +26829,7 @@ export const createServer = (
       content,
     };
     db.noteWatchLine(row.id, line);
-    transcripts.ingest(row.id, {
-      kind: "frame",
-      instanceId: row.id,
-      harness: row.harness,
-      message: watchLine(row, line),
-    });
+    transcripts.line(row.id, watchLine(row, line), row.harness);
   };
 
   const noteMovedHere = (
@@ -26912,12 +26880,7 @@ export const createServer = (
       unnoteAtLimit(row, standing.id);
     }
     db.atLimit.putEvent({ ...event, instanceId: row.id });
-    transcripts.ingest(row.id, {
-      kind: "frame",
-      instanceId: row.id,
-      harness: row.harness,
-      message: limitLine(row, event),
-    });
+    transcripts.line(row.id, limitLine(row, event), row.harness);
     // The transcript's own words: its line, then the detail under it.
     console.info(
       `[${move.kind === "ended" ? "session" : "at-limit"}] ${sessionName(row)}: ${accountMoveSentence(move, event.at)}`
@@ -26927,6 +26890,7 @@ export const createServer = (
   /** Takes one of the hub's lines back out of a session's transcript: kept, and drawn. */
   const unnoteAtLimit = (row: { id: string }, id: string): void => {
     db.atLimit.dropEvent(id);
+    db.unanchorLine(row.id, `limit-${id}`);
     transcripts.removeLine(row.id, `limit-${id}`);
   };
 
@@ -33025,7 +32989,7 @@ export const createServer = (
               }
               for (const [id, held] of heldSessions) {
                 if (held.machineId === message.machineId) {
-                  heldSessions.delete(id);
+                  releaseHeld(id);
                 }
               }
               // Named as the hub names it: through an SSH add's forward, the
@@ -34149,7 +34113,7 @@ export const createServer = (
                       "the summariser session stopped before it answered"
                     )
                   );
-                heldSessions.delete(message.instanceId);
+                releaseHeld(message.instanceId);
                 endPreviews(message.instanceId);
                 // Its live work took its final state as the end was confirmed
                 // (lifecycle `confirmed`, tree-stops.ts), naming who stopped it
@@ -34516,7 +34480,7 @@ export const createServer = (
                     if (live) {
                       workItems.started(live);
                     }
-                    heldSessions.delete(message.instanceId);
+                    releaseHeld(message.instanceId);
                     // A launch's own word: what it has open is written anew,
                     // and a turn a restart cut goes back to it now it is up.
                     turnsWritten.delete(message.instanceId);

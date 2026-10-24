@@ -315,6 +315,20 @@ export interface HarnessSession {
   withdrawPermission(requestId: string, message: string): void;
 }
 
+/**
+ * How much of a session's stored conversation a read returns:
+ *
+ * - `chain`: what the model reads now (claude: its active chain, which
+ *   begins at the last compaction);
+ * - `said`: the conversation as it was said, what a transcript shows: every
+ *   turn across its compactions, each compaction where it happened, no
+ *   branch the conversation left;
+ * - `whole`: every message the session ever stored, across compactions and
+ *   abandoned branches, for readers that index the whole history rather
+ *   than show it.
+ */
+export type TranscriptSpan = "chain" | "said" | "whole";
+
 /** One harness adapter. Implemented per runtime; registered in `./harnesses`. */
 export interface Harness {
   /** Abort a server-held turn without adopting or waking its session. */
@@ -380,18 +394,15 @@ export interface Harness {
     dir?: string
   ): Promise<NeutralSessionInfo | undefined>;
   /**
-   * The session's messages, oldest first. By default what the harness shows
-   * as the conversation (claude: its active chain, which begins at the last
-   * compaction); `whole` asks for every message the session ever stored,
-   * across compactions and abandoned branches — for readers that index the
-   * whole history rather than show it. `tail` keeps only the newest.
+   * The session's messages, oldest first, over the {@link TranscriptSpan}
+   * asked for (`chain` when none). `tail` keeps only the newest.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   getSessionMessages(
     sessionKey: string,
     dir?: string,
     tail?: number,
-    whole?: boolean
+    span?: TranscriptSpan
   ): Promise<SessionMessage[]>;
   /**
    * The hub restarted since this harness's live sessions connected to it:

@@ -3309,6 +3309,30 @@ export const sessionLines = sqliteTable(
 );
 
 /**
+ * Where each of the hub's own lines stands in a session's transcript (an
+ * account move, a line its machine said, fleet watch's, a fresh start), by
+ * the line's block id: after the rows it followed when it was first placed,
+ * the nearest first (core `HubLine`). Written as the line first lands, live
+ * or in a read that placed it by its clock (one written before this table,
+ * or while its transcript could not be read), and read by every read after,
+ * so a line stands where it was first shown however the transcript is read
+ * again (server.ts `readHistory`).
+ */
+export const lineAnchors = sqliteTable(
+  "line_anchors",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    /** The line's block id: `limit-<event>`, a machine line's or a watch line's id, `fresh-start-<instance>`. */
+    lineId: text("line_id").notNull(),
+    /** The ids of the rows before it when first placed, the nearest first. */
+    after: text("after", { mode: "json" }).$type<string[]>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.lineId] })]
+);
+
+/**
  * The harness conversations a session had before the one it runs now
  * (`instances.session_id`), oldest first (`ord`): each time it went on from
  * a summary in a fresh conversation (at its account's limit, or because it

@@ -13,17 +13,19 @@
   >();
 
   /**
-   * Where the reader left a conversation: at its tail, or at a row — the one
-   * at the top of the view, by key, and how many pixels of it were scrolled
-   * past. A row keeps its key whatever arrives before or after it, so the
-   * place survives a conversation that grew while it was away. Kept per
+   * Where the reader left a conversation: at its tail, or at a block — the
+   * first block of the row at the top of the view, by id, and how many
+   * pixels of its row were scrolled past. A block keeps its id whatever
+   * arrives before or after it and however the rows around it fold, and
+   * the row holding it is found again (open-at.svelte.ts `rowHolding`), so
+   * the place survives a conversation that grew while it was away. Kept per
    * session in sessionStorage, so a reload returns there too. Or at a record
    * the conversation was opened at (`?at=`, open-at.svelte.ts), centred:
    * never kept, it is the address's.
    */
   type Landing =
     | { tail: true }
-    | { tail: false; key: string; into: number }
+    | { tail: false; block: string; into: number }
     | { tail: false; at: string };
   const LANDING = "cawco:landing:";
 </script>
@@ -85,7 +87,7 @@
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
   import NoticeRun from "./NoticeRun.svelte";
-  import { openAt, rowHolding } from "./open-at.svelte";
+  import { blockOf, openAt, rowHolding } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import {
@@ -2242,15 +2244,8 @@
       first: placeOf(renderedRows[0]),
       count: renderedRows.length,
     });
-    let landing: Landing = { tail: true };
-    if (!atBottom) {
-      const index = list.findItemIndex(lastTop);
-      landing = {
-        tail: false,
-        key: placeOf(renderedRows[index]),
-        into: lastTop - listStart - list.getItemOffset(index),
-      };
-    }
+    const place = atBottom ? null : (keptPlace ?? placeAt(lastTop));
+    const landing: Landing = place ? { tail: false, ...place } : { tail: true };
     writeJson(LANDING + session.instanceId, landing, "session");
   }
 
@@ -2271,11 +2266,26 @@
     if (!resume || resume.tail) {
       return -1;
     }
-    if ("at" in resume) {
-      return rowHolding(renderedRows, resume.at);
+    return rowHolding(renderedRows, "at" in resume ? resume.at : resume.block);
+  }
+
+  /**
+   * The reader's place at the view's top `top`: the first block of the row
+   * there, or of the nearest row above it that has one (the live tail's rows
+   * have none), and how far past that row's top the view stands. Read off
+   * virtua's sizes, never the page.
+   */
+  function placeAt(top: number): { block: string; into: number } | null {
+    if (!list || renderedRows.length === 0) {
+      return null;
     }
-    const { key } = resume;
-    return renderedRows.findIndex((row) => placeOf(row) === key);
+    for (let index = list.findItemIndex(top); index >= 0; index -= 1) {
+      const block = blockOf(renderedRows[index]);
+      if (block) {
+        return { block, into: top - listStart - list.getItemOffset(index) };
+      }
+    }
+    return null;
   }
 
   /**
@@ -2304,28 +2314,145 @@
    */
   function restore(): boolean {
     const index = anchorIndex();
-    if (!(resume && !resume.tail && list && scroller && listing) || index < 0) {
+    if (!(resume && !resume.tail) || index < 0) {
       return false;
     }
     atBottom = false;
+    return scrollToRow(index, "at" in resume ? centred(index) : resume.into);
+  }
+
+  /**
+   * The last offset this component wrote to put a row back in its place,
+   * and the offset the engine read back for it. An engine rounds a written
+   * offset to its own steps (WebKit to whole pixels: 455.65625 reads back
+   * 455), so a place it cannot reach any closer is reached once the offset
+   * reads back what it did for that same write.
+   */
+  let placeWrite: { target: number; read: number } | null = null;
+
+  /**
+   * Puts the row at `index` at the view's top, `into` pixels past its top,
+   * from virtua's sizes as they stand; says whether the scroller had to
+   * move. Within what the scroller can reach: a place past its end — rows
+   * below it that are shorter now than when it was left — is its end.
+   */
+  function scrollToRow(index: number, into: number): boolean {
+    if (!(list && scroller && listing)) {
+      return false;
+    }
     const start =
       listing.getBoundingClientRect().top -
       scroller.getBoundingClientRect().top +
       scroller.scrollTop;
-    const into = "at" in resume ? centred(index) : resume.into;
-    // Within what the scroller can reach: a place past its end — rows below
-    // it that are shorter now than when it was left — is its end.
+    // Never past the row's own end as virtua has it sized: a row it has not
+    // measured is `ROW_ESTIMATE` tall, and a place further into it than that
+    // put the row above the view, where it is never drawn, never measured,
+    // and the place never reached (the reload landed on the row after it).
+    // Its last pixel at the view's top, it is drawn, measured, and the next
+    // write goes as far into it as the place says.
+    const reach = Math.min(into, Math.max(0, list.getItemSize(index) - 1));
     const target = Math.min(
-      Math.max(0, start + list.getItemOffset(index) + into),
+      Math.max(0, start + list.getItemOffset(index) + reach),
       scroller.scrollHeight - scroller.clientHeight
     );
-    if (Math.abs(scroller.scrollTop - target) <= 0.5) {
+    const now = scroller.scrollTop;
+    if (
+      Math.abs(now - target) <= 0.5 ||
+      (placeWrite !== null &&
+        Math.abs(placeWrite.target - target) <= 0.5 &&
+        now === placeWrite.read)
+    ) {
       return false;
     }
     scroller.scrollTop = target;
     lastWrite = scroller.scrollTop;
+    placeWrite = { target, read: lastWrite };
     return true;
   }
+
+  /**
+   * THE PLACE IS A BLOCK. The reader's place off the tail, as their own
+   * scroll last left it (`readScroll`, `placeAt`), or as this component last
+   * put it back: the block at the view's top and how far into its row. No
+   * other scroll moves it: virtua's corrections and the strip's keep the
+   * rows on screen where they stand, and a scroll the page's own layout
+   * makes as it goes (a reload) is not the reader's. What a reload returns
+   * to (`saveLanding`). Whatever the list does under it (a row put in above,
+   * one taken out, rows folding again), the row holding that block is put
+   * back at the view's top, as far into it, once the change is laid out
+   * (`holdPlace`). A change only in front is virtua's own `shift`, which is
+   * exact; at the tail the place does not move.
+   */
+  let keptPlace: { block: string; into: number } | null = null;
+  /** The frame the place is put back in, while it is. */
+  let keepFrame = 0;
+  /** The most frames a place is put back over while the rows around it measure: our own call. */
+  const KEEP_FRAMES = 12;
+  /**
+   * Bumped each time the reader's own scroll moves the view (`readScroll`):
+   * a place put back stops being put back the moment the reader moves.
+   */
+  let readerMoved = 0;
+  /**
+   * Until when a landing's place is held (performance.now()): the rows
+   * around a place read back to go on measuring after the list is drawn,
+   * and each measurement above it moves it, frames apart.
+   */
+  let holdUntil = 0;
+  /** How long a landing's place is held once the list is drawn, ms: our own call. */
+  const LANDING_HOLD_MS = 1500;
+  function holdPlace(): void {
+    cancelAnimationFrame(keepFrame);
+    keepFrame = 0;
+    const place = keptPlace;
+    if (
+      !(place && landed && shown) ||
+      atBottom ||
+      jumping ||
+      seeking !== null ||
+      (resume !== null && !resume.tail)
+    ) {
+      return;
+    }
+    const moved = readerMoved;
+    let frames = 0;
+    const step = (): void => {
+      keepFrame = requestAnimationFrame(() => {
+        keepFrame = 0;
+        // The reader moved since, or the view follows the tail again.
+        if (atBottom || readerMoved !== moved) {
+          return;
+        }
+        // The row at the view's top first: it is the place's unless the list
+        // moved under it, and the whole list is read for it only then.
+        const top = list ? list.findItemIndex(lastTop) : -1;
+        const index =
+          top >= 0 && blockOf(renderedRows[top]) === place.block
+            ? top
+            : rowHolding(renderedRows, place.block);
+        const wrote = index >= 0 && scrollToRow(index, place.into);
+        if (wrote) {
+          frames += 1;
+          keptPlace = place;
+        }
+        if ((wrote && frames < KEEP_FRAMES) || performance.now() < holdUntil) {
+          step();
+        }
+      });
+    };
+    step();
+  }
+  $effect(() => {
+    const { shifted } = built;
+    // biome-ignore lint/complexity/noVoid: the rows drawn are what moves the place
+    void renderedRows;
+    // A change only in front is virtua's own `shift`, unless a landing's
+    // place is still held: then it is put back after that change too.
+    if (!shifted || performance.now() < holdUntil) {
+      untrack(holdPlace);
+    }
+    return () => cancelAnimationFrame(keepFrame);
+  });
 
   // ── Opened at a record ────────────────────────────────────────────────
   /**
@@ -2399,6 +2526,8 @@
       return;
     }
     marked = { key: renderedRows[index].key, state: "on" };
+    // The record opened at is the place now, as a reader's scroll to it is.
+    keptPlace = placeAt(lastTop);
     // The finder's own words for the key that brought the reader here
     // ("↵ open at that line", docs/tom/find-and-mention-chosen.md).
     announcement = "Opened at that line.";
@@ -2762,6 +2891,9 @@
     if (was && stillAt(was, lastTop)) {
       return;
     }
+    readerMoved += 1;
+    holdUntil = 0;
+    keptPlace = placeAt(lastTop);
     stopFollow();
     // A row the reader scrolls to is not arriving, whenever it came in: what
     // is still waiting to mount is theirs to read, not ours to play.
@@ -3140,18 +3272,28 @@
     // a pane off screen builds its rows on its scheduler turn, and asking on
     // the page's landing alone read on past the place before it was looked for.
     const own = paged();
-    if (
-      own?.cursor &&
-      !own.olderFault &&
-      resume &&
-      !resume.tail &&
-      anchorIndex() < 0
-    ) {
-      if (!own.hydrating && untrack(printOf) === builtPrint) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget; the page landing re-runs this reveal
-        void untrack(() => readOlderPage(own.instanceId));
+    if (resume && !resume.tail && anchorIndex() < 0) {
+      // The place is looked for only among rows built from the store's
+      // session as it stands: not while a build's second step is still to
+      // come (`pending`) or the rows lag what the store holds, and not among
+      // the server's stand-in rows once the store has rows to take their
+      // place (`SessionPane`). Concluded not found there, the list was drawn
+      // at another row with the place a moment from arriving above it
+      // (transcript-holds, its reload legs).
+      if (
+        pending !== null ||
+        untrack(printOf) !== builtPrint ||
+        (store !== null && store !== session && store.messages.length > 0)
+      ) {
+        return;
       }
-      return;
+      if (own?.cursor && !own.olderFault) {
+        if (!own.hydrating) {
+          // biome-ignore lint/complexity/noVoid: fire-and-forget; the page landing re-runs this reveal
+          void untrack(() => readOlderPage(own.instanceId));
+        }
+        return;
+      }
     }
     let frame: number | null = null;
     /** This reveal is still the one being waited for. */
@@ -3214,12 +3356,7 @@
           });
           return;
         }
-        const sought = resume && "at" in resume ? resume.at : null;
-        resume = null;
-        shown = true;
-        if (sought !== null) {
-          arrived(sought);
-        }
+        drawAtLanding();
       });
     };
     const changes = new MutationObserver(wait);
@@ -3238,6 +3375,30 @@
       }
     };
   });
+
+  /**
+   * The list drawn where its landing put it. A record asked for is said to
+   * be reached (`arrived`); a place read back to stays the place while the
+   * rows around it go on measuring (`holdPlace`): drawn at it, the list
+   * moved off it by what the rows above measured to after the reveal.
+   */
+  function drawAtLanding(): void {
+    const sought = resume && "at" in resume ? resume.at : null;
+    const kept =
+      resume && !resume.tail && "block" in resume
+        ? { block: resume.block, into: resume.into }
+        : null;
+    resume = null;
+    shown = true;
+    if (sought !== null) {
+      arrived(sought);
+    }
+    if (kept) {
+      keptPlace = kept;
+      holdUntil = performance.now() + LANDING_HOLD_MS;
+      holdPlace();
+    }
+  }
 
   /**
    * Put the view at the tail in the next frame, before it paints: the

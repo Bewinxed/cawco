@@ -185,6 +185,7 @@ import {
   limitCompactions,
   limitEvents,
   limitHolds,
+  lineAnchors,
   type MachineLineKind,
   marketplaces,
   mcpServers,
@@ -683,6 +684,12 @@ export interface DbShape {
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
   /** Every project's threads, newest first. */
   readonly allThreads: () => ThreadRow[];
+  /** Keeps where one of the hub's lines stands ({@link lineAnchorsOf}); a line placed again keeps its newest place. */
+  readonly anchorLine: (
+    instanceId: string,
+    lineId: string,
+    after: readonly string[]
+  ) => void;
   /** Records the answer, filing the offer first when it was taken unprompted. */
   readonly answerProjectOffer: (
     instanceId: string,
@@ -1148,6 +1155,12 @@ export interface DbShape {
   readonly leadTurns: () => LeadTurnRow[];
   /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
   readonly lfsOffers: LfsOffersDb;
+  /**
+   * Where each of the hub's lines in a session's transcript stands, by the
+   * line's block id: the rows it followed when first placed, the nearest
+   * first (`line_anchors`).
+   */
+  readonly lineAnchorsOf: (instanceId: string) => Map<string, string[]>;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -1383,6 +1396,10 @@ export interface DbShape {
    * with the directory it really opened in, which is the agent's word on where
    * the spawn's `cwd` resolved to, and the MCP servers and tools it announced
    * when it announced any. Its harness is its spawn's ({@link openInstance}).
+   * A key that replaces another (a `/clear`, a fresh start, a relaunch that
+   * could not resume) keeps the one it replaces among the session's prior
+   * conversations ({@link priorConversations}): its transcript still reads
+   * what was said there.
    */
   readonly noteInstanceSession: (
     id: string,
@@ -2372,6 +2389,8 @@ export interface DbShape {
   readonly treeStops: TreeStopsDb;
   /** Each completed turn's tokens, on the account it ran on. */
   readonly turnUsage: TurnUsageDb;
+  /** Forgets where a line taken back stood. */
+  readonly unanchorLine: (instanceId: string, lineId: string) => void;
   /**
    * Pending sends handed to a machine before the hub kept each whole
    * ({@link sentMessages.envelope}): none once {@link keepEnvelope} has
@@ -3392,6 +3411,44 @@ const make = async (path: string): Promise<DbShape> => {
       return true;
     });
 
+  /**
+   * The conversation a session's new key replaces (a `/clear`, a fresh
+   * start, a relaunch under a new key) kept among its prior ones, last: its
+   * file is read before the new one, as a continuation's is. Once: a key
+   * already among them is not kept again.
+   */
+  const keepReplacedConversation = (
+    tx: Tx,
+    instanceId: string,
+    held: {
+      accountId: string | null;
+      harness: HarnessKind;
+      model: string | null;
+      sessionId: string | null;
+    },
+    sessionId: string
+  ): void => {
+    const left = held.sessionId;
+    if (!left || left === sessionId) {
+      return;
+    }
+    const prior = conversationsOf(tx, instanceId);
+    if (prior.some((one) => one.sessionId === left)) {
+      return;
+    }
+    putConversations(tx, instanceId, [
+      ...prior,
+      {
+        sessionId: left,
+        harness: held.harness,
+        model: held.model,
+        accountId: held.accountId,
+        endedAt: Date.now(),
+        next: null,
+      },
+    ]);
+  };
+
   /** A session's prior conversations, oldest first. */
   const conversationsOf = (
     from: Pick<Tx, "select">,
@@ -3645,6 +3702,7 @@ const make = async (path: string): Promise<DbShape> => {
     ["routines", "made_by"],
     ["design_proposals", "instance_id"],
     ["session_lines", "instance_id"],
+    ["line_anchors", "instance_id"],
     ["completed_turns", "instance_id", "once"],
     ["session_plans", "instance_id", "once"],
     ["project_offers", "instance_id", "once"],
@@ -5543,6 +5601,34 @@ const make = async (path: string): Promise<DbShape> => {
           .map((row) => [row.id, row.now])
       ),
     priorConversations: (instanceId) => conversationsOf(db, instanceId),
+    lineAnchorsOf: (instanceId) =>
+      new Map(
+        db
+          .select({ lineId: lineAnchors.lineId, after: lineAnchors.after })
+          .from(lineAnchors)
+          .where(eq(lineAnchors.instanceId, instanceId))
+          .all()
+          .map((row) => [row.lineId, row.after])
+      ),
+    anchorLine: (instanceId, lineId, after) => {
+      db.insert(lineAnchors)
+        .values({ instanceId, lineId, after: [...after] })
+        .onConflictDoUpdate({
+          target: [lineAnchors.instanceId, lineAnchors.lineId],
+          set: { after: [...after] },
+        })
+        .run();
+    },
+    unanchorLine: (instanceId, lineId) => {
+      db.delete(lineAnchors)
+        .where(
+          and(
+            eq(lineAnchors.instanceId, instanceId),
+            eq(lineAnchors.lineId, lineId)
+          )
+        )
+        .run();
+    },
     carryWorkItem: (itemId, from, to) =>
       db.transaction((tx) => {
         tx.update(workItems)
@@ -5789,46 +5875,54 @@ const make = async (path: string): Promise<DbShape> => {
       // directory as the machine resolved it (`~` expanded). Every later `init`
       // carries wherever the CLI has since `cd`'d to, which is not where the
       // session lives.
-      const before = db
-        .select({
-          sessionId: instances.sessionId,
-          projectId: instances.projectId,
-          machineId: instances.machineId,
-          parentInstanceId: instances.parentInstanceId,
-        })
-        .from(instances)
-        .where(eq(instances.id, id))
-        .get();
-      // A row its start found no project for, and whose folder only its
-      // machine could resolve (a `~` start), is placed by that folder now:
-      // the place holding it most closely, once. A session under a parent
-      // keeps its parent's, none included.
-      const placed =
-        cwd &&
-        before &&
-        before.sessionId === null &&
-        before.projectId === null &&
-        before.parentInstanceId === null
-          ? store.projectHolding(before.machineId, cwd)
-          : undefined;
-      db.update(instances)
-        .set({
-          sessionId,
-          ...(cwd
-            ? {
-                cwd: sql`CASE WHEN ${instances.sessionId} IS NULL THEN ${cwd} ELSE ${instances.cwd} END`,
-              }
-            : {}),
-          ...(placed
-            ? {
-                projectId: sql`COALESCE(${instances.projectId}, ${placed})`,
-              }
-            : {}),
-          ...(tooling ? { tooling } : {}),
-          ...(commands ? { commands } : {}),
-        })
-        .where(eq(instances.id, id))
-        .run();
+      db.transaction((tx) => {
+        const before = tx
+          .select({
+            sessionId: instances.sessionId,
+            projectId: instances.projectId,
+            machineId: instances.machineId,
+            parentInstanceId: instances.parentInstanceId,
+            harness: instances.harness,
+            model: instances.model,
+            accountId: instances.accountId,
+          })
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get();
+        // A row its start found no project for, and whose folder only its
+        // machine could resolve (a `~` start), is placed by that folder now:
+        // the place holding it most closely, once. A session under a parent
+        // keeps its parent's, none included.
+        const placed =
+          cwd &&
+          before &&
+          before.sessionId === null &&
+          before.projectId === null &&
+          before.parentInstanceId === null
+            ? store.projectHolding(before.machineId, cwd)
+            : undefined;
+        if (before) {
+          keepReplacedConversation(tx, id, before, sessionId);
+        }
+        tx.update(instances)
+          .set({
+            sessionId,
+            ...(cwd
+              ? {
+                  cwd: sql`CASE WHEN ${instances.sessionId} IS NULL THEN ${cwd} ELSE ${instances.cwd} END`,
+                }
+              : {}),
+            ...(placed
+              ? {
+                  projectId: sql`COALESCE(${instances.projectId}, ${placed})`,
+                }
+              : {}),
+            ...(tooling ? { tooling } : {}),
+            ...(commands ? { commands } : {}),
+          })
+          .where(eq(instances.id, id))
+          .run();
+      });
     },
     launchDirOf: (id) => {
       const row = db

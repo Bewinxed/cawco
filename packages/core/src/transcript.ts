@@ -37,6 +37,7 @@ import {
   suppressesTaskLine,
   type ToolResult,
   turnStart,
+  uuidOf,
 } from "./transcript-rules";
 import type {
   TranscriptBlock,
@@ -114,6 +115,120 @@ const branchEvents = (mapping: FrameMapping): BranchEvent[] =>
 const branchState = ({ blocks: _, ...state }: BranchState): TranscriptBranch =>
   state;
 
+/** How many rows before one of the hub's lines its anchor names, the nearest first. */
+const ANCHOR_ROWS = 8;
+
+/**
+ * One of the hub's own lines in a session's transcript (an account move, a
+ * line its machine said, fleet watch's, a fresh start), as a read places it:
+ * after the row it followed when it was first placed. Its anchor names the
+ * rows before it then, the nearest first, so a row only the live stream
+ * drew (a turn's end) is passed over for the next one a read holds.
+ */
+export interface HubLine {
+  /**
+   * The rows it followed when first placed, the nearest first: it stands
+   * after the first of them the read holds. Null: never placed yet.
+   */
+  after: readonly string[] | null;
+  /** When it was written, ms epoch: where a line never placed is put, once. */
+  at: number;
+  /** The line, as a stored transcript entry carries it. */
+  entry: SessionMessage;
+}
+
+/** A line a read placed that its anchor did not: its id, and the anchor it keeps from now on. */
+export interface LinePlaced {
+  after: string[];
+  id: string;
+}
+
+/** The ids of the rows before `rows[at]`, the nearest first: a line's anchor ({@link HubLine}). */
+const precedingIds = (rows: readonly TranscriptBlock[], at: number): string[] =>
+  rows
+    .slice(Math.max(0, at - ANCHOR_ROWS), at)
+    .map((row) => row.id)
+    .reverse();
+
+/**
+ * The hub's lines into a read's rows, oldest first, each after the first row
+ * its anchor names that the read holds, after any line already placed
+ * there; one never placed, or whose anchor names none of them, goes where
+ * its clock puts it (before the first row stored after it), once, and is
+ * returned with the anchor it keeps from then on. A line the read already
+ * holds (one standing between two conversations) is left where it is.
+ */
+function placeLines(
+  instanceId: string,
+  rows: TranscriptBlock[],
+  lines: readonly HubLine[]
+): LinePlaced[] {
+  const placed: LinePlaced[] = [];
+  const ids = new Set(rows.map((row) => row.id));
+  const thisPass = new Set<string>();
+  for (const line of [...lines].sort((a, b) => a.at - b.at)) {
+    const { entry } = line;
+    const blocks = mapFrame(
+      instanceId,
+      (entry.type === "system" ? entry.message : entry) as NeutralMessage,
+      () => entry.uuid
+    ).blocks.filter((block) => !ids.has(block.id));
+    const [first] = blocks;
+    if (!first) {
+      continue;
+    }
+    for (const block of blocks) {
+      block.timestamp = storedAt(entry);
+    }
+    const anchor = line.after?.find((id) => ids.has(id));
+    let at =
+      anchor === undefined
+        ? rows.findIndex(
+            (row) =>
+              row.timestamp !== undefined && Date.parse(row.timestamp) > line.at
+          )
+        : rows.findIndex((row) => row.id === anchor) + 1;
+    if (at < 0) {
+      at = rows.length;
+    }
+    while (at < rows.length && thisPass.has(rows[at].id)) {
+      at += 1;
+    }
+    rows.splice(at, 0, ...blocks);
+    for (const block of blocks) {
+      ids.add(block.id);
+      thisPass.add(block.id);
+    }
+    if (anchor === undefined) {
+      placed.push({ id: first.id, after: precedingIds(rows, at) });
+    }
+  }
+  return placed;
+}
+
+/**
+ * A held row as a read gives it: the read's, keeping what only the live
+ * stream measured (how long a reasoning block ran); the held one when the
+ * read says the same, or does not hold it.
+ */
+function restated(
+  held: TranscriptBlock,
+  read: TranscriptBlock | undefined
+): TranscriptBlock {
+  if (!read || read === held) {
+    return held;
+  }
+  const duration = held.metadata?.thinkingDurationMs;
+  const next =
+    duration !== undefined && read.metadata?.thinkingDurationMs === undefined
+      ? {
+          ...read,
+          metadata: { ...read.metadata, thinkingDurationMs: duration },
+        }
+      : read;
+  return JSON.stringify(next) === JSON.stringify(held) ? held : next;
+}
+
 /** The longest run of `seq` that only ever rises, as a set of its values. */
 function risingRun(seq: number[]): Set<number> {
   const tails: number[] = [];
@@ -154,7 +269,15 @@ export class TranscriptBuilder {
   private placed: TranscriptBlock[] = [];
   private queued: TranscriptBlock[] = [];
   /** The uuids a history read carried: a frame replayed behind it is not news. */
-  private seeded = new Set<string>();
+  private readonly seeded = new Set<string>();
+  /** How many reads this transcript has merged: the first is the transcript, and says nothing. */
+  private reads = 0;
+  /**
+   * The main-transcript blocks taken out on purpose and not back since (a
+   * rewind's cut, a line taken back, a send replaced), by id: what the
+   * newest page lists, for a client that missed their `block.remove`.
+   */
+  private readonly removed = new Set<string>();
   private tail = blankTail();
   private facts = blankFacts();
   /** When an interrupt was last carried to this session, epoch ms. */
@@ -203,12 +326,144 @@ export class TranscriptBuilder {
 
   /**
    * A stored transcript read from its machine, with the records of the sends
-   * it holds: everything this builder had is replaced by it. The live tail is
-   * dropped — what the partials painted is in the read now — and the facts a
-   * read can state are taken from it.
+   * it holds and the hub's own lines, MERGED into what this builder holds: a
+   * row once served stays where it stands under its id, however the
+   * transcript is read again.
+   *
+   * - The first read is the transcript: nothing was served before it, and it
+   *   says nothing (no client can hold a row of a transcript not built).
+   * - A later read changes the rows its blocks name in place (a tool call
+   *   that took its result), and puts each row it holds that is not held yet
+   *   after the row before it in the read, a run of them in read order. A
+   *   row held that the read lacks stays: a live-only row (a turn's end, an
+   *   interrupt's receipt), or one the read dropped, is never taken out by a
+   *   read. `cut` (a rewind) is the one exception: what is held after the
+   *   last row the read holds, and the read lacks, goes, each with its
+   *   `block.remove`.
+   *
+   * Each of the hub's lines stands after the row it followed when it was
+   * first placed ({@link HubLine}); one never placed is placed by its clock,
+   * once, and said back in `placed` for the hub to keep. The live tail is
+   * dropped (what the partials painted is in the read now) and the facts a
+   * read can state are taken from it. Returns the changes, in order.
+   */
+  merge(
+    entries: SessionMessage[],
+    records: Record<string, SendRecord>,
+    lines: readonly HubLine[] = [],
+    cut = false
+  ): { events: TranscriptEvent[]; placed: LinePlaced[] } {
+    const { rows: read, branches } = this.build(entries);
+    const placed = placeLines(this.instanceId, read, lines);
+    for (const entry of entries) {
+      this.seeded.add(entry.uuid);
+    }
+    for (const [uuid, record] of Object.entries(records)) {
+      if (newer(this.records[uuid], record)) {
+        this.records = { ...this.records, [uuid]: record };
+      }
+    }
+    const init = read.findLast((row) => row.type === "system.init");
+    const commands = {
+      ...this.facts.commands,
+      names: init?.metadata?.slashCommands ?? this.facts.commands.names,
+      skills: init?.metadata?.skills ?? this.facts.commands.skills,
+    };
+    const initialized = this.facts.initialized || entries.length > 0;
+    this.reads += 1;
+    if (this.reads === 1) {
+      this.rows = read;
+      this.rowIds = new Set(read.map((row) => row.id));
+      this.branches = branches;
+      ({ blocks: this.placed, queued: this.queued } = placeSends(
+        this.rows,
+        this.records
+      ));
+      this.facts = { ...this.facts, commands, initialized };
+      this.tail = { ...blankTail(), busy: this.tail.busy };
+      return { events: [], placed };
+    }
+    this.mergeRows(read, cut);
+    this.mergeBranches(branches);
+    this.setFacts({ commands, initialized });
+    this.setTail({ ...blankTail(), busy: this.tail.busy });
+    this.replace();
+    return { events: this.flush(), placed };
+  }
+
+  /**
+   * The read's rows into the held ones ({@link merge}): each held row the
+   * read names takes the read's word in place, and each run of rows the read
+   * holds that are not held goes after the held row before it in the read
+   * (the first run, before any held row, at the front). `cut`: held rows
+   * after the last one the read names, and that it lacks, go.
+   */
+  private mergeRows(read: TranscriptBlock[], cut: boolean): void {
+    const fresh = new Map(read.map((row) => [row.id, row]));
+    const runs = new Map<string | null, TranscriptBlock[]>();
+    let anchor: string | null = null;
+    for (const row of read) {
+      if (this.rowIds.has(row.id)) {
+        anchor = row.id;
+        continue;
+      }
+      const run = runs.get(anchor) ?? [];
+      run.push(row);
+      runs.set(anchor, run);
+    }
+    let held = this.rows;
+    if (cut) {
+      const last = held.findLastIndex((row) => fresh.has(row.id));
+      held = held.filter((row, index) => {
+        if (index <= last || fresh.has(row.id)) {
+          return true;
+        }
+        this.rowIds.delete(row.id);
+        return false;
+      });
+    }
+    const next: TranscriptBlock[] = [...(runs.get(null) ?? [])];
+    for (const row of held) {
+      next.push(restated(row, fresh.get(row.id)), ...(runs.get(row.id) ?? []));
+    }
+    this.rows = next;
+    this.rowIds = new Set(next.map((row) => row.id));
+  }
+
+  /**
+   * The read's branches into the held ones: a branch's state as the read
+   * gives it, and each of its blocks not held yet onto it, said.
+   */
+  private mergeBranches(branches: Map<string, BranchState>): void {
+    for (const [toolUseId, read] of branches) {
+      const held = this.branches.get(toolUseId);
+      const sink = held ?? { ...read, blocks: [] };
+      if (!held) {
+        this.branches.set(toolUseId, sink);
+        this.movedBranches.add(toolUseId);
+      } else if (
+        JSON.stringify(branchState(held)) !== JSON.stringify(branchState(read))
+      ) {
+        Object.assign(held, branchState(read));
+        this.movedBranches.add(toolUseId);
+      }
+      for (const block of read.blocks) {
+        if (holdOnce(sink.blocks, block)) {
+          this.events.push({ type: "block.append", block });
+        }
+      }
+    }
+  }
+
+  /**
+   * A stored transcript's rows and branches, folded as the live path folds
+   * frames: what {@link merge} merges.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass folding every stored transcript entry kind, as the live path folds frames
-  seed(entries: SessionMessage[], records: Record<string, SendRecord>): void {
+  private build(entries: SessionMessage[]): {
+    rows: TranscriptBlock[];
+    branches: Map<string, BranchState>;
+  } {
     const rows: TranscriptBlock[] = [];
     const rowIds = new Set<string>();
     const branches = new Map<string, BranchState>();
@@ -361,29 +616,7 @@ export class TranscriptBuilder {
         branch.completedAt ??= branch.lastEventAt ?? branch.startedAt;
       }
     }
-
-    this.rows = rows;
-    this.rowIds = rowIds;
-    this.records = { ...records };
-    this.branches = branches;
-    this.seeded = new Set(entries.map((entry) => entry.uuid));
-    ({ blocks: this.placed, queued: this.queued } = placeSends(
-      this.rows,
-      this.records
-    ));
-    // The `/` menu from the newest `init` read back: the live handler is
-    // otherwise the only thing that sets it.
-    const init = rows.findLast((row) => row.type === "system.init");
-    this.facts = {
-      ...this.facts,
-      commands: {
-        ...this.facts.commands,
-        names: init?.metadata?.slashCommands ?? this.facts.commands.names,
-        skills: init?.metadata?.skills ?? this.facts.commands.skills,
-      },
-      initialized: this.facts.initialized || entries.length > 0,
-    };
-    this.tail = { ...blankTail(), busy: this.tail.busy };
+    return { rows, branches };
   }
 
   /* ------------------------------------------------------------- live — */
@@ -599,6 +832,24 @@ export class TranscriptBuilder {
     return this.flush();
   }
 
+  /**
+   * One of the hub's own lines, folded in as a frame is ({@link applyFrame}).
+   * `after`: the rows it follows now, the nearest first, when this placed it
+   * (what the hub keeps, so a later read puts it here again,
+   * {@link HubLine}); null when it was already here (a line said again in
+   * its place).
+   */
+  applyLine(
+    frame: NeutralMessage,
+    harness?: string
+  ): { events: TranscriptEvent[]; after: string[] | null } {
+    const id = uuidOf(frame);
+    const known = id === undefined || this.rowIds.has(id);
+    const events = this.applyFrame(frame, harness);
+    const at = known ? -1 : this.rows.findIndex((row) => row.id === id);
+    return { events, after: at < 0 ? null : precedingIds(this.rows, at) };
+  }
+
   /** One of the hub's own lines taken back: its row is no longer drawn. */
   removeLine(id: string): TranscriptEvent[] {
     this.dropRow(id);
@@ -727,6 +978,7 @@ export class TranscriptBuilder {
         queued: this.queued,
         tail: this.tail,
         facts: this.facts,
+        ...(this.removed.size > 0 ? { removed: [...this.removed] } : {}),
       };
     }
     return {
@@ -841,6 +1093,7 @@ export class TranscriptBuilder {
     if (shown >= 0) {
       this.placed.splice(shown, 1);
     }
+    this.removed.add(id);
     this.events.push({ type: "block.remove", id });
   }
 
@@ -937,6 +1190,7 @@ export class TranscriptBuilder {
     }
     this.rows.push(block);
     this.rowIds.add(block.id);
+    this.removed.delete(block.id);
     if (this.floats()) {
       this.replace();
     } else {
@@ -1044,9 +1298,14 @@ export class TranscriptBuilder {
       if (!keptIds.has(block.id)) {
         this.events.push({ type: "block.remove", id: block.id });
       }
+      // Gone, not moved: a send replaced, a row a rewind cut.
+      if (!position.has(block.id)) {
+        this.removed.add(block.id);
+      }
     }
     const held = new Map(before.map((block) => [block.id, block]));
     next.forEach((block, i) => {
+      this.removed.delete(block.id);
       if (!keptIds.has(block.id)) {
         this.events.push({
           type: "block.insert",

@@ -50,11 +50,12 @@ function recordsOf(row: Row): Message[] {
       return [row.message];
     case "tools":
     case "notices":
+    case "account":
       return row.messages;
     case "subagent":
       return [row.spawn, ...row.branch.messages];
-    case "account":
     case "compaction":
+      return row.records ?? [];
     case "harness":
     case "live":
     case "livetool":
@@ -69,3 +70,10 @@ export const rowHolding = (rows: readonly Row[], docId: string): number =>
   rows.findIndex((row) =>
     recordsOf(row).some((message) => isRecord(message, docId))
   );
+
+/**
+ * The block a row is the place of, by its first record's id: what a kept
+ * place names it by (`Transcript`), found again by {@link rowHolding} however
+ * the rows around it were folded since. None for a row of the live tail.
+ */
+export const blockOf = (row: Row): string | undefined => recordsOf(row)[0]?.id;

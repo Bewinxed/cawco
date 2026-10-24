@@ -363,9 +363,7 @@ export type TranscriptEvent =
   /** The facts this change moved. */
   | { type: "facts"; facts: Partial<TranscriptFacts> }
   /** The hub's record of a send, as it moved: what a client's own copy gives way to. */
-  | { type: "send"; record: SendRecord }
-  /** The transcript was read again from the machine: fetch the newest page. */
-  | { type: "reset" };
+  | { type: "send"; record: SendRecord };
 
 /** A subagent branch with its own blocks, as a page carries it. */
 export type TranscriptPageBranch = TranscriptBranch & {
@@ -395,6 +393,14 @@ export interface TranscriptPage {
   facts?: TranscriptFacts;
   /** Newest page only: the sends waiting to be read. */
   queued?: TranscriptBlock[];
+  /**
+   * Newest page only: the blocks this transcript took out on purpose since
+   * the hub built it (a rewind's cut, one of the hub's lines taken back), by
+   * id. A row a client holds stays where it is until its `block.remove`
+   * reaches it or this lists it: a read that lacks a row is no word that it
+   * went.
+   */
+  removed?: string[];
   /** Newest page only: the stream position this page is consistent with. */
   seq?: number;
   /** Newest page only: the live tail. */

@@ -299,6 +299,56 @@ function findActiveChain(
   return { chain, chainSet };
 }
 
+/** Whether `r` is the line Claude Code starts a compacted conversation on. */
+const isCompactBoundary = (r: RawRecord): boolean =>
+  r.type === "system" && r.subtype === "compact_boundary";
+
+/**
+ * The conversation as it was said, from the active chain: before it, each
+ * stretch a compaction set aside. Claude Code starts a compacted
+ * conversation on a `compact_boundary` whose `parentUuid` is null, its
+ * `logicalParentUuid` the last record before the compaction, so the active
+ * chain (what the model reads now) begins at the newest boundary. Walked on
+ * from that boundary by the stored links (`original`, as the file wrote
+ * them, before {@link relinkCompactBoundaries} moved the preserved records
+ * after the summary), across every older boundary the same way, the turns
+ * the compactions set aside come before it, in the order they were said.
+ * The walk follows one record's parent at a time, so a branch the
+ * conversation left (a retry, an edit, a rewind) is never on it. A
+ * preserved record stands once, where it was said, and not again after the
+ * summary.
+ */
+function withSetAside(
+  chain: RawRecord[],
+  original: Map<string, RawRecord>
+): RawRecord[] {
+  const [head] = chain;
+  const before: RawRecord[] = [];
+  const seen = new Set<string>();
+  const onFrom = (r: RawRecord): RawRecord | undefined => {
+    if (r.parentUuid) {
+      return original.get(r.parentUuid);
+    }
+    const logical = r.logicalParentUuid;
+    return isCompactBoundary(r) && typeof logical === "string"
+      ? original.get(logical)
+      : undefined;
+  };
+  for (
+    let node = head && isCompactBoundary(head) ? onFrom(head) : undefined;
+    node && !seen.has(node.uuid);
+    node = onFrom(node)
+  ) {
+    seen.add(node.uuid);
+    before.push(node);
+  }
+  if (before.length === 0) {
+    return chain;
+  }
+  before.reverse();
+  return [...before, ...chain.filter((r) => !seen.has(r.uuid))];
+}
+
 /**
  * Splice orphans into the chain — retried assistant turns and tool_result user
  * records that share the same message.id as a chain assistant but are not
@@ -428,18 +478,28 @@ function spliceOrphans(
  * records. The suspect records are dropped so the result is always an exact
  * suffix of the global walk; the caller widens the window if it now has too
  * few records.
+ *
+ * `said`: the conversation as it was said ({@link withSetAside}), what a
+ * transcript shows, rather than what the model reads now. Never windowed:
+ * a window cannot hold what the compactions set aside.
  */
 function walkChainWindowed(
   records: RawRecord[],
-  windowed: boolean
+  windowed: boolean,
+  said = false
 ): RawRecord[] {
   const byUuid = buildUuidMap(records);
+  const original = said ? new Map(byUuid) : byUuid;
   const skippedAnchors = relinkCompactBoundaries(byUuid);
-  const { chain, chainSet } = findActiveChain(byUuid, records);
-  if (chain.length === 0) {
+  const found = findActiveChain(byUuid, records);
+  if (found.chain.length === 0) {
     return [];
   }
-  let active = chain;
+  const { chainSet } = found;
+  let active = said ? withSetAside(found.chain, original) : found.chain;
+  for (const r of active) {
+    chainSet.add(r.uuid);
+  }
   if (windowed) {
     // Drop everything up to and including the last skipped compact anchor.
     const dropped: RawRecord[] = [];
@@ -867,11 +927,12 @@ function joinedCounts(raw: RawRecord[]): Map<string, number> {
 /** Convert located records to the SDK shape via chain walking. */
 function locatedToMessages(
   located: LocatedRecord[],
-  windowed = false
+  windowed = false,
+  said = false
 ): SDKSessionMessage[] {
   const raw = located.map((lr) => lr.record as unknown as RawRecord);
   const joined = joinedCounts(raw);
-  const chain = walkChainWindowed(raw, windowed);
+  const chain = walkChainWindowed(raw, windowed, said);
   const messages: SDKSessionMessage[] = [];
   for (const r of chain) {
     const msg = toSDKMessage(r);
@@ -899,6 +960,25 @@ export async function readSessionFull(
   }
   const messages = locatedToMessages(entry.records);
   entry.walkedMessages = messages;
+  return messages;
+}
+
+/**
+ * The conversation as it was said: the active chain ({@link readSessionFull})
+ * with every stretch its compactions set aside before it, in order
+ * ({@link withSetAside}), each compaction's boundary between them. What a
+ * transcript shows: a compaction changes what the model reads next, never
+ * what was said. Cached beside the active chain's walk.
+ */
+export async function readSessionSaid(
+  path: string
+): Promise<SDKSessionMessage[]> {
+  const entry = await cache.get(path);
+  if (entry.saidMessages) {
+    return entry.saidMessages as SDKSessionMessage[];
+  }
+  const messages = locatedToMessages(entry.records, false, true);
+  entry.saidMessages = messages;
   return messages;
 }
 

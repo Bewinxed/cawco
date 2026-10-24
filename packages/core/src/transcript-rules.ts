@@ -372,7 +372,8 @@ const empty = (): FrameMapping => ({
   endsTurn: false,
 });
 
-const uuidOf = (sdk: NeutralMessage): string | undefined =>
+/** A frame's own uuid: what its blocks are named by. */
+export const uuidOf = (sdk: NeutralMessage): string | undefined =>
   "uuid" in sdk ? sdk.uuid : undefined;
 
 /** An ISO time, or nothing when the text is no time at all. */
