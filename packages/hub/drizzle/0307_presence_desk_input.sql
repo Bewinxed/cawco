@@ -1,0 +1,1 @@
+ALTER TABLE `presence_clients` ADD `desk_input_at` integer;

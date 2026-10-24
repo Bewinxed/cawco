@@ -13,10 +13,12 @@
  *   `watchInput`); absent until the first since the page loaded. Input
  *   decides whether the person is here: a tab open and focused with nobody
  *   at it says no input, and they go away once the away clock passes.
- * - **The machine** (`machine`): Chromium's Idle Detection, once the person
- *   allowed it for this browser (Needs you's onboarding row, the presence
- *   menu), says whether this computer is in use, idle or locked. Never
- *   input: a lock makes the person away at once.
+ * - **The computer** (`machine`, `deskIdleMs`): Chromium's Idle Detection,
+ *   once the person allowed it for this browser (Needs you's onboarding
+ *   row, the presence menu) and left it on, says whether this computer is
+ *   in use, idle or locked, its threshold the away clock. The hub reads it
+ *   as an opted-in machine's desktop: input there keeps the person here
+ *   with the tab hidden, a lock makes them away at once.
  * - **A phone or tablet** (`handheld`): a coarse pointer that can't hover,
  *   so what needs the person goes to the phone while this tab is the one
  *   in use, never to a desk tab.
@@ -27,6 +29,7 @@
  * while it is open, and at once on a change.
  */
 import {
+  AWAY_AFTER_DEFAULT_MS,
   type MachineState,
   PRESENCE_BEAT_MS,
   type PresenceBeat,
@@ -37,8 +40,14 @@ import { lastInputAt, onInput } from "./reload.svelte";
 
 /** Per tab: sessionStorage outlives a reload and is the tab's own. */
 const CLIENT_KEY = "cawco-presence-client";
-/** Idle after this long without input: Idle Detection's least threshold, the agents' too. */
-const IDLE_AFTER_MS = 60_000;
+/**
+ * This browser's word on reporting whether the person is at this computer,
+ * kept in localStorage: `off` once they turned it off (the presence menu)
+ * or put the offer away; Idle Detection runs only without it.
+ */
+const DESK_KEY = "cawco-desk-report";
+/** Idle Detection's least threshold (the spec's 60 s). */
+const LEAST_THRESHOLD_MS = 60_000;
 /** An input after this long without one is said at once, not on the next beat: the person came back. */
 const QUIET_MS = 60_000;
 
@@ -67,8 +76,12 @@ let listening = false;
 let beating: ReturnType<typeof setInterval> | undefined;
 /** The last state the hub was told, so only a change (or a beat) posts. */
 let told: string | undefined;
-/** Idle Detection while it runs. */
+/** Idle Detection while it runs, what stops it, and since when it has said idle. */
 let detector: IdleDetectorLike | undefined;
+let stopDetector: AbortController | undefined;
+let idleSince: number | undefined;
+/** Idle Detection's threshold: the person's away clock (person.svelte.ts says it). */
+let threshold = AWAY_AFTER_DEFAULT_MS;
 
 /** Minted once per page load where no storage keeps the tab's own. */
 let mintedHere: string | null = null;
@@ -103,6 +116,21 @@ const machineNow = (): MachineState | undefined => {
     return "locked";
   }
   return detector.userState === "idle" ? "idle" : "active";
+};
+
+/**
+ * How long since the last input anywhere on this computer, as Idle
+ * Detection can tell: 0 while it says active (input inside the threshold),
+ * the threshold plus the time since it said idle after; undefined while it
+ * doesn't run or the screen is locked (the lock says the rest).
+ */
+const deskIdleNow = (now: number): number | undefined => {
+  if (!detector || detector.screenState === "locked") {
+    return;
+  }
+  return detector.userState === "idle" && idleSince !== undefined
+    ? now - idleSince + threshold
+    : 0;
 };
 
 /** How long since the person's last input on this page, ms; undefined before any. */
@@ -148,6 +176,7 @@ const report = (beat = false, leaving = false): void => {
   if (beat || state !== told) {
     told = state;
     const idleMs = idleNow(now);
+    const deskIdleMs = deskIdleNow(now);
     post(
       {
         clientId: presenceClientId(),
@@ -157,6 +186,7 @@ const report = (beat = false, leaving = false): void => {
         alerts,
         handheld: handheld(),
         ...(idleMs === undefined ? {} : { idleMs }),
+        ...(deskIdleMs === undefined ? {} : { deskIdleMs }),
         ...(machine ? { machine } : {}),
         // Beats can land out of order; the hub keeps the newest said.
         saidAt: now,
@@ -279,10 +309,27 @@ export async function deskPermissions(): Promise<DeskPermissions> {
   }
 }
 
-/** Starts Idle Detection when it is allowed and not yet running. */
+/** This browser reports whether the person is at this computer: not turned off here. */
+export const deskReportOn = (): boolean => stored("local", DESK_KEY) !== "off";
+
+/** Whether Idle Detection runs in this tab now. */
+export const deskReporting = (): boolean => detector !== undefined;
+
+/** Stops Idle Detection: the hub hears no more of this computer from this tab. */
+const stopIdle = (): void => {
+  stopDetector?.abort();
+  stopDetector = undefined;
+  detector = undefined;
+  idleSince = undefined;
+};
+
+/**
+ * Starts Idle Detection when it is granted, not turned off here and not yet
+ * running, on the away clock as its threshold.
+ */
 async function detectIdle(): Promise<void> {
   const Detector = idleDetectorClass();
-  if (!Detector || detector) {
+  if (!Detector || detector || !deskReportOn()) {
     return;
   }
   const { idle } = await deskPermissions();
@@ -290,19 +337,73 @@ async function detectIdle(): Promise<void> {
     return;
   }
   const running = new Detector();
-  running.addEventListener("change", () => report());
-  await running.start({
-    threshold: IDLE_AFTER_MS,
-    signal: new AbortController().signal,
+  const stop = new AbortController();
+  running.addEventListener("change", () => {
+    if (running.userState === "idle") {
+      idleSince ??= Date.now();
+    } else {
+      idleSince = undefined;
+    }
+    report(true);
   });
+  await running.start({
+    threshold: Math.max(LEAST_THRESHOLD_MS, threshold),
+    signal: stop.signal,
+  });
+  stopDetector = stop;
   detector = running;
-  report();
+  report(true);
+}
+
+/**
+ * The away clock, as the hub holds it: Idle Detection's threshold, so its
+ * idle is the clock's. A running detector starts again on a new one.
+ */
+export function setDeskThreshold(ms: number): void {
+  if (ms === threshold) {
+    return;
+  }
+  threshold = ms;
+  if (detector) {
+    stopIdle();
+    detectIdle().catch(() => undefined);
+  }
+}
+
+/**
+ * Turns this browser's report on or off, on the person's press: on asks the
+ * browser first where it still may (the press's user activation stands),
+ * then starts it; off stops it and is kept, so it is not offered again
+ * until they turn it on.
+ */
+export async function setDeskReport(on: boolean): Promise<DeskPermissions> {
+  if (!on) {
+    store("local", DESK_KEY, "off");
+    stopIdle();
+    report(true);
+    return deskPermissions();
+  }
+  const Detector = idleDetectorClass();
+  const asked = Detector?.requestPermission();
+  store("local", DESK_KEY, "on");
+  await asked?.catch(() => undefined);
+  await detectIdle();
+  report(true);
+  return deskPermissions();
+}
+
+/** The offer put away in this browser: its report stays off. */
+export function declineDesk(): void {
+  store("local", DESK_KEY, "off");
+  stopIdle();
 }
 
 /** What a press asks this browser for. */
 export interface DeskAsk {
   readonly idle: boolean;
   readonly notify: boolean;
+  /** No Idle Detection here: the row says so and where this computer can say it instead; nothing is asked for it. */
+  readonly unavailable: boolean;
 }
 
 /**
@@ -318,6 +419,9 @@ export function allowDesk(ask: DeskAsk): Promise<DeskPermissions> {
     ask.idle && Detector ? Detector.requestPermission() : undefined,
     ask.notify ? Notification.requestPermission() : undefined,
   ];
+  if (ask.idle) {
+    store("local", DESK_KEY, "on");
+  }
   return Promise.all(asked).then(async () => {
     await detectIdle();
     report(true);

@@ -7861,6 +7861,10 @@
                     "minimum": 0,
                     "type": "number"
                   },
+                  "deskIdleMs": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
                   "machine": {
                     "type": "string",
                     "enum": [

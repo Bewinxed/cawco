@@ -26,8 +26,10 @@
  *   tick, the tab's Idle Detection reaching the hub as the machine's word,
  *   locked included; answered no, the row and the presence menu name the
  *   setting and where to turn it on. WebKit, a Chromium page without
- *   IdleDetector and Brave (its `navigator.brave`): no ask, no warning, no
- *   row; WebKit with notifications to answer, those alone. A browser on the
+ *   IdleDetector and Brave (its `navigator.brave`): no ask and no warning,
+ *   the row saying plainly it is not available here and where this
+ *   computer can say it instead; WebKit with notifications to answer, those
+ *   alone asked. A browser on the
  *   computer whose agent reads its desktop: tied there by the hub, nothing
  *   asked. The row at 390, 680 and 1440, asking and refused.
  * - (boxes) the presence dot and its menu at 390, 680 and 1440, Chromium
@@ -917,8 +919,11 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     const { words } = await deskRow(quiet, base, 8000);
     const menu = await menuLines(quiet);
     kit.check(
-      `(onboarding) ${one.name}: no Idle Detection to grant, so no row, no set-up and no warning`,
-      words === "" && menu.setUp === 0 && menu.refusal === "",
+      `(onboarding) ${one.name}: no Idle Detection to grant, so the row says so plainly and where this computer can say it instead, asks nothing, and the menu offers no set-up and no warning`,
+      words.includes(presenceWords.unavailable(null, false)) &&
+        !words.includes(presenceWords.allow) &&
+        menu.setUp === 0 &&
+        menu.refusal === "",
       `row "${words}"; menu ${JSON.stringify(menu)}`
     );
     await quiet.context().close();
@@ -931,9 +936,8 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   });
   const { words: shown } = await deskRow(safari, base, 10_000);
   kit.check(
-    "(onboarding) WebKit, notifications to answer: the row asks for notifications alone, naming no device use",
-    shown.includes(presenceWords.title(false)) &&
-      shown.includes(presenceWords.lead({ idle: false, notify: true })) &&
+    "(onboarding) WebKit, notifications to answer: the row says device use is not available here, asks for notifications alone, and names no device use",
+    shown.includes(presenceWords.unavailable(null, true)) &&
       !shown.includes(presenceWords.deviceUse),
     shown || "no row"
   );

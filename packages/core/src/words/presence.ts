@@ -38,6 +38,11 @@ export const presenceWords = {
   },
   /** The menu's group for this browser, and its one item while something is still to allow. */
   thisBrowser: "This browser",
+  /** The menu's switch: this browser says when you're at this computer (Idle Detection). */
+  atComputer: "Say when I'm at this computer",
+  /** That switch's state word: on, off, blocked in the browser, or no Idle Detection here. */
+  atComputerState: (state: "on" | "off" | "blocked" | "unavailable") =>
+    state === "unavailable" ? "not available here" : state,
   setUp: "Set up this browser",
   /** The trigger's name, with the dot's word after it. */
   you: (state: string) => `You · ${state}`,
@@ -58,6 +63,18 @@ export const presenceWords = {
     }
     return "Allow notifications for this site, and what needs you shows here instead of on your phone while you're at this computer.";
   },
+  /**
+   * The row's notice in a browser with no Idle Detection (Safari, Firefox,
+   * Brave): it says so, and where this computer can say it instead, its
+   * CawCo agent's switch in the presence menu, by the machine's name when
+   * the hub ties this browser to one. Notifications still to ask come after.
+   */
+  unavailable: (machine: string | null, notify: boolean) =>
+    `This browser can't tell CawCo when you're at this computer. ${
+      machine
+        ? `Turn on ${machine} under “Machines that count” in your presence menu, and its CawCo agent tells CawCo instead.`
+        : "Run the CawCo agent on this computer, then turn it on under “Machines that count” in your presence menu."
+    }${notify ? " Allow notifications for this site, and what needs you shows here instead of on your phone while you're at this computer." : ""}`,
   meta: "Onboarding · this browser",
   /** Its tick, once the browser allowed it. */
   done: (idle: boolean) =>

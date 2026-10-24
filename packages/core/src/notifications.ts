@@ -44,6 +44,16 @@ export interface PresenceBeat {
   /** Stable per browser tab or app install. */
   readonly clientId: string;
   /**
+   * How long since the last input anywhere on this computer, ms as of
+   * `saidAt`, as Chromium's Idle Detection reads it once the person granted
+   * it and left it on (its threshold the away clock): 0 while it says the
+   * person is active, the clock plus the time since it said idle after.
+   * The hub reads it as it reads an opted-in machine's desktop: it keeps the
+   * person here (elsewhere, with the tab hidden) while the computer sees
+   * input. Absent while Idle Detection does not run, and while locked.
+   */
+  readonly deskIdleMs?: number;
+  /**
    * This tab runs on a phone or tablet (a coarse pointer that can't hover):
    * while it has the person's newest input, what needs them goes to the
    * phone, never to a desk tab. The iOS app is one by its `client`. Web only.

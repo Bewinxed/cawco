@@ -35,6 +35,14 @@
  *   away once the clock passes; an opted-in machine whose desktop sees
  *   input keeps the person elsewhere past the clock, and what needs them
  *   shows on the desk tab; a lock there is away at once.
+ * - (chrome idle) a Chromium tab's Idle Detection, granted (DevTools'
+ *   `Browser.grantPermissions`, `Emulation.setIdleOverride`), counts as an
+ *   opted-in machine's desktop does: active keeps the person here, on no
+ *   chat, with the tab blurred past the clock; a lock is away at once;
+ *   idle past the clock is away. In WebKit, which has none, the onboarding
+ *   step and the presence menu say it is not available here and where this
+ *   computer can say it instead, at 390, 680 and 1440, with no console
+ *   error.
  *
  * Runs inside a workspace: it delegates nothing. About 15 minutes.
  *
@@ -1181,6 +1189,233 @@ const elsewhereLegs = async (
   }
 };
 
+// ---------------------------------------------------------------------------
+// (chrome idle)
+
+/** The page's browser on a computer no agent reads: an address no machine of the fleet holds, through a proxy's word. */
+const ELSEWHERE = { "x-forwarded-for": "10.99.0.7" };
+
+/** Idle Detection as the person left it, and the desktop's state as the browser reads it, through DevTools. */
+const idleOf = async (page: Page, base: string) => {
+  const cdp = await page.context().newCDPSession(page);
+  const { targetInfo } = await cdp.send("Target.getTargetInfo");
+  await cdp.send("Browser.grantPermissions", {
+    origin: new URL(base).origin,
+    permissions: ["idleDetection"],
+    browserContextId: targetInfo.browserContextId,
+  });
+  return {
+    say: (isUserActive: boolean, isScreenUnlocked: boolean) =>
+      cdp.send("Emulation.setIdleOverride", {
+        isUserActive,
+        isScreenUnlocked,
+      }),
+  };
+};
+
+/**
+ * (chrome idle) A Chromium tab's Idle Detection, granted, counts by the one
+ * rule an opted-in machine's desktop does: the user active keeps the
+ * person here, on no chat, with the tab blurred and no input in it past the
+ * clock; a lock is away at once; idle past the clock is away.
+ */
+const chromeIdleLegs = async (
+  kit: Kit,
+  fleet: KitFleet,
+  base: string,
+  s1: string
+): Promise<void> => {
+  const page = await kit.page("desk", {
+    engine: "chromium",
+    init: [notificationsGranted, blurred],
+  });
+  try {
+    await page.context().setExtraHTTPHeaders(ELSEWHERE);
+    const idle = await idleOf(page, base);
+    await idle.say(true, true);
+    await open(page, `${base}/session/${s1}`, `[data-session-tab="${s1}"]`);
+    await settle(page, 1500);
+    const id = await presenceIdOf(page);
+    const started = Date.now();
+    await Bun.sleep(MINUTE + 15_000);
+    const kept1 = await personOf(fleet);
+    const [row] = fleet.query<{
+      desk_input_at: number | null;
+      input_at: number | null;
+      machine: string | null;
+    }>(
+      "SELECT desk_input_at, input_at, machine FROM presence_clients WHERE client_id = ?",
+      id
+    );
+    kit.check(
+      "(chrome idle) a blurred Chromium tab, Idle Detection granted and the user active, no input in the tab: here, on no chat, past the 1-minute clock",
+      kept1.state === "here" &&
+        kept1.on === null &&
+        Date.now() - started > MINUTE &&
+        row?.input_at === null &&
+        row.desk_input_at !== null &&
+        row.machine === "active",
+      `${JSON.stringify(kept1)}; row ${JSON.stringify(row)}`
+    );
+    const lockedAt = Date.now();
+    await idle.say(true, false);
+    const locked = await personWhen(
+      fleet,
+      "(chrome idle) away at the lock",
+      (person) => person.state === "away",
+      5000
+    );
+    kit.check(
+      "(chrome idle) the screen locks: away at once, since the lock",
+      locked.state === "away" &&
+        locked.since !== null &&
+        locked.since >= lockedAt - 1000 &&
+        Date.now() - lockedAt < 6000,
+      JSON.stringify(locked)
+    );
+    await idle.say(true, true);
+    const back = await personWhen(
+      fleet,
+      "(chrome idle) here again, unlocked and active",
+      (person) => person.state === "here",
+      10_000
+    );
+    const idleAt = Date.now();
+    await idle.say(false, true);
+    const gone = await personWhen(
+      fleet,
+      "(chrome idle) away once idle",
+      (person) => person.state === "away",
+      10_000
+    );
+    kit.check(
+      "(chrome idle) unlocked and active again: here; then idle, which Idle Detection says once its threshold (the away clock) has passed: away, since a clock before it said so",
+      back.state === "here" &&
+        gone.state === "away" &&
+        gone.since !== null &&
+        Math.abs(gone.since - (idleAt - MINUTE)) < 5000,
+      `back ${JSON.stringify(back)}; idle ${JSON.stringify(gone)}`
+    );
+  } finally {
+    await page.context().close();
+  }
+};
+
+/** Caw's panel opened, and the desk row's words; "" when it never shows. */
+const deskRowOf = async (page: Page, base: string): Promise<string> => {
+  await open(page, base, "[data-needs-caw]");
+  await page.locator("[data-needs-caw]").first().click();
+  await page.waitForSelector(
+    ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"])[data-shown]',
+    { timeout: 30_000 }
+  );
+  await settle(page, 400);
+  const row = page.locator('[data-slot="row"][data-kind="desk"]');
+  return await row
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .then(() => row.innerText())
+    .catch(() => "");
+};
+
+/** The desk row's box against the screen: inside it, nothing sideways, its words whole (its want line is never clamped). */
+const deskBox = (page: Page) =>
+  page.evaluate(() => {
+    const row = document.querySelector<HTMLElement>(
+      '[data-slot="row"][data-kind="desk"]'
+    );
+    if (!row) {
+      return null;
+    }
+    const box = row.getBoundingClientRect();
+    const scroller = document.scrollingElement;
+    return {
+      left: box.left,
+      right: box.right,
+      viewport: innerWidth,
+      sideways: scroller ? scroller.scrollWidth - scroller.clientWidth : 0,
+      rowSideways: row.scrollWidth - row.clientWidth,
+      cut: (() => {
+        const want = row.querySelector<HTMLElement>('[data-slot="want"]');
+        return (
+          !want ||
+          want.scrollHeight > want.clientHeight + 1 ||
+          want.scrollWidth > want.clientWidth + 1
+        );
+      })(),
+    };
+  });
+
+/**
+ * (chrome idle) WebKit has no Idle Detection: the onboarding step says so,
+ * points to this computer's CawCo agent switch, asks nothing it can't, and
+ * the presence menu says "not available here"; no console error; the row
+ * whole at 390, 680 and 1440.
+ */
+const webkitLegs = async (kit: Kit, base: string): Promise<void> => {
+  for (const [name, view] of [
+    ["390", "phone"],
+    ["680", "narrowDesk"],
+    ["1440", "desk"],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await kit.page(view, {
+      engine: "webkit",
+      init: [notificationsGranted],
+    });
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        errors.push(message.text());
+      }
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+    try {
+      await page.context().setExtraHTTPHeaders(ELSEWHERE);
+      const words = await deskRowOf(page, base);
+      const box = await deskBox(page);
+      kit.check(
+        `(chrome idle) WebKit ${name}: the onboarding step says plainly this browser can't tell CawCo, and points to this computer's CawCo agent switch; nothing to allow; the row inside the screen, nothing sideways or cut`,
+        words.includes(presenceWords.unavailable(null, false)) &&
+          !words.includes(presenceWords.allow) &&
+          box !== null &&
+          box.left >= 0 &&
+          box.right <= box.viewport + 0.5 &&
+          box.sideways <= 0 &&
+          box.rowSideways <= 0 &&
+          !box.cut,
+        `row "${words}"; box ${JSON.stringify(box)}`
+      );
+      if (view === "desk") {
+        await page.keyboard.press("Escape");
+        await page.locator("[data-presence]:visible").first().click();
+        const item = page.locator('[data-slot="at-computer"]');
+        await item.waitFor({ state: "visible", timeout: 10_000 });
+        const state = await item.getAttribute("data-desk");
+        const said = (await item.innerText()).trim();
+        const instead = await page
+          .locator('[data-slot="at-computer-instead"]')
+          .innerText()
+          .catch(() => "");
+        kit.check(
+          "(chrome idle) WebKit: the presence menu shows this browser's report as not available here, and where this computer can say it instead",
+          state === "unavailable" &&
+            said.includes(presenceWords.atComputerState("unavailable")) &&
+            instead.includes(presenceWords.unavailable(null, false)),
+          `state ${state}; "${said}"; "${instead}"`
+        );
+        await page.keyboard.press("Escape");
+      }
+      kit.check(
+        `(chrome idle) WebKit ${name}: no console error`,
+        errors.length === 0,
+        errors.join(" | ")
+      );
+    } finally {
+      await page.context().close();
+    }
+  }
+};
+
 const run = async (kit: Kit) => {
   replayLegs(kit);
   const fleet = await kit.fleet(respond);
@@ -1218,6 +1453,8 @@ const run = async (kit: Kit) => {
     await b.context().close();
     await a.context().close();
     await elsewhereLegs(kit, fleet, base, s1, s3);
+    await chromeIdleLegs(kit, fleet, base, s1);
+    await webkitLegs(kit, base);
   } finally {
     await phone.stop();
   }

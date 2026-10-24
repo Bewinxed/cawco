@@ -205,8 +205,11 @@
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
           : tailnetWords.lead;
       case "desk":
-        return item.done
-          ? presenceWords.done(item.idle)
+        if (item.done) {
+          return presenceWords.done(item.idle);
+        }
+        return item.unavailable
+          ? presenceWords.unavailable(item.machine, item.notify)
           : presenceWords.lead(item);
       case "relay":
         return "";
@@ -1319,7 +1322,9 @@
         <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in
            this browser, the presence menu still offers it; Allow calls the
            browser's own prompts on the press. A refusal stands over them,
-           naming each blocked setting and where to turn it on. -->
+           naming each blocked setting and where to turn it on. A browser
+           with no Idle Detection has nothing of it to allow: its row says
+           so, with Skip alone unless notifications are still to ask. -->
         <div
           data-slot="peers"
           class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-wrap justify-end gap-space-2 coarse:gap-space-4"
@@ -1343,16 +1348,18 @@
             size="sm"
             variant="secondary"
           />
-          <Button
-            data-allow
-            disabled={person.pending === "allow"}
-            label={presenceWords.allow}
-            onclick={() => allowHere()}
-            pending={person.pending === "allow"}
-            pendingLabel={presenceWords.allowing}
-            size="sm"
-            variant="secondary"
-          />
+          {#if item.idle || item.notify}
+            <Button
+              data-allow
+              disabled={person.pending === "allow"}
+              label={presenceWords.allow}
+              onclick={() => allowHere()}
+              pending={person.pending === "allow"}
+              pendingLabel={presenceWords.allowing}
+              size="sm"
+              variant="secondary"
+            />
+          {/if}
         </div>
       {:else if item.kind === "tailnet" && item.done}
         <!-- Ticked: the https dashboard to open. -->

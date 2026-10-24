@@ -33,8 +33,12 @@ import {
   allowDesk,
   type DeskAsk,
   type DeskPermissions,
+  declineDesk,
   deskPermissions,
+  deskReportOn,
   presenceClientId,
+  setDeskReport,
+  setDeskThreshold,
 } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { store, stored } from "./storage";
@@ -54,7 +58,7 @@ const state = $state({
   view: null as PersonView | null,
   /** This browser's permissions; null until read. */
   permissions: null as DeskPermissions | null,
-  /** A press on its way: Appear away (`away`), the away clock (`clock`), a machine by id, or this browser (`allow`). */
+  /** A press on its way: Appear away (`away`), the away clock (`clock`), this browser's report (`desk`), a machine by id, or this browser (`allow`). */
   pending: null as string | null,
   /** The hub's or the browser's refusal of the last press: its words, and what refused. */
   refusal: null as Refusal | null,
@@ -66,6 +70,8 @@ const state = $state({
   skipped: false,
   /** This browser's permissions were just granted from the row: it ticks a moment, then leaves. */
   ticked: false,
+  /** This browser's report is not turned off here (presence.ts `deskReportOn`). */
+  reportOn: true,
 });
 
 export const person = {
@@ -92,14 +98,16 @@ export const person = {
   },
 };
 
-/** The hub's word on the person: its read, or a frame. */
+/** The hub's word on the person: its read, or a frame. Its away clock is Idle Detection's threshold. */
 export function takePerson(view: PersonView): void {
   state.view = view;
+  setDeskThreshold(view.awayAfterMs);
 }
 
 /** Reads the person and this browser's permissions: on connect and again after every reconnect. */
 export async function readPerson(): Promise<void> {
   state.skipped = stored("local", SKIPPED.key) === SKIPPED.value;
+  state.reportOn = deskReportOn();
   // The permissions land with the hub's tie to this machine, never before
   // it: read alone, a row would flash its ask on a computer whose agent
   // already reads it.
@@ -112,7 +120,7 @@ export async function readPerson(): Promise<void> {
   ]);
   if (read) {
     const { thisMachine, ...view } = read;
-    state.view = view;
+    takePerson(view);
     state.thisMachine = thisMachine;
   }
   state.permissions = permissions;
@@ -127,7 +135,7 @@ async function press(
   state.pending = key;
   state.refusal = null;
   try {
-    state.view = await askHub<PersonView>(url, json("POST", body));
+    takePerson(await askHub<PersonView>(url, json("POST", body)));
   } catch (error) {
     state.refusal = {
       blocked: false,
@@ -181,8 +189,60 @@ export const deskAsks = (): DeskAsk => {
   return {
     idle: permissions?.idle === "prompt" && !agentReadsHere(),
     notify: permissions?.notify === "default",
+    unavailable: permissions?.idle === "unsupported" && !agentReadsHere(),
   };
 };
+
+/**
+ * This browser's report of whether the person is at this computer, as the
+ * presence menu says it: on (granted, and not turned off here), off,
+ * blocked in the browser's site settings, or unavailable (no Idle
+ * Detection: Safari, Firefox, Brave).
+ */
+export const deskState = (): "on" | "off" | "blocked" | "unavailable" => {
+  const idle = state.permissions?.idle;
+  if (idle === "unsupported") {
+    return "unavailable";
+  }
+  if (idle === "denied") {
+    return "blocked";
+  }
+  return idle === "granted" && state.reportOn ? "on" : "off";
+};
+
+/**
+ * The machine this browser's computer can count by instead, by its name:
+ * the one the hub ties this browser to, when an agent runs there; null
+ * when none is known.
+ */
+export const machineHere = (): string | null =>
+  (state.view?.devices ?? []).find((device) => device.id === state.thisMachine)
+    ?.name ?? null;
+
+/**
+ * The presence menu's switch, on the person's press: on asks the browser
+ * where it still may and starts the report, off stops it and is kept. A
+ * refusal names the setting and where to turn it on.
+ */
+export async function setAtComputer(on: boolean): Promise<void> {
+  state.pending = "desk";
+  state.refusal = null;
+  try {
+    state.permissions = await setDeskReport(on);
+    state.reportOn = deskReportOn();
+    if (on) {
+      state.refusal = blockedHere();
+    }
+  } catch (error) {
+    state.refusal = {
+      blocked: true,
+      message: error instanceof Error ? error.message : String(error),
+      title: presenceWords.notAsked,
+    };
+  } finally {
+    state.pending = null;
+  }
+}
 
 /**
  * Site settings this browser blocks for CawCo, by the names it shows them:
@@ -224,6 +284,7 @@ export async function allowHere(): Promise<void> {
   state.refusal = null;
   try {
     state.permissions = await allowDesk(ask);
+    state.reportOn = deskReportOn();
     const blocked = blockedHere();
     if (blocked) {
       state.refusal = blocked;
@@ -248,6 +309,8 @@ export async function allowHere(): Promise<void> {
 /** Puts the onboarding row away in this browser; the presence menu still offers it. */
 export function skipHere(): void {
   store("local", SKIPPED.key, SKIPPED.value);
+  declineDesk();
+  state.reportOn = false;
   state.skipped = true;
   state.refusal = null;
   state.asked = null;
@@ -262,7 +325,7 @@ export const asksHere = (): boolean => {
     return false;
   }
   const ask = deskAsks();
-  return ask.idle || ask.notify;
+  return ask.idle || ask.notify || ask.unavailable;
 };
 
 /** This tab's answer to a desk alert it was named for: the hub sends the item on when none comes. */

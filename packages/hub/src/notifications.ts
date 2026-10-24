@@ -168,6 +168,12 @@ interface Client {
   readonly alerts: boolean;
   readonly at: number;
   readonly client: PresenceClient;
+  /**
+   * The last input on its computer, anywhere on it, as the tab's Idle
+   * Detection reads it (`deskIdleMs`), on the hub's clock; null while it
+   * reads none (not granted, turned off, not in this browser).
+   */
+  readonly deskInputAt: number | null;
   /** It runs on a phone or tablet: the iOS app, or a tab under a coarse pointer. */
   readonly handheld: boolean;
   /** The person's last input on it, on the hub's clock; null when it never said. */
@@ -205,10 +211,16 @@ export interface DeviceFacts {
   readonly front: string | null;
   /** A phone or tablet: what needs the person goes to the phone while it is the one in use. */
   readonly handheld: boolean;
+  /** How long its machine word holds after it said it: an agent's 15 s beats, a hidden tab's minute. */
+  readonly holdsMs: number;
   readonly id: string;
   /** When the person last touched it; null when it never said. */
   readonly inputAt: number | null;
-  /** What it is, for where a desk alert or a push goes. */
+  /**
+   * What it is, for where a desk alert or a push goes. A `machine` is a
+   * computer's desktop as something reads it: its agent, or a tab's Idle
+   * Detection; one rule reads both.
+   */
   readonly kind: PresenceClient | "machine" | "send";
   /** Since when it has said locked or asleep. */
   readonly lockedAt: number | null;
@@ -231,10 +243,6 @@ export interface Rolled extends Person {
 /** A lock or sleep: the device says nothing of the person but that they left it. */
 const gone = (machine: MachineState | null): boolean =>
   machine === "locked" || machine === "asleep";
-
-/** How long a device's machine word holds: a machine's agent beats every 15 s, a hidden tab once a minute. */
-const wordHolds = (device: Pick<DeviceFacts, "kind">): number =>
-  device.kind === "machine" ? MACHINE_TTL_MS : DEVICE_TTL_MS;
 
 /** An input said again: the one kept, when the new reading lands within {@link SAME_INPUT_MS} of it. */
 const sameInput = (said: number, kept: number | null): number =>
@@ -270,6 +278,20 @@ const inputOf = (
       before.sessionId !== beat.sessionId);
   return came ? now : kept;
 };
+
+/**
+ * A tab's computer's last input while its Idle Detection runs (`deskIdleMs`),
+ * the same input said again kept as it was; none said, none counts (not
+ * granted, turned off, locked).
+ */
+const deskInputOf = (
+  beat: PresenceBeat,
+  before: Client | undefined,
+  now: number
+): number | null =>
+  beat.deskIdleMs === undefined
+    ? null
+    : sameInput(now - beat.deskIdleMs, before?.deskInputAt ?? null);
 
 /** Since when a device has said locked or asleep: kept from the word before while it still says so. */
 const lockSince = (
@@ -315,10 +337,12 @@ const newestOf = (devices: readonly DeviceFacts[]): DeviceFacts | null =>
  * 5. Else here. The chat is the one in front on the client (a tab, an app,
  *    the iPhone) that had the newest input, while it still has it in front
  *    and beats ({@link PRESENCE_TTL_MS}); a hidden or blurred tab has none
- *    in front, so the person is here, elsewhere. A machine the person opted
- *    in counts with its desktop's input: it keeps them here, and input on
- *    another machine newer than that client's moves them off its chat. A
- *    beat with no new input never moves the chat.
+ *    in front, so the person is here, elsewhere. A computer's desktop (a
+ *    machine the person opted in, through its agent; a tab's Idle
+ *    Detection, once granted) counts with its input: it keeps them here,
+ *    its lock or sleep is rule 3, and input on another known computer newer
+ *    than that client's moves them off its chat. A beat with no new input
+ *    never moves the chat.
  */
 export const rollup = (
   devices: readonly DeviceFacts[],
@@ -327,7 +351,7 @@ export const rollup = (
   now: number
 ): Rolled => {
   const usable = devices.filter(
-    (device) => !(gone(device.machine) && now - device.at < wordHolds(device))
+    (device) => !(gone(device.machine) && now - device.at < device.holdsMs)
   );
   const newest = newestOf(usable);
   const lastInputAt = newest?.inputAt ?? null;
@@ -346,7 +370,7 @@ export const rollup = (
   const locks = devices.flatMap((device) =>
     gone(device.machine) &&
     device.lockedAt !== null &&
-    now - device.at < wordHolds(device)
+    now - device.at < device.holdsMs
       ? [{ device, at: device.lockedAt }]
       : []
   );
@@ -374,7 +398,9 @@ export const rollup = (
   const movedOff =
     reader !== null &&
     newest.kind === "machine" &&
-    newest.id !== reader.machineId &&
+    newest.machineId !== null &&
+    reader.machineId !== null &&
+    newest.machineId !== reader.machineId &&
     (newest.inputAt ?? 0) - (reader.inputAt ?? 0) > SAME_INPUT_MS;
   const front =
     reader !== null && !movedOff && now - reader.at < PRESENCE_TTL_MS
@@ -475,6 +501,8 @@ export const createNotifications = ({
       active: client.active,
       alerts: client.alerts,
       handheld: client.handheld,
+      deskInputAt:
+        client.deskInputAt === null ? null : new Date(client.deskInputAt),
       inputAt: client.inputAt === null ? null : new Date(client.inputAt),
       machine: client.machine,
       machineId: client.machineId,
@@ -494,6 +522,7 @@ export const createNotifications = ({
       active: false,
       alerts: false,
       handheld: false,
+      deskInputAt: null,
       inputAt: new Date(word.inputAt),
       machine: word.state,
       machineId,
@@ -505,6 +534,8 @@ export const createNotifications = ({
   };
 
   const SEND_ID = "send";
+  /** A tab's computer, as its Idle Detection reads it: the tab's id and this. */
+  const DESK_OF = "#desk";
   const keepSpoke = (at: number): void => {
     spokeAt = at;
     db.presence.keepClient({
@@ -514,6 +545,7 @@ export const createNotifications = ({
       active: false,
       alerts: false,
       handheld: false,
+      deskInputAt: null,
       inputAt: new Date(at),
       machine: null,
       machineId: null,
@@ -561,6 +593,7 @@ export const createNotifications = ({
         active: row.active,
         alerts: row.alerts,
         handheld: row.handheld,
+        deskInputAt: row.deskInputAt?.getTime() ?? null,
         inputAt: row.inputAt?.getTime() ?? null,
         lockedAt,
         machine: row.machine,
@@ -576,21 +609,45 @@ export const createNotifications = ({
   };
   restore(db.presence.clients());
 
-  /** Every device's facts, as the rollup reads them: each client, each machine the person opted in, and a send from no device. */
+  /**
+   * Every device's facts, as the rollup reads them: each client; the
+   * desktop of each machine the person opted in, as its agent reads it, and
+   * of each tab's computer, as its Idle Detection reads it, one rule for
+   * both; and a send from no device.
+   */
   const facts = (): DeviceFacts[] => {
     const counted = db.presence.counted();
     return [
-      ...[...clients].map(([id, client]): DeviceFacts => ({
-        id,
-        kind: client.client,
-        at: client.at,
-        front: client.active ? client.sessionId : null,
-        handheld: client.handheld,
-        inputAt: client.inputAt,
-        lockedAt: client.lockedAt,
-        machine: client.machine,
-        machineId: client.machineId,
-      })),
+      ...[...clients].flatMap(([id, client]): DeviceFacts[] => [
+        {
+          id,
+          kind: client.client,
+          at: client.at,
+          front: client.active ? client.sessionId : null,
+          handheld: client.handheld,
+          holdsMs: DEVICE_TTL_MS,
+          inputAt: client.inputAt,
+          lockedAt: client.lockedAt,
+          machine: client.machine,
+          machineId: client.machineId,
+        },
+        ...(client.deskInputAt === null
+          ? []
+          : [
+              {
+                id: `${id}${DESK_OF}`,
+                kind: "machine" as const,
+                at: client.at,
+                front: null,
+                handheld: false,
+                holdsMs: DEVICE_TTL_MS,
+                inputAt: client.deskInputAt,
+                lockedAt: client.lockedAt,
+                machine: client.machine,
+                machineId: client.machineId,
+              },
+            ]),
+      ]),
       ...[...machines]
         .filter(([id]) => counted.has(id))
         .map(([id, word]): DeviceFacts => ({
@@ -599,6 +656,7 @@ export const createNotifications = ({
           at: word.at,
           front: null,
           handheld: false,
+          holdsMs: MACHINE_TTL_MS,
           inputAt: word.inputAt,
           lockedAt: word.lockedAt,
           machine: word.state,
@@ -613,6 +671,7 @@ export const createNotifications = ({
               at: spokeAt,
               front: null,
               handheld: false,
+              holdsMs: DEVICE_TTL_MS,
               inputAt: spokeAt,
               lockedAt: null,
               machine: null,
@@ -926,6 +985,7 @@ export const createNotifications = ({
         active: beat.active,
         alerts: beat.alerts ?? false,
         handheld: beat.client === "ios" || (beat.handheld ?? false),
+        deskInputAt: deskInputOf(beat, before, now),
         machine,
         machineId: beat.client === "web" ? machineId : null,
         inputAt,
@@ -1240,6 +1300,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
           alerts: t.Optional(t.Boolean()),
           handheld: t.Optional(t.Boolean()),
           idleMs: t.Optional(t.Number({ minimum: 0 })),
+          deskIdleMs: t.Optional(t.Number({ minimum: 0 })),
           machine: t.Optional(
             t.Union([
               t.Literal("active"),

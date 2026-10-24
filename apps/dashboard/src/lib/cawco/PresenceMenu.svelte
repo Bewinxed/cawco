@@ -13,11 +13,13 @@
    * switch (agents go quiet and the phone gets pushes while it is on); the
    * away clock, the person's own (how long without input on any device
    * before they are away, and how far back what was held at a desk follows
-   * them to the phone); the machines whose desktop can count, each turned on by the person, with its
-   * state word; and, while this browser has something still to ask for, Set
-   * up this browser. Nothing changes here before the hub says so: a refused
-   * switch says why under it. A site setting this browser blocks is named
-   * under it with where to turn it on.
+   * them to the phone); the machines whose desktop can count, each turned
+   * on by the person, with its state word; and this browser: its own report
+   * of whether the person is at this computer (on, off, blocked, not
+   * available here, with where to turn it on), and Set up this browser while
+   * it has something still to ask. Nothing changes here before the hub says
+   * so: a refused switch says why under it. A site setting this browser
+   * blocks is named under it with where to turn it on.
    */
   import {
     AWAY_AFTER_CHOICES_MS,
@@ -37,8 +39,11 @@
     allowHere,
     blockedHere,
     deskAsks,
+    deskState,
+    machineHere,
     person,
     setAppearAway,
+    setAtComputer,
     setAwayAfter,
     setMachineCounts,
   } from "./person.svelte";
@@ -88,6 +93,8 @@
   /** The last press's refusal, else what this browser blocks now. */
   const refusal = $derived(person.refusal ?? blockedHere());
   const devices = $derived(view?.devices ?? []);
+  /** This browser's report of whether the person is at this computer. */
+  const desk = $derived(person.permissions ? deskState() : "off");
   /** The away clock as the hub holds it, ms. */
   const clockMs = $derived(view?.awayAfterMs ?? AWAY_AFTER_DEFAULT_MS);
   /** The clocks offered, and the one set when it is none of them. */
@@ -211,20 +218,49 @@
         {/each}
       </DropdownMenu.Group>
     {/if}
-    {#if setUp}
-      <DropdownMenu.Separator />
-      <DropdownMenu.Group>
-        <DropdownMenu.GroupHeading
-          >{presenceWords.thisBrowser}</DropdownMenu.GroupHeading
+    <DropdownMenu.Separator />
+    <DropdownMenu.Group>
+      <DropdownMenu.GroupHeading
+        >{presenceWords.thisBrowser}</DropdownMenu.GroupHeading
+      >
+      <!-- On or off as this browser's Idle Detection stands; blocked in the
+           browser's own settings, or not in this browser at all, the switch
+           can't change it and says so (its line below says where). -->
+      <DropdownMenu.CheckboxItem
+        checked={desk === "on"}
+        closeOnSelect={false}
+        data-desk={desk}
+        data-slot="at-computer"
+        disabled={desk === "unavailable" ||
+          desk === "blocked" ||
+          person.pending === "desk"}
+        onCheckedChange={(on) => setAtComputer(on)}
+      >
+        <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          >{presenceWords.atComputer}</span
         >
+        <span
+          data-slot="at-computer-state"
+          class="flex-none type-meta text-ink-muted"
+          >{presenceWords.atComputerState(desk)}</span
+        >
+      </DropdownMenu.CheckboxItem>
+      {#if desk === "unavailable"}
+        <DropdownMenu.Label data-slot="at-computer-instead" kind="line"
+          ><span class="text-ink-muted"
+            >{presenceWords.unavailable(machineHere(), false)}</span
+          ></DropdownMenu.Label
+        >
+      {/if}
+      {#if setUp}
         <DropdownMenu.Item
           closeOnSelect={false}
           data-slot="set-up-browser"
           disabled={person.pending === "allow"}
           onSelect={() => allowHere()}>{presenceWords.setUp}</DropdownMenu.Item
         >
-      </DropdownMenu.Group>
-    {/if}
+      {/if}
+    </DropdownMenu.Group>
     {#if refusal}
       <!-- Wrapped whole: the setting's name and where to turn it on. -->
       <DropdownMenu.Label data-slot="presence-refusal" kind="line" role="alert"

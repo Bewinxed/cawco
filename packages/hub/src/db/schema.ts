@@ -3548,6 +3548,8 @@ export const presenceClients = sqliteTable("presence_clients", {
   machineId: text("machine_id"),
   /** The person's last input on it, on the hub's clock; null when it never said. */
   inputAt: timestamp("input_at"),
+  /** A tab's computer's last input, as its Idle Detection reads it; null while it reads none. */
+  deskInputAt: timestamp("desk_input_at"),
   /** Its machine's word: active, idle, locked or asleep. */
   machine: text("machine").$type<MachineState>(),
   lockedAt: timestamp("locked_at"),

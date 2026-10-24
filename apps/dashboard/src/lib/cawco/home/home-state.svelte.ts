@@ -67,7 +67,7 @@ import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { notices } from "../notices.svelte";
-import { asksHere, deskAsks, person } from "../person.svelte";
+import { asksHere, deskAsks, machineHere, person } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -413,10 +413,14 @@ export interface DeskItem {
   idle: boolean;
   key: string;
   kind: "desk";
+  /** The machine this browser's computer can count by instead, when the hub ties it to one. */
+  machine: string | null;
   notify: boolean;
   place: string;
   raisedAt: undefined;
   title: string;
+  /** No Idle Detection here (Safari, Firefox, Brave): the row says so, and where this computer can say it instead. */
+  unavailable: boolean;
 }
 
 /**
@@ -1300,8 +1304,10 @@ class Home {
               key: "desk:this-browser",
               idle: ask.idle,
               notify: ask.notify,
+              unavailable: ask.unavailable,
+              machine: machineHere(),
               done: person.ticked,
-              title: presenceWords.title(ask.idle),
+              title: presenceWords.title(ask.idle || ask.unavailable),
               place: "Onboarding",
               raisedAt: undefined,
             },
