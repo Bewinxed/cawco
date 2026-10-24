@@ -7,7 +7,7 @@
    * focus. In a run every later part has its own line, its clock and its
    * strip on it. A failed send shows its recovery at rest and no strip. On
    * a touch screen a ⋯ handle stands after the clock at rest and opens the
-   * menu. A selected message wears the selection pill in the well's own
+   * bottom sheet. A selected message wears the selection pill in the well's own
    * contour (highlight.svelte.ts, The Concentric Rule).
    */
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -25,7 +25,7 @@
     hovered = null,
     selected = null,
     touch = false,
-    menuOpen = false,
+    sheetOpen = false,
   }: {
     parts: RunPart[];
     /** The part under the pointer, held for a drawing. */
@@ -34,8 +34,8 @@
     selected?: string | null;
     /** A touch screen: the handle at rest instead of the hover strip. */
     touch?: boolean;
-    /** The handle's menu open, on the first part. */
-    menuOpen?: boolean;
+    /** The handle's sheet open, on the first part. */
+    sheetOpen?: boolean;
   } = $props();
 </script>
 
@@ -54,7 +54,7 @@
       <Strip class="me-space-2" />
     {/snippet}
     {#snippet end()}
-      <Handle class="-me-space-1" open={menuOpen && i === 0} />
+      <Handle class="-me-space-1" open={sheetOpen && i === 0} />
     {/snippet}
     <Turn
       data-hovered={hovered === part.id || undefined}

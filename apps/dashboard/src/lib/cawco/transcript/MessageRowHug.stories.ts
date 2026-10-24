@@ -53,8 +53,8 @@ export const PhoneRest = {
   parameters: { viewport: 390 },
 };
 
-/** Phone · after a tap on ⋯. Copy, Edit and Fork from here in the menu at the handle. */
+/** Phone · after a tap on ⋯ of the first of three messages. Copy, Edit and Fork from here in a bottom sheet under it. */
 export const PhoneTapped = {
-  args: { touch: true, moment: "tap", height: PHONE },
+  args: { touch: true, set: "run", moment: "tap", height: PHONE },
   parameters: { viewport: 390 },
 };

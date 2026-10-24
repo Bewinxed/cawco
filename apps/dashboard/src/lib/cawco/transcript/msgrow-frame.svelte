@@ -38,6 +38,7 @@
     type RunPart,
   } from "./msgrow";
   import Chip from "./msgrow-chip.svelte";
+  import { hostSheets } from "./msgrow-handle.svelte";
 
   let {
     option,
@@ -126,6 +127,9 @@
   });
   /** The lead row's height: the transcript keeps that much more room over the pill. */
   let leadH = $state(0);
+  /** The frame, which its phone's bottom sheet rises in (msgrow-handle). */
+  let frame = $state<HTMLElement>();
+  hostSheets(() => frame);
 </script>
 
 {#snippet lead()}
@@ -152,8 +156,9 @@
 <TooltipProvider>
   <div
     data-slot="msgrow-frame"
-    class="relative w-full min-h-(--frame-h) overflow-clip bg-surface-page"
+    class="relative w-full min-h-(--frame-h) overflow-clip contain-layout bg-surface-page"
     style:--frame-h="{height}px"
+    bind:this={frame}
   >
     <div
       data-slot="tx"
@@ -180,7 +185,7 @@
         {#if option === "strip"}
           <MessageRowStrip
             {hovered}
-            menuOpen={moment === "tap"}
+            sheetOpen={moment === "tap"}
             {parts}
             selected={held}
             {touch}
@@ -188,7 +193,7 @@
         {:else if option === "hug"}
           <MessageRowHug
             {hovered}
-            menuOpen={moment === "tap"}
+            sheetOpen={moment === "tap"}
             {parts}
             selected={held}
             {touch}

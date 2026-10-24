@@ -4,7 +4,7 @@
  * holds the words alone; Copy, Edit and Fork from here stand on the "You"
  * line before the clock under the pointer, every later part of a run has
  * its own line with its clock and strip, and a phone has a ⋯ handle at
- * rest that opens the menu. Each moment in the session it was sent in
+ * rest that opens a bottom sheet. Each moment in the session it was sent in
  * (msgrow-frame), on a desk (1440) and a phone (390).
  *
  * The meta's args are every story's; a story's own are what it changes.
@@ -44,8 +44,8 @@ export const PhoneRest = {
   parameters: { viewport: 390 },
 };
 
-/** Phone · after a tap on ⋯. Copy, Edit and Fork from here in the menu at the handle. */
+/** Phone · after a tap on ⋯ of the first of three messages. Copy, Edit and Fork from here in a bottom sheet under it. */
 export const PhoneTapped = {
-  args: { touch: true, moment: "tap", height: PHONE },
+  args: { touch: true, set: "run", moment: "tap", height: PHONE },
   parameters: { viewport: 390 },
 };

@@ -27,7 +27,7 @@
     hovered = null,
     selected = null,
     touch = false,
-    menuOpen = false,
+    sheetOpen = false,
   }: {
     parts: RunPart[];
     /** The part under the pointer, held for a drawing. */
@@ -36,8 +36,8 @@
     selected?: string | null;
     /** A touch screen: the handle at rest instead of the hover strip. */
     touch?: boolean;
-    /** The handle's menu open, on the first part. */
-    menuOpen?: boolean;
+    /** The handle's sheet open, on the first part. */
+    sheetOpen?: boolean;
   } = $props();
 
   /** Each slab's width and its row's, as laid out: where its strip can stand. */
@@ -114,7 +114,7 @@
         {#if !failed && touch}
           <!-- The handle at the well's outer bottom corner, at rest. -->
           <div class="flex justify-end mt-space-1">
-            <Handle class="-me-space-1" open={menuOpen && i === 0} />
+            <Handle class="-me-space-1" open={sheetOpen && i === 0} />
           </div>
         {:else if !failed && beside(part.id)}
           <!-- On the well's open side, on its last line. -->
