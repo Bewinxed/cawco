@@ -8,11 +8,14 @@
  *   client.svelte.ts `olderThanHub`), so it misreads what the hub sends and
  *   reads nothing more until it reloads.
  *
- * Either way the reload never comes under the operator's hands: it waits
- * until the tab is idle ({@link busy}), Caw's panel closed with everything
- * else that stands over the page, so "nobody gets a page pulled out from
- * under them mid-task" (440bdbc6) holds without asking. Then it goes at
- * once: the update notice's goodbye lives in Caw's panel, which is closed.
+ * Either way an open page never sits stale. A reload at any moment is safe,
+ * since everything a person has in progress comes back after it ({@link
+ * busy}), so it waits only for the input in hand: a keystroke or a press
+ * under {@link IDLE_MS} old, or words in a field nothing keeps. Then it goes
+ * at once, and the connection band's Reload goes sooner ({@link reloadNow}).
+ * A tab held for hours after nightly 5408, when a focused field alone held
+ * it (a composer keeps the keyboard after an Enter sends), and so did the
+ * side pane's artifact cards, a listbox, taken for an open picker.
  * The reload acknowledges what the notice announced, on the hub, so neither
  * the reloaded tab nor any other says it again.
  *
@@ -39,7 +42,7 @@ export function keepsDrafts(flush: () => Promise<void>): () => void {
   };
 }
 
-/** How long the tab goes without pointer or key input before it is idle. */
+/** How long the tab goes without pointer or key input, typing included, before it is idle. */
 export const IDLE_MS = 30_000;
 /** How often a waiting reload looks again. */
 const POLL_MS = 1000;
@@ -124,17 +127,43 @@ function focused(): Element | null {
 }
 
 /**
- * Words a reload would lose: a field outside every composer (which writes
- * its words down first, `keepsDrafts`) that holds other text than it did
- * when it was first focused, while it is still on the page.
+ * A surface that stands until it is closed, whose fields nothing keeps: a
+ * dialog or sheet, a popover (bits-ui's content has no role of its own), a
+ * drawer. A menu or a list to pick from holds no words, and the reload only
+ * closes it.
  */
-function unsentWords(): boolean {
+const STANDING = [
+  "dialog[open]",
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[data-popover-content][data-state="open"]',
+  "[data-vaul-drawer]",
+].join(", ");
+
+/**
+ * Words a reload would lose: a field outside every composer and comment
+ * (each writes its words down as they are typed and before this tab reloads,
+ * `keepsDrafts`), still on the page, holding other text than it did when it
+ * was first focused, that has the keyboard (a field that commits as it is
+ * left, a task's or a session's name, has not yet) or stands in an open
+ * dialog, sheet, popover or drawer. A field left with its words outside
+ * those has committed them as it was left, or is a search's.
+ */
+function unsavedWords(): boolean {
+  const active = focused();
   for (const [field, start] of started) {
     if (!field.isConnected) {
       started.delete(field);
       continue;
     }
-    if (!field.closest("[data-keeps-draft]") && textOf(field) !== start) {
+    if (field.closest("[data-keeps-draft]") || textOf(field) === start) {
+      continue;
+    }
+    if (field === active) {
+      return true;
+    }
+    const surface = field.closest(STANDING);
+    if (surface && surface.getClientRects().length > 0) {
       return true;
     }
   }
@@ -142,65 +171,39 @@ function unsentWords(): boolean {
 }
 
 /**
- * What stands over the page: a dialog or sheet, a popover (Caw's panel
- * among them: an idle tab never reloads under it), a menu or a list to pick
- * from, a drawer. Toasts are not in it, and neither is a preview: one sits beside
- * the conversation most of the time, and it comes back after the reload as
- * it was (open, from the hub's snapshot; at the reader's place in it,
- * PreviewPane `keptAt`). Input inside it counts as using the tab
- * (`watchInput`).
+ * Why the tab holds its reload, or null when nothing does. Everything else a
+ * person has in progress comes back after a reload: every composer's and
+ * comment's draft (`keepsDrafts`), the session and tab (the address), the
+ * open preview and its place (the hub's snapshot, PreviewPane `keptAt`); a
+ * menu or popover open with nothing typed in it is only closed.
+ *
+ * - `typing`: in view, a field has the keyboard and the last input is under
+ *   {@link IDLE_MS} old;
+ * - `unsaved`: words a reload would lose ({@link unsavedWords});
+ * - `recent`: in view, the last pointer or key input is under {@link IDLE_MS} old.
  */
-const OVERLAYS = [
-  "dialog[open]",
-  '[role="dialog"]',
-  '[role="alertdialog"]',
-  '[role="menu"]',
-  '[role="listbox"]',
-  // A bits-ui popover's content has no role of its own.
-  '[data-popover-content][data-state="open"]',
-  "[data-vaul-drawer]",
-].join(", ");
+export type Busy = "typing" | "unsaved" | "recent";
 
-function overlayOpen(): boolean {
-  return [...document.querySelectorAll(OVERLAYS)].some((element) => {
-    // On a phone the preview stands in a sheet (side/SideSheet): it is the
-    // preview, which comes back after the reload, not something open.
-    const passes =
-      element.closest("[inert], [data-sonner-toaster]") ||
-      element.querySelector('iframe[title="Preview"]');
-    return !passes && element.getClientRects().length > 0;
-  });
-}
-
-/**
- * Why the tab isn't idle, or null when it is. In view: a field has the
- * keyboard, or the last pointer or key input is under {@link IDLE_MS} old.
- * Always: words a reload would lose, or something open over the page.
- */
-export function busy(): "typing" | "unsent" | "open" | "recent" | null {
-  const visible = document.visibilityState === "visible";
-  if (visible && typed(focused())) {
+export function busy(): Busy | null {
+  const recent =
+    document.visibilityState === "visible" &&
+    performance.now() - lastInput < IDLE_MS;
+  if (recent && typed(focused())) {
     return "typing";
   }
-  if (unsentWords()) {
-    return "unsent";
+  if (unsavedWords()) {
+    return "unsaved";
   }
-  if (overlayOpen()) {
-    return "open";
-  }
-  if (visible && performance.now() - lastInput < IDLE_MS) {
-    return "recent";
-  }
-  return null;
+  return recent ? "recent" : null;
 }
 
 /**
  * What a due reload is waiting on: the dashboard does not serve another
- * build yet, or the operator is using the tab; or it never goes by itself,
- * since the browser keeps no session storage for its once-per-change guard
- * ({@link RELOADED_FOR}), and the reader reloads.
+ * build yet, or the operator is using the tab ({@link Busy}); or it never
+ * goes by itself, since the browser keeps no session storage for its
+ * once-per-change guard ({@link RELOADED_FOR}), and the reader reloads.
  */
-export type ReloadHold = "build" | "busy" | "unkept";
+export type ReloadHold = "build" | Busy | "unkept";
 
 /** What the update notice gives the reload: the notice ids it acknowledges for the build it loads. */
 interface Farewell {
@@ -221,6 +224,19 @@ export function bidFarewell(given: Farewell): () => void {
 /** Everyone told what holds the reload: the connection band (client.svelte.ts). */
 const listeners = new Set<(hold: ReloadHold) => void>();
 let reloading = false;
+
+/** The reload that is due: the build it loads and its change, once {@link reloadWhenIdle} has found one. */
+let due: { running: string; change: string } | null = null;
+/** The person's Reload is on its way: the waiting reload stands down. */
+let leaving = false;
+
+/** Every composer's words written down, and what the update notice said acknowledged for `running`. */
+const writeDown = async (running: string): Promise<void> => {
+  await Promise.allSettled([
+    ...[...flushes].map((flush) => flush()),
+    notices.acknowledge(farewell?.acks(running) ?? []),
+  ]);
+};
 
 const nextLook = () =>
   new Promise<void>((resolve) => {
@@ -275,23 +291,41 @@ export async function reloadWhenIdle(
     return;
   }
   reloading = true;
-  while (busy() !== null) {
+  due = { running, change };
+  for (let hold = busy(); hold !== null && !leaving; hold = busy()) {
     for (const listener of listeners) {
-      listener("busy");
+      listener(hold);
     }
     // biome-ignore lint/performance/noAwaitInLoops: one look at a time until the tab is idle
     await nextLook();
   }
-  await Promise.allSettled([
-    ...[...flushes].map((flush) => flush()),
-    notices.acknowledge(farewell?.acks(running) ?? []),
-  ]);
+  if (leaving) {
+    return;
+  }
+  await writeDown(running);
   store("session", RELOADED_FOR, change);
   if (reloadedFor() !== change) {
     for (const listener of listeners) {
       listener("unkept");
     }
     return;
+  }
+  leaveThePage(() => location.reload());
+}
+
+/**
+ * The person's Reload (the connection band's): the reload that is due, at
+ * once, whatever holds it. The drafts are written down first, as the reload
+ * by itself writes them, and the change is marked as reloaded for, so a
+ * reload handed the old build again does not go round.
+ */
+export async function reloadNow(): Promise<void> {
+  leaving = true;
+  if (due) {
+    await writeDown(due.running);
+    store("session", RELOADED_FOR, due.change);
+  } else {
+    await Promise.allSettled([...flushes].map((flush) => flush()));
   }
   leaveThePage(() => location.reload());
 }

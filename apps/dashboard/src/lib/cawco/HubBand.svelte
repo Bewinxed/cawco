@@ -10,7 +10,9 @@
    * - `retrying`: a try is out now.
    * - `refused`: this page has never reached the hub; its address shows.
    * - `back`: the hub answered again after the band showed, for --dur-hold.
-   * - `older`: the page is on an older wire than the hub's (reload.svelte).
+   * - `older`: the page is on an older wire than the hub's, and reads
+   *   nothing more until it reloads (reload.svelte): what the reload waits
+   *   on, and Reload to go now.
    */
   export type BandState =
     | { kind: "updating"; until: number; version: string | null }
@@ -56,6 +58,7 @@
    * had the hub, once the grace has run out.
    */
   import { connectionWords } from "@cawco/core";
+  import { shellWords } from "@cawco/core/words/shell";
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -64,6 +67,7 @@
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { dur } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
+  import { IDLE_MS, reloadNow } from "./reload.svelte";
 
   /** Whether this tab has ever had the hub: a drop retries, a first miss is a wrong address. */
   let everConnected = $state(false);
@@ -224,13 +228,15 @@
               shown.updated ? unbroken(shown.updated) : null
             );
       case "older":
-        return {
-          busy: "CawCo updated — this page has stopped updating. It reloads once you're not using it.",
-          unkept:
-            "CawCo updated — this page has stopped updating. Reload it to catch up.",
-          build:
-            "CawCo updated — this page has stopped updating. It reloads when the dashboard serves the new build.",
-        }[shown.hold];
+        return `${shellWords.staleLead} ${
+          {
+            typing: shellWords.staleTyping(IDLE_MS / 1000),
+            recent: shellWords.staleRecent(IDLE_MS / 1000),
+            unsaved: shellWords.staleUnsaved,
+            unkept: shellWords.staleUnkept,
+            build: shellWords.staleBuild,
+          }[shown.hold]
+        }`;
       case undefined:
         break;
     }
@@ -265,6 +271,20 @@
       shown?.kind === "retrying" ||
       shown?.kind === "refused"
   );
+
+  /**
+   * A stale page's Reload, at once: shown whenever a reload would load the
+   * new build, so only not while the dashboard still serves this one.
+   */
+  const reloadable = $derived(
+    shown?.kind === "older" && shown.hold !== "build"
+  );
+  let reloadPressed = $state(false);
+  function reload() {
+    reloadPressed = true;
+    // biome-ignore lint/complexity/noVoid: the page goes once the drafts are written down
+    void reloadNow();
+  }
 </script>
 
 <!-- Its slot is a row of the page's column under the bar, a fold (design.css
@@ -344,6 +364,18 @@
             onclick={reconnectNow}
             pending={cawco.status === "connecting"}
             pendingLabel="Reconnecting…"
+            size="sm"
+            variant="outline"
+          />
+        {:else if reloadable}
+          <!-- Pending in place while the drafts are written down, then the
+               page goes (reload.svelte `reloadNow`). -->
+          <Button
+            icon={IconRefresh}
+            label={shellWords.reload}
+            onclick={reload}
+            pending={reloadPressed}
+            pendingLabel={shellWords.reloading}
             size="sm"
             variant="outline"
           />

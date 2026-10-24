@@ -257,6 +257,12 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   pressed while it runs, and only past the deadline the hub gave does the band say "Hub unreachable");
   once it answers, **"CawCo updated to 1.4.2."** The app's status line says the same: both read core
   `words/connection.ts`
+- A page on an older wire than the hub's (connection band): **"CawCo updated — this page has stopped
+  updating. It reloads 30 seconds after you stop typing. Reload."** The second sentence names what the
+  reload waits on, determinate: "once the page has been still for 30 seconds", "once you save or
+  close what you're editing", "when the dashboard serves the new build" (no Reload: it would load
+  this build again), "Reload it to catch up" (a browser that keeps no session storage). Never an
+  open-ended "once you're not using it". Core `words/shell.ts`
 - A project the hub didn't give (an error empty, where its board would be): **"The tasks, stages and
   views for Launch couldn't be read. The hub didn't answer (502). Nothing was changed." → [Retry]**
   (one failed read is said once, in one place, naming only the parts that didn't come; its one Retry

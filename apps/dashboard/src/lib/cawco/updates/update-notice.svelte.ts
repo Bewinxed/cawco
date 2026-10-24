@@ -3,8 +3,8 @@
  * (home/CawPanel, home/UpdateCard): the notice the fleet's state calls for
  * now (`noticeFor`), what its buttons do, and what goes on without anyone
  * looking (`startUpdateWatch`): "running on N machines" leaving by itself,
- * and a tab older than the dashboard reloading once the operator isn't using
- * it, Caw's panel closed (reload.svelte.ts).
+ * and a tab older than the dashboard reloading once no keystroke or press is
+ * in hand (reload.svelte.ts).
  *
  * Every notice is acknowledged on the hub (notices.svelte.ts), by the ids of
  * the events it announces: its ✕, or acting on it, clears it for every tab
@@ -116,9 +116,9 @@ export function actOnUpdate(
 /** What runs with nobody looking at the notice. Started once from the root layout. */
 export function startUpdateWatch(): () => void {
   return $effect.root(() => {
-    // A tab older than the dashboard reloads itself once it is idle and
-    // nothing stands over the page, Caw's panel included (reload.svelte.ts
-    // `busy`); the reload acknowledges what the notice said, as Reload does.
+    // A tab older than the dashboard reloads itself once no input is in
+    // hand (reload.svelte.ts `busy`); the reload acknowledges what the
+    // notice said, as Reload does.
     const unbid = bidFarewell({
       acks: (build) => [...(updateNotice.current?.acks ?? []), reloadId(build)],
     });
