@@ -2085,11 +2085,12 @@ const readTrace = async (
     if (span > 33.4 && frames[at] >= window.from && frames[at] <= window.to) {
       const a = traceAt(frames[at - 1]);
       const b = traceAt(frames[at]);
+      const inFrame = inWindow.filter((event) => event.ts >= a && event.ts < b);
+      // What the frame's script forced, and from where: the first read
+      // after a write pays for the layout every write before it asked for.
+      const { sites } = await forcedSites(inFrame);
       longFrames.push(
-        frameSpent(
-          inWindow.filter((event) => event.ts >= a && event.ts < b),
-          span
-        )
+        `${frameSpent(inFrame, span)}${sites.length > 0 ? ` [forced from ${sites.slice(0, 5).join("; ")}]` : ""}`
       );
     }
   }
