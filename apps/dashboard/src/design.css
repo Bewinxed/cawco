@@ -1718,7 +1718,13 @@
    Offset by that half pixel, an area answers a press from 22px before its
    control's centre to 22px after it, and two areas that meet at a midpoint
    meet there for the press too, instead of the later one taking the
-   earlier one's last half pixel.
+   earlier one's last half pixel. WebKit hit-tests as Blink does; Gecko
+   takes a press at its point, the box half-open ([100, 144) takes 143.5
+   and not 144), so there the half pixel took the area's top half pixel
+   away (an area at -7..37 about a 30px box, elementFromPoint: Blink and
+   WebKit nudged 7px above and below land, 7.5 does not; Gecko nudged 6.5
+   above lands and 7 does not; Gecko unnudged 7 above, 6.5 below). Gecko
+   alone reads `-moz-orient`, so it is the one the nudge leaves.
    --hit-scale is the zoom of a scaled canvas (a graph), so the
    area stays 44px on screen there, as pointer-hit's stays 24px. */
 @utility touch-hit {
@@ -1730,6 +1736,9 @@
       content: "";
       position: absolute;
       translate: 0.5px 0.5px;
+      @supports (-moz-orient: inline) {
+        translate: none;
+      }
       inset-inline: max(
         min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
         calc(
