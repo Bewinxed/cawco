@@ -23,6 +23,7 @@
    * 14 − 9 = 5 cannot split evenly, so the glyph landed 2px from one edge and
    * 3px from the other and read visibly off-centre. 18 − 12 = 6 splits 3/3.
    */
+  import type { Snippet } from "svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconAgent, IconUser } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
@@ -38,7 +39,17 @@
     working = false,
     noteLive = false,
     shown = false,
+    actions,
+    end,
   }: {
+    /**
+     * Controls on the speaker line, before its clock: the reader's message's
+     * own actions (MessageRow's strip). They take their room whether shown or
+     * not, so showing them changes paint only.
+     */
+    actions?: Snippet;
+    /** A control after the clock, at the line's end: a touch screen's handle to them. */
+    end?: Snippet;
     you?: boolean;
     /**
      * The turn in flight: a pane's own face for its speaker (`voice`) draws
@@ -98,6 +109,9 @@
      stand on the mark's middle. Grouped it has no mark, and its clock keeps
      its own line box in the body's first line. -->
 <h2
+  aria-label={actions || end
+    ? [name, note, clock].filter(Boolean).join(", ")
+    : undefined}
   data-turn-who
   data-grouped={grouped || undefined}
   class={[
@@ -158,13 +172,26 @@
       ]}>{note}</span
     >
   {/if}
+  <!-- The controls name themselves; the heading says who, the note and
+       the clock (its label), never the controls' names. -->
+  {#if actions}
+    <span
+      data-slot="who-actions"
+      data-after-note={note || undefined}
+      class="ms-auto flex flex-none items-center data-after-note:ms-0"
+      data-box>{@render actions()}</span
+    >
+  {/if}
   {#if validAt}
     <time
       data-slot="when"
-      data-after-note={note || undefined}
+      data-after-note={note || (actions ? "" : undefined)}
       data-shown={shown || undefined}
       class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
+  {/if}
+  {#if end}
+    {@render end()}
   {/if}
 </h2>

@@ -19,7 +19,7 @@
         /** In a view's bar: it shrinks, takes the bar's control corner, and
             clips the name it morphs while its width follows. */
         "in-bar":
-          "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:rounded-(--bar-control-radius)",
+          "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
         field: "rounded-sm border border-border-control px-space-3 py-space-2",
       },

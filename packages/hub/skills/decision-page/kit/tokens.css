@@ -712,10 +712,6 @@
     --row-mark-r: 4.6px;
     /* The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side. */
     --tab-icon-r: 4px;
-    /* A control standing in a composer shell (Attach, Send/Stop, a view bar's controls): concentric with the shell (The Concentric Rule), its 12px less its inset and its 1px edge. */
-    --composer-control-r: calc(
-      var(--radius-lg) - var(--c-composer-inset) - var(--border-width)
-    );
     /* A row standing at a glide popover's own inset (the new-session form's popovers, `roomy`): concentric with the surface (The Concentric Rule), its 12px less its space-2 pad and its 1px edge. */
     --glide-row-r: calc(
       var(--radius-lg) - var(--space-2) - var(--border-width)
@@ -864,6 +860,12 @@
     /* The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot. */
     --c-composer-field: 34px;
     --c-composer-inset: var(--space-2);
+    /* How far in from a composer shell's outer edge its controls stand (Attach, Send/Stop, a view bar's controls): its inset and its 1px edge. The shell declares it with its 12px (design.css `concentric-in`), and its controls take 12px less it (The Concentric Rule). */
+    --c-inset-composer: calc(var(--c-composer-inset) + var(--border-width));
+    /* A floating surface's padding round its rows (a menu, a select, a popover, the bottom sheet's rows). */
+    --c-floating-pad: 6px;
+    /* How far in from a floating surface's outer edge its rows stand: its 1px edge and its pad. The surface declares it with its 12px (design.css `concentric-in`), and its rows take 12px less it, 5px (The Concentric Rule). */
+    --c-inset-floating: calc(var(--border-width) + var(--c-floating-pad));
     /* How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach. */
     --c-ask-diff-share: 0.4;
     --c-composer-panel: calc(

@@ -533,7 +533,7 @@
   {...glass ? { portalProps: { disabled: true } } : {}}
   {...rest}
   class={cn(
-    floatingSurface({ motion: "hang" }),
+    floatingSurface({ motion: "hang", edge: "drawn" }),
     hangCardVariants({ tab, glass, surface }),
     frame && FRAMES[frame],
     className

@@ -1,54 +1,70 @@
 /**
- * A person's own message offers its actions in one row under it, at its
- * end (the owner, on the edit pen drawn over his message's time: "the edit
- * icon shows behind the text and timestamp", then "refer to the best ux
- * practice"). A scratch fleet (real hub, agent and sessiond against the mock
- * model) and the built dashboard. One Claude Code session holds a message
- * alone ("hello") and a 40-word line, each answered. A second holds a run
- * of three: queued behind a turn that is still working, as a person's run
- * of messages stands in the product, one run in one well under one header
- * (Claude Code answers a turn with nothing to show by asking for one, so a
- * read run has an answer between its messages).
+ * A person's own message: its box hugs its words, and its actions stand on
+ * its speaker line (the owner's pick, "Actions on the speaker line": Copy,
+ * Edit and Fork from here on the "You" line under the pointer or for the
+ * keyboard; on a phone one handle at rest opening the sheet "Message"; a
+ * queued or failed message's recovery at rest in its well, and no strip).
+ * And the highlight rule: the selection pill, the hover ghost and the focus
+ * ring take the contour of what they mark, concentric with its container
+ * (inner radius = max(0, outer − inset), corner by corner, square where a
+ * run opens a part's edge).
+ *
+ * A scratch fleet (real hub, agent and sessiond against the mock model) and
+ * the built dashboard. One Claude Code session holds "hello", a 40-word line
+ * and one more, each answered. A second holds a run of three of his
+ * messages, read: said one by one and each answered, the answers between
+ * them taken out of the transcript the page reads (a route), so the three
+ * stand in one run under one header, as a run of his stands in the product.
  *
  * On Chromium and WebKit, at 1440 and 680 (a mouse) and 390 (a finger):
- *  1. each message's row is revealed by the leg's own input (hover, a tap)
- *     and holds Copy message, Edit message where the message can be
- *     rewound or is queued, and Fork from here where it can branch, each
- *     what a press at its centre lands on;
- *  2. its box meets neither the header's clock, its note, the words, nor the
- *     next turn; it stands under the words, inside the well, its last glyph
- *     ending on the words' end; and every turn's box is the same before and
- *     after it shows (it changes paint only);
- *  3. Copy puts the message's words on the clipboard (pasted back into the
- *     composer), its glyph turning to the drawn check;
- *  4. Edit message opens the edit state, which says the rewind's cost before
- *     Send edited message, and Cancel edit puts the words back;
- *  5. the page holds the overflow and overlap scan (journeys/scan.ts) with
- *     the row shown: zero findings over every leg.
- * At 1440, on both engines, the keyboard reaches the row from the page's
- * start by Tab alone, shows it, and Enter copies and opens Edit (Esc
- * cancels). Fork from here runs for real by a mouse (Chromium 1440), a
- * finger (WebKit 390) and the keyboard (WebKit 1440): a new session on the
- * hub, the page on it. Edit message on a queued message lifts its words
- * into the composer, on both engines at 1440, and the row it grows comes
- * up out of its blur once, from the focus. A failed send's recovery (Send again) stands
- * in its failure block only, never in the row. Last, Send edited message
- * rewinds for real: the edited words stand where the 40-word line was,
- * nothing after it, and a reload says the same.
+ *  1. at rest each message's well ends on its words: the well's foot is its
+ *     words' foot plus its own padding and edge, no band, and nothing of the
+ *     actions stands inside the well;
+ *  2. (mouse) under the pointer the strip shows on the "You" line, Copy,
+ *     Edit and Fork from here where the message offers each, each what a
+ *     press at its centre lands on; it meets none of the words, the clock,
+ *     the well or the next turn; showing it moves no turn;
+ *  3. (mouse) in the run each part has its own line with its clock, and its
+ *     strip on that line shows for that part alone;
+ *  4. (finger) no strip; the handle stands at rest on the speaker line, and
+ *     a press opens the sheet "Message" with Copy, Edit and Fork from here,
+ *     each row 44px;
+ *  5. (desk) the keyboard reaches the strip by Tab alone: it shows, covers
+ *     nothing, the well is chosen and its surface is the selection pill's
+ *     wash in its four corners (a run's middle part: square at top and
+ *     foot), the focus
+ *     ring on the button its own radius; Enter copies, Edit opens with the
+ *     focus in its field, Esc cancels;
+ *  6. (mouse) the hover ghost under a context menu's item (the tab's menu,
+ *     its edge drawn inside it) takes the item's corners, and the item's are
+ *     the menu's 12px less its inset; at the desk Find's rows stand clear of
+ *     its card's curve, keep their own 8px, and the ghost under the active
+ *     row takes them;
+ *  7. on the composer, Send at the shell's end is its 12px less its 8px
+ *     inset (the focus ring follows its radius);
+ *  8. the page's overflow and overlap scan (journeys/scan.ts): zero, and no
+ *     console error on any page.
+ * Then, on both engines at 1440: a failed send shows Retry, Edit and Remove
+ * at rest under its reason, and no strip under the pointer; a queued message
+ * shows Edit in place and Remove from queue at rest and no strip, and
+ * Remove from queue takes it out of the queue on the hub. Last (Chromium),
+ * Fork from here starts a session, and Send edited message rewinds for real.
  *
  *   bun scripts/probe-kit/run.ts web own-message-actions
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person takes them
 import type { Page } from "playwright-core";
-import { commonWords } from "../../../../packages/core/src/words/common";
+import { shellWords } from "../../../../packages/core/src/words/shell";
 import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { scan } from "../../journeys/scan";
 import {
+  buttonNames,
   COMPOSER,
   type Engine,
   type Kit,
   type KitFleet,
+  kitsOwnMessage,
   open,
   type Spec,
   settle,
@@ -58,24 +74,23 @@ import {
 const ONE = "hello";
 const LONG =
   "Please read the failing build log from last night, find the first test that broke, explain in plain words why it broke, then fix the cause rather than the symptom and tell me which files you changed and why each one";
-/** Said after the 40-word line, so the rewind has something to replace. */
 const AFTER = "and one more thing";
 const RUN = ["run one", "run two", "run three"];
-/** A turn that stays at work through every leg, so the run stays queued behind it. */
+/** A turn that stays at work, so a message sent behind it stays queued. */
 const HOLD = "hold this turn open";
+const QUEUED = "queued words";
 const EDITED = "edited words, sent again";
 const COST =
   "Sending goes back to this message and replaces everything after it in the conversation.";
 
-const ROW = "[data-message-actions]";
+const STRIP = "[data-message-actions]";
 const TURN = 'section[data-slot="turn"]';
+const ALL = [
+  transcriptWords.copyMessage,
+  transcriptWords.editMessage,
+  transcriptWords.forkFromHere,
+];
 
-/**
- * The mock's answers: a word, or for HOLD one word and then a space every
- * 20s for 40 minutes, so its live line keeps its height while the stream
- * stays alive. The person's words are read before the reminders the hub
- * puts after them (core injected.ts, "[CawCo presence] …").
- */
 const respond = (request: Seen): Reply =>
   (request.last.split("<system-reminder>")[0] ?? "").trim() === HOLD
     ? { everyMs: 20_000, words: ["Working.", ...new Array(120).fill(" ")] }
@@ -124,17 +139,78 @@ async function say(fleet: KitFleet, source: string, text: string) {
   );
 }
 
+interface Block {
+  content?: unknown;
+  metadata?: object;
+  type?: string;
+}
+type Shape = (blocks: Block[]) => Block[];
+
+/** The person's words in a block, as the transcript read carries them. */
+const wordsOf = (block: Block) =>
+  typeof block.content === "string" ? block.content.trim() : "";
+
+/** The run: the agent's answers between its first and last message taken out of the read. */
+const asRun: Shape = (blocks) => {
+  const first = blocks.findIndex(
+    (b) => b.type === "user" && wordsOf(b) === RUN[0]
+  );
+  const last = blocks.findIndex(
+    (b) => b.type === "user" && wordsOf(b) === RUN[2]
+  );
+  return blocks.filter((b, i) => !(i > first && i < last && b.type !== "user"));
+};
+
+/** The last message failed, as core transcript-rules.ts writes a failed send's row. */
+const asFailed: Shape = (blocks) => {
+  const last = blocks.findLastIndex((b) => b.type === "user");
+  return blocks.map((b, i) =>
+    i === last
+      ? {
+          ...b,
+          state: "failed",
+          metadata: {
+            ...b.metadata,
+            sendFailed: "The machine stopped answering before it read it.",
+          },
+        }
+      : b
+  );
+};
+
+/** Every console error a page says, the kit's own aside. */
+const errorsOf = new WeakMap<Page, string[]>();
+
 async function sessionPage(
   kit: Kit,
   base: string,
   source: string,
-  leg: { engine: Engine; view: View }
+  leg: { engine: Engine; view: View },
+  shape?: Shape
 ): Promise<Page> {
   const page = await kit.page(leg.view, { theme: "light", engine: leg.engine });
+  const errors: string[] = [];
+  errorsOf.set(page, errors);
+  page.on("console", (message) => {
+    if (message.type() === "error" && !kitsOwnMessage(message.text())) {
+      errors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => errors.push(String(error)));
   if (leg.engine === "chromium") {
     await page
       .context()
       .grantPermissions(["clipboard-read", "clipboard-write"]);
+  }
+  if (shape) {
+    await page.route("**/api/instances/*/transcript*", async (route) => {
+      const response = await route.fetch();
+      const read = (await response.json()) as { blocks?: Block[] };
+      await route.fulfill({
+        response,
+        json: { ...read, blocks: shape(read.blocks ?? []) },
+      });
+    });
   }
   await page.addInitScript(
     (tree) => {
@@ -142,7 +218,7 @@ async function sessionPage(
     },
     treeOf([source])
   );
-  await open(page, `${base}/session/${source}`, ROW, 120_000);
+  await open(page, `${base}/session/${source}`, `${TURN}[data-you]`, 120_000);
   await settle(page, 400);
   return page;
 }
@@ -160,11 +236,9 @@ const turnOf = (page: Page, text: string) =>
     })
     .first();
 
-/** The turn showing message `id`, whatever its words are doing (an edit holds them in a field). */
 const byId = (page: Page, id: string) =>
   page.locator(`${TURN}[data-message="${id}"]`);
 
-/** The message id of the person's turn whose words are `text`. */
 async function idOf(page: Page, text: string): Promise<string> {
   const id = await turnOf(page, text).getAttribute("data-message", {
     timeout: 30_000,
@@ -183,15 +257,21 @@ interface Box {
 }
 
 interface Measure {
+  /** The well's foot less its words' (its last content's) foot, its padding and its edge. */
+  band: number;
   buttons: { name: string; hit: boolean }[];
   clock: Box | null;
-  /** The last glyph's end less the words' end (the well's content edge), css px. */
-  endOffset: number | null;
+  handle: { box: Box; opacity: number } | null;
+  /** The strip's line: the turn's own speaker line, or its part's line. */
+  line: Box | null;
   next: Box | null;
   note: Box | null;
   opacity: number;
-  row: Box | null;
-  /** Every drawn turn's box in the scroller's content, by its message. */
+  /** A later part of a run: its line stands in the well, on the hairline. */
+  part: boolean;
+  strip: Box | null;
+  /** The strip stands in its line, never among the words. */
+  stripInLine: boolean;
   turns: Record<string, Box>;
   well: Box | null;
   words: Box | null;
@@ -226,17 +306,18 @@ function measure(text: string): Measure | null {
   const turns: Record<string, Box> = {};
   all.forEach((one, i) => {
     const r = one.getBoundingClientRect();
-    const key = one.dataset.message ?? `#${i}`;
-    turns[key] = {
+    turns[one.dataset.message ?? `#${i}`] = {
       top: r.top - origin + lift,
       bottom: r.bottom - origin + lift,
       left: r.left,
       right: r.right,
     };
   });
-  const row = turn.querySelector<HTMLElement>("[data-message-actions]");
+  const strip = turn.querySelector<HTMLElement>("[data-message-actions]");
   const well = turn.querySelector<HTMLElement>('[data-slot="well"]');
-  const buttons = [...(row?.querySelectorAll("button") ?? [])].map((b) => {
+  const line = turn.querySelector<HTMLElement>("[data-turn-who]");
+  const handle = turn.querySelector<HTMLElement>('[data-slot="handle"]');
+  const buttons = [...(strip?.querySelectorAll("button") ?? [])].map((b) => {
     const r = b.getBoundingClientRect();
     const at = document.elementFromPoint(
       r.left + r.width / 2,
@@ -247,28 +328,42 @@ function measure(text: string): Measure | null {
       hit: !!at && b.contains(at),
     };
   });
-  let endOffset: number | null = null;
-  const last = row?.querySelector("button:last-of-type");
-  if (last && well) {
-    const r = last.getBoundingClientRect();
-    const icon = Number.parseFloat(
-      getComputedStyle(last).getPropertyValue("--btn-icon")
-    );
-    const glyphEnd = r.left + r.width / 2 + icon / 2;
+  let band = Number.NaN;
+  const words = turn.querySelector<HTMLElement>('[data-slot="words"]');
+  if (well && words) {
+    const last = [...words.children]
+      .filter((child) => child.getClientRects().length > 0)
+      .at(-1);
     const ws = getComputedStyle(well);
-    const contentEnd =
-      well.getBoundingClientRect().right - Number.parseFloat(ws.paddingRight);
-    endOffset = glyphEnd - contentEnd;
+    band =
+      well.getBoundingClientRect().bottom -
+      (last ?? words).getBoundingClientRect().bottom -
+      Number.parseFloat(ws.paddingBottom);
   }
   const index = all.indexOf(turn);
   return {
+    band,
     buttons,
     clock: box(turn.querySelector('time[data-slot="when"]')),
-    endOffset,
+    handle: handle
+      ? {
+          box: box(handle) as Box,
+          opacity: Number(getComputedStyle(handle).opacity),
+        }
+      : null,
+    line: box(line),
     next: box(all[index + 1]),
     note: box(turn.querySelector('[data-slot="note"]')),
-    opacity: row ? Number(getComputedStyle(row).opacity) : 0,
-    row: box(row),
+    opacity: strip ? Number(getComputedStyle(strip).opacity) : 0,
+    strip: box(strip),
+    part: turn.hasAttribute("data-grouped"),
+    stripInLine:
+      !!strip &&
+      !!line?.contains(strip) &&
+      !strip.closest("[data-lift-words]") &&
+      (turn.hasAttribute("data-grouped")
+        ? !!line?.closest('[data-slot="part-line"]')
+        : !well?.contains(line)),
     turns,
     well: box(well),
     words: box(turn.querySelector("[data-lift-words]")),
@@ -284,7 +379,6 @@ const meets = (a: Box | null, b: Box | null): boolean =>
   a.top < b.bottom - EDGE &&
   b.top < a.bottom - EDGE;
 
-/** The turns drawn in both reads whose box moved, by more than half a pixel. */
 const moved = (
   before: Record<string, Box>,
   after: Record<string, Box>
@@ -302,37 +396,404 @@ const moved = (
       );
     });
 
-/** The leg's own way of showing a message's row: the pointer on its words, or a finger's tap. */
-async function reveal(page: Page, text: string, touch: boolean) {
+/** The pointer on the words of the message saying `text`. */
+async function hover(page: Page, text: string) {
   const words = turnOf(page, text).locator("[data-lift-words]");
   await words.scrollIntoViewIfNeeded();
   await settle(page, 200);
-  if (touch) {
-    await words.tap();
-  } else {
-    await words.hover();
-  }
+  await words.hover();
   await settle(page, 350);
 }
 
-/** The composer's words after a paste of the clipboard into it, then emptied again. */
-async function pasteBack(page: Page, touch: boolean): Promise<string> {
-  const field = page.locator(COMPOSER).filter({ visible: true }).first();
-  if (touch) {
-    await field.tap();
-  } else {
-    await field.click();
-  }
-  await page.keyboard.press("ControlOrMeta+V");
-  await settle(page, 250);
-  const pasted = (await field.innerText()).trim();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.keyboard.press("Backspace");
-  await settle(page, 150);
-  return pasted;
+/** At rest: the well ends on its words, and none of the actions stands in it. */
+async function restLeg(kit: Kit, page: Page, label: string, text: string) {
+  await page.mouse.move(2, 2);
+  await turnOf(page, text).scrollIntoViewIfNeeded();
+  await settle(page, 300);
+  const at = await page.evaluate(measure, text);
+  const name = text.length > 20 ? "the 40-word line" : `"${text}"`;
+  const inside = await turnOf(page, text)
+    .locator(
+      `[data-slot="well"] :is(${STRIP}, [data-slot="handle"]):not([data-slot="part-line"] *)`
+    )
+    .count();
+  kit.check(
+    `${label}: at rest ${name}'s well hugs its words (its foot is its words' foot plus its padding, ${at?.band.toFixed(2)}px over), nothing of the actions in it${at?.part ? " but on its part's own line" : ""}`,
+    !!at && Math.abs(at.band) <= 1 && inside === 0,
+    JSON.stringify({ band: at?.band, inside })
+  );
 }
 
-/** Tab from where the focus is until it lands on `name` in the turn saying `text`; how many presses. */
+/** Under the pointer: the strip on the speaker line, what it holds, covering nothing, moving nothing. */
+async function hoverLeg(
+  kit: Kit,
+  page: Page,
+  label: string,
+  text: string,
+  expect: string[]
+) {
+  await page.mouse.move(2, 2);
+  await turnOf(page, text).scrollIntoViewIfNeeded();
+  await settle(page, 300);
+  const before = await page.evaluate(measure, text);
+  await hover(page, text);
+  const after = await page.evaluate(measure, text);
+  const name = text.length > 20 ? "the 40-word line" : `"${text}"`;
+  if (!(before && after)) {
+    kit.check(`${label}: ${name} is drawn`, false, "not found");
+    return;
+  }
+  kit.check(
+    `${label}: under the pointer ${name}'s strip shows on its speaker line with ${expect.join(", ")}, each what a press at its centre lands on`,
+    after.opacity === 1 &&
+      after.stripInLine &&
+      after.buttons.map((b) => b.name).join("|") === expect.join("|") &&
+      after.buttons.every((b) => b.hit),
+    JSON.stringify({
+      opacity: after.opacity,
+      inLine: after.stripInLine,
+      buttons: after.buttons,
+    })
+  );
+  // A later part's line is in the well, on the hairline from the part
+  // above: its strip stands inside the well, under that hairline.
+  const clear = after.part
+    ? !!(after.strip && after.well) &&
+      after.strip.top >= after.well.top + EDGE &&
+      after.strip.bottom <= (after.words?.top ?? 0) + EDGE
+    : !meets(after.strip, after.well);
+  kit.check(
+    `${label}: ${name}'s strip meets none of the words, the clock, the note, the next turn or ${after.part ? "the hairline over its part" : "the well"}`,
+    clear &&
+      !(
+        meets(after.strip, after.words) ||
+        meets(after.strip, after.clock) ||
+        meets(after.strip, after.note) ||
+        meets(after.strip, after.next)
+      ),
+    JSON.stringify({
+      strip: after.strip,
+      words: after.words,
+      clock: after.clock,
+      well: after.well,
+      next: after.next,
+    })
+  );
+  const shifted = moved(before.turns, after.turns);
+  kit.check(
+    `${label}: showing ${name}'s strip moves no turn (${Object.keys(before.turns).length} read)`,
+    shifted.length === 0,
+    shifted.join(", ")
+  );
+}
+
+/** One part of the run: its own line with its clock, its strip on that line for it alone. */
+async function runLeg(kit: Kit, page: Page, label: string) {
+  const parts = await page.evaluate((texts) => {
+    const turns = [
+      ...document.querySelectorAll<HTMLElement>(
+        'section[data-slot="turn"][data-you]'
+      ),
+    ];
+    return texts.map((text) => {
+      const turn = turns.find(
+        (one) =>
+          one.querySelector("[data-lift-words]")?.textContent?.trim() === text
+      );
+      const line = turn?.querySelector("[data-turn-who]");
+      return {
+        grouped: turn?.hasAttribute("data-grouped") ?? null,
+        clock: !!line?.querySelector('time[data-slot="when"]'),
+        strip: !!line?.querySelector("[data-message-actions]"),
+        partLine: !!turn?.querySelector(
+          '[data-slot="well"] [data-slot="part-line"] [data-turn-who]'
+        ),
+      };
+    });
+  }, RUN);
+  kit.check(
+    `${label}: the run of three stands under one header, each later part with its own line in the well, every part's line with its clock and its strip`,
+    parts[0]?.grouped === false &&
+      parts.slice(1).every((part) => part.grouped && part.partLine) &&
+      parts.every((part) => part.clock && part.strip),
+    JSON.stringify(parts)
+  );
+  for (const text of RUN) {
+    await hoverLeg(kit, page, `${label} (run)`, text, ALL);
+    const shown = await page.evaluate(
+      (texts) =>
+        texts.map((one) => {
+          const turn = [
+            ...document.querySelectorAll<HTMLElement>(
+              'section[data-slot="turn"][data-you]'
+            ),
+          ].find(
+            (t) =>
+              t.querySelector("[data-lift-words]")?.textContent?.trim() === one
+          );
+          const strip = turn?.querySelector("[data-message-actions]");
+          return strip ? Number(getComputedStyle(strip).opacity) : -1;
+        }),
+      RUN
+    );
+    kit.check(
+      `${label} (run): the pointer on "${text}" shows its part's strip alone`,
+      shown.every((opacity, i) => opacity === (RUN[i] === text ? 1 : 0)),
+      shown.join(",")
+    );
+  }
+}
+
+/** A finger: no strip; the handle at rest; a press opens the sheet with its rows. */
+async function phoneLeg(kit: Kit, page: Page, label: string) {
+  await turnOf(page, LONG).scrollIntoViewIfNeeded();
+  await settle(page, 300);
+  const at = await page.evaluate(measure, LONG);
+  const strips = await turnOf(page, LONG).locator(STRIP).count();
+  kit.check(
+    `${label}: no strip; the handle stands at rest on the 40-word line's speaker line, clear of the well`,
+    strips === 0 &&
+      !!at?.handle &&
+      at.handle.opacity === 1 &&
+      !meets(at.handle.box, at.well) &&
+      !meets(at.handle.box, at.words),
+    JSON.stringify({ strips, handle: at?.handle, well: at?.well })
+  );
+  await turnOf(page, LONG)
+    .getByRole("button", { name: transcriptWords.messageActions })
+    .tap();
+  const sheet = page.getByRole("dialog", {
+    name: transcriptWords.messageSheet,
+  });
+  await sheet.waitFor({ state: "visible", timeout: 10_000 });
+  await settle(page, 600);
+  const rows = await sheet
+    .locator('[data-slot="message-sheet"] button')
+    .evaluateAll((all) =>
+      all.map((b) => ({
+        name: b.textContent?.trim(),
+        h: b.getBoundingClientRect().height,
+      }))
+    );
+  kit.check(
+    `${label}: a press on the handle opens the sheet "Message" with Copy, Edit and Fork from here, each row 44px`,
+    rows.map((row) => row.name).join("|") ===
+      [
+        transcriptWords.copyRow,
+        transcriptWords.editRow,
+        transcriptWords.forkFromHere,
+      ].join("|") && rows.every((row) => Math.abs(row.h - 44) <= 0.5),
+    JSON.stringify(rows)
+  );
+  await sheet.getByRole("button", { name: transcriptWords.copyRow }).tap();
+  await sheet.waitFor({ state: "hidden", timeout: 10_000 });
+  await settle(page, 400);
+}
+
+/** A row's four corners and its container's, as drawn, and the gap between their edges at each. In the page. */
+function contour(args: { row: string; layer?: string }) {
+  const r = (el: Element) => {
+    const s = getComputedStyle(el);
+    return [
+      s.borderTopLeftRadius,
+      s.borderTopRightRadius,
+      s.borderBottomRightRadius,
+      s.borderBottomLeftRadius,
+    ].map((one) => Number.parseFloat(one) || 0);
+  };
+  const row = document.querySelector(args.row);
+  if (!row) {
+    return null;
+  }
+  // Its container: the one that declares the rule, else the nearest rounded
+  // box holding it.
+  let host: Element | null =
+    row.parentElement?.closest('[class*="concentric-in"]') ?? null;
+  for (let at = row.parentElement; !host && at; at = at.parentElement) {
+    if (r(at).some((one) => one > 0)) {
+      host = at;
+    }
+  }
+  const own = r(row);
+  const layer = args.layer ? document.querySelector(args.layer) : null;
+  if (!host) {
+    return { own, host: null, layer: layer ? r(layer) : null, corners: [] };
+  }
+  const outer = r(host);
+  const a = host.getBoundingClientRect();
+  const b = row.getBoundingClientRect();
+  const gaps = [
+    [b.left - a.left, b.top - a.top],
+    [a.right - b.right, b.top - a.top],
+    [a.right - b.right, a.bottom - b.bottom],
+    [b.left - a.left, a.bottom - b.bottom],
+  ];
+  // A corner the rule speaks of: the same gap in from both edges, inside the
+  // outer's curve.
+  const corners = gaps.flatMap(([x, y], i) =>
+    Math.abs(x - y) <= 0.5 && (x + y) / 2 < (outer[i] ?? 0)
+      ? [
+          {
+            corner: i,
+            outer: outer[i] ?? 0,
+            inset: Number(((x + y) / 2).toFixed(2)),
+            inner: own[i] ?? 0,
+          },
+        ]
+      : []
+  );
+  return {
+    own,
+    host: host.getAttribute("data-slot") ?? host.localName,
+    layer: layer ? r(layer) : null,
+    corners,
+  };
+}
+
+const concentric = (
+  corners: { outer: number; inset: number; inner: number }[]
+) =>
+  corners.length > 0 &&
+  corners.every(
+    (c) => Math.abs(c.inner - Math.max(0, c.outer - c.inset)) <= EDGE
+  );
+
+/** The keyboard: Tab to the strip, the pill under the chosen well in its contour, Enter copies and edits, Esc cancels. */
+async function keyboardLeg(kit: Kit, page: Page, label: string, run: Page) {
+  for (const [where, text] of [
+    [page, LONG],
+    [run, RUN[1] as string],
+  ] as const) {
+    await where.bringToFront();
+    await where.mouse.move(2, 2);
+    await where.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      window.scrollTo(0, 0);
+    });
+    const presses = await tabTo(where, text, transcriptWords.copyMessage);
+    await settle(where, 400);
+    const at = await where.evaluate(measure, text);
+    const marks = await where.evaluate((wanted) => {
+      const turn = [
+        ...document.querySelectorAll<HTMLElement>(
+          'section[data-slot="turn"][data-you]'
+        ),
+      ].find(
+        (t) =>
+          t.querySelector("[data-lift-words]")?.textContent?.trim() === wanted
+      );
+      const well = turn?.querySelector<HTMLElement>('[data-slot="well"]');
+      const corners = (style: CSSStyleDeclaration | null) =>
+        style
+          ? [
+              style.borderTopLeftRadius,
+              style.borderTopRightRadius,
+              style.borderBottomRightRadius,
+              style.borderBottomLeftRadius,
+            ].map((one) => Number.parseFloat(one) || 0)
+          : null;
+      // The pill's wash, as the page resolves the token.
+      const swatch = document.createElement("i");
+      swatch.style.background = "var(--selected-bg)";
+      document.body.append(swatch);
+      const wash = getComputedStyle(swatch).backgroundColor;
+      swatch.remove();
+      const surface = well ? getComputedStyle(well, "::before") : null;
+      const held = document.activeElement as HTMLElement | null;
+      return {
+        selected: well?.hasAttribute("data-selected") ?? false,
+        well: corners(well ? getComputedStyle(well) : null),
+        pill: corners(surface),
+        wash: surface?.backgroundColor === wash,
+        covers:
+          surface?.position === "absolute" &&
+          surface.left === "0px" &&
+          surface.right === "0px" &&
+          surface.bottom === "0px",
+        ring: held ? getComputedStyle(held).outlineStyle : "none",
+        ringRadius: corners(held ? getComputedStyle(held) : null),
+      };
+    }, text);
+    const name =
+      text === LONG ? "the 40-word line" : `the run's middle "${text}"`;
+    kit.check(
+      `${label} (keyboard): Tab alone reaches ${name}'s Copy message (${presses ?? "never"} presses), its strip shown on its line and covering nothing`,
+      presses !== null &&
+        at?.opacity === 1 &&
+        at.stripInLine &&
+        !(
+          meets(at.strip, at.words) ||
+          meets(at.strip, at.clock) ||
+          meets(at.strip, at.next)
+        ),
+      JSON.stringify({
+        opacity: at?.opacity,
+        strip: at?.strip,
+        words: at?.words,
+      })
+    );
+    const square =
+      text === LONG
+        ? true
+        : marks.well?.[0] === 0 &&
+          marks.well?.[1] === 0 &&
+          marks.well?.[2] === 0 &&
+          marks.well?.[3] === 0;
+    kit.check(
+      `${label} (keyboard): ${name}'s well is chosen: its surface is the selection pill's wash, covering it, in its four corners (${marks.well?.join("/")}px${text === LONG ? "" : ", square where the run opens it"}); the focus ring stands on the button`,
+      marks.selected &&
+        marks.wash &&
+        marks.covers &&
+        JSON.stringify(marks.pill) === JSON.stringify(marks.well) &&
+        square &&
+        marks.ring !== "none",
+      JSON.stringify(marks)
+    );
+  }
+  await page.bringToFront();
+  await page.keyboard.press("Enter");
+  await settle(page, 200);
+  const pasted = await pasteBack(page, false);
+  kit.check(
+    `${label} (keyboard): Enter on Copy message put the words on the clipboard`,
+    pasted === LONG,
+    pasted
+  );
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur()
+  );
+  const toEdit = await tabTo(page, LONG, transcriptWords.editMessage);
+  await page.keyboard.press("Enter");
+  await settle(page, 300);
+  const editing = await page.evaluate(() => ({
+    field: document.activeElement?.tagName === "TEXTAREA",
+    cost: document
+      .querySelector('[data-slot="edit-cost"]')
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim(),
+  }));
+  kit.check(
+    `${label} (keyboard): Tab reaches Edit message, Enter opens the edit with the focus in its field and the cost said`,
+    toEdit !== null && editing.field && editing.cost === COST,
+    JSON.stringify(editing)
+  );
+  const editingId = await page.evaluate(
+    () =>
+      document.activeElement
+        ?.closest<HTMLElement>('section[data-slot="turn"]')
+        ?.getAttribute("data-message") ?? ""
+  );
+  await page.keyboard.press("Escape");
+  await settle(page, 300);
+  const turn = byId(page, editingId);
+  kit.check(
+    `${label} (keyboard): Esc cancels the edit, the words back`,
+    editingId !== "" &&
+      (await turn.locator("textarea").count()) === 0 &&
+      (await turn.locator("[data-lift-words]").innerText()).trim() === LONG
+  );
+}
+
 async function tabTo(
   page: Page,
   text: string,
@@ -360,266 +821,158 @@ async function tabTo(
   return null;
 }
 
-/** One message's row, read and held to the layout rules, in one leg. */
-async function rowLeg(
-  kit: Kit,
-  page: Page,
-  label: string,
-  text: string,
-  expect: string[],
-  touch: boolean
-) {
-  await turnOf(page, text).scrollIntoViewIfNeeded();
-  await settle(page, 200);
-  const before = await page.evaluate(measure, text);
-  await reveal(page, text, touch);
-  const after = await page.evaluate(measure, text);
-  const name = text.length > 20 ? "the 40-word line" : `"${text}"`;
-  if (!(before && after)) {
-    kit.check(`${label}: ${name} is drawn`, false, "not found");
-    return;
+async function pasteBack(page: Page, touch: boolean): Promise<string> {
+  const field = page.locator(COMPOSER).filter({ visible: true }).first();
+  if (touch) {
+    await field.tap();
+  } else {
+    await field.click();
   }
-  kit.check(
-    `${label}: ${name}'s row shows (${touch ? "a tap" : "the pointer"}) with ${expect.join(", ")}, each what a press at its centre lands on`,
-    after.opacity === 1 &&
-      after.buttons.map((b) => b.name).join("|") === expect.join("|") &&
-      after.buttons.every((b) => b.hit),
-    JSON.stringify({ opacity: after.opacity, buttons: after.buttons })
-  );
-  kit.check(
-    `${label}: ${name}'s row meets neither the clock, the note, the words nor the next turn`,
-    !(
-      meets(after.row, after.clock) ||
-      meets(after.row, after.note) ||
-      meets(after.row, after.words) ||
-      meets(after.row, after.next)
-    ),
-    JSON.stringify({
-      row: after.row,
-      clock: after.clock,
-      note: after.note,
-      words: after.words,
-      next: after.next,
-    })
-  );
-  const row = after.row as Box;
-  const well = after.well as Box;
-  const words = after.words as Box;
-  kit.check(
-    `${label}: ${name}'s row stands under the words inside the well, its last glyph on the words' end`,
-    row.top >= words.bottom - EDGE &&
-      row.left >= well.left - EDGE &&
-      row.right <= well.right + EDGE &&
-      row.bottom <= well.bottom + EDGE &&
-      Math.abs(after.endOffset ?? 99) <= 1,
-    JSON.stringify({ row, well, words, endOffset: after.endOffset })
-  );
-  const shifted = moved(before.turns, after.turns);
-  kit.check(
-    `${label}: showing ${name}'s row moves no turn (${Object.keys(before.turns).length} read)`,
-    shifted.length === 0,
-    shifted.join(", ")
-  );
+  await page.keyboard.press("ControlOrMeta+V");
+  await settle(page, 250);
+  const pasted = (await field.innerText()).trim();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Backspace");
+  await settle(page, 150);
+  return pasted;
 }
 
-/** Copy on the 40-word line by the leg's input, pasted back; then Edit's state and its Cancel. */
-async function copyEditLeg(
-  kit: Kit,
-  page: Page,
-  label: string,
-  touch: boolean
-) {
-  await reveal(page, LONG, touch);
-  const turn = byId(page, await idOf(page, LONG));
-  const copy = turn.getByRole("button", { name: transcriptWords.copyMessage });
-  if (touch) {
-    await copy.tap();
-  } else {
-    await copy.click();
-  }
+/** Copy on the 40-word line by the pointer, pasted back. */
+async function copyLeg(kit: Kit, page: Page, label: string) {
+  await hover(page, LONG);
+  await turnOf(page, LONG)
+    .getByRole("button", { name: transcriptWords.copyMessage })
+    .click();
   await settle(page, 200);
-  // PendingContent's drawn check, up for --dur-hold (1.2s) after the copy.
-  const checked = await copy.evaluate(
-    (b) => b.querySelector('[data-slot="tick"][data-on]') !== null
-  );
-  kit.check(
-    `${label}: Copy message turns its glyph to the drawn check`,
-    checked
-  );
-  const pasted = await pasteBack(page, touch);
+  const pasted = await pasteBack(page, false);
   kit.check(
     `${label}: Copy message put the 40-word line on the clipboard (pasted back into the composer)`,
     pasted === LONG,
     pasted
   );
-  await reveal(page, LONG, touch);
-  const edit = turn.getByRole("button", { name: transcriptWords.editMessage });
-  if (touch) {
-    await edit.tap();
-  } else {
-    await edit.click();
-  }
-  await settle(page, 300);
-  const state = await turn.evaluate((el, sendEdited) => {
-    const field = el.querySelector("textarea");
-    const cost = el.querySelector('[data-slot="edit-cost"]');
-    const send = [...el.querySelectorAll("button")].find(
-      // A pending button keeps both its words in one cell: its text starts with its label.
-      (b) => b.textContent?.trim().startsWith(sendEdited)
-    );
-    const c = cost?.getBoundingClientRect();
-    const s = send?.getBoundingClientRect();
-    return {
-      value: field?.value ?? null,
-      cost: cost?.textContent?.replace(/\s+/g, " ").trim() ?? null,
-      above: !!(c && s) && c.bottom <= s.top + 0.5,
-      shown:
-        !!c &&
-        c.height > 0 &&
-        getComputedStyle(cost as Element).opacity === "1",
-      described:
-        field?.getAttribute("aria-describedby") === cost?.id && !!cost?.id,
-    };
-  }, transcriptWords.sendEdited);
-  kit.check(
-    `${label}: Edit message opens the words in place, the cost said above Send edited message`,
-    state.value === LONG &&
-      state.cost === COST &&
-      state.above &&
-      state.shown &&
-      state.described,
-    JSON.stringify(state)
-  );
-  const cancel = turn.getByRole("button", { name: transcriptWords.cancelEdit });
-  if (touch) {
-    await cancel.tap();
-  } else {
-    await cancel.click();
-  }
-  await settle(page, 300);
-  kit.check(
-    `${label}: Cancel edit puts the words back`,
-    (await turn.locator("textarea").count()) === 0 &&
-      (await turn.locator("[data-lift-words]").innerText()).trim() === LONG
-  );
 }
 
-/** The page's spill and overlap scan with the row of the message saying `text` shown: its findings. */
-async function scanLeg(
-  page: Page,
-  text: string,
-  touch: boolean
-): Promise<string[]> {
-  await reveal(page, text, touch);
-  return page.evaluate(scan);
-}
-
-/** The keyboard alone: Tab from the page's start to the row, Enter to copy, Enter to edit, Esc. */
-async function keyboardLeg(kit: Kit, page: Page, label: string) {
-  await page.mouse.move(2, 2);
-  await page.evaluate(() => {
-    (document.activeElement as HTMLElement | null)?.blur();
-    window.scrollTo(0, 0);
+/** The ghost under a context menu's item, and the composer's controls and a segmented thumb, held to the formula. */
+async function contourLeg(kit: Kit, page: Page, label: string, touch: boolean) {
+  const composer = await page.evaluate(contour, {
+    row: 'form[data-slot="cin"] button[data-slot="stop"]',
   });
-  const presses = await tabTo(page, LONG, transcriptWords.copyMessage);
-  await settle(page, 350);
-  const shown = await page.evaluate(measure, LONG);
   kit.check(
-    `${label} (keyboard): Tab alone reaches the 40-word line's Copy message (${presses ?? "never"} presses), its row shown and covering nothing`,
-    presses !== null &&
-      shown?.opacity === 1 &&
-      !(
-        meets(shown.row, shown.clock) ||
-        meets(shown.row, shown.words) ||
-        meets(shown.row, shown.next)
-      ),
-    JSON.stringify(shown?.opacity)
+    `${label}: the composer's Send is its shell's radius less its inset, at each corner it stands in (${JSON.stringify(composer?.corners)})`,
+    !!composer && concentric(composer.corners),
+    JSON.stringify(composer)
   );
-  await page.keyboard.press("Enter");
-  await settle(page, 200);
-  const pasted = await pasteBack(page, false);
-  kit.check(
-    `${label} (keyboard): Enter on Copy message put the words on the clipboard`,
-    pasted === LONG,
-    pasted
-  );
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur()
-  );
-  const toEdit = await tabTo(page, LONG, transcriptWords.editMessage);
-  await page.keyboard.press("Enter");
-  await settle(page, 300);
-  const editing = await page.evaluate(
-    () => document.activeElement?.tagName === "TEXTAREA"
-  );
-  kit.check(
-    `${label} (keyboard): Tab reaches Edit message, Enter opens the edit with the focus in its field`,
-    toEdit !== null && editing
-  );
-  const editingId = await page.evaluate(
-    () =>
-      document.activeElement
-        ?.closest<HTMLElement>('section[data-slot="turn"]')
-        ?.getAttribute("data-message") ?? ""
-  );
-  await page.keyboard.press("Escape");
-  await settle(page, 300);
-  const turn = byId(page, editingId);
-  kit.check(
-    `${label} (keyboard): Esc cancels the edit, the words back`,
-    editingId !== "" &&
-      (await turn.locator("textarea").count()) === 0 &&
-      (await turn.locator("[data-lift-words]").innerText()).trim() === LONG
-  );
-}
-
-/** Fork from here pressed for real, by `how`: a new session on the hub, the page on it. */
-async function forkLeg(
-  kit: Kit,
-  page: Page,
-  fleet: KitFleet,
-  label: string,
-  source: string,
-  how: "click" | "tap" | "keyboard"
-) {
-  const rows = () =>
-    fleet.query<{ id: string }>("SELECT id FROM instances").length;
-  const before = rows();
-  if (how === "keyboard") {
-    await page.mouse.move(2, 2);
-    await page.evaluate(() =>
-      (document.activeElement as HTMLElement | null)?.blur()
+  if (!touch) {
+    await page.keyboard.press("Escape");
+    const tab = page.getByRole("tab").filter({ visible: true }).first();
+    await tab.click({ button: "right" });
+    const menu = page.locator(
+      '[data-slot="context-menu-content"][data-state="open"]'
     );
-    await tabTo(page, LONG, transcriptWords.forkFromHere);
-    await page.keyboard.press("Enter");
-  } else {
-    await reveal(page, LONG, how === "tap");
-    const fork = turnOf(page, LONG).getByRole("button", {
-      name: transcriptWords.forkFromHere,
+    await menu.waitFor({ state: "visible", timeout: 10_000 });
+    await settle(page, 400);
+    const item = menu.locator("[data-menu-item]").first();
+    await item.hover();
+    await settle(page, 300);
+    const read = await page.evaluate(contour, {
+      row: '[data-slot="context-menu-content"][data-state="open"] [data-menu-item]',
+      layer:
+        '[data-slot="context-menu-content"][data-state="open"] [data-slot="highlight-ghost"]',
     });
-    if (how === "tap") {
-      await fork.tap();
-    } else {
-      await fork.click();
+    kit.check(
+      `${label}: the hover ghost under a context menu's first item takes its corners, the menu's radius less its inset (${JSON.stringify(read?.corners)})`,
+      !!read &&
+        concentric(read.corners) &&
+        JSON.stringify(read.layer) === JSON.stringify(read.own),
+      JSON.stringify(read)
+    );
+    await page.keyboard.press("Escape");
+    await settle(page, 300);
+    const jump = page
+      .getByRole("button", { name: shellWords.jumpToSession })
+      .first();
+    if (await jump.isVisible()) {
+      await jump.click();
+      const row = page
+        .locator("[data-find-row]")
+        .filter({ visible: true })
+        .first();
+      await row.waitFor({ state: "visible", timeout: 10_000 });
+      await settle(page, 500);
+      await row.hover();
+      await settle(page, 300);
+      const rows = page.locator("[data-find-row]").filter({ visible: true });
+      await rows.last().hover();
+      await settle(page, 300);
+      const find = await page.evaluate(() => {
+        const all = [
+          ...document.querySelectorAll<HTMLElement>("[data-find-row]"),
+        ].filter((one) => one.getClientRects().length > 0);
+        const active = all.find((one) => one.hasAttribute("data-active"));
+        const list = active?.closest<HTMLElement>('[data-slot="list"]');
+        const card = list?.closest<HTMLElement>(
+          '[data-slot="popover-content"]'
+        );
+        const ghost = list?.querySelector<HTMLElement>(
+          ':scope > [data-slot="highlight-ghost"]'
+        );
+        const corners = (el: Element | null | undefined) => {
+          if (!el) {
+            return null;
+          }
+          const st = getComputedStyle(el);
+          return [
+            st.borderTopLeftRadius,
+            st.borderTopRightRadius,
+            st.borderBottomRightRadius,
+            st.borderBottomLeftRadius,
+          ].map((one) => Number.parseFloat(one) || 0);
+        };
+        const r = active?.getBoundingClientRect();
+        const c = card?.getBoundingClientRect();
+        const radius = corners(card)?.[2] ?? 0;
+        // In the card's curve: a corner standing the same gap in from both
+        // of its edges, nearer than its radius.
+        const inCurve =
+          !!(r && c) &&
+          [
+            [r.left - c.left, c.bottom - r.bottom],
+            [c.right - r.right, c.bottom - r.bottom],
+            [r.left - c.left, r.top - c.top],
+            [c.right - r.right, r.top - c.top],
+          ].some(([x, y]) => Math.abs(x - y) <= 0.5 && (x + y) / 2 < radius);
+        return {
+          own: corners(active),
+          ghost: corners(ghost),
+          shown: ghost ? getComputedStyle(ghost).opacity : "none",
+          inCurve,
+          token: Number.parseFloat(
+            getComputedStyle(document.documentElement).getPropertyValue(
+              "--radius-sm"
+            )
+          ),
+        };
+      });
+      kit.check(
+        `${label}: Find's rows stand clear of its card's curve and keep their own radius (${find.own?.join("/")}px); the hover ghost under the row takes its corners`,
+        !find.inCurve &&
+          find.own?.every((one) => one === find.token) === true &&
+          find.shown === "1" &&
+          JSON.stringify(find.ghost) === JSON.stringify(find.own),
+        JSON.stringify(find)
+      );
+      await page.keyboard.press("Escape");
+      await settle(page, 300);
     }
   }
-  const left = await page
-    .waitForURL(
-      (url) =>
-        url.pathname.startsWith("/session/") && !url.pathname.includes(source),
-      {
-        timeout: 120_000,
-      }
-    )
-    .then(
-      () => true,
-      () => false
-    );
-  kit.check(
-    `${label} (${how}): Fork from here starts a session on the hub and the page goes to it`,
-    left && rows() === before + 1,
-    `${page.url()}; sessions ${before} → ${rows()}`
-  );
+}
+
+/** The page's spill and overlap scan with the 40-word line's strip shown (a finger: at rest). */
+async function scanLeg(page: Page, touch: boolean): Promise<string[]> {
+  if (!touch) {
+    await hover(page, LONG);
+  }
+  return page.evaluate(scan);
 }
 
 const spec: Spec = {
@@ -639,295 +992,267 @@ const spec: Spec = {
     for (const text of [ONE, LONG, AFTER]) {
       await say(fleet, source, text);
     }
-    // The run: three messages queued behind a turn still at work.
-    const held = await fleet.spawn("claude", "Queued run");
-    await say(fleet, held, ONE);
-    await fleet.send(held, HOLD);
-    await until(
-      "the held turn at work",
-      () =>
-        fleet.query<{ turn_open_at: number | null }>(
-          "SELECT turn_open_at FROM instances WHERE id = ?",
-          held
-        )[0],
-      (one) => one?.turn_open_at !== null,
-      60_000
-    );
-    for (const text of RUN) {
-      await fleet.send(held, text);
+    const runs = await fleet.spawn("claude", "A run of his");
+    for (const text of [ONE, ...RUN]) {
+      await say(fleet, runs, text);
     }
 
     const findings: string[] = [];
-    const full = [
-      transcriptWords.copyMessage,
-      transcriptWords.editMessage,
-      transcriptWords.forkFromHere,
-    ];
-    const queued = [transcriptWords.copyMessage, transcriptWords.editMessage];
-    for (const leg of LEGS) {
+    const errors: string[] = [];
+    const only = process.env.PROBE_LEGS?.split(",");
+    for (const leg of LEGS.filter((one) => !only || only.includes(one.label))) {
       const page = await sessionPage(kit, base, source, leg);
-      // The session's first message has no answer above it to rewind to or
-      // branch from: Copy alone.
-      await rowLeg(
-        kit,
-        page,
-        leg.label,
-        ONE,
-        [transcriptWords.copyMessage],
-        leg.touch
-      );
-      await rowLeg(kit, page, leg.label, LONG, full, leg.touch);
-      await rowLeg(kit, page, leg.label, AFTER, full, leg.touch);
-      await copyEditLeg(kit, page, leg.label, leg.touch);
-      const found = await scanLeg(page, LONG, leg.touch);
-      findings.push(...found.map((one) => `${leg.label}: ${one}`));
-      if (leg.view === "desk") {
-        await keyboardLeg(kit, page, leg.label);
+      for (const text of [ONE, LONG, AFTER]) {
+        await restLeg(kit, page, leg.label, text);
       }
-      if (leg.engine === "chromium" && leg.view === "desk") {
-        await forkLeg(kit, page, fleet, leg.label, source, "click");
-      } else if (leg.engine === "webkit" && leg.view === "phone") {
-        await forkLeg(kit, page, fleet, leg.label, source, "tap");
-      } else if (leg.engine === "webkit" && leg.view === "desk") {
-        await forkLeg(kit, page, fleet, leg.label, source, "keyboard");
-      }
-      await page.close();
-
-      const run = await sessionPage(kit, base, held, leg);
+      const run = await sessionPage(kit, base, runs, leg, asRun);
       await turnOf(run, RUN[2] as string).waitFor({ timeout: 60_000 });
-      // The held turn's live line stands between its message and the run.
-      await run
-        .getByText("Working.", { exact: true })
-        .first()
-        .waitFor({ timeout: 60_000 });
       await settle(run, 300);
-      const grouped = await run.evaluate(
-        (texts) =>
-          texts.map((text) => {
-            const one = [
-              ...document.querySelectorAll<HTMLElement>(
-                'section[data-slot="turn"][data-you]'
-              ),
-            ].find(
-              (turn) =>
-                turn.querySelector("[data-lift-words]")?.textContent?.trim() ===
-                text
-            );
-            return one ? one.hasAttribute("data-grouped") : null;
-          }),
-        RUN
-      );
-      // The first of them heads the run, or joins the held message's when
-      // the tail was first drawn bare (rows.ts, "THE TAIL KEEPS THE ORDER
-      // IT WAS DRAWN IN"); either way the later two are the same run's.
-      kit.check(
-        `${leg.label}: the three queued messages stand in one run, the later two grouped under its one header (first ${grouped[0] ? "joins the held message's run" : "heads the run"})`,
-        grouped[1] === true && grouped[2] === true,
-        grouped.join(",")
-      );
       for (const text of RUN) {
-        await rowLeg(kit, run, leg.label, text, queued, leg.touch);
+        await restLeg(kit, run, `${leg.label} (run)`, text);
       }
-      const inRun = await scanLeg(run, RUN[1] as string, leg.touch);
-      findings.push(...inRun.map((one) => `${leg.label} (run): ${one}`));
-      await run.close();
+      if (leg.touch) {
+        await phoneLeg(kit, page, leg.label);
+      } else {
+        await page.bringToFront();
+        // The session's first message has no answer above it to rewind to
+        // or branch from: Copy alone.
+        await hoverLeg(kit, page, leg.label, ONE, [
+          transcriptWords.copyMessage,
+        ]);
+        await hoverLeg(kit, page, leg.label, LONG, ALL);
+        await hoverLeg(kit, page, leg.label, AFTER, ALL);
+        await copyLeg(kit, page, leg.label);
+        await run.bringToFront();
+        await runLeg(kit, run, leg.label);
+        await page.bringToFront();
+      }
+      if (leg.view === "desk") {
+        await keyboardLeg(kit, page, leg.label, run);
+      }
+      await page.bringToFront();
+      await contourLeg(kit, page, leg.label, leg.touch);
+      findings.push(
+        ...(await scanLeg(page, leg.touch)).map((one) => `${leg.label}: ${one}`)
+      );
+      await run.bringToFront();
+      findings.push(
+        ...(await run.evaluate(scan)).map((one) => `${leg.label} (run): ${one}`)
+      );
+      for (const [what, one] of [
+        ["", page],
+        [" (run)", run],
+      ] as const) {
+        errors.push(
+          ...(errorsOf.get(one) ?? []).map((e) => `${leg.label}${what}: ${e}`)
+        );
+        await one.close();
+      }
     }
     kit.check(
-      `the page's spill and overlap scan with a row shown, over all ${LEGS.length} legs and both sessions: ${findings.length} findings`,
+      `the page's spill and overlap scan over all ${LEGS.length} legs and both sessions: ${findings.length} findings`,
       findings.length === 0,
       findings.slice(0, 12).join(" | ")
     );
 
-    await failedLeg(kit, base, source);
-    await liftLeg(kit, base, held, "chromium");
-    await liftLeg(kit, base, held, "webkit");
-    await rewindLeg(kit, base, fleet, source);
+    for (const engine of ["chromium", "webkit"] as const) {
+      await failedLeg(kit, base, source, engine, errors);
+      await queuedLeg(kit, base, fleet, engine, errors);
+    }
+    await forkLeg(kit, base, fleet, source, errors);
+    await rewindLeg(kit, base, fleet, source, errors);
+    kit.check(
+      `no console error on any page: ${errors.length}`,
+      errors.length === 0,
+      errors.slice(0, 8).join(" | ")
+    );
   },
 };
 
-/**
- * A failed send (the hub's record: `state: "failed"` with its reason, as
- * core transcript-rules.ts writes one): its row holds Copy alone, and Send
- * again stands in its failure block, under the reason.
- */
-async function failedLeg(kit: Kit, base: string, source: string) {
-  const page = await kit.page("desk", { theme: "light" });
-  await page.route("**/api/instances/*/transcript*", async (route) => {
-    const response = await route.fetch();
-    const read = (await response.json()) as {
-      blocks?: { metadata?: object; type?: string; content?: unknown }[];
-    };
-    const blocks = read.blocks ?? [];
-    const last = blocks.findLastIndex((block) => block.type === "user");
-    await route.fulfill({
-      response,
-      json: {
-        ...read,
-        blocks: blocks.map((block, i) =>
-          i === last
-            ? {
-                ...block,
-                state: "failed",
-                metadata: {
-                  ...block.metadata,
-                  sendFailed:
-                    "The machine stopped answering before it read it.",
-                },
-              }
-            : block
-        ),
-      },
-    });
-  });
-  await page.addInitScript(
-    (tree) => {
-      localStorage.setItem("cawco-workspace", tree);
-    },
-    treeOf([source])
+/** A failed send: Retry, Edit and Remove at rest under its reason, and no strip under the pointer. */
+async function failedLeg(
+  kit: Kit,
+  base: string,
+  source: string,
+  engine: Engine,
+  errors: string[]
+) {
+  const page = await sessionPage(
+    kit,
+    base,
+    source,
+    { engine, view: "desk" },
+    asFailed
   );
-  await open(page, `${base}/session/${source}`, ROW, 120_000);
-  await settle(page, 400);
-  await reveal(page, AFTER, false);
   const turn = turnOf(page, AFTER);
-  const row = await turn
-    .locator(ROW)
-    .getByRole("button")
-    .evaluateAll((all) => all.map((b) => b.getAttribute("aria-label")));
-  const failure = await turn
-    .locator('[data-slot="failure"]')
-    .evaluate((el) => ({
+  await turn.scrollIntoViewIfNeeded();
+  await page.mouse.move(2, 2);
+  await settle(page, 600);
+  const failure = turn.locator('[data-slot="failure"]');
+  const rest = {
+    ...(await failure.evaluate((el) => ({
       reason: el.querySelector('[data-slot="reason"]')?.textContent?.trim(),
-      actions: [...el.querySelectorAll("button")].map((b) =>
-        b.textContent?.trim()
-      ),
-    }));
+      shown:
+        getComputedStyle(el).opacity === "1" &&
+        [...el.querySelectorAll('[data-slot="action"]')].every(
+          (b) => b.getClientRects().length > 0
+        ),
+    }))),
+    actions: await buttonNames(failure.locator('[data-slot="actions"]')),
+  };
+  await hover(page, AFTER);
+  const strips = await turn.locator(STRIP).count();
   kit.check(
-    "1440: a failed send's row holds Copy message alone; Send again stands in its failure block under the reason",
-    row.join("|") === transcriptWords.copyMessage &&
-      failure.actions.some((one) => one?.startsWith(commonWords.sendAgain)) &&
-      (failure.reason ?? "").startsWith(transcriptWords.notSent),
-    JSON.stringify({ row, failure })
+    `${engine} 1440: a failed send shows Retry, Edit and Remove at rest under its reason, and under the pointer no strip`,
+    (rest.reason ?? "").startsWith(transcriptWords.notSent) &&
+      rest.actions.join("|") ===
+        [
+          transcriptWords.retrySend,
+          transcriptWords.editFailed,
+          transcriptWords.removeFailed,
+        ].join("|") &&
+      rest.shown &&
+      strips === 0,
+    JSON.stringify({ rest, strips })
+  );
+  errors.push(
+    ...(errorsOf.get(page) ?? []).map((e) => `${engine} failed: ${e}`)
   );
   await page.close();
 }
 
-/** The queued edit's row as it comes up: each read of its label, and how many label elements it drew. */
-interface RowEntrance {
-  /** Distinct label elements seen: a row drawn afresh mid-entrance makes two. */
-  drawn: number;
-  reads: { blur: number; opacity: number; t: number }[];
-}
-
 /**
- * In the page, before the lift: reads the edit row's label every 16ms for
- * 900ms from when it stands, its opacity and blur as its computed style says.
+ * A message queued behind a turn still at work: Edit in place and Remove
+ * from queue at rest, no strip; Remove from queue takes it back on the hub.
  */
-function watchRow(): Promise<RowEntrance> {
-  return new Promise((resolve) => {
-    const out: RowEntrance = { drawn: 0, reads: [] };
-    const seen = new Set<Element>();
-    let start: number | null = null;
-    const began = performance.now();
-    const read = () => {
-      const now = performance.now();
-      const label = document.querySelector(
-        '[data-slot="edit-row"] [data-slot="what"]'
-      );
-      if (label) {
-        start ??= now;
-        seen.add(label);
-        const style = getComputedStyle(label);
-        // Its filter is its blur alone: `blur(Npx)`, or `none`.
-        const at = style.filter.indexOf("blur(");
-        out.reads.push({
-          t: Math.round(now - start),
-          opacity: Number(style.opacity),
-          blur: at === -1 ? 0 : Number.parseFloat(style.filter.slice(at + 5)),
-        });
-      }
-      out.drawn = seen.size;
-      if ((start !== null && now - start > 900) || now - began > 15_000) {
-        resolve(out);
-      } else {
-        setTimeout(read, 16);
-      }
-    };
-    read();
-  });
-}
-
-/**
- * Edit message on a queued message (the run's last) lifts its words into the
- * composer, on each engine at the desk. The row it grows comes up out of its
- * blur from the focus, once: a read part way (opacity and blur between their
- * ends), clear at the end, one label drawn (no keyboard rises here, so the
- * entrance never starts over).
- */
-async function liftLeg(kit: Kit, base: string, held: string, engine: Engine) {
-  const text = RUN[2] as string;
-  const page = await sessionPage(kit, base, held, { engine, view: "desk" });
-  await reveal(page, text, false);
-  const entrance = page.evaluate(watchRow);
-  await turnOf(page, text)
-    .getByRole("button", { name: transcriptWords.editMessage })
-    .click();
-  const field = page.locator(COMPOSER).filter({ visible: true }).first();
-  const lifted = await until(
-    "the queued words in the composer",
-    async () => (await field.innerText()).trim(),
-    (words) => words === text,
-    15_000
-  ).then(
-    () => true,
-    () => false
-  );
-  kit.check(
-    `${engine} 1440: Edit message on a queued message lifts its words into the composer`,
-    lifted,
-    (await field.innerText()).trim()
-  );
-  const row = await entrance;
-  const last = row.reads.at(-1);
-  const said = row.reads
-    .filter((_, i) => i % 3 === 0)
-    .map((r) => `${r.t}ms ${r.opacity.toFixed(2)}/${r.blur.toFixed(2)}px`)
-    .join(", ");
-  kit.check(
-    `${engine} 1440: the edit row's label comes up out of its blur from the focus, once (a read part way, clear at the end, one label drawn)`,
-    row.drawn === 1 &&
-      row.reads.some(
-        (r) =>
-          r.opacity > 0.001 &&
-          r.opacity < 0.999 &&
-          r.blur > 0.05 &&
-          r.blur < 3.95
-      ) &&
-      last?.opacity === 1 &&
-      last.blur === 0,
-    `${row.drawn} drawn; ${said}`
-  );
-  // The words go back, so the next engine lifts the same queued message.
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(800);
-  await page.close();
-}
-
-/**
- * Send edited message for real, last (it replaces what follows): the edited
- * words stand where the 40-word line was and nothing after it, and a reload
- * reads the same from the hub.
- */
-async function rewindLeg(
+async function queuedLeg(
   kit: Kit,
   base: string,
   fleet: KitFleet,
-  source: string
+  engine: Engine,
+  errors: string[]
+) {
+  const held = await fleet.spawn("claude", `Queued ${engine}`);
+  await say(fleet, held, ONE);
+  await fleet.send(held, HOLD);
+  await until(
+    "the held turn at work",
+    () =>
+      fleet.query<{ turn_open_at: number | null }>(
+        "SELECT turn_open_at FROM instances WHERE id = ?",
+        held
+      )[0],
+    (one) => one?.turn_open_at !== null,
+    60_000
+  );
+  const uuid = await fleet.send(held, QUEUED);
+  const page = await sessionPage(kit, base, held, { engine, view: "desk" });
+  const turn = turnOf(page, QUEUED);
+  await turn.waitFor({ timeout: 60_000 });
+  await page.mouse.move(2, 2);
+  await settle(page, 500);
+  const recovery = turn.locator('[data-slot="recovery"]');
+  const rest = {
+    names: await buttonNames(recovery),
+    shown: await recovery
+      .locator('[data-slot="action"]')
+      .evaluateAll((all) =>
+        all.every(
+          (b) =>
+            Number(getComputedStyle(b).opacity) === 1 &&
+            b.getClientRects().length > 0
+        )
+      ),
+  };
+  await hover(page, QUEUED);
+  const strips = await turn.locator(STRIP).count();
+  kit.check(
+    `${engine} 1440: a queued message shows Edit in place and Remove from queue at rest, and under the pointer no strip`,
+    rest.names.join("|") ===
+      [transcriptWords.editInPlace, transcriptWords.removeFromQueue].join(
+        "|"
+      ) &&
+      rest.shown &&
+      strips === 0,
+    JSON.stringify({ rest, strips })
+  );
+  await turn
+    .getByRole("button", { name: transcriptWords.removeFromQueue })
+    .click();
+  const gone = await until(
+    "the queued message withdrawn",
+    async () => ({
+      record: fleet.sendRow(uuid)?.state,
+      drawn: await turnOf(page, QUEUED).count(),
+    }),
+    (one) => one.record === "cancelled" && one.drawn === 0,
+    30_000
+  ).then(
+    (one) => one,
+    () => ({ record: fleet.sendRow(uuid)?.state, drawn: -1 })
+  );
+  kit.check(
+    `${engine} 1440: Remove from queue takes the message back: cancelled on the hub, gone from the transcript`,
+    gone.record === "cancelled" && gone.drawn === 0,
+    JSON.stringify(gone)
+  );
+  errors.push(
+    ...(errorsOf.get(page) ?? []).map((e) => `${engine} queued: ${e}`)
+  );
+  await page.close();
+}
+
+/** Fork from here pressed for real by the pointer: a new session on the hub, the page on it. */
+async function forkLeg(
+  kit: Kit,
+  base: string,
+  fleet: KitFleet,
+  source: string,
+  errors: string[]
 ) {
   const page = await sessionPage(kit, base, source, {
     engine: "chromium",
     view: "desk",
   });
-  await reveal(page, LONG, false);
+  const rows = () =>
+    fleet.query<{ id: string }>("SELECT id FROM instances").length;
+  const before = rows();
+  await hover(page, LONG);
+  await turnOf(page, LONG)
+    .getByRole("button", { name: transcriptWords.forkFromHere })
+    .click();
+  const left = await page
+    .waitForURL(
+      (url) =>
+        url.pathname.startsWith("/session/") && !url.pathname.includes(source),
+      { timeout: 120_000 }
+    )
+    .then(
+      () => true,
+      () => false
+    );
+  kit.check(
+    "chromium 1440: Fork from here on the speaker line starts a session on the hub and the page goes to it",
+    left && rows() === before + 1,
+    `${page.url()}; sessions ${before} → ${rows()}`
+  );
+  errors.push(...(errorsOf.get(page) ?? []).map((e) => `fork: ${e}`));
+  await page.close();
+}
+
+/** Send edited message for real, last: the edited words stand where the 40-word line was, and a reload says the same. */
+async function rewindLeg(
+  kit: Kit,
+  base: string,
+  fleet: KitFleet,
+  source: string,
+  errors: string[]
+) {
+  const page = await sessionPage(kit, base, source, {
+    engine: "chromium",
+    view: "desk",
+  });
+  await hover(page, LONG);
   const turnRow = byId(page, await idOf(page, LONG));
   await turnRow
     .getByRole("button", { name: transcriptWords.editMessage })
@@ -957,7 +1282,7 @@ async function rewindLeg(
     () => false
   );
   kit.check(
-    "1440: Send edited message rewinds: the edited words stand after hello and nothing of what followed",
+    "chromium 1440: Send edited message rewinds: the edited words stand after hello and nothing of what followed",
     landed,
     (await read()).join(" | ")
   );
@@ -972,14 +1297,15 @@ async function rewindLeg(
     120_000
   );
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(ROW, { timeout: 60_000 });
+  await page.waitForSelector(`${TURN}[data-you]`, { timeout: 60_000 });
   await settle(page, 400);
   const after = await read();
   kit.check(
-    "1440: a reload reads the same: hello, then the edited words, and nothing that followed",
+    "chromium 1440: a reload reads the same: hello, then the edited words, and nothing that followed",
     after.join("|") === `${ONE}|${EDITED}`,
     after.join(" | ")
   );
+  errors.push(...(errorsOf.get(page) ?? []).map((e) => `rewind: ${e}`));
   await page.close();
 }
 

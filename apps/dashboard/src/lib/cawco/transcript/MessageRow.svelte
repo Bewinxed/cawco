@@ -28,13 +28,17 @@
   import { moveTo, movingTo } from "../accounts/switch.svelte";
   import {
     answeredOr,
+    canWithdraw,
     cawco,
     commandRecord,
+    discardUnreached,
     editAndResend,
+    editFailed,
     failedSendPayload,
     forkPointOf,
     ModeUnchosen,
     relaunchSession,
+    removeSend,
     restoreDraft,
     retryFailed,
     retryOf,
@@ -54,6 +58,7 @@
   import DocThumb from "./DocThumb.svelte";
   import { disclosure } from "./disclosure.svelte";
   import { askLift, landing, liftsInto, replacing } from "./lift.svelte";
+  import MessageSheet from "./MessageSheet.svelte";
   import ModePick from "./ModePick.svelte";
   import Peer from "./Peer.svelte";
   import Shot from "./Shot.svelte";
@@ -91,7 +96,8 @@
   const voice = useVoice();
   /**
    * What the row offers. A queued message is edited in the composer, so it
-   * offers Edit only where a composer is writing to its conversation.
+   * offers Edit in place only where a composer is writing to its
+   * conversation.
    */
   const offered = $derived.by(() => {
     const actions = userTurnActions(message);
@@ -99,22 +105,16 @@
       ? { ...actions, edit: null }
       : actions;
   });
+  /**
+   * Edit on the strip: the reader's own sent message, opened in place and
+   * sent with the rewind, while the agent is not running (client
+   * `userTurnActions`: a session at work offers none). A queued message's
+   * edit and a failed send's are its recovery row's, at rest in the well.
+   */
   const canEdit = $derived(offered.edit === "resend");
   const canFork = $derived(offered.fork);
-  /**
-   * The row's one Edit: a queued message's words lift into the composer, a
-   * sent one's are edited in place and sent with the rewind. A failed send's
-   * restore is recovery, offered in its failure block.
-   */
-  const editsHere = $derived(canEdit || offered.edit === "queued");
   /** Words to copy: a message of pictures alone has none. */
   const canCopy = $derived(!!message.content.trim());
-  /**
-   * The action row under the words: Copy, Edit, Fork from here. It stands,
-   * its room taken, whenever it holds one of them, so showing it on hover,
-   * focus or a tap changes paint only.
-   */
-  const hasActions = $derived(canCopy || editsHere || canFork);
   let editing = $state(false);
   let editContent = $state("");
   let editPending = $state(false);
@@ -123,8 +123,11 @@
   let copyFailed = $state(false);
   let editError = $state("");
   let editor = $state<HTMLTextAreaElement | null>(null);
-  let actionsShown = $state(false);
+  /** No pointer hovers: the handle stands on the speaker line instead of the strip. */
   const coarse = new MediaQuery("(pointer: coarse)");
+  /** The keyboard's focus is on one of the strip's buttons. */
+  let stripFocused = $state(false);
+  let sheetOpen = $state(false);
 
   /*
    * A queued message can be edited until the session reads it: its words
@@ -137,25 +140,6 @@
   const wordsAway = $derived(lifted || landing.has(message.id));
   /** What the bubble says: its words, or those a replace has just sent for it. */
   const shownContent = $derived(replacing.get(message.id) ?? message.content);
-
-  function touchActions(node: HTMLElement): () => void {
-    function reveal(event: MouseEvent): void {
-      if (
-        !(coarse.current && hasActions) ||
-        editing ||
-        !(event.target instanceof Element) ||
-        event.target.closest("button, a, input, textarea") ||
-        !window.getSelection()?.isCollapsed
-      ) {
-        return;
-      }
-      // Every message's tap shows its row, a queued one's too: Copy and Edit
-      // are both its, so neither is the tap.
-      actionsShown = true;
-    }
-    node.addEventListener("click", reveal);
-    return () => node.removeEventListener("click", reveal);
-  }
 
   /**
    * Copy puts the message's words on the clipboard: the glyph turns to the
@@ -178,33 +162,7 @@
     copying = false;
   }
 
-  $effect(() => {
-    if (!(actionsShown && words)) {
-      return;
-    }
-    const turn = words.closest('[data-slot="turn"]');
-    function dismiss(event: Event): void {
-      if (
-        event.type === "scroll" ||
-        (event.target instanceof Node && !turn?.contains(event.target))
-      ) {
-        actionsShown = false;
-      }
-    }
-    document.addEventListener("pointerdown", dismiss, true);
-    document.addEventListener("scroll", dismiss, true);
-    return () => {
-      document.removeEventListener("pointerdown", dismiss, true);
-      document.removeEventListener("scroll", dismiss, true);
-    };
-  });
-
   async function startEditing(): Promise<void> {
-    actionsShown = false;
-    if (queued) {
-      askLift(message);
-      return;
-    }
     editContent = message.content;
     editError = "";
     editing = true;
@@ -307,14 +265,11 @@
     }
   }
 
-  async function branch(event: MouseEvent): Promise<void> {
+  /** Fork from here; the New Session form hangs from `trigger` when the fork has no mode to run in. */
+  async function branch(trigger: HTMLElement | null): Promise<void> {
     if (!canFork || forkPending) {
       return;
     }
-    // The form hangs from Fork from here when the fork has no mode to run in.
-    const trigger =
-      event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-    actionsShown = false;
     forkPending = true;
     editError = "";
     try {
@@ -503,6 +458,42 @@
   /** Something to say under the words: the failure, or the retry for it. */
   const open = $derived(failed || retrying);
   /**
+   * A queued message's way back, at rest in its well while its words are
+   * there: Edit in place lifts them into the composer, Remove from queue
+   * withdraws it (Claude Code recalls a queued send; client `canWithdraw`).
+   */
+  const removable = $derived(canWithdraw(message));
+  const queueRow = $derived(waiting && !lifted && (queued || removable));
+  /**
+   * A recovery row stands at rest in the well (failed, queued): the message
+   * shows no hover strip and no handle while it does. Copy, Edit and Fork
+   * from here are a sent message's.
+   */
+  const recovering = $derived(open || queueRow);
+  const strip = $derived(
+    (canCopy || canEdit || canFork) && !recovering && !editing && !wordsAway
+  );
+  /**
+   * The message is chosen while its strip holds the keyboard's focus, while
+   * it is being edited, or while its sheet is open: its well wears the
+   * selection pill's wash, in its own contour (Well).
+   */
+  const selected = $derived(
+    (stripFocused && strip) || editing || (sheetOpen && strip)
+  );
+  function stripFocus(event: FocusEvent): void {
+    stripFocused =
+      event.target instanceof Element && event.target.matches(":focus-visible");
+  }
+  function stripBlur(event: FocusEvent): void {
+    const held = event.currentTarget as HTMLElement;
+    if (!(
+      event.relatedTarget instanceof Node && held.contains(event.relatedTarget)
+    )) {
+      stripFocused = false;
+    }
+  }
+  /**
    * What the reason line reads: the failure as it stands, or, once a send
    * again has gone out, that it is being sent again — kept while the fold
    * closes, so the block folds shut on its words instead of losing them (and
@@ -592,12 +583,65 @@
       starting = false;
     }
   }
-  function edit(): void {
-    actionsShown = false;
-    if (message.id) {
+  /**
+   * A failed send's Edit: its words, texts, files and pictures back in the
+   * composer, and the row gone, the composer holds it now. One that never
+   * reached the hub comes back from this tab's outbox; one the hub failed,
+   * from its record, its pictures read from the hub first.
+   */
+  async function edit(): Promise<void> {
+    if (!message.id) {
+      return;
+    }
+    if (unreached) {
       restoreDraft(message.id);
+      return;
+    }
+    editError = "";
+    try {
+      removeId = await editFailed(message);
+    } catch {
+      editError =
+        "Couldn't put it back in the composer: a picture it carries couldn't be read from the hub. Press Edit again once the hub answers.";
     }
   }
+
+  /**
+   * Remove: a queued message out of the queue, a failed send out of the
+   * conversation, nothing in its place. One that never reached the hub is
+   * this tab's alone to let go. The hub's withdraw folds the row away on
+   * every screen; one the session read first stays, and says so.
+   */
+  let removeId = $state<string | null>(null);
+  function remove(): void {
+    if (!message.id) {
+      return;
+    }
+    editError = "";
+    if (unreached) {
+      discardUnreached(message.id);
+      return;
+    }
+    removeId = removeSend(message);
+  }
+  const removal = $derived(removeId ? commandRecord(removeId) : null);
+  const removePending = $derived(
+    !!removeId &&
+      !(
+        removal?.stage === "failed" ||
+        (removal?.stage === "applied" && removal.outcome !== "withdrawn")
+      )
+  );
+  $effect(() => {
+    if (removal?.stage === "failed") {
+      editError = `It was not taken back: ${removal.reason ?? "the hub refused it"}.`;
+    } else if (
+      removal?.stage === "applied" &&
+      removal.outcome !== "withdrawn"
+    ) {
+      editError = "The session read it first, so it stays in the conversation.";
+    }
+  });
 
   /**
    * Where the words this row says land from: the composer's text sent under
@@ -635,6 +679,99 @@
   }
 </script>
 
+<!-- The reader's message's actions on its speaker line, before the clock:
+     Copy message, Edit message, Fork from here, each the kit's ghost
+     `icon-sm` with its 16px glyph and its tooltip. Shown under the pointer and
+     for keyboard focus, held while one of them runs; they take their room
+     at rest, so showing them changes paint only, and they stand on the
+     line, never over the words, the note or the clock. -->
+{#snippet actions()}
+  <span
+    data-message-actions
+    data-slot="strip"
+    data-pending={forkPending || copying || undefined}
+    class="flex items-center gap-space-1 -my-space-1 opacity-0 pointer-events-none motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto has-focus-visible:opacity-100 has-focus-visible:pointer-events-auto data-pending:opacity-100 data-pending:pointer-events-auto"
+    onfocusin={stripFocus}
+    onfocusout={stripBlur}
+  >
+    {#if canCopy}
+      <Tip label={transcriptWords.copyMessage}>
+        {#snippet children(tip)}
+          <Button
+            {...tip}
+            aria-busy={copying || undefined}
+            aria-label={transcriptWords.copyMessage}
+            onclick={whileIdle<MouseEvent>(() => copying, copyWords)}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <PendingContent
+              failed={copyFailed}
+              icon={IconCopy}
+              pending={copying}
+            />
+          </Button>
+        {/snippet}
+      </Tip>
+    {/if}
+    {#if canEdit}
+      <Tip label={transcriptWords.editMessage}>
+        {#snippet children(tip)}
+          <Button
+            {...tip}
+            aria-label={transcriptWords.editMessage}
+            onclick={startEditing}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <IconPenLine aria-hidden="true" />
+          </Button>
+        {/snippet}
+      </Tip>
+    {/if}
+    {#if canFork}
+      <Tip label={transcriptWords.forkFromHere}>
+        {#snippet children(tip)}
+          <Button
+            {...tip}
+            aria-busy={forkPending || undefined}
+            aria-disabled={forkPending || undefined}
+            aria-label={transcriptWords.forkFromHere}
+            onclick={whileIdle<MouseEvent>(
+              () => forkPending,
+              (event) =>
+                branch(
+                  event.currentTarget instanceof HTMLElement
+                    ? event.currentTarget
+                    : null
+                )
+            )}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <PendingContent
+              failed={!!editError}
+              icon={IconFork}
+              pending={forkPending}
+            />
+          </Button>
+        {/snippet}
+      </Tip>
+    {/if}
+  </span>
+{/snippet}
+
+<!-- Where nothing hovers: one handle on the speaker line, at rest, to the
+     same actions in the kit's bottom sheet. -->
+{#snippet handle()}
+  <MessageSheet
+    copy={canCopy ? copyWords : undefined}
+    edit={canEdit ? startEditing : undefined}
+    fork={canFork ? branch : undefined}
+    bind:open={sheetOpen}
+  />
+{/snippet}
+
 {#if hidden}
   <!-- A successful result has no line; an empty assistant frame carried only a tool call. -->
 {:else if kind === "user"}
@@ -658,7 +795,6 @@
     {grouped}
     {runsOn}
     you
-    {@attach touchActions}
     {@attach land(() => (grouped ? undefined : sent), {
       ms: dur("--dur-pop"),
       uniform: true,
@@ -666,6 +802,8 @@
   >
     {#if !grouped}
       <Who
+        actions={strip && !coarse.current ? actions : undefined}
+        end={strip && coarse.current ? handle : undefined}
         name="You"
         note={whoNote}
         noteLive={whoNote === SENDING}
@@ -673,11 +811,16 @@
         you
       />
     {/if}
-    <Well {grouped} {lifted} {runsOn} {@attach openWell}>
-      <!-- Holds the grouped row's clock, floated into the first line.
-           Sending and queued: the words and their header at reduced
-           presence, a note instead of a clock. The well stays at full
-           strength, so the run reads as one surface. -->
+    <Well
+      data-selected={selected || undefined}
+      {grouped}
+      {lifted}
+      {runsOn}
+      {@attach openWell}
+    >
+      <!-- Sending and queued: the words and their line at reduced presence,
+           a note instead of a clock. The well stays at full strength, so the
+           run reads as one surface. -->
       <div
         data-slot="words"
         class="flow-root group-data-ghost/turn:opacity-(--ghost-presence) motion-safe:transition-[opacity] motion-safe:duration-(--dur-menu) motion-safe:ease-out"
@@ -688,16 +831,23 @@
         })}
       >
         {#if grouped}
-          <Who
-            grouped
-            name="You"
-            note={whoNote}
-            noteLive={whoNote === SENDING}
-            timestamp={ghost || failed || waiting
-              ? undefined
-              : message.timestamp}
-            you
-          />
+          <!-- A later part's own line, on the hairline from the part above:
+               its strip and its clock, so a run carries every message's
+               time and each part its own actions. -->
+          <div data-slot="part-line" class="flex justify-end mb-space-2">
+            <Who
+              actions={strip && !coarse.current ? actions : undefined}
+              end={strip && coarse.current ? handle : undefined}
+              grouped
+              name="You"
+              note={whoNote}
+              noteLive={whoNote === SENDING}
+              timestamp={ghost || failed || waiting
+                ? undefined
+                : message.timestamp}
+              you
+            />
+          </div>
         {/if}
         <!-- Folds to the tag above while its words are in the composer, and
              opens to take them back; the words hide while they fly. -->
@@ -807,6 +957,38 @@
             {/each}
           </div>
         {/if}
+        {#if queueRow}
+          <!-- A queued message's way back, at rest under its words (never a
+               hover's): Edit in place lifts its words into the composer,
+               Remove from queue takes it back before the session reads it. -->
+          <div
+            data-slot="recovery"
+            class="flex flex-wrap gap-space-1 mt-space-2 min-w-0"
+          >
+            {#if queued}
+              <Button
+                data-slot="action"
+                disabled={removePending}
+                onclick={() => askLift(message)}
+                size="xs"
+                variant="ghost"
+              >
+                {transcriptWords.editInPlace}
+              </Button>
+            {/if}
+            {#if removable}
+              <Button
+                data-slot="action"
+                label={transcriptWords.removeFromQueue}
+                onclick={remove}
+                pending={removePending}
+                pendingLabel="Removing…"
+                size="xs"
+                variant="ghost"
+              />
+            {/if}
+          </div>
+        {/if}
         <!-- Mirrors Prompt.svelte's own refusal line ("Couldn't send that
              answer.") — a failed send is a sibling of a failed answer, not a
              new dialect of failure. The grid-rows wrapper is what animates a
@@ -851,188 +1033,123 @@
                   <span class="mark-cell"><LiveDot /></span>
                 {/if}<span class="min-w-0">{line}</span>
               </p>
-              <!-- The way back, right under why, and only here: recovery is
-                   read and acted on, never a hover's. While what refused it
-                   holds (send-recovery.svelte.ts), what fixes it; otherwise
-                   Send again, and Edit message where this tab still holds the
-                   payload to put back in the composer. Its actions wrap under
-                   the reason rather than run past the well; a link among them
-                   is drawn as its siblings are. -->
-              {#if shownRecovery?.holds ? shownRecovery.actions.length > 0 : recoverable || retried || editable}
-                <div
-                  data-slot="actions"
-                  class="flex flex-wrap gap-space-2 mt-space-2 min-w-0"
-                >
-                  {#if shownRecovery?.holds}
-                    {#each shownRecovery.actions as action, i (i)}
-                      {#if action.kind === "link"}
-                        <Button
-                          data-slot="action"
-                          class="max-w-full"
-                          href={action.href}
-                          size="xs"
-                          variant="outline"
-                          width="shrink"
-                          ><span
-                            data-slot="message-row-label"
-                            class="overflow-clip text-ellipsis whitespace-nowrap"
-                            >{action.label}</span
-                          ></Button
-                        >
-                      {:else if action.kind === "move"}
-                        {@const going =
-                          !!target && movingTo(target) === action.account.id}
-                        <Button
-                          data-slot="action"
-                          onclick={() => moveAndSend(action.account.id)}
-                          pending={going}
-                          size="xs"
-                          variant="outline"
-                        >
-                          <!-- An account's own dot, as its menu draws it
-                               (AccountSubmenu). -->
-                          <i
-                            data-slot="dot"
-                            aria-hidden="true"
-                            class="flex-none size-space-2 rounded-pill bg-(--c)"
-                            data-box
-                            style:--c={hueVar(action.account.hue)}
-                          ></i>
-                          <PendingContent
-                            label={`Move to ${nameOf(action.account)}`}
-                            pending={going}
-                            pendingLabel={`Moving to ${nameOf(action.account)}…`}
-                          />
-                        </Button>
-                      {:else if action.kind === "mode"}
-                        <Button
-                          data-slot="action"
-                          aria-expanded={modeOpen}
-                          aria-haspopup="dialog"
-                          label="Choose a mode"
-                          onclick={() => askMode("send", modeButton, action)}
-                          pending={modePending}
-                          pendingLabel="Starting it…"
-                          size="xs"
-                          variant="outline"
-                          bind:ref={modeButton}
-                        />
-                      {:else}
-                        <Button
-                          data-slot="action"
-                          label="Start a new session"
-                          onclick={() => startWith(action)}
-                          pending={starting}
-                          pendingLabel="Opening…"
-                          size="xs"
-                          variant="outline"
-                        />
-                      {/if}
-                    {/each}
-                  {:else}
-                    {#if recoverable || retried}
+              <!-- The way back, right under why, at rest, as text buttons:
+                   recovery is read and acted on, never a hover's. While what
+                   refused it holds (send-recovery.svelte.ts), what fixes it;
+                   otherwise Retry and Edit; and Remove, which takes it out
+                   of the conversation. Its actions wrap under the reason
+                   rather than run past the well. -->
+              <div
+                data-slot="actions"
+                class="flex flex-wrap gap-space-1 mt-space-2 min-w-0"
+              >
+                {#if shownRecovery?.holds}
+                  {#each shownRecovery.actions as action, i (i)}
+                    {#if action.kind === "link"}
                       <Button
                         data-slot="action"
-                        {failed}
-                        label={commonWords.sendAgain}
-                        onclick={tryAgain}
-                        pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending again…"
+                        class="max-w-full"
+                        href={action.href}
                         size="xs"
-                        variant="outline"
+                        variant="ghost"
+                        width="shrink"
+                        ><span
+                          data-slot="message-row-label"
+                          class="overflow-clip text-ellipsis whitespace-nowrap"
+                          >{action.label}</span
+                        ></Button
+                      >
+                    {:else if action.kind === "move"}
+                      {@const going =
+                        !!target && movingTo(target) === action.account.id}
+                      <Button
+                        data-slot="action"
+                        onclick={() => moveAndSend(action.account.id)}
+                        pending={going}
+                        size="xs"
+                        variant="ghost"
+                      >
+                        <!-- An account's own dot, as its menu draws it
+                             (AccountSubmenu). -->
+                        <i
+                          data-slot="dot"
+                          aria-hidden="true"
+                          class="flex-none size-space-2 rounded-pill bg-(--c)"
+                          data-box
+                          style:--c={hueVar(action.account.hue)}
+                        ></i>
+                        <PendingContent
+                          label={`Move to ${nameOf(action.account)}`}
+                          pending={going}
+                          pendingLabel={`Moving to ${nameOf(action.account)}…`}
+                        />
+                      </Button>
+                    {:else if action.kind === "mode"}
+                      <Button
+                        data-slot="action"
+                        aria-expanded={modeOpen}
+                        aria-haspopup="dialog"
+                        label="Choose a mode"
+                        onclick={() => askMode("send", modeButton, action)}
+                        pending={modePending}
+                        pendingLabel="Starting it…"
+                        size="xs"
+                        variant="ghost"
+                        bind:ref={modeButton}
+                      />
+                    {:else}
+                      <Button
+                        data-slot="action"
+                        label="Start a new session"
+                        onclick={() => startWith(action)}
+                        pending={starting}
+                        pendingLabel="Opening…"
+                        size="xs"
+                        variant="ghost"
                       />
                     {/if}
-                    {#if editable || (retried && heldEdit)}
-                      <Button
-                        data-slot="action"
-                        disabled={retrying}
-                        onclick={edit}
-                        size="xs"
-                        variant="outline"
-                      >
-                        {transcriptWords.editMessage}
-                      </Button>
-                    {/if}
+                  {/each}
+                {:else}
+                  {#if recoverable || retried}
+                    <Button
+                      data-slot="action"
+                      disabled={removePending}
+                      {failed}
+                      label={transcriptWords.retrySend}
+                      onclick={tryAgain}
+                      pending={retrying || (retried && !failed)}
+                      pendingLabel="Sending again…"
+                      size="xs"
+                      variant="ghost"
+                    />
                   {/if}
-                </div>
-              {/if}
+                  {#if editable || message.state === "failed" || (retried && heldEdit)}
+                    <Button
+                      data-slot="action"
+                      disabled={retrying || removePending}
+                      onclick={edit}
+                      size="xs"
+                      variant="ghost"
+                    >
+                      {transcriptWords.editFailed}
+                    </Button>
+                  {/if}
+                {/if}
+                {#if failed && !retrying}
+                  <Button
+                    data-slot="action"
+                    label={transcriptWords.removeFailed}
+                    onclick={remove}
+                    pending={removePending}
+                    pendingLabel="Removing…"
+                    size="xs"
+                    variant="ghost"
+                  />
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
-        {#if hasActions && !editing && !wordsAway}
-          <!-- The message's actions, under it at its end (as Claude.ai and
-               ChatGPT stand a person's): Copy, Edit, Fork from here, one
-               ghost icon style. The row always takes its room, so showing it
-               moves nothing and covers nothing, the header's clock and note
-               included. Shown under the pointer and for keyboard focus,
-               under a finger once the message is tapped, and held while one
-               of its actions runs. -->
-          <div
-            data-message-actions
-            data-slot="actions"
-            data-pending={forkPending || copying || undefined}
-            data-shown={actionsShown || undefined}
-            style:--btn-icon="var(--icon-md)"
-            class="flex flex-wrap justify-end gap-space-1 mt-space-1 -me-space-2 opacity-0 pointer-events-none motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto has-focus-visible:opacity-100 has-focus-visible:pointer-events-auto data-pending:opacity-100 data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
-          >
-            {#if canCopy}
-              <Tip label={transcriptWords.copyMessage}>
-                {#snippet children(tip)}
-                  <Button
-                    {...tip}
-                    aria-busy={copying || undefined}
-                    aria-label={transcriptWords.copyMessage}
-                    onclick={whileIdle<MouseEvent>(() => copying, copyWords)}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
-                    <PendingContent
-                      failed={copyFailed}
-                      icon={IconCopy}
-                      pending={copying}
-                    />
-                  </Button>
-                {/snippet}
-              </Tip>
-            {/if}
-            {#if editsHere}
-              <Tip label={transcriptWords.editMessage}>
-                {#snippet children(tip)}
-                  <Button
-                    {...tip}
-                    aria-label={transcriptWords.editMessage}
-                    onclick={startEditing}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
-                    <IconPenLine aria-hidden="true" />
-                  </Button>
-                {/snippet}
-              </Tip>
-            {/if}
-            {#if canFork}
-              <Tip label={transcriptWords.forkFromHere}>
-                {#snippet children(tip)}
-                  <Button
-                    {...tip}
-                    aria-busy={forkPending || undefined}
-                    aria-disabled={forkPending || undefined}
-                    aria-label={transcriptWords.forkFromHere}
-                    onclick={whileIdle<MouseEvent>(() => forkPending, branch)}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
-                    <PendingContent
-                      failed={!!editError}
-                      icon={IconFork}
-                      pending={forkPending}
-                    />
-                  </Button>
-                {/snippet}
-              </Tip>
-            {/if}
-          </div>
-        {/if}
       </div>
     </Well>
   </Turn>

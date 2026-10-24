@@ -104,7 +104,7 @@
     aria-label="Name a session, thread or machine"
     role="listbox"
     {@attach reflow()}
-    {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
+    {@attach highlight({ rows: "[data-find-row]", hovered: "[data-active]" })}
   >
     {#if mention.answer.state === "unreached"}
       <p

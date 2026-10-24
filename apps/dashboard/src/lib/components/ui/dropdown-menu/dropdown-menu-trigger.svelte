@@ -25,7 +25,7 @@
       },
       look: {
         attach:
-          "hit-edge-hair grid size-c-composer-field place-items-center rounded-composer-control border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
+          "hit-edge-hair grid size-c-composer-field place-items-center concentric-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
       },
     },
   });

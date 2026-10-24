@@ -4075,14 +4075,18 @@ export interface CommandIntents {
   /** `replaces`: the failed send this one retries, which the hub then retires. */
   send: { text: string; extras?: SendExtras; replaces?: string };
   /**
-   * `replacementId`: the id the replacement goes out under once the queued
-   * send is withdrawn, known before it goes, so the words can fly into its row.
+   * Takes back a queued or failed send. `replace`: the words that go in its
+   * place once it is withdrawn (a queued message's edit), under
+   * `replacementId`, known before it goes so the words can fly into its row;
+   * none, the message is removed (Remove from queue, a failed send's Remove).
    */
   "send.withdraw": {
     sendId: string;
-    extras: SendExtras;
-    replacement: string;
-    replacementId: string;
+    replace?: {
+      extras: SendExtras;
+      replacement: string;
+      replacementId: string;
+    };
   };
   "set-effort": { effort: EffortLevel };
   "set-model": { model: string };
@@ -4668,15 +4672,58 @@ export async function replaceQueued(
     "send.withdraw",
     {
       sendId: message.id,
-      extras: {
-        attachments: resentAttachments(message),
-        images,
+      replace: {
+        extras: {
+          attachments: resentAttachments(message),
+          images,
+        },
+        replacement,
+        replacementId,
       },
-      replacement,
-      replacementId,
     }
   );
   return { withdraw, replacement: replacementId };
+}
+
+/**
+ * Takes a queued send out of the queue, or a failed send out of the
+ * conversation, with nothing in its place. Returns the withdraw's command id,
+ * whose record says how it went: `applied` with the outcome `withdrawn` (its
+ * row folds away on every screen), or the session read it first.
+ */
+export function removeSend(message: Message): string {
+  return submitCommand(
+    message.instanceId,
+    session(message.instanceId).machineId,
+    "send.withdraw",
+    { sendId: message.id }
+  );
+}
+
+/**
+ * Lets go of a send that never reached the hub, from this tab's outbox and
+ * its row: nothing of it was ever said. Never throws.
+ */
+export function discardUnreached(commandId: string): void {
+  const entry = sendOutbox.get(commandId);
+  if (entry) {
+    sendOutbox.delete(commandId);
+    outboxVersion += 1;
+    dropSendEcho(entry.instanceId, commandId);
+  }
+  forgetSend(commandId).catch(() => undefined);
+}
+
+/**
+ * A failed send's words, texts, files and pictures back in its session's
+ * composer to be written again, and the failed send taken out of the
+ * conversation: the composer holds it now. Its pictures are read from the
+ * hub first; one that can't be read throws, and nothing moves.
+ */
+export async function editFailed(message: Message): Promise<string> {
+  const { text, extras } = await failedSendPayload(message);
+  restoreComposer(message.instanceId, text, extras);
+  return removeSend(message);
 }
 
 /** The yes-or-no capabilities a harness reports (`HarnessCapabilities`). */
@@ -4819,8 +4866,7 @@ function streamEffectsFor<K extends CommandKind>(
   const target = session(instanceId);
   switch (kind) {
     case "send.withdraw": {
-      const { sendId, extras, replacement, replacementId } =
-        intent as CommandIntents["send.withdraw"];
+      const { sendId, replace } = intent as CommandIntents["send.withdraw"];
       return {
         settled: (stage) => {
           if (
@@ -4834,13 +4880,19 @@ function streamEffectsFor<K extends CommandKind>(
               take(target, block as TranscriptBlock, "removed");
               place(target);
             }
-            submitCommand(
-              instanceId,
-              target.machineId,
-              "send",
-              { text: replacement, extras, replaces: sendId },
-              replacementId
-            );
+            if (replace) {
+              submitCommand(
+                instanceId,
+                target.machineId,
+                "send",
+                {
+                  text: replace.replacement,
+                  extras: replace.extras,
+                  replaces: sendId,
+                },
+                replace.replacementId
+              );
+            }
           }
         },
       };

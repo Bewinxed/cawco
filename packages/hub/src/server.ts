@@ -21514,6 +21514,13 @@ export const createServer = (
       if (row.state === "cancelled") {
         return "withdrawn";
       }
+      // A failed send the person removes (its row's Remove, or Edit taking
+      // its words back to the composer): no harness holds it, so the record
+      // alone says it is gone, and no screen draws it again.
+      if (row.state === "failed") {
+        changeSend(row, { state: "cancelled" });
+        return "withdrawn";
+      }
       if (row.state !== "pending") {
         return "started";
       }

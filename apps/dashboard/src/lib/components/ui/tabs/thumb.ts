@@ -12,16 +12,16 @@ import { tv } from "#lib/utils.js";
  * still owes (`data-pending`) breathes its thumb, where motion is welcome.
  * The segment is a mark line, so its words stand on their x-height. The
  * thumb and the segments are concentric with the groove (DESIGN.md, The
- * Concentric Rule): its 10px less its 3px pad, `radius-well`.
+ * Concentric Rule; design.css `concentric-in`): its 10px less its 3px pad.
  */
 export const segmentedVariants = tv({
   slots: {
     group:
-      "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad",
+      "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad concentric-in r-inset-c-segmented-pad r-outer-md",
     thumb:
-      "pointer-events-none absolute start-0 top-0 origin-top-left rounded-well bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
+      "pointer-events-none absolute start-0 top-0 origin-top-left concentric-well bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
     segment:
-      "relative inline-flex h-c-btn-h-sm items-center justify-center gap-c-segment-gap rounded-well px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
+      "relative inline-flex h-c-btn-h-sm items-center justify-center gap-c-segment-gap concentric-well px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
 });
 

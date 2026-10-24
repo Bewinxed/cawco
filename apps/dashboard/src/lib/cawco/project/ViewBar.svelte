@@ -135,7 +135,6 @@
         "group flex items-center gap-space-2 p-c-composer-inset hit-gap-x-space-2 coarse:gap-space-3 coarse:hit-gap-x-space-3",
     })}
     data-bar
-    style:--bar-control-radius="var(--composer-control-r)"
     bind:this={shell}
   >
     <Select.Root
@@ -193,7 +192,7 @@
     {@render tools?.()}
     {#if needs > 0}
       <NeedsYouChip
-        class="touch-hit group-data-bar:h-c-composer-field group-data-bar:rounded-(--bar-control-radius)"
+        class="touch-hit group-data-bar:h-c-composer-field group-data-bar:concentric-xs"
         count={needs}
         on={needsOn}
         ontoggle={ontoggleneeds}

@@ -552,6 +552,30 @@
   }
 }
 
+/* The Concentric Rule as one mechanism. A rounded container a highlight
+   stands in declares its outer radius and the inset to the rows, controls or
+   parts it holds (`concentric-in r-outer-lg r-inset-c-inset-floating`), and
+   works out the inner radius once: outer less inset, never under 0. Its
+   rows take it (`concentric-<own radius>`), corner by corner, and keep their
+   own radius token where no rounded container holds them. A nested
+   container declares its own and its rows take that one. The hover ghost and
+   the selection pill measure a row's four corners (highlight.svelte.ts), and
+   the focus ring follows the row's own radius, so all three take its
+   contour; a row opened at an edge (a run's part, Well) squares those
+   corners itself. */
+@utility concentric-in {
+  --r-inner: max(0px, calc(var(--r-outer) - var(--r-inset)));
+}
+@utility r-outer-* {
+  --r-outer: --value(--radius-*);
+}
+@utility r-inset-* {
+  --r-inset: --value(--spacing-*);
+}
+@utility concentric-* {
+  border-radius: var(--r-inner, --value(--radius-*));
+}
+
 /* One side's border taken away whole, as `border-bottom: 0` takes it: no
    width, no style, the colour back to currentcolor. Tailwind's `border-b-0`
    only zeroes the width, leaving the side solid in the base border colour;
@@ -1156,12 +1180,14 @@
   );
 }
 /* A well's surface easing its edge and radius as it lands, its opacity on
-   the drawer's curve. */
+   the drawer's curve, and its fill stepping aside for the hover ghost or the
+   selection pill under it on the ghost's own clock. */
 @utility transition-well-surface {
   transition:
     border-color var(--dur-pop) var(--ease-out),
     border-radius var(--dur-pop) var(--ease-out),
-    opacity var(--dur-panel) var(--ease-drawer);
+    opacity var(--dur-panel) var(--ease-drawer),
+    background-color var(--dur-control) var(--ease-out);
 }
 /* Tiles as many to a row as fit at their least width, a lone tile no wider
    than its row (Limits, a project's spend). */

@@ -376,6 +376,9 @@
   --spacing-c-sidebar-w: var(--c-sidebar-w);
   --spacing-c-composer-field: var(--c-composer-field);
   --spacing-c-composer-inset: var(--c-composer-inset);
+  --spacing-c-inset-composer: var(--c-inset-composer);
+  --spacing-c-floating-pad: var(--c-floating-pad);
+  --spacing-c-inset-floating: var(--c-inset-floating);
   --spacing-c-composer-panel: var(--c-composer-panel);
   --spacing-c-new-project-field-w: var(--c-new-project-field-w);
   --spacing-c-composer-w: var(--c-composer-w);
@@ -633,7 +636,6 @@
   --radius-well-r: var(--well-r);
   --radius-row-mark: var(--row-mark-r);
   --radius-tab-icon: var(--tab-icon-r);
-  --radius-composer-control: var(--composer-control-r);
   --radius-glide-row: var(--glide-row-r);
   --radius-inner-well: var(--inner-well-r);
 

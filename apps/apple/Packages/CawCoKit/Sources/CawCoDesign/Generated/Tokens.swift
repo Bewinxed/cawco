@@ -524,8 +524,6 @@ public enum Radius {
     public static let rowMarkR: Double = 4.6
     /// The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side.
     public static let tabIconR: Double = 4
-    /// A control standing in a composer shell (Attach, Send/Stop, a view bar's controls): concentric with the shell (The Concentric Rule), its 12px less its inset and its 1px edge.
-    public static let composerControlR: Double = 4
     /// A row standing at a glide popover's own inset (the new-session form's popovers, `roomy`): concentric with the surface (The Concentric Rule), its 12px less its space-2 pad and its 1px edge.
     public static let glideRowR: Double = 4
     /// A transcript's well inside a row (a subagent's, an inline transcript's): concentric round its rows (The Concentric Rule), their radius-xs plus its space-1 padding.
@@ -675,6 +673,12 @@ public enum Size {
     /// The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot.
     public static let cComposerField: Double = 34
     public static let cComposerInset: Double = 7
+    /// How far in from a composer shell's outer edge its controls stand (Attach, Send/Stop, a view bar's controls): its inset and its 1px edge. The shell declares it with its 12px (design.css `concentric-in`), and its controls take 12px less it (The Concentric Rule).
+    public static let cInsetComposer: Double = 8
+    /// A floating surface's padding round its rows (a menu, a select, a popover, the bottom sheet's rows).
+    public static let cFloatingPad: Double = 6
+    /// How far in from a floating surface's outer edge its rows stand: its 1px edge and its pad. The surface declares it with its 12px (design.css `concentric-in`), and its rows take 12px less it, 5px (The Concentric Rule).
+    public static let cInsetFloating: Double = 7
     /// How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach.
     public static let cAskDiffShare: Double = 0.4
     public static let cComposerPanel: Double = 50

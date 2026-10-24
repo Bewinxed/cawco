@@ -800,12 +800,33 @@ public enum Words {
         /// The composer's send.
         public static let sendMessage = "Send message"
 
-        /// A message's actions, under it.
+        /// A message's actions, on its speaker line.
         public static let copyMessage = "Copy message"
 
         public static let editMessage = "Edit message"
 
         public static let forkFromHere = "Fork from here"
+
+        /// A touch screen's handle to them, and the sheet it opens with its rows.
+        public static let messageActions = "Message actions"
+
+        public static let messageSheet = "Message"
+
+        public static let copyRow = "Copy"
+
+        public static let editRow = "Edit"
+
+        /// A queued message's way back, at rest in its well.
+        public static let editInPlace = "Edit in place"
+
+        public static let removeFromQueue = "Remove from queue"
+
+        /// A failed send's way back, at rest in its well.
+        public static let retrySend = "Retry"
+
+        public static let editFailed = "Edit"
+
+        public static let removeFailed = "Remove"
 
         /// An edit's controls.
         public static let cancelEdit = "Cancel edit"

@@ -12,10 +12,22 @@ export const transcriptWords = {
   transcript: "Session transcript",
   /** The composer's send. */
   sendMessage: "Send message",
-  /** A message's actions, under it. */
+  /** A message's actions, on its speaker line. */
   copyMessage: "Copy message",
   editMessage: "Edit message",
   forkFromHere: "Fork from here",
+  /** A touch screen's handle to them, and the sheet it opens with its rows. */
+  messageActions: "Message actions",
+  messageSheet: "Message",
+  copyRow: "Copy",
+  editRow: "Edit",
+  /** A queued message's way back, at rest in its well. */
+  editInPlace: "Edit in place",
+  removeFromQueue: "Remove from queue",
+  /** A failed send's way back, at rest in its well. */
+  retrySend: "Retry",
+  editFailed: "Edit",
+  removeFailed: "Remove",
   /** An edit's controls. */
   cancelEdit: "Cancel edit",
   sendEdited: "Send edited message",

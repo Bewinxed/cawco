@@ -96,7 +96,13 @@ const twMergeConfig = {
       // app.css's utilities for declarations Tailwind writes none for. Those
       // that set a property tailwind-merge has a group for join it, so they
       // replace a rival as it would; the rest are a group each.
-      rounded: ["rounded-inherit"],
+      // design.css's Concentric Rule (`concentric-in`): a row's
+      // `concentric-<own radius>` sets its radius as `rounded-*` does; a
+      // container's outer radius and inset each set a property of their own.
+      rounded: ["rounded-inherit", { concentric: keys("radius") }],
+      "concentric-in": ["concentric-in"],
+      "r-outer": [{ "r-outer": keys("radius") }],
+      "r-inset": [{ "r-inset": keys("spacing") }],
       "font-family": ["font-family-inherit"],
       gap: ["gap-inherit"],
       "color-scheme": ["scheme-inherit"],
@@ -160,6 +166,9 @@ const twMergeConfig = {
   },
 };
 const twMerge = extendTailwindMerge<
+  | "concentric-in"
+  | "r-outer"
+  | "r-inset"
   | "animation-duration"
   | "animation-delay"
   | "type-role"

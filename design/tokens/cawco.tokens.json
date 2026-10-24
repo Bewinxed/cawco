@@ -4061,19 +4061,6 @@
       },
       "$description": "The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side."
     },
-    "composer-control-r": {
-      "$type": "dimension",
-      "$value": {
-        "value": 4,
-        "unit": "px"
-      },
-      "$description": "A control standing in a composer shell (Attach, Send/Stop, a view bar's controls): concentric with the shell (The Concentric Rule), its 12px less its inset and its 1px edge.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc({radius.radius-lg} - {size.c-composer-inset} - {size.border-width})"
-        }
-      }
-    },
     "glide-row-r": {
       "$type": "dimension",
       "$value": {
@@ -4733,6 +4720,40 @@
       "$type": "dimension",
       "$value": "{space.space-2}"
     },
+    "c-inset-composer": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "How far in from a composer shell's outer edge its controls stand (Attach, Send/Stop, a view bar's controls): its inset and its 1px edge. The shell declares it with its 12px (design.css `concentric-in`), and its controls take 12px less it (The Concentric Rule).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-composer-inset} + {size.border-width})"
+        }
+      }
+    },
+    "c-floating-pad": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "A floating surface's padding round its rows (a menu, a select, a popover, the bottom sheet's rows)."
+    },
+    "c-inset-floating": {
+      "$type": "dimension",
+      "$value": {
+        "value": 7,
+        "unit": "px"
+      },
+      "$description": "How far in from a floating surface's outer edge its rows stand: its 1px edge and its pad. The surface declares it with its 12px (design.css `concentric-in`), and its rows take 12px less it, 5px (The Concentric Rule).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.border-width} + {size.c-floating-pad})"
+        }
+      }
+    },
     "c-ask-diff-share": {
       "$type": "number",
       "$value": 0.4,
@@ -4980,7 +5001,10 @@
       },
       "$description": "The most an inline chip's label stands across (a session, a pin, a decision card, an artifact, a task, a plan, any thing named in running text): past it the label ends in an ellipsis, its whole name in the chip's accessible name and its peek or card. An absolute length, never a percentage, so it bounds the chip's min-content too: in an auto-sized grid or flex track a percentage counts for nothing, and a long name claimed its whole nowrap width (a 390 page scrolled 660px sideways). 32ch: the most a line of chat reads as one name. Web only.",
       "$extensions": {
-        "dev.cawco": { "platforms": ["web"], "css": "32ch" }
+        "dev.cawco": {
+          "platforms": ["web"],
+          "css": "32ch"
+        }
       }
     },
     "c-peek-glyph": {

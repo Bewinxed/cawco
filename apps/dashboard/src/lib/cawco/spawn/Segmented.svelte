@@ -44,7 +44,7 @@
 <div
   aria-label={label}
   class={[
-    "relative grid grid-cols-(--cols) gap-space-row rounded-md bg-surface-recess-deep p-space-1",
+    "relative grid grid-cols-(--cols) gap-space-row rounded-md concentric-in r-outer-md r-inset-space-1 bg-surface-recess-deep p-space-1",
     className,
   ]}
   data-segmented-size={size}
@@ -57,7 +57,7 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-space-1 start-space-1 w-(--thumb-w) translate-x-(--thumb-x) rounded-sm bg-surface-lift shadow-raised motion-safe:transition-[translate] motion-safe:duration-(--dur-pop) motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-y-space-1 start-space-1 w-(--thumb-w) translate-x-(--thumb-x) concentric-sm bg-surface-lift shadow-raised motion-safe:transition-[translate] motion-safe:duration-(--dur-pop) motion-safe:ease-in-out"
     style:--thumb-w={"calc((100% - 2 * var(--space-1) - (var(--n) - 1) * var(--space-row)) / var(--n))"}
     style:--thumb-x={`calc(${index} * (100% + var(--space-row)))`}
   ></span>
@@ -67,7 +67,7 @@
       data-slot="tab"
       aria-checked={item.value === value}
       class={[
-        "press-tint transition-control relative inline-flex select-none min-w-0 items-center justify-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong [&_svg]:flex-none",
+        "press-tint transition-control relative inline-flex select-none min-w-0 items-center justify-center gap-space-2 concentric-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong [&_svg]:flex-none",
         size === "md" ? "h-c-btn-h-sm" : "h-c-btn-h-xs max-phone:h-c-btn-h",
       ]}
       onclick={() => onchange(item.value)}

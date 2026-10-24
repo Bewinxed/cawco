@@ -790,7 +790,7 @@
     aria-label="Results"
     role="listbox"
     {@attach reflow()}
-    {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
+    {@attach highlight({ rows: "[data-find-row]", hovered: "[data-active]" })}
   >
     {#each items as item (item.key)}
       {@render item_(item)}
@@ -834,7 +834,7 @@
     aria-label="Waiting for you"
     role="listbox"
     {@attach reflow()}
-    {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
+    {@attach highlight({ rows: "[data-find-row]", hovered: "[data-active]" })}
   >
     {#if finder.waiting.state === "ok" && waitingCount === 0}
       <div

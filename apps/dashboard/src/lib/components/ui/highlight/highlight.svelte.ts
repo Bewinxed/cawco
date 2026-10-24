@@ -144,6 +144,26 @@ interface Box {
   y: number;
 }
 
+/**
+ * A row's four corners as one `border-radius`, each corner its own (The
+ * Concentric Rule): a row concentric in its container (design.css
+ * `concentric-in`) takes the container's radius less its inset at each
+ * corner, and a row opened at an edge is square there, so the ghost and the
+ * pill drawn from it take the row's contour. Read corner by corner, never
+ * from the shorthand, which an engine may serialise as one value.
+ */
+const cornersOf = (style: CSSStyleDeclaration): string => {
+  const corners = [
+    style.borderTopLeftRadius,
+    style.borderTopRightRadius,
+    style.borderBottomRightRadius,
+    style.borderBottomLeftRadius,
+  ].map((corner) => corner.split(" "));
+  const across = corners.map(([x = "0px"]) => x).join(" ");
+  const down = corners.map(([x = "0px", y = x]) => y).join(" ");
+  return across === down ? across : `${across} / ${down}`;
+};
+
 const layer = (slot: string, className: string) => {
   const span = document.createElement("span");
   span.className = className;
@@ -360,7 +380,7 @@ export function highlight(options: HighlightOptions) {
     };
     const boxOf = (row: HTMLElement): Box | undefined => {
       const at = placeOf(row);
-      return at && { ...at, r: getComputedStyle(row).borderRadius };
+      return at && { ...at, r: cornersOf(getComputedStyle(row)) };
     };
     /** A row's box, if it is shown at all. */
     const shownBoxOf = (row: HTMLElement) =>

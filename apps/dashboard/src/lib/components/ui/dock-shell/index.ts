@@ -7,8 +7,9 @@ import { tv } from "#lib/utils.js";
  * page's note, the project's views). The composer glass (the panel material
  * at the base blur) so the page shows faintly under it; the opaque raised
  * surface where transparency is reduced (DESIGN.md, Materials). Its inset
- * and its row are its caller's.
+ * and its row are its caller's. Its controls are concentric with it
+ * (design.css `concentric-in`): its 12px less their inset and its edge.
  */
 export const dockShellVariants = tv({
-  base: "reduced-transparency:backdrop-filter-none rounded-lg border border-border-control bg-material-panel shadow-tile backdrop-blur-(--material-blur) backdrop-saturate-(--material-saturate) reduced-transparency:bg-surface-raised",
+  base: "reduced-transparency:backdrop-filter-none rounded-lg border border-border-control bg-material-panel shadow-tile backdrop-blur-(--material-blur) backdrop-saturate-(--material-saturate) concentric-in r-inset-c-inset-composer r-outer-lg reduced-transparency:bg-surface-raised",
 });
