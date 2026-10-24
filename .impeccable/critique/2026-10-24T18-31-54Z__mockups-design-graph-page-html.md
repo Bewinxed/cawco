@@ -39,7 +39,7 @@ Target: .mockups/design-graph/page.html (round 29, after the eight review fixes)
 The round now holds the house rules it broke (boxed icons, a coral row, doors over text) and every motion proves on one clock. The single biggest opportunity is the well's two door bands: right in principle, but they cost 56px of a 233px phone well whether a door stands there or not.
 
 ## What's Working
-- The arc is one object at three lengths: 1.5px quiet at rest, 3px strong ink on reach (8.17:1 against the panel's edge ink), coral on drag; the hand reads where it is.
+- The arc is one object at three lengths: 1.5px quiet at rest, 3px strong ink on reach (9.96:1 by day and 9.3:1 at night against the panel's edge ink), coral on drag; the hand reads where it is.
 - The popover's box is measured to start on the fact's own rect and fold back into it; the source hides meanwhile, so the screen never shows two.
 - Doors now live in the well's own bands: nothing of the graph is painted there (sampled every 4px), no slab text under a door at start, middle and end of the scroll.
 
