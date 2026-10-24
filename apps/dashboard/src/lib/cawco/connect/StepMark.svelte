@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * One step's status glyph, Solar's bare glyphs: a check done, refresh
-   * current (breathing, as live work does), a cross failed, stop stopped,
-   * an empty ring not reached yet. A change of state is an
+   * One step's status glyph, each Solar's without its circle (The Bare Glyph
+   * Rule): check-circle done, refresh-circle current (breathing, as live
+   * work does), close-circle failed, stop-circle stopped, record-circle not
+   * reached yet. A change of state is an
    * icon swap in its one cell (`icon-swap`, 120ms): the old glyph gives way
    * as the new one arrives from 0.92, never a jump. Status is never the hue
    * alone: the glyph's shape says it, and the row's words.

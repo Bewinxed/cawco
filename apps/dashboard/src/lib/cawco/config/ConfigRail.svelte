@@ -104,7 +104,7 @@
             >
               <span
                 data-slot="tile"
-                class="inline-flex items-center justify-center flex-none size-space-6 rounded-xs bg-surface-tile shadow-tile *:size-space-4"
+                class="inline-flex items-center justify-center flex-none size-space-6 *:size-icon-md"
                 style:color={section.hue}><section.icon /></span
               >
               <span

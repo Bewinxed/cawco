@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Solar has no bare minus — every one is enclosed, which double-encloses inside a checkbox.
-  // Drawn like Plus.svelte: 24px grid, 1.5 linear stroke, round caps.
+  // The minus, drawn like Plus.svelte (24px grid, 1.5 linear stroke, round caps),
+  // a step inside Solar's bare linear `minus`, which reaches the grid's edge.
   import type { SVGAttributes } from "svelte/elements";
 
   let { ...rest }: SVGAttributes<SVGSVGElement> = $props();

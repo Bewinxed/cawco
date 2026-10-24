@@ -301,7 +301,7 @@ const BOARD_WITH_FAR: Envelope<InstancesFrame> = {
  */
 let boardFill: string | null = null;
 
-/** A mark's fill as drawn: a session mark's `--mark-bg`, a tree mark's `--fill`. */
+/** A mark's hue as drawn: a session mark's `--mark-ink`, a tree mark's `--fill`. */
 const fillOf = (page: Page, selector: string): Promise<string | null> =>
   page
     .locator(selector)
@@ -309,7 +309,7 @@ const fillOf = (page: Page, selector: string): Promise<string | null> =>
     .evaluate(
       (el) =>
         (el as HTMLElement).style.getPropertyValue("--fill") ||
-        (el as HTMLElement).style.getPropertyValue("--mark-bg") ||
+        (el as HTMLElement).style.getPropertyValue("--mark-ink") ||
         null
     );
 

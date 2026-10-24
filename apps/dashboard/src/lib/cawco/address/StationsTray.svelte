@@ -20,7 +20,7 @@
     IconDot,
     IconError,
     IconExternal,
-    IconNeutral,
+    IconMinusCircle,
     IconSuccess,
   } from "#lib/icons.js";
   import AddressList from "./AddressList.svelte";
@@ -360,7 +360,7 @@
                           class="size-icon-md text-status-fail-ink"
                         />
                       {:else if state === "skipped"}
-                        <IconNeutral
+                        <IconMinusCircle
                           aria-label="Not done"
                           class="size-icon-md text-ink-muted"
                         />

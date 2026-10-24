@@ -29,8 +29,8 @@
 
   /**
    * Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its
-   * Solar duotone glyph: each one a mark on its half-ink body (The Solar
-   * Duotone Rule), never strokes alone beside a filled one.
+   * Solar duotone glyph, bare: none in a container of its own (The Bare
+   * Glyph Rule).
    */
   export const GLYPHS: Record<
     StarterGlyph,

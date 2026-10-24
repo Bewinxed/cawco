@@ -9,7 +9,7 @@ import {
 } from "@cawco/core/browser-gate";
 import { unlayeredRules } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
-import { DRAWN_ICONS } from "@cawco/icons/drawn";
+import { BARE_ICONS } from "@cawco/icons/bare";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -29,13 +29,13 @@ import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
 
 /**
  * unplugin-icons' options, for the app's build and for the optimizer's
- * bundle of the icon barrel alike: Svelte components, and the glyphs CawCo
- * draws itself as the `cawco` collection (`~icons/cawco/<name>`,
- * @cawco/icons drawn.ts) beside Solar's.
+ * bundle of the icon barrel alike: Svelte components, and Solar's icons
+ * without their containers as the `bare` collection
+ * (`~icons/bare/<solar name>`, @cawco/icons bare.ts) beside Solar's own.
  */
 const ICONS = {
   compiler: "svelte",
-  customCollections: { cawco: DRAWN_ICONS },
+  customCollections: { bare: BARE_ICONS },
 } as const;
 
 /**

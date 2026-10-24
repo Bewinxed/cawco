@@ -14,8 +14,7 @@
  *    margins as 1440's foot), never over the head, the empty board's
  *    words or a column; on a phone it is the kit's bottom sheet, full-bleed
  *    on the foot, his head its one header under the grabber, Close at its
- *    trailing edge. The rows: each glyph a mark on its half-ink body, each
- *    reason 4.5:1 on its row, each row's edge 3:1 on the panel; curly
+ *    trailing edge. The rows: each reason 4.5:1 on its row, each row's edge 3:1 on the panel; curly
  *    apostrophes. The shell's Caw card stands shut behind its cut, never
  *    opened by itself. Nothing spills or covers text (journeys/scan.ts), and
  *    the panel's room ends over its composer.
@@ -253,26 +252,12 @@ const readPanel = (page: Page) =>
         ...(panel?.querySelectorAll('[data-slot="starter"]') ?? []),
       ].map((el) => {
         const reason = el.querySelector('[data-slot="starter-reason"]');
-        const glyph = el.querySelector("svg");
-        const view = glyph?.viewBox.baseVal;
-        const whole = (view?.width ?? 24) * (view?.height ?? 24);
-        // Its half-ink body: the largest part drawn at half opacity.
-        const body = Math.max(
-          0,
-          ...[...(glyph?.querySelectorAll("[opacity]") ?? [])]
-            .filter((part) => Number(part.getAttribute("opacity")) === 0.5)
-            .map((part) => {
-              const b = (part as SVGGraphicsElement).getBBox();
-              return (b.width * b.height) / whole;
-            })
-        );
         const style = getComputedStyle(el);
         const row = ground(el);
         return {
           box: box(el),
           text: words(el.querySelector('[data-slot="starter-text"]')),
           reason: words(reason),
-          body,
           reasonContrast: reason
             ? { ink: rgb(getComputedStyle(reason).color), row }
             : null,
@@ -436,7 +421,7 @@ const clear = (kit: Kit, tag: string, at: PanelRead) =>
     })
   );
 
-/** The rows, on a leg: as wide as their words, one glyph style, their reasons and edges read, curly apostrophes. */
+/** The rows, on a leg: as wide as their words, their reasons and edges read, curly apostrophes. */
 const rowChecks = (kit: Kit, tag: string, at: PanelRead) => {
   kit.check(
     `${tag}: the starters are suggestion rows, each as wide as its words`,
@@ -460,11 +445,6 @@ const rowChecks = (kit: Kit, tag: string, at: PanelRead) => {
         row.reason,
       ]),
     })
-  );
-  kit.check(
-    `${tag}: every row's glyph is a mark on its half-ink body`,
-    at.starters.every((row) => row.body >= 0.25),
-    JSON.stringify(at.starters.map((row) => [row.text, row.body.toFixed(2)]))
   );
   const reasons = at.starters
     .filter((row) => row.reasonContrast)

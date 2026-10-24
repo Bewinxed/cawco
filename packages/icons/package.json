@@ -8,9 +8,9 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./drawn": {
-      "types": "./src/drawn.ts",
-      "default": "./src/drawn.ts"
+    "./bare": {
+      "types": "./src/bare.ts",
+      "default": "./src/bare.ts"
     },
     "./marks": {
       "types": "./src/marks.ts",

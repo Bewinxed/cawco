@@ -1,276 +1,281 @@
 {
-  "id": "bare-icons-2026-10-24",
-  "title": "Icons without their containers",
+  "id": "bare-icons-2026-10-24-b",
+  "title": "Solar icons without their containers",
   "decisions": [
     {
-      "id": "subagent",
-      "question": "Subagents: is the drawn branch right?",
-      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
-      "recommended": "drawn",
+      "id": "status",
+      "question": "Status glyphs: bare?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
           "label": "Today (in its container)",
-          "result": "What ships now: the branch inside a grey rounded square.",
+          "result": "What ships now: each glyph on a half-ink disc.",
           "items": [
             {
-              "label": "Configure rail",
-              "after": "img/subagent-today-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "after": "img/subagent-today-sizes.svg"
+              "label": "Status rows, in their inks",
+              "after": "img/status-today-0.svg"
             }
           ]
         },
         {
-          "id": "drawn",
-          "label": "Drawn",
-          "result": "The same branch, bare and full size; lighter than its filled neighbours.",
+          "id": "bare",
+          "label": "Without its container",
+          "result": "The same glyphs, discs gone, grown to fill the box at Solar's stroke.",
           "items": [
             {
-              "label": "Configure rail",
-              "before": "img/subagent-today-context.svg",
-              "after": "img/subagent-drawn-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "before": "img/subagent-today-sizes.svg",
-              "after": "img/subagent-drawn-sizes.svg"
+              "label": "Status rows, in their inks",
+              "before": "img/status-today-0.svg",
+              "after": "img/status-bare-0.svg"
             }
           ]
         }
       ]
     },
     {
-      "id": "fork",
-      "question": "Fork: is the drawn branch right?",
-      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
-      "recommended": "drawn",
+      "id": "configure",
+      "question": "Configure rail: bare, tiles off?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
           "label": "Today (in its container)",
-          "result": "What ships now: the branch inside a grey rounded square.",
+          "result": "What ships now: every glyph on a raised tile; four also on a disc or square.",
           "items": [
             {
-              "label": "Session menu",
-              "after": "img/fork-today-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "after": "img/fork-today-sizes.svg"
+              "label": "Configure rail",
+              "after": "img/configure-today-0.svg"
             }
           ]
         },
         {
-          "id": "drawn",
-          "label": "Drawn",
-          "result": "Subagents' branch turned up, bare; the pair still reads as one family.",
+          "id": "bare",
+          "label": "Without its container",
+          "result": "No tiles, no discs: each glyph alone in its hue.",
           "items": [
             {
-              "label": "Session menu",
-              "before": "img/fork-today-context.svg",
-              "after": "img/fork-drawn-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "before": "img/fork-today-sizes.svg",
-              "after": "img/fork-drawn-sizes.svg"
-            }
-          ]
-        },
-        {
-          "id": "git-fork",
-          "label": "Solar's git fork",
-          "result": "Solar's own bare fork, no drawing; reads as git more than as a session.",
-          "items": [
-            {
-              "label": "Session menu",
-              "before": "img/fork-today-context.svg",
-              "after": "img/fork-git-fork-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "before": "img/fork-today-sizes.svg",
-              "after": "img/fork-git-fork-sizes.svg"
+              "label": "Configure rail",
+              "before": "img/configure-today-0.svg",
+              "after": "img/configure-bare-0.svg"
             }
           ]
         }
       ]
     },
     {
-      "id": "terminal",
-      "question": "Command-line tools: is the drawn prompt right?",
-      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
-      "recommended": "drawn",
+      "id": "menus",
+      "question": "Menus and tabs: bare?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
           "label": "Today (in its container)",
-          "result": "What ships now: </> inside a grey rounded square.",
+          "result": "What ships now: five of these in a rounded square.",
           "items": [
             {
-              "label": "Configure rail",
-              "after": "img/terminal-today-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "after": "img/terminal-today-sizes.svg"
+              "label": "Session and tab menus",
+              "after": "img/menus-today-0.svg"
             }
           ]
         },
         {
-          "id": "drawn",
-          "label": "Drawn",
-          "result": "A bare prompt and cursor (>_), from Solar's boxed one; lighter than its neighbours.",
+          "id": "bare",
+          "label": "Without its container",
+          "result": "The same glyphs without their squares.",
           "items": [
             {
-              "label": "Configure rail",
-              "before": "img/terminal-today-context.svg",
-              "after": "img/terminal-drawn-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "before": "img/terminal-today-sizes.svg",
-              "after": "img/terminal-drawn-sizes.svg"
+              "label": "Session and tab menus",
+              "before": "img/menus-today-0.svg",
+              "after": "img/menus-bare-0.svg"
             }
           ]
         }
       ]
     },
     {
-      "id": "mcp",
-      "question": "MCP servers: is the drawn plug right?",
-      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
-      "recommended": "drawn",
+      "id": "chips",
+      "question": "Delegate chips: sprite without its tile?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
           "label": "Today (in its container)",
-          "result": "What ships now: a plug on a grey disc.",
+          "result": "What ships now: a white sprite on a hued tile.",
           "items": [
             {
-              "label": "Configure rail",
-              "after": "img/mcp-today-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "after": "img/mcp-today-sizes.svg"
+              "label": "Delegate tray chips",
+              "after": "img/chips-today-0.svg"
             }
           ]
         },
         {
-          "id": "drawn",
-          "label": "Drawn",
-          "result": "The plug alone: solid head, cable at half ink. Holds its weight.",
+          "id": "bare",
+          "label": "Without its container",
+          "result": "The sprite alone, drawn in the hue the tile had.",
           "items": [
             {
-              "label": "Configure rail",
-              "before": "img/mcp-today-context.svg",
-              "after": "img/mcp-drawn-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "before": "img/mcp-today-sizes.svg",
-              "after": "img/mcp-drawn-sizes.svg"
+              "label": "Delegate tray chips",
+              "before": "img/chips-today-0.svg",
+              "after": "img/chips-bare-0.svg"
             }
           ]
         }
       ]
     },
     {
-      "id": "spend",
-      "question": "Spend: is the drawn dollar right?",
-      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
-      "recommended": "drawn",
+      "id": "canvas",
+      "question": "Canvas tools: bare?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
           "label": "Today (in its container)",
-          "result": "What ships now: a dollar on a grey coin.",
+          "result": "What ships now: T in a square; done and remove on discs.",
           "items": [
             {
-              "label": "Configure rail",
-              "after": "img/spend-today-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "after": "img/spend-today-sizes.svg"
+              "label": "Canvas tool rail",
+              "after": "img/canvas-today-0.svg"
             }
           ]
         },
         {
-          "id": "drawn",
-          "label": "Drawn",
-          "result": "The dollar sign alone, its bar at half ink; lighter than the coin.",
+          "id": "bare",
+          "label": "Without its container",
+          "result": "The T, tick and cross alone.",
           "items": [
             {
-              "label": "Configure rail",
-              "before": "img/spend-today-context.svg",
-              "after": "img/spend-drawn-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "before": "img/spend-today-sizes.svg",
-              "after": "img/spend-drawn-sizes.svg"
+              "label": "Canvas tool rail",
+              "before": "img/canvas-today-0.svg",
+              "after": "img/canvas-bare-0.svg"
             }
           ]
         }
       ]
     },
     {
-      "id": "info",
-      "question": "Info: is the drawn “i” right?",
-      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
-      "recommended": "drawn-full",
+      "id": "others",
+      "question": "Everything else: bare?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
           "label": "Today (in its container)",
-          "result": "What ships now: an i on a grey disc.",
+          "result": "What ships now, top to bottom: add, read, task list, away, improved, sort, MCP, spend, terminal, key, play.",
           "items": [
             {
-              "label": "Transcript note, 12px",
-              "after": "img/info-today-context.svg"
-            },
-            {
-              "label": "16 · 20 · 24",
-              "after": "img/info-today-sizes.svg"
+              "label": "16 · 20 · 24, beside a folder",
+              "after": "img/others-today-0.svg"
             }
           ]
         },
         {
-          "id": "drawn",
-          "label": "Drawn, stem at half ink",
-          "result": "Bare i, split like Solar's bare ! (dot full, stem half); faint at 12px.",
+          "id": "bare",
+          "label": "Without its container",
+          "result": "The same eleven without their containers.",
           "items": [
             {
-              "label": "Transcript note, 12px",
-              "before": "img/info-today-context.svg",
-              "after": "img/info-drawn-context.svg"
-            },
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/others-today-0.svg",
+              "after": "img/others-bare-0.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tree",
+      "question": "Session rows: keep the sprite's tile?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "today",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Keep as it is",
+          "result": "Kept as it is: the tile also carries the row's count, its deck of rows and the status dot.",
+          "items": [
             {
-              "label": "16 · 20 · 24",
-              "before": "img/info-today-sizes.svg",
-              "after": "img/info-drawn-sizes.svg"
+              "label": "Sidebar session rows",
+              "after": "img/tree-today-0.svg"
             }
           ]
         },
         {
-          "id": "drawn-full",
-          "label": "Drawn, all full ink",
-          "result": "The same i with its stem in full ink; reads better small, loses the duotone.",
+          "id": "bare",
+          "label": "Without its container",
+          "result": "The sprite alone in its hue; the count, deck and dot would need a new home.",
           "items": [
             {
-              "label": "Transcript note, 12px",
-              "before": "img/info-today-context.svg",
-              "after": "img/info-drawn-full-context.svg"
-            },
+              "label": "Sidebar session rows",
+              "before": "img/tree-today-0.svg",
+              "after": "img/tree-bare-0.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clock",
+      "question": "Clock: keep its face?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "today",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Keep as it is",
+          "result": "Kept as it is: its circle is the clock's face.",
+          "items": [
             {
               "label": "16 · 20 · 24",
-              "before": "img/info-today-sizes.svg",
-              "after": "img/info-drawn-full-sizes.svg"
+              "after": "img/clock-today-0.svg"
+            }
+          ]
+        },
+        {
+          "id": "bare",
+          "label": "Without its container",
+          "result": "Hands alone, the face taken as a container.",
+          "items": [
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/clock-today-0.svg",
+              "after": "img/clock-bare-0.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "server",
+      "question": "Server: keep its box?",
+      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "recommended": "today",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Keep as it is",
+          "result": "Kept as it is: the square is the server's chassis.",
+          "items": [
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/server-today-0.svg"
+            }
+          ]
+        },
+        {
+          "id": "bare",
+          "label": "Without its container",
+          "result": "The unit marks alone, the chassis taken as a container.",
+          "items": [
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/server-today-0.svg",
+              "after": "img/server-bare-0.svg"
             }
           ]
         }

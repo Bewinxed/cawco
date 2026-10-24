@@ -1214,11 +1214,11 @@
   <span
     data-slot="mark"
     aria-hidden="true"
-    class="flex-none size-c-row-mark rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
+    class="flex-none size-c-row-mark grid place-items-center"
     data-box
-    style:--mark-bg="var(--mark-{markHue(sessionPlace(item.instanceId))})"
+    style:--mark-ink="var(--mark-{markHue(sessionPlace(item.instanceId))})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
-    ><Sprite class="size-icon-sm block text-mark-glyph" /></span
+    ><Sprite class="size-icon-md block text-(--mark-ink)" /></span
   >
 {/snippet}
 

@@ -1,8 +1,7 @@
 <script lang="ts">
-  // Solar has no bare plus — every "add" it ships is enclosed in a circle or
-  // square, which double-encloses inside pill buttons and reads small on a
-  // 32px row. This is the missing glyph, drawn to the set's own grammar:
-  // 24px grid, 1.5 linear stroke, round caps, 1.2em box like unplugin's.
+  // The plus, drawn to Solar's own grammar (24px grid, 1.5 linear stroke,
+  // round caps, 1.2em box like unplugin's), a step inside Solar's bare linear
+  // `add`, whose arms reach the grid's edge.
   import type { SVGAttributes } from "svelte/elements";
 
   let { ...rest }: SVGAttributes<SVGSVGElement> = $props();

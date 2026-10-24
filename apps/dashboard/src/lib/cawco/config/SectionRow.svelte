@@ -118,7 +118,7 @@
   >
     <span
       data-slot="tile"
-      class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile *:size-icon-md *:flex-none max-phone:row-span-full max-phone:self-center"
+      class="inline-flex size-c-mark flex-none items-center justify-center text-ink-muted *:size-icon-md *:flex-none max-phone:row-span-full max-phone:self-center"
       data-share={href ? `icon:${href}` : undefined}
       style:color={hue}
       {@attach land(() => {

@@ -84,15 +84,14 @@
       class="group/bhead w-full flex-auto"
       look="head"
     >
-      <!-- The per-session identity sprite, on its --mark-N hue square,
-           filling the glyph cell. -->
+      <!-- The per-session identity sprite, bare, in its --mark-N hue. -->
       <span
         data-rail-cell
         data-slot="mark"
         aria-hidden="true"
-        class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
-        style:--mark-bg="var(--mark-{markHue(seed)})"
-        ><Sprite class="size-icon-sm block text-mark-glyph" /></span
+        class="rail-cell"
+        style:--mark-ink="var(--mark-{markHue(seed)})"
+        ><Sprite class="size-icon-md block text-(--mark-ink)" /></span
       >
       <!-- A narrow head (DESIGN.md, The Truncate Inside Rule: the name
            stands, the rest gives way): the name stays whole; the model stands

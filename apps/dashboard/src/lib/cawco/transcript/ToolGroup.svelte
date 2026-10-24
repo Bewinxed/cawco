@@ -539,8 +539,8 @@
               >
                 <span
                   data-slot="mark"
-                  class="size-c-row-mark shrink-0 grid place-items-center rounded-xs text-mark-glyph bg-mark-overlay bg-mark-6"
-                  ><IconWindow class="size-icon-sm" /></span
+                  class="size-c-row-mark shrink-0 grid place-items-center text-mark-6"
+                  ><IconWindow class="size-icon-md" /></span
                 >
                 <!-- The name wraps, whole, and breaks inside a word only
                      when the word alone is wider than the row; the place

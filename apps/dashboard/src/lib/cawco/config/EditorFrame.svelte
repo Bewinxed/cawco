@@ -160,7 +160,7 @@
         {#if tile}
           <span
             data-slot="tile"
-            class="inline-flex items-center justify-center flex-none size-c-mark mt-space-row rounded-sm bg-surface-raised shadow-tile *:size-icon-md"
+            class="inline-flex items-center justify-center flex-none size-c-mark mt-space-row *:size-icon-md"
             data-share="icon:{page.url.pathname}"
             {@attach land(() => `icon:${page.url.pathname}`)}
           >
@@ -169,7 +169,7 @@
         {:else if section}
           <span
             data-slot="tile"
-            class="inline-flex items-center justify-center flex-none size-c-mark mt-space-row rounded-sm bg-surface-raised shadow-tile *:size-icon-md"
+            class="inline-flex items-center justify-center flex-none size-c-mark mt-space-row *:size-icon-md"
             data-share="icon:{page.url.pathname}"
             style:color={section.hue}
             {@attach land(() => `icon:${page.url.pathname}`)}

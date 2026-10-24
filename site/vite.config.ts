@@ -19,9 +19,34 @@ function inlineIcon(set: IconifyJSON, name: string, what: string): string {
   return iconToHTML(svg.body, { ...svg.attributes, 'aria-hidden': 'true', class: 'icon' });
 }
 
-/** `<i data-icon="widget-5"></i>` becomes that Solar bold-duotone icon, inline. */
+/**
+ * Solar's icons without their containers (packages/icons/src/bare.ts, written by
+ * scripts/bare-glyphs.ts; DESIGN.md, The Bare Glyph Rule), as an icon set of their own.
+ */
+const { BARE_ICONS } = (await import('../packages/icons/src/bare.ts')) as {
+  BARE_ICONS: Record<string, string>;
+};
+const bare: IconifyJSON = {
+  prefix: 'bare',
+  width: 24,
+  height: 24,
+  icons: Object.fromEntries(
+    Object.entries(BARE_ICONS).map(([name, svg]) => [
+      name,
+      { body: svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '') },
+    ]),
+  ),
+};
+
+/**
+ * `<i data-icon="widget-5"></i>` becomes that Solar bold-duotone icon, inline;
+ * `<i data-icon="bare:plug-circle"></i>` that icon without its container. Every
+ * glyph stands bare, never in a circle or a rounded square of its own.
+ */
 const icon = (name: string): string =>
-  inlineIcon(solar, `${name}-bold-duotone`, 'Solar bold-duotone icon');
+  name.startsWith('bare:')
+    ? inlineIcon(bare, name.slice('bare:'.length), 'bare Solar icon')
+    : inlineIcon(solar, `${name}-bold-duotone`, 'Solar bold-duotone icon');
 
 /** `<i data-mark="github"></i>` becomes that company's own mark, inline. */
 const mark = (name: string): string => inlineIcon(brands, name, 'brand mark');

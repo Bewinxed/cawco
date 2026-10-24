@@ -5,8 +5,9 @@
  */
 // biome-ignore lint/performance/noBarrelFile: central icon barrel — every consumer imports icons from this index
 export * from "@cawco/icons";
-// Not solar: the set has no bare plus or close (only circled/squared ones),
-// and an enclosed glyph double-encloses inside pill buttons. Local, set-matched.
+// Local, to Solar's grid and stroke: each a step inside Solar's own bare linear
+// close, add and minus, which reach the grid's edge; the tick one stroke, so it
+// can draw itself along its path.
 export { default as IconClose } from "#lib/components/icons/Close.svelte";
 export { default as IconMinus } from "#lib/components/icons/Minus.svelte";
 export { default as IconPlus } from "#lib/components/icons/Plus.svelte";

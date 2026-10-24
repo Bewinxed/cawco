@@ -152,8 +152,8 @@
               <button class="copy" type="button" data-copy>
                 <span class="copy-icons" aria-hidden="true">
                   <span class="ic-copy"><i data-icon="copy"></i></span>
-                  <span class="ic-done"><i data-icon="check-circle"></i></span>
-                  <span class="ic-fail"><i data-icon="close-circle"></i></span>
+                  <span class="ic-done"><i data-icon="bare:check-circle"></i></span>
+                  <span class="ic-fail"><i data-icon="bare:close-circle"></i></span>
                 </span>
                 <span data-copy-label>Copy</span>
               </button>
@@ -228,7 +228,7 @@
               tabindex="-1"
               data-tab="delegates"
             >
-              <i data-icon="branching-paths-down"></i><span class="tab-name">Delegates</span>
+              <i data-icon="bare:branching-paths-down"></i><span class="tab-name">Delegates</span>
               <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
             </button>
             <button
@@ -241,7 +241,7 @@
               tabindex="-1"
               data-tab="sync"
             >
-              <i data-icon="refresh-circle"></i><span class="tab-name">Fleet sync</span>
+              <i data-icon="bare:refresh-circle"></i><span class="tab-name">Fleet sync</span>
               <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
             </button>
           </div>
@@ -351,14 +351,18 @@
                           <ul class="nest" data-branch>
                             <li data-leaf>
                               <div class="t-row t-step">
-                                <span class="step step-done"><i data-icon="check-circle"></i></span>
+                                <span class="step step-done"
+                                  ><i data-icon="bare:check-circle"></i
+                                ></span>
                                 <span class="t-name">Build</span>
                                 <span class="t-age">48s</span>
                               </div>
                             </li>
                             <li data-leaf>
                               <div class="t-row t-step">
-                                <span class="step step-live"><i data-icon="play-circle"></i></span>
+                                <span class="step step-live"
+                                  ><i data-icon="bare:play-circle"></i
+                                ></span>
                                 <span class="t-name">Publish the notes</span>
                                 <span class="t-age">now</span>
                               </div>
@@ -465,11 +469,13 @@
                     <div class="swap hitl-foot">
                       <div class="choice" data-a>
                         <span class="app-btn app-btn-yes" data-allow
-                          ><i data-icon="check-circle"></i>Approve</span
+                          ><i data-icon="bare:check-circle"></i>Approve</span
                         >
-                        <span class="app-btn"><i data-icon="close-circle"></i>Deny</span>
+                        <span class="app-btn"><i data-icon="bare:close-circle"></i>Deny</span>
                       </div>
-                      <span class="hitl-done" data-b><i data-icon="check-circle"></i>Approved</span>
+                      <span class="hitl-done" data-b
+                        ><i data-icon="bare:check-circle"></i>Approved</span
+                      >
                     </div>
                   </div>
                   <span class="tap" data-tap></span>
@@ -751,7 +757,9 @@
                   <span class="field-k">On the hub</span>
                   <ul class="chips">
                     <li class="chip" data-src="skill"><i data-icon="magic-stick-3"></i>review</li>
-                    <li class="chip" data-src="mcp"><i data-icon="plug-circle"></i>github-mcp</li>
+                    <li class="chip" data-src="mcp">
+                      <i data-icon="bare:plug-circle"></i>github-mcp
+                    </li>
                     <li class="chip" data-src="market"><i data-icon="box"></i>plugins</li>
                   </ul>
                 </div>
@@ -760,7 +768,9 @@
                     <i data-device="cloud"></i>
                     <b>cloud</b><small>rented box</small>
                     <ul class="chips">
-                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="mcp">
+                        <i data-icon="bare:plug-circle"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="skill">
                         <i data-icon="magic-stick-3"></i>
                       </li>
@@ -771,7 +781,9 @@
                     <i data-device="vm"></i>
                     <b>dev-vm</b><small>over SSH</small>
                     <ul class="chips">
-                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="mcp">
+                        <i data-icon="bare:plug-circle"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="skill">
                         <i data-icon="magic-stick-3"></i>
                       </li>
@@ -782,7 +794,9 @@
                     <i data-device="laptop"></i>
                     <b>laptop</b><small>lid left ajar</small>
                     <ul class="chips">
-                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="mcp">
+                        <i data-icon="bare:plug-circle"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="skill">
                         <i data-icon="magic-stick-3"></i>
                       </li>
@@ -793,7 +807,9 @@
                     <i data-device="box"></i>
                     <b>desk-box</b><small>always on</small>
                     <ul class="chips">
-                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="mcp">
+                        <i data-icon="bare:plug-circle"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="skill">
                         <i data-icon="magic-stick-3"></i>
                       </li>
@@ -886,7 +902,7 @@
             </p>
           </div>
           <div class="fact">
-            <i data-icon="key-minimalistic-square-2"></i>
+            <i data-icon="bare:key-minimalistic-square-2"></i>
             <h4>Your own accounts</h4>
             <p>You sign in to each agent yourself. Caw&amp;Co doesn't sell model usage.</p>
           </div>
@@ -911,8 +927,8 @@
               <button class="copy" type="button" data-copy>
                 <span class="copy-icons" aria-hidden="true">
                   <span class="ic-copy"><i data-icon="copy"></i></span>
-                  <span class="ic-done"><i data-icon="check-circle"></i></span>
-                  <span class="ic-fail"><i data-icon="close-circle"></i></span>
+                  <span class="ic-done"><i data-icon="bare:check-circle"></i></span>
+                  <span class="ic-fail"><i data-icon="bare:close-circle"></i></span>
                 </span>
                 <span data-copy-label>Copy</span>
               </button>

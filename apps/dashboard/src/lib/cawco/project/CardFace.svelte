@@ -35,7 +35,7 @@
 >
   <span
     data-slot="tile"
-    class="inline-grid size-c-mark flex-none place-items-center rounded-sm bg-surface-tile shadow-tile *:size-icon-md"
+    class="inline-grid size-c-mark flex-none place-items-center *:size-icon-md"
     style:color={hue}><Icon /></span
   >
   {@render aside?.()}

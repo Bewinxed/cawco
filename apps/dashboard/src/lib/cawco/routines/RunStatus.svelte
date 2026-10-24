@@ -17,8 +17,8 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconError,
+    IconMinusCircle,
     IconNeedsYou,
-    IconNeutral,
     IconSuccess,
   } from "#lib/icons.js";
 
@@ -38,7 +38,7 @@
   const GLYPH = {
     done: IconSuccess,
     failed: IconError,
-    neutral: IconNeutral,
+    neutral: IconMinusCircle,
     waiting: IconNeedsYou,
   } as const;
 </script>

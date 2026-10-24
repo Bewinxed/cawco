@@ -830,7 +830,7 @@
           >
             <span
               data-slot="ptile"
-              class="grid size-c-mark flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
+              class="grid size-c-mark flex-none place-items-center"
               data-box><ProviderMark provider={row.provider} /></span
             >
             <span
@@ -874,7 +874,7 @@
       >
         <span
           data-slot="ptile"
-          class="grid size-c-mark flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
+          class="grid size-c-mark flex-none place-items-center"
           data-box
           {@attach land(() =>
             choice ? `provider:${keyOf(choice)}` : undefined

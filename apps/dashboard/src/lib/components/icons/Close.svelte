@@ -1,8 +1,7 @@
 <script lang="ts">
-  // Solar has no bare close — every "close" it ships is enclosed in a circle
-  // or square, and at a close button's size the ring leaves the X too small
-  // to read. This is the missing glyph, drawn to the set's own grammar:
-  // 24px grid, 1.5 linear stroke, round caps, 1.2em box like unplugin's.
+  // The close X, drawn to Solar's own grammar (24px grid, 1.5 linear stroke,
+  // round caps, 1.2em box like unplugin's), a step inside Solar's bare linear
+  // `close`, whose arms reach the grid's edge.
   import type { SVGAttributes } from "svelte/elements";
 
   let { ...rest }: SVGAttributes<SVGSVGElement> = $props();

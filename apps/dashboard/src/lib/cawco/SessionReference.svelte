@@ -67,14 +67,14 @@
   <span
     data-slot="mark"
     aria-hidden="true"
-    class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-    style:--mark-bg="var(--mark-{markHue(sessionPlace(id))})"
+    class="grid size-c-row-mark flex-none place-items-center text-(--mark-ink)"
+    style:--mark-ink="var(--mark-{markHue(sessionPlace(id))})"
     data-box
   >
     {#if caw}
       <CawFace size={14} status={caw} />
     {:else}
-      <Sprite class="block size-icon-sm text-mark-glyph" />
+      <Sprite class="block size-icon-sm" />
     {/if}
   </span>
   <span data-slot="label">{title}</span>

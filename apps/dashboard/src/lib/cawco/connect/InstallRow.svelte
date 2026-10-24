@@ -143,7 +143,7 @@
         "transition-[border-color] duration-(--dur-control) ease-out",
         install.returning === null &&
           install.state !== "joined" &&
-          "border border-dashed border-border-control shadow-none",
+          "text-ink-muted",
       ],
     })}
     style:color={machineHue(index, install.state === "joined")}

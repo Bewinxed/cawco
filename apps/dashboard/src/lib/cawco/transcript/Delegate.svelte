@@ -446,15 +446,15 @@
       <Collapsible.Trigger data-bhead class="group/bhead flex-auto" look="head">
         <!-- The mark the delegate tray's chip flies out of, the first time
              this card leaves the view (tray.svelte.ts): the delegate's
-             sprite on its hue, filling the glyph cell. -->
+             sprite, bare, in its hue. -->
         <span
           data-rail-cell
           data-slot="mark"
           aria-hidden="true"
-          class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
-          style:--mark-bg="var(--mark-{markHue(hueSeed)})"
+          class="rail-cell"
+          style:--mark-ink="var(--mark-{markHue(hueSeed)})"
           {@attach trayCard(() => (elsewhere ? null : id))}
-          ><Sprite class="size-space-3 block text-mark-glyph" /></span
+          ><Sprite class="size-icon-md block text-(--mark-ink)" /></span
         >
         <span
           class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--dur-control) ease-out"

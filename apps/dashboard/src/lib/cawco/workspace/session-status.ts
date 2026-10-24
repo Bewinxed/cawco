@@ -8,7 +8,7 @@ import type { Component } from "svelte";
 import {
   IconNeedsYou as Attention,
   IconError as Failed,
-  IconPause as Pause,
+  IconPauseCircle as Pause,
   IconMoonSleep as Sleeping,
   IconAsk as Unknown,
   IconRenew as Working,

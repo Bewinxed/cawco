@@ -55,7 +55,7 @@
     IconNeedsYou as Attention,
     IconCloudCross as Away,
     IconError as Failed,
-    IconPause as Pause,
+    IconPauseCircle as Pause,
     IconRenew as Working,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
@@ -628,7 +628,7 @@
   {#each arrivals as arrival (arrival.id)}
     {@const Sprite = sessionSprite(arrival.id)}
     <span
-      class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay text-mark-glyph"
+      class="absolute inset-0 grid place-items-center text-(--fill)"
       style:--fill={arrival.fill}
       style:--landed-icon="calc(var(--btn-icon) * 2 / 3)"
       out:intoRing
