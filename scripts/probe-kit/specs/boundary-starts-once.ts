@@ -49,6 +49,9 @@ const TAG = /PROBE-ONCE-([A-Z]+):/;
 /** The command's mark, spelled apart in the command so only its output carries it whole. */
 const ranMark = (harness: Harness) => `ONCE-RAN-${harness.toUpperCase()}`;
 
+/** OpenCode's Code Mode tool, which runs MCP tools from a script (source-burst's leg 6 calls `set_title` by it). */
+const CODE_MODE = "execute";
+
 const steps = new Map<
   string,
   { ran?: boolean; rested?: boolean; searched?: boolean }
@@ -99,10 +102,19 @@ const respond = (request: Seen): Reply => {
     step.ran = true;
     return call(shell.name, shell.input);
   }
+  const rest = { minutes: 60, reason: "the spec reads its workspace" };
   const wait = request.toolNames.find((name) => name.endsWith("wait_item"));
   if (!step.rested && wait) {
     step.rested = true;
-    return call(wait, { minutes: 60, reason: "the spec reads its workspace" });
+    return call(wait, rest);
+  }
+  // OpenCode offers CawCo's tools through its Code Mode tool, a script
+  // calling each by its server and name.
+  if (!step.rested && request.toolNames.includes(CODE_MODE)) {
+    step.rested = true;
+    return call(CODE_MODE, {
+      code: `return await tools.cawco.wait_item(${JSON.stringify(rest)});`,
+    });
   }
   if (
     !(step.rested || step.searched) &&
