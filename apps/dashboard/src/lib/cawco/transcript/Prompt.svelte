@@ -41,6 +41,7 @@
     IconShield,
     IconTick,
   } from "#lib/icons.js";
+  import { page } from "$app/state";
   import {
     cawco,
     commandRecord,
@@ -422,6 +423,14 @@
   type Choice = "allow" | "deny" | "always" | "answer";
   let pressed = $state<Choice | null>(null);
   const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
+  /**
+   * The asking session's page, for its chip: none while the card stands on
+   * that page already, where a link would only reload it.
+   */
+  const sessionHref = $derived.by(() => {
+    const href = rowHref(request.instanceId);
+    return page.url.pathname === href ? undefined : href;
+  });
   /** The asking session's harness, for the agent chip's mark: a states file names it, the live card reads its row. */
   const harness = $derived(harnessOf ?? row?.harness ?? null);
   /** The session's machine is offline: the ask stands, its answer waits. */
@@ -1149,7 +1158,7 @@
       {harness}
       {place}
       {presentation}
-      sessionHref={rowHref(request.instanceId)}
+      {sessionHref}
     />
   {/if}
   {#if !(browserAsk || (connect && connectStage) || questions)}
