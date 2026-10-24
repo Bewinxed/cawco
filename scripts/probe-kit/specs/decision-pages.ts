@@ -395,6 +395,7 @@ const canvasBoxes = (frame: Frame) =>
         box: { w: f.width, h: f.height },
         room: s?.width ?? 0,
         wide: stage?.hasAttribute("data-wide") ?? false,
+        picture: stage?.closest("figure")?.getAttribute("data-picture") ?? null,
         off: s ? Math.abs(s.left + s.width / 2 - (f.left + f.width / 2)) : 99,
         scene,
       };
@@ -548,25 +549,25 @@ const diagramInk = (frame: Frame) =>
 
 /** The pane's mode by its head's segment (V, C, D), once the page has heard it. */
 const mode = async (page: Page, frame: Frame, key: "V" | "C" | "D") => {
-  await page
-    .locator(`${PANE} [role='tab'][aria-keyshortcuts='${key}']`)
-    .click();
   const want = { V: "", C: "comment", D: "draw" }[key];
-  await until(
-    `the page's mode ${key}`,
-    () =>
-      frame.evaluate(() => {
-        const layer = document
-          .querySelector("cawco-overlay")
-          ?.shadowRoot?.querySelector(".layer");
-        if (layer?.classList.contains("comment")) {
-          return "comment";
-        }
-        return layer?.classList.contains("draw") ? "draw" : "";
-      }),
-    (now) => now === want,
-    5000
-  );
+  const modeNow = () =>
+    frame.evaluate(() => {
+      const layer = document
+        .querySelector("cawco-overlay")
+        ?.shadowRoot?.querySelector(".layer");
+      if (layer?.classList.contains("comment")) {
+        return "comment";
+      }
+      return layer?.classList.contains("draw") ? "draw" : "";
+    });
+  // Already in it (an Escape out of Draw or Comment is Interact again): no
+  // press, which a segment already chosen takes as nothing.
+  if ((await modeNow()) !== want) {
+    await page
+      .locator(`${PANE} [role='tab'][aria-keyshortcuts='${key}']`)
+      .click();
+  }
+  await until(`the page's mode ${key}`, modeNow, (now) => now === want, 5000);
 };
 
 const DIAGRAM_TYPES = ["flowchart", "sequence", "gantt"] as const;
@@ -806,22 +807,34 @@ const mediaLeg = async (
   ).catch(() => undefined);
   await settle(shown, 400);
   const media = await mediaIn(frame);
-  const canvases = await until(
-    `${leg}: each canvas sized from its drawing`,
-    () => canvasBoxes(frame),
-    (all) =>
-      all.length === 2 && all.every((one) => one.box.h > 0 && !!one.scene),
-    30_000
-  ).catch(() => canvasBoxes(frame));
   // The frame the canvas's own fit fills at zoom 1: the drawing and its
   // fitted view's 32px margin each side (canvas-host scene.ts `sceneBox`).
-  const fitted = (one: (typeof canvases)[number]) => {
+  const fitted = (one: Awaited<ReturnType<typeof canvasBoxes>>[number]) => {
     if (!one.scene) {
       return null;
     }
     const m = 32;
     return { w: one.scene.width + 2 * m, h: one.scene.height + 2 * m };
   };
+  // Read once each canvas's frame has taken its drawing's size: the canvas
+  // says its size once its scene is drawn, and the frame stands at its
+  // placeholder until then.
+  const canvases = await until(
+    `${leg}: each canvas sized from its drawing`,
+    () => canvasBoxes(frame),
+    (all) =>
+      all.length === 2 &&
+      all.every((one) => {
+        const want = fitted(one);
+        return (
+          !!want &&
+          Math.abs(one.box.w - want.w) <= 1 &&
+          Math.abs(one.box.h - want.h) <= 1 &&
+          one.wide === one.box.w > one.room + 0.5
+        );
+      }),
+    30_000
+  ).catch(() => canvasBoxes(frame));
   const shapes = canvases.map((one) => ({ ...one, want: fitted(one) }));
   kit.check(
     `(a) ${leg}: each canvas is its drawing's own box at its real size, centred in its well or, wider than it, scrolling sideways in it, a wide one and a tall one (${shapes.map((one) => `“${one.caption}” ${Math.round(one.box.w)}×${Math.round(one.box.h)}, its drawing ${one.scene ? `${Math.round(one.scene.width)}×${Math.round(one.scene.height)}` : "unread"}`).join("; ")})`,
@@ -2328,6 +2341,28 @@ const waitChecks = async (on: On) => {
   await held.close();
 };
 
+/** What stood of the host card and its Open to draw, and why it read hidden: said when it never stood in view. */
+const hostCardRead = async (desk: Page, selector: string): Promise<string> => {
+  try {
+    const now = await frameWith(desk, 4);
+    const stood = await now.evaluate((sel) => {
+      const card = document.querySelector("#decision-host");
+      const button = document.querySelector<HTMLElement>(sel);
+      return {
+        card: card
+          ? `${card.getAttribute("data-state") ?? ""} ${card.getAttribute("aria-expanded") ?? ""} ${Math.round(card.getBoundingClientRect().height)}px`
+          : "none",
+        open: button
+          ? `${button.localName} visible ${button.checkVisibility()} ${Math.round(button.getBoundingClientRect().height)}px`
+          : "none",
+      };
+    }, selector);
+    return JSON.stringify(stood);
+  } catch (error) {
+    return String(error);
+  }
+};
+
 /** Canvas: Open to draw brings the canvas to the front of the panel. */
 const openToDraw = async (on: On) => {
   const { desk, fleet, kit } = on;
@@ -2338,22 +2373,31 @@ const openToDraw = async (on: On) => {
   // Found again until its Open to draw stands in view.
   const OPEN =
     "#decision-host [data-slot=media] :is([data-open-canvas], [data-open-draw])";
-  const frame = (await until(
-    "the host card open, its Open to draw in view",
-    async () => {
-      const now = await frameWith(desk, 4);
-      const shows = await now
-        .evaluate(
-          (selector) =>
-            !!document.querySelector<HTMLElement>(selector)?.checkVisibility(),
-          OPEN
-        )
-        .catch(() => false);
-      return shows ? now : null;
-    },
-    Boolean,
-    30_000
-  )) as Frame;
+  let frame: Frame;
+  try {
+    frame = (await until(
+      "the host card open, its Open to draw in view",
+      async () => {
+        const now = await frameWith(desk, 4);
+        const shows = await now
+          .evaluate(
+            (selector) =>
+              !!document
+                .querySelector<HTMLElement>(selector)
+                ?.checkVisibility(),
+            OPEN
+          )
+          .catch(() => false);
+        return shows ? now : null;
+      },
+      Boolean,
+      30_000
+    )) as Frame;
+  } catch (error) {
+    throw new Error(`${String(error)} (${await hostCardRead(desk, OPEN)})`, {
+      cause: error,
+    });
+  }
   const canvasId = await frame
     .locator('iframe[src*="/__cawco/canvas/"]')
     .getAttribute("src")
