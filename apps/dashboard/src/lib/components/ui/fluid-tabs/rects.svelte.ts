@@ -70,6 +70,11 @@ export class TabRects {
   #sizes: FrameObserver | null = null;
   /** What the last measure in a delivery read, written in the next frame. */
   #pending: (() => void) | null = null;
+  /**
+   * The track and the tabs observed whose first report has not come: a
+   * measure asked for meanwhile is taken in that report (`#schedule`).
+   */
+  readonly #unreported = new Set<Element>();
   #moves: MutationObserver | null = null;
 
   /** `onOrder` hears the tabs' values in the order they stand. */
@@ -91,17 +96,26 @@ export class TabRects {
     this.#container = node;
     // Read inside the delivery, on its layout; written in the next frame
     // (frameObserver), so the tabs' new places resize nothing it has passed.
-    this.#sizes = frameObserver(
-      () => {
-        const write = this.#pending;
-        this.#pending = null;
-        write?.();
+    // A box's first report (the track mounting, a tab arriving) writes there
+    // and then (`first`): the frame it mounts in paints its tabs' places,
+    // which only the track's overlays draw from.
+    const write = () => {
+      const read = this.#pending;
+      this.#pending = null;
+      read?.();
+    };
+    this.#sizes = frameObserver(write, {
+      read: () => this.#measureLaidOut(),
+      first: (entries) => {
+        for (const entry of entries) {
+          this.#unreported.delete(entry.target);
+        }
+        write();
       },
-      { read: () => this.#measureLaidOut() }
-    );
-    this.#sizes.observe(node);
+    });
+    this.#watch(node);
     for (const el of this.#values.keys()) {
-      this.#sizes.observe(el);
+      this.#watch(el);
     }
     this.#moves = new MutationObserver((records) => {
       if (records.some((record) => this.#canMove(record))) {
@@ -116,11 +130,11 @@ export class TabRects {
       attributeOldValue: true,
       attributeFilter: ["style", "class", "inert"],
     });
-    this.#schedule();
     return {
       destroy: () => {
         this.#sizes?.disconnect();
         this.#sizes = null;
+        this.#unreported.clear();
         this.#moves?.disconnect();
         this.#moves = null;
         this.#container = null;
@@ -139,7 +153,7 @@ export class TabRects {
   register(element: HTMLElement, value: string): () => void {
     untrack(() => {
       this.#values.set(element, value);
-      this.#sizes?.observe(element);
+      this.#watch(element);
       this.#sort();
       this.#schedule();
     });
@@ -147,6 +161,7 @@ export class TabRects {
       untrack(() => {
         this.#values.delete(element);
         this.#sizes?.unobserve(element);
+        this.#unreported.delete(element);
         this.#sort();
         this.#schedule();
       });
@@ -221,16 +236,36 @@ export class TabRects {
     this.#schedule();
   }
 
+  /** Observes a box, its first report still to come (`#unreported`). */
+  #watch(element: Element): void {
+    if (this.#sizes) {
+      this.#unreported.add(element);
+      this.#sizes.observe(element);
+    }
+  }
+
   /**
    * One measure per frame, at the frame's own time, however many changes
    * ask for it. A pending frame is kept, never cancelled and asked for
    * again: a gesture restyles the tabs from a frame callback queued ahead
    * of this one, so cancelling on every change put the measure off in the
    * very frame it was due, every frame, for as long as the gesture ran.
+   *
+   * With a box's first report due (a tab arriving), that frame's measure is
+   * that report's (`first`), on the layout the frame has done: taken in its
+   * callbacks, ahead of that layout, it laid out the page the arrival had
+   * just changed (a turn's Working tab arriving in the rail: up to 60ms of
+   * layout at 4x on the phone). The frame after it measures if no report
+   * came: a box laid out at no size is reported by no ResizeObserver.
    */
   #schedule(): void {
     this.#frame ??= requestAnimationFrame(() => {
       this.#frame = null;
+      if (this.#unreported.size > 0) {
+        this.#unreported.clear();
+        this.#schedule();
+        return;
+      }
       this.#measure();
     });
   }

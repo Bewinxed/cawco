@@ -84,7 +84,8 @@
  *     with a trace of that window, no layout is forced from a mount's sites
  *     (a helper's computed position read as it attached, the rendered check
  *     as it mounted, a folder tab's first measure, a session row's trailing
- *     width: `MOUNT_SITES`) and no frame runs past 250ms; on WebKit and
+ *     width: `MOUNT_SITES`; the tabs' places measured ahead of the frame's
+ *     layout) and no frame runs past 250ms; on WebKit and
  *     Firefox, which have no CPU throttle and no trace here, the frames are
  *     read and said.
  * (n) Interact and Draw, ten presses over the page's ink and comments, the
@@ -1898,7 +1899,12 @@ const framesIn = (frames: number[], from: number, to: number) => {
  * `checkVisibility`: now its observers' first answers), a folder tab's first
  * measure (TabItem, its `--flare`: now its size observer's first report) and
  * a session row's trailing column read for its width (SessionRow
- * `getComputedStyle(...).inlineSize`: now its observer's own entries).
+ * `getComputedStyle(...).inlineSize`: now its observer's own entries), and
+ * the tabs' places measured in the frame's callbacks, ahead of its layout
+ * (fluid-tabs `rects`, its `offsetParent` walk: now its size observer's
+ * first report). That last is the walk forced from anywhere but a
+ * ResizeObserver's delivery (`DELIVERY`): measured there, it reads the
+ * frame's own layout, and a tab arriving is measured there.
  */
 const MOUNT_SITES: [string, RegExp][] = [
   ["position read at attach", /\.position\s*===\s*["'`]static["'`]/],
@@ -1906,6 +1912,10 @@ const MOUNT_SITES: [string, RegExp][] = [
   ["folder tab measure", /["'`]--flare["'`]/],
   ["row trail width", /\)\.inlineSize/],
 ];
+/** fluid-tabs `rects`' measure: each tab skipped when it has no box. */
+const TAB_PLACES = /\.offsetParent\s*===\s*null\s*\)\s*continue/;
+/** A frame of a stack inside frame-observer's ResizeObserver callback. */
+const DELIVERY = /new ResizeObserver\(/;
 
 /** The longest a frame of a reply may take at 4x CPU throttle on Chromium, ms. */
 const TURN_FRAME_MS = 250;
@@ -1967,6 +1977,24 @@ const durationOf = (events: TraceEvent[]) =>
     events.reduce((total, event) => total + (event.dur ?? 0), 0) / 1000
   );
 
+type StackFrame = NonNullable<
+  NonNullable<NonNullable<TraceEvent["args"]>["beginData"]>["stackTrace"]
+>[number];
+
+/** Whether a forced layout's stack runs inside a ResizeObserver's delivery (`DELIVERY`). */
+const delivered = async (stack: StackFrame[]) => {
+  for (const frame of stack) {
+    if (frame.url.startsWith("http")) {
+      const source = await lineOf(frame.url, frame.lineNumber);
+      const column = frame.columnNumber - 1;
+      if (DELIVERY.test(source.slice(Math.max(0, column - 80), column))) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
 /** A layout or style recalc script forced: one with the stack that asked for it. */
 const forcedBy = (event: TraceEvent) =>
   (event.name === "Layout" || event.name === "UpdateLayoutTree") &&
@@ -1989,6 +2017,10 @@ const forcedSites = async (events: TraceEvent[]) => {
     const site = MOUNT_SITES.find(([, token]) => token.test(at))?.[0];
     if (site) {
       mount.push(`${event.name} ${site} (${file}:${top.columnNumber})`);
+    } else if (TAB_PLACES.test(at) && !(await delivered(stack))) {
+      mount.push(
+        `${event.name} tabs measured ahead of the frame's layout (${file}:${top.columnNumber})`
+      );
     }
     const key = `${event.name} ${file}:${top.columnNumber} "${at.slice(70, 110).replace(SPACES_RUN, " ")}"`;
     const held = sites.get(key) ?? { count: 0, ms: 0 };
