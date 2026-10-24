@@ -156,11 +156,14 @@ async function checkCutIsNoFailure(
   const lines = (await fleet.logs("agent")).split("\n");
   const said = lines.filter((line) => dropped.test(line));
   const codes = new Set(said.map((line) => dropped.exec(line)?.[2]));
-  const cutThenAsked = lines.filter(
-    (line) =>
-      line.includes(downloadWords.stopped(`${archive} from its hub`)) &&
-      line.includes(downloadWords.cut("ECONNRESET"))
-  );
+  const retried = shaped(downloadWords.retrying);
+  const cutThenAsked = lines.filter((line) => {
+    const [, what, , , why] = retried.exec(line) ?? [];
+    return (
+      what === downloadWords.fromHub(archive ?? "") &&
+      why === downloadWords.cut("ECONNRESET")
+    );
+  });
   check(
     "a hub killed mid-download is a cut the download goes on from at once (ECONNRESET, its next attempt logged), and a hub refusing every ask after it through an update tick is one that did not answer (ECONNREFUSED): both said so in the agent's log",
     cutThenAsked.length > 0 && codes.has("ECONNREFUSED"),

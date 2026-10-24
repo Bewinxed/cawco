@@ -73,6 +73,7 @@ import {
   until,
 } from "../binary-install";
 import type { Kit, Spec } from "../kit";
+import { shaped } from "../words";
 
 type Artifact = ReleaseManifest["artifacts"][number];
 
@@ -494,6 +495,8 @@ interface Stage {
   version: string;
 }
 
+/** A log line of a stopped attempt, any download (its first group the download's name). */
+const RETRIED = shaped(downloadWords.retrying);
 const STALLED = downloadWords.stalled(Math.round(STALL_MS / 1000));
 const CUT = downloadWords.cut("ECONNRESET");
 
@@ -505,7 +508,7 @@ const logLines = async (fleet: Fleet, role: "agent" | "hub") =>
 const downloadOf = (stage: Stage, leg: "hub" | "machine"): string =>
   leg === "hub"
     ? `${stage.artifact.archive} from ${stage.host.url}`
-    : `${stage.artifact.archive} from its hub`;
+    : downloadWords.fromHub(stage.artifact.archive);
 
 /** The hub's record of the machine, every second, until `stop`. */
 function sample(fleet: Fleet, into: BinaryUpdateState[]) {
@@ -687,8 +690,8 @@ async function trickled(
       one?.ended === "whole" &&
       one.sent === artifact.size &&
       took >= forMs &&
-      !(await logLines(fleet, role)).some((line) =>
-        line.includes(downloadWords.stopped(downloadOf(stage, leg)))
+      !(await logLines(fleet, role)).some(
+        (line) => RETRIED.exec(line)?.[1] === downloadOf(stage, leg)
       ),
     `${took} ms; ${JSON.stringify(served)}`
   );

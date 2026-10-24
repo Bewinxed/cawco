@@ -1632,7 +1632,7 @@ export class BinaryUpdater {
       hubFetch: undefined,
     });
     const url = `${hub}/api/binary-updates/artifacts/${encodeURIComponent(version)}/${encodeURIComponent(artifact.archive)}`;
-    const what = `${artifact.archive} from its hub`;
+    const what = downloadWords.fromHub(artifact.archive);
     let saidAt = 0;
     const say = (
       progress: Pick<BinaryUpdateState, "download" | "hubFetch">
