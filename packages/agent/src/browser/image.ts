@@ -18,6 +18,7 @@ export const BROWSER_IMAGE_FILES = [
   "chromium.conf",
   "policies.json",
   "preferences.json",
+  "xorg.conf",
 ] as const;
 
 /** One file of `packages/agent/browser/`: as the binary embedded it, or the checkout's. */

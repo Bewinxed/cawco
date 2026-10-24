@@ -255,6 +255,15 @@ export class LocalHost implements BrowserHost {
         // at the whole screen (cdp-takeover.ts).
         `--screen-info={${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}}`,
         `--window-size=${BROWSER_SCREEN.width},${BROWSER_SCREEN.height}`,
+        // A desktop with a mouse, as the container host's X server is
+        // (browser/xorg.conf): headless Chromium has no input device, so
+        // every page reads (pointer: none) and (hover: none). Blink's pointer
+        // and hover settings say a mouse instead (ui::PointerType FINE = 4,
+        // ui::HoverType HOVER = 2), the switch Playwright launches every
+        // headless Chromium with (playwright-core 1.64.1). A page that
+        // emulates touch (`Emulation.setTouchEmulationEnabled`) still reads
+        // coarse while it does.
+        "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
         "about:blank",
       ],
       { detached: true, env: hostEnvironment(), stdio: ["ignore", log, log] }
