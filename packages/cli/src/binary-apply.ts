@@ -579,7 +579,10 @@ async function handOverKeeperAlone(version: string): Promise<void> {
 /**
  * `VACUUM INTO` a copy of the hub database beside it, named for the build it
  * belongs to: one read transaction, so the copy is the database as one commit
- * left it while the hub goes on writing. A copy SQLite does not check `ok`
+ * left it while the hub goes on writing. The hub keeps its file in WAL (hub
+ * db/wal.ts): the read sees every commit up to its start, in the WAL or the
+ * file, never waits on the hub's writes, and the copy is one file in
+ * rollback-journal mode, whole by itself. A copy SQLite does not check `ok`
  * throws, before anything is swapped. A journal left from a copy before is
  * removed with it: opened beside this one, SQLite would play it in.
  */
@@ -1093,10 +1096,11 @@ async function restoreDatabase(
 }
 
 /**
- * Every file SQLite keeps beside a database: the rollback journal (the hub's
- * own mode: it opens its file with no `journal_mode`), the WAL and the
- * shared-memory index. Each belongs to the one file beside it; left beside
- * another, SQLite plays it into that one ("database disk image is malformed").
+ * Every file SQLite keeps beside a database: the WAL and its shared-memory
+ * index (the hub's own mode, hub db/wal.ts), and the rollback journal a build
+ * before WAL left, or a hub of one killed mid-write. Each belongs to the one
+ * file beside it; left beside another, SQLite plays it into that one
+ * ("database disk image is malformed").
  */
 const SIDECARS = ["-journal", "-wal", "-shm"] as const;
 
@@ -1108,7 +1112,10 @@ const SIDECARS = ["-journal", "-wal", "-shm"] as const;
  * only good beside the file it belongs to. Its sidecars go first and the file
  * itself last, so a moved-aside file means every sidecar went with it, and
  * what a helper that died half-way left at `db` is a copy of ours. The hub
- * is held off the database while this runs ({@link holdDatabase}).
+ * is held off the database while this runs ({@link holdDatabase}). The copy
+ * goes in by a plain file copy: {@link backUpDatabase} wrote it as one file
+ * in rollback-journal mode, with no WAL of its own to lose, and the hub
+ * converts it to WAL as it opens it.
  */
 export async function putBackup(
   db: string,

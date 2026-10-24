@@ -3,15 +3,18 @@
  * intact (cli binary-apply.ts `backUpDatabase`, `putBackup`,
  * `restoreDatabase`), on the update helper's own functions:
  *
- * 1. Rollback journal, the hub's own mode (it opens its file with no
- *    `journal_mode`): rows written, the pre-update copy taken, then the hub
- *    killed mid-transaction as its unit's SIGTERM does (the kernel's, no
- *    JavaScript runs after it), leaving a hot `cawco.db-journal`; the trial
- *    build damages the file as the stage-2 `migrates` fixture does; the copy
- *    is put back. The restored file, opened as the hub opens it, answers
- *    drizzle's first statement, `PRAGMA integrity_check` says `ok`, and every
- *    row is there.
- * 2. The same in WAL mode, with committed writes left in the WAL.
+ * 1. WAL, the hub's own mode (hub db/wal.ts): rows written, committed
+ *    writes left in the WAL, then a write transaction held open; the
+ *    pre-update copy is taken beside it, as the helper takes it beside a
+ *    running hub, with no wait; then the hub is killed mid-transaction as its
+ *    unit's SIGTERM does (the kernel's, no JavaScript runs after it), leaving
+ *    its `cawco.db-wal`; the trial build damages the file as the stage-2
+ *    `migrates` fixture does; the copy is put back. The restored file, opened
+ *    as the hub opens it, is in WAL, answers drizzle's first statement,
+ *    `PRAGMA integrity_check` says `ok`, and every row is there.
+ * 2. The same for a database a build before WAL kept in rollback-journal
+ *    mode, its hub killed mid-write leaving a hot `cawco.db-journal` (the
+ *    copy taken before the write: in that mode a writer shuts readers out).
  * 3. While the helper holds the hub's lock (`<db>.lock`, core db-lock.ts), a
  *    hub that starts refuses the database; once the helper lets it go, a hub
  *    takes it. A live hub holding it keeps the helper out until it is gone.
@@ -32,6 +35,7 @@ import {
   lockDatabase,
   releaseDatabase,
 } from "../../../packages/core/src/db-lock";
+import { useWal } from "../../../packages/hub/src/db/wal";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -42,7 +46,7 @@ const ROWS = 600;
 const seed = (path: string, wal: boolean): void => {
   const db = new Database(path);
   if (wal) {
-    db.run("PRAGMA journal_mode = WAL");
+    useWal(db, path);
   }
   db.run("CREATE TABLE t (id INTEGER PRIMARY KEY, v BLOB)");
   db.run("CREATE TABLE u (id INTEGER PRIMARY KEY, v BLOB)");
@@ -64,10 +68,15 @@ const seed = (path: string, wal: boolean): void => {
 /**
  * A hub killed while it writes: a process of its own rewrites every row in
  * one open transaction (a tiny page cache, so the pages reach the file
- * before the commit), says so, and is killed with SIGKILL. In WAL mode it
- * first commits rewrites that stay in the WAL (no checkpoint).
+ * before the commit), says so, `whileWriting` runs beside that open write,
+ * and the process is killed with SIGKILL. In WAL mode it first commits
+ * rewrites that stay in the WAL (no checkpoint).
  */
-const killedMidWrite = async (path: string, wal: boolean): Promise<void> => {
+const killedMidWrite = async (
+  path: string,
+  wal: boolean,
+  whileWriting: () => void
+): Promise<void> => {
   const child = Bun.spawn(
     [
       process.execPath,
@@ -94,17 +103,28 @@ await Bun.sleep(60000);`,
     }
     said += new TextDecoder().decode(value);
   }
-  child.kill("SIGKILL");
+  try {
+    whileWriting();
+  } finally {
+    child.kill("SIGKILL");
+  }
   await child.exited;
 };
 
-/** What the hub meets on opening `path`: its first statement, the check, the rows. */
+/** What the hub meets on opening `path` (db/index.ts `make`): its mode, its first statement, the check, the rows. */
 const openAsHub = (
   path: string
-): { check: string; rows: number; rule: boolean } | { error: string } => {
+):
+  | { check: string; mode: string; rows: number; rule: boolean }
+  | { error: string } => {
   try {
     const db = new Database(path);
     try {
+      db.run("PRAGMA busy_timeout = 5000");
+      useWal(db, path);
+      const mode =
+        db.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()
+          ?.journal_mode ?? "none";
       db.run(
         'CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)'
       );
@@ -122,7 +142,7 @@ const openAsHub = (
             "SELECT name FROM rules WHERE name = 'kept-through-rollback'"
           )
           .get() !== null;
-      return { check, rows, rule };
+      return { check, mode, rows, rule };
     } finally {
       db.close();
     }
@@ -138,8 +158,33 @@ const rollback = async (kit: Kit, scratch: string, wal: boolean) => {
   mkdirSync(folder, { recursive: true });
   const db = join(folder, "cawco.db");
   seed(db, wal);
-  const backup = backUpDatabase(db, "0.0.1-test.2");
-  await killedMidWrite(db, wal);
+  // In rollback-journal mode the hub's write shuts every reader out, so the
+  // copy is taken before it; in WAL, beside it, with no busy_timeout: a copy
+  // that had to wait would fail at once with SQLITE_BUSY.
+  let backup = wal ? undefined : backUpDatabase(db, "0.0.1-test.2");
+  let beside = "";
+  await killedMidWrite(db, wal, () => {
+    if (!wal) {
+      return;
+    }
+    const from = performance.now();
+    try {
+      backup = backUpDatabase(db, "0.0.1-test.2");
+      beside = `copied in ${Math.round(performance.now() - from)} ms`;
+    } catch (error) {
+      beside = error instanceof Error ? error.message : String(error);
+    }
+  });
+  if (wal) {
+    kit.check(
+      "WAL: the pre-update copy is taken beside the hub's open write transaction, with no wait, and SQLite checks it ok",
+      backup !== undefined,
+      beside
+    );
+  }
+  if (!backup) {
+    return;
+  }
   const sidecars = ["-journal", "-wal", "-shm"].filter((suffix) =>
     existsSync(`${db}${suffix}`)
   );
@@ -153,11 +198,15 @@ const rollback = async (kit: Kit, scratch: string, wal: boolean) => {
   // The trial build's hub, as the stage-2 `migrates` fixture is.
   await appendFile(db, "migrated-and-broken");
   await putBackup(db, backup, "0.0.1-test.8");
+  // Before the hub's open, which makes a WAL of the restored file's own.
+  const leftBeside = sidecars.filter((suffix) => existsSync(`${db}${suffix}`));
   const opened = openAsHub(db);
   kit.check(
-    `${mode}: the restored database opens as the hub opens it and PRAGMA integrity_check says ok`,
-    "check" in opened && opened.check === "ok",
-    "error" in opened ? opened.error : opened.check.slice(0, 300)
+    `${mode}: the restored database opens as the hub opens it, in WAL, and PRAGMA integrity_check says ok`,
+    "check" in opened && opened.check === "ok" && opened.mode === "wal",
+    "error" in opened
+      ? opened.error
+      : `${opened.mode}; ${opened.check.slice(0, 300)}`
   );
   kit.check(
     `${mode}: every row and the saved rule are in the restored database`,
@@ -170,11 +219,11 @@ const rollback = async (kit: Kit, scratch: string, wal: boolean) => {
   kit.check(
     `${mode}: every sidecar the killed hub left is moved aside with the migrated file`,
     sidecars.every((suffix) => existsSync(`${aside}${suffix}`)) &&
-      sidecars.every((suffix) => !existsSync(`${db}${suffix}`)),
+      leftBeside.length === 0,
     sidecars
       .map(
         (suffix) =>
-          `${suffix}: aside ${existsSync(`${aside}${suffix}`)}, beside the restored ${existsSync(`${db}${suffix}`)}`
+          `${suffix}: aside ${existsSync(`${aside}${suffix}`)}, beside the restored ${leftBeside.includes(suffix)}`
       )
       .join("; ")
   );
@@ -239,8 +288,8 @@ const spec: Spec = {
     process.env.XDG_DATA_HOME = join(scratch, "data");
     mkdirSync(join(scratch, "data", "cawco", "binary"), { recursive: true });
     try {
-      await rollback(kit, scratch, false);
       await rollback(kit, scratch, true);
+      await rollback(kit, scratch, false);
       await lockLegs(kit, scratch);
     } finally {
       if (xdg === undefined) {

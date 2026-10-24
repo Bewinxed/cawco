@@ -8,8 +8,8 @@
  * `[hub] machine d04ca118428001f1 registered` and its `[fleet] welcome …
  * 326 item(s)`; apply.log: "does not answer" from 15.4 s to 151.8 s.
  *
- * `PROBE_HUB_DB` names a `.backup` of the live database (read-only on the
- * live file). Its copy, in the scratch fleet's hub folder, is made inert
+ * `PROBE_HUB_DB` names the live database or a copy of it (`VACUUM INTO`,
+ * read-only on the given file). Its copy, in the scratch fleet's hub folder, is made inert
  * before the hub opens it ({@link INERT}): no SSH to the fleet's machines,
  * no routine, poll, relay, event route, push or OpenRouter key, paired
  * devices not required. The hub reaches nothing past loopback: its HTTP(S)
@@ -30,11 +30,10 @@
  * `PROBE_CPU_PROF=1` writes the hub's CPU profile (Chrome .cpuprofile) to
  * the spec's folder; the hub ends itself {@link PROFILE_MS} after it starts.
  *
- *   PROBE_HUB_DB=<backup> bun scripts/probe-kit/run.ts hub-restart-live-db
+ *   PROBE_HUB_DB=<database> bun scripts/probe-kit/run.ts hub-restart-live-db
  */
 import { Database } from "bun:sqlite";
 import {
-  copyFileSync,
   mkdirSync,
   readdirSync,
   rmSync,
@@ -106,17 +105,26 @@ async function run(kit: Kit): Promise<void> {
   const source = process.env.PROBE_HUB_DB;
   if (!source) {
     kit.check(
-      "PROBE_HUB_DB names a backup of the live hub's database",
+      "PROBE_HUB_DB names the live hub's database or a copy of it",
       false,
-      "set PROBE_HUB_DB=<path to a .backup>"
+      "set PROBE_HUB_DB=<the live database, or a copy of it>"
     );
     return;
   }
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   const dbPath = fleet.env.CAWCO_DB_PATH ?? "";
-  copyFileSync(source, dbPath);
-  rmSync(`${dbPath}-wal`, { force: true });
-  rmSync(`${dbPath}-shm`, { force: true });
+  // SQLite's own copy, never the file's bytes: a live hub's database is in
+  // WAL (hub db/wal.ts), with commits still in its `-wal`. Read-only on the
+  // source, which may be the live file itself or a copy of it.
+  for (const suffix of ["", "-wal", "-shm"]) {
+    rmSync(`${dbPath}${suffix}`, { force: true });
+  }
+  const given = new Database(source, { readonly: true });
+  try {
+    given.run(`VACUUM INTO '${dbPath.replaceAll("'", "''")}'`);
+  } finally {
+    given.close();
+  }
   const db = new Database(dbPath);
   const skipped: string[] = [];
   for (const statement of INERT) {

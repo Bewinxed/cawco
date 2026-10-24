@@ -518,7 +518,7 @@ export async function until<T>(
 ): Promise<T> {
   const deadline = Date.now() + ms;
   for (;;) {
-    // A read that throws, synchronously (the hub holding the db: SQLITE_CANTOPEN)
+    // A read that throws, synchronously (a database the hub has not made yet: SQLITE_CANTOPEN)
     // or by rejecting, is no reading yet: `.then(read)` makes both a rejection.
     // biome-ignore lint/performance/noAwaitInLoops: each look follows the scratch services' last state
     const value = await Promise.resolve()
@@ -2457,22 +2457,23 @@ async function standUp(
     }
   };
   /**
-   * A read beside the running hub's own: read-only, and it waits for the
-   * hub's lock (busy_timeout) rather than failing on it. A hub started again
-   * after a kill holds its database through its start (r255:
-   * "SQLiteError: database is locked" at a read's prepare, as the restarted
-   * hub settled a launch).
+   * A read beside the running hub's own, read-only. The hub keeps its file
+   * in WAL (hub db/wal.ts), where its writes never block a read, so the read
+   * does not wait.
    */
   const query = <T>(sql: string, ...params: (string | number)[]): T[] => {
     const db = new Database(dbPath, { readonly: true });
     try {
-      db.exec("PRAGMA busy_timeout = 15000");
       return db.query(sql).all(...params) as T[];
     } finally {
       db.close();
     }
   };
-  /** A write beside the running hub's own: it waits for the hub's lock (busy_timeout) rather than failing on it. */
+  /**
+   * A write beside the running hub's own. WAL keeps one writer at a time
+   * (sqlite.org/wal.html 2.2), so it waits for the hub's write
+   * (busy_timeout) rather than failing on it.
+   */
   const write = (sql: string, ...params: (string | number | null)[]) => {
     const db = new Database(dbPath);
     try {

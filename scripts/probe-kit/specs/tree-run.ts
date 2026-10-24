@@ -317,30 +317,11 @@ interface ItemRow {
   workspace_id: string;
 }
 
-/**
- * Rows of the hub's database, read again while a write of the hub's holds
- * it (SQLITE_BUSY on a read-only connection), for 15 s at most.
- */
-const rows = <T>(
-  fleet: KitFleet,
-  sql: string,
-  ...params: string[]
-): Promise<T[]> =>
-  until(
-    "a read of the hub's database",
-    () => fleet.query<T>(sql, ...params),
-    () => true,
-    15_000
-  );
-
 const ITEM =
   "SELECT id, instance_id, parent_instance_id, state, error, ended_at, stopping_at, background, workspace_id FROM work_items";
 
-const itemOf = async (
-  fleet: KitFleet,
-  id: string
-): Promise<ItemRow | undefined> =>
-  (await rows<ItemRow>(fleet, `${ITEM} WHERE id = ?`, id))[0];
+const itemOf = (fleet: KitFleet, id: string): ItemRow | undefined =>
+  fleet.query<ItemRow>(`${ITEM} WHERE id = ?`, id)[0];
 
 /** A host-scope delegate of `parent`, filed as its `delegate` call files it. */
 const delegate = (
@@ -411,21 +392,18 @@ const keyedLeg = async (
     delay(300).then(() => toolWords(session, "delegate", ask, once)),
   ]);
   const later = await toolWords(session, "delegate", ask, once);
-  const filed = async () =>
-    (
-      await rows<{ id: string }>(
-        fleet,
-        "SELECT id FROM work_items WHERE title = ?",
-        ask.title
-      )
+  const filed = () =>
+    fleet.query<{ id: string }>(
+      "SELECT id FROM work_items WHERE title = ?",
+      ask.title
     ).length;
   kit.check(
     "k1: a delegate call sent again under the same tool use id answers the same item, while it runs and once answered, and files one",
     !first.refused &&
       first.text === again.text &&
       first.text === later.text &&
-      (await filed()) === 1,
-    `first ${JSON.stringify(first.text.slice(0, 160))}; again ${JSON.stringify(again.text.slice(0, 160))}; later ${JSON.stringify(later.text.slice(0, 160))}; filed ${await filed()}`
+      filed() === 1,
+    `first ${JSON.stringify(first.text.slice(0, 160))}; again ${JSON.stringify(again.text.slice(0, 160))}; later ${JSON.stringify(later.text.slice(0, 160))}; filed ${filed()}`
   );
   const other = await toolWords(session, "delegate", ask, {
     via: "mcp",
@@ -433,8 +411,8 @@ const keyedLeg = async (
   });
   kit.check(
     "k1: a call under another tool use id files a second item",
-    !other.refused && other.text !== first.text && (await filed()) === 2,
-    `other ${JSON.stringify(other.text.slice(0, 160))}; filed ${await filed()}`
+    !other.refused && other.text !== first.text && filed() === 2,
+    `other ${JSON.stringify(other.text.slice(0, 160))}; filed ${filed()}`
   );
 };
 
@@ -498,11 +476,10 @@ const treeLeg = async (
     });
     await delay(6000);
     frozen = {
-      rows: await rows<{ ended_at: number | null; instance_id: string }>(
-        fleet,
+      rows: fleet.query<{ ended_at: number | null; instance_id: string }>(
         "SELECT instance_id, ended_at FROM tree_stops"
       ),
-      items: await Promise.all(all.map((one) => itemOf(fleet, one.workItemId))),
+      items: all.map((one) => itemOf(fleet, one.workItemId)),
     };
   } finally {
     fleet.freeze("agent", false);
@@ -532,12 +509,9 @@ const treeLeg = async (
     (item) => item.state === "cancelled",
     180_000
   ).catch(() => undefined);
-  const items = await Promise.all(
-    all.map((one) => itemOf(fleet, one.workItemId))
-  );
+  const items = all.map((one) => itemOf(fleet, one.workItemId));
   const [o, a, b, a1] = items.map((item) => item?.ended_at ?? Number.NaN);
-  const left = await rows<{ instance_id: string }>(
-    fleet,
+  const left = fleet.query<{ instance_id: string }>(
     "SELECT instance_id FROM tree_stops"
   );
   kit.check(
@@ -742,8 +716,7 @@ const routineLeg = async (
       ).catch(() => undefined)
     : undefined;
   const [place] = orchestrator
-    ? await rows<{ host: number; path: string }>(
-        fleet,
+    ? fleet.query<{ host: number; path: string }>(
         "SELECT host, path FROM workspaces WHERE id = ?",
         orchestrator.workspace_id
       )
@@ -779,12 +752,8 @@ const routineLeg = async (
     120_000
   ).catch(() => undefined);
   await delay(5000);
-  const after = [
-    await itemOf(fleet, orchestrator.id),
-    await itemOf(fleet, child.id),
-  ];
-  const held = await rows<{ instance_id: string }>(
-    fleet,
+  const after = [itemOf(fleet, orchestrator.id), itemOf(fleet, child.id)];
+  const held = fleet.query<{ instance_id: string }>(
     "SELECT instance_id FROM tree_stops"
   );
   kit.check(
@@ -1086,7 +1055,7 @@ const custodyLeg = async (
       seenWhile.push({
         custody: row?.custody?.state,
         status: row?.status,
-        state: (await itemOf(fleet, held.workItemId))?.state,
+        state: itemOf(fleet, held.workItemId)?.state,
       });
     }
   } finally {

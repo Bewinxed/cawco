@@ -251,6 +251,7 @@ import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
 import { type TreeStopsDb, treeStopsDb } from "./tree-stops";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
+import { closeWal, useWal } from "./wal";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
@@ -2904,15 +2905,18 @@ export const hashHookMaterial = (hook: {
 const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
-  // EVERY WRITE WAITS ITS TURN. Another connection to this file
-  // (delegate-types.ts's, the CLI's `cawco pairing off`, a
-  // probe's writes, the sqlite3 shell) holds the write lock for a
-  // statement's or a transaction's length, and the hub's write waits it out
-  // rather than failing with "database is locked".
+  // EVERY WRITE WAITS ITS TURN. WAL lets reads run beside a write, but
+  // "there can only be one writer at a time" (sqlite.org/wal.html 2.2):
+  // another connection's write to this file (delegate-types.ts's, the CLI's
+  // `cawco pairing off`, a probe's writes, the sqlite3 shell) holds the write
+  // lock for a statement's or a transaction's length, and the hub's write
+  // waits it out rather than failing with "database is locked".
   // busy_timeout: a write that opens the file's lock waits up to 5 s for it
   // (0 ms and failed with none, 330 ms and done with it, against a writer in
-  // another process: workspace-retire, G, 2026-10-16).
+  // another process: workspace-retire, G, 2026-10-16). Set first, so the
+  // conversion to WAL below waits out a reader of a file not yet converted.
   db.$client.run("PRAGMA busy_timeout = 5000");
+  useWal(db.$client, path);
   // BEGIN IMMEDIATE: that wait is only for a lock asked for with no read
   // open. drizzle's bun-sqlite `transaction` is DEFERRED unless told
   // otherwise (`nativeTx[config.behavior ?? "deferred"]()`), so one that
@@ -4400,7 +4404,7 @@ const make = async (path: string): Promise<DbShape> => {
   };
 
   const store: DbShape = {
-    close: () => db.$client.close(),
+    close: () => closeWal(db.$client),
     machinePathOn: (machineId, raw) => {
       const agent = db
         .select({ home: agents.home, hostname: agents.hostname })

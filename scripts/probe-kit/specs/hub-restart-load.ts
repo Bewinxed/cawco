@@ -28,7 +28,7 @@
  *   bun scripts/probe-kit/run.ts hub-restart-load
  */
 import { Database } from "bun:sqlite";
-import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
@@ -375,7 +375,16 @@ async function run(kit: Kit): Promise<void> {
   const seeded = seedLiveRows(fleet.env.CAWCO_DB_PATH ?? "");
   kit.note(`seeded the hub's database to ${JSON.stringify(seeded)}`);
   if (process.env.PROBE_KEEP_DB === "1") {
-    copyFileSync(fleet.env.CAWCO_DB_PATH ?? "", join(kit.out, "seeded.db"));
+    // SQLite's own copy: the hub's file is in WAL (hub db/wal.ts), and a
+    // copy of its bytes alone would lose what its `-wal` still holds.
+    const kept = join(kit.out, "seeded.db");
+    rmSync(kept, { force: true });
+    const seededDb = new Database(fleet.env.CAWCO_DB_PATH ?? "");
+    try {
+      seededDb.run(`VACUUM INTO '${kept.replaceAll("'", "''")}'`);
+    } finally {
+      seededDb.close();
+    }
   }
   const profile = process.env.PROBE_CPU_PROF === "1";
   // Profiled, the hub ends itself {@link PROFILE_MS} after it starts: Bun

@@ -15,9 +15,10 @@
  * foreign_key_check`): a hub that kept a port for a project no longer there
  * died at every start (nightly 4627).
  *
- * `--db <path>`: the same over a copy of that database instead (a `.backup`
- * of a live hub's), which is never written: hub start-up and migrations are
- * proven on a copy of the live database before landing.
+ * `--db <path>`: the same over a copy of that database instead (a live
+ * hub's, or a copy of one), taken by `VACUUM INTO`; the given file is never
+ * written: hub start-up and migrations are proven on a copy of the live
+ * database before landing.
  */
 import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -188,12 +189,23 @@ try {
   }
   const dbPath = join(scratch, "hub.db");
   mkdirSync(join(scratch, "home"));
-  await Bun.write(
-    dbPath,
-    GIVEN
-      ? Bun.file(GIVEN)
-      : Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
-  );
+  if (GIVEN) {
+    // SQLite's own copy, never the file's bytes: a hub's database is in WAL
+    // (hub db/wal.ts), and its committed writes not yet checkpointed are in
+    // `-wal` beside it, which a copy of the file alone would lose. One read
+    // transaction, so the copy is one commit's state even beside a live hub.
+    const given = new Database(GIVEN, { readonly: true });
+    try {
+      given.run(`VACUUM INTO '${dbPath.replaceAll("'", "''")}'`);
+    } finally {
+      given.close();
+    }
+  } else {
+    await Bun.write(
+      dbPath,
+      Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
+    );
+  }
   const before = read(dbPath);
   const { hub, lifetime } = await hubInProcess(dbPath, join(scratch, "home"));
   const answers: string[] = [];
