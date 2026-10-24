@@ -17,7 +17,10 @@
  *   moment). An orphan is reparented to whoever reaps for its parent: the
  *   service manager or init, outside the child's processes, or, inside a
  *   workspace's sandbox on Linux, the sandbox's init, which starts nothing
- *   of its own after its runner (boundary.ts `Place.idle`).
+ *   of its own after its runner (boundary.ts `Place.idle`). A browser's
+ *   crash handler, which Chromium starts orphaned and which ends with its
+ *   browser, is one only once no process of its browser's install runs
+ *   ({@link browsersHandlers}).
  *
  * What a child started: on Linux, where the keeper gives each child a cgroup
  * of its own (sessiond cgroup.ts), every process in that cgroup, a
@@ -49,6 +52,7 @@ import { basename, dirname, join } from "node:path";
 import {
   commandLine,
   cpuTimeUsed,
+  executablePath,
   type ProcessLineage,
   processLineage,
   residentBytes,
@@ -339,6 +343,49 @@ const climbed = async (
 type Sandbox =
   { idle: readonly number[]; inner: number } | { members: readonly number[] };
 
+/** A browser's crash handler, by its file's name: Chromium's and Chrome's `chrome_crashpad_handler`, Edge's `msedge_crashpad_handler`, a Mac helper's `… Crashpad Handler`. */
+const CRASH_HANDLER = /crashpad[_ ]handler$/i;
+const APP = ".app/";
+
+/** The install a file is part of: its `.app` bundle on the Mac, else its folder (a browser's helpers and crash handler stand beside it). */
+const installOf = (path: string): string => {
+  const app = path.indexOf(APP);
+  return app === -1 ? dirname(path) : path.slice(0, app + APP.length - 1);
+};
+
+/**
+ * The crash handlers among `members` whose browser still runs: each one
+ * whose install a process of `members` that is no crash handler runs from.
+ * Chromium starts its crash handlers in a session of their own, their
+ * parent gone at once (ppid 1: "the process that started them ended" from
+ * their first instant), and each exits once every process it watches has
+ * ("Generally speaking the handler process exits when all of its
+ * connected clients have exited", crashpad-dev,
+ * https://groups.google.com/a/chromium.org/g/crashpad-dev/c/Wpb6JjA75Vo).
+ * So a handler is no leftover while its browser runs; once the browser has
+ * ended, one still standing is.
+ */
+const browsersHandlers = async (
+  members: ReadonlyMap<number, ProcessLineage>
+): Promise<Set<number>> => {
+  const files = await Promise.all(
+    [...members.keys()].map(
+      async (pid) => [pid, await executablePath(pid)] as const
+    )
+  );
+  const handler = (file: string) => CRASH_HANDLER.test(basename(file));
+  const running = new Set(
+    files.flatMap(([, file]) =>
+      file && !handler(file) ? [installOf(file)] : []
+    )
+  );
+  return new Set(
+    files.flatMap(([pid, file]) =>
+      file && handler(file) && running.has(installOf(file)) ? [pid] : []
+    )
+  );
+};
+
 /** The leftovers of `members` past their grace and not yet told, in words; nothing when there are none. */
 const leftovers = async (
   root: ProcessLineage,
@@ -350,16 +397,23 @@ const leftovers = async (
   const init = sandbox && "inner" in sandbox ? sandbox : undefined;
   const idle = new Set(init?.idle);
   const now = Date.now();
-  const due: ProcessLineage[] = [];
-  for (const row of members.values()) {
-    // A pid namespace's init (its parent 0, outside its namespace) is no one's leftover.
-    const orphan =
+  // A pid namespace's init (its parent 0, outside its namespace) is no one's leftover.
+  const orphans = [...members.values()].filter(
+    (row) =>
       row.pid !== root.pid &&
       row.ppid !== 0 &&
       (!members.has(row.ppid) ||
-        (row.ppid === init?.inner && !idle.has(row.pid)));
+        (row.ppid === init?.inner && !idle.has(row.pid))) &&
+      !watching.told.has(keyOf(row))
+  );
+  const browsing =
+    orphans.length > 0 ? await browsersHandlers(members) : new Set<number>();
+  const due: ProcessLineage[] = [];
+  for (const row of orphans) {
     const key = keyOf(row);
-    if (!orphan || watching.told.has(key)) {
+    // Its grace starts over once its browser has ended.
+    if (browsing.has(row.pid)) {
+      watching.left.delete(key);
       continue;
     }
     const since = watching.left.get(key) ?? now;

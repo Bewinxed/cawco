@@ -8,11 +8,17 @@
  * workspace.
  *
  * The agent's leak threshold is {@link THRESHOLD_GIB} GiB
- * (`CAWCO_LEAK_MEMORY_GIB`). The delegate runs two commands in its
+ * (`CAWCO_LEAK_MEMORY_GIB`). The delegate runs three commands in its
  * workspace's boundary:
  *
  * - a background command whose process, named `leak-probe-W`, grows 8 MiB a
  *   second to 1.5 GiB and holds it;
+ * - a foreground command that runs the machine's Chromium headless (the one
+ *   the daemon's render draws with, agent capabilities.ts
+ *   `browserExecutable`) {@link BROWSER_HOLD_S} s, past a leftover's grace
+ *   and two looks, counting its crash handlers, then ends it and counts
+ *   again. Chromium starts them in a session of their own, the sandbox
+ *   init's from their first instant, and they end with it;
  * - a foreground command that leaves `sleep 600.0961` double-forked into a
  *   session of its own (`fork and exit; setsid`), so it is the sandbox
  *   init's from its first instant, and ends at once.
@@ -30,11 +36,17 @@
  *   delegated it reads the leak's next height instead, naming the delegate's
  *   item and `leak-probe-W` (hub server.ts `tellLeak`).
  * - (w4) Both processes are still running.
+ * - (w5) The browser ran with its crash handlers, which ended with it, and
+ *   no session read a leftover naming a crash handler, nor did the agent's
+ *   log say one: on main every browser launch in a workspace was told as "2
+ *   processes this session started are still running after the process
+ *   that started them ended".
  *
  *   bun scripts/probe-kit/run.ts leak-notice-workspace
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { browserExecutable } from "../../../packages/agent/src/capabilities";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   isAlive,
@@ -51,6 +63,13 @@ const LEFT_WAIT_MS = 90_000;
 const TAG = "PROBE-LEAK-WS";
 const LEAKER = "leak-probe-W";
 const LEFTOVER = "600.0961";
+/** How long the browser runs: a leftover's 10 s grace, two looks of 10 s, and room. */
+const BROWSER_HOLD_S = 35;
+/** Chromium headless for {@link BROWSER_HOLD_S} s, its crash handlers counted while it runs and once it ended. */
+const BROWSE = (executable: string) =>
+  `D=$(mktemp -d); ${JSON.stringify(executable)} --headless --disable-gpu --no-sandbox --user-data-dir="$D" about:blank > /dev/null 2>&1 & P=$!; sleep ${BROWSER_HOLD_S}; echo "HANDLERS-RUNNING=$(pgrep -fc crashpad_handler)"; kill $P; wait $P; sleep 3; echo "HANDLERS-AFTER=$(pgrep -fc crashpad_handler)"; rm -rf "$D"; echo BROWSER-DONE`;
+const HANDLERS_RUNNING = /HANDLERS-RUNNING=(\d+)/;
+const HANDLERS_AFTER = /HANDLERS-AFTER=(\d+)/;
 const GROW = `exec -a ${LEAKER} perl -e 'my @k; for (1 .. 192) { push @k, "x" x (8 * 1024 * 1024); select(undef, undef, undef, 1); } sleep 900;'`;
 const LEAVE = `perl -MPOSIX -e 'fork and exit; POSIX::setsid(); open(STDIN, "<", "/dev/null"); open(STDOUT, ">", "/dev/null"); open(STDERR, ">", "/dev/null"); exec @ARGV' sleep ${LEFTOVER}; echo LEFT-DONE`;
 
@@ -114,14 +133,18 @@ const respond = (request: Seen): Reply => {
   }
   if (step === 1 && request.afterTool) {
     step = 2;
+    return bash(BROWSE(browserExecutable() ?? "chromium"), false);
+  }
+  if (step === 2 && request.afterTool) {
+    step = 3;
     return bash(LEAVE, false);
   }
   if (request.afterTool) {
     if (pending) {
       return want(request, pending.name, pending.input);
     }
-    if (step === 2) {
-      step = 3;
+    if (step === 3) {
+      step = 4;
       return want(request, WAIT, REST);
     }
     return text("ok");
@@ -244,6 +267,25 @@ const spec: Spec = {
         leakers.some((pid) => isAlive(listedPid(pid))) &&
           leftovers.some((pid) => isAlive(listedPid(pid))),
         `${LEAKER}: ${leakers.join(", ") || "none"}; sleep ${LEFTOVER}: ${leftovers.join(", ") || "none"}`
+      );
+      const browsed = fleet.seen.find(
+        (request) => request.afterTool && request.body.includes("BROWSER-DONE")
+      )?.body;
+      const running = Number(browsed?.match(HANDLERS_RUNNING)?.[1]);
+      const after = Number(browsed?.match(HANDLERS_AFTER)?.[1]);
+      const handlerTold = toldWith(fleet.seen, [
+        leakWords.leftBehind,
+        "crashpad",
+      ]);
+      const logged = (await fleet.logs("agent"))
+        .split("\n")
+        .filter(
+          (line) => line.includes("[leaks]") && line.includes("crashpad")
+        );
+      check(
+        "(w5) a browser run in the workspace for 35 s had its crash handlers, they ended with it, and no session read a leftover naming one nor did the agent's log",
+        running > 0 && after === 0 && !handlerTold && logged.length === 0,
+        `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}; ${handlerTold ? `told: ${handlerTold.slice(0, 400)}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? "no [leaks] line naming crashpad" : logged.join(" | ").slice(0, 400)}`
       );
     } finally {
       const probes = await Promise.all([

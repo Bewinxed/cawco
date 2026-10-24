@@ -990,6 +990,25 @@ export function processArgs(
 }
 
 /**
+ * The file a process runs, as the kernel keeps it: Linux's
+ * `/proc/<pid>/exe`, macOS's `KERN_PROCARGS2` executable path (what it was
+ * started from, before any title it wrote over its arguments). Undefined
+ * when it is gone or not ours to read.
+ */
+export async function executablePath(pid: number): Promise<string | undefined> {
+  if (process.platform === "linux") {
+    return await readlink(`/proc/${pid}/exe`).catch(() => undefined);
+  }
+  const room = argsRoom();
+  const raw = room ? sysctl([CTL_KERN, KERN_PROCARGS2, pid], room) : undefined;
+  if (!raw || raw.length < 5) {
+    return;
+  }
+  const end = raw.indexOf(0, 4);
+  return end > 4 ? decoder.decode(raw.subarray(4, end)) : undefined;
+}
+
+/**
  * A process's command line as `ps -ww -o command= -p <pid>` prints it;
  * undefined when there is no such process.
  */
