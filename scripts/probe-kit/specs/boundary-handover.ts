@@ -784,7 +784,7 @@ const deletedStops = async (
       !running.includes(after[0] as string) &&
       took <= LOOK_BOUND_MS &&
       Boolean(said),
-    `sessions ${sleeping.join(", ")}; delete: ${answer}; folder there: ${existsSync(folder)}; before: ${running.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the delete; ${said ? decisionSaid(said) : `no stop for the folder's move: ${decisionSaid(await stopsOf(home, h.id))}`}`
+    `sessions ${sleeping.join(", ")}; delete: ${answer}; folder there: ${existsSync(folder)}; before: ${running.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the delete; ${said ? decisionSaid(said) : `no stop for the folder's move; its decisions since the delete: ${decisionSaid((await decisionsOf(home, h.id)).filter((one) => one.at >= asked))}`}`
   );
   kit.check(
     "6: its loop is stopped with it, and the line naming it is queued for H's next command",
