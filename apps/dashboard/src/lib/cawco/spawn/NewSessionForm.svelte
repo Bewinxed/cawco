@@ -338,8 +338,10 @@
   let summarizerModel = $state("");
   /**
    * Continue mode: what the new session opens on. `summary`: a summary, the
-   * artifact index and the last turns. `asks`: the person's own messages
-   * alone, verbatim and in order; nothing is summarised. Reset on every open.
+   * artifact index and the last turns. `asks`: the messages the session was
+   * asked alone (the person's; a delegate's brief and its parent's
+   * hand-offs), verbatim and in order; nothing is summarised. Reset on every
+   * open.
    */
   let carry = $state<"summary" | "asks">("summary");
   /** Continue mode: the hub's sizing of what the continuation carries. */
