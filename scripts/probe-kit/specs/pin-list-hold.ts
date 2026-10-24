@@ -31,11 +31,12 @@
  * 4. An artifact with no pins, once read: "No open comments", the tabs and
  *    the head with no count element at 0 (The Earned Count Rule).
  * 5. A write of the pane's the hub would not keep, once synced (the hub's
- *    4400 close, which y-websocket never reopens by itself): the pane says
- *    the hub's reason in its band and joins the hub's doc again, so a pin the
- *    page writes after it is in the list.
+ *    refusal frame on the pane's socket, hub artifacts/sync.ts `refusal`):
+ *    the pane says the hub's reason in its band and goes on in a fresh doc
+ *    of the hub's, so a pin the page writes after it is in the list.
  */
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
+import { messageAuth } from "y-websocket";
 import type { Pin } from "../../../packages/core/src/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { until } from "../../scratch-fleet";
@@ -57,6 +58,24 @@ const PAGE =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Pins</title></head><body><h1>Pins</h1><p id="here">The paragraph pin 1 stands on.</p></body></html>';
 const REFUSAL = "probe refuses the link";
 const WRITE_REFUSAL = "probe refuses the write";
+
+/**
+ * The hub's word that it would not keep a write, as it says it on the
+ * writer's socket (hub artifacts/sync.ts `refusal`): y-websocket's auth
+ * type, y-protocols' permission denied (0), and the reason, a lib0
+ * varString (its UTF-8 length as a varUint, then its bytes).
+ */
+const refusalFrame = (reason: string): Buffer => {
+  const words = new TextEncoder().encode(reason);
+  const length: number[] = [];
+  let left = words.length;
+  while (left > 127) {
+    length.push((left % 128) + 128);
+    left = Math.floor(left / 128);
+  }
+  length.push(left);
+  return Buffer.from([messageAuth, 0, ...length, ...words]);
+};
 /** How long the stand-in keeps the hub's first messages from the pane. */
 const HOLD_MS = 2500;
 /** A tab's label carrying a count, as the recorder writes it. */
@@ -255,7 +274,7 @@ const recorder = () => {
 /** The pane's artifact socket through the spec: held, refused, or let through. */
 interface Stand {
   mode: "hold" | "refuse" | "through";
-  /** Closes the socket open now as the hub closes one whose write it would not keep (4400). */
+  /** Says on the socket open now, as the hub does, that it would not keep a write of the pane's. */
   refuseWrite: () => void;
   release: () => void;
 }
@@ -267,7 +286,7 @@ const standIn = async (page: Page): Promise<Stand> => {
   const stand: Stand = {
     mode: "through",
     refuseWrite: () => {
-      current?.close({ code: 4400, reason: WRITE_REFUSAL });
+      current?.send(refusalFrame(WRITE_REFUSAL));
       current = null;
     },
     release: () => {
