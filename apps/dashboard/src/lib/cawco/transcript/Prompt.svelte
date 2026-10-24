@@ -168,6 +168,15 @@
     }
   });
 
+  /** Connect's words: the yes, or once the hub has signed in, as whom. */
+  const connectLabel = $derived.by(() => {
+    if (signIn.stage === "done") {
+      const as = connectServer?.auth?.as;
+      return as ? askWords.connectedAs(as) : askWords.connected;
+    }
+    return connect?.again ? askWords.reconnect : askWords.connect;
+  });
+
   function pressConnect(): void {
     if (
       !(answerable && connect) ||
@@ -989,91 +998,74 @@
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
-      {#if signIn.stage === "done"}
-        <!-- The hub signed in: a beat in the card, as whom, before the
-             shape folds and the record stands in the transcript. -->
-        <div data-slot="choice" class="flex mt-space-2">
-          <Button
-            answer="approve-strong"
-            class="flex-none"
-            fit="prompt"
-            width="shrink"
-            data-connect-done
-            icon={IconTick}
-            label={connectServer?.auth?.as
-              ? askWords.connectedAs(connectServer.auth.as)
-              : askWords.connected}
-            size="sm"
-            variant="secondary"
-          />
-        </div>
-      {:else}
-        <!-- Over the pair, as the browser ask's refusal stands: the wait
+      <!-- Over the pair, as the browser ask's refusal stands: the wait
              (McpSignIn's), or why the sign-in did not come back with the way
              to try again (RowFault, as McpSignIn says it), or why it cannot
              be answered yet. -->
-        {#if signIn.stage === "waiting"}
-          <p
-            data-slot="wait"
-            class="mt-space-2 text-size-meta font-normal text-ink-muted"
-            role="status"
-          >
-            {askWords.connectWaiting(connect.server)}
-          </p>
-        {:else if signIn.stage === "failed" && signIn.fault && reachable && pressed === null}
-          {@const fault = faultWords(signIn.fault, connect.server)}
-          <RowFault
-            class="mt-space-2 text-size-meta"
-            again={pressConnect}
-            data-connect-fault={signIn.fault.kind}
-            details={fault.details}
-            reason={fault.reason}
-          />
-        {:else}
-          {@render wait()}
-        {/if}
-        <!-- The Peer Rule's transcript form, as the browser ask's: the yes
+      {#if signIn.stage === "waiting"}
+        <p
+          data-slot="wait"
+          class="mt-space-2 text-size-meta font-normal text-ink-muted"
+          role="status"
+        >
+          {askWords.connectWaiting(connect.server)}
+        </p>
+      {:else if signIn.stage === "failed" && signIn.fault && reachable && pressed === null}
+        {@const fault = faultWords(signIn.fault, connect.server)}
+        <RowFault
+          class="mt-space-2 text-size-meta"
+          again={pressConnect}
+          data-connect-fault={signIn.fault.kind}
+          details={fault.details}
+          reason={fault.reason}
+        />
+      {:else}
+        {@render wait()}
+      {/if}
+      <!-- The Peer Rule's transcript form, as the browser ask's: the yes
              and the refusal at the row's two ends, the one recessed fill,
              each outlined in its tint; no third control between them. Not
-             now stays live while the provider's page is open. -->
-        <div
-          data-slot="choice"
-          class="flex justify-between gap-space-8 mt-space-2"
-        >
-          <Button
-            answer="approve-strong"
-            class="flex-none"
-            fit="prompt"
-            width="shrink"
-            data-connect
-            disabled={!answerable}
-            failed={signIn.stage === "failed"}
-            icon={IconKey}
-            label={connect.again ? askWords.reconnect : askWords.connect}
-            onclick={pressConnect}
-            pending={signIn.stage === "waiting"}
-            pendingLabel={askWords.signingIn(connect.server)}
-            size="sm"
-            variant="secondary"
-          />
-          <Button
-            answer="deny-strong"
-            class="flex-none"
-            fit="prompt"
-            width="shrink"
-            data-connect-decline
-            disabled={disabledOf("deny")}
-            failed={failedOf("deny")}
-            icon={IconClose}
-            label={askWords.notNow}
-            onclick={declineConnect}
-            pending={pendingOf("deny")}
-            pendingLabel={askWords.declining}
-            size="sm"
-            variant="secondary"
-          />
-        </div>
-      {/if}
+             now stays live while the provider's page is open. Once the hub
+             has signed in, Connect's wait ends in the kit's done morph (its
+             check, for --dur-hold) under "Connected as …", the beat the
+             composer holds before the shape folds. -->
+      <div
+        data-slot="choice"
+        class="flex justify-between gap-space-8 mt-space-2"
+      >
+        <Button
+          answer="approve-strong"
+          class="flex-none"
+          fit="prompt"
+          width="shrink"
+          data-connect
+          disabled={!answerable}
+          failed={signIn.stage === "failed"}
+          icon={IconKey}
+          label={connectLabel}
+          onclick={pressConnect}
+          pending={signIn.stage === "waiting"}
+          pendingLabel={askWords.signingIn(connect.server)}
+          size="sm"
+          variant="secondary"
+        />
+        <Button
+          answer="deny-strong"
+          class="flex-none"
+          fit="prompt"
+          width="shrink"
+          data-connect-decline
+          disabled={disabledOf("deny") || signIn.stage === "done"}
+          failed={failedOf("deny")}
+          icon={IconClose}
+          label={askWords.notNow}
+          onclick={declineConnect}
+          pending={pendingOf("deny")}
+          pendingLabel={askWords.declining}
+          size="sm"
+          variant="secondary"
+        />
+      </div>
     </div>
   {:else if questions}
     {@render title(`Question from ${asker}`)}

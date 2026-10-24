@@ -2803,6 +2803,24 @@
       ? askWords.signingIn(connect.server)
       : askWords.connectBar(ask.asker, connect.server);
   });
+  /**
+   * The connect ask parked here last: one that leaves while minimized never
+   * folds, so what this device kept of its sign-in goes as it leaves.
+   */
+  let parkedConnect: string | null = null;
+  $effect(() => {
+    const id = ask?.request.connectAsk ? ask.request.requestId : null;
+    untrack(() => {
+      if (
+        parkedConnect &&
+        parkedConnect !== id &&
+        parkedConnect !== drawnAsk?.request.requestId
+      ) {
+        fleet?.connectSignIns.forget(parkedConnect);
+      }
+      parkedConnect = id;
+    });
+  });
   /** The ask the composer grows into: the parked one, unless it is minimized. */
   const grownAsk = $derived(minimized ? null : ask);
   /** The minimized question's bar. */
