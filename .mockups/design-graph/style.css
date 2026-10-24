@@ -790,6 +790,9 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .pop input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar { touch-action: none; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-hit { display: block; }
+/* The mock page's own fields keep the touch floor too (the fourth review: they took a press over 42px). */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .stage .input { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .stage .input.tall { min-block-size: calc(2 * var(--c-touch-floor) - var(--space-2)); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .tl { --lane-gap: calc((var(--c-touch-floor) - var(--c-pill-h)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .edge .hit { stroke-width: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ceditor .knob-hit { display: inline; }
