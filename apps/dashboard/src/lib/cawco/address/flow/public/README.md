@@ -27,6 +27,36 @@ bun apps/dashboard/scripts/house-faces.ts
 cd apps/dashboard && bunx vite build --config scripts/address-preview.vite.ts
 ```
 
+## Proposed, not in the house yet
+
+- **The QR at 160px.** The report draws the phone step's QR at 160 (§4.2);
+  the house token `--c-address-qr` is 112. The preview draws 160 through a
+  preview-local value (`flow/proposed.ts`, `PROPOSED_QR`), labelled
+  "proposed; the token moves to 160 if picked". With it the phone step stands
+  tallest of the flow, as §4.8 has it.
+- **Two button words that need WORDS.md's allowlist.** The preview uses the
+  allowlisted wording; the owner picks:
+
+  | Where | Allowlisted (drawn) | The report's (needs the verb added) |
+  | --- | --- | --- |
+  | Start's button | Open Tailscale sign-in | Sign in to Tailscale |
+  | Headscale's refusal | Open the command | Show the command |
+
+## Text and Caw
+
+Every word in the tray stands at its one leading edge (`text-align: start`),
+titles, lines, failure lines and Show details alike, at desk and phone; only
+Caw, the illustration, is centred on the tray's axis.
+
+## Day and night
+
+The page switches Day and Night (the house theme). By night each still is the
+same day drawing on the paper rim `assets/mascot/stills/dark-ready.png`
+carries: its alpha dilated 4px at 512 (the width that matches dark-ready's
+rim best, intersection over union 0.986 against light-ready's) filled with
+the rim's own colour (243, 239, 229), the day drawing laid over it
+(`flow/caw/*-night.png`). Made here, not in Backlot: it is the day take, rimmed.
+
 ## Caw
 
 Each pose is a Backlot edit (`backlot_edit_image`, `transparent` off) of his
@@ -73,5 +103,5 @@ Passed over in the read: `tk_Qj_odSi8knD6SmR5hTey3` (beak hidden),
 wings), `tk_jYMLTfeF89aKUv07xOdaU` (no beak), `tk_Kpioxs6YI7lP02febuKC2`
 (stray boxes), `tk_kEedpi7VSZWv6XzRMN5V6` (opaque ground), and the second take
 of the rest. An earlier round written with a keep-line describing Caw
-(`tk_cgIXBojVifk_FPQXycJiX` and its siblings) was replaced whole. Only day
-stills were made; the report's night versions are not drawn.
+(`tk_cgIXBojVifk_FPQXycJiX` and its siblings) was replaced whole. Each still
+has its night version beside it (Day and night, above).

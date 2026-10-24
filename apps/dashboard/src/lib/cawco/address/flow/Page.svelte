@@ -21,6 +21,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { theme } from "#lib/theme.svelte.js";
   import type { Network } from "../tray.svelte";
   import DeskNeeds from "./DeskNeeds.svelte";
   import DeskSettings from "./DeskSettings.svelte";
@@ -87,6 +88,7 @@
       hubSees: () => flow.hubSees(),
       fail: (cause: Cause) => flow.fail(cause),
       rowLine: () => rowLine(flow).text,
+      theme: (scheme: "light" | "dark") => theme.set(scheme),
       network: (network: Network) => flow.switchNetwork(network, flow.moment),
       certsAtJoin: (on: boolean) => {
         flow.certsAtJoin = on;
@@ -135,6 +137,22 @@
             {#each Object.entries(NETWORK_NAMES) as [id, name] (id)}
               <TabItem data-network={id} label={name} value={id} />
             {/each}
+          </TabsList>
+        </Tabs>
+      </div>
+      <div class="grid gap-space-1">
+        <span class="type-meta text-ink-muted" id="flow-theme"
+          >Day or night</span
+        >
+        <Tabs
+          onValueChange={(next) =>
+            theme.set(next === "night" ? "dark" : "light")}
+          size="compact"
+          value={theme.resolved === "dark" ? "night" : "day"}
+        >
+          <TabsList aria-labelledby="flow-theme">
+            <TabItem data-theme-pick="day" label="Day" value="day" />
+            <TabItem data-theme-pick="night" label="Night" value="night" />
           </TabsList>
         </Tabs>
       </div>

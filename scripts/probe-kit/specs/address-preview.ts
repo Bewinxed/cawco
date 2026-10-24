@@ -91,9 +91,10 @@ const FLOWS: {
 ];
 
 /** Every failure (§4.5), the network it is drawn on and the state it comes from. */
-const FAILURES: { cause: string; net: Net; from: string }[] = [
+const FAILURES: { cause: string; net: Net; from: string | null }[] = [
   { cause: "stopped", net: "tailscale", from: "signin" },
-  { cause: "unsupported", net: "tailscale", from: "start" },
+  // Opened from Settings' Set up on a network that can't carry the word: no state of the tray comes before it.
+  { cause: "unsupported", net: "tailscale", from: null },
   { cause: "stale-link", net: "tailscale", from: "signin" },
   { cause: "wrong-tailnet", net: "tailscale", from: "signin" },
   { cause: "refused", net: "headscale", from: "admin" },
@@ -118,6 +119,10 @@ const REPORT: Record<string, number> = {
 
 interface TrayRead {
   cawDx: number;
+  /** Text that is not set at start, or whose words stand off the tray's leading edge. */
+  edge: string[];
+  /** Text under 4.5:1 against what it stands on. */
+  faint: string[];
   frame: Frame;
   h: number;
   /** Icons outside a control with a border or fill behind them. */
@@ -247,8 +252,104 @@ function readTrays(): {
           );
         }
       }
+      // Every word at the tray's one leading edge: the body's content box's start.
+      const body = tray.querySelector("[data-slot=body]") as HTMLElement;
+      const b = rect(body);
+      const lead =
+        b.left + Number.parseFloat(getComputedStyle(body).paddingLeft);
+      const firstWords = (el: Element) => {
+        const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (n.textContent?.trim()) {
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            const [first] = range.getClientRects();
+            if (first) {
+              return first.left;
+            }
+          }
+        }
+        return null;
+      };
+      const edge: string[] = [];
+      const words = [
+        ...tray.querySelectorAll(
+          "[data-slot=title], [data-slot=state] > p, [data-tray-details]"
+        ),
+      ].filter((el) => (el as HTMLElement).checkVisibility());
+      for (const el of words) {
+        // A button's box hugs its words, so its own alignment is moot: its words' place is read below.
+        const align = getComputedStyle(el).textAlign;
+        if (!(el.matches("button") || align === "start" || align === "left")) {
+          edge.push(`${name(el)} text-align ${align}`);
+        }
+        // A line led by a mark (the live line, the secure address's lock) or drawn as a box (the answering address's well) stands at the edge by its box; its words follow the mark or the well's pad.
+        const boxed = el.matches(
+          "[data-slot=meta], [data-slot=secure-address], [data-slot=answers-address]"
+        );
+        const x = boxed ? rect(el).left : firstWords(el);
+        // Within 2.5px: a glyph's own side bearing stands it up to that far in (Show details' S, 2px in both engines).
+        if (x !== null && Math.abs(x - lead) > 2.5) {
+          edge.push(
+            `${name(el)} "${(el.textContent ?? "").trim().slice(0, 24)}" at ${(x - lead).toFixed(1)}px from the edge`
+          );
+        }
+      }
+      // Contrast of every run of words against what it stands on (the first ancestor with a fill), read through a canvas so any colour space resolves to sRGB.
+      const ctx = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      const rgba = (css: string) => {
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = "#000";
+        ctx.fillStyle = css;
+        ctx.fillRect(0, 0, 1, 1);
+        const [r, g, bl, a] = ctx.getImageData(0, 0, 1, 1).data;
+        return [r, g, bl, a / 255];
+      };
+      const lum = ([r, g, bl]: number[]) => {
+        const c = [r, g, bl].map((v) => {
+          const x = v / 255;
+          return x <= 0.040_45 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+      };
+      const ground = (el: Element) => {
+        for (let at: Element | null = el; at; at = at.parentElement) {
+          const bg = rgba(getComputedStyle(at).backgroundColor);
+          if (bg[3] > 0.5) {
+            return bg;
+          }
+        }
+        return rgba(getComputedStyle(document.body).backgroundColor);
+      };
+      const faint: string[] = [];
+      for (const el of tray.querySelectorAll<HTMLElement>(
+        "h2, p, code, button, a, li, span"
+      )) {
+        const own = [...el.childNodes].some(
+          (n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim()
+        );
+        if (
+          !(own && el.checkVisibility()) ||
+          el.closest(":disabled, .sr-only")
+        ) {
+          continue;
+        }
+        const fg = rgba(getComputedStyle(el).color);
+        const l1 = lum(fg);
+        const l2 = lum(ground(el));
+        const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+        if (ratio < 4.5) {
+          faint.push(
+            `${name(el)} "${(el.textContent ?? "").trim().slice(0, 20)}" ${ratio.toFixed(2)}:1`
+          );
+        }
+      }
       return {
         frame,
+        edge,
+        faint,
         h: t.height,
         w: t.width,
         cawDx: caw.left + caw.width / 2 - (t.left + t.width / 2),
@@ -292,6 +393,7 @@ interface PreviewApi {
   network: (net: Net) => void;
   park: (surface: Frame) => void;
   rowLine: () => string;
+  theme: (scheme: "light" | "dark") => void;
 }
 
 const api = (page: Page, fn: string, ...args: unknown[]) =>
@@ -385,13 +487,23 @@ async function openPreview(
 }
 
 /** Every state at rest on every network: boxes and heights. */
-async function restLegs(kit: Kit, page: Page, engine: Engine) {
+async function restLegs(
+  kit: Kit,
+  page: Page,
+  engineName: Engine,
+  scheme: "light" | "dark"
+) {
+  // Every rest read is said for its engine and its theme: Day (light) or Night (dark).
+  const engine = `${engineName} ${scheme === "dark" ? "night" : "day"}`;
+  await api(page, "theme", scheme);
   const ladders: string[] = [];
   const rules = {
     axis: [] as string[],
     spill: [] as string[],
     overlap: [] as string[],
     icons: [] as string[],
+    edge: [] as string[],
+    faint: [] as string[],
     width: [] as string[],
     page: [] as string[],
   };
@@ -411,6 +523,8 @@ async function restLegs(kit: Kit, page: Page, engine: Engine) {
       rules.spill.push(...tray.spills.map((s) => `${at}: ${s}`));
       rules.overlap.push(...tray.overlaps.map((s) => `${at}: ${s}`));
       rules.icons.push(...tray.icons.map((s) => `${at}: ${s}`));
+      rules.edge.push(...tray.edge.map((s) => `${at}: ${s}`));
+      rules.faint.push(...tray.faint.map((s) => `${at}: ${s}`));
       const want = tray.frame === "phone" ? read.phoneInner : 380;
       if (Math.abs(tray.w - want) > 0.5) {
         rules.width.push(`${at} ${tray.w.toFixed(1)} (want ${want})`);
@@ -473,8 +587,10 @@ async function restLegs(kit: Kit, page: Page, engine: Engine) {
 
   const intoFailure: string[] = [];
   for (const f of FAILURES) {
-    // biome-ignore lint/performance/noAwaitInLoops: one state at a time
-    const from = await look(`failure ${f.cause}`, f.net, false, f.from);
+    const from = f.from
+      ? // biome-ignore lint/performance/noAwaitInLoops: one state at a time
+        await look(`failure ${f.cause}`, f.net, false, f.from)
+      : new Map<Frame, number>();
     const to = await look(
       `failure ${f.cause}`,
       f.net,
@@ -518,6 +634,16 @@ async function restLegs(kit: Kit, page: Page, engine: Engine) {
     `${engine}: every icon outside a control is the glyph alone, no border or fill behind it (${states} states)`,
     rules.icons.length === 0,
     rules.icons.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: every word in every tray is set at start, on the tray's one leading edge within 2.5px; only Caw is centred (${states} states)`,
+    rules.edge.length === 0,
+    rules.edge.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: every run of words in every tray stands at 4.5:1 or more against what it stands on (${states} states)`,
+    rules.faint.length === 0,
+    rules.faint.slice(0, 6).join("; ")
   );
   kit.check(
     `${engine}: the desk trays stand 380 wide, the phone's sheet its 390 frame's width (${states} states)`,
@@ -915,7 +1041,9 @@ const spec: Spec = {
       for (const engine of engines) {
         // biome-ignore lint/performance/noAwaitInLoops: one engine's browser at a time
         const { page, errors } = await openPreview(kit, url, engine);
-        await restLegs(kit, page, engine);
+        await restLegs(kit, page, engine, "light");
+        await restLegs(kit, page, engine, "dark");
+        await api(page, "theme", "light");
         await motionLegs(kit, page, engine);
         await parkLegs(kit, page, engine);
         kit.check(

@@ -20,6 +20,7 @@
     numberOf,
     pinned,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { theme } from "#lib/theme.svelte.js";
   import type { Pose } from "./flow.svelte";
 
   let { pose, big = false }: { pose: Pose; big?: boolean } = $props();
@@ -29,7 +30,10 @@
     query: "?url",
     import: "default",
   });
-  const src = $derived(STILLS[`./caw/${pose}.png`]);
+  /** By night, the same drawing on the paper rim dark-ready.png carries (README.md). */
+  const src = $derived(
+    STILLS[`./caw/${pose}${theme.resolved === "dark" ? "-night" : ""}.png`]
+  );
 
   let box = $state<HTMLElement | null>(null);
   /** The box as it was drawn before `big` changed: where the FLIP starts. */

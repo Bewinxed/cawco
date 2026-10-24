@@ -32,6 +32,7 @@
   import { HEADSCALE_USER } from "../words";
   import { type AddressFlow, PEER } from "./flow.svelte";
   import { doneMarks, type Form } from "./flow-words";
+  import { PROPOSED_QR } from "./proposed";
 
   let { flow, form }: { flow: AddressFlow; form: Form } = $props();
 
@@ -74,7 +75,7 @@
   </div>
 {:else if flow.step === "answers"}
   <p
-    class="m-0 min-w-0 rounded-well border border-border-well bg-surface-well px-space-3 py-space-4 text-center type-title font-mono whitespace-nowrap text-ink-strong select-all"
+    class="m-0 min-w-0 rounded-well border border-border-well bg-surface-well px-space-3 py-space-4 text-start type-title font-mono whitespace-nowrap text-ink-strong select-all"
     data-slot="answers-address"
   >
     {flow.address}
@@ -82,10 +83,15 @@
 {:else if flow.step === "phone" && form === "desk"}
   <!-- The QR, and once a phone opened it, that phone in its place: the
        QR departs as the name arrives (§4.9, a tick lands). -->
-  <div class="relative grid min-w-0" data-slot="phone-object">
+  <!-- The QR at §4.2's 160: proposed; the token moves to 160 if picked (proposed.ts). -->
+  <div
+    style:--c-address-qr={PROPOSED_QR}
+    class="relative grid min-w-0"
+    data-slot="phone-object"
+  >
     {#if flow.phoneOpened}
       <p
-        class="mark-line m-0 flex min-w-0 items-center justify-center gap-space-2 py-space-2 type-label text-ink-strong"
+        class="mark-line m-0 flex min-w-0 items-center justify-start gap-space-2 py-space-2 type-label text-ink-strong"
         data-slot="phone-name"
         in:arrive
         out:depart
@@ -107,7 +113,7 @@
   </div>
 {:else if flow.step === "https" && flow.certs}
   <p
-    class="mark-line m-0 flex min-w-0 items-center justify-center gap-space-2"
+    class="mark-line m-0 flex min-w-0 items-center justify-start gap-space-2"
     data-slot="secure-address"
   >
     <IconLock

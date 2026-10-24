@@ -5,7 +5,9 @@
    * axis at the top of the body, 64px, the middle of a head row whose
    * sides are equal (‹ before him on a step reopened from Done, × after
    * him on every state), so his centre is the tray's whatever else stands
-   * there; in a failure his box is 80 and everything centres under him.
+   * there; in a failure his box is 80, under ×. Every word stands at the
+   * tray's one leading edge (text-align: start), at desk and phone alike:
+   * only Caw, the illustration, is centred.
    *
    * Motion (§4.9): the box's height tweens over --dur-pop on the drawer
    * curve (morph); the title, the live line and the buttons' words morph in
@@ -154,7 +156,7 @@
           </div>
           <h2
             id={titleId}
-            class="m-0 min-w-0 text-center type-title tracking-title text-balance text-ink-strong"
+            class="m-0 min-w-0 text-start type-title tracking-title text-balance text-ink-strong"
             data-slot="title"
           >
             <MorphText text={words.title} wrap />
@@ -163,7 +165,7 @@
         <div class="relative grid min-w-0">
           {#key body}
             <div
-              class={["grid min-w-0 gap-space-3", failed && "text-center"]}
+              class="grid min-w-0 gap-space-3 text-start"
               data-slot="state"
               in:arrive
               out:depart
@@ -176,10 +178,7 @@
               <FlowObject {flow} {form} />
               {#if words.meta}
                 <p
-                  class={[
-                    "mark-line m-0 flex min-w-0 flex-wrap items-start gap-x-space-2 gap-y-space-1 type-meta text-ink-muted",
-                    failed && "justify-center",
-                  ]}
+                  class="mark-line m-0 flex min-w-0 flex-wrap items-start gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
                   data-slot="meta"
                   {@attach reflow()}
                 >
@@ -213,30 +212,21 @@
           {/key}
         </div>
         {#if form === "phone"}
-          <FlowDetails
-            align={failed ? "center" : "start"}
-            bind:open={details}
-            {flow}
-          />
+          <FlowDetails bind:open={details} {flow} />
         {/if}
-        {#if primary || (form === "desk" && !failed)}
+        {#if primary || form === "desk"}
           <div
             class={[
               form === "desk"
                 ? "flex flex-wrap items-center gap-space-2"
                 : "grid gap-space-2",
-              form === "desk" && (failed ? "justify-center" : "justify-end"),
+              form === "desk" && "justify-end",
             ]}
             data-slot="actions"
           >
-            {#if form === "desk" && !failed}
+            {#if form === "desk"}
               <span class="me-auto flex">
-                <FlowDetails
-                  align="start"
-                  bind:open={details}
-                  {flow}
-                  part="link"
-                />
+                <FlowDetails bind:open={details} {flow} part="link" />
               </span>
             {/if}
             <!-- The buttons as one group: they wrap together, never apart. -->
@@ -279,12 +269,7 @@
           </div>
         {/if}
         {#if form === "desk"}
-          <FlowDetails
-            align="center"
-            bind:open={details}
-            {flow}
-            part={failed ? "both" : "fold"}
-          />
+          <FlowDetails bind:open={details} {flow} part="fold" />
         {/if}
       </div>
       {#if flow.firstLive && flow.step === "done"}

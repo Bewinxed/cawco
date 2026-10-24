@@ -22,12 +22,10 @@
 
   let {
     flow,
-    align = "end",
     part = "both",
     open = $bindable(false),
   }: {
     flow: AddressFlow;
-    align?: "start" | "center" | "end";
     part?: "link" | "fold" | "both";
     open?: boolean;
   } = $props();
@@ -47,17 +45,12 @@
   data-slot={part === "fold" ? "tray-details-fold" : "tray-details"}
 >
   {#if part !== "fold"}
-    <span
-      class={[
-        "flex",
-        align === "start" && "justify-start",
-        align === "center" && "justify-center",
-        align === "end" && "justify-end",
-      ]}
-    >
+    <!-- At the tray's leading edge: the ghost button's pad hangs outside it, so its words stand on the edge. -->
+    <span class="flex justify-start">
       <Button
         aria-controls={foldId}
         aria-expanded={open}
+        class="-ms-space-2"
         data-tray-details
         label={open ? "Hide details" : "Show details"}
         onclick={() => {
