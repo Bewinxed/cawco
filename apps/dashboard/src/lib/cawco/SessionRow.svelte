@@ -58,7 +58,7 @@
             }
           }
         },
-        first: (entries) => {
+        first: (entries) => () => {
           for (const entry of entries) {
             writeTrail(entry.target);
           }

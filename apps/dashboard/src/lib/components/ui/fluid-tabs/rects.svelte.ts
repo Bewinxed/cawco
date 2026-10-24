@@ -110,7 +110,7 @@ export class TabRects {
         for (const entry of entries) {
           this.#unreported.delete(entry.target);
         }
-        write();
+        return write;
       },
     });
     this.#watch(node);

@@ -612,12 +612,19 @@ export function highlight(options: HighlightOptions) {
     };
 
     /** The pill onto the selected row: from the ghost, or gliding. */
-    const placePill = (glide: boolean) => {
+    /** The selected row and its box, read: where `placePill` puts the pill. */
+    const selectedPill = () => {
       if (!selected) {
-        return;
+        return null;
       }
       const row = container.querySelector<HTMLElement>(selected);
-      const box = row && shownBoxOf(row);
+      return { row, box: row && shownBoxOf(row) };
+    };
+    const placePill = (glide: boolean, at = selectedPill()) => {
+      if (!at) {
+        return;
+      }
+      const { row, box } = at;
       if (!(row && box)) {
         show(pill, false);
         pillBox = null;
@@ -1099,7 +1106,18 @@ export function highlight(options: HighlightOptions) {
     // paint. The pill is an absolute layer under the rows: placing it
     // resizes nothing an observer watches.
     const sizes = frameObserver(() => onResize(), {
-      first: () => syncPill(false),
+      // Read with every site's reads, placed after them (frameObserver).
+      first: () => {
+        if (skipped) {
+          return;
+        }
+        const pillRead = selectedPill();
+        return () => {
+          if (!skipped) {
+            placePill(false, pillRead);
+          }
+        };
+      },
     });
     const onResize = () => {
       forgetScroll();

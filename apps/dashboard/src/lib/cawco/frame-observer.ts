@@ -40,7 +40,9 @@ import type { Attachment } from "svelte/attachments";
  * absolute layer under its rows), so the delivery has nothing left to report.
  * Every first report of one delivery comes in one call, so a site that
  * observes many boxes with one observer reads them all before it writes
- * any. A target it took is not answered again for that report.
+ * any. A target it took is not answered again for that report. It reads,
+ * and answers what it writes: every site's `read` and `first` run before
+ * any of those writes (the shared observer, below).
  */
 export interface FrameObserver {
   disconnect: () => void;
@@ -74,19 +76,138 @@ export function frameSize<T extends Element>(
   };
 }
 
+/** A site's options: what it does inside a delivery. */
+interface Inside {
+  /**
+   * Targets' first reports, inside the delivery, all of one delivery
+   * together: their mounts' measures and what they draw from them. What it
+   * answers runs after every site's `first` has: a site that reads here
+   * answers its writes, so no site's write lays the page out under another
+   * site's read.
+   */
+  first?: (entries: readonly ResizeObserverEntry[]) => (() => void) | undefined;
+  /** Inside the delivery, reading only: what `answer` writes in the next frame. */
+  read?: (entries: readonly ResizeObserverEntry[]) => void;
+}
+
+/** One site: a frameObserver's own state. */
+interface Site {
+  /** Its targets in this delivery, from the shared observer. */
+  delivered: ResizeObserverEntry[];
+  options: Inside;
+  /** Targets whose first report has come (`first`). */
+  reported: WeakSet<Element>;
+  /** Takes its targets' entries of a delivery that are not first reports (`changed`, then the next frame's answer). */
+  take: (entry: ResizeObserverEntry) => void;
+}
+
+/** A site's hold on a target: the box it observes, and the size it last heard. */
+interface Hold {
+  box: ResizeObserverBoxOptions;
+  heard: string | null;
+}
+
+/** Every target observed, and each site's hold on it. */
+const holds = new Map<Element, Map<Site, Hold>>();
+
+/** The size of `box` an entry reports, as one string. */
+const sizeOf = (entry: ResizeObserverEntry, box: ResizeObserverBoxOptions) => {
+  const [size] =
+    box === "border-box" ? entry.borderBoxSize : entry.contentBoxSize;
+  return `${size?.inlineSize ?? 0}x${size?.blockSize ?? 0}`;
+};
+
+/**
+ * The one ResizeObserver every site shares. A delivery is read whole before
+ * anything is written: every site's `read`, then every site's `first`, then
+ * the writes each `first` answered; Svelte's flush, a microtask, comes after
+ * the delivery. A ResizeObserver of each site's own was its own callback,
+ * and the microtask checkpoint after each ran Svelte's flush there: one
+ * site's `first` (a session row's trail, a pill) laid the page out under the
+ * next site's `read`, inside the same delivery (fluid-tabs `rects`, 2x 121ms
+ * of style in a reply's frame at 4x, decision-pages (o)).
+ *
+ * A target several sites observe is observed once, on the border box if any
+ * of them asked for it: each site hears an entry only when its own box's
+ * size differs from the one it heard last (a new hold has heard none).
+ */
+// biome-ignore lint/style/noRestrictedGlobals: the type of the one ResizeObserver the rule allows
+type Shared = ResizeObserver;
+let shared: Shared | null = null;
+
+/** The sites a delivery reports to, each with its own entries (`delivered`): those whose own box's size changed. */
+const sitesOf = (entries: ResizeObserverEntry[]): Set<Site> => {
+  const sites = new Set<Site>();
+  for (const entry of entries) {
+    for (const [site, hold] of holds.get(entry.target) ?? []) {
+      const heard = sizeOf(entry, hold.box);
+      if (heard !== hold.heard) {
+        hold.heard = heard;
+        site.delivered.push(entry);
+        sites.add(site);
+      }
+    }
+  }
+  return sites;
+};
+
+/** A site's first reports of a delivery; the rest go to its next frame's answer. */
+const firstsOf = (site: Site): ResizeObserverEntry[] => {
+  const firsts: ResizeObserverEntry[] = [];
+  for (const entry of site.delivered) {
+    if (site.options.first && !site.reported.has(entry.target)) {
+      firsts.push(entry);
+    } else {
+      site.take(entry);
+    }
+    site.reported.add(entry.target);
+  }
+  site.delivered = [];
+  return firsts;
+};
+
+const deliver = (entries: ResizeObserverEntry[]) => {
+  const sites = sitesOf(entries);
+  for (const site of sites) {
+    site.options.read?.(site.delivered);
+  }
+  const writes: (() => void)[] = [];
+  for (const site of sites) {
+    const firsts = firstsOf(site);
+    const write = firsts.length > 0 ? site.options.first?.(firsts) : undefined;
+    if (write) {
+      writes.push(write);
+    }
+  }
+  for (const write of writes) {
+    write();
+  }
+};
+
+const sharedObserver = (): Shared => {
+  // biome-ignore lint/style/noRestrictedGlobals: the one ResizeObserver the rule allows, shared by every frameObserver
+  shared ??= new ResizeObserver(deliver);
+  return shared;
+};
+
+/** Observes `target` for its holds, on the border box if any asks for it: a new hold's first report comes in the next delivery. */
+const observeFor = (target: Element) => {
+  const boxes = [...(holds.get(target)?.values() ?? [])].map(
+    (hold) => hold.box
+  );
+  const observer = sharedObserver();
+  observer.unobserve(target);
+  observer.observe(target, {
+    box: boxes.includes("border-box") ? "border-box" : "content-box",
+  });
+};
+
 export function frameObserver(
   answer: (changed: Element[]) => void,
-  options: {
-    /** Inside the delivery, reading only: what `answer` writes in the next frame. */
-    read?: (entries: readonly ResizeObserverEntry[]) => void;
-    /** Targets' first reports, inside the delivery, all of one delivery together: their mounts' measures and what they draw from them. */
-    first?: (entries: readonly ResizeObserverEntry[]) => void;
-  } = {}
+  options: Inside = {}
 ): FrameObserver {
   let frame = 0;
   const changed = new Set<Element>();
-  /** Targets whose first report has come (`first`). */
-  const reported = new WeakSet<Element>();
   const request = () => {
     if (frame === 0) {
       frame = requestAnimationFrame(() => {
@@ -97,39 +218,47 @@ export function frameObserver(
       });
     }
   };
-  // biome-ignore lint/style/noRestrictedGlobals: the one ResizeObserver the rule allows, deferring every answer to the next frame
-  const observer = new ResizeObserver((entries) => {
-    options.read?.(entries);
-    const firsts: ResizeObserverEntry[] = [];
-    let asked = false;
-    for (const entry of entries) {
-      if (options.first && !reported.has(entry.target)) {
-        firsts.push(entry);
-      } else {
-        changed.add(entry.target);
-        asked = true;
-      }
-      reported.add(entry.target);
-    }
-    if (firsts.length > 0) {
-      options.first?.(firsts);
-    }
-    if (asked) {
+  const site: Site = {
+    delivered: [],
+    options,
+    reported: new WeakSet(),
+    take: (entry) => {
+      changed.add(entry.target);
       request();
-    }
-  });
-  return {
-    observe: (target, how) => observer.observe(target, how),
-    request,
-    unobserve: (target) => {
-      observer.unobserve(target);
-      changed.delete(target);
     },
+  };
+  /** The targets this site holds. */
+  const mine = new Set<Element>();
+  const release = (target: Element) => {
+    const held = holds.get(target);
+    held?.delete(site);
+    if (held?.size === 0) {
+      holds.delete(target);
+      shared?.unobserve(target);
+    }
+    mine.delete(target);
+    changed.delete(target);
+  };
+  return {
+    observe: (target, how) => {
+      let held = holds.get(target);
+      if (!held) {
+        held = new Map();
+        holds.set(target, held);
+      }
+      held.set(site, { box: how?.box ?? "content-box", heard: null });
+      mine.add(target);
+      observeFor(target);
+    },
+    request,
+    unobserve: release,
     disconnect: () => {
       cancelAnimationFrame(frame);
       frame = 0;
+      for (const target of [...mine]) {
+        release(target);
+      }
       changed.clear();
-      observer.disconnect();
     },
   };
 }

@@ -17,7 +17,8 @@
    * shape laid the page out again for the next tab's read.
    */
   let foldSizes: FrameObserver | undefined;
-  const measureAll = (targets: Iterable<Element>) => {
+  /** Every tab of `targets` read; answers the drawing of them all. */
+  const measureAll = (targets: Iterable<Element>): (() => void) => {
     const read: [Folded, FoldMeasure][] = [];
     for (const target of targets) {
       const tab = folded.get(target);
@@ -25,13 +26,17 @@
         read.push([tab, tab.measure()]);
       }
     }
-    for (const [tab, measure] of read) {
-      tab.take(measure);
-    }
+    return () => {
+      for (const [tab, measure] of read) {
+        tab.take(measure);
+      }
+    };
   };
   const watchFold = (el: Element, tab: Folded): (() => void) => {
     folded.set(el, tab);
-    foldSizes ??= frameObserver(measureAll, {
+    // A first report's drawing is answered to the shared delivery, which
+    // runs it once every site there has read (frameObserver).
+    foldSizes ??= frameObserver((targets) => measureAll(targets)(), {
       first: (entries) => measureAll(entries.map((entry) => entry.target)),
     });
     foldSizes.observe(el);

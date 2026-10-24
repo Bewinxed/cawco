@@ -59,9 +59,11 @@ export function watchRendered(
     },
     first: () => {
       laidOut = sizedNow;
-      if (sizedNow) {
-        turn(true);
-      }
+      return () => {
+        if (laidOut) {
+          turn(true);
+        }
+      };
     },
   });
   sized.observe(node);
