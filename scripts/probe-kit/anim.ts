@@ -391,7 +391,21 @@ export class Clock {
     return kept.filter((run) => !drop.has(run));
   }
 
-  /** How many held runs the page lists on a node; null when it is no longer in the document. */
+  /**
+   * How many held runs the page lists on a node; null when it is no longer
+   * in the document. A pseudo-element's run is the page's on its host: the
+   * protocol names the pseudo-element's own node, which resolves to a
+   * `CSSPseudoElement`, while the page's run has the host as its
+   * `effect.target` and the pseudo-element in `effect.pseudoElement`
+   * (Chromium, 2026-10-24: a `::before` background-color transition, its
+   * node `::before`, resolved `CSSPseudoElement`, its run's target the
+   * `<button>`, its pseudoElement "::before"). So a run counts on a node
+   * where its target is the node's element and its pseudo-element is the
+   * node's own: none for the element itself, so the host is not counted
+   * its pseudo-element's runs either. Compared on the target alone, a held
+   * `::before` run (a tray chip's fill) read 0, and the clock threw on a
+   * page that held it.
+   */
   private async heldOn(node: number | undefined): Promise<number | null> {
     const resolved =
       node === undefined
@@ -406,7 +420,7 @@ export class Clock {
     const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
       objectId,
       functionDeclaration:
-        "function () { const t = this instanceof Element ? this : this.element; if (!t.isConnected) { return null; } return window.kitRuns().filter((r) => r.playState === 'paused' && r.effect && r.effect.target === this).length; }",
+        "function () { const t = this instanceof Element ? this : this.element; const pseudo = this instanceof Element ? null : this.type; if (!(t && t.isConnected)) { return null; } return window.kitRuns().filter((r) => r.playState === 'paused' && r.effect && r.effect.target === t && (r.effect.pseudoElement || null) === pseudo).length; }",
       returnByValue: true,
     })) as { result: { value: number | null } };
     return result.value;
@@ -431,7 +445,7 @@ export class Clock {
     const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
       objectId,
       functionDeclaration:
-        "function () { const t = this instanceof Element ? this : this.element; const states = {}; for (const r of t.getAnimations()) { states[r.playState] = (states[r.playState] || 0) + 1; } const all = {}; for (const r of window.kitRuns()) { if (r.effect && r.effect.target === t) { all[r.playState] = (all[r.playState] || 0) + 1; } } return '(<' + t.tagName.toLowerCase() + ' ' + (t.getAttribute('data-slot') || '') + '> connected ' + t.isConnected + '; its own ' + JSON.stringify(states) + '; on the page ' + JSON.stringify(all) + ')'; }",
+        "function () { const t = this instanceof Element ? this : this.element; const pseudo = this instanceof Element ? null : this.type; const states = {}; for (const r of t.getAnimations({ subtree: !!pseudo })) { if (r.effect && r.effect.target === t && (r.effect.pseudoElement || null) === pseudo) { states[r.playState] = (states[r.playState] || 0) + 1; } } const all = {}; for (const r of window.kitRuns()) { if (r.effect && r.effect.target === t && (r.effect.pseudoElement || null) === pseudo) { all[r.playState] = (all[r.playState] || 0) + 1; } } return '(<' + t.tagName.toLowerCase() + ' ' + (t.getAttribute('data-slot') || '') + '>' + (pseudo || '') + ' connected ' + t.isConnected + '; its own ' + JSON.stringify(states) + '; on the page ' + JSON.stringify(all) + ')'; }",
       returnByValue: true,
     })) as { result: { value: string } };
     return result.value;
