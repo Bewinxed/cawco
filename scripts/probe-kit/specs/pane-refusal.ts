@@ -1,23 +1,20 @@
 /**
- * A write the hub would not keep is never a closed socket and a lost copy
- * (Pi Durable 13.9C, hub artifacts/sync.ts `refusal`; dashboard
- * preview/artifact-doc.ts `refusedBy`, PreviewPane `refusedReplies`). On a
- * scratch fleet (real hub, agent and sessiond; Claude Code against the mock
- * model), a session's judge page with one comment of the person's on it:
+ * Writes to one pin from many places all land, and a write the hub would
+ * not keep is never a closed socket and a lost copy (Pi Durable 13.9C; hub
+ * artifacts/sync.ts `refusal`; core comments.ts `PIN_MAPS`, each part of a
+ * pin its own key; overlay artifact.ts `keepRefused`). On a scratch fleet
+ * (real hub, agent and sessiond; Claude Code against the mock model), a
+ * session's judge page with a comment of the person's on it:
  *
  * - (h) The hub: a doc client writes a pin the hub refuses. It is told why
  *   on its socket, which stays open; the next write on that socket is not
  *   kept; a fresh client's write is, and the hub's doc holds nothing
  *   pending.
  * - (p) The pane: its link from the hub held (the probe's route keeps what
- *   the hub sends it), the agent answers the comment, and the person replies
- *   in the pane, which has not heard the answer. The hub refuses the reply,
- *   whichever write wins the merge (hub artifacts/sync.ts: one that drops
- *   the agent's answer, `pinsProblem`; one that loses to it, whose words
- *   would be gone, `crossedProblem`), and the reply stays in its row and
- *   thread, unsent, with the hub's reason and Try again, kept on the device. Try again lands it on
- *   the hub beside the agent's answer, the row's reason goes, and the hub's
- *   doc holds nothing pending.
+ *   the hub sends it), the agent answers comment 1, and the person replies
+ *   in the pane, which has not heard the answer. The reply and the answer
+ *   both land on the hub, the hub refuses nothing, the pane keeps nothing
+ *   aside, and its thread draws both once its link is let through.
  * - (w) A doc the hub kept with each pin one whole value (as every doc stored
  *   before pins were written in parts): the hub, started again, keeps it in
  *   its parts as it loads it, and comment_read reads the pin as it was.
@@ -34,7 +31,6 @@ import {
   readPins,
   writePin,
 } from "../../../packages/core/src/comments";
-import { commentWords } from "../../../packages/core/src/words/comments";
 import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
@@ -231,58 +227,71 @@ const legH = async (
       !end.pending,
     `refusals heard: ${writer.refusals.length}; closes before it left: ${closed}; socket open after: ${stood}; refused pin on the hub: ${!!later.pins[bad]}; the later write on the hub: ${!!later.pins[after]}; pending then: ${later.pending}; fresh write landed: ${!!landed}; pending at the end: ${end.pending}`
   );
-  // The fresh pin goes again, so the pane's leg reads one comment.
+  // The fresh pin goes again, so the pane's leg reads its two comments.
   const tidy = await joinHub(fleet, session, artifact);
   deletePin(tidy.doc, good);
   await Bun.sleep(1000);
   tidy.leave();
 };
 
-/** The pane's links, newest last: each passes through, or holds the doc updates the hub sends while `held`. */
-interface PaneLink {
+/** A link of the page's or the pane's to the hub, through the probe: it passes, or holds the doc updates the hub sends while `held`. */
+interface Held {
   held: boolean;
+  /** The hub closed it, before the page did. */
+  hubClosed: boolean;
+  /** The page closed it (the hub's close that follows is its answer). */
+  pageClosed: boolean;
   queue: (string | Buffer)[];
+  /** Refusal frames the hub sent on it (y-websocket's auth type). */
+  refusals: number;
   ws: WebSocketRoute;
 }
 
-/** The person's reply in pin 1's thread, opened from its row. */
-const replyInPane = async (page: Page, words: string) => {
-  const button = page.locator(`${PANE} button[data-slot="comments"]`);
-  if ((await button.getAttribute("aria-expanded")) !== "true") {
-    await button.click();
-  }
-  await page.locator(RAIL).waitFor({ timeout: 10_000 });
-  await settle(page, 350);
-  await page.locator(`${RAIL} [data-slot="pin-row"][data-pin-row="1"]`).click();
-  const card = page.locator('[data-slot="pin-card"][data-pin-card="1"]');
-  await card.waitFor({ timeout: 10_000 });
-  await card.getByRole("combobox").fill(words);
-  await card.getByRole("button", { name: "Reply" }).click();
-  await settle(page, 300);
-  await page.keyboard.press("Escape");
+/**
+ * Each link `pattern` names, through the probe, newest last. Held, the
+ * doc's updates wait (y-protocols sync, type 0); the hub's word on the
+ * client's own writes (auth, type 2) and its beat go through. Closes go
+ * on to the other side, as without the probe.
+ */
+const routeLinks = async (page: Page, pattern: RegExp): Promise<Held[]> => {
+  const links: Held[] = [];
+  await page.routeWebSocket(pattern, (ws) => {
+    const server = ws.connectToServer();
+    const link: Held = {
+      ws,
+      held: false,
+      queue: [],
+      refusals: 0,
+      hubClosed: false,
+      pageClosed: false,
+    };
+    links.push(link);
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const type = typeof message === "string" ? -1 : message[0];
+      if (type === messageAuth) {
+        link.refusals += 1;
+      }
+      if (link.held && type === 0) {
+        link.queue.push(message);
+      } else {
+        ws.send(message);
+      }
+    });
+    ws.onClose((code, reason) => {
+      link.pageClosed = true;
+      server.close({ code, reason }).catch(() => undefined);
+    });
+    server.onClose((code, reason) => {
+      link.hubClosed ||= !link.pageClosed;
+      ws.close({ code, reason }).catch(() => undefined);
+    });
+  });
+  return links;
 };
 
-/** What leg (p) works with: the fleet, its session and page, the pane's links, and its page errors. */
-interface Pane {
-  artifact: string;
-  base: string;
-  errors: string[];
-  fleet: KitFleet;
-  kit: Kit;
-  links: PaneLink[];
-  page: Page;
-  session: string;
-}
-
-/** The pane's replies kept aside on the device (PreviewPane `refusedReplies`), as stored: null when none. */
-const keptOf = (on: Pane) =>
-  on.page.evaluate(
-    (key) => localStorage.getItem(key),
-    `cawco-refused-replies:${on.artifact}`
-  );
-
-/** Hands a held link what it kept, to a link the pane may have let go of after a refusal: what fails is nothing to hand on. */
-const letGo = (link: PaneLink | undefined) => {
+/** Hands a held link what it kept, to a link the client may have let go of: what fails is nothing to hand on. */
+const letThrough = (link: Held | undefined) => {
   if (!link) {
     return;
   }
@@ -296,183 +305,124 @@ const letGo = (link: PaneLink | undefined) => {
   }
 };
 
-/**
- * The pane's link from the hub held, the agent answers pin 1, and the
- * person replies in the pane, which hasn't heard it. The reply's words and
- * the hub's reason, kept on the device once the hub refused it; nothing
- * when nothing was kept.
- */
-const tryStale = async (
-  on: Pane
-): Promise<{ why: string; words: string } | undefined> => {
-  await open(
-    on.page,
-    `${on.base}/session/${on.session}`,
-    "[data-artifact-trigger]"
-  );
-  await on.page
-    .locator(`${PANE} button[data-slot="comments"]`)
-    .waitFor({ timeout: 60_000 });
-  await settle(on.page, 600);
-  const link = on.links.at(-1);
-  if (link) {
-    link.held = true;
-  }
-  await callIn(on.fleet, on.session, REPLY_TOOL, {
-    pin: (await pinOne(on.fleet, on.session, on.artifact)) ?? "",
-    text: "PROBE-AGENT-ANSWER",
-  });
-  const words = "PROBE-PANE-REPLY";
-  await replyInPane(on.page, words);
-  const stored = await until(
-    "(p) the pane's reply refused",
-    () => keptOf(on),
-    Boolean,
-    8000
-  ).catch(() => null);
-  letGo(link);
-  if (!stored) {
-    return;
-  }
-  const said = JSON.parse(stored) as Record<
-    string,
-    { entries: { text: string }[]; why: string }
-  >;
-  const [one] = Object.values(said);
-  return one?.entries.some((entry) => entry.text === words)
-    ? { why: one.why, words }
-    : undefined;
-};
-
-/** The rail open, and pin 1's row in it. */
-const railRow = async (page: Page) => {
+/** The rail open, and comment `n`'s row in it. */
+const railRow = async (page: Page, n: number) => {
   const button = page.locator(`${PANE} button[data-slot="comments"]`);
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
   }
-  const row = page.locator(`${RAIL} [data-slot="pin-row"][data-pin-row="1"]`);
+  const row = page.locator(
+    `${RAIL} [data-slot="pin-row"][data-pin-row="${n}"]`
+  );
   await row.waitFor({ timeout: 10_000 });
   return row;
 };
 
-/** The refused reply as the pane draws it: its row's not-sent line and Try again, and its thread. */
-const checkKept = async (on: Pane, refused: { why: string; words: string }) => {
-  const row = await railRow(on.page);
-  const line = (
-    await on.page
-      .locator(`${RAIL} [data-not-sent]`)
-      .first()
-      .textContent({ timeout: 10_000 })
+/** Comment `n`'s not-sent line in the rail, as drawn; null when it draws none. */
+const notSentOf = async (page: Page, n: number) =>
+  (
+    await page
+      .locator(
+        `${RAIL} li:has([data-slot="pin-row"][data-pin-row="${n}"]) [data-not-sent]`
+      )
+      .textContent({ timeout: 2000 })
       .catch(() => null)
-  )?.trim();
-  const retryShown = await on.page
-    .locator(`${RAIL} [data-slot="pin-retry"]`)
-    .first()
-    .isVisible()
-    .catch(() => false);
-  await row.click();
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  )?.trim() ?? null;
+
+/** The person's reply in comment 1's thread, opened from its row. */
+const replyInPane = async (page: Page, words: string) => {
+  await railRow(page, 1);
+  await settle(page, 350);
+  await page.locator(`${RAIL} [data-slot="pin-row"][data-pin-row="1"]`).click();
+  const card = page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   await card.waitFor({ timeout: 10_000 });
-  const thread = (await card.textContent()) ?? "";
-  await on.page.keyboard.press("Escape");
-  on.kit.check(
-    "(p) a pane reply the hub refuses stays in its thread, unsent, its row saying the hub's reason with Try again, and kept on the device",
-    line === commentWords.notSent(refused.why) &&
-      retryShown &&
-      thread.includes(refused.words),
-    `row: ${line ?? "no not-sent line"}; Try again: ${retryShown}; thread holds the reply: ${thread.includes(refused.words)}; reason kept: ${refused.why}`
-  );
+  await card.getByRole("combobox").fill(words);
+  await card.getByRole("button", { name: "Reply" }).click();
+  await settle(page, 300);
+  await page.keyboard.press("Escape");
 };
 
-/** Try again on the refused reply: it lands on the hub, and nothing is left aside or pending. */
-const checkRetry = async (on: Pane, words: string) => {
-  await railRow(on.page);
-  await on.page.locator(`${RAIL} [data-slot="pin-retry"]`).first().click();
-  const landed = await until(
-    "(p) Try again's reply on the hub",
-    async () => {
-      const now = await hubDoc(on.fleet, on.session, on.artifact);
-      const pin = Object.values(now.pins).find((one) =>
-        one.thread.some(
-          (entry) => entry.by === "person" && entry.text === words
-        )
-      );
-      return pin ? { now, pin } : undefined;
-    },
-    Boolean,
-    30_000
-  ).catch(() => undefined);
-  await settle(on.page, 1000);
-  const after = await notSentLines(on.page);
-  const left = await keptOf(on);
-  on.kit.check(
-    "(p) Try again lands the reply on the hub beside the agent's answers, the row's reason goes, nothing is kept aside, and nothing waits pending on the hub",
-    !!landed &&
-      landed.pin.thread.some((entry) => entry.by === "agent") &&
-      !landed.now.pending &&
-      after === 0 &&
-      left === null,
-    `landed: ${landed ? JSON.stringify(landed.pin.thread.map((entry) => `${entry.by}: ${entry.text}`)) : "not within 30 s"}; pending: ${landed?.now.pending}; not-sent lines after: ${after}; kept on the device: ${left ?? "nothing"}; page errors: ${on.errors.join(" / ") || "none"}`
-  );
+/** Comment 1's thread as the pane draws it. */
+const threadInPane = async (page: Page) => {
+  await (await railRow(page, 1)).click();
+  const card = page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  await card.waitFor({ timeout: 10_000 });
+  const said = (await card.textContent()) ?? "";
+  await page.keyboard.press("Escape");
+  return said;
 };
 
-/** (p) A pane reply the hub refuses stays in its thread with why and Try again, and Try again lands it. */
+/** (p) The pane's link from the hub held, the agent answers comment 1, and the person replies in the pane, which hasn't heard it: both land. */
 const legP = async (
   kit: Kit,
   fleet: KitFleet,
   session: string,
-  artifact: string
+  artifact: string,
+  pin: string
 ) => {
   const page = await kit.page("desk");
-  const on: Pane = {
-    artifact,
-    base: await fleet.dashboard(),
-    errors: [],
-    fleet,
-    kit,
-    links: [],
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const links = await routeLinks(page, PANE_SOCKET);
+  await open(
     page,
-    session,
-  };
-  await page.routeWebSocket(PANE_SOCKET, (ws) => {
-    const server = ws.connectToServer();
-    const link: PaneLink = { ws, held: false, queue: [] };
-    on.links.push(link);
-    ws.onMessage((message) => server.send(message));
-    // Held, the doc's updates wait (y-protocols sync, type 0); the hub's
-    // word on the pane's own writes (auth, type 2) and its beat go through.
-    server.onMessage((message) => {
-      if (link.held && typeof message !== "string" && message[0] === 0) {
-        link.queue.push(message);
-      } else {
-        ws.send(message);
-      }
-    });
-  });
-  page.on("pageerror", (error) => on.errors.push(error.message));
-  const refused = await tryStale(on);
-  if (refused) {
-    await settle(page, 600);
-    await checkKept(on, refused);
-    await checkRetry(on, refused.words);
-  } else {
-    kit.check(
-      "(p) the hub refuses a stale pane reply, and the pane keeps it aside",
-      false,
-      `nothing kept on the device within 8 s; page errors: ${on.errors.join(" / ") || "none"}`
-    );
+    `${await fleet.dashboard()}/session/${session}`,
+    "[data-artifact-trigger]"
+  );
+  await page
+    .locator(`${PANE} button[data-slot="comments"]`)
+    .waitFor({ timeout: 60_000 });
+  await settle(page, 600);
+  // Comment 1's row drawn: the pane's doc holds the hub's (a fresh desk keeps no copy of it).
+  await railRow(page, 1);
+  const link = links.at(-1);
+  if (link) {
+    link.held = true;
   }
+  await callIn(fleet, session, REPLY_TOOL, {
+    pin,
+    text: "PROBE-AGENT-ANSWER",
+  });
+  const words = "PROBE-PANE-REPLY";
+  await replyInPane(page, words);
+  const both = (seen: Pin | undefined) =>
+    !!seen?.thread.some(
+      (entry) => entry.by === "agent" && entry.text === "PROBE-AGENT-ANSWER"
+    ) &&
+    seen.thread.some((entry) => entry.by === "person" && entry.text === words);
+  const landed = await until(
+    "(p) the pane's reply beside the agent's answer on the hub",
+    async () => {
+      const now = await hubDoc(fleet, session, artifact);
+      return both(now.pins[pin]) ? now : undefined;
+    },
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  const unheard = link?.queue.length ?? 0;
+  letThrough(link);
+  await settle(page, 1000);
+  const thread = await threadInPane(page);
+  const kept = await page.evaluate(
+    (key) => localStorage.getItem(key),
+    `cawco-refused-replies:${artifact}`
+  );
+  const line = await notSentOf(page, 1);
+  const refusals = links.reduce((sum, one) => sum + one.refusals, 0);
+  const held = (await hubDoc(fleet, session, artifact)).pins[pin];
+  kit.check(
+    "(p) a reply in a pane that hasn't heard the agent's answer lands beside it: the hub holds both, refuses nothing, the pane keeps nothing aside and says nothing unsent, and its thread draws both once its link is let through",
+    !!landed &&
+      !landed.pending &&
+      unheard > 0 &&
+      refusals === 0 &&
+      kept === null &&
+      line === null &&
+      thread.includes("PROBE-AGENT-ANSWER") &&
+      thread.includes(words),
+    `on the hub: ${held ? JSON.stringify(held.thread.map((entry) => `${entry.by}: ${entry.text}`)) : "no pin"}; pending: ${landed?.pending}; updates the pane hadn't heard: ${unheard}; refusal frames to the pane: ${refusals}; kept on the device: ${kept ?? "nothing"}; not-sent line: ${line ?? "none"}; thread draws the answer: ${thread.includes("PROBE-AGENT-ANSWER")}, the reply: ${thread.includes(words)}; page errors: ${errors.join(" / ") || "none"}`
+  );
   await page.close();
-};
-
-/** How many not-sent lines the rail draws. */
-const notSentLines = (page: Page) =>
-  page.locator(`${RAIL} [data-not-sent]`).count();
-
-/** Pin 1's id on the hub. */
-const pinOne = async (fleet: KitFleet, session: string, artifact: string) => {
-  const { pins } = await hubDoc(fleet, session, artifact);
-  return Object.values(pins).find((pin) => pin.number === 1)?.id;
 };
 
 /** The updates the hub keeps for `artifact`, in order. */
@@ -630,12 +580,12 @@ const run = async (kit: Kit) => {
     return;
   }
   const seed = await joinHub(fleet, session, artifact);
-  const pin = crypto.randomUUID();
-  writePin(seed.doc, personPin(pin, 1, "PROBE-PERSON-COMMENT"));
+  const first = crypto.randomUUID();
+  writePin(seed.doc, personPin(first, 1, "PROBE-PERSON-COMMENT"));
   await Bun.sleep(1000);
   seed.leave();
   await legH(kit, fleet, session, artifact);
-  await legP(kit, fleet, session, artifact);
+  await legP(kit, fleet, session, artifact, first);
   await legW(kit, fleet, session);
 };
 
