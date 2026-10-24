@@ -20,8 +20,11 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
+  CANVAS_EMBED_FETCHED,
   CANVAS_EMBED_SIZE,
+  CANVAS_GRAPH_FETCHED,
   CANVAS_PLAN_ID,
+  type CanvasGraph,
   type CanvasSpec,
   FORMS,
   type FormName,
@@ -1351,6 +1354,28 @@ export function boot(options: BootOptions): void {
     body.style.width = width === null ? "" : `${width}px`;
     body.style.container =
       width === null ? "" : `${WIDTH_CONTAINER} / inline-size`;
+  }
+
+  /**
+   * The page holding an embed hears its whole graph arrived (core
+   * `CANVAS_EMBED_FETCHED`), once its page's preloads have all answered,
+   * before it is evaluated and drawn: the next embed may fetch meanwhile
+   * (dashboard decisions host embed-turns.ts). Nothing is said where the
+   * page carried no graph: its turn ends at its shape.
+   */
+  function tellGraphFetched(): void {
+    const graph = (window as unknown as { __cawcoGraph?: CanvasGraph })
+      .__cawcoGraph;
+    if (!graph || graph.asked === 0) {
+      return;
+    }
+    const tell = () =>
+      window.parent.postMessage({ type: CANVAS_EMBED_FETCHED }, "*");
+    if (graph.whole) {
+      tell();
+    } else {
+      addEventListener(CANVAS_GRAPH_FETCHED, tell, { once: true });
+    }
   }
 
   let saidShape = "";
@@ -3255,6 +3280,7 @@ export function boot(options: BootOptions): void {
   }
   if (embed) {
     chrome.asEmbed();
+    tellGraphFetched();
     // Its stories load now, not on the observer's first callback: a frame off the page's screen gets no rendering steps until it is scrolled to, and its module is fetched and mounted meanwhile.
     quietly(pump());
   } else {

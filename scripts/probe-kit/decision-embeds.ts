@@ -62,8 +62,8 @@ export const STAGE_START_MS = 240_000;
 /** An embed on a decision page: a Preview's live frame (dashboard decisions host Preview.svelte). */
 export const EMBED_FRAME = "[data-slot=media] iframe[data-slot=embed]";
 const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
-/** Where a Preview tells its page's origin the shape its canvas said (hub preview.ts `/shape`). */
-const SHAPE_PATH = /^\/__cawco\/artifact\/([0-9a-f-]{36})\/shape$/;
+/** Where a Preview tells the shape its canvas said, beside its page (hub preview.ts `PAGE_SHAPE_PATH`). */
+const SHAPE_PATH = /^\/page\/[a-z-]+\/(?:light|dark)\/shape$/;
 /** A page artifact's own address, as the hub serves it. */
 const PAGE_ARTIFACT = /^\/__cawco\/page\/([^/]+)\/$/;
 const TITLE = /Decisions\("([^"]*)"/;
@@ -344,7 +344,7 @@ function decisionPage(
     embedAt: string;
     files: Readonly<Record<string, readonly string[]>>;
     pages: Readonly<Record<string, string>>;
-    /** Each canvas's shapes as its Previews told them (`/shape`), as the hub's media carries them. */
+    /** Each canvas's shapes as its Previews told them (`shape` beside the page), as the hub's media carries them. */
     said: ReadonlyMap<string, Record<string, EmbedShape>>;
     theme: string;
   },
@@ -443,16 +443,16 @@ export async function startDecisionStage(
       if (script) {
         return script;
       }
-      // A Preview tells the shape its canvas said, as the hub keeps it (hub preview.ts `/shape`).
-      const shaped = pathname.match(SHAPE_PATH)?.[1];
-      if (shaped && request.method === "POST") {
+      // A Preview tells the shape its canvas said beside its page, as the hub keeps it (hub preview.ts `PAGE_SHAPE_PATH`).
+      if (SHAPE_PATH.test(pathname) && request.method === "POST") {
         const told = (await request.json()) as {
+          artifact: string;
           h: number;
           stories: string[];
           w: number | null;
         };
-        said.set(shaped, {
-          ...said.get(shaped),
+        said.set(told.artifact, {
+          ...said.get(told.artifact),
           [storiesKey(told.stories)]: { h: told.h, w: told.w },
         });
         return new Response(null, { status: 204 });

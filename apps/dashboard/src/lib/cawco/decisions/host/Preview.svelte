@@ -12,9 +12,9 @@
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
   `sayShape`), so its frame is that wide and that tall; a page's canvases
-  load one at a time, the one in view or nearest it first, each once the
-  one before it has said its shape (embed-turns.ts: together they ask more
-  than the browser takes in flight). Each stands in its well, which hugs it
+  fetch one at a time, the one in view or nearest it first, each once the
+  graph of the one before it has arrived (embed-turns.ts: together they ask
+  more than the browser takes in flight). Each stands in its well, which hugs it
   and scrolls it sideways where it is wider (Well.svelte). While a screen's
   origin is asked, the well holds its 16:10, a skeleton until the wait
   outlasts its grace; a canvas waiting its turn or loading holds its
@@ -37,6 +37,7 @@
     probePreview,
   } from "@cawco/core/preview-reach";
   import {
+    CANVAS_EMBED_FETCHED,
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
     type EmbedShape,
@@ -127,8 +128,8 @@
   let turn: EmbedTurn | undefined;
 
   /**
-   * The shape its canvas said, told to the page's origin (hub preview.ts
-   * `/shape`) where the media knew another: kept for every next Preview of
+   * The shape its canvas said, told beside the page's own address (hub
+   * preview.ts `PAGE_SHAPE_PATH`) where the media knew another: kept for every next Preview of
    * these stories, in any browser. Unheard, the next stands at what the
    * media knew; nothing waits on it.
    */
@@ -137,10 +138,11 @@
     if (had?.h === heard.h && had.w === heard.w) {
       return;
     }
-    fetch(`/__cawco/artifact/${id}/shape`, {
+    // Beside the page's own address (hub preview.ts `PAGE_SHAPE_PATH`).
+    fetch("shape", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stories, ...heard }),
+      body: JSON.stringify({ artifact: id, stories, ...heard }),
     }).catch(() => undefined);
   };
 
@@ -152,11 +154,15 @@
         type?: unknown;
         width?: unknown;
       } | null;
-      if (
-        event.source === frame?.contentWindow &&
-        said?.type === CANVAS_EMBED_SIZE &&
-        typeof said.height === "number"
-      ) {
+      if (event.source !== frame?.contentWindow) {
+        return;
+      }
+      // Its graph arrived: the next canvas fetches while this one evaluates and draws.
+      if (said?.type === CANVAS_EMBED_FETCHED) {
+        turn?.done();
+        return;
+      }
+      if (said?.type === CANVAS_EMBED_SIZE && typeof said.height === "number") {
         tall = said.height;
         saidWidth = typeof said.width === "number" ? said.width : null;
         turn?.done();

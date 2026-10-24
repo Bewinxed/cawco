@@ -14064,8 +14064,8 @@ export const createServer = (
         throw error;
       }
     },
-    // A decision page's Preview heard its canvas's shape: kept for the next Preview of it.
-    keepShape: async (request, artifactId) => {
+    // A decision page's Preview heard a canvas of its media say its shape: kept for the next Preview of it.
+    keepShape: async (request, pageId) => {
       if (request.method !== "POST") {
         return new Response("Tell a shape with a POST.", {
           status: 405,
@@ -14073,23 +14073,31 @@ export const createServer = (
         });
       }
       const told = (await request.json().catch(() => null)) as {
+        artifact?: unknown;
         h?: unknown;
         stories?: unknown;
         w?: unknown;
       } | null;
       const shape = { h: told?.h, w: told?.w ?? null };
+      const canvas = typeof told?.artifact === "string" ? told.artifact : "";
       if (!(
+        canvas &&
         Array.isArray(told?.stories) &&
         told.stories.every((one) => typeof one === "string") &&
         isEmbedShape(shape)
       )) {
         return new Response(
-          "A shape is { stories: string[], h: px, w: px or null }.",
+          "A shape is { artifact: id, stories: string[], h: px, w: px or null }.",
           { status: 400 }
         );
       }
+      if (!artifacts.pageShows(pageId, canvas)) {
+        return new Response("This page shows no such canvas.", {
+          status: 404,
+        });
+      }
       return artifacts.keepSaidShape(
-        artifactId,
+        canvas,
         storiesKey(told.stories as string[]),
         shape
       )

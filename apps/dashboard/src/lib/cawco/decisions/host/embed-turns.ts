@@ -21,9 +21,12 @@
  * is given once the page's Previews have all asked (a task after the first
  * ask), so it goes by place too, not to whichever asked first.
  *
- * A turn ends when its embed says its shape (it drew, or says why it
- * didn't), when its Preview goes, or after {@link TURN_MS}, so a canvas that
- * never answers holds the rest no longer than that.
+ * A turn ends when its embed says its whole graph arrived (core
+ * `CANVAS_EMBED_FETCHED`: one graph in flight at a time, the next fetching
+ * while this one evaluates on the page's one main thread), else when it says
+ * its shape (it drew, or says why it didn't), when its Preview goes, or
+ * after {@link TURN_MS}, so a canvas that never answers holds the rest no
+ * longer than that.
  */
 
 /** How long one embed holds the page's turn at most. Our call. */

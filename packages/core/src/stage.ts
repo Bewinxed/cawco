@@ -75,6 +75,25 @@ export const sectionName = (
  */
 export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 
+/**
+ * A canvas embed's whole module graph has arrived (every `modulepreload`
+ * its page carried answered), the message it posts to the page holding it,
+ * `{ type }`, before it has evaluated and drawn: the page may let the next
+ * embed fetch while this one evaluates (dashboard decisions host
+ * embed-turns.ts). An embed whose page carried no graph (a stage no page
+ * has drawn since it started) never posts it.
+ */
+export const CANVAS_EMBED_FETCHED = "cawco:embed-fetched";
+
+/** The canvas page's count of its graph's preloads (stage-host host.ts `serveCanvas`), read by the runtime. */
+export interface CanvasGraph {
+  asked: number;
+  done: number;
+  whole: boolean;
+}
+/** The event the canvas page dispatches once every preload of its graph answered. */
+export const CANVAS_GRAPH_FETCHED = "cawco:graph-fetched";
+
 /** A canvas embed's shape as it said it (`CANVAS_EMBED_SIZE`), CSS px: its height, and its widest story's width (null where none says one). */
 export interface EmbedShape {
   h: number;
@@ -86,8 +105,8 @@ export interface EmbedShape {
  * Preview's skeleton stands at its picture's own shape from its first paint
  * (dashboard decisions host Preview.svelte):
  * - `said`: what an embed of it said, by the stories its Preview names
- *   ({@link storiesKey}), as a Preview heard it and told its page's origin
- *   (`/__cawco/artifact/<id>/shape`);
+ *   ({@link storiesKey}), as a Preview heard it and told beside its page
+ *   (`/__cawco/page/<page>/shape`);
  * - `drawn`: each story's rest frame as the stage's render report has it,
  *   for a Preview no embed has said yet.
  */

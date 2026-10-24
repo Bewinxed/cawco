@@ -52,6 +52,7 @@ import { parse } from "@babel/parser";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
+  CANVAS_GRAPH_FETCHED,
   CANVAS_PATH,
   CANVAS_PLAN_ID,
   COMPONENT_BUDGET,
@@ -1125,6 +1126,26 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
   res.end(JSON.stringify(body));
 };
 
+/**
+ * The canvas page's preloads of its whole graph, each counted as it answers
+ * (core `CanvasGraph`): once every one has, the page dispatches
+ * `CANVAS_GRAPH_FETCHED`, so an embed tells the page holding it its graph
+ * arrived before it evaluates it (runtime.ts, `CANVAS_EMBED_FETCHED`).
+ * Measured on caw-panel's States, cold: its 839 preloads answered 1.5 s
+ * in, its frame drew 3.8 s in; the 2.3 s between are the page's main thread
+ * evaluating the graph, which the next embed's fetch may overlap. None when
+ * the stage has no graph to preload.
+ */
+const graphPreloads = (urls: string[]): string =>
+  urls.length === 0
+    ? ""
+    : `<script>window.__cawcoGraph={asked:${urls.length},done:0,whole:false};window.__cawcoPreloaded=function(){var g=window.__cawcoGraph;g.done+=1;if(!g.whole&&g.done>=g.asked){g.whole=true;dispatchEvent(new Event(${JSON.stringify(CANVAS_GRAPH_FETCHED)}))}};</script>${urls
+        .map(
+          (url) =>
+            `<link rel="modulepreload" href="${escapeAttr(url)}" onload="__cawcoPreloaded()" onerror="__cawcoPreloaded()">`
+        )
+        .join("")}`;
+
 /** The canvas's page, through the project's own HTML transforms. */
 async function serveCanvas(
   dev: DevServer,
@@ -1139,9 +1160,7 @@ async function serveCanvas(
     ).searchParams.getAll("file");
     // JSON in a script element: no `<` closes it early.
     const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
-    const preloads = preloadsOf(files)
-      .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
-      .join("");
+    const preloads = graphPreloads(preloadsOf(files));
     const html = keyedPage(
       await dev.transformIndexHtml(
         req.url ?? CANVAS_PATH,

@@ -386,12 +386,12 @@ export interface PreviewListenerDeps {
     artifactId: string
   ) => Promise<Response>;
   /**
-   * The shape a decision page's Preview heard component canvas
-   * `artifactId` say (`POST /__cawco/artifact/<id>/shape`, a JSON body of
-   * core `storiesKey`'s stories and an `EmbedShape`), kept for every next
-   * Preview of it (artifacts service `keepSaidShape`).
+   * The shape a decision page's Preview heard a component canvas of page
+   * `pageId`'s media say (`POST /__cawco/page/<id>/shape`, a JSON body of
+   * the canvas's `artifact`, its `stories` and an `EmbedShape`), kept for
+   * every next Preview of it (artifacts service `keepSaidShape`).
    */
-  keepShape: (request: Request, artifactId: string) => Promise<Response>;
+  keepShape: (request: Request, pageId: string) => Promise<Response>;
   /** An artifact's kind; undefined when there is none. */
   kindOf: (artifactId: string) => ArtifactKind | undefined;
   /**
@@ -466,9 +466,6 @@ const joinArtifact = (
       ? undefined
       : new Response("WebSocket upgrade failed", { status: 400 });
   }
-  if (action === "/shape") {
-    return deps.keepShape(request, artifactId);
-  }
   // What the page asks of its session: the one that holds it now.
   const instanceId = deps.ownerOf(artifactId);
   if (!instanceId) {
@@ -509,6 +506,13 @@ const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/;
  * socket the page joins there.
  */
 const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/;
+
+/**
+ * Where a decision page's Preview tells the shape its component canvas
+ * said, relative to the page (`shape` beside `/__cawco/page/<id>/`): a POST
+ * of the canvas's id, its stories and the shape ({@link PreviewListenerDeps.keepShape}).
+ */
+const PAGE_SHAPE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})\/shape$/;
 
 /** Everything under it is the hub's own on a preview origin; a previewed app never sees it. */
 const RESERVED = "/__cawco/";
@@ -766,6 +770,32 @@ async function artifactById(
   return null;
 }
 
+/**
+ * What a page asks of an artifact on this origin by its path: its doc's
+ * socket or an action ({@link joinArtifact}), or, beside a decision page,
+ * the shape one of its Previews heard ({@link PAGE_SHAPE_PATH}); null for any
+ * other path.
+ */
+function artifactAsked(
+  request: Request,
+  server: Server<ListenerSocket>,
+  pathname: string,
+  instanceId: string,
+  deps: PreviewListenerDeps
+): Response | Promise<Response> | undefined | null {
+  const synced = pathname.match(ARTIFACT_PATH);
+  if (synced) {
+    return joinArtifact(request, server, synced, instanceId, deps);
+  }
+  const shaped = pathname.match(PAGE_SHAPE_PATH)?.[1];
+  if (!shaped) {
+    return null;
+  }
+  return deps.servedOn(shaped, instanceId) && deps.kindOf(shaped) === "page"
+    ? deps.keepShape(request, shaped)
+    : new Response("This origin serves no such page.", { status: 404 });
+}
+
 /** One request to session `instanceId`'s preview origin, at its root; `direct` as {@link relay} takes it. */
 async function serveSession(
   request: Request,
@@ -786,9 +816,9 @@ async function serveSession(
       url.searchParams.get(OVERLAY_KEY)
     );
   }
-  const synced = pathname.match(ARTIFACT_PATH);
-  if (synced) {
-    return joinArtifact(request, server, synced, instanceId, deps);
+  const told = artifactAsked(request, server, pathname, instanceId, deps);
+  if (told !== null) {
+    return told;
   }
   const byId = await artifactById(url, instanceId, deps);
   if (byId) {

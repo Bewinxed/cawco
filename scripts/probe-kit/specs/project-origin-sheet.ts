@@ -24,7 +24,10 @@
  *     both canvases remounted three times (the page sets each frame's
  *     address again) draw the card each time; none of the embeds' answers
  *     is 401, the page's first load is (the browser holds no pass yet), and
- *     one `/__cawco/enter` is asked in all, none once the remounts begin.
+ *     one `/__cawco/enter` is asked in all, none once the remounts begin;
+ * (d) the Previews told the hub the shape their canvas said (hub preview.ts
+ *     `PAGE_SHAPE_PATH`): the page served again carries it in its media,
+ *     at the frames' own height, so the next Preview's skeleton stands at it.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { mkdir, writeFile } from "node:fs/promises";
@@ -149,6 +152,46 @@ const embedIn = async (tab: Page): Promise<string> => {
         .join(" | ");
 };
 
+/**
+ * (d): the Previews told the hub the shape their canvas said (hub
+ * preview.ts `PAGE_SHAPE_PATH`); the page served again carries it in its
+ * media, at the frames' own height.
+ */
+async function shapeHeard(
+  kit: Kit,
+  mode: string,
+  tab: Page,
+  sheet: string
+): Promise<void> {
+  const shapes = await (
+    await pageFrame(tab)
+  )?.evaluate(async (id) => {
+    const html = await (await fetch(location.href)).text();
+    const media = new DOMParser()
+      .parseFromString(html, "text/html")
+      .getElementById("cawco-media")?.textContent;
+    const said =
+      (
+        JSON.parse(media ?? "{}") as Record<
+          string,
+          { shapes?: { said?: Record<string, { h: number }> } }
+        >
+      )[id]?.shapes?.said ?? {};
+    const frames = [
+      ...document.querySelectorAll("iframe[data-slot=embed]"),
+    ].map((one) => Math.round(one.getBoundingClientRect().height));
+    return { said, frames };
+  }, sheet);
+  kit.check(
+    `(d) ${mode}: the page served again carries the shape its Previews heard the canvas say, at the frames' own height (${JSON.stringify(shapes)})`,
+    !!shapes &&
+      (shapes.said[""]?.h ?? 0) > 0 &&
+      shapes.frames.length === 2 &&
+      shapes.frames.every((h) => h === shapes.said[""]?.h),
+    JSON.stringify(shapes)
+  );
+}
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -239,6 +282,7 @@ const run = async (kit: Kit) => {
       settled === BOTH,
       settled
     );
+    await shapeHeard(kit, mode, tab, sheet.id);
     if (mode === "host") {
       const shown = await pageFrame(tab);
       const embeds = new Set(

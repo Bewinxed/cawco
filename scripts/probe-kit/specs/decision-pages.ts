@@ -121,8 +121,9 @@
  *     held {@link HEAVY_HOLD_MS} as the hops to a stage hold it. Every
  *     Preview stands at its drawn shape, none says "didn't load", and every
  *     story it names has a rest frame with a box past 0 by 0; and the page
- *     loaded them one at a time, each embed given its address only once the
- *     one before it had mounted its stories. The page is six cards tall, and
+ *     fetched them one at a time, each embed given its address only once the
+ *     whole graph of the one before it had arrived (its page's preloads all
+ *     answered: stage-host host.ts `graphPreloads`). The page is six cards tall, and
  *     scrolled to its middle the moment its last card stands: no picture out
  *     of view gets its turn while one in view still waits. Sampled every 50
  *     ms, a picture not yet drawn is never an empty box: its skeleton stands
@@ -4711,8 +4712,19 @@ function dozenRead() {
  * Each frame's own status says drawn a report later, past this.
  */
 function dozenClock(): void {
-  const own = window as unknown as { __kitDrewAt?: number };
+  const own = window as unknown as {
+    __kitDrewAt?: number;
+    __kitFetchedAt?: number;
+  };
   if (location.pathname.includes("/@cawco/canvas")) {
+    // Its whole graph arrived (stage-host host.ts `graphPreloads`): the page may let the next fetch from here.
+    addEventListener(
+      "cawco:graph-fetched",
+      () => {
+        own.__kitFetchedAt = Date.now();
+      },
+      { once: true }
+    );
     const mark = () => {
       const done =
         document.querySelector(".cawco-section-failed") !== null ||
@@ -4892,9 +4904,10 @@ function dozenWaits(): void {
 
 /** One embed of (r)'s page, as its Preview named it and as it drew. */
 interface DozenEmbed {
-  /** When its frame got its address, and when it mounted its stories (`dozenClock`). */
+  /** When its frame got its address, when its whole graph arrived, and when it mounted its stories (`dozenClock`). */
   at: number;
   drew: number | null;
+  fetched: number | null;
   /** Its picture stood in view as it got its turn, and how many in view still waited for theirs then. */
   inView: boolean;
   named: string[];
@@ -4932,6 +4945,11 @@ async function dozenEmbeds(page: Page): Promise<DozenEmbed[]> {
         (await frame?.evaluate(
           () => (window as unknown as { __kitDrewAt?: number }).__kitDrewAt
         )) ?? null,
+      fetched:
+        (await frame?.evaluate(
+          () =>
+            (window as unknown as { __kitFetchedAt?: number }).__kitFetchedAt
+        )) ?? null,
     });
   }
   return embeds;
@@ -4956,17 +4974,18 @@ const dozenFaults = (one: DozenEmbed): string[] => {
   ];
 };
 
-/** Each embed that got its address before the one given its address before it had mounted its stories. */
+/** Each embed that got its address before the one given its address before it had its whole graph (else, a page with no graph to preload, before it mounted its stories). */
 const dozenOverlaps = (order: DozenEmbed[]): string[] =>
   order.flatMap((one, at) => {
     const before = order[at - 1];
-    if (!before || (before.drew !== null && one.at >= before.drew)) {
+    const done = before?.fetched ?? before?.drew ?? null;
+    if (!before || (done !== null && one.at >= done)) {
       return [];
     }
     return [
-      before.drew === null
-        ? `${one.take} began with ${before.take} never drawn`
-        : `${one.take} began ${before.drew - one.at} ms before ${before.take} drew`,
+      done === null
+        ? `${one.take} began with ${before.take}'s graph never fetched`
+        : `${one.take} began ${done - one.at} ms before ${before.take}'s graph arrived`,
     ];
   });
 
@@ -5052,7 +5071,7 @@ async function dozenOn(
   const order = [...embeds].sort((a, b) => a.at - b.at);
   const overlaps = dozenOverlaps(order);
   kit.check(
-    `${leg}: the page loads its canvases one at a time, each once the one before it drew (${overlaps.length} began early)`,
+    `${leg}: the page fetches its canvases one at a time, each once the graph of the one before it arrived (${overlaps.length} began early)`,
     embeds.length === HEAVY_TAKES.length &&
       embeds.every((one) => one.at > 0) &&
       overlaps.length === 0,
@@ -5060,7 +5079,7 @@ async function dozenOn(
       ...overlaps,
       ...order.map(
         (one) =>
-          `${one.take}: address at +${one.at - started} ms, drew at ${one.drew === null ? "never" : `+${one.drew - started} ms`}`
+          `${one.take}: address at +${one.at - started} ms, graph at ${one.fetched === null ? "none" : `+${one.fetched - started} ms`}, drew at ${one.drew === null ? "never" : `+${one.drew - started} ms`}`
       ),
     ].join("\n    ")
   );

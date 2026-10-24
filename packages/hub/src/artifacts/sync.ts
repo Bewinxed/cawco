@@ -317,12 +317,11 @@ export const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
 
 /**
  * The listener's paths for an artifact: its doc's socket, the person's send
- * (`/send`), a canvas's picture (`/picture`), and the shape a decision
- * page's Preview heard a component canvas say (`/shape`), on the page's own
- * origin as the overlay and the canvas's host page reach them.
+ * (`/send`), and a canvas's picture (`/picture`), on the page's own origin
+ * as the overlay and the canvas's host page reach them.
  */
 export const ARTIFACT_PATH =
-  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture|\/pictures|\/canvas|\/show|\/shape)?$/;
+  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture|\/pictures|\/canvas|\/show)?$/;
 
 /** Where a canvas's latest picture is kept: its folder under the artifacts' root. */
 export const picturePath = (root: string, artifactId: string): string =>
