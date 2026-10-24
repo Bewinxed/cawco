@@ -971,11 +971,53 @@
     }
     keepReplies(id, next);
   }
+  /**
+   * The person's replies the hub refused that the page keeps (written
+   * through the page, as the app writes them: overlay artifact.ts
+   * `refusedReplies`), by pin, as the page last said them
+   * (`cawco:page-pins`). Drawn in their thread beside the pane's own, with
+   * the reason and Try again, which the page writes again
+   * (`cawco:resend-pin`).
+   */
+  let pageReplies = $state.raw<
+    Record<string, { entries: ThreadEntry[]; why: string }>
+  >({});
+  /** `said` as the page's refused replies, each part checked: what isn't one is left out. */
+  function pageRepliesOf(said: unknown) {
+    if (!said || typeof said !== "object" || Array.isArray(said)) {
+      return {};
+    }
+    const kept: Record<string, { entries: ThreadEntry[]; why: string }> = {};
+    for (const [pin, one] of Object.entries(said)) {
+      const { entries, why } = (one ?? {}) as {
+        entries?: unknown;
+        why?: unknown;
+      };
+      if (typeof why !== "string" || !Array.isArray(entries)) {
+        continue;
+      }
+      const valid = entries.filter(
+        (entry): entry is ThreadEntry =>
+          !!entry &&
+          typeof entry === "object" &&
+          typeof (entry as ThreadEntry).id === "string" &&
+          typeof (entry as ThreadEntry).text === "string" &&
+          (entry as ThreadEntry).by === "person"
+      );
+      if (valid.length > 0) {
+        kept[pin] = { entries: valid, why };
+      }
+    }
+    return kept;
+  }
   const pins = $derived.by(() => {
     const held = (view?.pins ?? []).map((pin) => {
-      const refused = refusedReplies[pin.id];
-      return refused
-        ? { ...pin, thread: [...pin.thread, ...refused.entries] }
+      const refused = [
+        ...(refusedReplies[pin.id]?.entries ?? []),
+        ...(pageReplies[pin.id]?.entries ?? []),
+      ];
+      return refused.length > 0
+        ? { ...pin, thread: [...pin.thread, ...refused] }
         : pin;
     });
     const known = new Set(held.map((pin) => pin.id));
@@ -1381,6 +1423,7 @@
     pageLost = null;
     pageSilent = false;
     pagePins = {};
+    pageReplies = {};
     pageWords.clear();
     refusedReplies = readJson(refusedKey(id), {});
     const joined = joinArtifact(
@@ -1463,6 +1506,7 @@
    */
   const notSentWhy = (pin: Pin): string | null =>
     refusedReplies[pin.id]?.why ??
+    pageReplies[pin.id]?.why ??
     pin.notSent?.why ??
     (onlyOnPage(pin.id) ? (linkDown ?? commentWords.notOnHub) : null);
   /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
@@ -1500,8 +1544,14 @@
     }
     pinsRetrying = new Set([...pinsRetrying, id]);
     try {
-      if (refusedReplies[id]) {
-        retryRefused(artifact.id, id);
+      if (refusedReplies[id] || pageReplies[id]) {
+        // The page's are written into its doc again, which tells what it still keeps; the pane's into the pane's.
+        if (pageReplies[id]) {
+          post({ type: "cawco:resend-pin", id });
+        }
+        if (refusedReplies[id]) {
+          retryRefused(artifact.id, id);
+        }
       } else if (onlyOnPage(id)) {
         // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
         post({ type: "cawco:resend-pin", id });
@@ -2740,6 +2790,8 @@
         heardPageWrite(message.type, message);
         break;
       case "cawco:page-pins":
+        // The replies the hub refused that the page keeps, every one each time: they stand in their threads.
+        pageReplies = pageRepliesOf(message.replies);
         // The pins the page holds while its link isn't synced (a reload's, given back by the device among them): those the pane's doc lacks stand as the page's.
         for (const pin of Array.isArray(message.pins) ? message.pins : []) {
           const one = pin as Partial<Pin> | null;

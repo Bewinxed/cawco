@@ -25,6 +25,13 @@
  *   the page keeps the comment aside, its row in the rail saying the hub's
  *   reason with Try again. With room again, Try again lands it on the hub,
  *   and the page keeps nothing aside.
+ * - (r) The page's overlay, on a third page whose one comment's thread is
+ *   one short of what a thread keeps: its link from the hub held, another
+ *   client takes the last place, and the host writes a reply through the
+ *   page (`cawco:reply`, as the app does). The hub refuses it; the page keeps
+ *   the reply aside by its pin with the hub's reason and tells the pane,
+ *   whose thread draws it, its row saying why with Try again. With room
+ *   again, Try again lands it on the hub, and the page keeps nothing aside.
  * - (w) A doc the hub kept with each pin one whole value (as every doc stored
  *   before pins were written in parts): the hub, started again, keeps it in
  *   its parts as it loads it, and comment_read reads the pin as it was.
@@ -37,6 +44,7 @@ import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
 import {
   COMMENT_LIMITS,
   deletePin,
+  entryKey,
   type Pin,
   pinDelivered,
   placeOf,
@@ -752,6 +760,257 @@ const legO = async (kit: Kit, fleet: KitFleet, session: string) => {
   await page.close();
 };
 
+/** The replies the page keeps aside on the device (overlay artifact.ts `REPLIES_KEY`), as stored: null when none. */
+const repliesOnPage = (frame: Frame, artifact: string) =>
+  frame
+    .evaluate(
+      (key) => localStorage.getItem(key),
+      `cawco-refused-page-replies:${artifact}`
+    )
+    .catch(() => null);
+
+/** Pin `n`'s thread card as the pane draws it, opened from its row. */
+const cardSays = async (page: Page, n: number) => {
+  await (await railRow(page, n)).click();
+  const card = page.locator(`[data-slot="pin-card"][data-pin-card="${n}"]`);
+  await card.waitFor({ timeout: 10_000 });
+  const said = (await card.textContent()) ?? "";
+  await page.keyboard.press("Escape");
+  return said;
+};
+
+/**
+ * (r) A reply written through the page (the app's `cawco:reply`) on a
+ * thread one short of its bound, while another device, unheard, takes the
+ * last place: the hub refuses it on the page's socket; the page keeps the
+ * reply aside by its pin with the hub's reason and tells its host, whose
+ * thread draws it with why and Try again. With room again, Try again lands
+ * it on the hub and the page keeps nothing aside.
+ */
+/** (r)'s comment of the person's on `artifact`, its thread one short of what a thread keeps, all delivered: how long its thread is on the hub (0 when it isn't). */
+const fillThread = async (
+  fleet: KitFleet,
+  session: string,
+  artifact: string,
+  pin: string
+) => {
+  const start = Date.now();
+  const head = personPin(pin, 1, "PROBE-FULL-THREAD");
+  const full = pinDelivered(
+    {
+      ...head,
+      thread: [
+        ...head.thread,
+        ...Array.from({ length: COMMENT_LIMITS.entries - 2 }, (_, i) => ({
+          id: crypto.randomUUID(),
+          by: "person" as const,
+          text: `PROBE-THREAD-${i + 2}`,
+          at: new Date(start + (i + 1) * 1000).toISOString(),
+        })),
+      ],
+    },
+    new Date(start + COMMENT_LIMITS.entries * 1000).toISOString()
+  );
+  const seed = await joinHub(fleet, session, artifact);
+  writePin(seed.doc, full);
+  const seeded = await until(
+    "(r) the full thread on the hub",
+    async () =>
+      (await hubDoc(fleet, session, artifact)).pins[pin]?.thread.length ?? 0,
+    (count) => count === COMMENT_LIMITS.entries - 1,
+    15_000
+  ).catch(() => 0);
+  seed.leave();
+  return seeded;
+};
+
+const legR = async (kit: Kit, fleet: KitFleet, session: string) => {
+  const made = await callIn(fleet, session, CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page as well: pin anything that reads wrong",
+    name: "reply-refusal",
+    html: PAGE_HTML,
+  });
+  const artifact = made.match(ANSWERED_ID)?.[1];
+  if (!artifact) {
+    kit.check("(r) the third page is made", false, made.slice(0, 400));
+    return;
+  }
+  const pin = crypto.randomUUID();
+  const seeded = await fillThread(fleet, session, artifact, pin);
+  const page = await kit.page("desk");
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const links = await routeLinks(page, PAGE_SOCKET);
+  await open(
+    page,
+    `${await fleet.dashboard()}/session/${session}`,
+    "[data-artifact-trigger]"
+  );
+  const frame = await pageHolding(page, artifact);
+  const shown = frame ? await syncedWith(frame, 1) : null;
+  if (!(frame && seeded > 0 && shown === null)) {
+    kit.check(
+      "(r) the third page, its thread filled, in the pane, its link synced",
+      false,
+      `thread on the hub: ${seeded}; page ${frame ? "shown" : "not shown"}; ${shown ?? ""}; page errors: ${errors.join(" / ") || "none"}`
+    );
+    await page.close();
+    return;
+  }
+  const link = links.at(-1);
+  if (link) {
+    link.held = true;
+  }
+  // Another device takes the thread's last place; the page, its link held, hasn't heard it.
+  const other = await joinHub(fleet, session, artifact);
+  replyToPin(other.doc, pin, { text: "PROBE-OTHER-REPLY" });
+  await until(
+    "(r) the other device's reply on the hub",
+    async () =>
+      (await hubDoc(fleet, session, artifact)).pins[pin]?.thread.length ?? 0,
+    (count) => count === COMMENT_LIMITS.entries,
+    15_000
+  ).catch(() => 0);
+  // The host writes the person's reply through the page, as the app does.
+  const words = "PROBE-PAGE-REPLY";
+  await page.evaluate(
+    ({ selector, message }) =>
+      (
+        document.querySelector(selector) as HTMLIFrameElement | null
+      )?.contentWindow?.postMessage(message, "*"),
+    {
+      selector: FRAME,
+      message: { type: "cawco:reply", pin, text: words },
+    }
+  );
+  const stored = await until(
+    "(r) the page's reply kept aside",
+    () => repliesOnPage(frame, artifact),
+    Boolean,
+    20_000
+  ).catch(() => null);
+  const kept = stored
+    ? (JSON.parse(stored) as Record<
+        string,
+        { entries: { text: string }[]; why: string }
+      >)
+    : {};
+  const why = kept[pin]?.why ?? "";
+  const keptWords = kept[pin]?.entries.map((entry) => entry.text) ?? [];
+  await settle(page, 600);
+  await railRow(page, 1).catch(() => undefined);
+  const said = await until(
+    "(r) its row saying why",
+    () => notSentOf(page, 1),
+    Boolean,
+    10_000
+  ).catch(() => null);
+  const retryButton = page.locator(
+    `${RAIL} li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-retry"]`
+  );
+  const retry = await retryButton.isVisible().catch(() => false);
+  const thread = await cardSays(page, 1).catch(() => "");
+  const refused = links.find((one) => one.refusals > 0);
+  const onHub = (await hubDoc(fleet, session, artifact)).pins[pin];
+  const replyOnHub = !!onHub?.thread.some((entry) => entry.text === words);
+  kit.check(
+    "(r) a reply written through the page on a thread another device filled: the refusal comes on the page's socket, which the hub doesn't close; the page keeps the reply aside by its pin with the hub's reason and tells the pane, whose thread draws it, its row saying why with Try again; the hub holds none of it",
+    !!refused &&
+      !refused.hubClosed &&
+      !!why &&
+      keptWords.length === 1 &&
+      keptWords[0] === words &&
+      said === commentWords.notSent(why) &&
+      retry &&
+      thread.includes(words) &&
+      !replyOnHub,
+    `refusal frames: ${links.map((one) => one.refusals).join(", ")}; the hub closed that link: ${refused?.hubClosed}; kept: ${stored ? `${JSON.stringify(keptWords)}, why ${JSON.stringify(why)}` : "nothing"}; row: ${said ?? "no not-sent line"}; Try again: ${retry}; thread draws the reply: ${thread.includes(words)}; on the hub: ${replyOnHub}; page errors: ${errors.join(" / ") || "none"}`
+  );
+  letThrough(link);
+  await retryReply(kit, fleet, session, {
+    page,
+    frame,
+    other,
+    artifact,
+    pin,
+    words,
+    errors,
+  });
+  await page.close();
+};
+
+/** (r)'s second half: the other device's reply goes, so the thread has room again, and the page's Try again lands the kept reply. */
+const retryReply = async (
+  kit: Kit,
+  fleet: KitFleet,
+  session: string,
+  {
+    page,
+    frame,
+    other,
+    artifact,
+    pin,
+    words,
+    errors,
+  }: {
+    artifact: string;
+    errors: string[];
+    frame: Frame;
+    other: Client;
+    page: Page;
+    pin: string;
+    words: string;
+  }
+) => {
+  const retryButton = page.locator(
+    `${RAIL} li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-retry"]`
+  );
+  const theirs = readPin(other.doc, pin)?.thread.find(
+    (entry) => entry.text === "PROBE-OTHER-REPLY"
+  );
+  if (theirs) {
+    other.doc.getMap("entries").delete(entryKey(pin, theirs.id));
+  }
+  const room = await until(
+    "(r) the page's doc holding the thread with room",
+    async () => (await pagePins(frame))[pin]?.thread.length ?? 0,
+    (count) => count === COMMENT_LIMITS.entries - 1,
+    15_000
+  ).catch(() => 0);
+  other.leave();
+  await railRow(page, 1);
+  await retryButton.click({ timeout: 10_000 }).catch(() => undefined);
+  const landed = await until(
+    "(r) Try again's reply on the hub",
+    async () => {
+      const now = await hubDoc(fleet, session, artifact);
+      return now.pins[pin]?.thread.some((entry) => entry.text === words)
+        ? now
+        : undefined;
+    },
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  const after = await until(
+    "(r) its row's reason gone",
+    () => notSentOf(page, 1),
+    (line) => line === null,
+    10_000
+  ).catch(() => notSentOf(page, 1));
+  const left = await repliesOnPage(frame, artifact);
+  kit.check(
+    "(r) with room again, Try again lands the page's reply on the hub with its words, its row's reason goes, the page keeps nothing aside, and nothing waits pending on the hub",
+    room === COMMENT_LIMITS.entries - 1 &&
+      !!landed &&
+      !landed.pending &&
+      after === null &&
+      left === null,
+    `room in the page's thread: ${room}; landed: ${landed ? "yes" : "not within 30 s"}; pending: ${landed?.pending}; not-sent line after: ${after ?? "none"}; kept on the page: ${left ?? "nothing"}; page errors: ${errors.join(" / ") || "none"}`
+  );
+};
+
 /** The updates the hub keeps for `artifact`, in order. */
 const storedUpdates = (fleet: KitFleet, artifact: string) =>
   fleet.query<{ update: Uint8Array }>(
@@ -917,6 +1176,7 @@ const run = async (kit: Kit) => {
   await legM(kit, fleet, session, artifact, second);
   await legP(kit, fleet, session, artifact, first);
   await legO(kit, fleet, session);
+  await legR(kit, fleet, session);
   await legW(kit, fleet, session);
 };
 

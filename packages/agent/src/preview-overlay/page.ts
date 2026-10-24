@@ -481,26 +481,38 @@ function tellDoc() {
   }, DOC_TOLD_MS);
 }
 
+/** The host was last told of refused replies: the next word says them, none included, so it lets them go. */
+let toldReplies = false;
+
 /**
  * While the page's link to the hub isn't synced, the pins this page holds
  * (`cawco:page-pins`): one written meanwhile, or given back by the device
  * after a reload, may stand only here; and always the comments the hub
- * refused, each with its reason (artifact.ts `refused`). The host lists
- * each with why it isn't sent and its Try again, so the person's words are
- * never out of reach.
+ * refused, each with its reason (artifact.ts `refused`), and the replies it
+ * refused in threads it holds, by pin (`replies`, artifact.ts
+ * `refusedReplies`), every one each time. The host draws each in its
+ * thread with why it isn't sent and its Try again (`cawco:resend-pin`), so
+ * the person's words are never out of reach.
  */
 function tellPagePins() {
   const refused = artifact.refused();
+  const replies = artifact.refusedReplies();
+  const anyReplies = Object.keys(replies).length > 0;
   const linked = artifact.link().state === "synced";
-  if (!artifact.keeps() || (linked && refused.length === 0)) {
+  if (
+    !artifact.keeps() ||
+    (linked && refused.length === 0 && !anyReplies && !toldReplies)
+  ) {
     return;
   }
+  toldReplies = anyReplies;
   post("cawco:page-pins", {
     pins: [
       ...(linked ? [] : [...readPins(artifact.doc()).values()]),
       // The hub refused these: each carries its reason (`notSent`).
       ...refused,
     ],
+    replies,
   });
 }
 
@@ -2774,9 +2786,13 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         paint();
       }
     },
-    // A comment the hub refused, tried again (its Try again): written into the doc once more.
-    "cawco:resend-pin": (message) => {
-      if (typeof message.id === "string" && artifact.resend(message.id)) {
+    // A comment, or a thread's replies, the hub refused, tried again (its Try again): written into the doc once more.
+    "cawco:resend-pin": async (message) => {
+      if (typeof message.id !== "string" || !artifact.keeps()) {
+        return;
+      }
+      await artifact.whenKnown();
+      if (artifact.resend(message.id)) {
         tellPagePins();
       }
     },

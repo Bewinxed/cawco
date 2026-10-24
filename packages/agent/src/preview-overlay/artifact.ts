@@ -24,8 +24,9 @@
  * reload and goes to the hub as the socket syncs again (the hub asks for
  * what it lacks on every open, artifacts/sync.ts). A write the hub refused
  * is cleared from the device with the doc that held it; the person's
- * comments in it the hub doesn't hold are kept aside on the device with its
- * reason, never let go ({@link artifact.refused}). A browser that keeps no
+ * comments and replies in it the hub doesn't hold are kept aside on the
+ * device with its reason, never let go ({@link artifact.refused},
+ * {@link artifact.refusedReplies}). A browser that keeps no
  * IndexedDB keeps nothing on the device. Where the page may start no worker
  * (a Content-Security-Policy that refuses one), the page keeps no doc.
  */
@@ -43,6 +44,8 @@ import {
   PIN_MAPS,
   type Pin,
   readPins,
+  replyToPin,
+  type ThreadEntry,
   writePin,
 } from "@cawco/core/comments";
 import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
@@ -343,38 +346,69 @@ const restart = (generation: number) => {
 };
 
 /**
- * The person's comments the hub refused (a write it would not keep, the
- * refusal's reason), kept on the device apart from the doc, per artifact: the
- * host lists each with why and Try again ({@link artifact.resend}), and a
+ * The person's words the hub refused (a write it would not keep, the
+ * refusal's reason), kept on the device apart from the doc, per artifact:
+ * whole comments the hub holds none of, and replies in a thread the hub
+ * holds (the app's `cawco:reply` on a thread another device filled), by
+ * pin, as the pane keeps its own (PreviewPane.svelte `refusedReplies`). The
+ * host draws each with why and Try again ({@link artifact.resend}), and a
  * reload keeps them. A browser that keeps no storage keeps them in memory.
  */
 const REFUSED_KEY = (id: string) => `cawco-refused-pins:${id}`;
+/** The page's own key: a page the dashboard proxies shares its origin, whose `cawco-refused-replies:` are the pane's. */
+const REPLIES_KEY = (id: string) => `cawco-refused-page-replies:${id}`;
 let refusedPins: Pin[] = [];
+/** A pin's replies the hub refused: each entry as written, and the hub's reason. */
+export type RefusedReplies = Record<
+  string,
+  { entries: ThreadEntry[]; why: string }
+>;
+let refusedReplies: RefusedReplies = {};
 /** A refusal's comments, until the hub's doc is in to tell which it doesn't hold. */
 let refusing: { pins: Record<string, Pin>; why: string } | null = null;
-const storeRefused = () => {
-  if (!joined) {
-    return;
-  }
+const keep = (key: string, value: unknown, any: boolean) => {
   try {
-    if (refusedPins.length > 0) {
-      localStorage.setItem(REFUSED_KEY(joined.id), JSON.stringify(refusedPins));
+    if (any) {
+      localStorage.setItem(key, JSON.stringify(value));
     } else {
-      localStorage.removeItem(REFUSED_KEY(joined.id));
+      localStorage.removeItem(key);
     }
   } catch {
     // No storage here: they stand in memory for this page's life.
   }
 };
-const loadRefused = (id: string) => {
+const storeRefused = () => {
+  if (!joined) {
+    return;
+  }
+  keep(REFUSED_KEY(joined.id), refusedPins, refusedPins.length > 0);
+  keep(
+    REPLIES_KEY(joined.id),
+    refusedReplies,
+    Object.keys(refusedReplies).length > 0
+  );
+};
+const readKept = (key: string): unknown => {
   try {
-    const raw = JSON.parse(localStorage.getItem(REFUSED_KEY(id)) ?? "[]");
-    refusedPins = Array.isArray(raw) ? (raw as Pin[]) : [];
+    return JSON.parse(localStorage.getItem(key) ?? "null");
   } catch {
-    refusedPins = [];
+    return null;
   }
 };
-/** The hub's doc is in after a refusal: each of the person's comments it doesn't hold is kept aside with the hub's reason. */
+const loadRefused = (id: string) => {
+  const pins = readKept(REFUSED_KEY(id));
+  refusedPins = Array.isArray(pins) ? (pins as Pin[]) : [];
+  const replies = readKept(REPLIES_KEY(id));
+  refusedReplies =
+    replies && typeof replies === "object" && !Array.isArray(replies)
+      ? (replies as RefusedReplies)
+      : {};
+};
+/**
+ * The hub's doc is in after a refusal: each of the person's comments it
+ * doesn't hold is kept aside with the hub's reason, and each of the
+ * person's entries missing from a thread it does hold.
+ */
 const keepRefused = () => {
   if (!refusing) {
     return;
@@ -388,7 +422,29 @@ const keepRefused = () => {
   const lost = Object.values(pins).filter(
     (pin) => pin.by === "person" && !held.has(pin.id) && !gone.has(pin.id)
   );
-  if (lost.length === 0) {
+  const replies = { ...refusedReplies };
+  let repliesLost = false;
+  for (const pin of Object.values(pins)) {
+    const now = held.get(pin.id);
+    if (!now) {
+      continue;
+    }
+    const has = new Set(now.thread.map((entry) => entry.id));
+    const entries = pin.thread.filter(
+      (entry) => entry.by === "person" && !has.has(entry.id)
+    );
+    if (entries.length === 0) {
+      continue;
+    }
+    const ids = new Set(entries.map((entry) => entry.id));
+    const was = replies[pin.id]?.entries ?? [];
+    replies[pin.id] = {
+      entries: [...was.filter((entry) => !ids.has(entry.id)), ...entries],
+      why,
+    };
+    repliesLost = true;
+  }
+  if (lost.length === 0 && !repliesLost) {
     return;
   }
   const ids = new Set(lost.map((pin) => pin.id));
@@ -396,6 +452,7 @@ const keepRefused = () => {
     ...refusedPins.filter((pin) => !ids.has(pin.id)),
     ...lost.map((pin) => ({ ...pin, notSent: { at, why } })),
   ];
+  refusedReplies = replies;
   storeRefused();
   watchers?.ink();
 };
@@ -642,6 +699,21 @@ export const artifact = {
   /** The person's comments the hub refused, each with its reason (`notSent`), kept on the device. */
   refused: (): Pin[] => refusedPins,
 
+  /**
+   * The person's replies the hub refused in threads it holds, by pin, each
+   * with its reason, kept on the device; a deleted pin's are let go.
+   */
+  refusedReplies: (): RefusedReplies => {
+    const gone = goneOf(mirror);
+    if (Object.keys(refusedReplies).some((pin) => gone.has(pin))) {
+      refusedReplies = Object.fromEntries(
+        Object.entries(refusedReplies).filter(([pin]) => !gone.has(pin))
+      );
+      storeRefused();
+    }
+    return refusedReplies;
+  },
+
   /** Refused comment `id` let go of the device's keep (the person deleted it); false when no such comment is kept. */
   letGoRefused: (id: string): boolean => {
     if (!refusedPins.some((one) => one.id === id)) {
@@ -653,19 +725,43 @@ export const artifact = {
   },
 
   /**
-   * Refused comment `id` written into the doc again, for the hub to take
-   * (its Try again): it leaves the device's keep; refused once more, it is
-   * kept again with the new reason. False when no such comment is kept.
+   * Refused comment `id`, or its refused replies, written into the doc
+   * again, for the hub to take (its Try again): they leave the device's
+   * keep; a reply the doc won't take stays with why, and one the hub refuses
+   * once more is kept again with the new reason. False when nothing of pin
+   * `id` is kept.
    */
   resend: (id: string): boolean => {
     const pin = refusedPins.find((one) => one.id === id);
-    if (!pin) {
+    if (pin) {
+      const { notSent: _why, ...again } = pin;
+      refusedPins = refusedPins.filter((one) => one.id !== id);
+      storeRefused();
+      writePin(mirror, again);
+      return true;
+    }
+    const kept = refusedReplies[id];
+    if (!kept) {
       return false;
     }
-    const { notSent: _why, ...again } = pin;
-    refusedPins = refusedPins.filter((one) => one.id !== id);
+    const left: ThreadEntry[] = [];
+    let why: string | null = null;
+    for (const entry of kept.entries) {
+      const refused = replyToPin(mirror, id, {
+        text: entry.text,
+        ...(entry.attachments ? { attachments: entry.attachments } : {}),
+      });
+      if (refused) {
+        left.push(entry);
+        why = refused;
+      }
+    }
+    const { [id]: _done, ...rest } = refusedReplies;
+    refusedReplies =
+      left.length > 0
+        ? { ...rest, [id]: { entries: left, why: why ?? kept.why } }
+        : rest;
     storeRefused();
-    writePin(mirror, again);
     return true;
   },
 
