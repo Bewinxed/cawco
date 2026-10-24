@@ -178,6 +178,7 @@
     "./notifications": "./src/notifications.ts",
     "./presence-onboarding": "./src/presence-onboarding.ts",
     "./words/presence": "./src/words/presence.ts",
+    "./words/presence-log": "./src/words/presence-log.ts",
     "./project-membership": "./src/project-membership.ts",
     "./words/configure": "./src/words/configure.ts",
     "./words/memory": "./src/words/memory.ts",

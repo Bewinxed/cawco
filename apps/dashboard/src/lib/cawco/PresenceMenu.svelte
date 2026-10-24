@@ -11,13 +11,19 @@
    *
    * The menu: the person's state on its first row; Appear away, the hub's
    * switch (agents go quiet and the phone gets pushes while it is on); the
-   * machines whose desktop can count, each turned on by the person, with its
+   * away clock, the person's own (how long without input on any device
+   * before they are away, and how far back what was held at a desk follows
+   * them to the phone); the machines whose desktop can count, each turned on by the person, with its
    * state word; and, while this browser has something still to ask for, Set
    * up this browser. Nothing changes here before the hub says so: a refused
    * switch says why under it. A site setting this browser blocks is named
    * under it with where to turn it on.
    */
-  import { presenceWords } from "@cawco/core";
+  import {
+    AWAY_AFTER_CHOICES_MS,
+    AWAY_AFTER_DEFAULT_MS,
+    presenceWords,
+  } from "@cawco/core";
   import { mergeProps } from "bits-ui";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -33,6 +39,7 @@
     deskAsks,
     person,
     setAppearAway,
+    setAwayAfter,
     setMachineCounts,
   } from "./person.svelte";
 
@@ -81,6 +88,14 @@
   /** The last press's refusal, else what this browser blocks now. */
   const refusal = $derived(person.refusal ?? blockedHere());
   const devices = $derived(view?.devices ?? []);
+  /** The away clock as the hub holds it, ms. */
+  const clockMs = $derived(view?.awayAfterMs ?? AWAY_AFTER_DEFAULT_MS);
+  /** The clocks offered, and the one set when it is none of them. */
+  const clocks = $derived(
+    [...new Set<number>([...AWAY_AFTER_CHOICES_MS, clockMs])].sort(
+      (a, b) => a - b
+    )
+  );
 </script>
 
 <DropdownMenu.Root>
@@ -134,6 +149,38 @@
       onCheckedChange={(on) => setAppearAway(on)}
       >{presenceWords.appearAway}</DropdownMenu.CheckboxItem
     >
+    <DropdownMenu.Sub>
+      <DropdownMenu.SubTrigger
+        data-slot="away-clock"
+        disabled={!view || person.pending === "clock"}
+      >
+        <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          >{presenceWords.awayAfter(Math.round(clockMs / 60_000))}</span
+        >
+      </DropdownMenu.SubTrigger>
+      <DropdownMenu.SubContent>
+        <DropdownMenu.Group>
+          <DropdownMenu.GroupHeading
+            >{presenceWords.awayClock}</DropdownMenu.GroupHeading
+          >
+          <DropdownMenu.RadioGroup
+            onValueChange={(value) => setAwayAfter(Number(value))}
+            value={String(clockMs)}
+          >
+            {#each clocks as ms (ms)}
+              <DropdownMenu.RadioItem
+                closeOnSelect={false}
+                data-away-after={ms}
+                value={String(ms)}
+                >{presenceWords.minutes(
+                  Math.round(ms / 60_000)
+                )}</DropdownMenu.RadioItem
+              >
+            {/each}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Group>
+      </DropdownMenu.SubContent>
+    </DropdownMenu.Sub>
     {#if devices.length > 0}
       <DropdownMenu.Separator />
       <DropdownMenu.Group>

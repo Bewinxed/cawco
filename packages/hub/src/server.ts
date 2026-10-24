@@ -8866,11 +8866,19 @@ export const createServer = (
     }).format(at);
 
   /**
-   * The person's own message: on this chat, with the notes the session kept
-   * in its plan while they were away (`awayNotesOf`) and what waits on them
-   * there, once per section, for its recap.
+   * The person's own message: on this chat. The first one handed to a
+   * session after the person came back from an away stretch (a real
+   * return: their input after it, notifications.ts `takeRecap`, kept on
+   * the hub through a restart) carries the notes the session kept in its
+   * plan meanwhile (`awayNotesOf`) and what waits on them there, for its
+   * recap, with the hub's own away-since; once per return, and never a
+   * section already recapped.
    */
   const recapFor = (instanceId: string): PresenceSaid => {
+    const back = notifications.takeRecap(instanceId);
+    if (!back) {
+      return { kind: "on" };
+    }
     const plan = db.sessionPlan(instanceId);
     const notes = awayNotesOf(plan?.spec ?? undefined);
     if (!notes || recapped.get(instanceId) === notes.notes) {
@@ -8880,7 +8888,12 @@ export const createServer = (
     const waiting = waitingOn(plan?.steps ?? []);
     return {
       kind: "on",
-      recap: { ...notes, ...(waiting.length > 0 ? { waiting } : {}) },
+      recap: {
+        notes: notes.notes,
+        section: notes.since,
+        since: clockOf(back.since),
+        ...(waiting.length > 0 ? { waiting } : {}),
+      },
     };
   };
 
@@ -8939,7 +8952,7 @@ export const createServer = (
           : [...content, { type: "text", text: withPresenceLine("", said) }];
     }
     console.log(
-      `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.kind === "on" && said.recap ? `, with the notes since ${said.recap.since}` : ""}`
+      `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.kind === "on" && said.recap ? `, back after away since ${said.recap.since}, with the plan's notes under "Since ${said.recap.section}"` : ""}`
     );
     return {
       ...envelope,
@@ -20452,6 +20465,12 @@ export const createServer = (
     const { provenance } = message.payload as {
       provenance?: { clientId?: string; presenceId?: string };
     };
+    // The person's own words are their input, on the device they came
+    // from, before the send is handed on: its presence line, and the recap
+    // of a return, read them.
+    if (message.payload.message.origin.kind === "human") {
+      notifications.spoke(provenance?.presenceId, message.payload.instanceId);
+    }
     const record = deliverSend(message);
     console.log(
       `[hub] send -> ${message.payload.instanceId} (${record?.state ?? "to Caw's thread"})${

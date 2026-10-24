@@ -1078,6 +1078,13 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
       setAppearAway: () => undefined,
       counted: () => new Set<string>(),
       setCounts: () => undefined,
+      clients: () => [],
+      keepClient: () => undefined,
+      dropClient: () => undefined,
+      awayAfter: () => null,
+      setAwayAfter: () => undefined,
+      stretch: () => ({ awaySince: null, backAt: null, recapped: [] }),
+      setStretch: () => undefined,
     },
     getInstancesByIds: (ids: string[]) =>
       ids.map((instanceId) => ({

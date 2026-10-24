@@ -1,6 +1,6 @@
 /**
  * Whether the person is here: the presence dot on the rail's avatar and its
- * menu (Appear away, the machines that count), and the onboarding row in
+ * menu (Appear away, the away clock, the machines that count), and the onboarding row in
  * Needs you that lets this browser say when the person is at this computer
  * (Chromium's Idle Detection, "Your device use" in its site settings) and
  * show what needs them as a desktop notification. State words only:
@@ -18,6 +18,15 @@ export const presenceWords = {
     since ? `Appearing away since ${since}` : "Appearing away",
   /** The menu's switch: agents go quiet and the phone gets pushes while it is on. */
   appearAway: "Appear away",
+  /** The away clock's row: how long without input on any device before you're away. */
+  awayAfter: (minutes: number) => `Away after ${minutes} min`,
+  /** The away clock's choices' heading. */
+  awayClock: "Away after no input for",
+  /** One away clock choice. */
+  minutes: (minutes: number) =>
+    minutes >= 60 && minutes % 60 === 0
+      ? `${minutes / 60} hour${minutes === 60 ? "" : "s"}`
+      : `${minutes} min`,
   /** The menu's group: the machines whose desktop can say you're here, each turned on by you. */
   machines: "Machines that count",
   /** A machine's state word, as its agent reads its desktop; null when it hasn't said lately. */

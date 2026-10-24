@@ -78,16 +78,62 @@ const started = new Map<Field, string>();
 let lastInput = 0;
 
 /**
- * Hears pointer and key input, and fields being focused, in `target`: this
- * window, and each preview frame's window as it loads (PreviewPane). Input
- * inside a frame never reaches the page around it, so someone working in a
- * preview would otherwise look idle.
+ * The person's last input in this tab, a preview frame's included, epoch
+ * ms; null until the first since the page loaded, as a load is no input (a
+ * tab reloads itself for a new build). The tab's presence beat says it
+ * (presence.ts `idleMs`).
+ */
+let inputAt: number | null = null;
+const inputHeard = new Set<(at: number, before: number | null) => void>();
+
+/** The person's last input in this tab ({@link inputAt}); null before any. */
+export const lastInputAt = (): number | null => inputAt;
+
+/** Hears each input in this tab: when, and the one before it (null for the first). */
+export function onInput(
+  listener: (at: number, before: number | null) => void
+): () => void {
+  inputHeard.add(listener);
+  return () => {
+    inputHeard.delete(listener);
+  };
+}
+
+/**
+ * A pointer move the person made: one that moved. A browser sends a move
+ * of none to the element under a resting cursor when the page moves under
+ * it (a streaming reply, a scroll), and that is no one's hand. Our call.
+ */
+const moved = (event: Event): boolean =>
+  event.type !== "pointermove" ||
+  (event as PointerEvent).movementX !== 0 ||
+  (event as PointerEvent).movementY !== 0;
+
+/**
+ * Hears pointer, key, wheel and touch input, and fields being focused, in
+ * `target`: this window, and each preview frame's window as it loads
+ * (PreviewPane). Input inside a frame never reaches the page around it, so
+ * someone working in a preview would otherwise look idle.
  */
 export function watchInput(target: Window): void {
-  const touched = () => {
+  const touched = (event: Event) => {
     lastInput = performance.now();
+    if (!(event.isTrusted && moved(event))) {
+      return;
+    }
+    const before = inputAt;
+    inputAt = Date.now();
+    for (const listener of inputHeard) {
+      listener(inputAt, before);
+    }
   };
-  for (const kind of ["pointerdown", "pointermove", "keydown", "wheel"]) {
+  for (const kind of [
+    "pointerdown",
+    "pointermove",
+    "keydown",
+    "wheel",
+    "touchstart",
+  ]) {
     target.addEventListener(kind, touched, { capture: true, passive: true });
   }
   target.addEventListener(

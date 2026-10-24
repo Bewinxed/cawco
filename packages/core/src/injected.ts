@@ -322,9 +322,10 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
  * Where the person is, as a session is told at the start of each turn (hub
  * server.ts `presenced`, from notifications.ts `person`):
  * - `on`: on this chat now, or this is their own message: talk normally.
- *   With `recap`, they are back after being away since `recap.since`, and
- *   the notes the session kept meanwhile (its plan's "Since" section) ride
- *   along for it to recap or point to;
+ *   With `recap`, this is their first message to the session since they
+ *   came back from being away since `recap.since` (the hub's own word on
+ *   when they left), and the notes the session kept meanwhile (its plan's
+ *   "Since `recap.section`" section) ride along for it to recap or point to;
  * - `elsewhere`: here, on another chat or another app: work quietly;
  * - `away`: away since `since` (HH:MM on the hub's clock; null when no
  *   device has ever said): work without talking, and keep the notes.
@@ -334,6 +335,9 @@ export type PresenceSaid =
       kind: "on";
       recap?: {
         notes: string;
+        /** The plan's section the notes are under, by its heading's time (`## Since HH:MM`). */
+        section: string;
+        /** When the person went away, HH:MM on the hub's clock, as the hub knows it. */
         since: string;
         /** The plan's open steps waiting on the person's pick on a page, read from the plan as it stands. */
         waiting?: readonly AwayWait[];
@@ -388,7 +392,7 @@ export const presenceLine = (said: PresenceSaid): string => {
   switch (said.kind) {
     case "on":
       return said.recap
-        ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.since}" in your plan in one line. Otherwise open with a recap of those notes in one to three sentences, then answer. Then fold that section into the rest of your plan's spec with todo_write.`
+        ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.section}" in your plan in one line. Otherwise open with a recap of those notes in one to three sentences, then answer. Then fold that section into the rest of your plan's spec with todo_write.`
         : "[CawCo presence] The person is on this chat now: talk to them normally.";
     case "elsewhere":
       return "[CawCo presence] The person is at their desk but not on this chat. Work quietly: keep your plan current with todo_write, and write to them only for what needs them.";
