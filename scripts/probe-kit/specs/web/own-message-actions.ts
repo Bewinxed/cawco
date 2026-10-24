@@ -270,6 +270,8 @@ interface Measure {
   next: Box | null;
   note: Box | null;
   opacity: number;
+  /** The well's padding at its foot: the room a part above leaves at the seam. */
+  pad: number;
   /** A later part of a run: its line stands in the well, on the hairline. */
   part: boolean;
   strip: Box | null;
@@ -346,6 +348,7 @@ function measure(text: string): Measure | null {
   const index = all.indexOf(turn);
   return {
     band,
+    pad: well ? Number.parseFloat(getComputedStyle(well).paddingBottom) : 0,
     buttons,
     clock: box(turn.querySelector('time[data-slot="when"]')),
     handle: handle
@@ -486,15 +489,16 @@ async function hoverLeg(
       buttons: after.buttons,
     })
   );
-  // A later part's line is in the well, on the hairline from the part
-  // above: its strip stands inside the well, under that hairline.
+  // A later part's line starts on the hairline from the part above: its
+  // strip reaches over the seam no further than the part above's padding,
+  // so the words above stay clear, and ends over its own words.
   const clear = after.part
     ? !!(after.strip && after.well) &&
-      after.strip.top >= after.well.top + EDGE &&
+      after.strip.top >= after.well.top - after.pad + EDGE &&
       after.strip.bottom <= (after.words?.top ?? 0) + EDGE
     : !meets(after.strip, after.well);
   kit.check(
-    `${label}: ${name}'s strip meets none of the words, the clock, the note, the next turn or ${after.part ? "the hairline over its part" : "the well"}`,
+    `${label}: ${name}'s strip meets none of the words, the clock, the note, the next turn or ${after.part ? "the words of the part above" : "the well"}`,
     clear &&
       !(
         meets(after.strip, after.words) ||

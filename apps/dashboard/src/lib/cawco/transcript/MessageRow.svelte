@@ -815,6 +815,7 @@
     <Well
       data-selected={selected || undefined}
       {grouped}
+      headed={grouped}
       {lifted}
       {runsOn}
       {@attach openWell}

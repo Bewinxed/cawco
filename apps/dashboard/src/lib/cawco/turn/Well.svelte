@@ -15,6 +15,7 @@
 
   let {
     grouped = false,
+    headed = false,
     runsOn = false,
     lifted = false,
     class: extra,
@@ -23,6 +24,12 @@
   }: HTMLAttributes<HTMLDivElement> & {
     /** A later message of the run: open at the top, the hairline over the part above. */
     grouped?: boolean;
+    /**
+     * A later message whose own line (its clock, its actions; MessageRow's
+     * part line) stands at its top: that line parts it from the seam, so the
+     * part keeps no padding over it, and the line starts on the hairline.
+     */
+    headed?: boolean;
     /** Another message follows: no bottom edge or corners. */
     runsOn?: boolean;
     /** Its words are away (in the composer): the well folds away with them. */
@@ -48,9 +55,10 @@
   data-slot="well"
   data-runs-on={runsOn || undefined}
   data-grouped={grouped || undefined}
+  data-headed={headed || undefined}
   data-lifted={lifted || undefined}
   class={[
-    "relative isolate flow-root ms-(--well-x) px-(--pad) py-space-2 data-lifted:py-0 motion-safe:transition-[padding-block] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer",
+    "relative isolate flow-root ms-(--well-x) px-(--pad) py-space-2 data-headed:pt-0 data-lifted:py-0 motion-safe:transition-[padding-block] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer",
     // Its own contour, corner by corner, on its box as on its surface:
     // square where a run opens the part (The Concentric Rule).
     "rounded-well-r data-grouped:rounded-ss-none data-grouped:rounded-se-none data-runs-on:rounded-ee-none data-runs-on:rounded-es-none",
