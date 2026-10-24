@@ -1,0 +1,215 @@
+/* The preview page around the two frames: the house field, type and the
+   kit's segmented control. Each frame is the page at its real width, scaled
+   down only where the window is narrower. */
+
+@font-face {
+  font-family: "Figtree Variable";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: block;
+  src: url("fonts/Figtree.ttf") format("truetype");
+}
+
+:root {
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  font: var(--type-body);
+  color: var(--ink-strong);
+  background: var(--surface-recess-deep);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.intro {
+  max-width: var(--c-measure);
+}
+.intro h1 {
+  margin: 0;
+  font: var(--type-title);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.intro p {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-muted);
+  text-wrap: pretty;
+}
+
+.controls {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-5);
+  margin: var(--space-5) calc(-1 * var(--space-6)) 0;
+  padding: var(--space-3) var(--space-6);
+  background: oklch(from var(--surface-recess-deep) l c h / 0.88);
+  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+}
+
+.seg {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.seg legend {
+  padding: 0 0 var(--space-1);
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+.seg-track {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-recess);
+  box-shadow: inset 0 0 0 1px var(--border-hairline);
+}
+.seg-thumb {
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 0;
+  width: 0;
+  height: 30px;
+  border-radius: var(--radius-well);
+  background: var(--surface-lift);
+  box-shadow: var(--shadow-raised);
+  transition:
+    translate var(--dur-pop) var(--ease-in-out),
+    width var(--dur-pop) var(--ease-in-out);
+}
+.seg label {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-well);
+  font: var(--type-label);
+  line-height: 1;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.seg input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.seg label:has(input:checked) {
+  color: var(--ink-strong);
+}
+.seg label:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.seg label:active {
+  background: var(--surface-pressed);
+}
+
+.replay {
+  height: var(--c-btn-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-button-outline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  font: var(--type-label);
+  color: var(--ink-strong);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    scale var(--dur-toggle) var(--ease-out);
+}
+@media (hover: hover) {
+  .replay:hover {
+    background: var(--surface-hover);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .replay:active {
+    scale: 0.97;
+  }
+}
+
+.hint {
+  min-height: 1lh;
+  margin: var(--space-3) 0 0;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.frames {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin-block-start: var(--space-5);
+}
+.frame {
+  flex: 1 1 1100px;
+  min-width: 0;
+  margin: 0;
+}
+.frame[data-frame="phone"] {
+  flex: 0 1 calc(390px + 2px);
+}
+.frame figcaption {
+  margin-block-end: var(--space-2);
+  font: var(--type-label);
+  color: var(--ink-strong);
+}
+.screen {
+  --s: 1;
+  position: relative;
+  width: calc(var(--w) * 1px * var(--s) + 2px);
+  max-width: 100%;
+  height: calc(var(--h) * 1px * var(--s) + 2px);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.screen iframe {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  border: 0;
+  transform: scale(var(--s));
+  transform-origin: 0 0;
+}
+
+@media (width < 640px) {
+  body {
+    padding-inline: var(--space-3);
+  }
+  .controls {
+    margin-inline: calc(-1 * var(--space-3));
+    padding-inline: var(--space-3);
+  }
+}

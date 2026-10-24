@@ -15,6 +15,9 @@
     "maxSize": 2097152,
     "includes": [
       "!mocks",
+      // Design previews served as plain folders for the owner to judge (design-previews/<page>/),
+      // mock-ups as mocks/ are; their proof is a probe-kit spec, which is linted.
+      "!design-previews",
       "!.design-foundations",
       "!.mcp.json",
       "!packages/jsonl-parser",

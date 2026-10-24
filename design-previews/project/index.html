@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The project page · preview</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="index.css" />
+    <script src="index.js" defer></script>
+  </head>
+  <body>
+    <header class="intro">
+      <h1>The project page</h1>
+      <p>
+        A head that says the state in one line, a board whose cards are the glance, a pane that answers and reviews,
+        and Caw where his words are. Pick a state; each frame is the page, live.
+      </p>
+    </header>
+
+    <div class="controls">
+      <fieldset class="seg" data-control="state">
+        <legend>State</legend>
+        <div class="seg-track">
+          <span class="seg-thumb" aria-hidden="true"></span>
+          <label><input type="radio" name="state" value="rest" checked /><span>At rest</span></label>
+          <label><input type="radio" name="state" value="waiting" /><span>Waiting on you</span></label>
+          <label><input type="radio" name="state" value="open" /><span>Task open</span></label>
+          <label><input type="radio" name="state" value="empty" /><span>Empty project</span></label>
+          <label><input type="radio" name="state" value="fault" /><span>Read failure</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="seg" data-control="layout">
+        <legend>Phone board</legend>
+        <div class="seg-track">
+          <span class="seg-thumb" aria-hidden="true"></span>
+          <label><input type="radio" name="layout" value="list" checked /><span>One grouped list · recommended</span></label>
+          <label><input type="radio" name="layout" value="columns" /><span>Desk columns sideways</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="seg" data-control="scheme">
+        <legend>Scheme</legend>
+        <div class="seg-track">
+          <span class="seg-thumb" aria-hidden="true"></span>
+          <label><input type="radio" name="scheme" value="light" checked /><span>Day</span></label>
+          <label><input type="radio" name="scheme" value="dark" /><span>Night</span></label>
+        </div>
+      </fieldset>
+      <button class="replay" type="button" data-act="replay">Replay the state</button>
+    </div>
+    <p class="hint" data-slot="hint" aria-live="polite"></p>
+
+    <div class="frames">
+      <figure class="frame" data-frame="desk">
+        <figcaption>Desk</figcaption>
+        <div class="screen" style="--w: 1440; --h: 900">
+          <iframe title="The project page at 1440 wide" src="frame.html?state=rest" width="1440" height="900"></iframe>
+        </div>
+      </figure>
+      <figure class="frame" data-frame="phone">
+        <figcaption>Phone</figcaption>
+        <div class="screen" style="--w: 390; --h: 844">
+          <iframe title="The project page at 390 wide" src="frame.html?state=rest" width="390" height="844"></iframe>
+        </div>
+      </figure>
+    </div>
+  </body>
+</html>
