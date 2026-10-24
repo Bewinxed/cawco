@@ -116,12 +116,10 @@ export function tickingClock(running: () => boolean): Clock {
       const watching = watchRendered(node, (rendered) => {
         drawn = rendered;
       });
-      const box = node.getBoundingClientRect();
-      inView =
-        box.bottom > 0 &&
-        box.top < innerHeight &&
-        box.right > 0 &&
-        box.left < innerWidth;
+      // Out of view until its first entry says otherwise (a task after the
+      // frame it mounts in paints): read off its box as it mounted, the
+      // clock laid the page out between the writes of that flush.
+      inView = false;
       const seen = new IntersectionObserver(([entry]) => {
         inView = entry.isIntersecting;
       });

@@ -24,8 +24,9 @@ export function restWhenHidden(): () => void {
 
 /**
  * An attachment for a pane `away` (put away: `data-offscreen` and
- * `content-visibility: hidden` in one update): its loops' style asked for
- * once, after the frame that put it away has painted.
+ * `content-visibility: hidden` in one update): its loops' style asked for,
+ * and its runs that end finished, once, after the frame that put it away
+ * has painted.
  *
  * Chrome restyles nothing inside content it skips, so the hold set in the
  * same update as the skip never reached a loop running as its pane went
@@ -35,6 +36,12 @@ export function restWhenHidden(): () => void {
  * loop's computed style, asked for, restyles what the skip held back, the
  * hold among it. Asked after the paint, the rest of the page is styled
  * already, so that is all it restyles.
+ *
+ * What runs once (an entrance: the cover's wait-grace fade, a row's reveal)
+ * is finished there, standing at its end: nothing runs while the pane is
+ * away, and a person coming back sees it as it would be by then. Held
+ * instead, it would play its rest as they came back (a cover's wait seen
+ * again); a run already held (paused) stays as it is.
  */
 export function holdSkipped(away: boolean) {
   return (node: Element): (() => void) | undefined => {
@@ -46,6 +53,12 @@ export function holdSkipped(away: boolean) {
       task = setTimeout(() => {
         for (const loop of node.querySelectorAll(".loops")) {
           getComputedStyle(loop).getPropertyValue("animation-play-state");
+        }
+        for (const run of node.getAnimations({ subtree: true })) {
+          const end = Number(run.effect?.getComputedTiming().endTime);
+          if (run.playState === "running" && Number.isFinite(end)) {
+            run.finish();
+          }
         }
       });
     });
