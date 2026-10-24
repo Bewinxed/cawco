@@ -2115,6 +2115,13 @@
       "when": 1792869989748,
       "tag": "0309_fleet_listings",
       "breakpoints": true
+    },
+    {
+      "idx": 310,
+      "version": "6",
+      "when": 1792876205444,
+      "tag": "0310_workspace_kind",
+      "breakpoints": true
     }
   ]
 }
