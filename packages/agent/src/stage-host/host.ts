@@ -2590,8 +2590,9 @@ function cawcoStage() {
    * to every page (its `logError`), so a request no page made (an address
    * typed or mangled by hand, `climb.riv?import&amp;url` read straight out
    * of the page's HTML) makes a module no module imports: its error is the
-   * request's answer alone, never kept against a canvas whose own import
-   * of that file compiles. An error that names no module is kept.
+   * request's answer alone, neither sent to the open pages nor kept against
+   * a canvas whose own import of that file compiles. An error that names
+   * no module is sent and kept.
    */
   const pageAsks = (id: string | undefined): boolean => {
     if (!id || id.startsWith("\0") || STORY_FILE.test(id.split("?")[0] ?? "")) {
@@ -2610,7 +2611,7 @@ function cawcoStage() {
    * its load fails.
    */
   const keepSent = (err: SentError) => {
-    if (err.pluginCode === SECTION_MISSING || !pageAsks(err.id)) {
+    if (err.pluginCode === SECTION_MISSING) {
       return;
     }
     // The module's id is Vite's absolute path; a plugin's `loc.file` may be
@@ -2711,6 +2712,10 @@ function cawcoStage() {
       hot.send = (payload: unknown, ...rest: unknown[]) => {
         const sent = payload as { err?: SentError; type?: string } | undefined;
         if (sent?.type === "error" && sent.err) {
+          // A request no page made is answered with its error alone: no page hears it.
+          if (!pageAsks(sent.err.id)) {
+            return;
+          }
           keepSent(sent.err);
         }
         return send(payload, ...rest);

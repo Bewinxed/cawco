@@ -84,8 +84,9 @@
  *     button pointed at, and the frame in view's label no fill of its own
  *     (in Interact it says the frame is in view, in `selected-bg`).
  * 19. A request no page makes is no canvas's error: a component's `.riv`
- *     asked for as `?import&amp;url` is answered with its error, and the
- *     stage keeps none for the canvas, which draws.
+ *     asked for as `?import&amp;url` is answered with its error, the stage
+ *     keeps none for the canvas and sends none to its open page (no
+ *     `[vite] Internal Server Error` in its console), and the canvas draws.
  *
  *   bun scripts/probe-kit/run.ts component-canvas
  *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 and 19 alone
@@ -1699,7 +1700,8 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
  * `?import&amp;url` (Vite reads the query as `amp;url` and parses the file
  * as script) is answered with its error, and the stage still keeps none
  * for the canvas (what the daemon carries into its doc, and artifact_read
- * reports as its errors); loaded again, the canvas draws.
+ * reports as its errors) nor sends it to the open page, whose console says
+ * no `[vite] Internal Server Error`; loaded again, the canvas draws.
  */
 async function strayRequest(kit: Kit, stage: Stage): Promise<void> {
   const files = ["src/Mark.stories.js"];
@@ -1719,17 +1721,19 @@ async function strayRequest(kit: Kit, stage: Stage): Promise<void> {
   const answered = (await answer.text()).slice(0, 160);
   await page.waitForTimeout(1500);
   const after = mine();
+  const heard = errors.slice(consoleBefore);
   await page.reload();
   const again = framesOf(await reportOn(page));
   const allDrawn = (frames: FrameRender[]) =>
     frames.length > 0 && frames.every((one) => one.state === "drawn");
   kit.check(
-    `19: a request no page makes is no canvas's error: the canvas of a component that imports a .riv by its address draws (${first.length} frames) with no error kept for it; asked for as ?import&amp;url the file is answered ${answer.status}, and the stage still keeps none for the canvas (${after.length} after, ${before.length} before); loaded again it draws (${again.length} frames)`,
+    `19: a request no page makes is no canvas's error: the canvas of a component that imports a .riv by its address draws (${first.length} frames) with no error kept for it; asked for as ?import&amp;url the file is answered ${answer.status}, and the stage still keeps none for the canvas (${after.length} after, ${before.length} before) nor sends it to the open page, which logs no error (${heard.length}); loaded again it draws (${again.length} frames)`,
     allDrawn(first) &&
       consoleBefore === 0 &&
       before.length === 0 &&
       answer.status >= 400 &&
       after.length === 0 &&
+      heard.length === 0 &&
       allDrawn(again),
     JSON.stringify({
       answered,
