@@ -1,5 +1,5 @@
 {
-  "id": "bare-icons-2026-10-24-c",
+  "id": "bare-icons-2026-10-24-d",
   "title": "Solar icons without their containers",
   "decisions": [
     {
@@ -43,7 +43,7 @@
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
-          "result": "Line cut, even ink: i, ! and ? with heavier stems and real dots; Stopped keeps its filled square (an outline reads as a checkbox), your call; Sleeping's moon in full ink.",
+          "result": "Line cut, even ink: i, ! and ? with heavier stems and real dots; Sleeping's moon in full ink. Stopped and Idle: the next question.",
           "items": [
             {
               "label": "Status rows, in their inks",
@@ -54,6 +54,46 @@
               "label": "16 · 20 · 24, beside a folder",
               "before": "img/status-today-1.svg",
               "after": "img/status-line-1.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stop-idle",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "bar": "Only if you pick the line cut above. Stopped and Idle go together: both outlined (Stopped then reads as an empty checkbox), or both filled at Solar's own sizes, the one pair of fills in the row. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "recommended": "filled",
+      "candidates": [
+        {
+          "id": "filled",
+          "label": "Both filled",
+          "result": "A filled pause beside a filled stop, at the sizes Solar draws them in their discs; reads as pause and stop.",
+          "items": [
+            {
+              "label": "Status rows, in their inks",
+              "after": "img/stop-idle-today-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "after": "img/stop-idle-today-1.svg"
+            }
+          ]
+        },
+        {
+          "id": "outlined",
+          "label": "Both outlined",
+          "result": "Both in outline like the rest of the row; Stopped reads as an empty checkbox.",
+          "items": [
+            {
+              "label": "Status rows, in their inks",
+              "before": "img/stop-idle-today-0.svg",
+              "after": "img/stop-idle-outlined-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/stop-idle-today-1.svg",
+              "after": "img/stop-idle-outlined-1.svg"
             }
           ]
         }
@@ -83,7 +123,7 @@
         {
           "id": "bare",
           "label": "Without its container",
-          "result": "No tiles; the bare four read lighter than the filled shield and bolt.",
+          "result": "No tiles; the bare four read lighter than the filled shield and bolt. Bare, the identity hues darken in Day across the app (rail, editors, New session's chips, machine tiles): 1.93–3.24:1 before, 3.19–4.36:1 after.",
           "items": [
             {
               "label": "Configure rail",
@@ -100,7 +140,7 @@
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
-          "result": "Every row in the line cut, even ink as cut; MCP's plug head is an outline.",
+          "result": "Every row in the line cut, even ink as cut; MCP's plug head is an outline. Picking this darkens the identity hues across the app in Day (rail, editors, New session's chips, machine tiles): 1.93–3.24:1 before, 3.19–4.36:1 after.",
           "items": [
             {
               "label": "Configure rail",

@@ -1555,8 +1555,8 @@
       "hue-cyan-400": {
         "role": "identity",
         "displayName": "Hue Cyan 400",
-        "canonical": "light-dark(oklch(75.35% 0.1390 232.66), oklch(80.00% 0.1390 232.66))",
-        "hex": "#38bdf8",
+        "canonical": "light-dark(oklch(62.80% 0.1390 232.66), oklch(80.00% 0.1390 232.66))",
+        "hex": "#0095ce",
         "hexDark": "#4cccff",
         "tonalRamp": [
           "#00063a",
@@ -1572,8 +1572,8 @@
       "hue-cyan-500": {
         "role": "identity",
         "displayName": "Hue Cyan 500",
-        "canonical": "light-dark(oklch(70.66% 0.1331 226.72), oklch(78.00% 0.1331 226.72))",
-        "hex": "#14b0e0",
+        "canonical": "light-dark(oklch(58.00% 0.1331 226.72), oklch(78.00% 0.1331 226.72))",
+        "hex": "#0088b6",
         "hexDark": "#3fc8f9",
         "tonalRamp": [
           "#000a35",
@@ -1589,8 +1589,8 @@
       "hue-amber-500": {
         "role": "identity",
         "displayName": "Hue Amber 500",
-        "canonical": "light-dark(oklch(79.08% 0.1577 79.28), oklch(82.00% 0.1577 79.28))",
-        "hex": "#f0ad1f",
+        "canonical": "light-dark(oklch(64.00% 0.1577 79.28), oklch(82.00% 0.1577 79.28))",
+        "hex": "#bc7e00",
         "hexDark": "#fab630",
         "tonalRamp": [
           "#290000",
@@ -1606,8 +1606,8 @@
       "hue-orange-500": {
         "role": "identity",
         "displayName": "Hue Orange 500",
-        "canonical": "light-dark(oklch(70.49% 0.1867 47.60), oklch(76.00% 0.1867 47.60))",
-        "hex": "#f97316",
+        "canonical": "light-dark(oklch(65.00% 0.1867 47.60), oklch(76.00% 0.1867 47.60))",
+        "hex": "#e56100",
         "hexDark": "#ff8532",
         "tonalRamp": [
           "#3a0000",
@@ -1623,8 +1623,8 @@
       "hue-green-500": {
         "role": "identity",
         "displayName": "Hue Green 500",
-        "canonical": "light-dark(oklch(72.27% 0.1920 149.58), oklch(76.00% 0.1920 149.58))",
-        "hex": "#22c55e",
+        "canonical": "light-dark(oklch(61.00% 0.1920 149.58), oklch(76.00% 0.1920 149.58))",
+        "hex": "#00a13b",
         "hexDark": "#37d16a",
         "tonalRamp": [
           "#001900",
@@ -1640,8 +1640,8 @@
       "hue-green-600": {
         "role": "identity",
         "displayName": "Hue Green 600",
-        "canonical": "light-dark(oklch(62.71% 0.1699 149.21), oklch(74.00% 0.1699 149.21))",
-        "hex": "#16a34a",
+        "canonical": "light-dark(oklch(55.00% 0.1699 149.21), oklch(74.00% 0.1699 149.21))",
+        "hex": "#008b32",
         "hexDark": "#4bc76c",
         "tonalRamp": [
           "#001800",
