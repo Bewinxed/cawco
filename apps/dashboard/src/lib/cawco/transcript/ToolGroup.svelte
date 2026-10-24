@@ -18,6 +18,7 @@
   import { ArtifactRefused, showArtifact } from "#lib/cawco/artifact-api.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
+  import { hubSeam } from "#lib/cawco/hub-live.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
@@ -66,6 +67,8 @@
   import Shot from "./Shot.svelte";
 
   const machine = getContext<(() => string) | undefined>("cawco:machine");
+  /** The hub this row reads: the live client's, or a states file's stand-in on a canvas. */
+  const hub = hubSeam();
 
   /** A picture or video on the session's machine, read through the hub when looked at. */
   const machineMedia = (machineId: string, path: string): string =>
@@ -285,7 +288,7 @@
       (meta.toolStatus ?? "pending") as ToolCallStatus,
       (server) =>
         mcpServerHost(cawco.session(m.instanceId)?.mcp ?? null, server) ??
-        mcpServerHost(fleetMcpServers(), server),
+        mcpServerHost(fleetMcpServers(hub), server),
       meta.toolDiff
     );
   }

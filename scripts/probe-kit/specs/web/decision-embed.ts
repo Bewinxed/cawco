@@ -126,10 +126,16 @@
  *    Yjs's constructor checks holding; the decision page, which imports
  *    none, runs none. On the stage's own port (as the daemon draws), and on
  *    the dashboard's own stage, the same.
+ * 16. An embed asks no origin for what it doesn't serve: a page of the
+ *    dashboard's three connect asks (transcripts with their tool rows over
+ *    the real composer), on the dashboard's own stage, in Chromium and
+ *    WebKit: every canvas draws, no frame requests `/api/*`, and nothing
+ *    logs a console error, answers 400 or more or fails.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  *   bun scripts/probe-kit/run.ts web decision-embed --leg one-yjs   # 15 alone
  *   bun scripts/probe-kit/run.ts web decision-embed --leg loads-clean   # 13 alone
+ *   bun scripts/probe-kit/run.ts web decision-embed --leg hubless   # 16 alone
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { cpSync, mkdirSync, readFileSync } from "node:fs";
@@ -1993,7 +1999,7 @@ const SHARED_PROGRAM = [
   `one = Preview("${SHARED_ID}", "The note alone", ["Note"])`,
   `pair = Preview("${SHARED_PAIR_ID}", "The reply beside the pinned note", ["Reply", "Pinned"])`,
 ].join("\n");
-/** `--leg one-yjs`: item 15 alone; `--leg loads-clean`: 13 alone. */
+/** `--leg one-yjs`: item 15 alone; `--leg loads-clean`: 13 alone; `--leg hubless`: 16 alone. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -2246,6 +2252,101 @@ async function oneYjsOnDashboard(kit: Kit): Promise<void> {
   }
 }
 
+/** The dashboard's connect asks: transcripts whose tool rows (ToolGroup) name each MCP server's site, over the real composer. */
+const CONNECT = [
+  "src/lib/cawco/transcript/ConnectAsk.stories.ts",
+  "src/lib/cawco/transcript/ConnectCard.stories.ts",
+  "src/lib/cawco/transcript/ConnectStrip.stories.ts",
+] as const;
+const CONNECT_IDS = CONNECT.map((_, i) => idOf(`connect-${i}`));
+const CONNECT_PAGE = "connect";
+const CONNECT_PROGRAM = [
+  `root = Decisions("The connect ask", [ask])`,
+  `ask = Decision("ask", "How should the agent ask for a sign-in?", [a, b, c], "Each is drawn by the dashboard's own components.")`,
+  `a = Option("ask", "On the composer", "The ask grows out of it.", true, [pa], "It covers the composer.")`,
+  `b = Option("card", "In the transcript", "A card where the agent asked.", false, [pb], "It can scroll away.")`,
+  `c = Option("strip", "A strip", "One line on the composer.", false, [pc], "Little room for why.")`,
+  `pa = Preview("${CONNECT_IDS[0]}", "On the composer", ["Asking", "Connected"])`,
+  `pb = Preview("${CONNECT_IDS[1]}", "In the transcript", ["Asking", "Connected"])`,
+  `pc = Preview("${CONNECT_IDS[2]}", "A strip", ["Asking", "Connected"])`,
+].join("\n");
+const API_PATH = /^\/api(?:\/|$)/;
+
+/**
+ * 16. An embed asks no origin for what it doesn't serve: a decision page
+ * of the dashboard's three connect asks (each a transcript with its tool
+ * rows over the real composer, under the stories' stand-in hub), on the
+ * dashboard's own stage, in Chromium and WebKit: every canvas draws, no
+ * frame requests `/api/*` of any origin (an embed's origin is a stage, which
+ * serves components, not the hub's API), and the page and its frames log
+ * no console error, answer no request with 400 or more and fail none.
+ */
+async function hublessOnDashboard(kit: Kit): Promise<void> {
+  const stage = await startDecisionStage(
+    new Map([[CONNECT_PAGE, CONNECT_PROGRAM]]),
+    Object.fromEntries(CONNECT_IDS.map((id, i) => [id, [CONNECT[i]]])),
+    { root: APP, kit: true }
+  );
+  try {
+    for (const engine of ["chromium", "webkit"] as const) {
+      const leg = `${engine} 1440px light, the dashboard's ${CONNECT_PAGE} page`;
+      const page = await kit.page("desk", {
+        engine,
+        theme: "light",
+        init: [CAWCO_BRIDGE],
+      });
+      const faults = faultsOf(page);
+      const asked: string[] = [];
+      page.on("request", (request) => {
+        const url = new URL(request.url());
+        if (API_PATH.test(url.pathname)) {
+          asked.push(
+            `${request.method()} ${url.href} (from ${request.frame().url()})`
+          );
+        }
+      });
+      await page.goto(stage.pageUrl(CONNECT_PAGE, "light"), {
+        waitUntil: "load",
+      });
+      await page.waitForFunction(
+        ({ n, selector }) => document.querySelectorAll(selector).length === n,
+        { n: CONNECT.length, selector: EMBED_FRAME },
+        { timeout: 60_000 }
+      );
+      const { embeds, undrawn } = await readEmbeds(page);
+      await settle(page, 2000);
+      const drawn = embeds.map(
+        (one) =>
+          `${one.file} ${one.frames.filter((f) => f.state === "drawn").length}/${one.frames.length}`
+      );
+      kit.check(
+        `${leg}: its ${CONNECT.length} canvases draw every story they name (${drawn.join(", ")})`,
+        undrawn.length === 0 &&
+          embeds.length === CONNECT.length &&
+          embeds.every(
+            (one) =>
+              one.frames.length === 2 &&
+              one.frames.every((f) => f.state === "drawn")
+          ),
+        undrawn.join("\n    ")
+      );
+      kit.check(
+        `${leg}: no frame asks any origin for /api/* (${asked.length} asked)`,
+        asked.length === 0,
+        [...new Set(asked)].slice(0, 12).join("\n    ")
+      );
+      kit.check(
+        `${leg}: the page and its canvases log no console error, answer no request with 400 or more and fail none (${faults.length} found)`,
+        faults.length === 0,
+        [...new Set(faults)].slice(0, 12).join("\n    ")
+      );
+      await page.close();
+    }
+  } finally {
+    await stage.stop();
+  }
+}
+
 /** How long an embed of the shared page has to draw: its first load optimizes the fixture's dependencies. */
 const STAGE_WAIT_MS = 120_000;
 
@@ -2309,6 +2410,10 @@ const spec: Spec = {
       if (ONLY_LEG === "one-yjs") {
         await oneYjs(kit, stage);
         await oneYjsOnDashboard(kit);
+        return;
+      }
+      if (ONLY_LEG === "hubless") {
+        await hublessOnDashboard(kit);
         return;
       }
       for (const view of ["desk", "phone"] as const) {
@@ -2888,6 +2993,7 @@ const spec: Spec = {
       await realSizeLegs(kit, stage);
       await oneYjs(kit, stage);
       await oneYjsOnDashboard(kit);
+      await hublessOnDashboard(kit);
     } finally {
       await stage.stop();
     }
