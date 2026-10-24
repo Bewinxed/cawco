@@ -159,8 +159,6 @@ export class TranscriptBuilder {
   private facts = blankFacts();
   /** When an interrupt was last carried to this session, epoch ms. */
   private interruptedAt = Number.NEGATIVE_INFINITY;
-  /** Started again in place for a mode it could not switch into; ends at the next init. */
-  private relaunching: boolean;
   private readonly now: () => number;
 
   /* The change being built: emitted together at the end of one apply. */
@@ -172,7 +170,6 @@ export class TranscriptBuilder {
   constructor(instanceId: string, now: () => number = Date.now) {
     this.instanceId = instanceId;
     this.now = now;
-    this.relaunching = false;
   }
 
   private stamp(): string {
@@ -396,11 +393,6 @@ export class TranscriptBuilder {
     this.interruptedAt = at;
   }
 
-  /** The session is being started again in place; ends at its next `init`. */
-  noteRelaunch(): void {
-    this.relaunching = true;
-  }
-
   /** One live frame, folded in. Returns the changes it made, in order. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one state machine over everything a frame can move, as the dashboard's frame handler was
   applyFrame(frame: NeutralMessage, harness?: string): TranscriptEvent[] {
@@ -475,17 +467,6 @@ export class TranscriptBuilder {
       // An id the SDK took but could not honour: what answers instead.
       if (block.type === "system.model_fallback") {
         this.setFacts({ model: block.metadata?.model ?? this.facts.model });
-      }
-      // The settle that precedes a relaunch ends the old turn with an error
-      // result the reader asked for — a quiet note, not a red card.
-      if (this.relaunching && block.type === "result.error") {
-        this.append(branch, {
-          ...block,
-          type: "system.status",
-          content: "Turn stopped to change the permission mode.",
-          metadata: {},
-        });
-        continue;
       }
       // A real subagent's `task_notification` names a branch that already
       // exists — its completion is the branch card.
@@ -832,7 +813,6 @@ export class TranscriptBuilder {
   /** The newest `init`: the session's own word on itself, never a row. */
   private init(block: TranscriptBlock): void {
     const meta = block.metadata;
-    this.relaunching = false;
     this.setFacts({
       sessionId: meta?.sessionId ?? this.facts.sessionId,
       // Re-emitted every turn and the session's own word on both settings.

@@ -171,8 +171,6 @@ export interface TranscriptsShape {
   ) => Promise<void>;
   /** An interrupt was carried to the session. */
   readonly noteInterrupt: (instanceId: string) => void;
-  /** The session is being started again in place. */
-  readonly noteRelaunch: (instanceId: string) => void;
   /** A page of the session's transcript, the newest when `before` is absent. */
   readonly page: (
     instanceId: string,
@@ -394,8 +392,6 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     page,
     noteInterrupt: (instanceId) =>
       entries.get(instanceId)?.builder.noteInterrupt(),
-    noteRelaunch: (instanceId) =>
-      entries.get(instanceId)?.builder.noteRelaunch(),
     removeLine: (instanceId, blockId) => {
       const entry = entries.get(instanceId);
       if (entry && entry.loading === null) {

@@ -20996,9 +20996,6 @@ export const createServer = (
     }
     // A move it still owed (asked mid-turn, to another account) is over.
     owedMoves.delete(row.id);
-    if (running) {
-      transcripts.noteRelaunch(row.id);
-    }
     const { kept } = await moveRowsToAccount(
       row.machineId,
       [row],
@@ -21098,7 +21095,6 @@ export const createServer = (
     console.log(
       `[hub] ${sessionName(row)} relaunches on ${accountWords(row.accountId)}, its conversation resumed${carry ? " and told to carry on past the limit that stopped it" : ""}.`
     );
-    transcripts.noteRelaunch(row.id);
     resumeSpawn(
       agent,
       row.machineId,
@@ -21180,7 +21176,6 @@ export const createServer = (
     /** The record is still this move's: no newer ask replaced it. */
     const still = () => owedMoves.get(stored.id)?.to === to;
     const stopped = stoppedNow(stored.id, carry);
-    transcripts.noteRelaunch(stored.id);
     const carried = moveRowsToAccount(
       stored.machineId,
       [stored],
@@ -21515,6 +21510,11 @@ export const createServer = (
     return true;
   };
 
+  /** Every interrupt of a session's turn the hub sends, and who asked for it, in the log. */
+  const saidInterrupt = (instanceId: string, by: string): void => {
+    console.log(`[hub] interrupt -> ${instanceId} ${by}`);
+  };
+
   /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
   const noteControl = (message: Envelope<ControlPayload>): void => {
     // The operator's effort for the session, which every later launch of it
@@ -21528,6 +21528,17 @@ export const createServer = (
       db.chooseEffort(message.instanceId, effort);
     }
     if (message.payload.method === CONTROL_INTERRUPT && message.instanceId) {
+      // Who stopped the turn, as a send's line says who sent it: the tab it
+      // came from, read against its presence's lines.
+      const { provenance } = message.payload as {
+        provenance?: { clientId?: string; presenceId?: string };
+      };
+      saidInterrupt(
+        message.instanceId,
+        provenance
+          ? `from a screen, client ${provenance.clientId ?? "?"} presence ${provenance.presenceId?.slice(0, 8) ?? "?"}`
+          : "from a screen"
+      );
       noteInterrupt(message.instanceId);
       // The error closing that turn is the stop's receipt, on every screen.
       transcripts.noteInterrupt(message.instanceId);
@@ -22086,11 +22097,9 @@ export const createServer = (
 
   /**
    * What a dashboard's spawn does to a transcript. A fork reads its history
-   * from the conversation it branches, up to the turn it branched at. One
-   * addressed to a session already running is a relaunch: the error closing
-   * the old turn is the reader's own doing. A rewind (`atMessage`) also cuts
-   * the transcript back to its turn, as the process it starts reads it — and
-   * puts it back whole if the spawn fails.
+   * from the conversation it branches, up to the turn it branched at. A
+   * rewind (`atMessage`) cuts the transcript back to its turn, as the
+   * process it starts reads it — and puts it back whole if the spawn fails.
    */
   const noteRespawn = (
     instanceId: string,
@@ -22106,7 +22115,6 @@ export const createServer = (
       });
       return;
     }
-    transcripts.noteRelaunch(instanceId);
     if (resume?.atMessage) {
       transcripts.reread(instanceId, resume.atMessage);
       if (requestId) {
@@ -22988,7 +22996,11 @@ export const createServer = (
       if (row) {
         workItems.retryPassed(row, why);
       }
-      interruptTurn(instanceId, false);
+      interruptTurn(
+        instanceId,
+        false,
+        `by the hub: its provider's retries ran past their deadline (${why})`
+      );
     },
   });
   offBoot.push(() => {
@@ -23134,12 +23146,17 @@ export const createServer = (
    * The control interrupt_delegate sends: the turn stops, the session keeps
    * its state. `hold`: as {@link noteInterrupt} says.
    */
-  const interruptTurn = (instanceId: string, hold = true): void => {
+  const interruptTurn = (
+    instanceId: string,
+    hold: boolean,
+    why: string
+  ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row && agent)) {
       return;
     }
+    saidInterrupt(instanceId, why);
     const requestId = crypto.randomUUID();
     sendFrame(agent, {
       verb: "control",
@@ -23177,7 +23194,7 @@ export const createServer = (
       ) {
         continue;
       }
-      interruptTurn(row.id, false);
+      interruptTurn(row.id, false, "by the hub: its machine was paused");
       deliverSend({
         verb: "send",
         machineId,
@@ -23226,7 +23243,8 @@ export const createServer = (
     db,
     proposeType: (actor, path, content, toolUseId) =>
       projectMemory.proposeType(actor, path, content, toolUseId),
-    interrupt: interruptTurn,
+    interrupt: (instanceId) =>
+      interruptTurn(instanceId, true, "by Caw: turned off mid-turn"),
     online: (machineId) =>
       machineId === undefined
         ? onlineMachines().length > 0
@@ -23407,7 +23425,8 @@ export const createServer = (
         kind: "hub",
         why: "fleet watch's triage is over",
       }),
-    interrupt: interruptTurn,
+    interrupt: (instanceId) =>
+      interruptTurn(instanceId, true, "by fleet watch's triage"),
     lifetime,
     line: (instanceId, content) => noteWatch(instanceId, content),
     name: (row) => sessionName(row),
@@ -24874,6 +24893,7 @@ export const createServer = (
         payload: { ...control, instanceId: row.id, from: requester.id },
       });
       if (control.method === CONTROL_INTERRUPT) {
+        saidInterrupt(row.id, `by session ${requester.id}`);
         noteInterrupt(row.id);
       }
     },
@@ -25108,7 +25128,6 @@ export const createServer = (
     const { sessionId } = row;
     relaunching.add(instanceId);
     lifetime.after(RELAUNCH_SETTLE_MS, () => relaunching.delete(instanceId));
-    transcripts.noteRelaunch(instanceId);
     resumeSpawn(agent, machineId, { ...row, sessionId }, true);
     console.info(
       `[hub] boundary: relaunching ${instanceId} onto the fail-closed hook`
@@ -26765,7 +26784,6 @@ export const createServer = (
       // and only then does its row say the account; it starts again there.
       // One that did not move stays on its account, held until its reset;
       // a process the carry ended there is asleep, woken at that reset.
-      transcripts.noteRelaunch(row.id);
       // A stopped session's move ends what it holds for later, unless no
       // person waits on it: then it waits for that work up to the cap from
       // `laterSince`. A rebalance's of a running one waits for it.

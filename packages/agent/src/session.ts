@@ -145,6 +145,7 @@ import {
   type SessiondLimit,
 } from "@cawco/core/sessiond";
 import { isDamagedRecord } from "@cawco/core/state-file";
+import { turnWords } from "@cawco/core/words/turns";
 import { Effect } from "effect";
 import { recordAgentState } from "./agent-state";
 import { withFiles } from "./attachments";
@@ -515,6 +516,9 @@ const custodyProbe = async <T>(
  * (`CONTROL_TIMEOUT_MS`), so the harnesses that answered still reach it.
  */
 const HARNESS_LISTING_MS = 10_000;
+
+/** How often a start that waits for a turn's end looks at it ({@link SessionSupervisor.#turnEnded}). */
+const TURN_END_LOOK_MS = 250;
 
 /**
  * A listed session with its first prompt as a title
@@ -1035,6 +1039,14 @@ export class SessionSupervisor {
    * instance id: a stop for it ends the wait ({@link dispatch}).
    */
   readonly #roomWaits = new Map<string, AbortController>();
+  /**
+   * Each start that replaces a process still in its turn, waiting for that
+   * turn to end ({@link #turnEnded}), by instance id. While it waits, a
+   * control for the session (an answer to its ask, the person's interrupt)
+   * goes to the running process at once rather than queue behind it, and a
+   * stop ends the wait: the start is dropped ({@link dispatch}).
+   */
+  readonly #relaunchWaits = new Map<string, AbortController>();
   /** The keepers a start's room is read under: the current one names where its children start ({@link #roomForStart}). */
   readonly #keepers = new KeeperPool();
   /** The fleet MCP heal passes, one session after another ({@link #healFleetMcp}). */
@@ -1416,6 +1428,25 @@ export class SessionSupervisor {
             "The session was stopped while it waited for its machine's memory."
           )
         );
+      this.#relaunchWaits
+        .get(stopping)
+        ?.abort(
+          new Error(
+            "The session was stopped while its start again waited for its turn to end, so it was not started again."
+          )
+        );
+    }
+    // The session's turn runs on while a start that replaces it waits for
+    // the turn's end ({@link #turnEnded}): what the turn needs from here (an
+    // answer to its ask, the person's interrupt) reaches it now.
+    if (
+      control &&
+      key === envelope.instanceId &&
+      this.#relaunchWaits.has(key)
+    ) {
+      return this.#route(envelope).catch((error: unknown) => {
+        warn(`${envelope.verb} failed: ${error}`);
+      });
     }
     // A question about the session waits for what is already on its way —
     // the spawn that makes the session, a send before it — but nothing waits
@@ -1964,6 +1995,68 @@ export class SessionSupervisor {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Whether `instanceId`'s process holds a turn now: one running (a send on
+   * its way into it included, as a harness is busy from the moment it is
+   * handed one) or an ask it parked, whose answer goes to this process alone.
+   */
+  #inTurn(instanceId: string): boolean {
+    if (this.#busy.has(instanceId)) {
+      return true;
+    }
+    for (const ask of this.#openAsks.values()) {
+      if ("instanceId" in ask && ask.instanceId === instanceId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Waits for `running`'s turn to end before a start that replaces its
+   * process ({@link #spawnClaimed}): a relaunch for a mode, an account move
+   * or a hook never cuts a turn, whatever it was running. Nothing is sent to
+   * the process meanwhile (what is sent waits behind the start, for the
+   * process it starts), but what the turn needs from here reaches it
+   * ({@link #relaunchWaits}). Answers `stopped`, in words, when a stop ended
+   * the wait; nothing once the turn has ended or the process is gone.
+   */
+  async #turnEnded(
+    instanceId: string,
+    running: HarnessSession
+  ): Promise<{ stopped?: string }> {
+    if (!this.#inTurn(instanceId)) {
+      return {};
+    }
+    const wait = new AbortController();
+    this.#relaunchWaits.set(instanceId, wait);
+    const since = Date.now();
+    console.info(turnWords.relaunchWaits(instanceId));
+    try {
+      while (
+        this.#sessions.get(instanceId) === running &&
+        this.#inTurn(instanceId)
+      ) {
+        if (wait.signal.aborted) {
+          return { stopped: String((wait.signal.reason as Error).message) };
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: one look at the turn every beat, until it has ended
+        await Bun.sleep(TURN_END_LOOK_MS);
+      }
+      if (wait.signal.aborted) {
+        return { stopped: String((wait.signal.reason as Error).message) };
+      }
+      console.info(
+        turnWords.turnEnded(instanceId, Math.round((Date.now() - since) / 1000))
+      );
+      return {};
+    } finally {
+      if (this.#relaunchWaits.get(instanceId) === wait) {
+        this.#relaunchWaits.delete(instanceId);
+      }
+    }
   }
 
   /**
@@ -3075,12 +3168,31 @@ export class SessionSupervisor {
       }
 
       // A spawn for an instance already running is a relaunch: replace the
-      // process under the same id, settling the old one first.
-      const running = this.#sessions.get(instanceId);
+      // process under the same id, settling the old one first, once its turn
+      // has ended. A process is never ended mid-turn for a start again (a
+      // mode, an account move, a hook), whoever asked for it.
+      let running = this.#sessions.get(instanceId);
       if (running) {
         if (this.#reuseRecovery(payload)) {
           return;
         }
+        const ended = await this.#turnEnded(instanceId, running);
+        if (ended.stopped) {
+          console.info(`[session] ${instanceId}: ${ended.stopped}`);
+          if (ack) {
+            this.sink({
+              kind: "control_result",
+              instanceId,
+              requestId: ack,
+              ok: false,
+              error: ended.stopped,
+            });
+          }
+          return;
+        }
+        running = this.#sessions.get(instanceId);
+      }
+      if (running) {
         this.#sessions.delete(instanceId);
         this.#forgetPulse(instanceId);
         // Ended by this daemon: its end is no failure ({@link #ending}).
@@ -4034,7 +4146,7 @@ export class SessionSupervisor {
     }
     this.#adopting.delete(spec.instanceId);
     settle();
-    console.info(`[custody] ${spec.instanceId}: attached to its live process`);
+    console.info(turnWords.attached(spec.instanceId));
     // Asked of the child, which answers when it can, ahead of what is sent
     // to it ({@link #settleAttached}).
     await this.#settleAttached(

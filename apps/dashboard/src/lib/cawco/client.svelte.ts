@@ -8421,12 +8421,20 @@ export async function loadMcpServers(
 }
 
 /**
+ * How long a start again asked during a turn waits for its answer: the
+ * machine gives it once that turn has ended and the session runs again, and
+ * a turn may run long.
+ */
+const RELAUNCH_AT_TURN_END_MS = 60 * 60_000;
+
+/**
  * `bypassPermissions` is a launch decision — the SDK refuses to switch a running
  * session into it — and so is `fullSend`, which runs the CLI in bypass. A
  * session that wants either from another mode is started again in place:
  * same instance id, same hub row, its own SDK session resumed, so the new
- * process reads the whole conversation back. A spin-off relaunches the same
- * way; the agent keeps it in the checkout it was already working in.
+ * process reads the whole conversation back, once the turn it is in has
+ * ended. A spin-off relaunches the same way; the agent keeps it in the
+ * checkout it was already working in.
  */
 export async function relaunchSession(
   instanceId: string,
@@ -8469,16 +8477,16 @@ export async function relaunchSession(
   });
 
   const previous = target.permissionMode;
-  // Work the relaunch interrupts must resume on its own: the reader unblocked
-  // the session, they should not also have to nudge it.
-  const hadWork = target.busy || target.pending.length > 0;
+  // A turn is never cut for it: its machine starts it again once the turn
+  // running now has ended (agent session.ts `#turnEnded`), and answers then.
+  const inTurn = target.busy || target.pending.length > 0;
   target.permissionMode = permissionMode;
   target.relaunching = true;
-  // Whatever was in flight belongs to the process being replaced.
-  settleStopped(instanceId);
   try {
-    const relaunched = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "spawn", machineId, instanceId, requestId, payload })
+    const relaunched = await ask<void>(
+      requestId,
+      inTurn ? RELAUNCH_AT_TURN_END_MS : CONTROL_TIMEOUT_MS,
+      () => send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
     switch (relaunched.kind) {
       case "unanswered":
@@ -8486,11 +8494,6 @@ export async function relaunchSession(
         target.permissionMode = previous;
         return relaunched;
       case "answered":
-        if (hadWork) {
-          submitCommand(instanceId, machineId, "send", {
-            text: `The permission mode is now "${permissionMode}". Continue the interrupted work.`,
-          });
-        }
         return relaunched;
       default: {
         const unhandled: never = relaunched;
