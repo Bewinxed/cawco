@@ -162,7 +162,7 @@ it actually means.
 | Where a task is in its project's own lifecycle, named by the project (Draft, Scheduled, Posted) | **stage** | The task file's `stage:` and a view's columns. | "status" (status words are liveness: `working` / `idle` / `done` / `needs you`); "column" as the concept |
 | The fixed category a stage belongs to: to do, active, waiting, you, done, dropped | **kind** | `stages.md`; how CawCo knows what a stage means. | "type", "category" |
 | A checklist line inside a task | **to-do** | The task file's checklist; ticked by you, Caw or the attempt's session. | "subtask" (a subtask that needs its own attempt is a task) |
-| A session's own step list, kept by its harness | **plan** | The progress ring on a session. | "todos", "tasks" (Claude Code's own name for it) in CawCo copy |
+| A session's own step list, kept in CawCo (`todo_write`) on every harness | **plan** | The progress ring on a session; the plan layer it opens. | "todos", "tasks" (Claude Code's own name for it) in CawCo copy |
 | One session's try at a task, possibly over many runs | **attempt** | A task's attempts list; "fresh attempt". | "run" (a run is one turn's execution); "try" as a noun |
 | Work that happens on a schedule or when an event arrives | **routine** | The routines list, "next run 08:55". | "job", "automation", "schedule" (a routine *has* a schedule), "cron" in copy |
 | A saved way of looking at a project's tasks: board, table, calendar, pipeline | **view** | The view picker; "Ask Caw for a view". | "board" alone (the board is the fleet board); "layout" |

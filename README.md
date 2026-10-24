@@ -1,6 +1,6 @@
 # Caw&Co
 
-Caw&Co (CawCo in the product) is a self-hosted fleet control plane for AI coding agents, for one operator managing their own machines. Its browser dashboard shows which sessions need attention across machines and projects, so you can approve permissions, redirect work, or stop a session without opening every terminal. A daemon runs on each machine and connects to your hub.
+Caw&Co (CawCo in the product) is the agent canvas for any work, anywhere, in any harness: self-hosted, for one operator managing their own machines. Its browser dashboard shows which sessions need attention across machines and projects, so you can approve permissions, redirect work, or stop a session without opening every terminal. A daemon runs on each machine and connects to your hub.
 
 ## Install
 
