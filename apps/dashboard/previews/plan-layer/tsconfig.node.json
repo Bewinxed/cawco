@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // The preview's build config, as the dashboard's own (../../tsconfig.node.json).
+  "extends": "../../tsconfig.node.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../../../.tsbuild/apps/dashboard/previews/plan-layer/node.tsbuildinfo"
+  },
+  "include": ["vite.config.ts"],
+  "references": [{ "path": "../../../../packages/core" }]
+}

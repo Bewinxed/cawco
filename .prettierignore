@@ -27,6 +27,8 @@ site/wrangler.jsonc
 site/scripts/deploy.mjs
 # Pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
 scripts/probe-kit/fixtures/
+# A dashboard preview's built folder: Vite's output, opened as a folder preview.
+apps/dashboard/previews/*/page/
 
 # Languages Biome never formatted here.
 *.md

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // The preview's pages, checked as the dashboard's own components are: the
+  // dashboard's settings (its generated SvelteKit config, `$app/types`), over
+  // this folder's sources.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../../../.tsbuild/apps/dashboard/previews/plan-layer/svelte.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../../packages/core" },
+    { "path": "../../../../packages/icons" }
+  ]
+}
