@@ -11,3 +11,5 @@ export { default as IconClose } from "#lib/components/icons/Close.svelte";
 export { default as IconMinus } from "#lib/components/icons/Minus.svelte";
 export { default as IconPlus } from "#lib/components/icons/Plus.svelte";
 export { default as IconTick } from "#lib/components/icons/Tick.svelte";
+/* An open to-do: a rounded square on the same 24px grid and 1.5 stroke (Solar has no bare one). */
+export { default as IconTodoBox } from "#lib/components/icons/TodoBox.svelte";
