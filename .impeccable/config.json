@@ -30,6 +30,13 @@
         "files": ["design-previews/caw-panel/index.html"],
         "createdAt": "2026-10-24T18:29:13.302Z",
         "reason": "the segmented control's 2px groove round its thumbs is DESIGN.md's segmented recipe, the labels carry space-3 padding"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": ["design-previews/pairing/index.html"],
+        "createdAt": "2026-10-24T19:36:45.835Z",
+        "reason": "leaf call: the preview sets type only through DESIGN.md's locked roles (--type-title, --type-body, --type-meta), which CLAUDE.md makes law; no one-off size steps allowed"
       }
     ]
   }

@@ -1,69 +1,172 @@
 /**
- * The pairing card, played moment by moment (the design's §C tables).
+ * The pairing card, played moment by moment, in the motion language of the
+ * design the owner pinned (PairingQr.svelte and PairingPanel.svelte on
+ * cawco/pairing-page-r4, ffea611a5) with only the changes his pins asked:
+ *
+ *   asking     the code's dots wait as a cloud at their scattered start,
+ *              stepped back, each drifting once a breath; no finder eyes
+ *   waiting    the dots lock onto their modules (r4's arrive, made one
+ *              continuous settle: no shuffle, no hold, and no dot's path
+ *              ever crosses the head), the letters type in on the same
+ *              beat; then one ring leaves the card's edge once a breath
+ *   lastminute the countdown takes the line, and the ring warms
+ *   checking   (the scan) the dots pour into the head, inner first, the
+ *              letters leave, and the card becomes the device
+ *   approved   the device leaves; the ending arrives, its check drawn last
+ *   removed    (Remove device) Paired's card changes in place
+ *   denied     the device's strokes burst out and fall out of the frame
+ *   expired,   the line under the code leaves, then the dots burst out
+ *   nomatch,   from the head and fall out of the frame; the head squeezes
+ *   failed     and shakes, face shut; the card folds to the ending, its
+ *              glyph drawn last; Expired's letters fly into its verdict
+ *              and are struck
+ *
+ * Each ending (report a8f73fdb §3) is a verdict (a status glyph and one
+ * sentence), the device's record, what it means, and the acts, one coral.
+ *
+ * The card's edge while the hub works is cruip's animated gradient border.
+ * Each other change is a transitions.dev recipe on the house's tokens: the
+ * card resizing between moments ("Card resize"), the title ("Text morph"),
+ * the line under the code ("Text states swap"), the device card arriving
+ * ("Panel reveal").
  *
  * How a moment plays: the card is put in the moment it plays from at once,
- * then `go(moment)` sets the new moment's resting state at once and, in the
- * same frame, issues every part's animation from where it was drawn, each
- * with `fill: backwards`, so its last keyframe is the resting style itself:
- * nothing holds, nothing snaps when a run ends, and nothing waits on a timer
- * (the only timers here are the hub's data: the device record landing, a
- * place lookup, the clock's seconds). Parts move by transform and opacity;
- * the band and ring are registered properties on CSS transitions; the
- * card's height tweens on the drawer curve.
+ * then it is set in the new moment's resting state and, in the same frame,
+ * every part's Web Animation is issued from where the part was drawn, its
+ * last keyframe the resting style itself (fill both); the dots, drawn on a
+ * canvas, each get a track read from one such run. Nothing waits on a
+ * timer; the only timers are the hub's data (the record landing, a place
+ * lookup) and the clock's seconds.
  */
-import { MorphText } from "./lib/morph.js";
-import { CRACK, FALL, pointsOf, SHARDS } from "./lib/shards.js";
+import { QR } from "./lib/qr.js";
+import { TextMorph, TextSwap } from "./lib/swap.js";
 
 /* ---------------------------------------------------------------- data */
 
-/** The QR: version 4 (33 modules), ECC H, the badge's square (modules 11 to 21) cleared. */
-const MODULES = 33;
-const HOLE = { from: 11, to: 22 };
-/** The 6×6 cluster grid's edges, in modules: whole modules but at the badge's middle. */
-const EDGES = [0, 6, 11, 16.5, 22, 27, 33];
 const CODE = "JWKHDQ";
-/** Where the open beak is in the swallowing drawing, as fractions of Caw's box (measured on tk_H9hHoUZygKjL5CQPYzv7I). */
-const BEAK = [0.58, 0.72];
+/** The head's tile and the modules round it kept clear, in modules from the symbol's edge. */
+const LOGO_AT = (QR.side - QR.logo) / 2;
+/** The symbol's middle, in modules (the head's centre). */
+const MIDDLE = QR.side / 2;
+/** How far a scattered dot starts from its module, in modules (r4's SCATTER). */
+const SCATTER = 6;
+/** How far a bursting dot flies out from the head, as a share of its way from it (r4's BURST). */
+const BURST = 0.6;
+/** A dot's radius, in modules (r4's). */
+const DOT_R = 0.42;
 
 const POSE = {
   asking: "asking",
   waiting: "waiting",
   lastminute: "lastminute",
   checking: "checking",
-  swallowing: "swallowing",
   approved: "approved",
   denied: "denied",
   expired: "expired",
   nomatch: "nomatch",
   failed: "failed",
+  // Remove device changes Paired's card in place; Caw stays as he was.
+  removed: "approved",
 };
+/** Every drawing of Caw the page shows. */
+const DRAWINGS = [...new Set(Object.values(POSE))];
 
 const TITLE = {
   code: "Scan with the CawCo app",
   device: "A phone wants in",
   approved: "Paired",
+  removed: "Removed",
   denied: "Not let in",
   expired: "That code expired",
   nomatch: "That scan didn't match",
   failed: "Pairing didn't start",
+  "failed-down": "Pairing didn't start",
 };
 
 const READOUT = {
   asking: "Getting a code…",
   waiting: "Or approve it in Needs you, or Configure › Devices.",
+  lastminute: "This code ends in 0:42",
 };
 
+/** The device the phone's record names, as the endings say it (the public case). */
+const RECORD = ["iPhone", "iOS 26.1", "203.0.113.7", "Riyadh, Saudi Arabia"];
+/** Which of the record's parts is the address (set in the mono figure). */
+const RECORD_ADDR = 2;
+
+/**
+ * Each ending's words, verbatim from report a8f73fdb §3, in its note 2's
+ * shape: the glyph, its tone, the verdict (`{code}` is Expired's struck
+ * code), the record (null where none), what it means, the acts (one coral).
+ * "removed" is Paired after Remove device (§3 A), "failed-down" Failed's
+ * second sample cause.
+ */
+const NEW_CODE = { label: "New code", tone: "primary", act: "again" };
 const OUTCOME = {
-  approved: { said: "Bewin's iPhone can run the fleet.", link: true },
-  denied: { said: "Bewin's iPhone was denied.", button: "New code" },
-  expired: { said: "Codes last five minutes.", button: "New code" },
+  approved: {
+    glyph: "check",
+    tone: "done",
+    said: "Bewin's iPhone can run the fleet.",
+    record: RECORD,
+    means:
+      "Its push answers permissions and questions from the lock screen, and it sees every machine, project and session. It's listed in Configure › Devices.",
+    acts: [
+      { label: "Remove device", tone: "ghost", act: "remove" },
+      { label: "Open Devices", tone: "primary", act: "devices" },
+    ],
+  },
+  removed: {
+    glyph: "close",
+    tone: "",
+    said: "Bewin's iPhone was removed. It can pair again with a new code.",
+    record: RECORD,
+    means: null,
+    acts: [NEW_CODE],
+  },
+  denied: {
+    glyph: "close",
+    tone: "fail",
+    said: "Bewin's iPhone was denied.",
+    record: RECORD,
+    means:
+      "Nothing reached it, and this code is spent. If that was your phone, make a new code and scan it again.",
+    acts: [NEW_CODE],
+  },
+  expired: {
+    glyph: "clock",
+    tone: "",
+    said: "No phone scanned {code} in its five minutes.",
+    record: null,
+    means: "Nothing was paired. A new code lasts another five.",
+    acts: [NEW_CODE],
+  },
   nomatch: {
-    said: "That scan was for another code. Make a new one and scan it.",
-    button: "New code",
+    glyph: "close",
+    tone: "fail",
+    said: "A phone scanned a code this hub isn't showing.",
+    record: null,
+    means:
+      "It was an old code, or another hub's. Only the code on this screen pairs here. Make a new one and scan that.",
+    acts: [NEW_CODE],
   },
   failed: {
-    said: "Pairing is off on this hub. Turn it on in Configure › Devices, then try again.",
-    button: "Retry",
+    glyph: "close",
+    tone: "fail",
+    said: "Pairing is off on this hub, so no code was made (403).",
+    record: null,
+    means: "Turn it on in Configure › Devices, then retry.",
+    acts: [
+      { label: "Retry", tone: "ghost", act: "again" },
+      { label: "Open Devices", tone: "primary", act: "devices" },
+    ],
+  },
+  "failed-down": {
+    glyph: "close",
+    tone: "fail",
+    said: "The hub didn't answer (502). Nothing was changed.",
+    record: null,
+    means: "Retry once it's back; the code is made then.",
+    acts: [{ label: "Retry", tone: "primary", act: "again" }],
   },
 };
 
@@ -104,8 +207,6 @@ const STROKES = [
   "M27.5 29v6",
   "M27.5 38v6",
 ];
-const WIRE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${STROKES.join("")}"/></svg>`;
-const WIRE_MASK = `url("data:image/svg+xml,${encodeURIComponent(WIRE_SVG)}")`;
 
 /** Each moment's control, and the moment it plays from. */
 const MOMENTS = [
@@ -116,10 +217,12 @@ const MOMENTS = [
   ["checking-tailnet", "Checking · tailnet", "waiting"],
   ["checking-lan", "Checking · LAN", "waiting"],
   ["approved", "Approved", "checking-public"],
+  ["removed", "Removed", "approved"],
   ["denied", "Denied", "checking-public"],
   ["expired", "Expired", "lastminute"],
   ["nomatch", "Scan matches nothing", "waiting"],
-  ["failed", "Failed before a code", "asking"],
+  ["failed", "Failed · pairing off", "asking"],
+  ["failed-down", "Failed · hub silent", "asking"],
 ];
 const FROM = Object.fromEntries(MOMENTS.map(([m, , from]) => [m, from]));
 
@@ -127,7 +230,6 @@ const FROM = Object.fromEntries(MOMENTS.map(([m, , from]) => [m, from]));
 
 const root = document.documentElement;
 const token = (name) => getComputedStyle(root).getPropertyValue(name).trim();
-const NUMBER = /-?[\d.]+/g;
 const TIMES = /calc\(\s*([\d.]+)(ms|s)\s*\*\s*([\d.]+)\s*\)/;
 const PLAIN = /([\d.]+)(ms|s)/;
 /** A duration token in ms ("260ms", "1.2s", "calc(500ms * 4)"). */
@@ -142,33 +244,47 @@ function ms(name) {
 }
 const D = {};
 const E = {};
+const V = {};
 function readTokens() {
   for (const n of [
     "control",
+    "toggle",
     "exit",
     "morph",
     "fade",
     "pop",
     "panel",
     "settle",
-    "cascade",
     "stagger",
-    "loop",
+    "ghost",
   ]) {
     D[n] = ms(`--dur-${n}`);
   }
   D.breath = ms("--breath");
-  D.pingSpread = Number.parseFloat(token("--c-change-ping-spread")) || 10;
-  for (const n of ["out", "in-out", "drawer", "glide-in"]) {
+  for (const n of ["out", "in-out", "drawer", "glide-in", "glide-out", "crossfade"]) {
     E[n] = token(`--ease-${n}`);
   }
+  for (const n of [
+    "qr-dim-opacity",
+    "qr-ping-scale",
+    "qr-ping-opacity",
+    "qr-squeeze",
+    "qr-pulse-scale",
+    "pop-scale",
+  ]) {
+    V[n] = Number.parseFloat(token(`--${n}`));
+  }
+  V.shake = Number.parseFloat(token("--shake-distance"));
+  V.overshoot = Number.parseFloat(token("--shake-overshoot"));
+  V.lift = token("--space-1");
+  V.reveal = token("--space-8");
 }
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
 /* -------------------------------------------------------------- state */
 
-const settings = { fork: "approve", hub: "auto", ticks: true };
+const settings = { hub: "auto", ticks: true };
 const stages = [];
 let last = "waiting";
 
@@ -178,14 +294,127 @@ function kindOf(m) {
   }
   return m.startsWith("checking") ? "device" : "outcome";
 }
+/** The card's ring at an ending (report a8f73fdb note 5): done, fail, or the hairline. */
 function outcomeOf(m) {
-  if (m === "approved") {
-    return "done";
+  return OUTCOME[m]?.tone ?? "";
+}
+const isDead = (m) => m === "expired" || m === "nomatch" || m.startsWith("failed");
+
+/* ------------------------------------------------------ the dots' paths */
+
+/**
+ * The same scatter for the same code: r4's linear congruential generator
+ * (Numerical Recipes' constants) seeded from the text.
+ */
+function seeded(text) {
+  const MODULUS = 2 ** 32;
+  let seed = 0;
+  for (const char of text) {
+    seed = (seed * 31 + (char.codePointAt(0) ?? 0)) % MODULUS;
   }
-  return m === "denied" || m === "nomatch" || m === "failed" ? "fail" : "";
+  return () => {
+    seed = (seed * 1_664_525 + 1_013_904_223) % MODULUS;
+    return seed / MODULUS;
+  };
 }
 
+/** The head's square, a dot's radius and half a module round it, in modules: what no arriving dot's disc ever enters. */
+const KEEP_OUT = {
+  lo: LOGO_AT - DOT_R - 0.08,
+  hi: LOGO_AT + QR.logo + DOT_R + 0.08,
+};
+const inKeepOut = (p) =>
+  p.x > KEEP_OUT.lo && p.x < KEEP_OUT.hi && p.y > KEEP_OUT.lo && p.y < KEEP_OUT.hi;
+/** Whether the segment p→q passes through the keep-out square (Liang–Barsky). */
+function crossesKeepOut(p, q) {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = q.x - p.x;
+  const dy = q.y - p.y;
+  for (const [pp, qq] of [
+    [-dx, p.x - KEEP_OUT.lo],
+    [dx, KEEP_OUT.hi - p.x],
+    [-dy, p.y - KEEP_OUT.lo],
+    [dy, KEEP_OUT.hi - p.y],
+  ]) {
+    if (pp === 0) {
+      if (qq < 0) {
+        return false;
+      }
+    } else {
+      const r = qq / pp;
+      if (pp < 0) {
+        t0 = Math.max(t0, r);
+      } else {
+        t1 = Math.min(t1, r);
+      }
+      if (t0 > t1) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+/** Whether the triangle a, b, c meets the keep-out square: any drift position on a–b travelling straight to c stays inside it. */
+function triangleMeets(a, b, c) {
+  if ([a, b, c].some(inKeepOut)) {
+    return true;
+  }
+  if (crossesKeepOut(a, b) || crossesKeepOut(b, c) || crossesKeepOut(c, a)) {
+    return true;
+  }
+  const centre = { x: MIDDLE, y: MIDDLE };
+  const side = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const s1 = side(a, b, centre);
+  const s2 = side(b, c, centre);
+  const s3 = side(c, a, centre);
+  return (s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0);
+}
+
+/**
+ * Each dot's numbers, r4's: its scattered start (`s`) and the other end of
+ * its drift (`a`, the start turned a quarter and halved), its way to the
+ * head, its distance from the head and its own random number. A start whose
+ * drift or whose way home would cross the head is drawn again, so the cloud
+ * never covers the head and no arriving dot crosses it.
+ */
+function dotsOf() {
+  const random = seeded(QR.text);
+  const reach = Math.hypot(MIDDLE, MIDDLE);
+  return QR.dots.map(([x, y]) => {
+    const home = { x: x + 0.5, y: y + 0.5 };
+    let s = { x: 0, y: 0 };
+    let a = { x: 0, y: 0 };
+    for (let tries = 0; tries < 40; tries += 1) {
+      const dx = Math.max(-x, Math.min(QR.side - 1 - x, (random() * 2 - 1) * SCATTER));
+      const dy = Math.max(-y, Math.min(QR.side - 1 - y, (random() * 2 - 1) * SCATTER));
+      const ax = Math.max(-x, Math.min(QR.side - 1 - x, dy * -0.5));
+      const ay = Math.max(-y, Math.min(QR.side - 1 - y, dx * 0.5));
+      const ps = { x: home.x + dx, y: home.y + dy };
+      const pa = { x: home.x + ax, y: home.y + ay };
+      if (!triangleMeets(ps, pa, home)) {
+        s = { x: dx, y: dy };
+        a = { x: ax, y: ay };
+        break;
+      }
+    }
+    return {
+      x,
+      y,
+      s,
+      a,
+      far: Math.hypot(home.x - MIDDLE, home.y - MIDDLE) / reach,
+      r: random(),
+    };
+  });
+}
+const DOTS = dotsOf();
+
+const t = (p) => `translate(${p.x.toFixed(3)}px, ${p.y.toFixed(3)}px)`;
+
 /* ------------------------------------------------------------- build */
+
+const SVG = "http://www.w3.org/2000/svg";
 
 function build(viewport) {
   const { layout } = viewport.dataset;
@@ -199,8 +428,9 @@ function build(viewport) {
     layout,
     stage,
     caw: $(".caw"),
-    title: new MorphText($(".title")),
+    title: new TextMorph($(".title")),
     titleEl: $(".title"),
+    cardWrap: $(".card-wrap"),
     card: $(".card"),
     ping: $(".ping"),
     scenes: {
@@ -209,31 +439,43 @@ function build(viewport) {
       outcome: $(".scene-outcome"),
     },
     well: $(".well"),
-    recess: $(".recess"),
-    clusters: [],
+    code: $(".code"),
+    eyesSvg: $(".code .eyes"),
+    /** The dots' motion: the clock it is read from and each dot's track, or null where every dot stands on its module. */
+    dotRun: null,
+    /** What the dots' canvas last drew: the clock's time, or "rest". */
+    dotsDrawn: null,
+    eyes: [],
     badge: $(".badge"),
     letters: $(".letters"),
     tiles: [],
+    glyphs: [],
     readout: $(".readout"),
-    dot: $(".readout .dot"),
-    // The readout's words wrap at the readout's own width, whatever the words before were.
-    words: new MorphText($(".readout .words"), {
-      wrap: true,
-      measure: (host) => host.parentElement.clientWidth,
-    }),
+    live: $(".readout .live"),
+    words: new TextSwap($(".readout .words")),
     wire: $(".wire"),
     strokes: [],
     facts: $(".facts"),
+    actions: $(".actions"),
     addr: $(".addr"),
     second: $(".second"),
     ago: $(".ago"),
     deny: $('[data-act="deny"]'),
     approve: $('[data-act="approve"]'),
+    mark: $(".mark"),
     said: $(".said"),
-    link: $('[data-act="devices"]'),
-    again: $('[data-act="again"]'),
-    debris: $(".debris"),
-    flight: $(".flight"),
+    lead: new TextSwap($(".said .lead")),
+    spent: $(".said .spent"),
+    letters2: [],
+    strike: $(".said .strike"),
+    tail: $(".said .tail"),
+    record: $(".record"),
+    means: $(".means"),
+    acts: $(".acts"),
+    ghost: $('[data-slot="ghost"]'),
+    leadEl: $(".said .lead"),
+    primary: new TextMorph($('[data-slot="primary"]')),
+    primaryEl: $('[data-slot="primary"]'),
     moment: null,
     network: "public",
     pingRun: null,
@@ -245,70 +487,83 @@ function build(viewport) {
   // Sizes: the card's width, and the QR in whole modules inside it.
   const cardW = layout === "phone" ? 366 : 335;
   const pad = 18;
-  const m = Math.floor((cardW - 2 - 2 * pad - 18) / MODULES);
-  const q = m * MODULES;
-  const holeAt = HOLE.from * m;
-  const holeW = (HOLE.to - HOLE.from) * m;
-  Object.assign(S, { cardW, m, q });
+  const m = Math.floor((cardW - 2 - 2 * pad - 18) / QR.side);
+  Object.assign(S, { cardW, m, q: m * QR.side });
   stage.style.setProperty("--card-w", `${cardW}px`);
-  stage.style.setProperty("--q", `${q}px`);
+  stage.style.setProperty("--q", `${S.q}px`);
   stage.style.setProperty("--m", `${m}px`);
-  stage.style.setProperty("--badge", `${holeW - 2 * m}px`);
-  stage.style.setProperty("--badge-at", `${holeAt + m}px`);
+  stage.style.setProperty("--badge", `${QR.logo * m}px`);
+  stage.style.setProperty("--badge-at", `${LOGO_AT * m}px`);
   const cawSize = layout === "phone" ? 64 : 80;
   S.caw.width = cawSize;
   S.caw.height = cawSize;
 
-  // 32 clusters: the 6×6 grid of the one QR image, the badge's four cells left empty.
-  const holder = $(".clusters");
-  for (let row = 0; row < 6; row += 1) {
-    for (let col = 0; col < 6; col += 1) {
-      if (row >= 2 && row <= 3 && col >= 2 && col <= 3) {
-        continue;
-      }
-      const el = document.createElement("div");
-      el.className = "cluster";
-      const x = EDGES[col] * m;
-      const y = EDGES[row] * m;
-      const w = (EDGES[col + 1] - EDGES[col]) * m;
-      const h = (EDGES[row + 1] - EDGES[row]) * m;
-      Object.assign(el.style, {
-        insetInlineStart: `${x}px`,
-        insetBlockStart: `${y}px`,
-        inlineSize: `${w}px`,
-        blockSize: `${h}px`,
-        maskPosition: `${-x}px ${-y}px`,
-      });
-      el.dataset.cx = String(x + w / 2);
-      el.dataset.cy = String(y + h / 2);
-      holder.append(el);
-      S.clusters.push(el);
+  // The code: each dark module a dot, drawn on the dots' canvas (placed once the card is laid out), the finder eyes rounded rings round a dot (r4).
+  S.dotsCanvas = document.createElement("canvas");
+  S.dotsCanvas.className = "dots";
+  S.dotsCanvas.setAttribute("aria-hidden", "true");
+  S.dotsPen = S.dotsCanvas.getContext("2d");
+  S.code.prepend(S.dotsCanvas);
+  S.eyesSvg.setAttribute("viewBox", `0 0 ${QR.side} ${QR.side}`);
+  for (const [ex, ey] of QR.eyes) {
+    const g = document.createElementNS(SVG, "g");
+    g.setAttribute("class", "eye");
+    const ring = document.createElementNS(SVG, "rect");
+    for (const [k, v] of Object.entries({
+      x: ex + 0.5,
+      y: ey + 0.5,
+      width: 6,
+      height: 6,
+      rx: 1.9,
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": 1,
+    })) {
+      ring.setAttribute(k, String(v));
     }
+    const pupil = document.createElementNS(SVG, "circle");
+    pupil.setAttribute("cx", String(ex + 3.5));
+    pupil.setAttribute("cy", String(ey + 3.5));
+    pupil.setAttribute("r", "1.5");
+    pupil.setAttribute("fill", "currentColor");
+    g.append(ring, pupil);
+    g.dataset.cx = String(ex + 3.5);
+    g.dataset.cy = String(ey + 3.5);
+    S.eyesSvg.append(g);
+    S.eyes.push(g);
   }
 
   for (const letter of CODE) {
     const tile = document.createElement("span");
     tile.className = "tile";
-    tile.textContent = letter;
+    const glyph = document.createElement("span");
+    glyph.className = "glyph";
+    glyph.textContent = letter;
+    tile.append(glyph);
     S.letters.append(tile);
     S.tiles.push(tile);
+    S.glyphs.push(glyph);
+    // Expired's verdict holds the same six letters, struck.
+    const l = document.createElement("span");
+    l.className = "l";
+    l.textContent = letter;
+    S.strike.before(l);
+    S.letters2.push(l);
   }
 
-  // The wireframe: one inline svg per stroke, so each can travel alone.
+  // The wireframe: one inline svg per stroke, each cut to its own ink, so each can burst alone.
   for (const d of STROKES) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = document.createElementNS(SVG, "svg");
     svg.setAttribute("viewBox", "0 0 96 96");
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
     svg.setAttribute("stroke-width", "1.5");
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const path = document.createElementNS(SVG, "path");
     path.setAttribute("d", d);
     svg.append(path);
     S.wire.append(svg);
-    // Each stroke's svg is cut to the stroke's own ink, so its box is the
-    // stroke's: what flies, and what a flight keeps clear of the words.
     const b = path.getBBox();
     const bleed = 1.5;
     const pct = (v) => `${((v / 96) * 100).toFixed(3)}%`;
@@ -317,19 +572,28 @@ function build(viewport) {
       `${b.x - bleed} ${b.y - bleed} ${b.width + 2 * bleed} ${b.height + 2 * bleed}`
     );
     Object.assign(svg.style, {
-      inset: "auto",
       insetInlineStart: pct(b.x - bleed),
       insetBlockStart: pct(b.y - bleed),
       inlineSize: pct(b.width + 2 * bleed),
       blockSize: pct(b.height + 2 * bleed),
     });
+    svg.dataset.cx = String(b.x + b.width / 2);
+    svg.dataset.cy = String(b.y + b.height / 2);
     S.strokes.push(svg);
   }
 
   S.approve.addEventListener("click", () => playStages([S], "approved"));
   S.deny.addEventListener("click", () => playStages([S], "denied"));
-  S.again.addEventListener("click", () => playStages([S], "asking"));
-  S.link.addEventListener("click", (event) => event.preventDefault());
+  // An ending's acts: New code and Retry play the code again, Remove device plays the removal;
+  // Open Devices has no page yet, so it plays nothing.
+  const act = (event) => {
+    const to = { again: "asking", remove: "removed" }[event.currentTarget.dataset.act];
+    if (to) {
+      playStages([S], to);
+    }
+  };
+  S.ghost.addEventListener("click", act);
+  S.primaryEl.addEventListener("click", act);
 
   // The band's lap pauses once its strength has reached 0.
   S.card.addEventListener("transitionend", (event) => {
@@ -368,16 +632,42 @@ function fillDevice(S, network, { recordIn, placeIn }) {
   S.approve.disabled = !recordIn;
 }
 
+/** An ending's verdict split at Expired's code: the words before it, and after. */
+function verdictOf(out) {
+  const [lead, tail = ""] = out.said.split("{code}");
+  return { lead, tail, code: out.said.includes("{code}") };
+}
+
+/** Puts ending `m`'s words in the card (note 2's shape): glyph, verdict, record, means, acts. */
 function fillOutcome(S, m) {
   const out = OUTCOME[m];
   if (!out) {
     return;
   }
-  S.said.textContent = out.said;
-  S.link.hidden = !out.link;
-  S.again.hidden = !out.button;
-  S.again.textContent = out.button ?? "";
-  S.scenes.outcome.toggleAttribute("data-has-button", Boolean(out.button));
+  S.mark.dataset.glyph = out.glyph;
+  S.mark.dataset.tone = out.tone;
+  const v = verdictOf(out);
+  S.lead.put(v.lead);
+  S.spent.hidden = !v.code;
+  S.tail.textContent = v.tail;
+  S.record.hidden = !out.record;
+  S.record.replaceChildren(
+    ...(out.record ?? []).map((text, i) => {
+      const part = document.createElement("span");
+      part.className = i === RECORD_ADDR ? "part addr" : "part";
+      part.textContent = text;
+      return part;
+    })
+  );
+  S.means.hidden = !out.means;
+  S.means.textContent = out.means ?? "";
+  const ghost = out.acts.find((a) => a.tone === "ghost");
+  const primary = out.acts.find((a) => a.tone === "primary");
+  S.ghost.hidden = !ghost;
+  S.ghost.textContent = ghost?.label ?? "";
+  S.ghost.dataset.act = ghost?.act ?? "";
+  S.primary.put(primary.label);
+  S.primaryEl.dataset.act = primary.act;
 }
 
 /**
@@ -387,39 +677,18 @@ function fillOutcome(S, m) {
  */
 function measureHeights(S) {
   const of = (kind) => S.scenes[kind].offsetHeight + 2;
-  const card = S.card.getBoundingClientRect();
-  /** The boxes of a scene's words, in the card's coordinates: what a flight must clear before they show. */
-  const words = (selector) =>
-    [...S.card.querySelectorAll(selector)]
-      .filter((el) => !el.closest("[hidden]") && el.getClientRects().length)
-      .map((el) => {
-        const r = el.getBoundingClientRect();
-        return {
-          x: r.left - card.left,
-          y: r.top - card.top,
-          w: r.width,
-          h: r.height,
-        };
-      });
-  const heights = { code: 0, device: {}, outcome: {} };
-  const texts = { device: {}, outcome: {} };
-  heights.code = of("code");
+  const heights = { code: of("code"), device: {}, outcome: {} };
   for (const net of Object.keys(NETWORK)) {
     fillDevice(S, net, { recordIn: true, placeIn: false });
     const pending = of("device");
-    texts.device[net] = words(".scene-device .facts p, .scene-device .btn");
     fillDevice(S, net, { recordIn: true, placeIn: true });
     heights.device[net] = { pending, in: of("device") };
   }
   for (const m of Object.keys(OUTCOME)) {
     fillOutcome(S, m);
     heights.outcome[m] = of("outcome");
-    texts.outcome[m] = words(
-      ".scene-outcome .said, .scene-outcome .link, .scene-outcome .btn"
-    );
   }
   S.heights = heights;
-  S.texts = texts;
 }
 
 function heightFor(S, m, { placeIn = true } = {}) {
@@ -434,26 +703,26 @@ function heightFor(S, m, { placeIn = true } = {}) {
   return S.heights.outcome[m];
 }
 
+/** The card's height; the "Card resize" recipe's transition (in the CSS) carries it. */
 function setHeight(S, h) {
   S.height = h;
-  S.card.style.blockSize = `${h}px`;
+  // On the card's wrap, the card filling it: on the proof's WebKit a card running its lap (a CSS
+  // animation of --border-angle) drew no other run's height.
+  S.cardWrap.style.height = `${h}px`;
 }
 
-/** The ping's loop: a ring leaving the card's contour each --dur-loop, from the breath's next wall-clock multiple at least `after` ms on. */
+/** r4's ping: one ring leaves the card's edge once a breath, growing to qr-ping-scale as it fades from qr-ping-opacity. */
 function startPing(S, after = 0) {
   stopPing(S);
-  const spread = D.pingSpread;
-  const sx = (S.cardW + 2 * spread) / S.cardW;
-  const sy = (S.height + 2 * spread) / S.height;
   const now = performance.timeOrigin + performance.now();
   const at = Math.ceil((now + after) / D.breath) * D.breath;
   S.pingRun = S.ping.animate(
     [
-      { opacity: 1, transform: "none" },
-      { opacity: 0, transform: `scale(${sx}, ${sy})` },
+      { opacity: V["qr-ping-opacity"], transform: "none" },
+      { opacity: 0, transform: `scale(${V["qr-ping-scale"]})` },
     ],
     {
-      duration: D.loop,
+      duration: D.breath,
       easing: E.out,
       delay: at - now,
       iterations: Number.POSITIVE_INFINITY,
@@ -488,10 +757,235 @@ function stopPing(S, { tail = false } = {}) {
   }
 }
 
+/* ------------------------------------------------------- the dots */
+
+/*
+ * The code's ~420 dots are drawn on one canvas per card. Each moment's dot
+ * motion is r4's, written as one track per dot (its delay, duration, curve
+ * and keyframes, in modules from its module), and every track is read from
+ * one clock: a Web Animation on the canvas that changes nothing drawn, so
+ * the page's clock (and the proof's, through the DevTools Animation domain)
+ * holds and seeks the dots like any other part. One element per dot made
+ * every play restyle and composite ~840 animated elements in its first
+ * frame (66–89ms of style on the proof's host); one canvas draws them all in
+ * a path a frame.
+ */
+
+/** A CSS `linear` or `cubic-bezier()` curve as a function of progress. */
+function curve(spec) {
+  if (spec === "linear") {
+    return (p) => p;
+  }
+  const n = /cubic-bezier\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/.exec(spec);
+  if (!n) {
+    throw new Error(`curve: ${spec} is neither linear nor cubic-bezier()`);
+  }
+  const [x1, y1, x2, y2] = n.slice(1).map(Number);
+  const at = (a, b, s) => 3 * a * s * (1 - s) ** 2 + 3 * b * s * s * (1 - s) + s ** 3;
+  const slope = (a, b, s) => 3 * a * (1 - s) ** 2 + 6 * (b - a) * s * (1 - s) + 3 * (1 - b) * s * s;
+  return (p) => {
+    if (p <= 0 || p >= 1) {
+      return p <= 0 ? 0 : 1;
+    }
+    // Newton's method on x(s) = p, then bisection where the slope is flat.
+    let s = p;
+    for (let i = 0; i < 8; i += 1) {
+      const d = slope(x1, x2, s);
+      if (Math.abs(d) < 1e-6) {
+        break;
+      }
+      s -= (at(x1, x2, s) - p) / d;
+    }
+    if (Math.abs(at(x1, x2, s) - p) > 1e-5 || s < 0 || s > 1) {
+      let lo = 0;
+      let hi = 1;
+      s = p;
+      for (let i = 0; i < 40; i += 1) {
+        if (at(x1, x2, s) < p) {
+          lo = s;
+        } else {
+          hi = s;
+        }
+        s = (lo + hi) / 2;
+      }
+    }
+    return at(y1, y2, s);
+  };
+}
+const curves = new Map();
+const curveOf = (spec) => {
+  if (!curves.has(spec)) {
+    curves.set(spec, curve(spec));
+  }
+  return curves.get(spec);
+};
+
+/**
+ * One dot's track, on Web Animations' timing model: `delay`, `duration`,
+ * `iterations`, `alternate`, filled both ways; `ch` maps a channel (x and y
+ * in modules from its module, s its scale, o its opacity) to its curve over
+ * the whole run and its keyframes ([offset, value, the curve to the next]).
+ */
+const track = (timing, ch) => ({ iterations: 1, alternate: false, ...timing, ch });
+const kf = (offset, value, ease = "linear") => [offset, value, curveOf(ease)];
+const REST = { x: 0, y: 0, s: 1, o: 1 };
+
+/** Where a track has its dot at time `time` (ms on its clock). */
+function trackAt(tr, time) {
+  const local = time - tr.delay;
+  let p = 0;
+  if (local > 0) {
+    const iteration = Math.min(Math.floor(local / tr.duration), tr.iterations - 1);
+    p = Math.min(1, (local - iteration * tr.duration) / tr.duration);
+    if (tr.alternate && iteration % 2 === 1) {
+      p = 1 - p;
+    }
+  }
+  const out = { ...REST };
+  for (const [name, { ease, frames }] of Object.entries(tr.ch)) {
+    const q = ease(p);
+    let i = 0;
+    while (i < frames.length - 2 && q > frames[i + 1][0]) {
+      i += 1;
+    }
+    const [o0, v0, step] = frames[i];
+    const [o1, v1] = frames[i + 1];
+    out[name] = v0 + (v1 - v0) * step(o1 === o0 ? 1 : (q - o0) / (o1 - o0));
+  }
+  return out;
+}
+
+/** Every dot where its track has it now (its clock's time), or on its module. */
+function dotsNow(S) {
+  const run = S.dotRun;
+  if (!run) {
+    return DOTS.map(() => REST);
+  }
+  const time = Number(run.clock.currentTime ?? 0);
+  return run.tracks.map((tr) => (tr ? trackAt(tr, time) : REST));
+}
+
+/** Plays `tracks` on the dots from now: one clock as long as the longest. */
+function playDots(S, tracks, id = "dots") {
+  const end = Math.max(...tracks.map((tr) => (tr ? tr.delay + tr.duration * tr.iterations : 0)));
+  const clock = part(S, S.dotsCanvas, [{ opacity: 1 }, { opacity: 1 }], { duration: end, easing: "linear", id });
+  S.dotRun = { clock, tracks, loop: false };
+  drawSoon();
+}
+
+/** r4's cloud: each dot drifting between its two scattered places once a breath, on its own beat; its clock a loop. */
+function startDrift(S) {
+  stopDrift(S);
+  const clock = S.dotsCanvas.animate([{ opacity: 1 }, { opacity: 1 }], {
+    duration: D.breath,
+    iterations: Number.POSITIVE_INFINITY,
+  });
+  clock.id = "drift";
+  const tracks = DOTS.map((dot) =>
+    track(
+      { delay: -dot.r * D.breath, duration: D.breath, iterations: Number.POSITIVE_INFINITY, alternate: true },
+      {
+        x: { ease: curveOf(E["in-out"]), frames: [kf(0, dot.s.x), kf(1, dot.a.x)] },
+        y: { ease: curveOf(E["in-out"]), frames: [kf(0, dot.s.y), kf(1, dot.a.y)] },
+      }
+    )
+  );
+  S.dotRun = { clock, tracks, loop: true };
+  drawSoon();
+}
+
+function stopDrift(S) {
+  if (S.dotRun?.loop) {
+    S.dotRun.clock.cancel();
+    S.dotRun = null;
+    drawSoon();
+  }
+}
+
+/** Where each dot is drawn now, in modules from its module. */
+const driftAt = (S) => dotsNow(S).map(({ x, y }) => ({ x, y }));
+
+/**
+ * The dots' canvas covers the card from the code's corner (a falling dot
+ * is drawn until the card's edge clips it), at the screen's pixel density.
+ */
+function placeDots(S, tallest) {
+  const { x, y } = offsetIn(S.code, S.card);
+  const c = S.dotsCanvas;
+  const dpr = window.devicePixelRatio || 1;
+  Object.assign(c.style, {
+    insetInlineStart: `${-x}px`,
+    insetBlockStart: `${-y}px`,
+    inlineSize: `${S.cardW}px`,
+    blockSize: `${tallest}px`,
+  });
+  S.dotsTall = tallest;
+  c.width = Math.ceil(S.cardW * dpr);
+  c.height = Math.ceil(tallest * dpr);
+  S.dotsAt = { x, y, dpr };
+  S.dotsInk = getComputedStyle(S.code).color;
+  S.dotsDrawn = null;
+}
+
+/** Draws a card's dots where they are now: every whole dot in one path, each fading one alone. */
+function drawDots(S) {
+  const pen = S.dotsPen;
+  const { x: ox, y: oy, dpr } = S.dotsAt;
+  pen.setTransform(1, 0, 0, 1, 0, 0);
+  pen.clearRect(0, 0, S.dotsCanvas.width, S.dotsCanvas.height);
+  pen.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+  pen.fillStyle = S.dotsInk;
+  const r = DOT_R * S.m;
+  const now = dotsNow(S);
+  pen.beginPath();
+  now.forEach((p, i) => {
+    if (p.o >= 1 && p.s > 0) {
+      const cx = (DOTS[i].x + 0.5 + p.x) * S.m;
+      const cy = (DOTS[i].y + 0.5 + p.y) * S.m;
+      pen.moveTo(cx + r * p.s, cy);
+      pen.arc(cx, cy, r * p.s, 0, 2 * Math.PI);
+    }
+  });
+  pen.fill();
+  now.forEach((p, i) => {
+    if (p.o > 0 && p.o < 1 && p.s > 0) {
+      pen.globalAlpha = p.o;
+      pen.beginPath();
+      pen.arc((DOTS[i].x + 0.5 + p.x) * S.m, (DOTS[i].y + 0.5 + p.y) * S.m, r * p.s, 0, 2 * Math.PI);
+      pen.fill();
+    }
+  });
+  pen.globalAlpha = 1;
+}
+
+let drawing = 0;
+/** Draws every card whose dots moved since its last drawing, each frame while a dot clock runs or is held. */
+function drawSoon() {
+  drawing ||= requestAnimationFrame(() => {
+    drawing = 0;
+    let again = false;
+    for (const S of stages) {
+      if (!S.dotsAt) {
+        continue;
+      }
+      const run = S.dotRun;
+      const key = run ? `${run.clock.currentTime}` : "rest";
+      if (key !== S.dotsDrawn) {
+        drawDots(S);
+        S.dotsDrawn = key;
+      }
+      again ||= Boolean(run && run.clock.playState !== "finished");
+    }
+    if (again) {
+      drawSoon();
+    }
+  });
+}
+
 function clearTimers(S) {
-  for (const t of S.timers) {
-    clearInterval(t);
-    clearTimeout(t);
+  for (const timer of S.timers) {
+    clearInterval(timer);
+    clearTimeout(timer);
   }
   S.timers = [];
 }
@@ -524,10 +1018,10 @@ function tick(S, m) {
 }
 
 /**
- * Puts the card in moment `m`'s resting state. `still`: at once, the band
- * and ring too (the moment a play starts from); otherwise the band and ring
- * take their CSS transitions and every part is left for the caller to
- * animate into this state.
+ * Puts the card in moment `m`'s resting state. `still`: at once, the band,
+ * ring and height too (the moment a play starts from); otherwise those take
+ * their CSS transitions and every part is left for the caller to animate
+ * into this state.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one resting state per moment, set field by field in the card's order
 function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
@@ -535,8 +1029,9 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
     held.cancel();
   }
   S.runs = [];
-  S.debris.replaceChildren();
-  S.flight.replaceChildren();
+  for (const ghost of S.scenes.outcome.querySelectorAll(".leaving")) {
+    ghost.remove();
+  }
   clearTimers(S);
   if (!keepPing) {
     stopPing(S, { tail: still });
@@ -549,27 +1044,33 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
     scene.inert = name !== kind;
   }
 
-  // The code.
-  const codeUp = m === "waiting" || m === "lastminute";
-  const codeScene = kind === "code";
-  for (const el of S.clusters) {
-    el.style.opacity = codeUp ? "1" : "0";
-    el.style.visibility = "";
+  // The code: a cloud while asking, locked on its modules once it is up.
+  const asking = m === "asking";
+  const up = m === "waiting" || m === "lastminute";
+  // A play's dot clock went with the runs above; the cloud's loop stays while asking.
+  if (S.dotRun && !S.dotRun.loop) {
+    S.dotRun = null;
+    drawSoon();
   }
-  for (const el of S.tiles) {
-    el.style.visibility = "";
+  if (asking) {
+    if (!S.dotRun) {
+      startDrift(S);
+    }
+  } else {
+    stopDrift(S);
   }
-  S.letters.style.opacity = codeUp ? "1" : "0";
+  S.code.style.opacity = asking ? String(V["qr-dim-opacity"]) : up ? "1" : "0";
+  for (const eye of S.eyes) {
+    eye.style.opacity = up ? "1" : "0";
+  }
+  for (const glyph of S.glyphs) {
+    glyph.style.opacity = up ? "1" : "0";
+  }
+  S.letters.style.opacity = kind === "code" ? "1" : "0";
   S.badge.src = "./caw/badge.png";
-  S.badge.style.visibility = codeScene ? "" : "hidden";
-  S.recess.style.visibility = codeScene ? "" : "hidden";
-  S.dot.style.opacity = m === "asking" ? "1" : "0";
-  S.words.put(
-    m === "lastminute"
-      ? "This code ends in 0:42"
-      : (READOUT[m] ?? READOUT.waiting)
-  );
-  S.wire.style.visibility = "";
+  S.live.style.opacity = asking ? "1" : "0";
+  S.words.put(READOUT[m] ?? READOUT.waiting);
+  S.cardWrap.toggleAttribute("data-warm", m === "lastminute");
 
   // The device.
   if (kind === "device") {
@@ -577,7 +1078,7 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   }
   fillOutcome(S, m);
 
-  // The edge.
+  // The edge and the height.
   const { card } = S;
   if (still) {
     card.style.transition = "none";
@@ -585,9 +1086,8 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   card.style.setProperty("--band-dur", "var(--dur-pop)");
   card.style.setProperty("--band-delay", "0ms");
   card.style.setProperty("--ring-delay", "0ms");
-  const busy = m === "asking";
-  card.toggleAttribute("data-busy", busy);
-  if (busy) {
+  card.toggleAttribute("data-busy", asking);
+  if (asking) {
     card.classList.add("lap");
   } else if (still) {
     card.classList.remove("lap");
@@ -598,15 +1098,15 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   } else {
     delete card.dataset.outcome;
   }
+  setHeight(S, heightFor(S, m));
   if (still) {
     getComputedStyle(card).getPropertyValue("--band");
     card.style.transition = "";
   }
 
-  setHeight(S, heightFor(S, m));
   S.title.put(TITLE[kind === "outcome" ? m : kind]);
   S.caw.src = `./caw/${POSE[m.split("-")[0]]}.png`;
-  if (codeUp && ping && !keepPing) {
+  if (up && ping && !keepPing) {
     startPing(S);
   }
   tick(S, m);
@@ -619,169 +1119,320 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
  * it holds that frame (fill both) until the next play cancels it, and its
  * end draws exactly what the card rests at.
  */
-function part(
-  S,
-  el,
-  keyframes,
-  { duration, easing, delay = 0, composite, fill = "both" }
-) {
-  const anim = el.animate(keyframes, {
-    duration,
-    easing,
-    delay,
-    fill,
-    composite,
-  });
-  anim.id = "part";
+function part(S, el, keyframes, { duration, easing, delay = 0, composite, fill = "both", id = "part" }) {
+  const anim = el.animate(keyframes, { duration, easing, delay, fill, composite });
+  anim.id = id;
   S.runs.push(anim);
   return anim;
 }
 
-/** The card's height from `from` to its resting height. */
-function fold(
-  S,
-  from,
-  { delay = 0, duration = D.panel, easing = E.drawer } = {}
-) {
-  const to = S.card.style.blockSize;
-  if (`${from}px` === to) {
-    return;
+/** transitions.dev "Card resize": the card's height from `from` to where it rests now, over --dur-panel on ease-out, after `delay`. */
+function resize(S, from, delay) {
+  if (Math.abs(from - S.height) > 0.5) {
+    part(S, S.cardWrap, [{ height: `${from}px` }, { height: `${S.height}px` }], {
+      duration: D.panel,
+      easing: E.out,
+      delay,
+    });
   }
-  part(S, S.card, [{ blockSize: `${from}px` }, { blockSize: to }], {
-    duration,
-    easing,
-    delay,
-  });
 }
 
-const fadeOut = (S, el, { delay = 0, duration = D.exit, scale = true } = {}) =>
+/** A part leaving in place: the "Text states swap" exit (up 4px, a 2px blur, a fade) over --dur-exit. */
+const leave = (S, el, delay = 0) =>
   part(
     S,
     el,
-    scale
-      ? [
-          { opacity: 1, transform: "none" },
-          { opacity: 0, transform: "scale(0.95)" },
-        ]
-      : [{ opacity: 1 }, { opacity: 0 }],
-    { duration, easing: E.out, delay }
+    [
+      { opacity: 1, transform: "none", filter: "blur(0px)" },
+      { opacity: 0, transform: `translateY(-${V.lift})`, filter: "blur(2px)" },
+    ],
+    { duration: D.exit, easing: E.crossfade, delay }
   );
 
-const fadeIn = (S, el, { delay = 0, duration = D.pop, from = 0.95 } = {}) =>
-  part(
+/** A part arriving in place: a fade over --dur-pop. */
+const arrive = (S, el, delay = 0, id = "part") =>
+  part(S, el, [{ opacity: 0 }, { opacity: 1 }], { duration: D.pop, easing: E.out, delay, id });
+
+/** The least a bursting part travels sideways, px: so none rises and falls on one spot and hangs at the top. */
+const BURST_SIDE = 6;
+
+/**
+ * r4's burst: out from `centre` by BURST of the way, then down past `floor`,
+ * over --dur-settle, a little late by its own random number. Its rise and
+ * fall are a thrown thing's: up on the glide-out curve (the first 35%), down
+ * on its mirror, glide-in, so it slows into the top of its arc and speeds out
+ * of it; and it keeps travelling sideways the whole way (on ease-out), so
+ * it never hangs at the top. Positions are in the part's own units, `px`
+ * the screen px a unit is drawn at; `from` is where it is drawn now. The
+ * path, in those units: x from `x0` to `x1`, y from `y0` up to `y1` and
+ * down to `y2`.
+ */
+function burstPath({ home, from, centre, floor, r, px = 1, delay = 0 }) {
+  const out = {
+    x: from.x + (home.x + from.x - centre.x) * BURST,
+    y: from.y + (home.y + from.y - centre.y) * BURST,
+  };
+  let side = out.x - from.x;
+  if (Math.abs(side) * px < BURST_SIDE) {
+    side = (r < 0.5 ? -BURST_SIDE : BURST_SIDE) / px;
+  }
+  return {
+    timing: { duration: D.settle, delay: delay + r * D.ghost },
+    x0: from.x,
+    x1: from.x + side * 1.25,
+    y0: from.y,
+    y1: out.y,
+    y2: Math.max(out.y, floor - home.y),
+  };
+}
+
+/** A burst on an element (a finder eye, a stroke): its sideways travel on `translate`, its rise and fall on `transform`. */
+function burst(S, el, path) {
+  const b = burstPath(path);
+  part(S, el, [{ translate: `${b.x0.toFixed(3)}px 0px` }, { translate: `${b.x1.toFixed(3)}px 0px` }], {
+    ...b.timing,
+    easing: E.out,
+  });
+  return part(
     S,
     el,
-    from === 1
-      ? [{ opacity: 0 }, { opacity: 1 }]
-      : [
-          { opacity: 0, transform: `scale(${from})` },
-          { opacity: 1, transform: "none" },
-        ],
-    { duration, easing: E.out, delay }
+    [
+      { transform: `translateY(${b.y0.toFixed(3)}px)`, easing: E["glide-out"] },
+      { transform: `translateY(${b.y1.toFixed(3)}px)`, offset: 0.35, easing: E["glide-in"] },
+      { transform: `translateY(${b.y2.toFixed(3)}px)` },
+    ],
+    { ...b.timing, easing: "linear" }
   );
+}
 
-/** `el`'s box in `within`'s coordinates. */
-function boxIn(el, within) {
-  const a = el.getBoundingClientRect();
-  const b = within.getBoundingClientRect();
-  return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height };
+/** The same burst as a dot's track, in modules. */
+const burstTrack = (b) =>
+  track(b.timing, {
+    x: { ease: curveOf(E.out), frames: [kf(0, b.x0), kf(1, b.x1)] },
+    y: { ease: curveOf("linear"), frames: [kf(0, b.y0, E["glide-out"]), kf(0.35, b.y1, E["glide-in"]), kf(1, b.y2)] },
+  });
+
+/** r4's head when the code dies: its face shut, it squeezes, then shakes once. */
+function squeeze(S) {
+  S.badge.src = "./caw/badge-shut.png";
+  part(
+    S,
+    S.badge,
+    [
+      { transform: "none" },
+      { transform: `scale(${2 - V["qr-squeeze"]}, ${V["qr-squeeze"]})`, offset: 0.4 },
+      { transform: "none" },
+    ],
+    { duration: D.panel, easing: E.out }
+  );
+  const shake = D.ghost * 2 + D.stagger * 2;
+  part(
+    S,
+    S.badge,
+    [
+      { transform: "translateX(0px)", easing: E.out },
+      { transform: `translateX(${V.shake}px)`, offset: 0.2857, easing: E.out },
+      { transform: `translateX(${-V.shake}px)`, offset: 0.5714, easing: E.out },
+      { transform: `translateX(${V.overshoot}px)`, offset: 0.7857, easing: E.out },
+      { transform: "translateX(0px)" },
+    ],
+    { duration: shake, easing: "linear", delay: D.panel, composite: "add" }
+  );
+}
+
+/* ------------------------------------------------------ the endings */
+
+/** Where `el` stands in `root`, in layout px (offsets: a frame drawn at a scale reads its own px). */
+function offsetIn(el, root) {
+  let x = 0;
+  let y = 0;
+  for (let at = el; at && at !== root; at = at.offsetParent) {
+    x += at.offsetLeft + (at.offsetParent?.clientLeft ?? 0);
+    y += at.offsetTop + (at.offsetParent?.clientTop ?? 0);
+  }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
 }
 
 /**
- * The shatter (C4), drawn: the subject's drawing cut into the 16 shards at
- * the box read before anything changed (`box`, in the debris layer's
- * coordinates), the badge whole beside them. Answers the animations to run.
+ * The status glyph arrives as the arrival ends, so it is the last thing
+ * drawn (report a8f73fdb note 4). The done check: transitions.dev "Success
+ * check" on the house's tokens: the glyph fades in, sharpens (2px blur) and
+ * grows from 0.6 over --dur-toggle, and the tick draws its stroke from
+ * --dur-ghost in (the recipe's path delay) over the same; the recipe's 80°
+ * turn and 40px bob are left out, as the house's status glyphs never turn.
+ * The fail and clock glyphs: transitions.dev "Icon swap" on DESIGN's status
+ * glyph (in from 0.92, 2px blur, over --dur-control). Both end with the
+ * arrival.
  */
-function shatter(S, subject, box, { badgeAt, fromHeight }) {
-  const pending = [];
-  for (const shard of SHARDS) {
-    const pts = pointsOf(shard.clip);
-    const xs = pts.map(([px]) => px);
-    const ys = pts.map(([, py]) => py);
-    const [minX, maxX, minY, maxY] = [
-      Math.min(...xs),
-      Math.max(...xs),
-      Math.min(...ys),
-      Math.max(...ys),
-    ];
-    const x = box.x + (box.w * minX) / 100;
-    const y = box.y + (box.h * minY) / 100;
-    const w = (box.w * (maxX - minX)) / 100;
-    const h = (box.h * (maxY - minY)) / 100;
-    const el = document.createElement("div");
-    el.className = "shard";
-    el.dataset.shard = shard.id;
-    const rel = pts
-      .map(
-        ([px, py]) =>
-          `${(((px - minX) / (maxX - minX)) * 100).toFixed(2)}% ${(((py - minY) / (maxY - minY)) * 100).toFixed(2)}%`
-      )
-      .join(", ");
-    const cx = (box.w * shard.centroid[0]) / 100 + box.x - x;
-    const cy = (box.h * shard.centroid[1]) / 100 + box.y - y;
-    Object.assign(el.style, {
-      insetInlineStart: `${x}px`,
-      insetBlockStart: `${y}px`,
-      inlineSize: `${w}px`,
-      blockSize: `${h}px`,
-      clipPath: `polygon(${rel})`,
-      transformOrigin: `${cx}px ${cy}px`,
+function glyphIn(S, glyph, at) {
+  const svg = S.mark.querySelector(`.g-${glyph}`);
+  const from = { opacity: 0, filter: "blur(2px)" };
+  const to = { opacity: 1, transform: "none", filter: "blur(0px)" };
+  if (glyph === "check") {
+    const start = at + D.pop - D.toggle - D.ghost;
+    part(S, svg, [{ ...from, transform: "scale(0.6)" }, to], {
+      duration: D.toggle,
+      easing: E.out,
+      delay: start,
+      id: "glyph",
     });
-    el.style.setProperty("--shard-ground", subject.ground);
-    el.style.setProperty("--shard-ink", subject.ink);
-    el.style.setProperty("--shard-mask", subject.mask);
-    el.style.setProperty("--shard-size", subject.size);
-    el.style.setProperty(
-      "--shard-at",
-      `${subject.at[0] - (x - box.x)}px ${subject.at[1] - (y - box.y)}px`
-    );
-    S.debris.append(el);
-    const dirX = shard.centroid[0] - 50;
-    const dirY = shard.centroid[1] - 50;
-    const len = Math.hypot(dirX, dirY) || 1;
-    const crack = `translate(${((dirX / len) * CRACK.offsetPx).toFixed(2)}px, ${((dirY / len) * CRACK.offsetPx).toFixed(2)}px)`;
-    const fall = `translate(${((shard.driftX / 100) * box.w).toFixed(2)}px, ${(fromHeight - y + h).toFixed(1)}px) rotate(${shard.rotate}deg)`;
-    pending.push(() => {
-      part(S, el, [{ transform: "none" }, { transform: crack }], {
-        duration: D.control,
+    part(S, svg.querySelector(".tick"), [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], {
+      duration: D.toggle,
+      easing: E.out,
+      delay: start + D.ghost,
+      id: "glyph",
+    });
+    return;
+  }
+  part(S, svg, [{ ...from, transform: "scale(0.92)" }, to], {
+    duration: D.control,
+    easing: E.out,
+    delay: at + D.pop - D.control,
+    id: "glyph",
+  });
+}
+
+/** An ending's rows arrive in place at `at` (a fade over --dur-pop), the glyph drawn as they land. Expired's letters fly in by their own job. */
+function arriveEnding(S, m, at) {
+  const out = OUTCOME[m];
+  arrive(S, S.leadEl, at, "arrive");
+  if (verdictOf(out).tail) {
+    arrive(S, S.tail, at);
+  }
+  if (out.record) {
+    arrive(S, S.record, at);
+  }
+  if (out.means) {
+    arrive(S, S.means, at);
+  }
+  arrive(S, S.acts, at);
+  glyphIn(S, out.glyph, at);
+}
+
+/**
+ * Expired's code is the one object on both sides of the ending: its six
+ * letters fly from their tiles into the verdict's struck code (a FLIP, each
+ * letter from its tile's glyph box, at its size, to its place, over
+ * --dur-panel on the drawer curve) while the card folds, then the strike
+ * draws left to right over --dur-morph. Until they fly, the letters stand
+ * in their tiles.
+ */
+function lettersJob(S, at) {
+  const moves = [];
+  return {
+    lay: () => undefined,
+    measure: () => {
+      S.letters2.forEach((l, i) => {
+        const g = offsetIn(S.glyphs[i], S.card);
+        const n = offsetIn(l, S.card);
+        moves.push({
+          x: g.x + g.w / 2 - (n.x + n.w / 2),
+          y: g.y + g.h / 2 - (n.y + n.h / 2),
+          s: g.w / n.w,
+        });
+      });
+    },
+    start: () => [
+      ...S.letters2.map((l, i) => {
+        const { x, y, s } = moves[i];
+        const run = l.animate(
+          [{ transform: `translate(${x.toFixed(3)}px, ${y.toFixed(3)}px) scale(${s.toFixed(4)})` }, { transform: "none" }],
+          { duration: D.panel, easing: E.drawer, delay: at, fill: "both" }
+        );
+        run.id = "flip";
+        return run;
+      }),
+      S.strike.animate([{ transform: "scaleX(0)" }, { transform: "none" }], {
+        duration: D.morph,
         easing: E.out,
-      });
-      return part(S, el, [{ transform: "none" }, { transform: fall }], {
-        duration: D.settle,
-        easing: E["glide-in"],
-        delay: FALL.startAfterCrack + shard.stagger,
-        composite: "add",
-      });
-    });
-  }
-  if (badgeAt) {
-    const copy = document.createElement("img");
-    copy.className = "badge";
-    copy.alt = "";
-    copy.src = "./caw/badge-shut.png";
+        delay: at + D.panel,
+        fill: "both",
+      }),
+    ],
+  };
+}
+
+/**
+ * Remove device: Paired's card changes in place. What goes (the means, the
+ * ghost act) leaves where it stood (Text states swap's exit) and the card
+ * folds once it has; the verdict swaps to the removal (Text states swap:
+ * the new sentence wraps to two lines, which the Text morph recipe's one
+ * line cannot); the rows that stay slide to their new places (a FLIP over
+ * --dur-panel on ease-out, Card resize's curve); the coral's words morph
+ * (Text morph); the check gives way to the muted close glyph (Icon swap).
+ */
+function removeJob(S) {
+  const before = { record: S.record.offsetTop, acts: S.acts.offsetTop };
+  const ghosts = [S.means, S.ghost].map((el) => {
+    const copy = el.cloneNode(true);
+    copy.classList.add("leaving");
+    copy.inert = true;
+    copy.setAttribute("aria-hidden", "true");
+    const at = offsetIn(el, S.scenes.outcome);
     Object.assign(copy.style, {
-      insetInlineStart: `${badgeAt.x}px`,
-      insetBlockStart: `${badgeAt.y}px`,
+      insetInlineStart: `${at.x}px`,
+      insetBlockStart: `${at.y}px`,
+      inlineSize: `${at.w}px`,
+      blockSize: `${at.h}px`,
     });
-    S.debris.append(copy);
-    const fall = `translate(-6px, ${(fromHeight - badgeAt.y + badgeAt.h).toFixed(1)}px) rotate(-14deg)`;
-    pending.push(() =>
-      part(S, copy, [{ transform: "none" }, { transform: fall }], {
-        duration: D.settle,
-        easing: E["glide-in"],
-      })
-    );
-  }
-  return () => {
-    const out = pending.map((begin) => begin());
-    Promise.all(out.map((r) => r.finished)).then(
-      () => {
-        if (S.runs.includes(out[0])) {
-          S.debris.replaceChildren();
+    return copy;
+  });
+  const after = {};
+  return {
+    ghosts,
+    lay: () => S.scenes.outcome.append(...ghosts),
+    measure: () => {
+      after.record = S.record.offsetTop;
+      after.acts = S.acts.offsetTop;
+    },
+    start: () => {
+      const runs = [];
+      const slide = (el, dy) => {
+        if (Math.abs(dy) > 0.01) {
+          runs.push(
+            el.animate([{ transform: `translateY(${dy.toFixed(3)}px)` }, { transform: "none" }], {
+              duration: D.panel,
+              easing: E.out,
+              fill: "both",
+            })
+          );
         }
-      },
-      () => undefined
-    );
+      };
+      slide(S.record, before.record - after.record);
+      slide(S.acts, before.acts - after.acts);
+      for (const copy of ghosts) {
+        const run = copy.animate(
+          [
+            { opacity: 1, transform: "none", filter: "blur(0px)" },
+            { opacity: 0, transform: `translateY(-${V.lift})`, filter: "blur(2px)" },
+          ],
+          { duration: D.exit, easing: E.crossfade, fill: "both" }
+        );
+        run.finished.then(
+          () => copy.remove(),
+          () => undefined
+        );
+        runs.push(run);
+      }
+      const swap = { duration: D.control, easing: E.out, fill: "both" };
+      runs.push(
+        S.mark.querySelector(".g-check").animate(
+          [
+            { opacity: 1, transform: "none", filter: "blur(0px)" },
+            { opacity: 0, transform: "scale(0.92)", filter: "blur(2px)" },
+          ],
+          swap
+        ),
+        S.mark.querySelector(".g-close").animate(
+          [
+            { opacity: 0, transform: "scale(0.92)", filter: "blur(2px)" },
+            { opacity: 1, transform: "none", filter: "blur(0px)" },
+          ],
+          swap
+        )
+      );
+      return runs;
+    },
   };
 }
 
@@ -798,118 +1449,77 @@ function landRecord(S) {
   }
 }
 
-/** A late place row arrives through morph(): the card tweens to its new height as the row fades in. */
+/** A late place row arrives: the card resizes ("Card resize") as the row fades in. */
 function landPlace(S) {
   if (!S.second.hidden || kindOf(S.moment) !== "device") {
     return;
   }
-  const from = S.height;
   S.second.hidden = false;
+  const from = S.height;
   setHeight(S, heightFor(S, S.moment, { placeIn: true }));
-  fold(S, from, { duration: D.morph });
-  part(S, S.second, [{ opacity: 0 }, { opacity: 1 }], {
-    duration: D.morph,
-    easing: E.out,
-  });
+  resize(S, from, 0);
+  arrive(S, S.second);
 }
 
 /* ------------------------------------------------------- moments */
 
 /**
  * Plays moment `m` from where the card stands, in phases a page of several
- * stages runs together (`playStages`), so the frame that starts it lays
- * the page out as few times as it can: `plan` reads every box the motion
- * starts from; the plan's `write` puts the card in its resting state and
- * draws the shards and flights; the MorphTexts read and write their
- * letters; `animate` issues every part's animation.
+ * stages runs together (`playStages`): `plan` reads what the motion starts
+ * from; `write` puts the card in its resting state; the texts lay out and
+ * measure their parts; `animate` issues every part's animation.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the design's §C tables, one branch per moment, read in the order the tables run
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per moment, read in the storyboard's order
 function plan(S, m) {
   const was = { moment: S.moment, height: S.height };
   const kindWas = kindOf(was.moment);
   const kind = kindOf(m);
-  const { fork } = settings;
   const flat = reduced.matches;
-  const shattering =
-    m === "denied" || m === "expired" || m === "nomatch" || m === "failed";
+  const dead = isDead(m);
   const keepPing = m === "lastminute" && was.moment === "waiting";
-  const delay240 = 4 * D.stagger;
-  const swallowCode =
-    !flat && kind === "device" && kindWas === "code" && fork === "scan";
-  const swallowDevice = !flat && m === "approved" && fork === "approve";
+  // Where each dot is drawn as the moment starts: its drift's place in the cloud, else its module.
+  const at = was.moment === "asking" ? driftAt(S) : null;
+  /** Where a dot is, in modules from its module, as the moment starts. */
+  const fromOf = (i) => at?.[i] ?? { x: 0, y: 0 };
+  // The card's foot, in the code's modules: what a falling dot passes to be out of the frame.
+  const floor = (was.height - S.well.offsetTop) / S.m + 1;
+  // A dead code's burst waits for the words under it to leave (--dur-exit), so no dot falls through them.
+  const burstAt = dead ? D.exit : 0;
+  // When the parts leaving have all left the frame: the card folds to the next words then.
+  const gone = burstAt + D.settle + D.ghost;
 
-  // Reads: every box the motion starts from.
-  let parts = [];
-  if (swallowCode) {
-    parts = [
-      ...S.clusters.map((el) => ({ el })),
-      { el: S.badge },
-      ...S.tiles.map((el) => ({ el })),
-    ];
+  // The card resizes when what it held has gone: at the swallow's end, once the burst is out of the frame;
+  // Remove device's card folds once what leaves it has gone.
+  let resizeAt = 0;
+  if (kindWas === "code" && kind === "device") {
+    resizeAt = D.panel + D.pop;
+  } else if (dead || m === "denied") {
+    resizeAt = gone;
+  } else if (m === "removed") {
+    resizeAt = D.exit;
   }
-  if (swallowDevice) {
-    parts = S.strokes.map((el) => ({ el }));
-  }
-  const boxes = parts.map((p) => boxIn(p.el, S.stage));
-  // Where the readout's foot stands in the card (its scene stands at the card's top, inside its 1px edge).
-  const readoutFoot = S.readout.offsetTop + S.readout.offsetHeight + 1;
-  const caw = parts.length ? boxIn(S.caw, S.stage) : null;
-  const title = parts.length ? boxIn(S.titleEl, S.stage) : null;
-  const cardAt = parts.length ? boxIn(S.card, S.stage) : null;
-  let shards = null;
-  if (shattering && !flat) {
-    const code = kindWas === "code";
-    const inner = (el) => {
-      const b = boxIn(el, S.card);
-      return { ...b, x: b.x - 1, y: b.y - 1 };
-    };
-    shards = {
-      box: inner(m === "denied" ? S.wire : S.recess),
-      badgeAt: code ? inner(S.badge) : null,
-      subject:
-        m === "denied"
-          ? {
-              ground: "transparent",
-              ink: "var(--ink-muted)",
-              mask: WIRE_MASK,
-              size: `${S.wire.offsetWidth}px ${S.wire.offsetWidth}px`,
-              at: [0, 0],
-            }
-          : {
-              ground: "var(--surface-recess)",
-              ink:
-                was.moment === "asking" ? "transparent" : "var(--ink-strong)",
-              mask: was.moment === "asking" ? "none" : 'url("./qr.svg")',
-              size: `${S.q}px ${S.q}px`,
-              at: [S.m, S.m],
-            },
-    };
-  }
-  const morph = { duration: D.morph, easing: E.out, fade: flat };
-  // The words change with the fold: at 240ms where the fold waits for the swallow or the crack, else at once.
-  const late =
-    (kind === "device" && fork === "scan") || swallowDevice || shattering;
-  const titleAt = !flat && late ? delay240 : 0;
+  const morph = { morph: D.morph, resize: D.pop, easing: E.out };
+  const swap = { duration: D.exit, easing: E.crossfade, lift: V.lift };
+  const titleAt = dead || m === "denied" ? 0 : kind === "device" ? D.panel + D.pop : 0;
   const jobs = [
-    S.title.prepare(TITLE[kind === "outcome" ? m : kind], {
-      ...morph,
-      delay: titleAt,
-    }),
+    S.title.prepare(TITLE[kind === "outcome" ? m : kind], { ...morph, delay: flat ? 0 : titleAt }),
   ];
-  if (!flat && m === "waiting") {
+  if (m === "waiting" || m === "lastminute") {
+    jobs.push(S.words.prepare(READOUT[m], { ...swap, delay: 0 }));
+  }
+  if (m === "removed" && was.moment === "approved") {
     jobs.push(
-      S.words.prepare(READOUT.waiting, { ...morph, delay: D.cascade - D.pop })
+      S.lead.prepare(verdictOf(OUTCOME.removed).lead, { ...swap, delay: 0 }),
+      S.primary.prepare(OUTCOME.removed.acts[0].label, { ...morph, delay: 0 })
     );
+    if (!flat) {
+      jobs.push(removeJob(S));
+    }
   }
-  if (!flat && m === "lastminute") {
-    jobs.push(S.words.prepare("This code ends in 0:42", morph));
+  if (m === "expired" && !flat) {
+    jobs.push(lettersJob(S, gone));
   }
 
-  let shatterRuns = null;
-  let flights = [];
-  let arrive = delay240;
-
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each moment's resting state, then what leaves by flight or shatter
   const write = () => {
     last = m;
     if (!keepPing) {
@@ -919,10 +1529,6 @@ function plan(S, m) {
     const { card } = S;
     if (m === "waiting") {
       card.style.setProperty("--band-dur", "var(--dur-exit)");
-      card.style.setProperty("--band-delay", `${D.cascade - D.pop}ms`);
-    }
-    if (swallowDevice) {
-      card.style.setProperty("--ring-delay", `${delay240}ms`);
     }
     if (kind === "device") {
       // The band runs while the hub's record is on its way.
@@ -937,384 +1543,218 @@ function plan(S, m) {
     if (flat) {
       return;
     }
-    // What leaves by flight or shatter is drawn as its copies now, its own drawing hidden.
-    if (swallowCode) {
-      S.recess.style.visibility = "visible";
-      for (const el of [...S.clusters, S.badge, ...S.tiles]) {
-        el.style.visibility = "hidden";
+    // What leaves by burst or swallow keeps its drawing while it goes.
+    if (kindWas === "code" && kind !== "code") {
+      const wasUp = was.moment !== "asking";
+      S.code.style.opacity = wasUp ? "1" : String(V["qr-dim-opacity"]);
+      for (const el of S.eyes) {
+        el.style.opacity = wasUp ? "1" : "0";
       }
-    }
-    if (kind === "device" && fork === "approve" && kindWas === "code") {
-      S.badge.style.visibility = "visible";
-      S.recess.style.visibility = "visible";
-      for (const el of S.clusters) {
-        el.style.opacity = "1";
+      // Expired's letters are drawn by the verdict's copies, standing in the tiles until they fly.
+      for (const el of S.glyphs) {
+        el.style.opacity = wasUp && m !== "expired" ? "1" : "0";
       }
       S.letters.style.opacity = "1";
     }
-    if (swallowDevice) {
-      S.wire.style.visibility = "hidden";
-    }
-    if (parts.length) {
-      S.caw.src = "./caw/swallowing.png";
-      flights = drawFlights(S, parts, boxes, { caw, title });
-      // The scene that arrives as the swallow ends shows its words once every part is past them.
-      const words = (
-        swallowCode ? S.texts.device[m.split("-")[1]] : S.texts.outcome[m]
-      ).map((w) => ({ ...w, x: w.x + cardAt.x, y: w.y + cardAt.y }));
-      arrive = Math.max(delay240, clearOf(flights, words));
-    }
-    if (shards) {
-      shatterRuns = shatter(S, shards.subject, shards.box, {
-        badgeAt: shards.badgeAt,
-        fromHeight: was.height,
-      });
-      if (kindWas === "code") {
-        S.letters.style.opacity = was.moment === "asking" ? "0" : "1";
-      } else {
-        S.wire.style.visibility = "hidden";
-      }
-    }
   };
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per moment's table (C1 to C5)
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per moment (the storyboard above)
   const animate = () => {
     for (const job of jobs) {
       if (job) {
         S.runs.push(...job.start());
       }
     }
+    resize(S, was.height, flat ? 0 : resizeAt);
     if (flat) {
       // Less motion: what leaves fades, the height lands, what arrives fades in.
       if (kindWas !== kind) {
-        part(S, S.scenes[kindWas], [{ opacity: 1 }, { opacity: 0 }], {
-          duration: D.fade,
-          easing: E.out,
-        });
-        part(S, S.scenes[kind], [{ opacity: 0 }, { opacity: 1 }], {
-          duration: D.fade,
-          easing: E.out,
-        });
+        part(S, S.scenes[kindWas], [{ opacity: 1 }, { opacity: 0 }], { duration: D.fade, easing: E.out });
+        part(S, S.scenes[kind], [{ opacity: 0 }, { opacity: 1 }], { duration: D.fade, easing: E.out });
       } else if (m === "waiting") {
-        for (const el of [...S.clusters, S.letters]) {
-          part(S, el, [{ opacity: 0 }, { opacity: 1 }], {
-            duration: D.fade,
-            easing: E.out,
-          });
-        }
+        part(S, S.code, [{ opacity: V["qr-dim-opacity"] }, { opacity: 1 }], { duration: D.fade, easing: E.out });
       }
       return;
     }
     if (m === "asking") {
-      // C5: New code → asking.
-      fold(S, was.height);
-      part(S, S.scenes[kindWas], [{ opacity: 1 }, { opacity: 0 }], {
-        duration: D.exit,
+      // The places open: the ending leaves, the card resizes, then the cloud and the head come in, the empty boxes with them.
+      part(S, S.scenes[kindWas], [{ opacity: 1 }, { opacity: 0 }], { duration: D.exit, easing: E.out });
+      part(S, S.code, [{ opacity: 0 }, { opacity: V["qr-dim-opacity"] }], {
+        duration: D.pop,
         easing: E.out,
+        delay: D.exit,
       });
-      fadeIn(S, S.recess);
-      fadeIn(S, S.badge);
-      // The readout's words show once the opening card has room for them whole.
-      part(S, S.readout, [{ opacity: 0 }, { opacity: 1 }], {
-        duration: D.morph,
-        easing: E.out,
-        delay: roomAt(was.height, S.heights.code, readoutFoot),
-      });
+      arrive(S, S.badge, D.exit);
+      arrive(S, S.letters, D.exit);
+      arrive(S, S.readout, D.exit + D.panel);
     } else if (m === "waiting") {
-      // C1: the code grows in, centre out, none crossing the badge.
-      const centre = (HOLE.from + (HOLE.to - HOLE.from) / 2) * S.m;
-      const ds = S.clusters.map((el) =>
-        Math.hypot(el.dataset.cx - centre, el.dataset.cy - centre)
+      // r4's arrive, one continuous settle: every dot from where the cloud has it straight onto its module.
+      playDots(
+        S,
+        DOTS.map((dot, i) => {
+          const from = fromOf(i);
+          return track(
+            { delay: dot.r * D.stagger * 2, duration: D.settle },
+            {
+              x: { ease: curveOf(E.out), frames: [kf(0, from.x), kf(1, 0)] },
+              y: { ease: curveOf(E.out), frames: [kf(0, from.y), kf(1, 0)] },
+            }
+          );
+        })
       );
-      const near = Math.min(...ds);
-      const far = Math.max(...ds);
-      S.clusters.forEach((el, i) => {
+      part(S, S.code, [{ opacity: V["qr-dim-opacity"] }, { opacity: 1 }], { duration: D.settle, easing: E.out });
+      for (const eye of S.eyes) {
         part(
           S,
-          el,
+          eye,
           [
-            { opacity: 0, transform: "scale(0.92)" },
+            { opacity: 0, transform: `scale(${V["pop-scale"]})` },
             { opacity: 1, transform: "none" },
           ],
-          {
-            duration: D.pop,
-            easing: E.out,
-            delay: ((ds[i] - near) / (far - near)) * (D.cascade - D.pop),
-          }
+          { duration: D.pop, easing: E.out, delay: D.settle - D.pop + D.stagger * 2 }
+        );
+      }
+      // The letters type in on the same beat.
+      const beat = (D.settle - D.pop) / (S.glyphs.length - 1);
+      S.glyphs.forEach((glyph, i) => {
+        part(
+          S,
+          glyph,
+          [
+            { opacity: 0, transform: `scale(${V["pop-scale"]})` },
+            { opacity: 1, transform: "none" },
+          ],
+          { duration: D.pop, easing: E.out, delay: i * beat }
         );
       });
-      fadeIn(S, S.letters, { delay: D.cascade - D.pop });
-      part(S, S.dot, [{ opacity: 1 }, { opacity: 0 }], {
-        duration: D.morph,
-        easing: E.out,
-        delay: D.cascade - D.pop,
+      leave(S, S.live);
+      startPing(S, D.settle + D.stagger * 2);
+    } else if (kind === "device") {
+      // The scan: the dots pour into the head, inner first (r4's swallow); the letters and the line leave;
+      // the head gulps; then the card becomes the device (Card resize, Panel reveal).
+      const swallow = curveOf(E["in-out"]);
+      playDots(
+        S,
+        DOTS.map((dot) =>
+          track(
+            { delay: dot.far * D.panel, duration: D.pop },
+            {
+              x: { ease: swallow, frames: [kf(0, 0), kf(1, MIDDLE - (dot.x + 0.5))] },
+              y: { ease: swallow, frames: [kf(0, 0), kf(1, MIDDLE - (dot.y + 0.5))] },
+              s: { ease: swallow, frames: [kf(0, 1), kf(1, V["pop-scale"])] },
+              o: { ease: swallow, frames: [kf(0, 1), kf(1, 0)] },
+            }
+          )
+        )
+      );
+      for (const eye of S.eyes) {
+        const into = { x: MIDDLE - Number(eye.dataset.cx), y: MIDDLE - Number(eye.dataset.cy) };
+        part(
+          S,
+          eye,
+          [
+            { transform: "none", opacity: 1 },
+            { transform: `${t(into)} scale(${V["pop-scale"]})`, opacity: 0 },
+          ],
+          { duration: D.pop, easing: E["in-out"], delay: D.panel }
+        );
+      }
+      leave(S, S.letters);
+      leave(S, S.readout);
+      part(
+        S,
+        S.badge,
+        [{ transform: "none" }, { transform: `scale(${V["qr-pulse-scale"]})`, offset: 0.5 }, { transform: "none" }],
+        { duration: D.pop, easing: E.out, delay: D.panel }
+      );
+      const swallowed = D.panel + D.pop;
+      part(S, S.scenes.code, [{ opacity: 1 }, { opacity: 0 }], { duration: D.exit, easing: E.out, delay: swallowed });
+      // Panel reveal: up from --space-8 below, a 2px cross-blur and a fade, over --dur-settle.
+      part(
+        S,
+        S.scenes.device,
+        [
+          { opacity: 0, transform: `translateY(${V.reveal})`, filter: "blur(2px)" },
+          { opacity: 1, transform: "none", filter: "blur(0px)" },
+        ],
+        { duration: D.settle, easing: E.out, delay: swallowed }
+      );
+    } else if (m === "approved") {
+      // The device leaves (Panel reveal's close, on the house's faster exit); the card resizes; the words come in.
+      part(
+        S,
+        S.scenes.device,
+        [
+          { opacity: 1, transform: "none", filter: "blur(0px)" },
+          { opacity: 0, transform: `translateY(${V.reveal})`, filter: "blur(2px)" },
+        ],
+        { duration: D.exit, easing: E.out }
+      );
+      arriveEnding(S, m, D.exit);
+    } else if (m === "removed") {
+      // Everything is in the jobs: removeJob, the verdict's swap, the coral's morph, the title's.
+    } else if (m === "denied") {
+      // The device's strokes burst out from its middle and fall out of the frame; its words leave.
+      const units = S.wire.offsetWidth / 96;
+      const wireTop = S.wire.offsetTop + S.scenes.device.offsetTop;
+      const strokeFloor = (was.height - wireTop) / units + 4;
+      const rs = seeded("denied");
+      S.strokes.forEach((svg) => {
+        const home = { x: Number(svg.dataset.cx), y: Number(svg.dataset.cy) };
+        burst(S, svg, {
+          home: { x: home.x * units, y: home.y * units },
+          from: { x: 0, y: 0 },
+          centre: { x: 48 * units, y: 48 * units },
+          floor: strokeFloor * units,
+          r: rs(),
+        });
       });
-      startPing(S, D.cascade);
-    } else if (kind === "device" && fork === "approve") {
-      // C2: the code leaves in place, the card folds, the device arrives.
-      part(S, S.scenes.code, [{ opacity: 1 }, { opacity: 0 }], {
-        duration: D.exit,
-        easing: E.out,
-      });
-      for (const el of [...S.clusters, S.badge, S.letters]) {
-        part(S, el, [{ transform: "none" }, { transform: "scale(0.95)" }], {
-          duration: D.exit,
-          easing: E.out,
+      leave(S, S.facts);
+      leave(S, S.actions);
+      part(S, S.scenes.device, [{ opacity: 1 }, { opacity: 0 }], { duration: D.control, easing: E.out, delay: gone });
+      arriveEnding(S, m, gone);
+    } else if (dead) {
+      // The words under the code leave; then r4's burst: every dot out from the head, then down out of the frame.
+      // The head squeezes and shakes, face shut, from the first frame.
+      playDots(
+        S,
+        DOTS.map((dot, i) =>
+          burstTrack(
+            burstPath({
+              home: { x: dot.x + 0.5, y: dot.y + 0.5 },
+              from: fromOf(i),
+              centre: { x: MIDDLE, y: MIDDLE },
+              floor,
+              r: dot.r,
+              px: S.m,
+              delay: burstAt,
+            })
+          )
+        )
+      );
+      for (const eye of S.eyes) {
+        burst(S, eye, {
+          home: { x: Number(eye.dataset.cx), y: Number(eye.dataset.cy) },
+          from: { x: 0, y: 0 },
+          centre: { x: MIDDLE, y: MIDDLE },
+          floor,
+          r: 0.5,
+          px: S.m,
+          delay: burstAt,
         });
       }
-      fold(S, was.height);
-      fadeIn(S, S.scenes.device);
-    } else if (kind === "device" && fork === "scan") {
-      // The fork: the code streams into Caw's beak at the scan; the device arrives as it lands.
-      part(S, S.scenes.code, [{ opacity: 1 }, { opacity: 0 }], {
-        duration: D.exit,
-        easing: E.out,
-      });
-      fly(S, flights, "checking");
-      fold(S, was.height, { delay: delay240 });
-      fadeIn(S, S.scenes.device, { delay: arrive });
-    } else if (m === "approved" && fork === "approve") {
-      // C3: the device streams into Caw's beak; the card folds behind it.
-      fly(S, flights, "approved");
-      fadeOut(S, S.scenes.device);
-      fold(S, was.height, { delay: delay240 });
-      fadeIn(S, S.scenes.outcome, { delay: arrive, from: 1 });
-    } else if (m === "approved") {
-      // The fork's Approve: a plain fold.
-      fadeOut(S, S.scenes.device);
-      fold(S, was.height);
-      fadeIn(S, S.scenes.outcome, { from: 1 });
-    } else if (shattering) {
-      // C4: any dead end shatters the drawing in the well.
-      shatterRuns();
-      part(S, S.scenes[kindWas], [{ opacity: 1 }, { opacity: 0 }], {
-        duration: D.exit,
-        easing: E.out,
-        delay: FALL.startAfterCrack,
-      });
-      fold(S, was.height, { delay: delay240 });
-      // The words arrive top down on the card's new face, and the glass is
-      // gone above its edge: what still falls never crosses them.
-      const face = S.heights.outcome[m] - 2;
-      const timing = { delay: delay240, duration: D.pop, easing: E.out };
-      part(
-        S,
-        S.scenes.outcome,
-        [
-          { opacity: 0, clipPath: `inset(0px 0px ${face}px 0px)` },
-          { opacity: 1, clipPath: "inset(0px 0px 0px 0px)" },
-        ],
-        timing
-      );
-      part(
-        S,
-        S.debris,
-        [
-          { clipPath: "inset(0px 0px 0px 0px)" },
-          { clipPath: `inset(${face}px 0px 0px 0px)` },
-        ],
-        timing
-      );
+      squeeze(S);
+      // Expired's tiles stay, their letters the verdict's copies; the other codes' letters leave with the line.
+      if (m !== "expired") {
+        leave(S, S.letters);
+      }
+      leave(S, S.readout);
+      part(S, S.scenes.code, [{ opacity: 1 }, { opacity: 0 }], { duration: D.control, easing: E.out, delay: gone });
+      arriveEnding(S, m, gone);
     }
   };
 
   return { jobs: jobs.filter(Boolean), write, animate };
-}
-
-/**
- * When a card folding open from `from` to `to` px on the house fold
- * (--dur-panel, --ease-drawer) first stands `needed` px tall: ms from its
- * start, read off the curve every 2ms.
- */
-function roomAt(from, to, needed) {
-  if (from >= needed) {
-    return 0;
-  }
-  const ease = curveOf(E.drawer);
-  for (let t = 0; t <= D.panel; t += 2) {
-    if (from + (to - from) * ease(t / D.panel) >= needed) {
-      return t;
-    }
-  }
-  return D.panel;
-}
-
-/** A CSS `cubic-bezier(…)` curve as a function of time's fraction. */
-function curveOf(css) {
-  const [x1, y1, x2, y2] = css.match(NUMBER).map(Number);
-  const at = (t, a, b) =>
-    3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
-  return (x) => {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 30; i += 1) {
-      const mid = (lo + hi) / 2;
-      if (at(mid, x1, x2) < x) {
-        lo = mid;
-      } else {
-        hi = mid;
-      }
-    }
-    return at((lo + hi) / 2, y1, y2);
-  };
-}
-
-/** How far a flight has shrunk at its path's fraction `f`: from 1 to 0.15. */
-const shrinkAt = (f) => 1 - 0.85 * f;
-
-/** Room a flying part keeps from the words it passes, px. Our call. */
-const CLEAR = 6;
-
-/**
- * The copies that fly, drawn where their parts stood, each on its path to
- * the beak. Nothing in flight crosses words: the path rises beside the
- * title, on the side its part starts nearer, and turns in to the beak above
- * it. Each path is a polyline in the stage's coordinates, with the part's
- * scale at each point.
- */
-function drawFlights(S, parts, boxes, { caw, title }) {
-  const beak = { x: caw.x + caw.w * BEAK[0], y: caw.y + caw.h * BEAK[1] };
-  const middle = title.x + title.w / 2;
-  return parts.map(({ el, centre }, i) => {
-    const at = boxes[i];
-    const copy = el.cloneNode(true);
-    copy.style.removeProperty("visibility");
-    copy.style.opacity = "0";
-    Object.assign(copy.style, {
-      insetInlineStart: `${at.x}px`,
-      insetBlockStart: `${at.y}px`,
-      inlineSize: `${at.w}px`,
-      blockSize: `${at.h}px`,
-      transform: "",
-    });
-    const c = centre ? centre(at) : { x: at.x + at.w / 2, y: at.y + at.h / 2 };
-    copy.style.transformOrigin = `${c.x - at.x}px ${c.y - at.y}px`;
-    S.flight.append(copy);
-    const half = Math.max(at.w, at.h) / 2;
-    const left = c.x < middle;
-    // Two passes: the waypoints' room depends on the part's size there, which depends on where on the path they fall.
-    let scales = [1, 1];
-    let path = [];
-    for (let pass = 0; pass < 2; pass += 1) {
-      const room = (s) => half * s + CLEAR;
-      const sideX = left
-        ? title.x - room(scales[0])
-        : title.x + title.w + room(scales[0]);
-      const below = { x: sideX, y: title.y + title.h + room(scales[0]) };
-      const above = {
-        x: sideX,
-        y: Math.max(beak.y, title.y - room(scales[1])),
-      };
-      const points = [c, below, above, beak];
-      const lengths = points
-        .slice(1)
-        .map((p, k) => Math.hypot(p.x - points[k].x, p.y - points[k].y));
-      const total = lengths.reduce((a, b) => a + b, 0) || 1;
-      let run = 0;
-      path = points.map((p, k) => {
-        run += k === 0 ? 0 : lengths[k - 1];
-        return { x: p.x, y: p.y, f: run / total };
-      });
-      // A margin on the estimate: the next pass's waypoints sit nearer, so the part is a little larger there.
-      scales = [
-        Math.min(1, shrinkAt(path[1].f) + 0.05),
-        Math.min(1, shrinkAt(path[2].f) + 0.05),
-      ];
-    }
-    return { copy, c, half, path, d: Math.hypot(beak.x - c.x, beak.y - c.y) };
-  });
-}
-
-/** Each flight's delay: nearest the beak first, over 0–4 staggers. */
-function delaysOf(flights) {
-  const near = Math.min(...flights.map((f) => f.d));
-  const far = Math.max(...flights.map((f) => f.d));
-  return flights.map(({ d }) =>
-    far > near ? ((d - near) / (far - near)) * 4 * D.stagger : 0
-  );
-}
-
-/** Where a flight stands at the path's fraction `f`: its centre and its scale. */
-function along(path, f) {
-  let k = 1;
-  while (k < path.length - 1 && path[k].f < f) {
-    k += 1;
-  }
-  const a = path[k - 1];
-  const b = path[k];
-  const t = b.f > a.f ? (f - a.f) / (b.f - a.f) : 1;
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, s: shrinkAt(f) };
-}
-
-/**
- * The first moment, ms from the play's start, after which no flight meets
- * any of `words` (boxes in the stage's coordinates): the words that arrive
- * as the swallow ends show only once the parts are past them.
- */
-function clearOf(flights, words) {
-  const ease = curveOf(E["in-out"]);
-  // The curve read once per 2ms step, for every flight.
-  const steps = [];
-  for (let t = 0; t <= D.panel; t += 2) {
-    steps.push([t, ease(t / D.panel)]);
-  }
-  const delays = delaysOf(flights);
-  let clear = 0;
-  flights.forEach(({ path, half }, i) => {
-    for (const [t, f] of steps) {
-      const at = along(path, f);
-      const r = half * at.s;
-      const meets = words.some(
-        (w) =>
-          at.x + r > w.x &&
-          at.x - r < w.x + w.w &&
-          at.y + r > w.y &&
-          at.y - r < w.y + w.h
-      );
-      if (meets) {
-        clear = Math.max(clear, delays[i] + t + 2);
-      }
-    }
-  });
-  return Math.ceil(clear);
-}
-
-/**
- * The swallow (C3's stroke motion, on the path round the words): each copy
- * flies into Caw's beak, nearest the beak first over 0–4 staggers,
- * shrinking to 0.15 and fading over its last 40%. Caw takes `after` once
- * the last lands.
- */
-function fly(S, flights, after) {
-  const delays = delaysOf(flights);
-  const runs = flights.map(({ copy, c, path }, i) => {
-    const frames = path.map((p) => ({
-      offset: p.f,
-      transform:
-        p.f === 0
-          ? "none"
-          : `translate(${(p.x - c.x).toFixed(1)}px, ${(p.y - c.y).toFixed(1)}px) scale(${shrinkAt(p.f).toFixed(3)})`,
-    }));
-    frames[0].opacity = 1;
-    frames.at(-1).opacity = 0;
-    // Opaque until 60% of the way, then fading into the beak.
-    const fadeFrom = { offset: 0.6, opacity: 1 };
-    const keyframes = [...frames, fadeFrom].sort((a, b) => a.offset - b.offset);
-    return part(S, copy, keyframes, {
-      duration: D.panel,
-      easing: E["in-out"],
-      delay: delays[i],
-    });
-  });
-  Promise.all(runs.map((r) => r.finished)).then(
-    () => {
-      if (S.runs.includes(runs[0])) {
-        S.caw.src = `./caw/${after}.png`;
-        S.flight.replaceChildren();
-      }
-    },
-    () => undefined
-  );
 }
 
 /** Plays `m` on `list`'s stages: their reads, then their writes, then their animations, in one frame. */
@@ -1326,12 +1766,6 @@ function playStages(list, m) {
   }
   for (const job of jobs) {
     job.lay();
-  }
-  for (const job of jobs) {
-    job.read();
-  }
-  for (const job of jobs) {
-    job.shift();
   }
   for (const job of jobs) {
     job.measure();
@@ -1359,8 +1793,7 @@ function goAll(m) {
   playStages(stages, m);
 }
 
-const nextFrame = () =>
-  new Promise((done) => requestAnimationFrame(() => done()));
+const nextFrame = () => new Promise((done) => requestAnimationFrame(() => done()));
 
 /** The from-state drawn on a frame of its own, then the moment played from it. */
 async function play(m) {
@@ -1370,22 +1803,32 @@ async function play(m) {
   goAll(m);
 }
 
-function setFork(fork) {
-  settings.fork = fork;
-  for (const b of document.querySelectorAll("[data-fork]")) {
-    b.setAttribute("aria-pressed", String(b.dataset.fork === fork));
+/**
+ * The frames stand at their real widths, side by side where they fit and
+ * one above the other where they don't; a frame wider than the window is
+ * drawn whole at the scale that fits it, never cut or scrolled.
+ */
+function fitFrames() {
+  const frames = document.querySelector(".frames");
+  const style = getComputedStyle(frames);
+  const room =
+    frames.clientWidth - Number.parseFloat(style.paddingInlineStart) - Number.parseFloat(style.paddingInlineEnd);
+  for (const fit of document.querySelectorAll(".fit")) {
+    const viewport = fit.querySelector(".viewport");
+    const width = viewport.offsetWidth;
+    const scale = Math.min(1, room / width);
+    fit.style.setProperty("--fit", String(scale));
+    fit.style.inlineSize = `${width * scale}px`;
+    fit.style.blockSize = `${viewport.offsetHeight * scale}px`;
   }
 }
 
 async function start() {
   readTokens();
-  root.style.setProperty(
-    "--breath-phase",
-    `${-((performance.timeOrigin + performance.now()) % (2 * D.breath))}ms`
-  );
+  root.style.setProperty("--breath-phase", `${-((performance.timeOrigin + performance.now()) % (2 * D.breath))}ms`);
   await document.fonts.ready;
   await Promise.all(
-    [...new Set(Object.values(POSE)), "badge", "badge-shut"].map((p) => {
+    [...DRAWINGS, "badge", "badge-shut"].map((p) => {
       const img = new Image();
       img.src = `./caw/${p}.png`;
       return img.decode().catch(() => undefined);
@@ -1398,9 +1841,27 @@ async function start() {
   for (const S of stages) {
     measureHeights(S);
     rest(S, "waiting", { still: true });
-    const tallest = S.stage.offsetHeight;
-    S.stage.style.setProperty("--stage-h", `${tallest + 12}px`);
+    placeDots(S, Math.max(S.heights.code, ...Object.values(S.heights.outcome), ...Object.values(S.heights.device).map((h) => h.in)));
+    S.stage.style.setProperty("--stage-h", `${S.stage.offsetHeight + 24}px`);
   }
+  fitFrames();
+  // The frames' room is the window's width: refit as it changes. (A ResizeObserver on the frames
+  // saw its own refit change their height, a loop WebKit reports as an error.)
+  addEventListener("resize", fitFrames);
+  // The dots' canvases follow the screen's pixel density (a zoom, another screen).
+  const watchDensity = () =>
+    matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener(
+      "change",
+      () => {
+        for (const S of stages) {
+          placeDots(S, S.dotsTall);
+        }
+        drawSoon();
+        watchDensity();
+      },
+      { once: true }
+    );
+  watchDensity();
 
   const list = document.querySelector('[data-slot="moments"]');
   for (const [m, label] of MOMENTS) {
@@ -1412,23 +1873,42 @@ async function start() {
     b.addEventListener("click", () => play(m));
     list.append(b);
   }
-  document
-    .querySelector('[data-slot="replay"]')
-    .addEventListener("click", () => play(last));
-  for (const b of document.querySelectorAll("[data-fork]")) {
-    b.addEventListener("click", () => setFork(b.dataset.fork));
-  }
+  document.querySelector('[data-slot="replay"]').addEventListener("click", () => play(last));
   play("waiting");
   document.documentElement.dataset.ready = "";
 }
 
-/** The proof's handle: play a moment, choose the fork, land the hub's data by hand. */
+/** The proof's handle: play a moment, land the hub's data by hand. */
 window.preview = {
   play,
   snap,
   go: goAll,
-  setFork,
   stages,
+  keepOut: KEEP_OUT,
+  /**
+   * A card's dots as the canvas draws them now (the proof reads them here:
+   * a canvas holds no element per dot): whether a play's clock moves them,
+   * the canvas's own px, and each dot's disc centre and radius in those px
+   * with its move (px), scale and opacity.
+   */
+  dotsOf(layout) {
+    const S = stages.find((s) => s.layout === layout);
+    const r = DOT_R * S.m;
+    return {
+      live: Boolean(S.dotRun && !S.dotRun.loop),
+      m: S.m,
+      r,
+      dots: dotsNow(S).map((p, i) => ({
+        cx: S.dotsAt.x + (DOTS[i].x + 0.5 + p.x) * S.m,
+        cy: S.dotsAt.y + (DOTS[i].y + 0.5 + p.y) * S.m,
+        r: r * p.s,
+        tx: p.x * S.m,
+        ty: p.y * S.m,
+        s: p.s,
+        o: p.o,
+      })),
+    };
+  },
   manualHub(on) {
     settings.hub = on ? "manual" : "auto";
   },

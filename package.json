@@ -84,7 +84,8 @@
     "vfile": "^6.0.3",
     "y-websocket": "3.1.0",
     "yjs": "13.6.33",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "zxing-wasm": "3.1.5"
   },
   "patchedDependencies": {
     "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",

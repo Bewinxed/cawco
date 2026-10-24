@@ -194,6 +194,24 @@
   }
 }
 
+
+/* The pairing QR's own tokens, from the design the owner pinned
+   (cawco/pairing-page-r4, ffea611a5, tokens.css): not on main yet. */
+@layer theme {
+  :root {
+    /* The QR's paper and ink, the same in both schemes, so it scans. */
+    --qr-paper: oklch(99.3% 0.004 85);
+    --qr-ink: oklch(29.5% 0.01 70);
+    --qr-dim-opacity: 0.3;
+    --qr-ping-scale: 1.1;
+    --qr-ping-opacity: 0.7;
+    --qr-squeeze: 0.84;
+    --qr-pulse-scale: 1.04;
+    --shake-distance: 6px;
+    --shake-overshoot: 4px;
+  }
+}
+
 @layer preview {
   /* ---- The page around the frames. ---- */
   .bar {
@@ -230,28 +248,32 @@
     }
   }
 
-  /* The frames stand at their real widths. Where the window is narrower
-     than a frame (the 544 Desk frame at 390), the row scrolls sideways in
-     itself and the page never does; `safe` keeps an overflowing frame's start
-     on screen instead of centring it off the left edge. */
+  /* The frames stand side by side where they fit and one above the other
+     where they don't (the row wraps). A frame wider than the window is drawn
+     whole at the scale that fits it (preview.js sets --fit on its .fit box),
+     never cut and never scrolled. */
   .frames {
     display: block flex;
     flex-wrap: wrap;
     align-items: start;
-    justify-content: safe center;
+    justify-content: center;
     gap: var(--space-8);
     padding: var(--space-8) var(--space-6);
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
   }
 
   .frame {
     display: block grid;
     gap: var(--space-3);
+    min-inline-size: 0;
     figcaption {
       color: var(--ink-muted);
       font: var(--type-label);
     }
+  }
+
+  .fit {
+    --fit: 1;
+    position: relative;
   }
 
   /* The window the card stands in: its real width, the page's recess. */
@@ -263,6 +285,8 @@
     border-radius: var(--radius-lg);
     background: var(--surface-page);
     overflow: clip;
+    transform: scale(var(--fit));
+    transform-origin: 0 0;
   }
 
   /* ---- The stage: Caw, the title, the card. ---- */
@@ -292,12 +316,27 @@
     user-select: none;
   }
 
+  /* One short heading, centred over the card. */
   .title {
     max-inline-size: var(--card-w);
     color: var(--ink-strong);
     font: var(--type-title);
     letter-spacing: var(--track-title);
     text-align: center;
+    white-space: nowrap;
+  }
+
+  /* transitions.dev "Text morph": the changing part's two versions share
+     one cell; preview.js eases its width and cross-blurs them. */
+  .t-morph-swap {
+    display: inline grid;
+    vertical-align: bottom;
+    justify-items: start;
+    overflow: clip;
+    > span {
+      grid-area: 1 / 1;
+      white-space: pre;
+    }
   }
 
   .card-wrap {
@@ -305,7 +344,12 @@
     inline-size: var(--card-w);
   }
 
-  /* The card and its band (DESIGN B, verbatim but for the delay hook). */
+  /* The card and its busy edge: cruip's animated gradient border
+     (cruip-tutorials.vercel.app/animated-gradient-border: a conic gradient
+     on the border box under the card's own fill on the padding box, 80% the
+     resting ring, a band over the last 20% from the brand's shoulders to its
+     lighter middle, turning once in 4s), in the house's coral. --band fades
+     it in and out; the outcomes turn the ring to a status ink. */
   .card {
     --ring: var(--border-hairline);
     --band-dur: var(--dur-pop);
@@ -313,6 +357,8 @@
     --ring-delay: 0ms;
     position: relative;
     z-index: 1;
+    /* The wrap holds the height (preview.js sets it and runs its "Card resize"). */
+    block-size: 100%;
     border: 1px solid transparent;
     border-radius: var(--radius-panel);
     background:
@@ -322,19 +368,19 @@
           var(--ring) 80%,
           color-mix(
               in oklab,
-              var(--ink-muted) calc(var(--band) * 100%),
+              var(--brand-solid) calc(var(--band) * 100%),
               var(--ring)
             )
             86%,
           color-mix(
               in oklab,
-              var(--ink-strong) calc(var(--band) * 100%),
+              var(--coral-5) calc(var(--band) * 100%),
               var(--ring)
             )
             90%,
           color-mix(
               in oklab,
-              var(--ink-muted) calc(var(--band) * 100%),
+              var(--brand-solid) calc(var(--band) * 100%),
               var(--ring)
             )
             94%,
@@ -343,6 +389,9 @@
         border-box;
     box-shadow: var(--shadow-tile);
     overflow: clip;
+    /* The height between moments is transitions.dev "Card resize" (a run
+       the script makes on --dur-panel and --ease-out, the recipe's 300ms
+       smooth-out), so it holds and seeks with every other part. */
     transition:
       --band var(--band-dur) var(--ease-out) var(--band-delay),
       --ring var(--dur-pop) var(--ease-out) var(--ring-delay);
@@ -355,9 +404,8 @@
     &[data-outcome="fail"] {
       --ring: var(--status-fail-ink);
     }
-    /* The lap runs while the band shows and pauses once --band has reached
-       0 (preview.js lifts .lap on that transition's end), so no
-       outcome stops it mid-frame. */
+    /* cruip's lap: 4s, linear, turning; it pauses once --band reaches 0
+       (preview.js lifts .lap then), so no outcome stops it mid-frame. */
     @media (prefers-reduced-motion: no-preference) {
       animation: border-lap calc(var(--breath) * 2) linear infinite paused;
       animation-delay: var(--breath-phase, 0ms);
@@ -366,6 +414,9 @@
       }
     }
     @media (prefers-reduced-motion: reduce) {
+      transition:
+        --band var(--band-dur) var(--ease-out) var(--band-delay),
+        --ring var(--dur-pop) var(--ease-out) var(--ring-delay);
       &[data-busy] {
         --band: 0;
         --ring: var(--border-control);
@@ -378,15 +429,18 @@
     }
   }
 
-  /* The owner's ping: a ring leaving the contour outward. */
+  /* r4's ping: one ring leaving the card's edge once a breath. */
   .ping {
     position: absolute;
     inset: 0;
     z-index: 0;
-    border: 1px solid var(--ink-muted);
+    border: 2px solid var(--brand-solid);
     border-radius: var(--radius-panel);
     opacity: 0;
     pointer-events: none;
+    [data-warm] > & {
+      border-color: var(--data-warn);
+    }
   }
 
   /* Every scene stands at the card's top; the card's height is its scene's. */
@@ -401,34 +455,56 @@
     }
   }
 
-  /* ---- The code: the well, the badge, the letters, the readout. ---- */
+  /* ---- The code: the QR, the head, the letters, the line. ---- */
   .scene-code {
     display: block grid;
     justify-items: center;
     gap: var(--space-4);
   }
 
+  /* The QR on its paper (r4: dark on qr-paper in both schemes), a module of
+     paper round it. */
   .well {
     position: relative;
     inline-size: var(--q);
     block-size: var(--q);
+    &::before {
+      content: "";
+      position: absolute;
+      inset: calc(var(--m) * -1);
+      border-radius: var(--radius-sm);
+      background: var(--qr-paper);
+      box-shadow: 0 0 0 1px var(--border-hairline);
+    }
   }
 
-  .recess {
+  /* r4's code: each dark module a dot, drawn on one canvas that covers the
+     card from the code's corner (placed by the script), the finder eyes
+     rounded rings round a dot (SVG). */
+  .code {
     position: absolute;
-    inset: calc(var(--m) * -1);
-    border: 1px dashed var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
+    inset: 0;
+    color: var(--qr-ink);
+    .dots {
+      position: absolute;
+      display: block;
+      pointer-events: none;
+    }
+    .eyes {
+      position: absolute;
+      inset: 0;
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      overflow: visible;
+    }
+    .eye {
+      transform-box: fill-box;
+      transform-origin: center;
+    }
   }
 
-  .cluster {
-    position: absolute;
-    background: var(--ink-strong);
-    mask: url("./qr.svg") no-repeat;
-    mask-size: var(--q) var(--q);
-  }
-
+  /* The head on the code's middle: Caw's app icon. */
   .badge {
     position: absolute;
     inset-block-start: var(--badge-at);
@@ -436,15 +512,18 @@
     z-index: 2;
     inline-size: var(--badge);
     block-size: var(--badge);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 0 0 1px var(--night-ring);
+    border-radius: 22%;
   }
 
   .letters {
     display: block flex;
     gap: var(--space-1);
   }
+  /* A tile stands in front of the code: a dot falling past it passes
+     behind its box. */
   .tile {
+    position: relative;
+    z-index: 1;
     display: block grid;
     place-items: center;
     inline-size: 40px;
@@ -455,20 +534,25 @@
     color: var(--ink-stat);
     font: 500 var(--text-kpi) / 1 var(--font-mono);
     font-variant-ligatures: none;
+    .glyph {
+      display: block;
+    }
   }
 
+  /* The line under the code: one short sentence, centred under it. */
   .readout {
-    position: relative;
-    display: block;
+    display: block flex;
+    justify-content: center;
+    align-items: start;
+    gap: var(--space-2);
     min-block-size: calc(2lh);
     max-inline-size: 100%;
     color: var(--ink-muted);
     font: var(--type-meta);
     text-align: center;
-    .dot {
-      position: absolute;
-      inset-block-start: calc(0.5lh - 3px);
-      inset-inline-end: calc(100% + var(--space-2));
+    .live {
+      flex: none;
+      margin-block-start: calc(0.5lh - 3px);
       inline-size: 6px;
       block-size: 6px;
       border-radius: var(--radius-pill);
@@ -477,9 +561,14 @@
         animation: breath var(--breath) var(--ease-in-out) infinite;
       }
     }
+    /* transitions.dev "Text states swap": the old and new words share one
+       cell while one leaves up and the other comes in from below. */
     .words {
-      position: relative;
-      display: inline;
+      display: inline grid;
+      min-inline-size: 0;
+      > span {
+        grid-area: 1 / 1;
+      }
     }
   }
   @keyframes breath {
@@ -488,29 +577,21 @@
     }
   }
 
-  /* ---- The device asking. ---- */
+  /* ---- The device asking: its drawing the hero, centred; the facts on
+     one leading edge under it; Deny and Approve at the foot. ---- */
   .scene-device {
     display: block grid;
-    grid-template-columns: var(--wire) minmax(0, 1fr);
-    align-items: start;
     gap: var(--space-4);
-    .stage[data-layout="phone"] & {
-      grid-template-columns: minmax(0, 1fr);
-      justify-items: center;
-      text-align: center;
-    }
   }
 
   .wire {
     position: relative;
+    justify-self: center;
     inline-size: var(--wire);
     block-size: var(--wire);
     color: var(--ink-muted);
     svg {
       position: absolute;
-      inset: 0;
-      inline-size: 100%;
-      block-size: 100%;
       overflow: visible;
     }
   }
@@ -519,6 +600,7 @@
     display: block grid;
     gap: var(--space-1);
     min-inline-size: 0;
+    text-align: start;
     overflow-wrap: anywhere;
     .name {
       color: var(--ink-strong);
@@ -557,7 +639,6 @@
   }
 
   .actions {
-    grid-column: 1 / -1;
     justify-self: end;
     display: block flex;
     gap: var(--space-2);
@@ -569,79 +650,189 @@
     }
   }
 
-  /* ---- An outcome: what happened, and the way on. ---- */
+  /* ---- An ending (report a8f73fdb §2): a ledger of what just happened. The
+     verdict (a 20px status glyph, then one sentence), the record of the
+     device as one meta line, what it means and the way out, the acts with
+     one coral. All text on the column's one start edge at both widths. ---- */
   .scene-outcome {
+    /* Above the code's tiles, so Expired's letters fly over them. */
+    z-index: 2;
+    display: block grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-content: start;
+    column-gap: var(--space-3);
+    row-gap: var(--space-3);
+    text-align: start;
+    > * {
+      grid-column: 2;
+      min-inline-size: 0;
+    }
+    > .mark {
+      grid-column: 1;
+      grid-row: 1;
+    }
+  }
+
+  /* The status glyph, Solar duotone, drawn bare: its three faces share one
+     cell (transitions.dev "Icon swap"), data-glyph shows one. */
+  .mark {
+    display: block grid;
+    inline-size: 20px;
+    block-size: 20px;
+    /* On the verdict's first line. */
+    margin-block-start: calc((1lh - 20px) / 2);
+    font: var(--type-body);
+    .g {
+      grid-area: 1 / 1;
+      inline-size: 20px;
+      block-size: 20px;
+      overflow: visible;
+      opacity: 0;
+    }
+    &[data-glyph="check"] .g-check,
+    &[data-glyph="close"] .g-close,
+    &[data-glyph="clock"] .g-clock {
+      opacity: 1;
+    }
+    .g-check {
+      color: var(--status-done-glyph);
+    }
+    .g-close {
+      color: var(--ink-muted);
+    }
+    &[data-tone="fail"] .g-close {
+      color: var(--status-fail-glyph);
+    }
+    .g-clock {
+      color: var(--ink-muted);
+    }
+    .tick {
+      stroke-dasharray: 1;
+      stroke-dashoffset: 0;
+    }
+  }
+
+  .said {
+    color: var(--ink-strong);
+    font: var(--type-body);
+    .lead {
+      /* transitions.dev "Text states swap": both sentences in one cell. */
+      display: inline grid;
+      > span {
+        grid-area: 1 / 1;
+      }
+    }
+    /* Expired's spent code: the six letters in mono, struck. */
+    .spent {
+      position: relative;
+      display: inline-block;
+      white-space: nowrap;
+      font: var(--type-code);
+      font-size: var(--text-body);
+      font-size-adjust: cap-height var(--mono-figure-cap);
+      font-variant-ligatures: none;
+      .l {
+        display: inline-block;
+        transform-origin: center;
+      }
+    }
+    .strike {
+      position: absolute;
+      inset-inline: 0;
+      inset-block-start: 50%;
+      block-size: 1px;
+      background: currentColor;
+      transform-origin: left center;
+    }
+  }
+
+  /* The device's record, one meta line: its parts never break inside, and
+     the " · " before a part that opens a line is cut off with the column's
+     edge (the row reaches a separator's width past it). */
+  .record {
+    --sep: var(--space-3);
     display: block flex;
     flex-wrap: wrap;
-    align-items: center;
+    margin-inline-start: calc(var(--sep) * -1);
+    clip-path: inset(0 0 0 var(--sep));
+    color: var(--ink-muted);
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
+    .part {
+      position: relative;
+      margin-inline-start: var(--sep);
+      white-space: nowrap;
+      &::before {
+        content: "·";
+        position: absolute;
+        inset-inline-end: 100%;
+        inline-size: var(--sep);
+        text-align: center;
+      }
+    }
+    .addr {
+      font: var(--type-code);
+      font-size: var(--text-meta);
+      font-size-adjust: cap-height var(--mono-figure-cap);
+      font-variant-ligatures: none;
+    }
+  }
+
+  .means {
+    color: var(--ink-muted);
+    font: var(--type-body);
+  }
+
+  /* The acts: one coral at the end, a ghost (text) at the start. On the
+     phone they stack, coral first, both full width, the ghost's text at the
+     start. */
+  .acts {
+    display: block flex;
     justify-content: space-between;
-    gap: var(--space-3) var(--space-4);
-    .said {
-      flex: 1 1 12rem;
-      min-inline-size: 0;
-      color: var(--ink-strong);
-      font: var(--type-body);
+    gap: var(--space-2);
+    margin-block-start: calc(var(--space-5) - var(--space-3));
+    [data-tone="primary"] {
+      margin-inline-start: auto;
     }
-    .stage[data-layout="phone"] &[data-has-button] {
+    .stage[data-layout="phone"] & {
+      grid-column: 1 / -1;
+      flex-direction: column;
       .btn {
-        flex: 1 1 100%;
+        inline-size: 100%;
+        margin-inline-start: 0;
+      }
+      [data-tone="primary"] {
+        order: -1;
       }
     }
   }
 
-  /* ---- Debris (shards, a falling badge) and flights (the swallow). ---- */
-  .debris {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-  }
-
-  .shard {
-    position: absolute;
-    background: var(--shard-ground, transparent);
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: var(--shard-ink, transparent);
-      mask: var(--shard-mask) no-repeat;
-      mask-size: var(--shard-size);
-      mask-position: var(--shard-at);
-    }
-  }
-
-  .flight {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-    > * {
-      position: absolute;
-      margin: 0;
-    }
-    svg {
-      color: var(--ink-muted);
-      overflow: visible;
-    }
-  }
-
-  .morph-letters {
-    position: relative;
-    display: inline flow-root;
-    white-space: nowrap;
-    overflow-x: clip;
-    vertical-align: top;
-    span {
-      display: inline flow-root;
-      white-space: pre;
-    }
-    [data-roll] {
-      overflow: clip;
-      vertical-align: top;
-      span {
-        display: block;
+  /* The ghost act: its words alone, muted, on the text's start edge. */
+  .btn[data-tone="ghost"] {
+    justify-content: start;
+    min-inline-size: 0;
+    padding-inline: 0;
+    border-color: transparent;
+    background: transparent;
+    color: var(--ink-muted);
+    text-align: start;
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        background: transparent;
+        color: var(--ink-strong);
       }
     }
+  }
+
+  /* What leaves the ending in place (Remove device): drawn where it stood
+     until it has faded. */
+  .leaving {
+    position: absolute;
+    /* Placed from the scene's padding box, not from a grid area (an
+       absolute grid child with a column is placed in that column). */
+    grid-column: auto;
+    grid-row: auto;
+    margin: 0;
+    pointer-events: none;
   }
 }

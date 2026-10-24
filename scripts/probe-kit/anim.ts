@@ -274,10 +274,21 @@ export class Clock {
       await this.release();
       throw error;
     }
-    await this.cdp.send("Animation.seekAnimations", {
-      animations: kept.map((one) => one.id),
-      currentTime: 0,
-    });
+    // A run the page cancelled after the protocol caught it (a loop it
+    // stopped as the action went on) is gone from the protocol's list too:
+    // seeking it fails, so it leaves the clock as one the page no longer draws.
+    const gone = await this.seekEach(kept, 0);
+    if (gone.length > 0) {
+      console.log(
+        `… clock: ${gone
+          .map((one) => `${one.type} ${one.name}`)
+          .slice(0, 6)
+          .join(
+            ", "
+          )}${gone.length > 6 ? ` and ${gone.length - 6} more` : ""} cancelled by the page after it started, left off the clock`
+      );
+      kept.splice(0, kept.length, ...kept.filter((one) => !gone.includes(one)));
+    }
     // What a spec reads on the page (`kitRuns`) must hold every run the
     // protocol caught: a read that sees fewer (a shadow tree's runs, left
     // out of `document.getAnimations()`) would pass on what it never saw.
@@ -343,6 +354,32 @@ export class Clock {
       returnByValue: true,
     })) as { result: { value: Place } };
     return result.value;
+  }
+
+  /**
+   * Seeks `runs` to `currentTime` in one call; where the protocol no longer
+   * knows one of them, each alone, returning those it does not know.
+   */
+  private async seekEach(runs: Run[], currentTime: number): Promise<Run[]> {
+    try {
+      await this.cdp.send("Animation.seekAnimations", {
+        animations: runs.map((one) => one.id),
+        currentTime,
+      });
+      return [];
+    } catch {
+      const missing: Run[] = [];
+      for (const run of runs) {
+        // biome-ignore lint/performance/noAwaitInLoops: one run at a time, to learn which the protocol lost
+        await this.cdp
+          .send("Animation.seekAnimations", {
+            animations: [run.id],
+            currentTime,
+          })
+          .catch(() => missing.push(run));
+      }
+      return missing;
+    }
   }
 
   /**

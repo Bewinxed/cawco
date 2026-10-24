@@ -1,46 +1,80 @@
 # Pairing: design preview
 
-The redrawn pairing flow (design spine + report 11d8e183), as one static page:
-the card and Caw above it at their real size, Desk (544) and Phone (390) side
-by side, one control per moment and Replay, and the open fork as a switch.
+The pairing flow as one static page: the card and Caw above it at their real
+size, Desk (544) and Phone (390), one control per moment and Replay. The code
+and its motion are r4's (`PairingQr.svelte`, `PairingPanel.svelte` on
+`cawco/pairing-page-r4`, ffea611a5) with only the changes the owner's pins
+asked; the endings are report a8f73fdb §3 and §4.
 
 ```sh
 python3 -m http.server -d design-previews/pairing 8080   # any static server on this folder
-bun scripts/probe-kit/run.ts pairing-preview   # the proof (Chromium + WebKit)
+bun scripts/probe-kit/run.ts pairing-preview               # the proof (Chromium + WebKit)
+PAIRING_ENGINES=chromium PAIRING_LEGS=end,motion PAIRING_MOMENTS=expired …   # a narrower run
 ```
 
 - `index.html`, `preview.css`, `preview.js`: the page. Tokens are the
-  dashboard's built `tokens.css`, copied in; type is the repository's own
-  Figtree and JetBrains Mono files (`fonts/`).
-- `qr.svg`: the real code, `cawco://pair/JWKHDQ@bewin-desk`, encoded by the
-  dashboard's `uqr` (version 4, 33 modules, ECC H) with the badge's square
-  (modules 11 to 21) cleared; it still decodes (jsQR). The 32 clusters are
-  slices of this one image (CSS mask), on a 6×6 grid whose edges fall on
-  whole modules (0, 6, 11, 16.5, 22, 27, 33).
-- `lib/shards.js`: the 16 shard constants as the report gives them.
-- `lib/morph.js`: the house MorphText renderer, split into read and write
-  phases so one frame lays the page out twice at most; `lib/torph.mjs` is
-  torph 0.1.3, vendored unchanged.
-- `caw/`: Caw's poses, one drawing per moment, each a Backlot edit of
-  `assets/mascot/stills/light-ready.png` (edited with `keepRest: "loose"` and
-  no `transparent`, then cut out by a second `transparent: true` call with no
-  instruction), and the `><` badge, an edit of the app icon.
-- Motion rule the probe holds: nothing in flight crosses shown words. The
-  swallow's parts rise beside the title and turn in to the beak above it,
-  and the words that arrive as it ends show once every part is past them;
-  in a dead end the outcome's words come in top down on the card's new face,
-  the falling glass gone above its edge.
+  dashboard's built `tokens.css`, copied in, plus r4's QR tokens (top of
+  `preview.css`); type is the repository's own Figtree and JetBrains Mono.
+- `lib/qr.js`: the code, `cawco://pair/JWKHDQ@bewin-desk`, encoded by the
+  dashboard's `uqr` (version 4, 33 modules, ECC H, r4's matrix): each dark
+  module a dot, the finder eyes rounded rings round a dot, the head's square
+  kept clear. It decodes (ZXing, in the spec).
+- `lib/swap.js`: transitions.dev "Text morph" and "Text states swap" on the
+  house's tokens, as Web Animations split into read and write phases.
+- `caw/`: Caw's drawings, one per moment.
 
-| Pose | Take |
+## Motion, recipe by recipe
+
+| Transition | Recipe |
 | --- | --- |
-| asking | `tk_DCuI45fQT-H3swN0H-YsG` |
-| waiting | `tk_9wTsTdSZMvSSXkLkXe-OQ` (cut out of `tk_O2bL7V9qKiiEzqbNf-_U5`, the left wing folded on `tk_2sAbMB1gfCuvYmiq6lWpM`) |
-| last minute (urgency) | `tk_GcyM9KYfH-IczdUyLaKjy` (cut out of `tk_FpTXWFymEJwb6TbkbIFr-`) |
-| checking | `tk_MvMFxRvLeWpyBtmVtZBpT` |
-| swallowing | `tk_H9hHoUZygKjL5CQPYzv7I` (beak at 0.58, 0.72 of the box) |
-| approved | `tk_VQzzHUm5cDaGqQ2ZelLW7` |
-| denied (the phone turned away) | `tk_rH4Ijc-xtE4KTVGn-wZSH` (cut out of `tk_wnWVyznBL8_jFEvE6ndU2`) |
-| scan matches nothing (a wrong code) | `tk_N3TtX6BSC-j8HDOuhbcGZ` (cut out of `tk_dwJtW4_hTYTdCLuLjfie4`) |
-| failed before a code (nothing offered yet) | `tk_cadPnrsv591ccq5ItIIb3` (cut out of `tk_nD2oKSeKItattAnRZ0KrV`) |
-| expired | `tk_xT-_1mn1lK0CJfm2RGx3F` |
-| badge `><` | `tk_yHUMib6tFcuJXcOasbqIn` |
+| The card's height between moments | transitions.dev Card resize (`--dur-panel`, `--ease-out`), run on the card's wrap |
+| The title | transitions.dev Text morph |
+| The line under the code; an ending's verdict on Remove device | transitions.dev Text states swap |
+| The device card arriving | transitions.dev Panel reveal |
+| The busy edge | cruip's animated gradient border, in coral |
+| The done check | transitions.dev Success check (fade, 2px blur, from 0.6, the tick drawn from `--dur-ghost` in; no turn, no bob) |
+| The fail and clock glyphs, and Remove device's check giving way | transitions.dev Icon swap on DESIGN's status glyph (from 0.92, `--dur-control`) |
+| Expired's letters into the verdict | a FLIP (`--dur-panel`, drawer), then the strike (`--dur-morph`) |
+| Remove device's rows | a FLIP over `--dur-panel` on ease-out |
+| The dots (cloud, arrival, swallow, burst), the head's squeeze and shake, the ping | r4's |
+
+The dots are drawn on one canvas per card. Each moment's dot motion is r4's
+paths, delays and curves, written as one track per dot and read from one Web
+Animation on the canvas (it changes nothing drawn), so the page's clock, and
+the spec's through the DevTools Animation domain, holds and seeks the dots
+like any other part. An element per dot made every play restyle and
+composite about 840 animated elements in its first frame: 48–89ms of the main
+thread on the proof's host, against 16.7ms. The spec reads each dot from the
+page's own drawing (`preview.dotsOf`) and decodes the canvas's pixels.
+
+## Caw's stills
+
+Each is a Backlot edit of `assets/mascot/stills/light-ready.png` written to
+the Qwen-Image edit recipe (the operation first, naming what moves from
+where to where, then the blanket clause: "Everything else stays exactly as
+in the input image: the same character drawn the same way, his
+proportions, colours and line, two wings and two feet, and the transparent
+background."), edited with `keepRest: "loose"` and no `transparent`, then
+cut out by a second `transparent: true` call with no instruction. The take
+below is the cut-out the page shows. The leaf that made them does not judge
+them: a separate reviewer reads anatomy, proportion and character.
+
+| Moment | File | Take (cut-out) |
+| --- | --- | --- |
+| Asking | `caw/asking.png` | `tk_RrfGx98giYIh8XvoauJbH` |
+| Waiting | `caw/waiting.png` | `tk_4MBgKsoG-k9zny9qtFP4z` |
+| Last minute | `caw/lastminute.png` | `tk_qpzFqEOgLm30y5iH5l7XU` |
+| Checking | `caw/checking.png` | `tk_Pg4KWYmyJkbZ-ydttEIdx` |
+| Paired (and Removed, the same card changed in place) | `caw/approved.png` | `tk_XLMcDjIlz0Y9f1uODbtfL` |
+| Not let in | `caw/denied.png` | `tk_Q-q2L8tsk-HsTV2vS97oa` |
+| That code expired | `caw/expired.png` | `tk_UUycqx4EcxvnLivv9rBYf` |
+| That scan didn't match | `caw/nomatch.png` | `tk_cB9JiRetv7txeth1YRB2D` |
+| Pairing didn't start (both causes) | `caw/failed.png` | `tk_gMv0Ked3Nln-dsB9KL8VS` |
+| The head (r4's app icon) | `caw/badge.png` | r4's |
+| The head, face shut | `caw/badge-shut.png` | `tk_yHUMib6tFcuJXcOasbqIn` |
+
+The card's height runs on its wrap, the card filling it: on the spec's
+WebKit, a card running its lap (the band's CSS animation of
+`--border-angle`) drew no other run's height or transition, so the card
+jumped to its new height on the first frame and the words arriving below
+were cut by its edge.
