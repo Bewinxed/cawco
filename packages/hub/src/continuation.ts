@@ -29,8 +29,9 @@ export interface ContinuationSource {
 /** What "continue in new session" is asked: who summarises, what starts. */
 export interface ContinueRequest {
   /**
-   * The new session opens on the person's own messages alone
-   * ({@link Extracted.asks}), verbatim and in order ({@link asksOpening}):
+   * The new session opens on the messages it was asked alone (the
+   * person's, and a delegate's parent's brief and hand-offs:
+   * {@link Extracted.asks}), verbatim and in order ({@link asksOpening}):
    * nothing is summarised, and nothing the agent said or did is carried.
    */
   asksOnly?: true;
@@ -223,12 +224,13 @@ export function openingMessage(
   ].join("\n");
 }
 
-/** The heading each of the person's messages goes under in {@link asksOpening}. */
+/** The heading each message it was asked goes under in {@link asksOpening}. */
 export const askHeading = (at: number): string => `## Message ${at + 1}`;
 
 /**
- * The new session's first message when it restarts from the person's asks:
- * every message they sent the source, verbatim and in order, then the
+ * The new session's first message when it restarts from its asks: every
+ * message the source was asked (the person's, and a delegate's parent's
+ * brief and hand-offs), verbatim and in order, then the
  * source's Open items section (`open`, from its records), and none of what
  * its agent said or did.
  */
@@ -239,7 +241,7 @@ export function asksOpening(
   open?: string
 ): string {
   return [
-    `Restarting session "${source.title}" (instance ${source.instanceId}, ${source.harness}, ${source.model}, in ${source.cwd}) from the person's own messages: every one they sent it, verbatim and in order, then the open items it filed in its records. Nothing else its agent said or did is carried. Some of that work may already be on disk: run \`git status\` and \`git log\` before acting.`,
+    `Restarting session "${source.title}" (instance ${source.instanceId}, ${source.harness}, ${source.model}, in ${source.cwd}) from the messages it was asked: every one the person sent it, and a delegate's every brief and hand-off from its parent, verbatim and in order, then the open items it filed in its records. Nothing else its agent said or did is carried. Some of that work may already be on disk: run \`git status\` and \`git log\` before acting.`,
     ...asks.flatMap((ask, at) => ["", askHeading(at), ask]),
     ...(open ? ["", open] : []),
     ...(note ? ["", `Next: ${note}`] : []),

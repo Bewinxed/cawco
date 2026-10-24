@@ -663,7 +663,7 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(["summary", "asks"])
           .optional()
           .describe(
-            '"asks": the person\'s own messages alone, nothing summarised.'
+            '"asks": the messages it was asked alone (a delegate\'s brief and hand-offs), nothing summarised.'
           ),
         summarizer_harness: z
           .enum(["claude", "opencode", "pi"])

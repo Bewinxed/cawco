@@ -225,6 +225,7 @@ import {
   type CommandQueueFrame,
   type CommandRun,
   type ContinuationRead,
+  type ContinuationReadOptions,
   CUSTODY_HELD,
   clockWords,
   configurePage,
@@ -1584,8 +1585,9 @@ const continueBody = t.Object({
       model: t.Optional(t.String({ minLength: 1 })),
     })
   ),
-  // The new session opens on the person's own messages alone, verbatim and
-  // in order: nothing is summarised and nothing the agent did is carried.
+  // The new session opens on the messages it was asked alone (the person's,
+  // a delegate's parent's brief and hand-offs), verbatim and in order:
+  // nothing is summarised and nothing the agent did is carried.
   asksOnly: t.Optional(t.Literal(true)),
   target: t.Object({
     harness: harnessSchema,
@@ -16135,13 +16137,34 @@ export const createServer = (
    * with them alone, never the transcript, which runs to hundreds of
    * megabytes and could not cross the socket within the bound.
    */
+  /**
+   * The short ids whose hand-offs a session was asked (core
+   * `ContinuationReadOptions.askers`): its parent's, under its id now and
+   * every former one; none for a session no other started.
+   */
+  const askersOf = (row: InstanceRow | undefined): string[] => {
+    const parent = row?.parentInstanceId;
+    if (!parent) {
+      return [];
+    }
+    const formers = Object.entries(db.formerIds()).flatMap(([former, now]) =>
+      now === parent ? [former] : []
+    );
+    return [parent, ...formers].map((id) => id.slice(0, 8));
+  };
+
   const readContinuationOf = async (
-    where: SessionLocation
+    where: SessionLocation,
+    askers: string[]
   ): Promise<ContinuationRead> => {
+    const options: ContinuationReadOptions = {
+      dir: where.cwd || undefined,
+      askers,
+    };
     const answer = await readAgent(
       where.machineId,
       CONTROL_READ_CONTINUATION,
-      [where.sessionId, { dir: where.cwd || undefined }],
+      [where.sessionId, options],
       READ_TIMEOUT_MS,
       where.harness
     );
@@ -16173,7 +16196,7 @@ export const createServer = (
   const prepareContinuation = async (
     sourceId: string,
     note?: string,
-    /** From the person's asks alone: nothing to summarise, and the opening is {@link asksOpening}. */
+    /** From its asks alone: nothing to summarise, and the opening is {@link asksOpening}. */
     asksOnly = false
   ): Promise<PreparedContinuation> => {
     const [row] = db.getInstancesByIds([sourceId]);
@@ -16195,7 +16218,10 @@ export const createServer = (
     const where = located.at;
     const since = await sessionStartOf(where);
     const [read, git] = await Promise.all([
-      readContinuationOf(where),
+      // What it was asked: the person's words, and a delegate's parent's
+      // brief and hand-offs, so a delegate's continuation knows its work.
+      // A parent that was itself continued wrote some under a former id.
+      readContinuationOf(where, askersOf(row)),
       gitChangesOf(where, since),
     ]);
     const { extracted } = read;
@@ -16596,7 +16622,7 @@ export const createServer = (
       ? " It files its open items in its records first, in a turn of its own."
       : "";
     if (request.asksOnly) {
-      return `[continuation] ${prepared.source.title} restarts from the person's ${prepared.extracted.asks.length} message(s) ${where}.${files} Nothing is summarised; the new session opens on those messages and its open items.`;
+      return `[continuation] ${prepared.source.title} restarts from the ${prepared.extracted.asks.length} message(s) it was asked ${where}.${files} Nothing is summarised; the new session opens on those messages and its open items.`;
     }
     return `[continuation] ${prepared.source.title} goes on from a summary ${where}.${files} ${steps.summarise ? "Its summary is written; the" : "The"} new session opens on it and its open items.`;
   };

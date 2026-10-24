@@ -56,9 +56,9 @@
  *    names it and the leaf reads the label picked), and `find`'s `around`
  *    reads that session once its words are indexed.
  *    Two leaves, each continued by the parent's `continue_session` (one
- *    session from then, its old id a former id of the new; the note carries
- *    the leaf's tag, since a delegate's brief is no person's message and the
- *    continuation opens on none of it): handed off by
+ *    session from then, its old id a former id of the new; from its asks
+ *    alone, which for a delegate are its parent's brief and hand-offs, so
+ *    the continuation opens knowing its work and keeps working): handed off by
  *    the old id and by the new, each reaches the continuation (the answer
  *    names it, the words reach it); one is stopped by its old id, the other
  *    by its new, and each time the continuation's item is cancelled. Two
@@ -1266,15 +1266,13 @@ const continuedAs = async (
   ).catch(() => undefined);
   // Idle first: a turn in flight would hold its continuation back.
   await toolWords(session, "interrupt_delegate", { target: old });
-  // A delegate's brief is its parent's words, not the person's: the
-  // continuation opens on none of them, so its next step carries the tag
-  // its turns are answered by.
+  // A plain continuation from its asks: a delegate's are its parent's
+  // brief and hand-offs, which carry the tag its turns are answered by.
   const continued = await toolWords(session, "continue_session", {
     session: old,
     from: "asks",
     target_harness: "claude",
     target_model: MODEL.claude,
-    note: `${tag}: keep working.`,
   });
   const now = (continued.text.match(UUIDS) ?? []).find((id) => id !== old);
   check(

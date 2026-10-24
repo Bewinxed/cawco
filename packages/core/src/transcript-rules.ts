@@ -1804,6 +1804,33 @@ export function personWords(entry: SessionMessage): string | null {
   return said.length ? said.join("\n") : null;
 }
 
+/**
+ * What a session was asked in a stored entry: the person's words
+ * ({@link personWords}), or, for a session another one asks (a delegate,
+ * whose brief and every hand-off are its parent's), a hand-off from one of
+ * `askers` (sessions' short ids, as a hand-off's marker carries them), its
+ * body verbatim with an `[image]` line per image. Null for everything else.
+ */
+export function askedWords(
+  entry: SessionMessage,
+  askers: readonly string[]
+): string | null {
+  const person = personWords(entry);
+  if (person !== null || askers.length === 0 || entry.compactSummary) {
+    return person;
+  }
+  const start = turnStart(entry);
+  const handoff = start ? parseHandoffMarker(start.text) : null;
+  if (!(start && handoff?.short && askers.includes(handoff.short))) {
+    return null;
+  }
+  const said = [
+    handoff.body.trim(),
+    ...(start.images ?? []).map(() => "[image]"),
+  ].filter(Boolean);
+  return said.length ? said.join("\n") : null;
+}
+
 /** A session's link in a spawn's words, `[title](cawco:session/<id>)`, its label's escapes kept. */
 const SESSION_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:session\/[^)\s]+)\)/;
 const ESCAPED = /\\(.)/g;

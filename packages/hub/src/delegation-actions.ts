@@ -984,8 +984,9 @@ export interface HandoffActions {
    * own continuation: a new session starts seeded with the summary and that
    * session's open items, and takes over its delegates; that one is only
    * read. Never the calling session itself. `from: "asks"`: nothing is
-   * summarised, and the new session opens on the person's own messages
-   * alone, verbatim and in order, and the open items.
+   * summarised, and the new session opens on the messages it was asked
+   * alone (the person's; a delegate's brief and hand-offs from its parent),
+   * verbatim and in order, and the open items.
    */
   /** This session's Open items section, built by the hub from its records (open-items.ts). */
   readonly openItems: () => Promise<string>;
@@ -1471,7 +1472,7 @@ const summariserOf = (input: ContinueSessionInput): string =>
 
 /**
  * What a continuation goes on from, as the hub's continue route takes it:
- * the person's asks alone, or a summary by the summariser named. Refused
+ * its asks alone, or a summary by the summariser named. Refused
  * when neither is asked.
  */
 const continuedFrom = (
@@ -1499,7 +1500,7 @@ const openedOnWords = (
   summariserInstanceId: string | null
 ): string => {
   if (input.from === "asks") {
-    return "It opened on the person's own messages alone; nothing was summarised. ";
+    return "It opened on the messages it was asked alone (a delegate's: its brief and its parent's hand-offs); nothing was summarised. ";
   }
   return summariserInstanceId
     ? `${summariserOf(input)} summarised it. `

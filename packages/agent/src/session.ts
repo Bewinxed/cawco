@@ -82,6 +82,7 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
+  type ContinuationReadOptions,
   cacheHit,
   type DeliveryMark,
   deriveTitleFromFirstMessage,
@@ -721,6 +722,21 @@ const catalogRead = (at: number, what: string): void => {
   if (took >= CATALOG_SLOW_MS) {
     console.info(`[catalog] ${what}, read in ${took} ms`);
   }
+};
+
+/**
+ * The short ids a continuation read counts the hand-offs of as the
+ * session's asks (core `ContinuationReadOptions.askers`): a delegate's
+ * parent; none when its options name none.
+ */
+const askersOf = (arg: unknown): string[] => {
+  const askers =
+    typeof arg === "object" && arg !== null
+      ? (arg as ContinuationReadOptions).askers
+      : undefined;
+  return Array.isArray(askers)
+    ? askers.filter((one): one is string => typeof one === "string")
+    : [];
 };
 
 /** The lane a catalog control takes: its conversation's, by its session key; the whole catalog's for a listing. */
@@ -6262,7 +6278,7 @@ export class SessionSupervisor {
               adapter.getSessionMessages(key, dirOf(args[1])),
               adapter.getSessionMessages(key, dirOf(args[1]), undefined, true),
             ]);
-            const read = readContinuation(live, whole);
+            const read = readContinuation(live, whole, askersOf(args[1]));
             console.info(
               `[catalog] readContinuation ${adapter.kind} ${key.slice(0, 8)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
             );

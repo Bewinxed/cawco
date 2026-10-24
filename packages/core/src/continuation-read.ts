@@ -21,14 +21,23 @@
  * what a compaction forgot about files is still there.
  */
 import type { NeutralContentBlock, SessionMessage } from "./harness";
-import { personWords } from "./transcript-rules";
+import { askedWords } from "./transcript-rules";
 
 /**
  * Machine-scoped catalog control: a session's continuation inputs
  * ({@link ContinuationRead}), read on the machine that stores its
- * transcript. Args: the session key, then `{ dir }`.
+ * transcript. Args: the session key, then `{ dir, askers }`: `askers`, the
+ * short ids of the sessions whose hand-offs it was asked (a delegate's
+ * parent), {@link ContinuationReadOptions}.
  */
 export const CONTROL_READ_CONTINUATION = "readContinuation";
+
+/** {@link CONTROL_READ_CONTINUATION}'s second argument. */
+export interface ContinuationReadOptions {
+  /** The short ids (eight characters) of the sessions whose hand-offs count as its asks: a delegate's parent. */
+  askers?: string[];
+  dir?: string;
+}
 
 /** What {@link CONTROL_READ_CONTINUATION} answers: a continuation's inputs, small whatever the transcript's size. */
 export interface ContinuationRead {
@@ -49,13 +58,14 @@ export interface ContinuationRead {
  */
 export function readContinuation(
   live: SessionMessage[],
-  whole: SessionMessage[]
+  whole: SessionMessage[],
+  askers: readonly string[]
 ): ContinuationRead {
   const scope = liveScope(live);
   return {
     compacted: scope[0]?.compactSummary === true,
     entries: { live: live.length, whole: whole.length, scope: scope.length },
-    extracted: extractTranscript(scope, whole),
+    extracted: extractTranscript(scope, whole, askers),
     model: transcriptModel(live) ?? null,
     scopeChars: scopeChars(scope),
   };
@@ -66,9 +76,10 @@ export interface Extracted {
   /** Files changed, files read, commands run — as plain text. */
   artifacts: string;
   /**
-   * Every message the person sent the session, over its whole transcript,
-   * verbatim and oldest first ({@link personWords}): what a continuation
-   * from the person's asks opens with, and all it carries.
+   * Every message the session was asked, over its whole transcript,
+   * verbatim and oldest first ({@link askedWords}): the person's, and a
+   * delegate's parent's brief and hand-offs. What a continuation from its
+   * asks opens with, and all it carries.
    */
   asks: string[];
   /**
@@ -461,7 +472,8 @@ export function liveScope(entries: SessionMessage[]): SessionMessage[] {
  */
 export function extractTranscript(
   scope: SessionMessage[],
-  whole: SessionMessage[]
+  whole: SessionMessage[],
+  askers: readonly string[]
 ): Extracted {
   const results = resultsOf(scope);
   const turns: SessionMessage[][] = [];
@@ -493,7 +505,9 @@ export function extractTranscript(
   }
   return {
     artifacts: artifactIndex(ownMessages(whole)),
-    asks: ownMessages(whole).flatMap((entry) => personWords(entry) ?? []),
+    asks: ownMessages(whole).flatMap(
+      (entry) => askedWords(entry, askers) ?? []
+    ),
     covers: turns[split - 1]?.at(-1)?.uuid ?? null,
     middle: turns
       .slice(0, split)
