@@ -97,6 +97,18 @@ export const LONGER_PIN: Pin = {
   ],
 };
 
+/**
+ * Each comment's element's nearest parent, in words, as the page names its
+ * chain (the section heading it stands under); none for the page's title,
+ * which stands on the whole page.
+ */
+export const PARENTS: Record<string, string | null> = {
+  "pin-title": null,
+  "pin-ports": "Where it connects",
+  "pin-backoff": "Retry policy",
+  "pin-log": "Retry policy",
+};
+
 /** The page's other comments, as the list draws them. */
 export const OTHER_PINS: Pin[] = [
   {

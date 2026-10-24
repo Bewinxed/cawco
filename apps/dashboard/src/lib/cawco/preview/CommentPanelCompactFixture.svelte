@@ -20,6 +20,7 @@
     OPEN_PIN,
     OPEN_TEXT,
     OTHER_PINS,
+    PARENTS,
   } from "./comment-panel-fixture";
   import PinCardFace from "./PinCardFace.svelte";
 
@@ -105,7 +106,7 @@
             onplace={none}
             onresolve={none}
             onretry={none}
-            parent="Retry policy"
+            parent={PARENTS[pin.id] ?? null}
             {pin}
           >
             {#snippet reply()}
