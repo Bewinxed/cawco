@@ -12,15 +12,17 @@
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
   `sayShape`), so its frame is that wide and that tall; a page's canvases
-  load one at a time, each once the one before it has said its shape
-  (embed-turns.ts: together they ask more than the browser takes in
-  flight). Each stands in its
-  well, which hugs it and scrolls it sideways where it is wider
-  (Well.svelte). While the origin is asked, the well holds the frame's own
-  height where it is known (a screen's), else one status row, a skeleton
-  until the wait outlasts its grace and Caw and the line then (DESIGN.md,
-  The Claim Of Nothing Rule, The Real Wait Rule). One the hub no longer
-  holds says so in words where it would stand.
+  load one at a time, the one in view or nearest it first, each once the
+  one before it has said its shape (embed-turns.ts: together they ask more
+  than the browser takes in flight). Each stands in its well, which hugs it
+  and scrolls it sideways where it is wider (Well.svelte). While a screen's
+  origin is asked, the well holds its 16:10, a skeleton until the wait
+  outlasts its grace; a canvas waiting its turn or loading holds its
+  skeleton at the shape it last said in this browser (the kit's picture
+  where it never has) until it stands drawn, never an empty box; past the
+  grace Caw and the line stand over either (DESIGN.md, Skeleton, The Claim
+  Of Nothing Rule, The Real Wait Rule). One the hub no longer holds says so
+  in words where it would stand.
 -->
 <script lang="ts">
   import { commonWords } from "@cawco/core";
@@ -37,6 +39,7 @@
     type FrameObserver,
     frameObserver,
   } from "#lib/cawco/frame-observer.js";
+  import { readJson, writeJson } from "#lib/cawco/storage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconRefresh } from "#lib/icons.js";
@@ -63,18 +66,34 @@
     Array.isArray(props.stories) ? props.stories.map(String) : []
   );
   let frame = $state<HTMLIFrameElement>();
+  /** The box the frame and its wait stand in: where the picture is on the page, for its turn (embed-turns.ts). */
+  let box = $state<HTMLDivElement>();
   let tall = $state<number | null>(null);
   /** A component canvas's widest story, as it says it: its frame is that wide. */
   let saidWidth = $state<number | null>(null);
+  /** Where this browser keeps the shape this Preview's canvas last said, by the artifact and the stories it names. */
+  const shapeKey = $derived(`cawco-preview-shape:${id}:${stories.join("|")}`);
+  /**
+   * The shape the canvas said when this browser last drew it, if it did: its
+   * skeleton stands at it until it draws again (Skeleton, at exactly the size
+   * of what it stands for).
+   */
+  const known = $derived.by((): { h: number; w: number | null } | null => {
+    const kept = readJson<{ h?: unknown; w?: unknown } | null>(shapeKey, null);
+    return typeof kept?.h === "number" && kept.h > 0
+      ? { h: kept.h, w: typeof kept.w === "number" ? kept.w : null }
+      : null;
+  });
   /**
    * The design's own width, px: the program's `width`, or the canvas's
-   * widest story where that is wider. Its frame stands at it, 1 CSS px per
-   * px; none, it takes the well's width.
+   * widest story (as it says it, else as it last said it) where that is
+   * wider. Its frame stands at it, 1 CSS px per px; none, it takes the
+   * well's width.
    */
   const picture = $derived.by(() => {
     const widths = [
       typeof props.width === "number" ? props.width : 0,
-      saidWidth ?? 0,
+      saidWidth ?? known?.w ?? 0,
     ];
     const widest = Math.max(...widths);
     return widest > 0 ? widest : undefined;
@@ -103,6 +122,7 @@
         tall = said.height;
         saidWidth = typeof said.width === "number" ? said.width : null;
         turn?.done();
+        writeJson(shapeKey, { h: tall, w: saidWidth });
       }
     };
     addEventListener("message", heard);
@@ -224,20 +244,9 @@
       slow = true;
     }, grace());
     const at = new URL(embed);
-    const deadline = Date.now() + START_MS;
-    /** The frame's address set once its origin serves, a canvas's once it is its turn among the page's canvases (embed-turns.ts). */
-    const open = async () => {
-      if (canvas) {
-        turn = embedTurn();
-        await turn.granted;
-      }
-      if (!gone) {
-        ready = address;
-        asking = false;
-      }
-    };
-    asking = true;
-    (async () => {
+    /** The origin asked once a second until it serves (null) or says why it won't, within {@link START_MS}. */
+    const reached = async () => {
+      const deadline = Date.now() + START_MS;
       for (;;) {
         // biome-ignore lint/performance/noAwaitInLoops: one ask a second until the origin serves, never several at once
         const why = await probePreview(at.origin, (origin) =>
@@ -248,19 +257,29 @@
             }
           )
         );
-        if (gone) {
-          return;
-        }
-        if (!why) {
-          await open();
-          return;
-        }
-        if (why.cause !== "status" || Date.now() >= deadline) {
-          failed = previewUnreachedWords(at.host, why, previewsNeed(at));
-          asking = false;
-          return;
+        if (gone || !why || why.cause !== "status" || Date.now() >= deadline) {
+          return why;
         }
         await new Promise((resolve) => setTimeout(resolve, PING_MS));
+      }
+    };
+    asking = true;
+    (async () => {
+      // A canvas loads in its turn among the page's canvases, the one in view first (embed-turns.ts); its skeleton stands meanwhile.
+      if (canvas) {
+        turn = embedTurn(() => box);
+        await turn.granted;
+      }
+      const why = gone ? null : await reached();
+      if (gone) {
+        return;
+      }
+      asking = false;
+      if (why) {
+        failed = previewUnreachedWords(at.host, why, previewsNeed(at));
+        turn?.done();
+      } else {
+        ready = address;
       }
     })();
     return () => {
@@ -309,8 +328,9 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it says it is one status row, a skeleton of its line before the grace, its frame loading at no height above it. Past the grace Caw and the wait's line stand in the row (The Real Wait Rule), over the screen's place, until it stands at its shape (a screen's frame loaded, a canvas's height said); then the row stands over the frame, empty. An origin that can't be reached says why in its place past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at the shape it last said here (the kit's picture where it never has), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace Caw and the wait's line stand over the screen's place or the canvas's skeleton (The Real Wait Rule), until it stands at its shape; then the row stands over the frame, empty. An origin that can't be reached says why in its place past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div
+      bind:this={box}
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
       style:inline-size={picture === undefined ? undefined : `${picture}px`}
     >
@@ -351,7 +371,7 @@
               "block w-full rounded-xs border-0 bg-surface-page transition-opacity duration-(--dur-fade)",
               tall === null &&
                 (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
-              !drawn && "opacity-0",
+              !(drawn && shaped) && "opacity-0",
             ]}
             data-cawco-artifact={id}
             data-drawn={drawn || undefined}
@@ -385,22 +405,26 @@
             <Skeleton class="w-full" height="picture" />
           {/if}
         {/if}
+        {#if !(screen || (shaped && drawn))}
+          <!-- A canvas waiting its turn or loading: its skeleton at the shape it last said in this browser (the kit's picture where it never has), pulsing, over its frame once that holds its height; it goes in its reveal as the frame comes. -->
+          <div
+            class={tall === null ? "w-full" : "absolute inset-0"}
+            data-slot="embed-wait"
+            out:reveal
+          >
+            {#if tall === null && known}
+              <Skeleton class="w-full" style={`block-size: ${known.h}px`} />
+            {:else if tall === null}
+              <Skeleton class="w-full" height="picture" />
+            {:else}
+              <Skeleton class="w-full" style={`block-size: ${tall}px`} />
+            {/if}
+          </div>
+        {/if}
         <div
-          class={[
-            "mark-line flex items-center justify-center gap-space-2",
-            screen || shaped
-              ? "pointer-events-none absolute inset-0"
-              : "min-h-c-btn-h-lg",
-          ]}
+          class="mark-line pointer-events-none absolute inset-0 flex items-center justify-center gap-space-2"
           data-slot="wait-row"
         >
-          {#if !(shaped || slow || screen)}
-            <!-- The reveal's own box gives way as the bar it holds does (min-w-0):
-                 its words keep the room they had beside the bare bar. -->
-            <span class="flex min-w-0" data-box out:reveal>
-              <Skeleton line="meta" width="title" />
-            </span>
-          {/if}
           {#if slow && !shaped}
             <img
               alt=""

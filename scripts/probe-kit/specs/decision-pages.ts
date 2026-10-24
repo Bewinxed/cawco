@@ -122,7 +122,14 @@
  *     Preview stands at its drawn shape, none says "didn't load", and every
  *     story it names has a rest frame with a box past 0 by 0; and the page
  *     loaded them one at a time, each embed given its address only once the
- *     one before it had mounted its stories. On 2026-10-24 the owner's
+ *     one before it had mounted its stories. The page is six cards tall, and
+ *     scrolled to its middle the moment its last card stands: no picture out
+ *     of view gets its turn while one in view still waits. Sampled every 50
+ *     ms, a picture not yet drawn is never an empty box: its skeleton stands
+ *     with a box, pulsing, and a take of one story stands as tall as its
+ *     story, within 2px (on 2026-10-24 the owner's project-screens picture
+ *     "In Review, its agent asking you" stood as an empty dark box while it
+ *     waited its turn). On 2026-10-24 the owner's
  *     pairing page of twelve such Previews drew two: Chromium fails a
  *     renderer's requests past 2,700 in flight
  *     (`net::ERR_INSUFFICIENT_RESOURCES`), and the twelve asked for some
@@ -4656,14 +4663,16 @@ const HEAVY_TAKES = [
 ] as const;
 const previewOf = (take: readonly string[], at: number) =>
   `p${at} = Preview("${HEAVY_ID}", "Take ${at + 1}", [${take.map((one) => `"${one}"`).join(", ")}])`;
-/** One card of four options, three Previews each: twelve embeds of one canvas on one page. */
+/** The cards of (r)'s page: six, two options each, a Preview in each option, so the page stands taller than its view and its middle has cards above and below. */
+const HEAVY_CARDS = ["t0", "t1", "t2", "t3", "t4", "t5"] as const;
+/** Six cards of two options, a Preview each: twelve embeds of one canvas on one page. */
 const HEAVY_PROGRAM = [
-  `root = Decisions("Twelve takes of one card", [takes])`,
-  `takes = Decision("takes", "Which take of the card reads right?", [a, b, c, d], "Each option shows three takes of the same card.")`,
-  ...["a", "b", "c", "d"].map(
-    (id, at) =>
-      `${id} = Option("${id}", "Takes ${at * 3 + 1} to ${at * 3 + 3}", "Three takes of the card.", ${at === 0}, [p${at * 3}, p${at * 3 + 1}, p${at * 3 + 2}], "The other takes.")`
-  ),
+  `root = Decisions("Twelve takes of one card", [${HEAVY_CARDS.join(", ")}])`,
+  ...HEAVY_CARDS.flatMap((card, at) => [
+    `${card} = Decision("${card}", "Which take of the card reads right, ${at + 1} of 6?", [${card}a, ${card}b], "Each option shows a take of the same card.")`,
+    `${card}a = Option("${card}a", "Take ${at * 2 + 1}", "This take of the card.", true, [p${at * 2}], "The other take.")`,
+    `${card}b = Option("${card}b", "Take ${at * 2 + 2}", "That take of the card.", false, [p${at * 2 + 1}], "The first take.")`,
+  ]),
   ...HEAVY_TAKES.map(previewOf),
 ].join("\n");
 
@@ -4718,6 +4727,23 @@ function dozenClock(): void {
     });
     return;
   }
+  const kit = window as unknown as { __kitScrolled?: number };
+  const wells = () => [
+    ...document.querySelectorAll<HTMLElement>("[data-slot=media]"),
+  ];
+  /** The page's own scroller (Decisions.svelte `page-scroll`): its cards scroll in it, not in the window. */
+  const scroller = () =>
+    document.querySelector<HTMLElement>("[data-slot=page-scroll]");
+  const inView = (el: Element) => {
+    const box = el.getBoundingClientRect();
+    const view = scroller()?.getBoundingClientRect();
+    return (
+      box.bottom > (view?.top ?? 0) &&
+      box.top < (view?.bottom ?? window.innerHeight)
+    );
+  };
+  const embedOf = (well: Element) =>
+    well.querySelector<HTMLIFrameElement>("iframe[data-slot=embed]");
   const stamp = (el: Node) => {
     if (
       el instanceof HTMLIFrameElement &&
@@ -4725,9 +4751,30 @@ function dozenClock(): void {
       !el.dataset.kitSrcAt
     ) {
       el.dataset.kitSrcAt = String(Date.now());
+      // Where its picture stood as it got its turn, and how many in view still waited for theirs.
+      const well = el.closest("[data-slot=media]");
+      el.dataset.kitInView = well && inView(well) ? "1" : "0";
+      el.dataset.kitWaitingInView = String(
+        wells().filter((one) => one !== well && inView(one) && !embedOf(one))
+          .length
+      );
     }
   };
+  // The page scrolled to its middle the moment its last card stands, before any Preview has its turn.
+  const scrollToMiddle = () => {
+    const last = document.getElementById("decision-t5");
+    if (kit.__kitScrolled !== undefined || !last) {
+      return;
+    }
+    const page = scroller();
+    if (!page) {
+      return;
+    }
+    page.scrollTop = (page.scrollHeight - page.clientHeight) / 2;
+    kit.__kitScrolled = page.scrollTop;
+  };
   new MutationObserver((changes) => {
+    scrollToMiddle();
     for (const change of changes) {
       stamp(change.target);
       for (const added of change.addedNodes) {
@@ -4747,14 +4794,93 @@ function dozenClock(): void {
   });
 }
 
+/**
+ * (r)'s look at the waits, on the decision page: every 50 ms until each
+ * picture stands drawn, a well holds its drawn frame or its skeleton with a
+ * box, pulsing (`kit-skeleton-pulse` running); anything else is an empty
+ * box, kept with what the well held (`__kitWait`).
+ */
+function dozenWaits(): void {
+  if (location.pathname.includes("/@cawco/canvas")) {
+    return;
+  }
+  const wells = () => [
+    ...document.querySelectorAll<HTMLElement>("[data-slot=media]"),
+  ];
+  const embedOf = (well: Element) =>
+    well.querySelector<HTMLIFrameElement>("iframe[data-slot=embed]");
+  // Every 50 ms until each picture stands drawn: a well holds its drawn frame, or its pulsing skeleton with a box; anything else is an empty box.
+  const wait = { empty: [] as string[], samples: 0, skeletons: 0, still: 0 };
+  (window as unknown as { __kitWait?: typeof wait }).__kitWait = wait;
+  /** What a well holds now: its drawn frame, its skeleton (pulsing or still), or what stands in an empty box. */
+  const holds = (well: Element): "drawn" | "pulse" | "still" | string => {
+    const frame = embedOf(well);
+    if (frame?.dataset.drawn !== undefined && frame.dataset.shape === "drawn") {
+      return "drawn";
+    }
+    const skeleton = well.querySelector<HTMLElement>(
+      "[data-slot=embed-wait] [data-slot=skeleton]"
+    );
+    const box = skeleton?.getBoundingClientRect();
+    if (!(skeleton && box && box.width > 0 && box.height > 0)) {
+      const held = frame
+        ? `frame ${frame.dataset.shape}, ${frame.dataset.drawn === undefined ? "not loaded" : "loaded"}`
+        : "no frame";
+      const stood = skeleton
+        ? `skeleton ${Math.round(box?.width ?? 0)}×${Math.round(box?.height ?? 0)}`
+        : "no skeleton";
+      return `${held}, ${stood}`;
+    }
+    return skeleton
+      .getAnimations()
+      .some(
+        (one) =>
+          one instanceof CSSAnimation &&
+          one.animationName === "kit-skeleton-pulse" &&
+          one.playState === "running"
+      )
+      ? "pulse"
+      : "still";
+  };
+  const sample = setInterval(() => {
+    const all = wells();
+    if (all.length === 0) {
+      return;
+    }
+    let waitingNow = 0;
+    all.forEach((well, at) => {
+      const now = holds(well);
+      if (now === "drawn") {
+        return;
+      }
+      waitingNow += 1;
+      wait.samples += 1;
+      if (now === "pulse" || now === "still") {
+        wait.skeletons += 1;
+        wait.still += now === "still" ? 1 : 0;
+      } else if (wait.empty.length < 8) {
+        wait.empty.push(`picture ${at + 1}: ${now}`);
+      }
+    });
+    if (waitingNow === 0) {
+      clearInterval(sample);
+    }
+  }, 50);
+}
+
 /** One embed of (r)'s page, as its Preview named it and as it drew. */
 interface DozenEmbed {
   /** When its frame got its address, and when it mounted its stories (`dozenClock`). */
   at: number;
   drew: number | null;
+  /** Its picture stood in view as it got its turn, and how many in view still waited for theirs then. */
+  inView: boolean;
   named: string[];
   read: ReturnType<typeof dozenRead> | null;
   take: string;
+  /** Its frame's height on the page, px: the shape it said. */
+  tall: number;
+  waitingInView: number;
 }
 
 /** Each embed on the page open in `page`, read in its own frame. */
@@ -4769,7 +4895,12 @@ async function dozenEmbeds(page: Page): Promise<DozenEmbed[]> {
       named,
       take: named.join("+"),
       at: Number(await handle.getAttribute("data-kit-src-at")),
+      inView: (await handle.getAttribute("data-kit-in-view")) === "1",
+      waitingInView: Number(
+        await handle.getAttribute("data-kit-waiting-in-view")
+      ),
       read: frame ? await frame.evaluate(dozenRead) : null,
+      tall: Math.round((await handle.boundingBox())?.height ?? 0),
       drew:
         (await frame?.evaluate(
           () => (window as unknown as { __kitDrewAt?: number }).__kitDrewAt
@@ -4855,7 +4986,7 @@ async function dozenOn(
   const page = await kit.page("desk", {
     engine,
     theme: "light",
-    init: [CAWCO_BRIDGE, dozenClock],
+    init: [CAWCO_BRIDGE, dozenClock, dozenWaits],
   });
   const started = Date.now();
   await page.goto(pageUrl, { waitUntil: "load" });
@@ -4904,7 +5035,73 @@ async function dozenOn(
       ),
     ].join("\n    ")
   );
+  // A take of one story stands exactly as tall as that story: nothing under it, wherever on the page it drew.
+  const ones = embeds.filter((one) => one.named.length === 1);
+  const off = ones.filter(
+    (one) => Math.abs(one.tall - (one.read?.frames[0]?.h ?? 0)) > 2
+  );
+  kit.check(
+    `${leg}: each take of one story stands as tall as its story, within 2px (${ones.length - off.length} of ${ones.length})`,
+    ones.length > 0 && off.length === 0,
+    ones
+      .map(
+        (one) =>
+          `${one.take}: its frame ${one.tall}px, its story ${one.read?.frames[0]?.h ?? 0}px`
+      )
+      .join("\n    ")
+  );
+  await waitAndViewChecks(kit, leg, page, order);
   await page.close();
+}
+
+/**
+ * (r)'s waits as the page held them: every sample of a picture not yet
+ * drawn stood its skeleton with a box, pulsing; and, the page scrolled to its
+ * middle before any turn, no picture out of view got its turn while one in
+ * view still waited.
+ */
+async function waitAndViewChecks(
+  kit: Kit,
+  leg: string,
+  page: Page,
+  order: DozenEmbed[]
+): Promise<void> {
+  const wait = await page.evaluate(() => {
+    const held = window as unknown as {
+      __kitScrolled?: number;
+      __kitWait?: {
+        empty: string[];
+        samples: number;
+        skeletons: number;
+        still: number;
+      };
+    };
+    return { scrolled: held.__kitScrolled ?? null, ...held.__kitWait };
+  });
+  kit.check(
+    `${leg}: a picture waiting its turn or loading is never an empty box: its skeleton stands with a box, pulsing (${wait.samples ?? 0} samples of a picture not yet drawn, ${wait.skeletons ?? 0} its skeleton, ${wait.empty?.length ?? 0} empty, ${wait.still ?? 0} still)`,
+    (wait.samples ?? 0) > 0 &&
+      (wait.empty?.length ?? 1) === 0 &&
+      wait.skeletons === wait.samples &&
+      wait.still === 0,
+    (wait.empty ?? []).join("\n    ") || "none empty"
+  );
+  const early = order.filter((one) => !one.inView && one.waitingInView > 0);
+  const seen = order.filter((one) => one.inView).length;
+  kit.check(
+    `${leg}: scrolled to the page's middle (${wait.scrolled ?? "not scrolled"} px), the pictures in view get their turn before those above and below (${seen} in view as their turn came, ${order.length - seen} out of it; ${early.length} out of view went ahead of one in view)`,
+    wait.scrolled !== null &&
+      (wait.scrolled ?? 0) > 0 &&
+      seen > 0 &&
+      seen < order.length &&
+      early.length === 0,
+    order
+      .map(
+        (one) =>
+          `${one.take}: ${one.inView ? "in view" : "out of view"}, ${one.waitingInView} in view still waiting`
+      )
+      .join("\n    ")
+  );
 }
 
 /** (r): a dozen Previews of one heavy canvas on one page, each drawn whole, in Chromium and WebKit. */

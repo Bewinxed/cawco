@@ -970,14 +970,19 @@ export function boot(options: BootOptions): void {
    * and `revealed` fades it out into the blur, taking it away once gone,
    * while each frame drawn since comes out of the blur in the same cell on
    * the same clock. The status line and the rest go at once, as everything
-   * does with reduced motion.
+   * does with reduced motion, and in an embed: the page holding it shows
+   * its own skeleton until it draws and reveals the frame (dashboard
+   * decisions host Preview.svelte), and a stand-in held there stood in the
+   * shape it says (`sayShape`), 107px under every picture of caw-panel's
+   * that drew off the page's screen, where no reveal runs to take it away.
    */
   function holdStandIns(section: Section): HTMLElement[] {
-    const kept = revealOf()
-      ? section.standIns.filter((one) =>
-          one.classList.contains("cawco-stand-in")
-        )
-      : [];
+    const kept =
+      revealOf() && !embed
+        ? section.standIns.filter((one) =>
+            one.classList.contains("cawco-stand-in")
+          )
+        : [];
     section.standIns = section.standIns.filter((one) => !kept.includes(one));
     clearStandIns(section);
     return kept;

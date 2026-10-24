@@ -15,7 +15,8 @@
  * 4. A piece the hub no longer holds is one line in its well.
  * 5. A dev server's preview holds its screen's height while it waits and
  *    keeps it once its origin answers; a component canvas's, whose height
- *    comes only once it serves, is one status row while it waits.
+ *    comes only once it serves, holds its skeleton while it waits (the kit's
+ *    picture where this browser never saw it drawn), never an empty box.
  * 6. Dials: each row the Effort chip's field (30px, 38 under a finger, 10px
  *    round, raised), the fill recess-deep with the lifted knob, names on one
  *    inset, names and values at 4.5:1 and up.
@@ -158,13 +159,19 @@ const goneOf = (page: Page) =>
     }))
   );
 
-/** 5. A card's preview well: its height, its wait row's, and its frame's when it stands. */
+/** 5. A card's preview well: its height, its wait row's, its frame's when it stands, and its canvas's skeleton's while it waits. */
 const waitOf = (page: Page, card: string) =>
   page.evaluate((id) => {
     const well = document.querySelector(`#decision-${id} [data-slot=media]`);
     const row = well?.querySelector("[data-slot=wait-row]");
     const frame = well?.querySelector("iframe[data-slot=embed]");
+    const skeleton = well
+      ?.querySelector("[data-slot=embed-wait] [data-slot=skeleton]")
+      ?.getBoundingClientRect();
     return {
+      skeleton: skeleton
+        ? `${Math.round(skeleton.width)}×${Math.round(skeleton.height)}`
+        : "none",
       well: Math.round(well?.getBoundingClientRect().height ?? 0),
       row: Math.round(row?.getBoundingClientRect().height ?? 0),
       frame: frame
@@ -501,10 +508,12 @@ async function waitView(kit: Kit, page: Page, label: string) {
   await settle(page, 300);
   const after = await waitOf(page, "site");
   kit.check(
-    `${label}: a dev server's well holds its screen's height while it waits (${before.well}px: "${before.said}") and keeps it once it serves (${after.frame}, the well ${after.well}px); a component canvas's, whose height comes only once it serves, is one status row (its row ${cards.row}px, the well ${cards.well}px: "${cards.said}")`,
+    `${label}: a dev server's well holds its screen's height while it waits (${before.well}px: "${before.said}") and keeps it once it serves (${after.frame}, the well ${after.well}px); a component canvas's, whose height comes only once it serves, holds its skeleton (${cards.skeleton}, the well ${cards.well}px: "${cards.said}")`,
     Math.abs(after.well - before.well) <= 1 &&
       after.frame !== "none" &&
-      cards.row <= 48 &&
+      cards.skeleton !== "none" &&
+      !cards.skeleton.startsWith("0×") &&
+      !cards.skeleton.endsWith("×0") &&
       cards.frame === "none",
     JSON.stringify({ before, after, cards })
   );
