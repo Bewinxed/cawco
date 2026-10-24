@@ -12,7 +12,9 @@
  * workspace boundary can start (not inside another one).
  *
  * For Claude Code, OpenCode and pi in turn, a delegate runs one command in
- * its workspace and finishes:
+ * its workspace and rests in a wait, its item live, so its workspace stands
+ * while the spec reads it (a finished item's workspace is settled and its
+ * state dir goes, r295):
  *
  * - its command ran in the workspace's boundary;
  * - the agent decided nothing of that boundary (agent boundary.ts
@@ -49,7 +51,7 @@ const ranMark = (harness: Harness) => `ONCE-RAN-${harness.toUpperCase()}`;
 
 const steps = new Map<
   string,
-  { finished?: boolean; ran?: boolean; searched?: boolean }
+  { ran?: boolean; rested?: boolean; searched?: boolean }
 >();
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -75,7 +77,7 @@ const shellCall = (
     : undefined;
 };
 
-/** Each delegate runs its one command, then finishes its item. */
+/** Each delegate runs its one command, then rests in a wait, its item live. */
 const respond = (request: Seen): Reply => {
   const harness = request.tools
     ? (TAG.exec(request.all)?.[1]?.toLowerCase() as Harness | undefined)
@@ -97,18 +99,18 @@ const respond = (request: Seen): Reply => {
     step.ran = true;
     return call(shell.name, shell.input);
   }
-  const finish = request.toolNames.find((name) => name.endsWith("finish_item"));
-  if (!step.finished && finish) {
-    step.finished = true;
-    return call(finish, { headline: "Ran it.", summary: "Ran it once." });
+  const wait = request.toolNames.find((name) => name.endsWith("wait_item"));
+  if (!step.rested && wait) {
+    step.rested = true;
+    return call(wait, { minutes: 60, reason: "the spec reads its workspace" });
   }
   if (
-    !(step.finished || step.searched) &&
+    !(step.rested || step.searched) &&
     request.toolNames.includes("ToolSearch")
   ) {
     step.searched = true;
     return call("ToolSearch", {
-      query: "select:mcp__cawco__finish_item",
+      query: "select:mcp__cawco__wait_item",
       max_results: 1,
     });
   }
@@ -140,7 +142,7 @@ const oneHarness = async (
   }>("/api/work-items", {
     parentInstanceId: parent,
     title: `Run once, ${harness}`,
-    prompt: `${tagOf(harness)} run the command once, then finish.`,
+    prompt: `${tagOf(harness)} run the command once, then wait.`,
     harness,
     model: MODEL[harness],
     cwd: src,
@@ -148,7 +150,8 @@ const oneHarness = async (
   const mark = ranMark(harness);
   const ran = await until(
     `${harness}'s command's output`,
-    () => fleet.seen.find((one) => one.all.includes(mark)),
+    // The command's output, as the harness hands it back in its next request.
+    () => fleet.seen.find((one) => one.body.includes(mark)),
     Boolean,
     300_000
   ).catch(() => undefined);
