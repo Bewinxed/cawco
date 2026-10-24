@@ -72,8 +72,10 @@
  *     picking it builds: the why reads "Recommended: <its label>. <why>";
  *     options whose program gives `builds` draw a Builds line in their card
  *     under the Costs line, on one row across the options, read in each
- *     pick's description; the same card without `builds` draws none, its
- *     cells the chip, line and cost rows alone.
+ *     pick's description; picked and decided, its record keeps each
+ *     option's builds and its log.md says what the pick costs and builds;
+ *     the same card without `builds` draws none, its cells the chip, line
+ *     and cost rows alone.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -2130,6 +2132,46 @@ const buildsLeg = async (on: On) => {
             ].join(" ")
         ),
         JSON.stringify(each.map(({ description }) => description))
+      );
+      // Decided: the record keeps each option's builds, and log.md says
+      // what the pick costs and builds.
+      await frame.locator(`#decision-${name} [data-option=tray]`).click();
+      await until(
+        "(m) the tray pick on the hub",
+        async () =>
+          (
+            await fleet.api<{ state: Doc["state"] }>(
+              `/api/instances/${writer}/artifacts/${made.id}`
+            )
+          ).state[name]?.options ?? [],
+        (options) => options.includes("tray"),
+        20_000
+      ).catch(() => undefined);
+      const decided = await fleet.api<{
+        record: {
+          cards: {
+            options: { builds?: string; cost: string; id: string }[];
+          }[];
+        } | null;
+      }>(`/api/projects/${on.projectId}/decisions/${name}/tasks`, {});
+      const log = await fleet
+        .api<{ content: string }>(
+          `/api/projects/${on.projectId}/folder/file?path=${encodeURIComponent(`decisions/${name}/log.md`)}`
+        )
+        .then((file) => file.content)
+        .catch((error: unknown) => String(error));
+      const [, tray] = TRAY_OPTIONS;
+      kit.check(
+        "(m) decided, the record keeps each option's builds, and log.md says what the pick costs and builds",
+        TRAY_OPTIONS.every(
+          (option) =>
+            decided.record?.cards[0]?.options.find(
+              (one) => one.id === option.id
+            )?.builds === option.builds
+        ) &&
+          log.includes(`- ${decisionsWords.costs(tray.cost)}`) &&
+          log.includes(`- ${decisionsWords.builds(tray.builds)}`),
+        `${JSON.stringify(decided.record?.cards[0]?.options)} | ${log}`
       );
     } else {
       kit.check(

@@ -39548,6 +39548,10 @@
         "description": "One option of a card, as the page labelled it.",
         "type": "object",
         "properties": {
+          "builds": {
+            "description": "What it means building or changing (the Option's `builds`); absent when it says none.",
+            "type": "string"
+          },
           "cost": {
             "description": "What picking it costs the person (the Option's `cost`); empty when it has none.",
             "type": "string"

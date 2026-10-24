@@ -28,9 +28,12 @@
  *   under {@link PLACES_KEY}, so they outlive revisions as picks do.
  */
 import type { ElementNode } from "@openuidev/lang-core";
+import { decisionsWords } from "./words/decisions";
 
 /** One option of a card, as the page labelled it. */
 export interface DecisionOption {
+  /** What it means building or changing (the Option's `builds`); absent when it says none. */
+  builds?: string;
   /** What picking it costs the person (the Option's `cost`); empty when it has none. */
   cost: string;
   id: string;
@@ -308,14 +311,18 @@ const cardOf = (
   why: text(props.why),
   multiple: props.multiple === true,
   mockup: null,
-  options: elementsOf(props.options).map((option, index) => ({
-    id: text(option.props.id),
-    keycap: index + 1,
-    label: text(option.props.label) || text(option.props.id),
-    line: text(option.props.line),
-    cost: text(option.props.cost),
-    recommended: option.props.recommended === true,
-  })),
+  options: elementsOf(props.options).map((option, index) => {
+    const builds = text(option.props.builds);
+    return {
+      id: text(option.props.id),
+      keycap: index + 1,
+      label: text(option.props.label) || text(option.props.id),
+      line: text(option.props.line),
+      cost: text(option.props.cost),
+      ...(builds ? { builds } : {}),
+      recommended: option.props.recommended === true,
+    };
+  }),
   after: strings(props.after),
   section,
 });
@@ -412,9 +419,20 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
 const labelOf = (card: RecordCard, id: string): string =>
   card.options.find((option) => option.id === id)?.label ?? id;
 
+/** A chosen option in `log.md`: its label and line, then what it costs and what it builds, each when it says. */
+const chosenLines = (card: RecordCard, id: string): string[] => {
+  const option = card.options.find((each) => each.id === id);
+  return [
+    `**${labelOf(card, id)}**${option?.line ? ` — ${option.line}` : ""}`,
+    ...(option?.cost ? [`- ${decisionsWords.costs(option.cost)}`] : []),
+    ...(option?.builds ? [`- ${decisionsWords.builds(option.builds)}`] : []),
+  ];
+};
+
 /**
  * The record in words (`log.md`), for sessions to read why: each card's
- * question, what was chosen and its line, the note, the tasks it made, and
+ * question, what was chosen with its line, what it costs and what it
+ * builds, the note, the tasks it made, and
  * the options turned down, the writer's recommendation marked.
  */
 export const logOf = (
@@ -432,10 +450,7 @@ export const logOf = (
       lines.push("Left open.");
     }
     for (const id of card.chosen) {
-      const option = card.options.find((each) => each.id === id);
-      lines.push(
-        `**${labelOf(card, id)}**${option?.line ? ` — ${option.line}` : ""}`
-      );
+      lines.push(...chosenLines(card, id));
     }
     if (card.dials.length > 0) {
       lines.push(
