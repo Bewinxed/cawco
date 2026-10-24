@@ -15,25 +15,35 @@
  *   in the pane, which has not heard the answer. The reply and the answer
  *   both land on the hub, the hub refuses nothing, the pane keeps nothing
  *   aside, and its thread draws both once its link is let through.
+ * - (o) The page's overlay, on a second page holding all but one of the
+ *   comments a page keeps: its link from the hub held, another client takes
+ *   the last place, and the page writes a comment as the overlay writes
+ *   one. The hub refuses it on the page's socket, which it doesn't close;
+ *   the page keeps the comment aside, its row in the rail saying the hub's
+ *   reason with Try again. With room again, Try again lands it on the hub,
+ *   and the page keeps nothing aside.
  * - (w) A doc the hub kept with each pin one whole value (as every doc stored
  *   before pins were written in parts): the hub, started again, keeps it in
  *   its parts as it loads it, and comment_read reads the pin as it was.
  *
  *   bun scripts/probe-kit/run.ts pane-refusal
  */
-import type { Page, WebSocketRoute } from "playwright-core";
+import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
 import {
+  COMMENT_LIMITS,
   deletePin,
   type Pin,
   pinDelivered,
   readPins,
   writePin,
 } from "../../../packages/core/src/comments";
+import { commentWords } from "../../../packages/core/src/words/comments";
 import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { pagePins, writePagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
 const REPLY_TOOL = "mcp__cawco__comment_reply";
@@ -41,8 +51,11 @@ const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const CALL = /PROBE-PR-CALL:(\d+)/g;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const RAIL = '[data-slot="comment-rail"]';
+const FRAME = `${PANE} iframe[title="Preview"]`;
 /** The pane's own link to the doc, through the dashboard's relay (artifact-doc.ts). */
 const PANE_SOCKET = /\/ws\/artifact\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/;
+/** The page's own link to the doc, on its preview origin (overlay artifact.ts). */
+const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/;
 const PAGE_HTML =
   "<!doctype html><html><body><main><h1>Refusal</h1><p>A page to pin.</p></main></body></html>";
 
@@ -425,6 +438,241 @@ const legP = async (
   await page.close();
 };
 
+/** The pane's page in `page` once it holds artifact `artifact`; null when it doesn't within 60 s. */
+const pageHolding = (page: Page, artifact: string) =>
+  until(
+    "(o) the page in the pane",
+    async () => {
+      try {
+        const handle = await page
+          .locator(FRAME)
+          .elementHandle({ timeout: 1000 });
+        const frame = await handle?.contentFrame();
+        if (!frame) {
+          return null;
+        }
+        const id = await frame.evaluate(() => {
+          let held: string | null = null;
+          (
+            window as unknown as {
+              cawcoArtifact?: {
+                subscribe: (
+                  holder: (hold: { ref: { id: string } | null }) => void
+                ) => () => void;
+              };
+            }
+          ).cawcoArtifact?.subscribe((hold) => {
+            held = hold.ref?.id ?? null;
+          })?.();
+          return held;
+        });
+        return id === artifact ? frame : null;
+      } catch {
+        return null;
+      }
+    },
+    Boolean,
+    60_000
+  ).catch(() => null) as Promise<Frame | null>;
+
+/** The page's doc's link to the hub now (overlay artifact.ts `Link`). */
+const pageLink = (frame: Frame) =>
+  frame
+    .evaluate(() => {
+      let state = "";
+      (
+        window as unknown as {
+          cawcoArtifact?: {
+            subscribe: (
+              holder: (hold: { link: { state: string } }) => void
+            ) => () => void;
+          };
+        }
+      ).cawcoArtifact?.subscribe((hold) => {
+        ({ state } = hold.link);
+      })?.();
+      return state;
+    })
+    .catch(() => "");
+
+/** The comments the page keeps aside on the device (overlay artifact.ts `REFUSED_KEY`), as stored: null when none. */
+const keptOnPage = (frame: Frame, artifact: string) =>
+  frame
+    .evaluate(
+      (key) => localStorage.getItem(key),
+      `cawco-refused-pins:${artifact}`
+    )
+    .catch(() => null);
+
+/** The pins of the page with all but one of the comments a page keeps: each delivered, so none is owed. */
+const fill = async (fleet: KitFleet, session: string, artifact: string) => {
+  const seed = await joinHub(fleet, session, artifact);
+  const at = new Date().toISOString();
+  seed.doc.transact(() => {
+    for (let number = 1; number < COMMENT_LIMITS.pins; number += 1) {
+      writePin(
+        seed.doc,
+        pinDelivered(
+          personPin(crypto.randomUUID(), number, `PROBE-FULL-${number}`),
+          at
+        )
+      );
+    }
+  });
+  const filled = await until(
+    "(o) the page's comments on the hub",
+    async () =>
+      Object.keys((await hubDoc(fleet, session, artifact)).pins).length,
+    (count) => count === COMMENT_LIMITS.pins - 1,
+    30_000
+  ).catch(() => 0);
+  seed.leave();
+  return filled;
+};
+
+/** Null once the page's doc holds its `filled` comments and its link has synced with the hub, not only filled from what the hub embedded in the page; else what it holds. */
+const syncedWith = async (frame: Frame, filled: number) => {
+  const holds = await until(
+    "(o) the page's doc holding its comments",
+    async () => Object.keys(await pagePins(frame)).length,
+    (count) => count === filled,
+    30_000
+  ).catch(() => 0);
+  const linked = await until(
+    "(o) the page's link synced",
+    () => pageLink(frame),
+    (state) => state === "synced",
+    30_000
+  ).catch(() => pageLink(frame));
+  return holds === filled && linked === "synced"
+    ? null
+    : `its doc holds ${holds}; its link ${linked || "none"}`;
+};
+
+/** (o) A comment the page's overlay writes and the hub refuses is told on the page's open socket, kept aside with why and Try again; with room again, Try again lands it. */
+const legO = async (kit: Kit, fleet: KitFleet, session: string) => {
+  const made = await callIn(fleet, session, CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page too: pin anything that reads wrong",
+    name: "overlay-refusal",
+    html: PAGE_HTML,
+  });
+  const artifact = made.match(ANSWERED_ID)?.[1];
+  if (!artifact) {
+    kit.check("(o) the second page is made", false, made.slice(0, 400));
+    return;
+  }
+  const filled = await fill(fleet, session, artifact);
+  const page = await kit.page("desk");
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const links = await routeLinks(page, PAGE_SOCKET);
+  await open(
+    page,
+    `${await fleet.dashboard()}/session/${session}`,
+    "[data-artifact-trigger]"
+  );
+  const frame = await pageHolding(page, artifact);
+  const shown = frame ? await syncedWith(frame, filled) : null;
+  if (!(frame && filled > 0 && shown === null)) {
+    kit.check(
+      "(o) the second page, filled, in the pane, its link synced",
+      false,
+      `filled ${filled}; page ${frame ? "shown" : "not shown"}; ${shown ?? ""}; page errors: ${errors.join(" / ") || "none"}`
+    );
+    await page.close();
+    return;
+  }
+  const link = links.at(-1);
+  if (link) {
+    link.held = true;
+  }
+  // Another device takes the page's last place; the page, its link held, hasn't heard it.
+  const other = await joinHub(fleet, session, artifact);
+  const theirs = crypto.randomUUID();
+  writePin(other.doc, personPin(theirs, 300, "PROBE-OTHER-DEVICE"));
+  await until(
+    "(o) the other device's comment on the hub",
+    async () => (await hubDoc(fleet, session, artifact)).pins[theirs],
+    Boolean,
+    15_000
+  ).catch(() => undefined);
+  const words = "PROBE-PAGE-COMMENT";
+  const mine = personPin(crypto.randomUUID(), filled + 1, words);
+  await writePagePins(frame, mine);
+  const stored = await until(
+    "(o) the page's comment kept aside",
+    () => keptOnPage(frame, artifact),
+    Boolean,
+    20_000
+  ).catch(() => null);
+  const keptPins = stored ? (JSON.parse(stored) as Pin[]) : [];
+  const why = keptPins.find((one) => one.id === mine.id)?.notSent?.why ?? "";
+  await settle(page, 600);
+  await railRow(page, mine.number).catch(() => undefined);
+  const said = await until(
+    "(o) its row saying why",
+    () => notSentOf(page, mine.number),
+    Boolean,
+    10_000
+  ).catch(() => null);
+  const retry = await page
+    .locator(
+      `${RAIL} li:has([data-slot="pin-row"][data-pin-row="${mine.number}"]) [data-slot="pin-retry"]`
+    )
+    .isVisible()
+    .catch(() => false);
+  const refused = links.find((one) => one.refusals > 0);
+  const refusedOnHub = !!(await hubDoc(fleet, session, artifact)).pins[mine.id];
+  kit.check(
+    "(o) a comment the page's overlay writes and the hub refuses: the refusal comes on the page's socket, which the hub doesn't close; the page keeps the comment aside with the hub's reason, its row saying it with Try again; the hub holds none of it",
+    !!refused &&
+      !refused.hubClosed &&
+      !!why &&
+      said === commentWords.notSent(why) &&
+      retry &&
+      !refusedOnHub,
+    `refusal frames: ${links.map((one) => one.refusals).join(", ")}; the hub closed that link: ${refused?.hubClosed}, the page did: ${refused?.pageClosed}; kept: ${stored ? `${keptPins.length} comment(s), why ${JSON.stringify(why)}` : "nothing"}; row: ${said ?? "no not-sent line"}; Try again: ${retry}; on the hub: ${refusedOnHub}; page errors: ${errors.join(" / ") || "none"}`
+  );
+  letThrough(link);
+  // The other device's comment goes: there is room again.
+  deletePin(other.doc, theirs);
+  const room = await until(
+    "(o) the other device's comment gone from the hub",
+    async () => !(await hubDoc(fleet, session, artifact)).pins[theirs],
+    Boolean,
+    15_000
+  ).catch(() => false);
+  other.leave();
+  await page
+    .locator(
+      `${RAIL} li:has([data-slot="pin-row"][data-pin-row="${mine.number}"]) [data-slot="pin-retry"]`
+    )
+    .click({ timeout: 10_000 })
+    .catch(() => undefined);
+  const landed = await until(
+    "(o) Try again's comment on the hub",
+    async () => {
+      const now = await hubDoc(fleet, session, artifact);
+      return now.pins[mine.id]?.thread.some((entry) => entry.text === words)
+        ? now
+        : undefined;
+    },
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  await settle(page, 1000);
+  const after = await notSentOf(page, mine.number);
+  const left = await keptOnPage(frame, artifact);
+  kit.check(
+    "(o) with room again, Try again lands the page's comment on the hub with its words, its row's reason goes, the page keeps nothing aside, and nothing waits pending on the hub",
+    room && !!landed && !landed.pending && after === null && left === null,
+    `room: ${room}; landed: ${landed ? "yes" : "not within 30 s"}; pending: ${landed?.pending}; not-sent line after: ${after ?? "none"}; kept on the page: ${left ?? "nothing"}; page errors: ${errors.join(" / ") || "none"}`
+  );
+  await page.close();
+};
+
 /** The updates the hub keeps for `artifact`, in order. */
 const storedUpdates = (fleet: KitFleet, artifact: string) =>
   fleet.query<{ update: Uint8Array }>(
@@ -586,6 +834,7 @@ const run = async (kit: Kit) => {
   seed.leave();
   await legH(kit, fleet, session, artifact);
   await legP(kit, fleet, session, artifact, first);
+  await legO(kit, fleet, session);
   await legW(kit, fleet, session);
 };
 
