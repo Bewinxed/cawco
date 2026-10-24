@@ -1,39 +1,33 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import type { AddressTray } from "../tray.svelte";
   /**
    * The word address in Configure › Devices (beside Require paired
    * devices and the paired devices: how your devices reach the dashboard,
    * the page hub-auth.ts sends a device to be approved on): its name, where it stands in one line,
    * and the one button that becomes the tray (Set up before it has
    * started, Open after). The only way in on a network that can't carry
-   * the word, and where it is seen later once live.
+   * the word, and where it is seen later once live. Its caller says where
+   * the work stands, so the kept tray and the flow both stand it.
    */
   import Words from "../Words.svelte";
-  import { rowLine } from "../words";
 
   let {
-    tray,
+    line,
     started,
+    hidden = false,
     button = $bindable(null),
     onopen,
   }: {
-    tray: AddressTray;
+    /** Where the work stands, in one line. */
+    line: { text: string; live: boolean };
     /** The set-up has begun (or is live): its button opens it again. */
     started: boolean;
+    /** The tray floats over the button: the button keeps its room unseen. */
+    hidden?: boolean;
     button?: HTMLElement | null;
     onopen: () => void;
   } = $props();
-
-  const line = $derived(
-    started
-      ? rowLine(tray)
-      : {
-          text: `Type ${tray.phoneTyped} on any of your devices to open CawCo.`,
-          live: false,
-        }
-  );
 </script>
 
 <div
@@ -51,12 +45,7 @@
       <span class="mark-text min-w-0"><Words text={line.text} /></span>
     </span>
   </div>
-  <span
-    class={[
-      "flex-none",
-      tray.open && tray.source === "settings" && "invisible",
-    ]}
-  >
+  <span class={["flex-none", hidden && "invisible"]}>
     <Button
       bind:ref={button}
       data-settings-open

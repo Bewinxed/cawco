@@ -17,6 +17,7 @@
   import { IconDollar } from "#lib/icons.js";
   import { sheetIn, sheetOut } from "../motion";
   import { AddressTray, type Network } from "../tray.svelte";
+  import { rowLine } from "../words";
   import AddressRow from "./AddressRow.svelte";
   import JumpControl from "./JumpControl.svelte";
   import SettingsRow from "./SettingsRow.svelte";
@@ -110,7 +111,15 @@
         </h2>
         <div class="grid gap-space-1">
           {#if !tray.stopped}
-            <AddressRow onopen={openTray} {tray} />
+            <AddressRow
+              done={tray.step === "live"}
+              line={rowLine(tray)}
+              meta="Onboarding · {tray.facts.domain}"
+              onopen={openTray}
+              title={tray.step === "live"
+                ? `${tray.name} is live`
+                : "Open CawCo by one word"}
+            />
           {/if}
           <NeedsRow
             href={budget.href}
@@ -133,7 +142,16 @@
           Devices
         </h2>
         <div class="grid px-space-3">
-          <SettingsRow onopen={openTray} {started} {tray} />
+          <SettingsRow
+            line={started
+              ? rowLine(tray)
+              : {
+                  text: `Type ${tray.phoneTyped} on any of your devices to open CawCo.`,
+                  live: false,
+                }}
+            onopen={openTray}
+            {started}
+          />
         </div>
       {/if}
     </div>

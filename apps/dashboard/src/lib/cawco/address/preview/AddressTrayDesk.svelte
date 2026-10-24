@@ -17,6 +17,7 @@
   import { IconDollar } from "#lib/icons.js";
   import { closeTo, openFrom, type Source } from "../motion";
   import { AddressTray, type Network } from "../tray.svelte";
+  import { rowLine } from "../words";
   import AddressRow from "./AddressRow.svelte";
   import JumpControl from "./JumpControl.svelte";
   import SettingsRow from "./SettingsRow.svelte";
@@ -187,7 +188,16 @@
               {#if tray.open}
                 <TrayView bind:ref={trayEl} {direction} form="desk" {tray} />
               {:else}
-                <AddressRow bind:ref={rowEl} onopen={openTray} {tray} />
+                <AddressRow
+                  bind:ref={rowEl}
+                  done={tray.step === "live"}
+                  line={rowLine(tray)}
+                  meta="Onboarding · {tray.facts.domain}"
+                  onopen={openTray}
+                  title={tray.step === "live"
+                    ? `${tray.name} is live`
+                    : "Open CawCo by one word"}
+                />
               {/if}
             </div>
           {/if}
@@ -230,9 +240,15 @@
           <div class="relative">
             <SettingsRow
               bind:button={buttonEl}
+              hidden={tray.open && tray.source === "settings"}
+              line={started
+                ? rowLine(tray)
+                : {
+                    text: `Type ${tray.phoneTyped} on any of your devices to open CawCo.`,
+                    live: false,
+                  }}
               onopen={openTray}
               {started}
-              {tray}
             />
             {#if tray.open}
               <div

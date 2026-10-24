@@ -11,6 +11,8 @@ packages/core/src/decisions-spec.json
 design-previews/pairing/lib/torph.mjs
 design-previews/comment-sizing/parts.js
 design-previews/comment-sizing/house.css
+design-previews/address/assets/
+design-previews/address/index.html
 packages/hub/skills/decision-page/kit/vendor/
 packages/hub/skills/decision-page/kit/page.html
 apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json

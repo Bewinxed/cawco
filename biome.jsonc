@@ -30,6 +30,9 @@
       // the comment sizing preview's parts and stylesheet, captured from the dashboard's own components and CSS by its capture/capture.ts.
       "!design-previews/comment-sizing/parts.js",
       "!design-previews/comment-sizing/house.css",
+      // the address design preview's build output (apps/dashboard/scripts/address-preview.vite.ts): minified, never edited.
+      "!design-previews/address/assets",
+      "!design-previews/address/index.html",
       // DialKit's browser build and stylesheet, vendored unchanged.
       "!packages/hub/skills/decision-page/kit/vendor",
       // the decision-page template: {{KIT_CSS}}/{{KIT_JS}} slots src/decision-page.ts fills, not CSS or JS.
