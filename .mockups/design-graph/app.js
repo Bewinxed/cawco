@@ -259,6 +259,9 @@ function applyScreen() {
   return !was || was.layout !== s.layout || !!was.multi !== !!multi || (was.multi && multi && was.multi.graphs !== multi.graphs);
 }
 const layoutIs = (l) => screen.layout === l;
+// Where every target keeps the 44px touch floor (a finger, or a phone's screen), the graph never zooms itself
+// below 1, so no fit shrinks a target under it; the person's own pinch or Fit all still may.
+const touchFloors = () => screen.input !== "fine" || /^phone/.test(screen.screen);
 const compact = () => !layoutIs("desk");
 // A length token in px, whatever its unit (45dvh, 85vh): drawn once on a probe and measured.
 function lenOf(name) {
@@ -656,6 +659,7 @@ function drawGraph(cid = tab) {
   const c = compOf(cid), graph = graphOf(cid), gs = G[cid];
   // A face out of view has no width; it draws when it comes back.
   if (!graph.clientWidth) return;
+  if (!touchFloors() && !gs.narrowing) gs.narrow = 0;
   graph.innerHTML = "";
   const zoomer = document.createElement("div"); zoomer.className = "zoomer";
   const world = document.createElement("div"); world.className = "world";
@@ -670,7 +674,8 @@ function drawGraph(cid = tab) {
   const chrome = 2 * px("--space-5"), full = 168, gap = 22;
   const two = graph.clientWidth >= 2 * (2 * full + gap + chrome) + 2 * margin + apart;
   const mroom = two ? Math.floor((room - apart) / 2) : room;
-  world.style.setProperty("--node-w", clamp(Math.floor((mroom - chrome - gap) / 2), 120, full) + "px");
+  const nodeW = clamp(Math.floor((mroom - chrome - gap) / 2), 120, full) - (gs.narrow || 0);
+  world.style.setProperty("--node-w", nodeW + "px");
   graph.dataset.two = String(two);
   const regions = {};
   for (const m of c.machines) {
@@ -696,6 +701,10 @@ function drawGraph(cid = tab) {
     for (const e of svg.querySelectorAll(".edge")) e.addEventListener("click", (ev) => { ev.stopPropagation(); keep(cid, m.id, e.dataset.to, varyOf(cid, m.id, e.dataset.to), e.dataset.from); });
     regions[m.id] = r;
   }
+  // A machine whose lanes and labels take it past the view at its least zoom (1 where targets keep the touch
+  // floor) draws again with its states narrower, down to --c-node-w-floor, so the kept machine stands whole.
+  const worst = Math.max(...c.machines.map((m) => regions[m.id].offsetWidth)) - mroom;
+  if (worst > 0.5 && touchFloors() && nodeW - Math.ceil(worst / 2) >= px("--c-node-w-floor") && !gs.narrowing) { gs.narrowing = true; gs.narrow = (gs.narrow || 0) + Math.ceil(worst / 2); drawGraph(cid); gs.narrowing = false; return; }
   const sized = c.machines.map((m) => ({ id: m.id, w: regions[m.id].offsetWidth, h: regions[m.id].offsetHeight }));
   let outer = fitLayout(sized, c.machineEdges, room + 2 * margin, margin, { align: "UL", nodesep: apart, ranksep: apart });
   if (outer.graph().width > room + 2 * margin) {
@@ -724,7 +733,7 @@ function drawDoors(c) {
     d.onclick = (e) => { e.stopPropagation(); fitRegion(c.id, m.id, "pan"); };
     box.append(d);
   }
-  for (const edge of ["top", "bottom", "left", "right"]) {
+  for (const edge of ["top", "bottom"]) {
     const d = document.createElement("button"); d.type = "button"; d.className = "door more"; d.dataset.more = edge; d.tabIndex = -1;
     d.innerHTML = "<span></span>" + icon(ICON.chevron);
     d.onclick = (e) => { e.stopPropagation(); openOutline(c.id, d); };
@@ -739,9 +748,14 @@ function viewChanged(cid) {
   if (!g || !g.clientHeight) return;
   const gb = g.getBoundingClientRect(), top = gb.top + g.clientTop, left = gb.left + g.clientLeft, W = g.clientWidth, H = g.clientHeight, z = G[cid].zoom;
   const s1 = px("--space-1"), s2 = px("--space-2");
-  // Doors: a region wholly out of view gets one at the view's edge nearest it, along that edge at the region's
-  // own coordinate; four at most per edge, past that three and "N more".
-  const doors = doorsOf(cid), per = { top: [], bottom: [], left: [], right: [] };
+  // The house edge fade at an end with more past it.
+  const more = g.scrollHeight - g.clientHeight - g.scrollTop;
+  g.dataset.fade = [g.scrollTop > 1 ? "top" : "", more > 1 ? "foot" : ""].filter(Boolean).join(" ");
+  // Doors stand in the well's two bands, never over the view: a region wholly out of view gets one in the
+  // band nearest it, along the band at the region's own place; one out to the side stands at that end of the
+  // band its middle is nearer, its chevron pointing that way. Four at most per band, past that three and
+  // "N more".
+  const doors = doorsOf(cid), per = { top: [], bottom: [] };
   for (const r of g.querySelectorAll(".region")) {
     const rb = r.getBoundingClientRect(), d = doors.querySelector('.door[data-machine="' + r.dataset.machine + '"]');
     if (!d) continue;
@@ -749,42 +763,52 @@ function viewChanged(cid) {
     const out = below >= -0.5 || above >= -0.5 || right >= -0.5 || leftOf >= -0.5;
     if (!out) { delete d.dataset.on; continue; }
     const vert = Math.max(below, above), horiz = Math.max(right, leftOf);
-    const edge = vert >= horiz ? (below >= above ? "bottom" : "top") : right >= leftOf ? "right" : "left";
-    per[edge].push({ d, at: edge === "top" || edge === "bottom" ? rb.left + rb.width / 2 - left : rb.top + rb.height / 2 - top });
+    const way = vert >= horiz ? (below >= above ? "bottom" : "top") : right >= leftOf ? "right" : "left";
+    const band = way === "top" || way === "bottom" ? way : rb.top + rb.height / 2 < top + H / 2 ? "top" : "bottom";
+    const at = way === "right" ? Infinity : way === "left" ? -Infinity : rb.left + rb.width / 2 - left;
+    d.style.setProperty("--door-turn", DOOR_TURN[way]);
+    per[band].push({ d, at });
   }
   for (const d of doors.querySelectorAll(".door:not(.more)")) if (!Object.values(per).some((list) => list.some((x) => x.d === d))) delete d.dataset.on;
-  for (const [edge, list] of Object.entries(per)) {
-    const more = doors.querySelector('.door[data-more="' + edge + '"]');
+  for (const [band, list] of Object.entries(per)) {
+    const moreDoor = doors.querySelector('.door[data-more="' + band + '"]');
     list.sort((a, b) => a.at - b.at);
     const shown = list.length > 4 ? list.slice(0, 3) : list, rest = list.length - shown.length;
     for (const x of list.slice(shown.length)) delete x.d.dataset.on;
-    if (rest) { more.querySelector("span").textContent = rest + " more"; more.setAttribute("aria-label", rest + " more machines, open the Outline"); shown.push({ d: more, at: Infinity }); } else delete more.dataset.on;
-    // Laid along the edge in order, each its own width apart by --space-1, inside the view by --space-2; where
-    // their run is longer than the edge, each names its region in an equal share, its words cut at the end.
-    const along = edge === "top" || edge === "bottom", span = along ? W : H;
+    if (rest) { moreDoor.querySelector("span").textContent = rest + " more"; moreDoor.setAttribute("aria-label", rest + " more machines, open the Outline"); moreDoor.style.setProperty("--door-turn", DOOR_TURN[band]); shown.push({ d: moreDoor, at: Infinity }); } else delete moreDoor.dataset.on;
+    // Laid along the band in order, each its own width apart by --space-1, inside it by --space-2; where their
+    // run is longer than the band, each names its region in an equal share, its words cut at the end.
+    const span = W;
     for (const x of shown) x.d.style.maxInlineSize = "";
-    if (along && shown.length) {
+    if (shown.length) {
       const room = span - 2 * s2 - (shown.length - 1) * s1, total = shown.reduce((n, x) => n + x.d.offsetWidth, 0);
       if (total > room) for (const x of shown) x.d.style.maxInlineSize = Math.floor(room / shown.length) + "px";
     }
     let next = s2;
-    const places = shown.map((x) => { x.d.dataset.edge = edge; x.d.style.setProperty("--door-turn", DOOR_TURN[edge]); const w = along ? x.d.offsetWidth : x.d.offsetHeight; const want = x.at === Infinity ? span - s2 - w : clamp(x.at - w / 2, s2, span - s2 - w); const at = Math.max(want, next); next = at + w + s1; return { x, at, w }; });
-    // Pushed back from the far end where the run overflows it.
+    const places = shown.map((x) => { x.d.dataset.band = band; const w = x.d.offsetWidth; const want = clamp(x.at - w / 2, s2, span - s2 - w); const at = Math.max(want, next); next = at + w + s1; return { x, at, w }; });
     let limit = span - s2;
     for (let i = places.length - 1; i >= 0; i--) { places[i].at = Math.min(places[i].at, limit - places[i].w); limit = places[i].at - s1; }
-    for (const { x, at } of places) {
-      if (along) { x.d.style.left = at + "px"; x.d.style.top = ""; } else { x.d.style.top = at + "px"; x.d.style.left = ""; }
-      x.d.dataset.on = ""; x.d.tabIndex = 0;
-    }
+    // The band's own left is the view's (the well's edge and the view's share one inline start).
+    const off = gb.left - doors.getBoundingClientRect().left + g.clientLeft;
+    for (const { x, at } of places) { x.d.style.left = off + at + "px"; x.d.dataset.on = ""; x.d.tabIndex = 0; }
   }
   for (const d of doors.querySelectorAll(".door:not([data-on])")) d.tabIndex = -1;
+  // A band stands only while it holds a door (impeccable critique: an empty band was dead room). Its coming
+  // shrinks the view and its going grows it, so a door only ever adds a door or takes one away: no flicker. The
+  // top band's coming and going moves the scroll by its height, so nothing in the view moves.
+  const gv = g.parentNode, band = px("--c-doorway-tab-h");
+  for (const [edge, attr] of [["top", "data-top"], ["bottom", "data-foot"]]) {
+    const want = per[edge].length > 0;
+    if (gv.hasAttribute(attr) === want) continue;
+    gv.toggleAttribute(attr, want);
+    if (edge === "top") g.scrollTop += want ? band : -band;
+    return viewChanged(cid);
+  }
   // A slab's name sticks to the view's top while its top has left the view and the slab is still in it, so the
-  // room the view is in is always named; it stops --space-2 short of its slab's foot.
+  // room the view is in is always named; it stops --space-5 short of its slab's foot.
   for (const r of g.querySelectorAll(".region")) {
     const head = r.querySelector(".region-head"), rb = r.getBoundingClientRect();
-    // Clear of a door on the view's top edge that stands over it.
-    const hb = head.getBoundingClientRect(), under = [...doors.querySelectorAll('.door[data-on][data-edge="top"]')].some((d) => { const q = d.getBoundingClientRect(); return q.left < hb.right && q.right > hb.left; });
-    const natural = rb.top + head.offsetTop * z, want = top + s1 + (under ? px("--c-doorway-tab-h") + s1 : 0);
+    const natural = rb.top + head.offsetTop * z, want = top + s1;
     const most = (r.offsetHeight - head.offsetTop - head.offsetHeight - px("--space-5")) * z;
     const inView = rb.bottom > top + 0.5 && rb.top < top + H - 0.5;
     const shift = inView ? clamp(want - natural, 0, Math.max(0, most)) : 0;
@@ -814,7 +838,7 @@ function fitRegion(cid, mid, mode) {
   if (!r) return;
   const pad = px("--space-3"), W = g.clientWidth - 2 * pad, H = g.clientHeight - 2 * pad;
   const rw = r.offsetWidth, rh = r.offsetHeight, rx = r.offsetLeft, ry = r.offsetTop;
-  const fitZ = clamp(Math.min(W / rw, H / rh), 0.5, 1);
+  const fitZ = touchFloors() ? 1 : clamp(Math.min(W / rw, H / rh), 0.5, 1);
   const z = mode === "fit" ? fitZ : Math.min(gs.zoom, fitZ);
   animateView(cid, () => {
     gs.zoom = z; gs.own = true; applyZoom(cid);
@@ -866,23 +890,22 @@ function revealIn(cid, el, fromEl, fit) {
   // margin, between 0.75 and 1 (the r24 values ruling, call 3). Where it doesn't fit at 0.75, the view opens
   // on the kept state, its from-state above it when there is room, the machine's top cut cleanly.
   if (fit && !gs.own) {
-    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, z = clamp((g.clientHeight - 2 * pad) / rh, 0.75, 1);
+    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, z = touchFloors() ? 1 : clamp((g.clientHeight - 2 * pad) / rh, 0.75, 1);
     if (Math.abs(z - gs.zoom) > 0.001) { gs.zoom = z; applyZoom(cid); }
   }
   const box = g.getBoundingClientRect(), n = el.getBoundingClientRect(), r = el.closest(".region").getBoundingClientRect();
-  // The doors' bands at the view's top and foot stay clear of what it opens on.
-  const sh = px("--c-doorway-tab-h") + px("--space-1");
+  const sh = 0;
   const at = (y) => y - box.top - g.clientTop + g.scrollTop - sh;
   const topWant = Math.min(at(r.top) - pad, fromEl ? at(fromEl.getBoundingClientRect().top) - pad : Infinity, at(n.top) - pad);
-  let want = Math.max(at(n.bottom) + pad - (g.clientHeight - 2 * sh), topWant);
+  let want = Math.max(at(n.bottom) + pad - (g.clientHeight - sh), topWant);
   // A focus keeps the view where it stands when that already shows the state; else it moves the least.
-  if (!fit) { const s0 = g.scrollTop, Hv = g.clientHeight - 2 * sh; want = at(n.top) >= s0 - 0.5 && at(n.bottom) <= s0 + Hv + 0.5 ? s0 : at(n.top) < s0 ? at(n.top) - pad : at(n.bottom) + pad - Hv; }
+  if (!fit) { const s0 = g.scrollTop, Hv = g.clientHeight - sh; want = at(n.top) >= s0 - 0.5 && at(n.bottom) <= s0 + Hv + 0.5 ? s0 : at(n.top) < s0 ? at(n.top) - pad : at(n.bottom) + pad - Hv; }
   // The view it opens on (the r23 review): its top edge cuts nothing, a state, a machine's name, an edge's
   // label, a machine's box or an arrow inside one, and stands --space-2 clear of what shows under it; only an
   // arrow between machines may come in over it, its head in view. Its foot cuts no state, name or label (a
   // box or an arrow running on under it is the cue that there is more). The nearest such scroll to the
   // kept state's; where none shows the kept state whole, the edges cut no state or name, as before.
-  const H = g.clientHeight - 2 * sh;
+  const H = g.clientHeight - sh;
   let max = g.scrollHeight - g.clientHeight;
   const boxOf = (el) => { const b = el.getBoundingClientRect(); return [at(b.top), at(b.bottom)]; };
   const solid = [...g.querySelectorAll(".node, .region-head, .world svg .lbl")].map(boxOf);
@@ -1052,7 +1075,7 @@ function factsHtml(e, c) {
 const anchorWords = (e, c) => (c.at.ref ? c.at.ref + " " + e.cur.concat(e.orig).find((x) => x.key === c.at.of).of : "");
 function clipRow(e, c) {
   const kind = c.kind || "text";
-  return '<div class="tl-row clip" data-key="' + c.key + '" data-prop="' + kind + '"><div class="clip-name"><span class="lead" role="img" aria-label="' + PROP_WORD[kind] + '">' + icon(PROP_GLYPH[kind]) + '</span><p class="l1"><span class="el">' + esc(c.of) + '</span> <span class="chg">' + esc(c.does) + '</span></p><div class="facts">' + factsHtml(e, c) + '</div></div><div class="lane" data-key="' + c.key + '"><div class="ghost" hidden></div><div class="bar" role="button" tabindex="0" aria-pressed="false" data-key="' + c.key + '" aria-label="' + esc(c.of + " " + c.does) + '"' + (c.at.ref ? ' data-tip="' + esc(anchorWords(e, c)) + '"' : "") + '></div><div class="tail" hidden></div></div></div>';
+  return '<div class="tl-row clip" data-key="' + c.key + '" data-prop="' + kind + '"><div class="clip-name"><span class="lead" role="img" aria-label="' + PROP_WORD[kind] + '">' + icon(PROP_GLYPH[kind]) + '</span><p class="l1"><span class="el">' + esc(c.of) + '</span> <span class="chg">' + esc(c.does) + '</span></p><div class="facts">' + factsHtml(e, c) + '</div></div><div class="lane" data-key="' + c.key + '"><div class="ghost" hidden></div><div class="bar" role="button" tabindex="0" aria-pressed="false" data-key="' + c.key + '" aria-label="' + esc(c.of + " " + c.does) + '"' + (c.at.ref ? ' data-tip="' + esc(anchorWords(e, c)) + '"' : "") + '><i class="bar-hit" aria-hidden="true"></i></div><div class="tail" hidden></div></div></div>';
 }
 function buildDock(opts = {}) {
   const dock = $("dock"), km = keptMove();
@@ -1336,7 +1359,7 @@ function wireDock(km) {
   // Touch has no marquee: a press beside a selected bar's end takes that end (its 44px handle), else it
   // clears the selection.
   for (const lane of rows.querySelectorAll(".lane")) lane.onpointerdown = (e) => {
-    if (e.target.classList.contains("bar") || tl.km.e.view === "original") return;
+    if (e.target.closest(".bar") || tl.km.e.view === "original") return;
     if (e.pointerType !== "mouse") { const bar = lane.querySelector('.bar[aria-pressed="true"]'), z = bar && touchZone(bar, e.clientX); if (z) barDown(bar, e, z); else { tl.km.e.sel = new Set(); closePop(); layoutDock(); } return; }
     marquee(e);
   };
@@ -1625,7 +1648,8 @@ function closePop(instant) {
   p.timer = 0;
 }
 const fieldVal = (v) => String(Math.round(msOf(v) * 100) / 100);
-function fieldHtml(f, value, unit, label) { return '<span class="fld"><input data-f="' + f + '" inputmode="decimal" aria-label="' + esc(label) + '" value="' + esc(value) + '">' + (unit ? '<span class="unit">' + unit + "</span>" : "") + "</span>"; }
+// The field is a label round its input, so a press anywhere on its box is the input's.
+function fieldHtml(f, value, unit, label) { return '<label class="fld"><input data-f="' + f + '" inputmode="decimal" aria-label="' + esc(label) + '" value="' + esc(value) + '">' + (unit ? '<span class="unit">' + unit + "</span>" : "") + "</label>"; }
 // The slider's detents: one per house length, two tokens at one length keeping the first.
 const detents = () => { const seen = new Set(), out = []; for (const t of LADDER) { const v = ms(t); if (!seen.has(v)) { seen.add(v); out.push({ t, v }); } } return out.sort((a, b) => a.v - b.v); };
 const sliderMax = (d) => Math.max(500, Math.ceil(d / 100) * 100);
@@ -1660,7 +1684,7 @@ function editorHtml(c) {
   let handles = "";
   if (!isSpring(c.ease)) {
     const [x1, y1, x2, y2] = Array.isArray(c.ease) ? c.ease : bezierOf(c.ease);
-    handles = '<line class="arm" x1="' + edX(0) + '" y1="' + edY(0) + '" x2="' + edX(x1) + '" y2="' + edY(y1) + '"/><line class="arm" x1="' + edX(1) + '" y1="' + edY(1) + '" x2="' + edX(x2) + '" y2="' + edY(y2) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="First handle" data-h="1" r="4" cx="' + edX(x1) + '" cy="' + edY(y1) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="Second handle" data-h="2" r="4" cx="' + edX(x2) + '" cy="' + edY(y2) + '"/>';
+    handles = '<line class="arm" x1="' + edX(0) + '" y1="' + edY(0) + '" x2="' + edX(x1) + '" y2="' + edY(y1) + '"/><line class="arm" x1="' + edX(1) + '" y1="' + edY(1) + '" x2="' + edX(x2) + '" y2="' + edY(y2) + '"/><circle class="knob-hit" data-for="1" r="22" cx="' + edX(x1) + '" cy="' + edY(y1) + '"/><circle class="knob-hit" data-for="2" r="22" cx="' + edX(x2) + '" cy="' + edY(y2) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="First handle" data-h="1" r="4" cx="' + edX(x1) + '" cy="' + edY(y1) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="Second handle" data-h="2" r="4" cx="' + edX(x2) + '" cy="' + edY(y2) + '"/>';
   }
   return '<div class="ceditor"><svg viewBox="0 0 120 72" aria-hidden="false" role="img" aria-label="The curve, drawn"><rect class="grid" x="' + ED.x0 + '" y="' + ED.y1 + '" width="' + (ED.x1 - ED.x0) + '" height="' + (ED.y0 - ED.y1) + '" rx="2"/><path class="curve" d="' + d + '"/>' + handles + '<circle class="live" r="3" cx="' + edX(0) + '" cy="' + edY(0) + '"/></svg></div>';
 }
@@ -1698,6 +1722,8 @@ function syncEditor(c) {
   if (arms.length < 2) return;
   arms[0].setAttribute("x2", edX(x1)); arms[0].setAttribute("y2", edY(y1)); arms[1].setAttribute("x2", edX(x2)); arms[1].setAttribute("y2", edY(y2));
   knobs[0].setAttribute("cx", edX(x1)); knobs[0].setAttribute("cy", edY(y1)); knobs[1].setAttribute("cx", edX(x2)); knobs[1].setAttribute("cy", edY(y2));
+  const hits = ed.querySelectorAll(".knob-hit");
+  hits[0].setAttribute("cx", edX(x1)); hits[0].setAttribute("cy", edY(y1)); hits[1].setAttribute("cx", edX(x2)); hits[1].setAttribute("cy", edY(y2));
 }
 function renderPop(work) {
   const el = pop.el, body = el.querySelector(".pop-body"), c = clipNow(pop.key, work), km = keptMove(), e = km.e;
@@ -1709,12 +1735,15 @@ function renderPop(work) {
   // Length: the slider and its figure. A spring's length is its perceptual duration: its response.
   html += '<div class="pop-sec"><div class="pop-label"><span>' + (mode === "spring" ? "Response" : "Duration") + '</span></div><div class="pop-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
   // Curve: the four house curves as glyphs, then Spring and Custom; the chosen one drawn large beside its words.
-  html += '<div class="pop-sec"><div class="pop-label"><span>Curve</span></div><div class="t-tabs" id="curveSeg" role="tablist" aria-label="Curve"><span class="t-tabs-pill" aria-hidden="true"></span>';
-  for (const t of SEG_CURVES) html += '<button class="t-tab glyph-seg" type="button" role="tab" data-curve="' + t + '" aria-label="' + CURVE_WORD[t] + '" data-tip="' + CURVE_WORD[t] + '" aria-selected="' + (mode === t) + '">' + glyph(t) + "</button>";
-  html += '<button class="t-tab" type="button" role="tab" data-curve="spring" aria-selected="' + (mode === "spring") + '">Spring</button><button class="t-tab" type="button" role="tab" data-curve="custom" aria-selected="' + (mode === "custom") + '">Custom</button></div>';
+  // The curve: past four short segments the list, as the inspector's variant control does (designer's 2C):
+  // the house curves as their glyphs with their words, then Spring and Custom, one radio group in two columns.
+  const CHOICES = SEG_CURVES.map((t) => [t, glyph(t), CURVE_WORD[t]]).concat([["spring", glyph({ spring: { bounce: 0.3 } }), "Spring"], ["custom", '<svg viewBox="0 0 16 10" aria-hidden="true"><path d="M1 9 C 6 9, 4 1, 15 1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="0"/><circle cx="6" cy="9" r="1.5" fill="currentColor"/><circle cx="4" cy="1" r="1.5" fill="currentColor"/></svg>', "Custom"]]);
+  html += '<div class="pop-sec"><div class="pop-label"><span id="curveLabel">Curve</span></div><div class="curve-list" id="curveList" role="radiogroup" aria-labelledby="curveLabel">';
+  for (const [t, g, w] of CHOICES) html += '<button class="curve-opt" type="button" role="radio" data-curve="' + t + '" aria-checked="' + (mode === t) + '" tabindex="' + (mode === t ? 0 : -1) + '">' + g + "<span>" + esc(w) + "</span></button>";
+  html += "</div>";
   let side;
   if (mode === "spring") side = '<span class="word">Spring</span><label class="pop-label" for="bounceIn"><span>Bounce</span>' + fig(c.ease.spring.bounce) + '</label><input id="bounceIn" type="range" data-f="bounce" min="0" max="0.6" step="0.05" value="' + c.ease.spring.bounce + '" aria-label="Bounce">';
-  else if (mode === "custom" && Array.isArray(c.ease)) side = '<span class="word">Custom</span><span class="fld wide"><input data-f="bez" aria-label="Custom bezier" value="' + c.ease.map((n) => +(+n).toFixed(3)).join(", ") + '"></span>';
+  else if (mode === "custom" && Array.isArray(c.ease)) side = '<span class="word">Custom</span><label class="fld wide"><input data-f="bez" aria-label="Custom bezier" value="' + c.ease.map((n) => +(+n).toFixed(3)).join(", ") + '"></label>';
   // A house curve the agent wrote that the control has no glyph for is shown as it is, its token and numbers.
   else if (mode === "custom") side = '<span class="word">' + esc(curveWord(c)) + "</span><code>" + esc(c.ease) + "</code><code>" + bezierOf(c.ease).join(", ") + "</code>";
   else side = '<span class="word">' + esc(CURVE_WORD[c.ease]) + "</span><span>Drag a handle to make it your own</span>";
@@ -1724,15 +1753,11 @@ function renderPop(work) {
   const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement : null;
   const focusKey = focused ? focused.dataset.f || focused.dataset.curve || focused.dataset.h || (focused.classList.contains("dslider") ? "slider" : null) : null;
   const caret = focused && focused.selectionStart;
-  const pill = el.querySelector("#curveSeg .t-tabs-pill"), pillWas = pill ? { t: pill.style.transform, w: pill.style.width } : null;
   const h0 = body.childElementCount ? body.offsetHeight : 0;
   body.innerHTML = html;
   pop.committed = { dur: fieldVal(d), from: String(c.from), to: String(c.to), bez: Array.isArray(c.ease) ? c.ease.map((n) => +(+n).toFixed(3)).join(", ") : "" };
   wirePop();
   labelTicks();
-  // The curve's thumb glides from the segment it stood on to the chosen one.
-  const seg = el.querySelector("#curveSeg");
-  if (pillWas && pillWas.t) { const p = seg.querySelector(".t-tabs-pill"); p.style.transition = "none"; p.style.transform = pillWas.t; p.style.width = pillWas.w; void p.offsetWidth; p.style.transition = ""; slidePill(seg, !reduced()); } else slidePill(seg, false);
   if (focusKey) { const f = el.querySelector('[data-f="' + focusKey + '"], [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null); if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch {} } }
   // The kit's morph: a height change tweens the box over --dur-morph on the drawer curve, on its far side from
   // the row.
@@ -1806,7 +1831,10 @@ function wirePop() {
     bounce.oninput = () => { const next = applyField("bounce", bounce.value, keptMove()); if (next) { if (!before) before = clone(keptMove().e.cur); liveEdit(keptMove(), next); } };
     bounce.onchange = () => { if (before) { settleEdit(before); before = null; } };
   }
-  for (const b of el.querySelectorAll("#curveSeg .t-tab")) b.onclick = () => {
+  // Arrows move the choice round the group, as a radio group's do.
+  const opts = [...el.querySelectorAll("#curveList .curve-opt")];
+  for (const b of opts) b.onkeydown = (e) => { const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key]; if (!d) return; e.preventDefault(); const n = opts[(opts.indexOf(b) + d + opts.length) % opts.length]; n.focus(); n.click(); };
+  for (const b of opts) b.onclick = () => {
     const kind = b.dataset.curve, c = clipNow(pop.key);
     const next = withClip((x) => {
       if (kind === "spring") x.ease = isSpring(c.ease) ? c.ease : { spring: { bounce: 0 } };
@@ -1819,6 +1847,8 @@ function wirePop() {
   if (rs) rs.onclick = () => { const next = clone(km.e.cur), i = next.findIndex((x) => x.key === pop.key); next[i] = clone(km.e.orig.find((x) => x.key === pop.key)); popCommit(next, { replay: true }); };
   wireSlider(el.querySelector(".dslider"));
   for (const k of el.querySelectorAll(".ceditor .knob")) wireKnob(k);
+  // A finger's 44px circle round each handle hands its press to the handle.
+  for (const h of el.querySelectorAll(".ceditor .knob-hit")) h.onpointerdown = (e) => el.querySelector('.ceditor .knob[data-h="' + h.dataset.for + '"]').onpointerdown(e);
 }
 // The duration slider: a drag snaps to a detent within --c-detent-snap (a finger feels a tick there, the
 // house's Quiet Feel), ⌥ frees it to 10ms steps; arrows step detent to detent, ⇧ by 10ms; Home and End to the
@@ -2044,8 +2074,21 @@ const STOPS = ["head", "peek", "full"];
 const stopPx = (s) => (s === "head" ? $("sheetHead").offsetHeight + 1 : Math.round(lenOf(s === "full" ? "--c-sheet-max-h" : "--c-graph-drawer-stop")));
 function labelHead() { $("sheetTitle").setAttribute("aria-label", "Design graph, " + $("sheetState").textContent + (layoutIs("drawer") ? ". Drawer at " + stop + "; tap for " + (stop === "peek" ? "full" : "peek") : "")); }
 function setDrawerH(h) { drawerH = Math.round(h); rootEl.style.setProperty("--drawer-h", drawerH + "px"); sizeDockRoom(); }
+// The sheet's own Hide (round 29 review): in the drawer a chevron down folds it to its head bar and, folded, the
+// same control points up and is Show; in the side sheet it points to the trailing edge the sheet folds to.
+function labelSheetHide() {
+  const b = $("sheetHide"), drawer = layoutIs("drawer"), folded = drawer && stop === "head";
+  // One chevron that turns over as the drawer folds and opens (Family's chevron that transforms rather than
+  // swaps), on the drawer's own clock.
+  const glyph = drawer ? ICON.chevron : ICON.chevronRight;
+  if (b.dataset.glyph !== glyph) { b.innerHTML = icon(glyph); b.dataset.glyph = glyph; }
+  b.toggleAttribute("data-folded", folded);
+  b.setAttribute("aria-label", folded ? "Show graph" : "Hide graph"); b.dataset.tip = (folded ? "Show graph" : "Hide graph") + " (H)";
+  b.setAttribute("aria-expanded", String(!folded));
+}
 function setStop(s) {
   const was = stop; stop = s; $("tools").dataset.stop = s;
+  labelSheetHide();
   setDrawerH(stopPx(s));
   labelHead();
   // The graph's view follows the drawer's new height once it has settled.
@@ -2065,7 +2108,7 @@ $("sheetTitle").onkeydown = (e) => { if (!layoutIs("drawer") || (e.key !== "Arro
 // Dragging the head moves the drawer with the finger; it settles on the nearest stop.
 $("sheetHead").addEventListener("pointerdown", (e) => {
   const head = $("sheetHead");
-  if (!layoutIs("drawer") || e.button !== 0 || e.target.closest(".faces")) return;
+  if (!layoutIs("drawer") || e.button !== 0 || e.target.closest(".faces, #sheetHide")) return;
   const y0 = e.clientY, h0 = drawerH, lo = stopPx("head"), hi = stopPx("full");
   let moved = false;
   head.setPointerCapture(e.pointerId);
@@ -2084,7 +2127,10 @@ const panel = $("panel");
 const widthFloor = () => px("--c-panel-w"), widthCeil = () => Math.round(Math.min(innerWidth, px("--c-review-max-w")) * 0.85);
 const floorOf = (g) => { const r = g.querySelector(".region"), n = g.querySelector(".node"); return Math.ceil((r ? r.querySelector(".region-head").offsetHeight + px("--space-5") : 0) + (n ? n.offsetHeight : 0) + 2 * px("--space-2") + 2); };
 const graphFloor = () => floorOf(graphOf(tab));
-const graphCeil = () => Math.max(graphFloor(), innerHeight - 2 * px("--space-5") - (panel.offsetHeight - graphOf(tab).offsetHeight));
+// The graph's height is its token's (--graph-h, the view with both door bands standing); the scroller itself
+// takes an empty band's room, so its own box is not the size.
+const graphH = () => parseFloat(getComputedStyle(graphOf(tab)).getPropertyValue("--graph-h")) || graphOf(tab).offsetHeight;
+const graphCeil = () => Math.max(graphFloor(), innerHeight - 2 * px("--space-5") - (panel.offsetHeight - graphOf(tab).parentNode.offsetHeight + 2 * px("--c-doorway-tab-h")));
 // The split between two stacked graphs: each keeps at least its own floor.
 const splitGraphs = () => [...$("graphs").children].map((sec) => sec.querySelector(".graph"));
 const splitFloor = () => { const gs = splitGraphs(); return gs.length && gs[0].querySelector(".node") ? floorOf(gs[0]) : 120; };
@@ -2108,7 +2154,7 @@ function setSize(w, h) {
 }
 // The separators a key reaches: the panel's corner (both sizes) and the dock's (its height).
 function syncSashes() {
-  const w = panel.offsetWidth, h = graphOf(tab).offsetHeight;
+  const w = panel.offsetWidth, h = graphH();
   const set = (el, now, min, max, text) => { el.setAttribute("aria-valuenow", now); el.setAttribute("aria-valuemin", min); el.setAttribute("aria-valuemax", max); if (text) el.setAttribute("aria-valuetext", text); };
   set($("sashC"), w, widthFloor(), widthCeil(), stackedGraphs() ? w + " px wide" : w + " by " + h + " px");
   set($("sashDC"), $("dock").offsetHeight, dockFloor(), dockCeil(), $("dock").offsetHeight + " px tall");
@@ -2239,7 +2285,7 @@ function flickSettle(edge, s0, track) {
   const reach = 100, props = [];
   if (edge === "d" || edge === "dc") { const from = $("dock").offsetHeight; props.push(["--dock-h", from + "px", clamp(Math.round(from - vy * reach), dockFloor(), dockCeil()) + "px"]); }
   if (edge.includes("w")) { const from = panel.offsetWidth; props.push(["--panel-w", from + "px", clamp(Math.round(from - vx * reach), widthFloor(), widthCeil()) + "px"]); }
-  if (edge.includes("h")) { const from = graphOf(tab).offsetHeight; props.push(["--graph-h", from + "px", clamp(Math.round(from + vy * reach), graphFloor(), graphCeil()) + "px"]); }
+  if (edge.includes("h")) { const from = graphH(); props.push(["--graph-h", from + "px", clamp(Math.round(from + vy * reach), graphFloor(), graphCeil()) + "px"]); }
   if (!props.length) return false;
   void s0;
   animateSize(props, sp, relayoutAfterResize);
@@ -2259,7 +2305,7 @@ function restoreDefault(which) {
   }
   const props = [];
   const read = (name, el) => { const was = rootEl.style.getPropertyValue(name); if (!was) return null; const from = el(); rootEl.style.removeProperty(name); const to = el(); rootEl.style.setProperty(name, was); return [name, from + "px", null, to + "px"]; };
-  const w = read("--panel-w", () => panel.offsetWidth), h = read("--graph-h", () => graphOf(tab).offsetHeight);
+  const w = read("--panel-w", () => panel.offsetWidth), h = read("--graph-h", graphH);
   if (w) props.push(w); if (h) props.push(h);
   if (props.length) animateSize(props, timing, relayoutAfterResize);
 }
@@ -2277,7 +2323,7 @@ for (const sash of document.querySelectorAll(".sash")) {
   sash.onpointerdown = (e) => {
     e.preventDefault();
     if (e.button !== 0) return;
-    const edge = edgeOf(sash), x0 = e.clientX, y0 = e.clientY, s0 = { w: panel.offsetWidth, h: graphOf(tab).offsetHeight, d: $("dock").offsetHeight, s: splitGraphs()[0].offsetHeight }, track = [[performance.now(), x0, y0]];
+    const edge = edgeOf(sash), x0 = e.clientX, y0 = e.clientY, s0 = { w: panel.offsetWidth, h: graphH(), d: $("dock").offsetHeight, s: splitGraphs()[0].offsetHeight }, track = [[performance.now(), x0, y0]];
     for (const a of rootEl.getAnimations()) a.finish();
     sash.setPointerCapture(e.pointerId);
     owner.dataset.resizing = edge; rootEl.dataset.resizing = resizeCursor(edge);
@@ -2301,7 +2347,7 @@ for (const sash of document.querySelectorAll(".sash")) {
   // The APG window splitter: arrows move the edge 16px, 64px with Shift; Home and End go to the floor and
   // ceiling. A key's move is instant, as every keyboard action is.
   sash.onkeydown = (e) => {
-    const edge = edgeOf(sash), step = e.shiftKey ? 64 : 16, w = panel.offsetWidth, h = graphOf(tab).offsetHeight, d = $("dock").offsetHeight, sp = splitGraphs()[0].offsetHeight;
+    const edge = edgeOf(sash), step = e.shiftKey ? 64 : 16, w = panel.offsetWidth, h = graphH(), d = $("dock").offsetHeight, sp = splitGraphs()[0].offsetHeight;
     let nw = null, nh = null, nd = null, ns = null;
     if (edge === "dc") { if (e.key === "ArrowUp") nd = d + step; else if (e.key === "ArrowDown") nd = d - step; else if (e.key === "Home") nd = dockFloor(); else if (e.key === "End") nd = dockCeil(); else return; }
     else if (edge === "s") { if (e.key === "ArrowDown") ns = sp + step; else if (e.key === "ArrowUp") ns = sp - step; else if (e.key === "Home") ns = splitFloor(); else if (e.key === "End") ns = splitCeil(); else return; }
@@ -2388,7 +2434,7 @@ function setOpen(open, how = {}) {
 const toolsOpen = () => (layoutIs("drawer") ? stop !== "head" : panelOpen());
 $("hide").onclick = () => { setOpen(false, { key: false }); $("shell").focus({ preventScroll: true }); };
 $("shell").onclick = (e) => { setOpen(true, { key: e.detail === 0 }); $("hide").focus({ preventScroll: true }); };
-$("sheetHide").onclick = () => { setOpen(false); $("show").focus(); };
+$("sheetHide").onclick = () => { if (layoutIs("drawer")) { setStop(stop === "head" ? "peek" : "head"); return; } setOpen(false); $("show").focus(); };
 $("show").onclick = () => { setOpen(true); $("sheetHide").focus(); };
 
 // ---- Keys ----
@@ -2426,12 +2472,14 @@ function onResize() {
   rootEl.dataset.tools = panelOpen() ? "open" : "hidden";
   $("show").hidden = panelOpen() || !layoutIs("sheet");
   if (layoutIs("desk")) tabPlace();
+  labelSheetHide();
   render();
   drawArcs();
 }
 addEventListener("resize", onResize);
 rootEl.dataset.tools = "open";
 if (layoutIs("drawer")) setStop("peek");
+labelSheetHide();
 setFace("graph");
 
 // ---- The round's open choice (the owner's): clip kinds in their own hue, or in ink only ----

@@ -248,6 +248,8 @@
       color-mix(in oklab, var(--neutral-8), var(--neutral-9) 50%),
       color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
     );
+    /* The strong control edge: a framed text field's own border while its text has focus (DESIGN.md, The Caret Rule). The row outline's value, 3:1 against the raised fill it frames and the recess or raised ground round it, by day and at night (WCAG 1.4.11), where the control edge it steps up from holds 1.36:1. */
+    --border-control-strong: var(--border-row-outline);
     --input: light-dark(
       var(--neutral-7),
       oklch(from var(--neutral-12) l c h / 0.14)
@@ -281,6 +283,8 @@
     );
     /* The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through. */
     --c-target-tint: oklch(from var(--brand-solid) l c h / 0.08);
+    /* The ring round what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): the done glyph's green, drawn on the element's own shape outside its box, so it never covers what the element says; never coral (The One Target Rule). */
+    --c-change-ring: var(--status-done-glyph);
     --brand-ink: var(--coral-11);
     /* Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills. */
     --brand-ink-strong: light-dark(oklch(55% 0.165 33), oklch(76% 0.12 34));
@@ -377,7 +381,7 @@
     --status-done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
     --status-fail-glyph: light-dark(oklch(53% 0.19 22), oklch(71% 0.16 20));
     --status-idle-glyph: var(--neutral-11);
-    /* The nesting lines' ink (.kit-nest, WorkflowRail): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one. */
+    /* The nesting lines' ink (.kit-nest, the rails' nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one. */
     --nest-ink: light-dark(
       color-mix(in oklch, var(--neutral-8) 85%, var(--neutral-9)),
       color-mix(in oklch, var(--neutral-7) 50%, var(--neutral-8))
@@ -408,7 +412,7 @@
     --presence-off: var(--neutral-8);
     /* Every scrollbar's thumb, inherited from the root. */
     --scrollbar-thumb: oklch(from var(--muted-foreground) l c h / 0.35);
-    /* The band of raised surface that crosses a skeleton once per loop. */
+    /* The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse). */
     --skeleton-sheen: oklch(from var(--surface-raised) l c h / 0.6);
     /* List bullets in rendered markdown. */
     --prose-bullet: oklch(from var(--muted-foreground) l c h / 0.55);
@@ -712,10 +716,6 @@
     --row-mark-r: 4.6px;
     /* The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side. */
     --tab-icon-r: 4px;
-    /* A control standing in a composer shell (Attach, Send/Stop, a view bar's controls): concentric with the shell (The Concentric Rule), its 12px less its inset and its 1px edge. */
-    --composer-control-r: calc(
-      var(--radius-lg) - var(--c-composer-inset) - var(--border-width)
-    );
     /* A row standing at a glide popover's own inset (the new-session form's popovers, `roomy`): concentric with the surface (The Concentric Rule), its 12px less its space-2 pad and its 1px edge. */
     --glide-row-r: calc(
       var(--radius-lg) - var(--space-2) - var(--border-width)
@@ -747,15 +747,19 @@
     --c-pin-gone-ring: 1px;
     /* The Comments rail beside the page (DESIGN.md, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot. */
     --c-comments-w: 320px;
-    /* A comment's composer and its thread, each beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin): one width for both, so a card never changes width as it goes from composer to thread. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph. */
+    /* A pin's peek and a chip's peek at most (DESIGN.md, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph. */
     --c-pin-card-w: 280px;
+    /* A comment's composer and its thread beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin; the owner's pick "Beside the comment", comment-card-sizing): one width for both, so a card never changes width as it goes from composer to thread. Two fifths of the well (the pin room is the size container), held between 280px and 480px: 415px at a 1357px pane with the 320px rail open, about 50 characters a line (Google Docs: 35 to 50; Radix Themes maxWidth 480). Web only. */
+    --c-pin-card-reading-w: clamp(280px, 40cqi, 480px);
+    /* The room from where a thread beside its pin stands to the well's foot under which it stops hanging from the pill and takes the well's height, its foot on the well's (DESIGN.md, A thread beside its pin). Web only. */
+    --c-pin-card-reading-room: 320px;
     /* The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule). */
     --c-target-stroke: 1px;
     /* How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule). */
     --c-target-gap: 2px;
     /* A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons. */
     --c-sheet-inspector-w: 296px;
-    /* An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well"; the workflow editor's inspector). */
+    /* An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well"). */
     --c-sheet-inspector-max-h: 60dvh;
     /* The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink). */
     --c-sheet-inspector-head-h: 44px;
@@ -793,6 +797,14 @@
     --c-find-w: 520px;
     /* The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own. */
     --c-new-session-pop-w: 569px;
+    /* Add machine's step rail (connect/RunningStep): the connector's line stands on the middle of a step's 16px glyph. */
+    --c-step-rail-x: calc(var(--icon-md) / 2);
+    /* Add machine's step rail: from a step's row top to its glyph's foot (the row's 30px, its glyph centred), where the connector to the next step starts. */
+    --c-step-rail-top: calc((var(--c-btn-h-sm) + var(--icon-md)) / 2);
+    /* Add machine's step rail: from a step's foot to the next step's glyph top, where the connector ends (the room above a glyph centred in its 30px row). */
+    --c-step-rail-gap: calc((var(--c-btn-h-sm) - var(--icon-md)) / 2);
+    /* Add machine's raised body on the desk (the kit dialog's `connect` width, its tray's padding round it) and its output sheet: the width at which the command route's longest address row (a Tailscale name and "anywhere on the tailnet") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds. */
+    --c-connect-w: 480px;
     /* A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line. */
     --c-panel-w: 380px;
     /* The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next. */
@@ -852,6 +864,12 @@
     /* The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot. */
     --c-composer-field: 34px;
     --c-composer-inset: var(--space-2);
+    /* How far in from a composer shell's outer edge its controls stand (Attach, Send/Stop, a view bar's controls): its inset and its 1px edge. The shell declares it with its 12px (design.css `concentric-in`), and its controls take 12px less it (The Concentric Rule). */
+    --c-inset-composer: calc(var(--c-composer-inset) + var(--border-width));
+    /* A floating surface's padding round its rows (a menu, a select, a popover, the bottom sheet's rows). */
+    --c-floating-pad: 6px;
+    /* How far in from a floating surface's outer edge its rows stand: its 1px edge and its pad. The surface declares it with its 12px (design.css `concentric-in`), and its rows take 12px less it, 5px (The Concentric Rule). */
+    --c-inset-floating: calc(var(--border-width) + var(--c-floating-pad));
     /* How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach. */
     --c-ask-diff-share: 0.4;
     --c-composer-panel: calc(
@@ -905,6 +923,8 @@
     --c-inline-chip-line: var(--c-row-mark);
     /* An inline chip's fill past its line, above and below, given back by an equal negative margin: the chip draws 22px tall and lays out as its 18px line, inside any line of text from 13px up. Web only. */
     --c-inline-chip-pad: 2px;
+    /* The most an inline chip's label stands across (a session, a pin, a decision card, an artifact, a task, a plan, any thing named in running text): past it the label ends in an ellipsis, its whole name in the chip's accessible name and its peek or card. An absolute length, never a percentage, so it bounds the chip's min-content too: in an auto-sized grid or flex track a percentage counts for nothing, and a long name claimed its whole nowrap width (a 390 page scrolled 660px sideways). 32ch: the most a line of chat reads as one name. Web only. */
+    --c-inline-chip-max-w: 32ch;
     /* A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger. */
     --c-peek-glyph: var(--icon-md);
     --c-tray-gap: var(--space-2);
@@ -921,6 +941,12 @@
     --row-mark-glyph: 11px;
     --row-mark-box: 18px;
     --well-x: calc((var(--row-mark-box) - var(--row-mark)) / 2);
+    /* The changed ring's line (DESIGN.md, Changed since you looked): as heavy as the focus ring, never heavier. */
+    --c-change-ring-width: 2px;
+    /* How far outside the changed element's box its ring stands, so the line never touches its words or its own border. */
+    --c-change-ring-offset: 3px;
+    /* How far the changed ring's ping spreads outward, past the ring, as it fades over --dur-loop. */
+    --c-change-ping-spread: 10px;
     --focus-ring-width: 2px;
     --focus-ring-offset: 2px;
     --focus-ring-inset: -2px;
@@ -1140,8 +1166,6 @@
     --c-decision-node-h: 56px;
     /* A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between. */
     --c-decision-page-w: 920px;
-    /* The least a decision card's question takes beside its decided line before that line wraps under it. */
-    --c-decision-question-basis: 240px;
     /* The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked". */
     --c-decision-meter-w: 120px;
     /* The narrowest a decision card's option column stands before the options stand one under another. */
@@ -1308,12 +1332,6 @@
     --c-usage-pct-w: 4ch;
     /* A filed task card's least track in a reply. */
     --c-filed-task-w: 14rem;
-    /* The workflow list's last-run and started columns. */
-    --c-workflow-when-col: 110px;
-    /* The workflow list's run count column. */
-    --c-workflow-count-col: 60px;
-    /* The workflow list's actions column. */
-    --c-workflow-actions-col: 70px;
     /* The composer's attachments row before it scrolls. */
     --c-atts-max-h: 180px;
     /* How far the settle's text clip reaches past a word's box, so ascenders and descenders survive. */
@@ -1368,24 +1386,8 @@
     --c-dialog-document-w: 95vw;
     /* The tallest a tool call's document well grows in the transcript before it scrolls. */
     --c-tool-well-max-h: 420px;
-    /* The workflow graph canvas's least height. */
-    --c-graph-canvas-min: 300px;
-    /* A connection handle's diameter on the workflow canvas. */
-    --c-graph-handle: 10px;
-    /* The workflow editor's breadcrumb basis. */
-    --c-workflow-crumb: 220px;
-    /* The workflow name field's widest in the header. */
-    --c-workflow-name-max: 300px;
-    /* The save-state readout's width, so its words swap and nothing moves. */
-    --c-workflow-save-w: 24ch;
-    /* The runs list column of the workflow editor's Runs tab. */
-    --c-workflow-runs-w: 300px;
     /* The template-path completer's tallest list. */
     --c-completer-max-h: 240px;
-    /* A workflow graph node card's width. */
-    --c-wf-node-w: 260px;
-    /* An inline scroll region on a workflow page (the problems list, the run log). */
-    --c-wf-scroll-max-h: 30dvh;
     /* The Set-key field's basis beside its buttons. */
     --c-key-field-basis: 14rem;
     /* The Set-key field's widest. */
@@ -1410,8 +1412,6 @@
     --c-side-bench-h: 120px;
     /* The phone's navigation sheet's width (Shell); the desk rail is c-sidebar-w. */
     --c-rail-sheet-w: 284px;
-    /* The height a run step's opened result scrolls inside (RunSteps). */
-    --c-run-result-max: 240px;
     /* The session hover card's head at its narrowest, so a short title never narrows the card. */
     --c-session-hover-head: 240px;
     /* The room the session hover card reads as its cell's (SessionHover). */
@@ -1428,20 +1428,22 @@
     --c-made-tile-min: 18rem;
     /* The Canvas view's least height, the floor its graph reads at (ViewCanvas). */
     --c-canvas-min-h: 280px;
-    /* A pipeline row's stage-name column at its narrowest (ViewPipeline). */
-    --c-pipeline-name-min: 6rem;
-    /* A pipeline row's stage-name column at its widest. */
-    --c-pipeline-name-max: 10rem;
-    /* A pipeline row's stage-kind column at its narrowest. */
-    --c-pipeline-kind-min: 4rem;
-    /* A pipeline row's stage-kind column at its widest. */
-    --c-pipeline-kind-max: 6rem;
-    /* A pipeline row's count column. */
-    --c-pipeline-count-w: 3rem;
     /* The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel. */
     --c-deck-gap: 12px;
     /* The new-project page's column. */
     --c-new-project-w: 72rem;
+    /* The cawco address tray's width where it floats under Settings' Set up (the advisor's 384px Family tray). */
+    --c-address-tray-w: 384px;
+    /* Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card). */
+    --c-address-caw: 64px;
+    /* Caw's still box in the address tray's title slot (stations). */
+    --c-address-caw-title: 40px;
+    /* The QR on the address tray's phone step: the address a phone opens once. */
+    --c-address-qr: 112px;
+    /* The tallest the address tray's Raw well stands before it scrolls. */
+    --c-address-raw-h: 192px;
+    /* The phone screen the address tray's Phone story stands its sheet in. */
+    --c-address-phone-h: 780px;
     /* The slot that holds Caw at his hero size over the new-project page; equal to CAW_SIZE in project/new/+page.svelte. */
     --c-caw-hero: 80px;
     /* The least a context meter's bar draws in the session details strip. */
@@ -1468,8 +1470,6 @@
     --c-skeleton-card-h: 54px;
     /* The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page). */
     --c-offer-text-basis: 240px;
-    /* A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome. */
-    --layer-sticky: 10;
     /* The hub band's slot under the bar: over the page column it opens above, its shadow on the page. */
     --layer-band: 20;
     /* The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage. */
@@ -1482,7 +1482,7 @@
     --layer-bar: 60;
     /* A toolbar fixed over the page (the task board's bulk bar): over the bar and the dock, under the phone's preview sheet. */
     --layer-toolbar: 70;
-    /* The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces. */
+    /* A phone's sheet that is part of the page, holding nothing (no scrim, the page above it live): the preview sheet host (SideSheet) and Caw's panel on a project's page (CawFloat). Over every page layer, under the floating surfaces, so a menu or a sheet opened from the page stands over it. */
     --layer-sheet: 80;
     /* A canvas stage standing in the phone's preview sheet: just over the sheet it stands in. */
     --layer-sheet-stage: 90;
@@ -1526,7 +1526,7 @@
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-    /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
+    /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
     --ease-crossfade: cubic-bezier(0.42, 0, 0.58, 1);
     /* A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap. */
     --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
@@ -1579,6 +1579,10 @@
     --dur-hold: 1.2s;
     /* One turn of an ambient loop: spinner, pulse, ping. */
     --dur-loop: 1.2s;
+    /* One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: "transitions.dev exactly"). */
+    --dur-skeleton-pulse: 1000ms;
+    /* A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms. */
+    --dur-skeleton-reveal: 400ms;
     --c-500: 500ms;
     --breath: calc(var(--c-500) * 4);
     --press-scale: 0.97;
@@ -1597,8 +1601,6 @@
     --echo-opacity: 0.45;
     /* The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1). */
     --breath-floor: 0.8;
-    /* The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5. */
-    --glyph-duo-status-opacity: 0.57;
     /* How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track. */
     --account-week-mix: 0.32;
     /* An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more. */
@@ -1608,6 +1610,12 @@
     --pop-rise: 8px;
     /* How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr. */
     --fold-blur: 2px;
+    /* How far out of focus the grown composer's parts come up from, and sink back into as it folds: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Web only. */
+    --part-blur: 4px;
+    /* The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5. */
+    --skeleton-pulse-floor: 0.5;
+    /* How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px. */
+    --skeleton-reveal-blur: 2px;
     /* A control's colours on one clock: its fill, edge, ink and its gradient's stops (Tailwind's registered --tw-gradient-from and --tw-gradient-to, as its own transition-colors lists them), so a highlight drawn as a gradient over the fill (action-surface) changes with the fill. */
     --transition-control:
       background-color var(--dur-control) var(--ease-out),
@@ -1628,10 +1636,15 @@
     /* The composer's tray leaving: the exit's beat, its visibility gone once the fade is done. */
     --transition-exit-hide:
       opacity var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit);
-    /* A part that fades as it slides into place on the drawer curve (the composer's edit row, a question's parts). */
-    --transition-fade-slide:
+    /* A part fading up out of a slight blur (part-blur) in place, with reduced motion: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs. */
+    --transition-fade-blur:
       opacity var(--dur-fade) var(--ease-out),
-      translate var(--dur-panel) var(--ease-drawer);
+      filter var(--dur-fade) var(--ease-out);
+    /* A part fading up out of a slight blur (part-blur) as it slides into place on the drawer curve: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs. */
+    --transition-fade-slide-blur:
+      opacity var(--dur-fade) var(--ease-out),
+      translate var(--dur-panel) var(--ease-drawer),
+      filter var(--dur-fade) var(--ease-out);
     /* A chip's fill and ink on the control's beat, and its press scale (transform) on the toggle's (the tree's count, a needs card's chip, a notice row). */
     --transition-tint-press:
       background-color var(--dur-control) var(--ease-out),
@@ -1753,7 +1766,6 @@
     --tab-rim-mix-chosen: 0.78;
     --tab-rim-mix-idle: 0.54;
     --breath-floor: 0.58;
-    --glyph-duo-status-opacity: 0.46;
     --account-week-mix: 0.63;
   }
 
@@ -1816,6 +1828,10 @@
      house grip's 1.5px. */
   --c-handle-arc-gap: calc(var(--radius-panel) * 0.122);
   --c-handle-stroke: var(--c-corner-grip-stroke);
+  /* Reached and held, the stroke doubles to 3px so the run reads at a glance against the panel's 1px edge
+     beside it, and takes the strong ink: (round 29 review: "a 1px hairline along a 565px edge" that "barely
+     separates from the panel's own border"). Its body keeps its place; it only thickens. */
+  --c-handle-stroke-held: calc(2 * var(--c-corner-grip-stroke));
   --c-handle-inset: calc(1px + var(--c-handle-arc-gap) + var(--c-handle-stroke) / 2);
   --c-handle-sweep: 65.6deg;
   /* How far past the pointer the reach runs, and the hit areas: an 8px band on each resizable edge, a 24px
@@ -1830,6 +1846,8 @@
   --c-tucked-tab: 36px;
   /* Regions (section E): the doorway tab's height. */
   --c-doorway-tab-h: 28px;
+  /* The narrowest a state may draw where a machine must fit its view at the touch floor's zoom of 1. */
+  --c-node-w-floor: 96px;
   /* The slab's ground: one step down from the well by day (--surface-recess-deep). At night the well is
      already neutral-1, the deepest step (recess-deep is the same neutral-1, 1.0:1, the slab gone), so the slab
      takes the recess there, the one step the night has (1.09:1) (my call). Its edges' inks are held to 3:1 on
@@ -1840,9 +1858,6 @@
   --c-graph-edge-ink: light-dark(var(--border-contrast), var(--border-row-outline));
   --c-graph-edge-chosen: light-dark(var(--brand-ink-strong), var(--brand-solid));
   --c-graph-label-bg: light-dark(var(--surface-recess), var(--surface-recess-deep));
-  /* A length's figure in its kind's hue on the chosen row's selection pill: by day the opacity and unfold hues
-     stand 3.98:1 there, under text's 4.5:1, so it takes 30% of the strong ink (5.45:1 at worst). */
-  --prop-figure-on-pill-mix: 70%;
   /* Edges (section F): the elbow's radius, the open chevron's legs, the playback dash. */
   --c-edge-elbow-r: var(--radius-sm);
   --c-edge-head-leg: 7px;
@@ -1950,9 +1965,22 @@ button { font: inherit; color: inherit; }
 .panel { z-index: calc(var(--layer-dock) + 1); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border: 0; border-radius: var(--radius-panel); padding: calc(var(--space-2) + 1px); background: none; box-shadow: none; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
 .bar-end { display: flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; flex: none; }
-.gview { position: relative; display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
-.graph { position: relative; flex: 0 1 auto; min-block-size: 0; block-size: var(--graph-h, 520px); overflow: auto; overscroll-behavior: contain; cursor: grab; border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
+/* The well: the graph's view between two bands of its own, one at its top and one at its foot, where the
+   doorways stand (section E). A door in its band covers nothing of the graph; the view scrolls between them,
+   its ends faded by the house edge fade so what scrolls on reads as going on. */
+.gview { position: relative; display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; padding-block: var(--c-doorway-tab-h); border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
+.graph { position: relative; flex: 0 1 auto; min-block-size: 0; block-size: var(--graph-h, 520px); overflow: auto; overscroll-behavior: contain; cursor: grab; }
 .graph.panning { cursor: grabbing; }
+/* A band stands only while it holds a door (data-top, data-foot on the well, app.js); empty, the view takes its
+   room, so the well's own height never changes. */
+.gview:not([data-top]) .graph { margin-block-start: calc(-1 * var(--c-doorway-tab-h)); }
+.gview:not([data-foot]) .graph { margin-block-end: calc(-1 * var(--c-doorway-tab-h)); }
+.gview:not([data-top], [data-foot]) .graph { block-size: calc(var(--graph-h, 520px) + 2 * var(--c-doorway-tab-h)); }
+.gview:is([data-top]:not([data-foot]), [data-foot]:not([data-top])) .graph { block-size: calc(var(--graph-h, 520px) + var(--c-doorway-tab-h)); }
+/* The house edge fade at an end with more to scroll past it (data-fade, app.js). */
+.graph[data-fade="top"] { mask-image: linear-gradient(transparent, #000 var(--c-edge-fade-len-phone)); }
+.graph[data-fade="foot"] { mask-image: linear-gradient(#000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.graph[data-fade="top foot"] { mask-image: linear-gradient(transparent, #000 var(--c-edge-fade-len-phone), #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
 .zoomer { position: relative; margin: 0 auto; }
 .world { position: absolute; inset-inline-start: 0; inset-block-start: 0; transform-origin: 0 0; }
 
@@ -1995,15 +2023,13 @@ button { font: inherit; color: inherit; }
    Show tab's shape), its name in meta and a chevron pointing out, along the edge at the region's own place. It
    comes in over --dur-fade as its region leaves the view and goes over --dur-exit as it returns, sliding 4px
    from the edge. */
-.doors { position: absolute; inset: 1px; pointer-events: none; overflow: hidden; border-radius: calc(var(--radius-panel) - var(--space-2) - 1px); }
+.doors { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
 .door { all: unset; box-sizing: border-box; position: absolute; display: inline-flex; align-items: center; gap: var(--space-1); block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; opacity: 0; translate: var(--door-out); pointer-events: none; transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door[data-on] { opacity: 1; translate: 0 0; pointer-events: auto; transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .door svg { flex: none; inline-size: var(--icon-sm); block-size: var(--icon-sm); rotate: var(--door-turn, 0deg); }
-.door[data-edge="bottom"] { inset-block-end: 0; border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; --door-out: 0 4px; }
-.door[data-edge="top"] { inset-block-start: 0; border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); --door-out: 0 -4px; }
-.door[data-edge="right"] { inset-inline-end: 0; border-inline-end: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); --door-out: 4px 0; }
-.door[data-edge="left"] { inset-inline-start: 0; border-inline-start: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; --door-out: -4px 0; padding-inline: var(--space-1) var(--space-2); }
+.door[data-band="bottom"] { inset-block-end: 0; border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; --door-out: 0 4px; }
+.door[data-band="top"] { inset-block-start: 0; border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); --door-out: 0 -4px; }
 @media (hover: hover) { .door:hover { background: var(--surface-hover); color: var(--ink-strong); } }
 .door:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 @media (prefers-reduced-motion: reduce) { .door, .door[data-on] { translate: 0 0; } }
@@ -2039,19 +2065,24 @@ button { font: inherit; color: inherit; }
 .world[data-instant] :is(.node, .var) { transition: none; }
 .var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
-/* The zoom group: 24px items 2px in (The Concentric Rule). Its figure is a press: Fit all (⇧1). */
-.zoom { display: flex; align-items: center; gap: var(--space-row); padding: calc(var(--radius-sm) - var(--radius-xs) - 1px); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); }
+/* The zoom group: its parts stand bare in a row (the house icon rule: the glyph, never a box round it). Its
+   figure is a press: Fit all (⇧1). */
+.zoom { display: flex; align-items: center; gap: var(--space-row); }
 .zoom-fit { all: unset; box-sizing: border-box; display: grid; place-items: center; min-inline-size: 5ch; block-size: var(--c-btn-h-xs); padding-inline: var(--space-1); border-radius: var(--radius-xs); cursor: pointer; transition: var(--transition-control); }
 @media (hover: hover) { .zoom-fit:hover { background: var(--surface-hover); } }
 .zoom-fit:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .icon-btn { all: unset; box-sizing: border-box; display: grid; place-items: center; inline-size: var(--c-btn-h-xs); block-size: var(--c-btn-h-xs); border-radius: var(--radius-xs); color: var(--ink-row); cursor: pointer; transition: var(--transition-control); }
 .icon-btn svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
-/* Outline and Hide: the kit's sm icon button (30px, the input's radius, the button outline), --icon-md. */
-.hide-btn { inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); color: var(--ink-row); }
+/* Outline and Hide: the kit's sm ghost icon button, a 30px hit area round a bare --icon-md glyph. */
+.hide-btn { inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); color: var(--ink-row); }
 .hide-btn svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
-@media (hover: hover) { .icon-btn:hover { background: var(--surface-hover); } }
+/* An icon is the Solar glyph alone, never a box or a circle (the owner's rule): its hit area keeps its size;
+   under the pointer and while its menu is open the glyph takes the strong ink; a press scales it (The Press
+   Rule). */
+@media (hover: hover) { .icon-btn:hover { color: var(--ink-strong); } }
+.icon-btn:active { scale: var(--press-scale); }
 .icon-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
-.icon-btn[aria-expanded="true"] { background: var(--surface-pressed); }
+.icon-btn[aria-expanded="true"] { color: var(--ink-strong); }
 
 .graphs { display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
 .gsec { display: flex; flex-direction: column; min-block-size: 0; }
@@ -2080,7 +2111,8 @@ html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2
    One arc per surface, iPadOS 26's corner handle (round 28's measured geometry), in the corner that faces the
    open field: the panel's bottom-leading, the dock's top-trailing. Nothing else is drawn on any edge. It is one
    object at three lengths: the arc's body never moves; each leg runs on from it along its edge. Pointing at an
-   edge, that edge's leg reaches to --c-handle-reach past the pointer and follows it (ink to the muted ink);
+   edge, that edge's leg reaches to --c-handle-reach past the pointer and follows it, thickened to 3px in the
+   strong ink;
    held, it sweeps the whole edge in coral (The Coral Is Where You Act Rule); let go, it retracts. Each leg's
    last 32px fade by the house rim taper (1 − (1 − x)^6, app.js), the stroke whole to its tip.
    The clock: CSS transitions on four registered values per arc (each leg's reach in px, and its sweep 0 to 1,
@@ -2090,24 +2122,28 @@ html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2
 @property --sweep-a { syntax: "<number>"; inherits: false; initial-value: 0; }
 @property --sweep-b { syntax: "<number>"; inherits: false; initial-value: 0; }
 .arc { position: absolute; z-index: 5; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; color: var(--border-row-outline); transition: --reach-a var(--dur-exit) var(--ease-out), --reach-b var(--dur-exit) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-exit) var(--ease-out); }
-.arc path { fill: none; stroke-width: var(--c-handle-stroke); stroke-linecap: round; stroke-linejoin: round; }
+.arc path { fill: none; stroke-width: var(--c-handle-stroke); stroke-linecap: round; stroke-linejoin: round; transition: stroke-width var(--dur-exit) var(--ease-out); }
+.arc:is([data-state="reach"], [data-state="follow"], [data-state="settle"], [data-state="sweep"]) path { stroke-width: var(--c-handle-stroke-held); }
+.arc[data-state="reach"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="follow"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="sweep"] path { transition: stroke-width var(--dur-pop) var(--ease-out); }
 .arc .arc-body { stroke: currentColor; }
 .arc stop { stop-color: currentColor; }
 .arc > g { transition: opacity var(--dur-exit) var(--ease-out); }
 #arcP { inset-inline-start: 0; inset-block-end: 0; }
 #arcD { inset-inline-end: -1px; inset-block-start: -1px; }
 /* Approach: the reach grows over --dur-control on ease-out, then follows the pointer on the hover ghost's glide. */
-.arc[data-state="reach"] { color: var(--ink-muted); transition: --reach-a var(--dur-control) var(--ease-out), --reach-b var(--dur-control) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
-.arc[data-state="follow"] { color: var(--ink-muted); transition: --reach-a var(--dur-ghost) var(--ease-in-out), --reach-b var(--dur-ghost) var(--ease-in-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.arc[data-state="reach"] { color: var(--ink-strong); transition: --reach-a var(--dur-control) var(--ease-out), --reach-b var(--dur-control) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.arc[data-state="follow"] { color: var(--ink-strong); transition: --reach-a var(--dur-ghost) var(--ease-in-out), --reach-b var(--dur-ghost) var(--ease-in-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
 /* Held: the sweep to the whole edge, the ink to coral, over --dur-pop on ease-out. */
 .arc[data-state="sweep"] { color: var(--brand-solid); transition: --reach-a var(--dur-pop) var(--ease-out), --reach-b var(--dur-pop) var(--ease-out), --sweep-a var(--dur-pop) var(--ease-out), --sweep-b var(--dur-pop) var(--ease-out), color var(--dur-pop) var(--ease-out); }
 /* Let go with the pointer still on it: back to the reach over --dur-exit. */
-.arc[data-state="settle"] { color: var(--ink-muted); }
+.arc[data-state="settle"] { color: var(--ink-strong); }
 @media (prefers-reduced-motion: reduce) {
   /* The run appears and goes by opacity alone over --dur-control; its length jumps (after the fade, going). */
   .arc[data-state] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s, --reach-b 0s, --sweep-a 0s, --sweep-b 0s; }
   .arc[data-state=""] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s linear var(--dur-control), --reach-b 0s linear var(--dur-control), --sweep-a 0s linear var(--dur-control), --sweep-b 0s linear var(--dur-control); }
-  .arc .arc-leg { transition: opacity var(--dur-control) var(--ease-out); }
+  .arc .arc-leg, .arc[data-state] .arc-leg { transition: opacity var(--dur-control) var(--ease-out), stroke-width var(--dur-control) var(--ease-out); }
   .arc[data-state=""] .arc-leg { opacity: 0; }
 }
 /* Stacked graphs have no foot edge: the corner moves the width alone. */
@@ -2156,16 +2192,17 @@ html[data-sliding], html[data-sliding] * { cursor: grabbing !important; user-sel
    becomes the tile's on the same clock. Show runs the same transitions back, the content in over the second
    half. Transitions, so a Show caught mid-Hide turns back from where the box is drawn. A keyboard toggle is
    instant (data-instant). */
-.panel-shell { all: unset; box-sizing: border-box; position: absolute; z-index: -1; inset: 0; border: 1px solid var(--border-control); border-radius: var(--radius-panel); background: var(--surface-raised); box-shadow: var(--shadow-overlay-hung); pointer-events: none; cursor: pointer; transition: inset-block-start var(--dur-panel) var(--ease-drawer), inset-block-end var(--dur-panel) var(--ease-drawer), inset-inline-start var(--dur-panel) var(--ease-drawer), inset-inline-end var(--dur-panel) var(--ease-drawer), border-radius var(--dur-panel) var(--ease-drawer), border-inline-end-width var(--dur-panel) var(--ease-drawer), box-shadow var(--dur-panel) var(--ease-drawer), background-color var(--dur-control) var(--ease-out); }
+.panel-shell { all: unset; box-sizing: border-box; position: absolute; z-index: -1; inset: 0; border: 1px solid var(--border-control); border-radius: var(--radius-panel); background: var(--surface-raised); box-shadow: var(--shadow-overlay-hung); pointer-events: none; cursor: pointer; transition: inset-block-start var(--dur-panel) var(--ease-drawer), inset-block-end var(--dur-panel) var(--ease-drawer), inset-inline-start var(--dur-panel) var(--ease-drawer), inset-inline-end var(--dur-panel) var(--ease-drawer), border-radius var(--dur-panel) var(--ease-drawer), border-inline-end-width var(--dur-panel) var(--ease-drawer), box-shadow var(--dur-panel) var(--ease-drawer), background-color var(--dur-panel) var(--ease-drawer), border-color var(--dur-panel) var(--ease-drawer); }
 .tab-glyph { position: absolute; inset-block-start: -1px; inset-inline-start: -1px; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); color: var(--ink-muted); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
 .tab-glyph svg { inline-size: var(--icon-lg); block-size: var(--icon-lg); }
 html[data-layout="desk"] .panel > :not(.panel-shell, .arc) { transition: opacity calc(var(--dur-panel) / 2) var(--ease-out) calc(var(--dur-panel) / 2); }
 html[data-layout="desk"] .panel[data-open="false"] { pointer-events: none; }
 html[data-layout="desk"] .panel[data-open="false"] > :not(.panel-shell, .arc) { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
 html[data-layout="desk"] .panel[data-open="false"] .arc > g { opacity: 0; }
-html[data-layout="desk"] .panel[data-open="false"] .panel-shell { inset-block-start: var(--tab-y, var(--space-2)); inset-block-end: calc(100% - var(--tab-y, var(--space-2)) - var(--c-tucked-tab)); inset-inline-start: calc(100% + var(--tab-out, var(--space-5)) - var(--c-tucked-tab)); inset-inline-end: calc(-1 * var(--tab-out, var(--space-5))); border-radius: var(--radius-lg) 0 0 var(--radius-lg); border-inline-end-width: 0; box-shadow: var(--shadow-tile); pointer-events: auto; }
+html[data-layout="desk"] .panel[data-open="false"] .panel-shell { inset-block-start: var(--tab-y, var(--space-2)); inset-block-end: calc(100% - var(--tab-y, var(--space-2)) - var(--c-tucked-tab)); inset-inline-start: calc(100% + var(--tab-out, var(--space-5)) - var(--c-tucked-tab)); inset-inline-end: calc(-1 * var(--tab-out, var(--space-5))); border-radius: var(--radius-lg) 0 0 var(--radius-lg); border-inline-end-width: 0; border-color: transparent; background-color: transparent; box-shadow: none; pointer-events: auto; }
 html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; transition: opacity calc(var(--dur-panel) - var(--dur-exit)) var(--ease-out) var(--dur-exit); }
-@media (hover: hover) { html[data-layout="desk"] .panel[data-open="false"] .panel-shell:hover { background: var(--surface-hover); } }
+@media (hover: hover) { html[data-layout="desk"] .panel[data-open="false"] .panel-shell:hover .tab-glyph { color: var(--ink-strong); } }
+html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyph { scale: var(--press-scale); }
 .panel-shell:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .panel[data-instant], .panel[data-instant] * { transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
@@ -2174,10 +2211,10 @@ html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; tran
 }
 
 /* The side sheet's Show: the same tucked tab, at the screen's trailing edge. */
-.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: 0; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); padding: 0; border: 1px solid var(--border-control); border-inline-end: 0; border-radius: var(--radius-lg) 0 0 var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-tile); color: var(--ink-muted); cursor: pointer; transition: var(--transition-control); }
+.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: 0; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); padding: 0; border: 0; border-radius: var(--radius-lg); background: none; color: var(--ink-muted); cursor: pointer; transition: var(--transition-control); }
 .show svg { inline-size: var(--icon-lg); block-size: var(--icon-lg); }
 .show[hidden] { display: none; }
-@media (hover: hover) { .show:hover { background: var(--surface-hover); } }
+@media (hover: hover) { .show:hover { color: var(--ink-strong); } }
 .show:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 
 /* ---- The dock: the kept move's clips over time, an editor ---- */
@@ -2197,13 +2234,15 @@ html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; tran
 .tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
 .ruler-row { position: sticky; inset-block-start: 0; z-index: 3; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
 .ruler-row .ruler { grid-column: 2; }
-.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); background: var(--surface-raised); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
+.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
 .tbtn svg { grid-area: 1 / 1; inline-size: var(--icon-md); block-size: var(--icon-md); transition: opacity var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out), filter var(--dur-control) var(--ease-out); }
 .tbtn .i-play { translate: 1px 0; }
 .tbtn .i-pause, .tbtn[data-playing] .i-play { opacity: 0; scale: var(--pop-scale); filter: blur(var(--c-recall-cross-blur)); }
 .tbtn[data-playing] .i-pause { opacity: 1; scale: 1; filter: none; }
-.tbtn[aria-pressed="true"] { background: var(--surface-pressed); }
-@media (hover: hover) { .tbtn:not([aria-pressed="true"]):hover { background: var(--surface-hover); } }
+/* Loop off is the muted glyph, on the strong one: a toggle said by its glyph's ink, with no box. */
+#loop[aria-pressed="false"] { color: var(--ink-muted); }
+.tbtn[aria-pressed="true"] { color: var(--ink-strong); }
+@media (hover: hover) { .tbtn:hover { color: var(--ink-strong); } }
 .tbtn:active { scale: var(--press-scale); }
 /* The time: a Measured figure, "320 / 320 ms". */
 .readout { min-inline-size: 13ch; text-align: end; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-muted); white-space: nowrap; }
@@ -2228,8 +2267,10 @@ html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; tran
 .clip[data-prop="size"] { --kind: var(--prop-size); }
 .clip[data-prop="colour"] { --kind: var(--prop-colour); }
 .clip[data-prop="unfold"] { --kind: var(--prop-unfold); }
-/* The chosen clip stands on the selection pill; the hover ghost glides under the row a pointer is on. */
-.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--selected-bg); }
+/* The chosen clip wears the card's selection frame (highlight.svelte.ts: "1px brand-solid over the recess at
+   the card's own radius"), not the apricot wash: a full row of coral would stand against the page's own coral
+   button, and coral is the act's. The hover ghost glides under the row a pointer is on. */
+.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--surface-recess); box-shadow: inset 0 0 0 1px var(--brand-solid); }
 .row-ghost { position: absolute; z-index: 0; inset-inline: calc(-1 * var(--space-2)); inset-block-start: 0; block-size: var(--ghost-h, 0px); translate: 0 var(--ghost-y, 0px); border-radius: var(--radius-sm); background: var(--surface-hover); opacity: 0; pointer-events: none; transition: translate var(--dur-ghost) var(--ease-in-out), block-size var(--dur-ghost) var(--ease-in-out), opacity var(--dur-control) var(--ease-out); }
 .row-ghost[data-on] { opacity: 1; }
 .row-ghost[data-fresh] { transition: opacity var(--dur-control) var(--ease-out); }
@@ -2256,7 +2297,6 @@ html[data-kinds="hue"] .lead { color: var(--kind); }
 .fig { display: inline-flex; align-items: baseline; gap: var(--space-1); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; font-feature-settings: "liga" 0, "calt" 0; color: var(--ink-row); white-space: nowrap; }
 .fig .unit { font: var(--type-meta); color: var(--ink-muted); }
 html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
-html[data-kinds="hue"] .clip[data-chosen] .fact-dur > .fig { color: light-dark(color-mix(in oklab, var(--kind) var(--prop-figure-on-pill-mix), var(--ink-strong)), var(--kind)); }
 /* The person's own edit: the figure on the selection pair, theirs alone. */
 .fact.changed { background: var(--selected-bg); }
 .fact.changed :is(.fig, .unit, .curve-glyph, .word, .arrow) { color: var(--selected-ink) !important; }
@@ -2281,6 +2321,8 @@ html[data-kinds="hue"] .clip[data-chosen] .fact-dur > .fig { color: light-dark(c
 .bar { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --bar-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--bar-fill); box-shadow: inset 0 0 0 1px var(--bar-edge); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
 html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill); --bar-edge: var(--border-row-outline); }
 .bar[data-zone] { cursor: ew-resize; }
+/* A bar's touch layer: its lane's height grown to the touch floor, transparent; shown on touch and phones. */
+.bar-hit { display: none; position: absolute; inset-inline: 0; inset-block: calc((var(--c-pill-h) - var(--c-touch-floor)) / 2); }
 .bar::before, .bar::after { content: ""; position: absolute; inset-block: var(--space-2); inline-size: var(--c-block-drop-line); border-radius: var(--radius-pill); background: var(--bar-edge); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
 .bar::before { inset-inline-start: var(--space-1); }
 .bar::after { inset-inline-end: var(--space-1); }
@@ -2367,11 +2409,16 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill); --tail-edge: va
 .fld .unit { font: var(--type-meta); color: var(--ink-muted); }
 html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size: var(--text-field-floor); }
 .arrow { font: var(--type-meta); color: var(--ink-muted); }
-/* The curve's segmented control: the four house curves as their glyphs, then Spring and Custom. */
-.pop .t-tabs { flex: 1 1 auto; inline-size: 100%; }
-.pop .t-tab { flex: 1 1 auto; padding-inline: var(--space-2); }
-.pop .t-tab.glyph-seg { display: grid; place-items: center; }
-.pop .t-tab svg { inline-size: 16px; block-size: 10px; overflow: visible; }
+/* The curve: past four short segments the list (designer's 2C, the inspector's variant control): the house
+   curves as their glyphs and words, Spring, Custom, a radio group in two columns; the chosen one on the fill
+   step in the strong ink. */
+.curve-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-row); }
+.curve-opt { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-inline-size: 0; min-block-size: var(--c-btn-h-sm); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-muted); cursor: pointer; transition: background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.curve-opt span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.curve-opt svg { flex: none; inline-size: 16px; block-size: 10px; overflow: visible; }
+.curve-opt[aria-checked="true"] { background: var(--surface-fill); color: var(--ink-strong); }
+@media (hover: hover) { .curve-opt:not([aria-checked="true"]):hover { background: var(--surface-hover); color: var(--ink-strong); } }
+.curve-opt:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 /* The chosen curve drawn large (DialKit's easing editor): the curve, its two handles to drag, and a live dot
    that plays the clip's length on the curve after every change. */
 .ceditor { position: relative; flex: none; inline-size: var(--c-curve-editor-w); block-size: var(--c-curve-editor-h); border-radius: var(--radius-sm); background: var(--surface-recess); touch-action: none; }
@@ -2380,6 +2427,7 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 .ceditor .curve { fill: none; stroke: var(--ink-strong); stroke-width: var(--c-graph-edge); stroke-linecap: round; }
 .ceditor .arm { stroke: var(--border-contrast); stroke-width: 1; }
 .ceditor .knob { fill: var(--surface-lift); stroke: var(--ink-row); stroke-width: var(--c-graph-edge); cursor: grab; }
+.ceditor .knob-hit { display: none; fill: transparent; cursor: grab; }
 .ceditor .knob:focus-visible { outline: none; stroke: var(--focus-ring); stroke-width: var(--focus-ring-width); }
 .ceditor .live { fill: var(--ink-strong); }
 .curve-side { display: flex; flex-direction: column; gap: var(--space-2); flex: 1 1 auto; min-inline-size: 0; font: var(--type-meta); color: var(--ink-muted); }
@@ -2478,10 +2526,22 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 }
 
 /* Touch: every target is at least the touch floor; hover-only marks never stick. */
-html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .fact, .door, .region-head) { position: relative; touch-action: manipulation; }
-html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .fact, .door, .region-head)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
-html:is([data-input="touch"], [data-input="touch-hover"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
-html:is([data-input="touch"], [data-input="touch-hover"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+/* Touch and phones: every target is at least the touch floor (44px). Where a part can grow to it in place it
+   does (a variant chip, a slab's name, a fact, a field, the slider); a glyph or a word in a tight row keeps its
+   size and grows a transparent layer to the floor instead; a bar's layer stands across its lane. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .sheet-title) { position: relative; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show) { touch-action: manipulation; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .pop input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar { touch-action: none; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-hit { display: block; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .edge .hit { stroke-width: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ceditor .knob-hit { display: inline; }
 html:is([data-input="touch"], [data-input="touch-hover"]) :is(.node, .var) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 html:is([data-input="touch"], [data-input="touch-hover"]) .graph { touch-action: pan-x pan-y; cursor: auto; }
 html:is([data-input="touch"], [data-input="touch-hover"]) .lane { touch-action: pan-y; }
@@ -2511,7 +2571,10 @@ html[data-layout="drawer"] .tools { inset-inline: 0; inset-block-end: 0; block-s
 html[data-layout="drawer"] .page { inset: 0 0 var(--dock-room, 0px) 0; padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--c-screen-margin) var(--space-5); transition: inset-block-end var(--dur-panel) var(--ease-drawer); }
 html[data-layout="drawer"][data-drawer-drag] :is(.tools, .page) { transition: none; }
 html[data-layout="drawer"] .sheet-head { cursor: grab; touch-action: none; }
-html[data-layout="drawer"] :is(#sheetHide, .show) { display: none; }
+html[data-layout="drawer"] .show { display: none; }
+#sheetHide svg { transition: rotate var(--dur-panel) var(--ease-drawer); }
+#sheetHide[data-folded] svg { rotate: 180deg; }
+@media (prefers-reduced-motion: reduce) { #sheetHide svg { transition: none; } }
 @media (prefers-reduced-motion: reduce) { html[data-layout="drawer"] :is(.tools, .page) { transition: none; } }
 
 /* The side sheet: from the trailing edge at half the pane. Hide folds it to the tucked tab. */
@@ -2544,7 +2607,7 @@ html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c
       <span class="edge-pill edge-pill-top" aria-hidden="true"></span>
       <button class="sheet-title" id="sheetTitle" type="button"><b>Design graph</b> · <span id="sheetState"></span></button>
       <div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph">Graph</button><button class="t-tab" role="tab" data-face="move">Timeline</button></div>
-      <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph" data-icon="chevronRight"></button>
+      <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph"></button>
     </header>
 
     <aside class="tool panel" id="panel" data-open="true" aria-label="Design graph">
@@ -6086,6 +6149,9 @@ function applyScreen() {
   return !was || was.layout !== s.layout || !!was.multi !== !!multi || (was.multi && multi && was.multi.graphs !== multi.graphs);
 }
 const layoutIs = (l) => screen.layout === l;
+// Where every target keeps the 44px touch floor (a finger, or a phone's screen), the graph never zooms itself
+// below 1, so no fit shrinks a target under it; the person's own pinch or Fit all still may.
+const touchFloors = () => screen.input !== "fine" || /^phone/.test(screen.screen);
 const compact = () => !layoutIs("desk");
 // A length token in px, whatever its unit (45dvh, 85vh): drawn once on a probe and measured.
 function lenOf(name) {
@@ -6483,6 +6549,7 @@ function drawGraph(cid = tab) {
   const c = compOf(cid), graph = graphOf(cid), gs = G[cid];
   // A face out of view has no width; it draws when it comes back.
   if (!graph.clientWidth) return;
+  if (!touchFloors() && !gs.narrowing) gs.narrow = 0;
   graph.innerHTML = "";
   const zoomer = document.createElement("div"); zoomer.className = "zoomer";
   const world = document.createElement("div"); world.className = "world";
@@ -6497,7 +6564,8 @@ function drawGraph(cid = tab) {
   const chrome = 2 * px("--space-5"), full = 168, gap = 22;
   const two = graph.clientWidth >= 2 * (2 * full + gap + chrome) + 2 * margin + apart;
   const mroom = two ? Math.floor((room - apart) / 2) : room;
-  world.style.setProperty("--node-w", clamp(Math.floor((mroom - chrome - gap) / 2), 120, full) + "px");
+  const nodeW = clamp(Math.floor((mroom - chrome - gap) / 2), 120, full) - (gs.narrow || 0);
+  world.style.setProperty("--node-w", nodeW + "px");
   graph.dataset.two = String(two);
   const regions = {};
   for (const m of c.machines) {
@@ -6523,6 +6591,10 @@ function drawGraph(cid = tab) {
     for (const e of svg.querySelectorAll(".edge")) e.addEventListener("click", (ev) => { ev.stopPropagation(); keep(cid, m.id, e.dataset.to, varyOf(cid, m.id, e.dataset.to), e.dataset.from); });
     regions[m.id] = r;
   }
+  // A machine whose lanes and labels take it past the view at its least zoom (1 where targets keep the touch
+  // floor) draws again with its states narrower, down to --c-node-w-floor, so the kept machine stands whole.
+  const worst = Math.max(...c.machines.map((m) => regions[m.id].offsetWidth)) - mroom;
+  if (worst > 0.5 && touchFloors() && nodeW - Math.ceil(worst / 2) >= px("--c-node-w-floor") && !gs.narrowing) { gs.narrowing = true; gs.narrow = (gs.narrow || 0) + Math.ceil(worst / 2); drawGraph(cid); gs.narrowing = false; return; }
   const sized = c.machines.map((m) => ({ id: m.id, w: regions[m.id].offsetWidth, h: regions[m.id].offsetHeight }));
   let outer = fitLayout(sized, c.machineEdges, room + 2 * margin, margin, { align: "UL", nodesep: apart, ranksep: apart });
   if (outer.graph().width > room + 2 * margin) {
@@ -6551,7 +6623,7 @@ function drawDoors(c) {
     d.onclick = (e) => { e.stopPropagation(); fitRegion(c.id, m.id, "pan"); };
     box.append(d);
   }
-  for (const edge of ["top", "bottom", "left", "right"]) {
+  for (const edge of ["top", "bottom"]) {
     const d = document.createElement("button"); d.type = "button"; d.className = "door more"; d.dataset.more = edge; d.tabIndex = -1;
     d.innerHTML = "<span></span>" + icon(ICON.chevron);
     d.onclick = (e) => { e.stopPropagation(); openOutline(c.id, d); };
@@ -6566,9 +6638,14 @@ function viewChanged(cid) {
   if (!g || !g.clientHeight) return;
   const gb = g.getBoundingClientRect(), top = gb.top + g.clientTop, left = gb.left + g.clientLeft, W = g.clientWidth, H = g.clientHeight, z = G[cid].zoom;
   const s1 = px("--space-1"), s2 = px("--space-2");
-  // Doors: a region wholly out of view gets one at the view's edge nearest it, along that edge at the region's
-  // own coordinate; four at most per edge, past that three and "N more".
-  const doors = doorsOf(cid), per = { top: [], bottom: [], left: [], right: [] };
+  // The house edge fade at an end with more past it.
+  const more = g.scrollHeight - g.clientHeight - g.scrollTop;
+  g.dataset.fade = [g.scrollTop > 1 ? "top" : "", more > 1 ? "foot" : ""].filter(Boolean).join(" ");
+  // Doors stand in the well's two bands, never over the view: a region wholly out of view gets one in the
+  // band nearest it, along the band at the region's own place; one out to the side stands at that end of the
+  // band its middle is nearer, its chevron pointing that way. Four at most per band, past that three and
+  // "N more".
+  const doors = doorsOf(cid), per = { top: [], bottom: [] };
   for (const r of g.querySelectorAll(".region")) {
     const rb = r.getBoundingClientRect(), d = doors.querySelector('.door[data-machine="' + r.dataset.machine + '"]');
     if (!d) continue;
@@ -6576,42 +6653,52 @@ function viewChanged(cid) {
     const out = below >= -0.5 || above >= -0.5 || right >= -0.5 || leftOf >= -0.5;
     if (!out) { delete d.dataset.on; continue; }
     const vert = Math.max(below, above), horiz = Math.max(right, leftOf);
-    const edge = vert >= horiz ? (below >= above ? "bottom" : "top") : right >= leftOf ? "right" : "left";
-    per[edge].push({ d, at: edge === "top" || edge === "bottom" ? rb.left + rb.width / 2 - left : rb.top + rb.height / 2 - top });
+    const way = vert >= horiz ? (below >= above ? "bottom" : "top") : right >= leftOf ? "right" : "left";
+    const band = way === "top" || way === "bottom" ? way : rb.top + rb.height / 2 < top + H / 2 ? "top" : "bottom";
+    const at = way === "right" ? Infinity : way === "left" ? -Infinity : rb.left + rb.width / 2 - left;
+    d.style.setProperty("--door-turn", DOOR_TURN[way]);
+    per[band].push({ d, at });
   }
   for (const d of doors.querySelectorAll(".door:not(.more)")) if (!Object.values(per).some((list) => list.some((x) => x.d === d))) delete d.dataset.on;
-  for (const [edge, list] of Object.entries(per)) {
-    const more = doors.querySelector('.door[data-more="' + edge + '"]');
+  for (const [band, list] of Object.entries(per)) {
+    const moreDoor = doors.querySelector('.door[data-more="' + band + '"]');
     list.sort((a, b) => a.at - b.at);
     const shown = list.length > 4 ? list.slice(0, 3) : list, rest = list.length - shown.length;
     for (const x of list.slice(shown.length)) delete x.d.dataset.on;
-    if (rest) { more.querySelector("span").textContent = rest + " more"; more.setAttribute("aria-label", rest + " more machines, open the Outline"); shown.push({ d: more, at: Infinity }); } else delete more.dataset.on;
-    // Laid along the edge in order, each its own width apart by --space-1, inside the view by --space-2; where
-    // their run is longer than the edge, each names its region in an equal share, its words cut at the end.
-    const along = edge === "top" || edge === "bottom", span = along ? W : H;
+    if (rest) { moreDoor.querySelector("span").textContent = rest + " more"; moreDoor.setAttribute("aria-label", rest + " more machines, open the Outline"); moreDoor.style.setProperty("--door-turn", DOOR_TURN[band]); shown.push({ d: moreDoor, at: Infinity }); } else delete moreDoor.dataset.on;
+    // Laid along the band in order, each its own width apart by --space-1, inside it by --space-2; where their
+    // run is longer than the band, each names its region in an equal share, its words cut at the end.
+    const span = W;
     for (const x of shown) x.d.style.maxInlineSize = "";
-    if (along && shown.length) {
+    if (shown.length) {
       const room = span - 2 * s2 - (shown.length - 1) * s1, total = shown.reduce((n, x) => n + x.d.offsetWidth, 0);
       if (total > room) for (const x of shown) x.d.style.maxInlineSize = Math.floor(room / shown.length) + "px";
     }
     let next = s2;
-    const places = shown.map((x) => { x.d.dataset.edge = edge; x.d.style.setProperty("--door-turn", DOOR_TURN[edge]); const w = along ? x.d.offsetWidth : x.d.offsetHeight; const want = x.at === Infinity ? span - s2 - w : clamp(x.at - w / 2, s2, span - s2 - w); const at = Math.max(want, next); next = at + w + s1; return { x, at, w }; });
-    // Pushed back from the far end where the run overflows it.
+    const places = shown.map((x) => { x.d.dataset.band = band; const w = x.d.offsetWidth; const want = clamp(x.at - w / 2, s2, span - s2 - w); const at = Math.max(want, next); next = at + w + s1; return { x, at, w }; });
     let limit = span - s2;
     for (let i = places.length - 1; i >= 0; i--) { places[i].at = Math.min(places[i].at, limit - places[i].w); limit = places[i].at - s1; }
-    for (const { x, at } of places) {
-      if (along) { x.d.style.left = at + "px"; x.d.style.top = ""; } else { x.d.style.top = at + "px"; x.d.style.left = ""; }
-      x.d.dataset.on = ""; x.d.tabIndex = 0;
-    }
+    // The band's own left is the view's (the well's edge and the view's share one inline start).
+    const off = gb.left - doors.getBoundingClientRect().left + g.clientLeft;
+    for (const { x, at } of places) { x.d.style.left = off + at + "px"; x.d.dataset.on = ""; x.d.tabIndex = 0; }
   }
   for (const d of doors.querySelectorAll(".door:not([data-on])")) d.tabIndex = -1;
+  // A band stands only while it holds a door (impeccable critique: an empty band was dead room). Its coming
+  // shrinks the view and its going grows it, so a door only ever adds a door or takes one away: no flicker. The
+  // top band's coming and going moves the scroll by its height, so nothing in the view moves.
+  const gv = g.parentNode, band = px("--c-doorway-tab-h");
+  for (const [edge, attr] of [["top", "data-top"], ["bottom", "data-foot"]]) {
+    const want = per[edge].length > 0;
+    if (gv.hasAttribute(attr) === want) continue;
+    gv.toggleAttribute(attr, want);
+    if (edge === "top") g.scrollTop += want ? band : -band;
+    return viewChanged(cid);
+  }
   // A slab's name sticks to the view's top while its top has left the view and the slab is still in it, so the
-  // room the view is in is always named; it stops --space-2 short of its slab's foot.
+  // room the view is in is always named; it stops --space-5 short of its slab's foot.
   for (const r of g.querySelectorAll(".region")) {
     const head = r.querySelector(".region-head"), rb = r.getBoundingClientRect();
-    // Clear of a door on the view's top edge that stands over it.
-    const hb = head.getBoundingClientRect(), under = [...doors.querySelectorAll('.door[data-on][data-edge="top"]')].some((d) => { const q = d.getBoundingClientRect(); return q.left < hb.right && q.right > hb.left; });
-    const natural = rb.top + head.offsetTop * z, want = top + s1 + (under ? px("--c-doorway-tab-h") + s1 : 0);
+    const natural = rb.top + head.offsetTop * z, want = top + s1;
     const most = (r.offsetHeight - head.offsetTop - head.offsetHeight - px("--space-5")) * z;
     const inView = rb.bottom > top + 0.5 && rb.top < top + H - 0.5;
     const shift = inView ? clamp(want - natural, 0, Math.max(0, most)) : 0;
@@ -6641,7 +6728,7 @@ function fitRegion(cid, mid, mode) {
   if (!r) return;
   const pad = px("--space-3"), W = g.clientWidth - 2 * pad, H = g.clientHeight - 2 * pad;
   const rw = r.offsetWidth, rh = r.offsetHeight, rx = r.offsetLeft, ry = r.offsetTop;
-  const fitZ = clamp(Math.min(W / rw, H / rh), 0.5, 1);
+  const fitZ = touchFloors() ? 1 : clamp(Math.min(W / rw, H / rh), 0.5, 1);
   const z = mode === "fit" ? fitZ : Math.min(gs.zoom, fitZ);
   animateView(cid, () => {
     gs.zoom = z; gs.own = true; applyZoom(cid);
@@ -6693,23 +6780,22 @@ function revealIn(cid, el, fromEl, fit) {
   // margin, between 0.75 and 1 (the r24 values ruling, call 3). Where it doesn't fit at 0.75, the view opens
   // on the kept state, its from-state above it when there is room, the machine's top cut cleanly.
   if (fit && !gs.own) {
-    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, z = clamp((g.clientHeight - 2 * pad) / rh, 0.75, 1);
+    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, z = touchFloors() ? 1 : clamp((g.clientHeight - 2 * pad) / rh, 0.75, 1);
     if (Math.abs(z - gs.zoom) > 0.001) { gs.zoom = z; applyZoom(cid); }
   }
   const box = g.getBoundingClientRect(), n = el.getBoundingClientRect(), r = el.closest(".region").getBoundingClientRect();
-  // The doors' bands at the view's top and foot stay clear of what it opens on.
-  const sh = px("--c-doorway-tab-h") + px("--space-1");
+  const sh = 0;
   const at = (y) => y - box.top - g.clientTop + g.scrollTop - sh;
   const topWant = Math.min(at(r.top) - pad, fromEl ? at(fromEl.getBoundingClientRect().top) - pad : Infinity, at(n.top) - pad);
-  let want = Math.max(at(n.bottom) + pad - (g.clientHeight - 2 * sh), topWant);
+  let want = Math.max(at(n.bottom) + pad - (g.clientHeight - sh), topWant);
   // A focus keeps the view where it stands when that already shows the state; else it moves the least.
-  if (!fit) { const s0 = g.scrollTop, Hv = g.clientHeight - 2 * sh; want = at(n.top) >= s0 - 0.5 && at(n.bottom) <= s0 + Hv + 0.5 ? s0 : at(n.top) < s0 ? at(n.top) - pad : at(n.bottom) + pad - Hv; }
+  if (!fit) { const s0 = g.scrollTop, Hv = g.clientHeight - sh; want = at(n.top) >= s0 - 0.5 && at(n.bottom) <= s0 + Hv + 0.5 ? s0 : at(n.top) < s0 ? at(n.top) - pad : at(n.bottom) + pad - Hv; }
   // The view it opens on (the r23 review): its top edge cuts nothing, a state, a machine's name, an edge's
   // label, a machine's box or an arrow inside one, and stands --space-2 clear of what shows under it; only an
   // arrow between machines may come in over it, its head in view. Its foot cuts no state, name or label (a
   // box or an arrow running on under it is the cue that there is more). The nearest such scroll to the
   // kept state's; where none shows the kept state whole, the edges cut no state or name, as before.
-  const H = g.clientHeight - 2 * sh;
+  const H = g.clientHeight - sh;
   let max = g.scrollHeight - g.clientHeight;
   const boxOf = (el) => { const b = el.getBoundingClientRect(); return [at(b.top), at(b.bottom)]; };
   const solid = [...g.querySelectorAll(".node, .region-head, .world svg .lbl")].map(boxOf);
@@ -6879,7 +6965,7 @@ function factsHtml(e, c) {
 const anchorWords = (e, c) => (c.at.ref ? c.at.ref + " " + e.cur.concat(e.orig).find((x) => x.key === c.at.of).of : "");
 function clipRow(e, c) {
   const kind = c.kind || "text";
-  return '<div class="tl-row clip" data-key="' + c.key + '" data-prop="' + kind + '"><div class="clip-name"><span class="lead" role="img" aria-label="' + PROP_WORD[kind] + '">' + icon(PROP_GLYPH[kind]) + '</span><p class="l1"><span class="el">' + esc(c.of) + '</span> <span class="chg">' + esc(c.does) + '</span></p><div class="facts">' + factsHtml(e, c) + '</div></div><div class="lane" data-key="' + c.key + '"><div class="ghost" hidden></div><div class="bar" role="button" tabindex="0" aria-pressed="false" data-key="' + c.key + '" aria-label="' + esc(c.of + " " + c.does) + '"' + (c.at.ref ? ' data-tip="' + esc(anchorWords(e, c)) + '"' : "") + '></div><div class="tail" hidden></div></div></div>';
+  return '<div class="tl-row clip" data-key="' + c.key + '" data-prop="' + kind + '"><div class="clip-name"><span class="lead" role="img" aria-label="' + PROP_WORD[kind] + '">' + icon(PROP_GLYPH[kind]) + '</span><p class="l1"><span class="el">' + esc(c.of) + '</span> <span class="chg">' + esc(c.does) + '</span></p><div class="facts">' + factsHtml(e, c) + '</div></div><div class="lane" data-key="' + c.key + '"><div class="ghost" hidden></div><div class="bar" role="button" tabindex="0" aria-pressed="false" data-key="' + c.key + '" aria-label="' + esc(c.of + " " + c.does) + '"' + (c.at.ref ? ' data-tip="' + esc(anchorWords(e, c)) + '"' : "") + '><i class="bar-hit" aria-hidden="true"></i></div><div class="tail" hidden></div></div></div>';
 }
 function buildDock(opts = {}) {
   const dock = $("dock"), km = keptMove();
@@ -7163,7 +7249,7 @@ function wireDock(km) {
   // Touch has no marquee: a press beside a selected bar's end takes that end (its 44px handle), else it
   // clears the selection.
   for (const lane of rows.querySelectorAll(".lane")) lane.onpointerdown = (e) => {
-    if (e.target.classList.contains("bar") || tl.km.e.view === "original") return;
+    if (e.target.closest(".bar") || tl.km.e.view === "original") return;
     if (e.pointerType !== "mouse") { const bar = lane.querySelector('.bar[aria-pressed="true"]'), z = bar && touchZone(bar, e.clientX); if (z) barDown(bar, e, z); else { tl.km.e.sel = new Set(); closePop(); layoutDock(); } return; }
     marquee(e);
   };
@@ -7452,7 +7538,8 @@ function closePop(instant) {
   p.timer = 0;
 }
 const fieldVal = (v) => String(Math.round(msOf(v) * 100) / 100);
-function fieldHtml(f, value, unit, label) { return '<span class="fld"><input data-f="' + f + '" inputmode="decimal" aria-label="' + esc(label) + '" value="' + esc(value) + '">' + (unit ? '<span class="unit">' + unit + "</span>" : "") + "</span>"; }
+// The field is a label round its input, so a press anywhere on its box is the input's.
+function fieldHtml(f, value, unit, label) { return '<label class="fld"><input data-f="' + f + '" inputmode="decimal" aria-label="' + esc(label) + '" value="' + esc(value) + '">' + (unit ? '<span class="unit">' + unit + "</span>" : "") + "</label>"; }
 // The slider's detents: one per house length, two tokens at one length keeping the first.
 const detents = () => { const seen = new Set(), out = []; for (const t of LADDER) { const v = ms(t); if (!seen.has(v)) { seen.add(v); out.push({ t, v }); } } return out.sort((a, b) => a.v - b.v); };
 const sliderMax = (d) => Math.max(500, Math.ceil(d / 100) * 100);
@@ -7487,7 +7574,7 @@ function editorHtml(c) {
   let handles = "";
   if (!isSpring(c.ease)) {
     const [x1, y1, x2, y2] = Array.isArray(c.ease) ? c.ease : bezierOf(c.ease);
-    handles = '<line class="arm" x1="' + edX(0) + '" y1="' + edY(0) + '" x2="' + edX(x1) + '" y2="' + edY(y1) + '"/><line class="arm" x1="' + edX(1) + '" y1="' + edY(1) + '" x2="' + edX(x2) + '" y2="' + edY(y2) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="First handle" data-h="1" r="4" cx="' + edX(x1) + '" cy="' + edY(y1) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="Second handle" data-h="2" r="4" cx="' + edX(x2) + '" cy="' + edY(y2) + '"/>';
+    handles = '<line class="arm" x1="' + edX(0) + '" y1="' + edY(0) + '" x2="' + edX(x1) + '" y2="' + edY(y1) + '"/><line class="arm" x1="' + edX(1) + '" y1="' + edY(1) + '" x2="' + edX(x2) + '" y2="' + edY(y2) + '"/><circle class="knob-hit" data-for="1" r="22" cx="' + edX(x1) + '" cy="' + edY(y1) + '"/><circle class="knob-hit" data-for="2" r="22" cx="' + edX(x2) + '" cy="' + edY(y2) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="First handle" data-h="1" r="4" cx="' + edX(x1) + '" cy="' + edY(y1) + '"/><circle class="knob" tabindex="0" role="slider" aria-label="Second handle" data-h="2" r="4" cx="' + edX(x2) + '" cy="' + edY(y2) + '"/>';
   }
   return '<div class="ceditor"><svg viewBox="0 0 120 72" aria-hidden="false" role="img" aria-label="The curve, drawn"><rect class="grid" x="' + ED.x0 + '" y="' + ED.y1 + '" width="' + (ED.x1 - ED.x0) + '" height="' + (ED.y0 - ED.y1) + '" rx="2"/><path class="curve" d="' + d + '"/>' + handles + '<circle class="live" r="3" cx="' + edX(0) + '" cy="' + edY(0) + '"/></svg></div>';
 }
@@ -7525,6 +7612,8 @@ function syncEditor(c) {
   if (arms.length < 2) return;
   arms[0].setAttribute("x2", edX(x1)); arms[0].setAttribute("y2", edY(y1)); arms[1].setAttribute("x2", edX(x2)); arms[1].setAttribute("y2", edY(y2));
   knobs[0].setAttribute("cx", edX(x1)); knobs[0].setAttribute("cy", edY(y1)); knobs[1].setAttribute("cx", edX(x2)); knobs[1].setAttribute("cy", edY(y2));
+  const hits = ed.querySelectorAll(".knob-hit");
+  hits[0].setAttribute("cx", edX(x1)); hits[0].setAttribute("cy", edY(y1)); hits[1].setAttribute("cx", edX(x2)); hits[1].setAttribute("cy", edY(y2));
 }
 function renderPop(work) {
   const el = pop.el, body = el.querySelector(".pop-body"), c = clipNow(pop.key, work), km = keptMove(), e = km.e;
@@ -7536,12 +7625,15 @@ function renderPop(work) {
   // Length: the slider and its figure. A spring's length is its perceptual duration: its response.
   html += '<div class="pop-sec"><div class="pop-label"><span>' + (mode === "spring" ? "Response" : "Duration") + '</span></div><div class="pop-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
   // Curve: the four house curves as glyphs, then Spring and Custom; the chosen one drawn large beside its words.
-  html += '<div class="pop-sec"><div class="pop-label"><span>Curve</span></div><div class="t-tabs" id="curveSeg" role="tablist" aria-label="Curve"><span class="t-tabs-pill" aria-hidden="true"></span>';
-  for (const t of SEG_CURVES) html += '<button class="t-tab glyph-seg" type="button" role="tab" data-curve="' + t + '" aria-label="' + CURVE_WORD[t] + '" data-tip="' + CURVE_WORD[t] + '" aria-selected="' + (mode === t) + '">' + glyph(t) + "</button>";
-  html += '<button class="t-tab" type="button" role="tab" data-curve="spring" aria-selected="' + (mode === "spring") + '">Spring</button><button class="t-tab" type="button" role="tab" data-curve="custom" aria-selected="' + (mode === "custom") + '">Custom</button></div>';
+  // The curve: past four short segments the list, as the inspector's variant control does (designer's 2C):
+  // the house curves as their glyphs with their words, then Spring and Custom, one radio group in two columns.
+  const CHOICES = SEG_CURVES.map((t) => [t, glyph(t), CURVE_WORD[t]]).concat([["spring", glyph({ spring: { bounce: 0.3 } }), "Spring"], ["custom", '<svg viewBox="0 0 16 10" aria-hidden="true"><path d="M1 9 C 6 9, 4 1, 15 1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="0"/><circle cx="6" cy="9" r="1.5" fill="currentColor"/><circle cx="4" cy="1" r="1.5" fill="currentColor"/></svg>', "Custom"]]);
+  html += '<div class="pop-sec"><div class="pop-label"><span id="curveLabel">Curve</span></div><div class="curve-list" id="curveList" role="radiogroup" aria-labelledby="curveLabel">';
+  for (const [t, g, w] of CHOICES) html += '<button class="curve-opt" type="button" role="radio" data-curve="' + t + '" aria-checked="' + (mode === t) + '" tabindex="' + (mode === t ? 0 : -1) + '">' + g + "<span>" + esc(w) + "</span></button>";
+  html += "</div>";
   let side;
   if (mode === "spring") side = '<span class="word">Spring</span><label class="pop-label" for="bounceIn"><span>Bounce</span>' + fig(c.ease.spring.bounce) + '</label><input id="bounceIn" type="range" data-f="bounce" min="0" max="0.6" step="0.05" value="' + c.ease.spring.bounce + '" aria-label="Bounce">';
-  else if (mode === "custom" && Array.isArray(c.ease)) side = '<span class="word">Custom</span><span class="fld wide"><input data-f="bez" aria-label="Custom bezier" value="' + c.ease.map((n) => +(+n).toFixed(3)).join(", ") + '"></span>';
+  else if (mode === "custom" && Array.isArray(c.ease)) side = '<span class="word">Custom</span><label class="fld wide"><input data-f="bez" aria-label="Custom bezier" value="' + c.ease.map((n) => +(+n).toFixed(3)).join(", ") + '"></label>';
   // A house curve the agent wrote that the control has no glyph for is shown as it is, its token and numbers.
   else if (mode === "custom") side = '<span class="word">' + esc(curveWord(c)) + "</span><code>" + esc(c.ease) + "</code><code>" + bezierOf(c.ease).join(", ") + "</code>";
   else side = '<span class="word">' + esc(CURVE_WORD[c.ease]) + "</span><span>Drag a handle to make it your own</span>";
@@ -7551,15 +7643,11 @@ function renderPop(work) {
   const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement : null;
   const focusKey = focused ? focused.dataset.f || focused.dataset.curve || focused.dataset.h || (focused.classList.contains("dslider") ? "slider" : null) : null;
   const caret = focused && focused.selectionStart;
-  const pill = el.querySelector("#curveSeg .t-tabs-pill"), pillWas = pill ? { t: pill.style.transform, w: pill.style.width } : null;
   const h0 = body.childElementCount ? body.offsetHeight : 0;
   body.innerHTML = html;
   pop.committed = { dur: fieldVal(d), from: String(c.from), to: String(c.to), bez: Array.isArray(c.ease) ? c.ease.map((n) => +(+n).toFixed(3)).join(", ") : "" };
   wirePop();
   labelTicks();
-  // The curve's thumb glides from the segment it stood on to the chosen one.
-  const seg = el.querySelector("#curveSeg");
-  if (pillWas && pillWas.t) { const p = seg.querySelector(".t-tabs-pill"); p.style.transition = "none"; p.style.transform = pillWas.t; p.style.width = pillWas.w; void p.offsetWidth; p.style.transition = ""; slidePill(seg, !reduced()); } else slidePill(seg, false);
   if (focusKey) { const f = el.querySelector('[data-f="' + focusKey + '"], [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null); if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch {} } }
   // The kit's morph: a height change tweens the box over --dur-morph on the drawer curve, on its far side from
   // the row.
@@ -7633,7 +7721,10 @@ function wirePop() {
     bounce.oninput = () => { const next = applyField("bounce", bounce.value, keptMove()); if (next) { if (!before) before = clone(keptMove().e.cur); liveEdit(keptMove(), next); } };
     bounce.onchange = () => { if (before) { settleEdit(before); before = null; } };
   }
-  for (const b of el.querySelectorAll("#curveSeg .t-tab")) b.onclick = () => {
+  // Arrows move the choice round the group, as a radio group's do.
+  const opts = [...el.querySelectorAll("#curveList .curve-opt")];
+  for (const b of opts) b.onkeydown = (e) => { const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key]; if (!d) return; e.preventDefault(); const n = opts[(opts.indexOf(b) + d + opts.length) % opts.length]; n.focus(); n.click(); };
+  for (const b of opts) b.onclick = () => {
     const kind = b.dataset.curve, c = clipNow(pop.key);
     const next = withClip((x) => {
       if (kind === "spring") x.ease = isSpring(c.ease) ? c.ease : { spring: { bounce: 0 } };
@@ -7646,6 +7737,8 @@ function wirePop() {
   if (rs) rs.onclick = () => { const next = clone(km.e.cur), i = next.findIndex((x) => x.key === pop.key); next[i] = clone(km.e.orig.find((x) => x.key === pop.key)); popCommit(next, { replay: true }); };
   wireSlider(el.querySelector(".dslider"));
   for (const k of el.querySelectorAll(".ceditor .knob")) wireKnob(k);
+  // A finger's 44px circle round each handle hands its press to the handle.
+  for (const h of el.querySelectorAll(".ceditor .knob-hit")) h.onpointerdown = (e) => el.querySelector('.ceditor .knob[data-h="' + h.dataset.for + '"]').onpointerdown(e);
 }
 // The duration slider: a drag snaps to a detent within --c-detent-snap (a finger feels a tick there, the
 // house's Quiet Feel), ⌥ frees it to 10ms steps; arrows step detent to detent, ⇧ by 10ms; Home and End to the
@@ -7871,8 +7964,21 @@ const STOPS = ["head", "peek", "full"];
 const stopPx = (s) => (s === "head" ? $("sheetHead").offsetHeight + 1 : Math.round(lenOf(s === "full" ? "--c-sheet-max-h" : "--c-graph-drawer-stop")));
 function labelHead() { $("sheetTitle").setAttribute("aria-label", "Design graph, " + $("sheetState").textContent + (layoutIs("drawer") ? ". Drawer at " + stop + "; tap for " + (stop === "peek" ? "full" : "peek") : "")); }
 function setDrawerH(h) { drawerH = Math.round(h); rootEl.style.setProperty("--drawer-h", drawerH + "px"); sizeDockRoom(); }
+// The sheet's own Hide (round 29 review): in the drawer a chevron down folds it to its head bar and, folded, the
+// same control points up and is Show; in the side sheet it points to the trailing edge the sheet folds to.
+function labelSheetHide() {
+  const b = $("sheetHide"), drawer = layoutIs("drawer"), folded = drawer && stop === "head";
+  // One chevron that turns over as the drawer folds and opens (Family's chevron that transforms rather than
+  // swaps), on the drawer's own clock.
+  const glyph = drawer ? ICON.chevron : ICON.chevronRight;
+  if (b.dataset.glyph !== glyph) { b.innerHTML = icon(glyph); b.dataset.glyph = glyph; }
+  b.toggleAttribute("data-folded", folded);
+  b.setAttribute("aria-label", folded ? "Show graph" : "Hide graph"); b.dataset.tip = (folded ? "Show graph" : "Hide graph") + " (H)";
+  b.setAttribute("aria-expanded", String(!folded));
+}
 function setStop(s) {
   const was = stop; stop = s; $("tools").dataset.stop = s;
+  labelSheetHide();
   setDrawerH(stopPx(s));
   labelHead();
   // The graph's view follows the drawer's new height once it has settled.
@@ -7892,7 +7998,7 @@ $("sheetTitle").onkeydown = (e) => { if (!layoutIs("drawer") || (e.key !== "Arro
 // Dragging the head moves the drawer with the finger; it settles on the nearest stop.
 $("sheetHead").addEventListener("pointerdown", (e) => {
   const head = $("sheetHead");
-  if (!layoutIs("drawer") || e.button !== 0 || e.target.closest(".faces")) return;
+  if (!layoutIs("drawer") || e.button !== 0 || e.target.closest(".faces, #sheetHide")) return;
   const y0 = e.clientY, h0 = drawerH, lo = stopPx("head"), hi = stopPx("full");
   let moved = false;
   head.setPointerCapture(e.pointerId);
@@ -7911,7 +8017,10 @@ const panel = $("panel");
 const widthFloor = () => px("--c-panel-w"), widthCeil = () => Math.round(Math.min(innerWidth, px("--c-review-max-w")) * 0.85);
 const floorOf = (g) => { const r = g.querySelector(".region"), n = g.querySelector(".node"); return Math.ceil((r ? r.querySelector(".region-head").offsetHeight + px("--space-5") : 0) + (n ? n.offsetHeight : 0) + 2 * px("--space-2") + 2); };
 const graphFloor = () => floorOf(graphOf(tab));
-const graphCeil = () => Math.max(graphFloor(), innerHeight - 2 * px("--space-5") - (panel.offsetHeight - graphOf(tab).offsetHeight));
+// The graph's height is its token's (--graph-h, the view with both door bands standing); the scroller itself
+// takes an empty band's room, so its own box is not the size.
+const graphH = () => parseFloat(getComputedStyle(graphOf(tab)).getPropertyValue("--graph-h")) || graphOf(tab).offsetHeight;
+const graphCeil = () => Math.max(graphFloor(), innerHeight - 2 * px("--space-5") - (panel.offsetHeight - graphOf(tab).parentNode.offsetHeight + 2 * px("--c-doorway-tab-h")));
 // The split between two stacked graphs: each keeps at least its own floor.
 const splitGraphs = () => [...$("graphs").children].map((sec) => sec.querySelector(".graph"));
 const splitFloor = () => { const gs = splitGraphs(); return gs.length && gs[0].querySelector(".node") ? floorOf(gs[0]) : 120; };
@@ -7935,7 +8044,7 @@ function setSize(w, h) {
 }
 // The separators a key reaches: the panel's corner (both sizes) and the dock's (its height).
 function syncSashes() {
-  const w = panel.offsetWidth, h = graphOf(tab).offsetHeight;
+  const w = panel.offsetWidth, h = graphH();
   const set = (el, now, min, max, text) => { el.setAttribute("aria-valuenow", now); el.setAttribute("aria-valuemin", min); el.setAttribute("aria-valuemax", max); if (text) el.setAttribute("aria-valuetext", text); };
   set($("sashC"), w, widthFloor(), widthCeil(), stackedGraphs() ? w + " px wide" : w + " by " + h + " px");
   set($("sashDC"), $("dock").offsetHeight, dockFloor(), dockCeil(), $("dock").offsetHeight + " px tall");
@@ -8066,7 +8175,7 @@ function flickSettle(edge, s0, track) {
   const reach = 100, props = [];
   if (edge === "d" || edge === "dc") { const from = $("dock").offsetHeight; props.push(["--dock-h", from + "px", clamp(Math.round(from - vy * reach), dockFloor(), dockCeil()) + "px"]); }
   if (edge.includes("w")) { const from = panel.offsetWidth; props.push(["--panel-w", from + "px", clamp(Math.round(from - vx * reach), widthFloor(), widthCeil()) + "px"]); }
-  if (edge.includes("h")) { const from = graphOf(tab).offsetHeight; props.push(["--graph-h", from + "px", clamp(Math.round(from + vy * reach), graphFloor(), graphCeil()) + "px"]); }
+  if (edge.includes("h")) { const from = graphH(); props.push(["--graph-h", from + "px", clamp(Math.round(from + vy * reach), graphFloor(), graphCeil()) + "px"]); }
   if (!props.length) return false;
   void s0;
   animateSize(props, sp, relayoutAfterResize);
@@ -8086,7 +8195,7 @@ function restoreDefault(which) {
   }
   const props = [];
   const read = (name, el) => { const was = rootEl.style.getPropertyValue(name); if (!was) return null; const from = el(); rootEl.style.removeProperty(name); const to = el(); rootEl.style.setProperty(name, was); return [name, from + "px", null, to + "px"]; };
-  const w = read("--panel-w", () => panel.offsetWidth), h = read("--graph-h", () => graphOf(tab).offsetHeight);
+  const w = read("--panel-w", () => panel.offsetWidth), h = read("--graph-h", graphH);
   if (w) props.push(w); if (h) props.push(h);
   if (props.length) animateSize(props, timing, relayoutAfterResize);
 }
@@ -8104,7 +8213,7 @@ for (const sash of document.querySelectorAll(".sash")) {
   sash.onpointerdown = (e) => {
     e.preventDefault();
     if (e.button !== 0) return;
-    const edge = edgeOf(sash), x0 = e.clientX, y0 = e.clientY, s0 = { w: panel.offsetWidth, h: graphOf(tab).offsetHeight, d: $("dock").offsetHeight, s: splitGraphs()[0].offsetHeight }, track = [[performance.now(), x0, y0]];
+    const edge = edgeOf(sash), x0 = e.clientX, y0 = e.clientY, s0 = { w: panel.offsetWidth, h: graphH(), d: $("dock").offsetHeight, s: splitGraphs()[0].offsetHeight }, track = [[performance.now(), x0, y0]];
     for (const a of rootEl.getAnimations()) a.finish();
     sash.setPointerCapture(e.pointerId);
     owner.dataset.resizing = edge; rootEl.dataset.resizing = resizeCursor(edge);
@@ -8128,7 +8237,7 @@ for (const sash of document.querySelectorAll(".sash")) {
   // The APG window splitter: arrows move the edge 16px, 64px with Shift; Home and End go to the floor and
   // ceiling. A key's move is instant, as every keyboard action is.
   sash.onkeydown = (e) => {
-    const edge = edgeOf(sash), step = e.shiftKey ? 64 : 16, w = panel.offsetWidth, h = graphOf(tab).offsetHeight, d = $("dock").offsetHeight, sp = splitGraphs()[0].offsetHeight;
+    const edge = edgeOf(sash), step = e.shiftKey ? 64 : 16, w = panel.offsetWidth, h = graphH(), d = $("dock").offsetHeight, sp = splitGraphs()[0].offsetHeight;
     let nw = null, nh = null, nd = null, ns = null;
     if (edge === "dc") { if (e.key === "ArrowUp") nd = d + step; else if (e.key === "ArrowDown") nd = d - step; else if (e.key === "Home") nd = dockFloor(); else if (e.key === "End") nd = dockCeil(); else return; }
     else if (edge === "s") { if (e.key === "ArrowDown") ns = sp + step; else if (e.key === "ArrowUp") ns = sp - step; else if (e.key === "Home") ns = splitFloor(); else if (e.key === "End") ns = splitCeil(); else return; }
@@ -8215,7 +8324,7 @@ function setOpen(open, how = {}) {
 const toolsOpen = () => (layoutIs("drawer") ? stop !== "head" : panelOpen());
 $("hide").onclick = () => { setOpen(false, { key: false }); $("shell").focus({ preventScroll: true }); };
 $("shell").onclick = (e) => { setOpen(true, { key: e.detail === 0 }); $("hide").focus({ preventScroll: true }); };
-$("sheetHide").onclick = () => { setOpen(false); $("show").focus(); };
+$("sheetHide").onclick = () => { if (layoutIs("drawer")) { setStop(stop === "head" ? "peek" : "head"); return; } setOpen(false); $("show").focus(); };
 $("show").onclick = () => { setOpen(true); $("sheetHide").focus(); };
 
 // ---- Keys ----
@@ -8253,12 +8362,14 @@ function onResize() {
   rootEl.dataset.tools = panelOpen() ? "open" : "hidden";
   $("show").hidden = panelOpen() || !layoutIs("sheet");
   if (layoutIs("desk")) tabPlace();
+  labelSheetHide();
   render();
   drawArcs();
 }
 addEventListener("resize", onResize);
 rootEl.dataset.tools = "open";
 if (layoutIs("drawer")) setStop("peek");
+labelSheetHide();
 setFace("graph");
 
 // ---- The round's open choice (the owner's): clip kinds in their own hue, or in ink only ----
