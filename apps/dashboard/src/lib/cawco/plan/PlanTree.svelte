@@ -131,7 +131,6 @@
             class={[
               "min-w-0 wrap-anywhere",
               node.status === "completed" && "text-ink-muted",
-              node.status === "in_progress" && "font-medium",
             ]}>{node.text}</span
           >
         </span>
