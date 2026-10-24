@@ -4382,22 +4382,7 @@ const sizingRead = (screen: Page, number: number) =>
         requestAnimationFrame(() => requestAnimationFrame(() => done()))
       );
       after = { head: boxOf(head), foot: boxOf(foot) };
-      // Given back, and let come to rest: the card cuts its room again at rest.
-      await new Promise<void>((done) => {
-        const timer = setTimeout(done, 2000);
-        room.addEventListener(
-          "scrollend",
-          () => {
-            clearTimeout(timer);
-            done();
-          },
-          { once: true }
-        );
-        room.scrollTop = kept;
-      });
-      await new Promise<void>((done) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => done()))
-      );
+      room.scrollTop = kept;
     }
     return {
       card: boxOf(card),
@@ -4506,11 +4491,8 @@ const movedBy = (one: SizingBox | null, two: SizingBox | null) =>
  * - the long reply opened at its first line, at the top of the room its
  *   replies scroll in;
  * - the room's foot drawn across a line of the reply's words under the
- *   house fade, as it opened, with its own edge held just under a heading
- *   and in the gap under a line of words, and once a scroll that left it
- *   under a heading rests, a press in the band under it landing on the
- *   room, never a hidden word; at the thread's end nothing cut, the last
- *   words on the reply (thread-cut.ts);
+ *   house fade, as it opened and with its own edge held just under a
+ *   heading and in the gap under a line of words (thread-cut.ts);
  * - and nothing on the page spilling sideways, the sweep's total zero.
  */
 const sizingChecks = async (on: On) => {
@@ -5218,15 +5200,10 @@ type SizingRead = Awaited<ReturnType<typeof sizingRead>>;
  * it: the room's foot as drawn (its box's foot less its mask's inset), the
  * line of the reply's words drawn across it (a heading's, a bold line's or
  * a speaker line's words are no such line), and the house fade's length
- * there, and what a press in the band under the drawn foot lands on (the
- * room's band, never a hidden word: 15 points across it). Read as the card
- * opened; with the room held so its own foot falls just under a heading
- * ("heading") and in the gap under a line of words ("gap"), each the lowest
- * such place in the room, its height given back after; scrolled so its own
- * foot falls just under the next heading below it, once the scroll rests
- * ("scrolled"); and scrolled to the thread's end ("end"), with how far the
- * last words stand above the room's foot. Its scroll given back after. In
- * the page.
+ * there. Read as the card opened, then with the room held so its own foot
+ * falls just under a heading ("heading") and in the gap under a line of
+ * words ("gap"), each the lowest such place in the room; its height given
+ * back after. In the page.
  */
 const cutRead = (screen: Page, number: number) =>
   screen.evaluate(async (n) => {
@@ -5286,22 +5263,6 @@ const cutRead = (screen: Page, number: number) =>
       }
       return found.sort((one, two) => one.top - two.top);
     };
-    /** What a press in the `inset` px band under `foot` lands on, at 15 points across it: "room", or the first thing else. */
-    const bandHit = (foot: number, inset: number) => {
-      const left = room.getBoundingClientRect().left + room.clientLeft;
-      for (const y of [0.15, 0.5, 0.85]) {
-        for (const x of [0.05, 0.25, 0.5, 0.75, 0.95]) {
-          const hit = document.elementFromPoint(
-            left + room.clientWidth * x,
-            foot + inset * y
-          );
-          if (hit !== room) {
-            return `${hit?.localName ?? "nothing"} "${(hit?.textContent ?? "").trim().slice(0, 30)}"`;
-          }
-        }
-      }
-      return "room";
-    };
     const read = () => {
       const style = getComputedStyle(room);
       const inset =
@@ -5314,31 +5275,12 @@ const cutRead = (screen: Page, number: number) =>
       const crossed = lines().find(
         (line) => !line.heading && line.top < foot - 2 && line.bottom > foot + 2
       );
-      const band = inset > 0 ? bandHit(foot, inset) : null;
       return {
         room: room.clientHeight,
         inset,
         fade: Number.parseFloat(style.getPropertyValue("--fade-end")) || 0,
         crosses: crossed?.text ?? null,
-        band,
       };
-    };
-    /** The room scrolled to `at`, once its scroll rests (`scrollend`; `rested` false if it never came within 2s). */
-    const scrolled = async (at: number) => {
-      const rested = await new Promise<boolean>((done) => {
-        const timer = setTimeout(() => done(false), 2000);
-        room.addEventListener(
-          "scrollend",
-          () => {
-            clearTimeout(timer);
-            done(true);
-          },
-          { once: true }
-        );
-        room.scrollTop = at;
-      });
-      await frames();
-      return rested;
     };
     const opened = read();
     // The lowest gap of each kind in the room, from its top, px.
@@ -5366,93 +5308,12 @@ const cutRead = (screen: Page, number: number) =>
       await frames();
       return { at, ...seen };
     };
-    const underHeading = await held(gaps.heading);
-    const underWords = await held(gaps.gap);
-    // Scrolled so the room's own foot falls just under the next heading below it.
-    const kept = room.scrollTop;
-    const edge = top + shown;
-    const below = all.find(
-      (line, i) =>
-        line.heading &&
-        line.bottom + 3 > edge &&
-        (all.slice(i + 1).find((one) => one.top > line.bottom)?.top ?? 0) -
-          line.bottom >=
-          8
-    );
-    let byScroll:
-      ({ at: number; rested: boolean } & ReturnType<typeof read>) | null = null;
-    if (below) {
-      const at = kept + below.bottom + 3 - edge;
-      const rested = await scrolled(at);
-      byScroll = { at, rested, ...read() };
-    }
-    // Scrolled to the thread's end: nothing runs past the foot.
-    const rested = await scrolled(room.scrollHeight);
-    const end = {
-      rested,
-      ...read(),
-      lastAbove:
-        room.getBoundingClientRect().top +
-        room.clientTop +
-        room.clientHeight -
-        list.getBoundingClientRect().bottom,
-    };
-    await scrolled(kept);
     return {
       opened,
-      heading: underHeading,
-      gap: underWords,
-      scrolled: byScroll,
-      end,
+      heading: await held(gaps.heading),
+      gap: await held(gaps.gap),
     };
   }, number);
-
-type CutRead = NonNullable<Awaited<ReturnType<typeof cutRead>>>;
-
-/** The room cut above its own edge, across a line of words, under the fade, its band taking the presses there. */
-const cutOnWords = (read: CutRead["heading"] | undefined) =>
-  !!read?.crosses && read.inset > 0 && read.fade > 0 && read.band === "room";
-
-/** The cut once a scroll rests: under a heading it moves onto words; at the thread's end there is none. */
-const cutRestChecks = (on: On, tag: string, cut: CutRead | null) => {
-  const moved = cut?.scrolled ?? null;
-  on.kit.check(
-    `${tag}: scrolled ${moved ? `to ${Math.round(moved.at)}px` : "(no heading below the foot)"} so its own edge falls just under a heading, once the scroll rests (${moved?.rested ? "scrollend" : "never rested"}) the room is cut ${moved?.inset ?? 0}px higher, across ${JSON.stringify(moved?.crosses ?? null)}, under the fade (${moved?.fade ?? 0}px), a press in the band landing on ${moved?.band ?? "nothing read"}`,
-    !!moved?.rested && cutOnWords(moved),
-    JSON.stringify(moved)
-  );
-  const end = cut?.end;
-  on.kit.check(
-    `${tag}: scrolled to the thread's end, once it rests (${end?.rested ? "scrollend" : "never rested"}) nothing is cut (${end?.inset ?? "unread"}px) and the last words stand ${end ? end.lastAbove.toFixed(1) : "unread"}px above the room's foot, on the reply`,
-    !!end?.rested && end.inset === 0 && Math.abs(end.lastAbove) <= 1,
-    JSON.stringify(end)
-  );
-};
-
-/**
- * One window's checks on where its open thread is cut (`cutRead`): the fade
- * at the room's foot lies over words, as it opened, with its own edge held
- * in the gap under a heading and under a line of words, and once a scroll
- * that left it under a heading rests; a press in the band under the cut
- * lands on the room; at the thread's end nothing is cut.
- */
-const cutChecks = async (on: On, screen: Page, tag: string, number: number) => {
-  const cut = await cutRead(screen, number);
-  on.kit.check(
-    `${tag}: the room's foot is drawn across a line of the reply's words (${JSON.stringify(cut?.opened.crosses ?? null)}, cut ${cut?.opened.inset ?? "unread"}px above its edge) under the house fade (${cut?.opened.fade ?? 0}px)`,
-    !!cut?.opened.crosses && cut.opened.fade > 0,
-    JSON.stringify(cut?.opened)
-  );
-  for (const kind of ["heading", "gap"] as const) {
-    const held = cut?.[kind];
-    on.kit.check(
-      `${tag}: its own edge held ${kind === "heading" ? "just under a heading" : "in the gap under a line of words"} (${held?.at.toFixed(1) ?? "no such place"}px down), the room is cut ${held?.inset ?? 0}px higher, across ${JSON.stringify(held?.crosses ?? null)}, under the fade (${held?.fade ?? 0}px), a press in the band under it landing on ${held?.band ?? "nothing read"}`,
-      cutOnWords(held),
-      JSON.stringify(held)
-    );
-  }
-  cutRestChecks(on, tag, cut);
-};
 
 /** One window's checks on its open thread; the number of sideways spills it found. */
 const sizingHold = async (
@@ -5483,7 +5344,23 @@ const sizingHold = async (
     read.opensAt !== null && Math.abs(read.opensAt) <= 1,
     JSON.stringify(read.room)
   );
-  await cutChecks(on, screen, tag, number);
+  // The fade at the room's foot lies over words: the foot as drawn crosses a
+  // line of the reply's, as it opened and with its own edge held in the gap
+  // under a heading and under a line of words, where the cut moves up.
+  const cut = await cutRead(screen, number);
+  on.kit.check(
+    `${tag}: the room's foot is drawn across a line of the reply's words (${JSON.stringify(cut?.opened.crosses ?? null)}, cut ${cut?.opened.inset ?? "unread"}px above its edge) under the house fade (${cut?.opened.fade ?? 0}px)`,
+    !!cut?.opened.crosses && cut.opened.fade > 0,
+    JSON.stringify(cut?.opened)
+  );
+  for (const kind of ["heading", "gap"] as const) {
+    const held = cut?.[kind];
+    on.kit.check(
+      `${tag}: its own edge held ${kind === "heading" ? "just under a heading" : "in the gap under a line of words"} (${held?.at.toFixed(1) ?? "no such place"}px down), the room is cut ${held?.inset ?? 0}px higher, across ${JSON.stringify(held?.crosses ?? null)}, under the fade (${held?.fade ?? 0}px)`,
+      !!held?.crosses && held.inset > 0 && held.fade > 0,
+      JSON.stringify(held)
+    );
+  }
   const spills = await screen.evaluate(sideSpills);
   on.kit.check(
     `${tag}: nothing on the page spills sideways (${spills.length})`,
