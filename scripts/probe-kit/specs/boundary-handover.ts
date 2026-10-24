@@ -749,6 +749,16 @@ const deletedStops = async (
     // biome-ignore lint/performance/noAwaitInLoops: each session is asked to sleep in turn, as the dashboard would
     sleeping.push(await asleep(fleet, session));
   }
+  // The loop runs on through the sessions' sleep: what the delete's stop
+  // must find in H's boundary, read a beat apart.
+  const beatsAsleep = await beats(h.clone);
+  await Bun.sleep(BEAT_GAP_MS);
+  const beatsBeforeDelete = await beats(h.clone);
+  kit.check(
+    "6: H's loop runs on with H, F and their parent asleep, before the delete",
+    beatsBeforeDelete > beatsAsleep,
+    `${beatsAsleep} lines once all slept, then ${beatsBeforeDelete} ${BEAT_GAP_MS / 1000} s on; H's boundaries: ${(await boundariesOf(fleet, h.id)).join(",") || "none"}; its decisions: ${decisionSaid(await decisionsOf(home, h.id))}`
+  );
   const running = await boundariesOf(fleet, h.id);
   const asked = Date.now();
   const deleted = await fetch(`${fleet.base}/api/projects/${h.project}`, {
