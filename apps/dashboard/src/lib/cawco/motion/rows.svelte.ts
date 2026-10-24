@@ -41,6 +41,7 @@
  * table and is `position: relative`.
  */
 import { watchRendered } from "#lib/utils/rendered.js";
+import { animateApart } from "./apart";
 import {
   dur,
   ease,
@@ -265,17 +266,20 @@ export function tableReflow(options: {
   /** The rows, each carrying its list key in `data-key`. */
   rows: string;
 }) {
-  /** What each element is doing now, so a newer reflow replaces it. */
-  const running = new WeakMap<Element, Animation>();
+  /** What each element is doing now (its cut apart, motion/apart), so a newer reflow replaces it. */
+  const running = new WeakMap<Element, Animation[]>();
+  const stop = (element: Element) => {
+    for (const animation of running.get(element) ?? []) {
+      animation.cancel();
+    }
+  };
   const play = (
     element: Element,
     frames: Keyframe[],
     opts: KeyframeAnimationOptions
   ) => {
-    running.get(element)?.cancel();
-    const animation = element.animate(frames, opts);
-    running.set(element, animation);
-    return animation;
+    stop(element);
+    running.set(element, animateApart(element, frames, opts));
   };
 
   const rowOf = (host: HTMLElement, key: string | null) =>
@@ -294,7 +298,7 @@ export function tableReflow(options: {
       }
       const dy = was - layoutTop(row, host);
       if (Math.abs(dy) < 0.5) {
-        running.get(row)?.cancel();
+        stop(row);
         continue;
       }
       play(

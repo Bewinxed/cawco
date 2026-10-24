@@ -57,6 +57,7 @@
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import { frameSize } from "../frame-observer";
+  import { animateApart } from "../motion/apart";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
@@ -853,19 +854,22 @@
    */
   let sliding = 0;
 
-  /** A slide on `node`, counted for as long as it runs. */
+  /** A slide on `node`, its cut apart from its travel (motion/apart), each counted for as long as it runs. */
   function startSlide(
     node: HTMLElement,
     keyframes: Keyframe[],
     options: KeyframeAnimationOptions
   ): void {
-    sliding += 1;
-    const settled = () => {
-      sliding -= 1;
-    };
-    node
-      .animate(keyframes, { id: SLIDE, ...options })
-      .finished.then(settled, settled);
+    for (const part of animateApart(node, keyframes, {
+      id: SLIDE,
+      ...options,
+    })) {
+      sliding += 1;
+      const settled = () => {
+        sliding -= 1;
+      };
+      part.finished.then(settled, settled);
+    }
   }
 
   /**

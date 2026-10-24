@@ -19,6 +19,7 @@
  * starts moved onto the source, cut to the source's box around its `anchor`
  * (the part of it that is the source), and travels home as the cut opens.
  */
+import { animateApart } from "./apart";
 import { CURVE, dur, motionOk } from "./curves.svelte";
 
 interface Departure {
@@ -110,6 +111,8 @@ const FLIGHT = "share-flight";
  * flight, which goes on as it was.
  */
 export function carry(within: Element, by: number): void {
+  // A flight is one or two animations (its cut apart, motion/apart): each target carried once.
+  const carried = new Set<Element>();
   for (const flight of within.getAnimations({ subtree: true })) {
     const effect = flight.effect as KeyframeEffect | null;
     const target = effect?.target;
@@ -119,10 +122,12 @@ export function carry(within: Element, by: number): void {
       flight.id !== FLIGHT ||
       flight.playState !== "running" ||
       !target ||
+      carried.has(target) ||
       at >= total
     ) {
       continue;
     }
+    carried.add(target);
     target.animate([{ translate: `0 ${-by}px` }, { translate: "0 0" }], {
       duration: total - at,
       easing: CURVE.drawer,
@@ -308,12 +313,12 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
       frames[1].clipPath = `inset(0px 0px 0px 0px round ${radius})`;
     }
   }
-  const animation = node.animate(frames, {
+  const runs = animateApart(node, frames, {
     id: FLIGHT,
     duration: ms,
     easing,
   });
-  animation.finished.then(reveal, reveal);
+  Promise.allSettled(runs.map((run) => run.finished)).then(reveal);
 }
 
 /** Land a destination from the departure waiting under its key. */
