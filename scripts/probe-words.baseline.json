@@ -376,7 +376,6 @@
   },
   "scripts/probe-kit/specs/presence.ts": {
     ": held at the desk, not sent": 1,
-    ": held, the person is at a desk": 2,
     ": shown on tab": 1,
     "[CawCo presence]": 1,
     "did not answer its desk alert": 2,

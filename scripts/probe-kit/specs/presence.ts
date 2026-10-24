@@ -48,11 +48,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  AWAY_AFTER_MS,
-  HELD_RECENT_MS,
+  AWAY_AFTER_DEFAULT_MS,
   type PersonView,
 } from "../../../packages/core/src/notifications";
 import { presenceWords } from "../../../packages/core/src/words/presence";
+import { presenceLogWords } from "../../../packages/core/src/words/presence-log";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import {
   type Harness,
@@ -337,7 +337,7 @@ const rollupLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   await beat(fleet, "probe-clock", { idleMs: 11 * 60_000, machine: "idle" });
   const eleven = await personOf(fleet);
   kit.check(
-    `(rollup) the 10-min clock: no input for 11 minutes is away, since the last input (${AWAY_AFTER_MS / 60_000} min clock)`,
+    `(rollup) the 10-min clock: no input for 11 minutes is away, since the last input (${AWAY_AFTER_DEFAULT_MS / 60_000} min clock)`,
     eleven.state === "away" &&
       eleven.since !== null &&
       Math.abs(eleven.since - elevenAgo) < 5000,
@@ -1362,7 +1362,7 @@ const holdLegs = async (
     async () => (await then.since()).split("\n"),
     (lines) =>
       lines.some((line) =>
-        line.includes(`push turn-${first}: held, the person is at a desk`)
+        line.includes(presenceLogWords.heldAtDesk(`turn-${first}`))
       ),
     60_000
   ).catch(() => [] as string[]);
@@ -1406,7 +1406,7 @@ const holdLegs = async (
   ).catch(() => undefined);
   const heldAt = Date.now();
   // The person keeps working at the desk: input every 30 s.
-  while (Date.now() - heldAt < HELD_RECENT_MS + 30_000) {
+  while (Date.now() - heldAt < AWAY_AFTER_DEFAULT_MS + 30_000) {
     // biome-ignore lint/performance/noAwaitInLoops: one beat each 30 s, as a tab beats
     await beat(fleet, "probe-desk-input", { idleMs: 0, machine: "active" });
     await page.mouse.move(400 + Math.random() * 10, 400);
@@ -1437,7 +1437,7 @@ const holdLegs = async (
     .split("\n")
     .filter((line) => line.includes(old) || line.includes(fresh));
   kit.check(
-    `(hold) only items from the last ${HELD_RECENT_MS / 60_000} min follow the person: the one held ${Math.round((Date.now() - heldAt) / 60_000)} min before stays on the board, the fresh one goes to the phone`,
+    `(hold) only items from the last ${AWAY_AFTER_DEFAULT_MS / 60_000} min follow the person: the one held ${Math.round((Date.now() - heldAt) / 60_000)} min before stays on the board, the fresh one goes to the phone`,
     oldSent === 0 &&
       freshSent === 1 &&
       said.some((line) =>
@@ -1485,7 +1485,7 @@ const installLeg = async (
     async () => (await then.since()).split("\n"),
     (lines) =>
       lines.some((line) =>
-        line.includes(`push ${collapseId}: held, the person is at a desk`)
+        line.includes(presenceLogWords.heldAtDesk(collapseId))
       ),
     90_000
   ).catch(() => [] as string[]);

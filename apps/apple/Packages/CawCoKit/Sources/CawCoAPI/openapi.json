@@ -7854,6 +7854,9 @@
                   "alerts": {
                     "type": "boolean"
                   },
+                  "handheld": {
+                    "type": "boolean"
+                  },
                   "idleMs": {
                     "minimum": 0,
                     "type": "number"
@@ -8017,6 +8020,53 @@
           },
           "422": {
             "description": "postApiPersonAway 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/person/away-clock": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "awayAfterMs": {
+                    "minimum": 60000,
+                    "maximum": 14400000,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "awayAfterMs"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiPersonAwayClock",
+        "responses": {
+          "200": {
+            "description": "postApiPersonAwayClock 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPersonAwayClock 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -39662,6 +39712,10 @@
               "string"
             ]
           },
+          "awayAfterMs": {
+            "description": "The away clock, ms: the person's setting, else {@link AWAY_AFTER_DEFAULT_MS}.",
+            "type": "number"
+          },
           "devices": {
             "type": "array",
             "items": {
@@ -39673,7 +39727,7 @@
             "type": "boolean"
           },
           "on": {
-            "description": "The chat in front and read on a device in use, when here on one.",
+            "description": "The chat in front and read on the device that had the newest input, when here on one.",
             "type": [
               "null",
               "string"
@@ -39691,6 +39745,7 @@
           }
         },
         "required": [
+          "awayAfterMs",
           "devices",
           "manual",
           "on",
@@ -39727,9 +39782,13 @@
         ]
       },
       "PersonView": {
-        "description": "The socket's `person` frame, and `GET /api/person` beside its {@link PersonRead}: the person, and the machines that can count toward it.",
+        "description": "The socket's `person` frame, and `GET /api/person` beside its {@link PersonRead}: the person, their away clock, and the machines that can count toward it.",
         "type": "object",
         "properties": {
+          "awayAfterMs": {
+            "description": "The away clock, ms: the person's setting, else {@link AWAY_AFTER_DEFAULT_MS}.",
+            "type": "number"
+          },
           "devices": {
             "type": "array",
             "items": {
@@ -39741,7 +39800,7 @@
             "type": "boolean"
           },
           "on": {
-            "description": "The chat in front and read on a device in use, when here on one.",
+            "description": "The chat in front and read on the device that had the newest input, when here on one.",
             "type": [
               "null",
               "string"
@@ -39759,6 +39818,7 @@
           }
         },
         "required": [
+          "awayAfterMs",
           "devices",
           "manual",
           "on",

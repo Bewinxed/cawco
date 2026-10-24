@@ -1894,6 +1894,7 @@ export * from "./words/pairing";
 export * from "./words/place";
 export * from "./words/plan";
 export * from "./words/presence";
+export * from "./words/presence-log";
 export * from "./words/preview";
 export * from "./words/project";
 export * from "./words/routines";

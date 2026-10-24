@@ -36,6 +36,7 @@ import type {
   HookHandler,
   LandsMode,
   LimitWindow,
+  MachineState,
   McpPlatform,
   MemoryRole,
   ModeAsk,
@@ -47,6 +48,7 @@ import type {
   OnCap,
   OpenCodeGoLimits,
   PermissionMode,
+  PresenceClient,
   RoutineMadeEvent,
   RuleMatchKind,
   RuleScope,
@@ -3499,8 +3501,10 @@ export const notificationCleared = sqliteTable(
 
 /**
  * The person's Appear away (notifications.ts), one row keyed `'person'`:
- * on until they turn it off, through a reload or the hub's restart. Only
- * the switch and when it was turned on are kept, never a history.
+ * on until they turn it off, through a reload or the hub's restart; and
+ * their last away stretch, so a restart neither ends it nor starts one.
+ * Only the switch, when it was turned on and the one stretch are kept,
+ * never a history.
  */
 export const presenceSettings = sqliteTable("presence_settings", {
   /** Always `'person'`. */
@@ -3508,6 +3512,51 @@ export const presenceSettings = sqliteTable("presence_settings", {
   appearAway: integer("appear_away", { mode: "boolean" }).notNull(),
   /** When Appear away was turned on; null while it is off. */
   appearAwayAt: timestamp("appear_away_at"),
+  /** The last away stretch began: their last input, the lock, or Appear away. */
+  awaySince: timestamp("away_since"),
+  /** It ended: their input after it; null while they are still away. */
+  backAt: timestamp("back_at"),
+  /** The person's away clock, ms; null keeps their pick (core `AWAY_AFTER_DEFAULT_MS`). */
+  awayAfterMs: integer("away_after_ms"),
+  /** The sessions already given that return's recap, by id. */
+  recapped: text("recapped", { mode: "json" })
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+});
+
+/**
+ * Each device's last word on the person (notifications.ts): a tab, an app
+ * install, a machine's desktop through its agent, or a send from a device
+ * that names none (`send`). Kept so the hub's restart changes nothing the
+ * person did: their last input, and the chat it was on, read back as they
+ * were. One row per device, its last word only, never a history; a device
+ * silent a day is dropped.
+ */
+export const presenceClients = sqliteTable("presence_clients", {
+  /** The client's own presence id; the machine's id for a machine. */
+  clientId: text("client_id").primaryKey(),
+  kind: text("kind").$type<PresenceClient | "machine" | "send">().notNull(),
+  /** The chat it had in front. */
+  sessionId: text("session_id"),
+  /** That chat was in front and read (visible, focused). */
+  active: integer("active", { mode: "boolean" }).notNull(),
+  alerts: integer("alerts", { mode: "boolean" }).notNull(),
+  /** A phone or tablet. */
+  handheld: integer("handheld", { mode: "boolean" }).notNull(),
+  /** The machine it is, or runs on, as the hub tied it; null when no one machine is. */
+  machineId: text("machine_id"),
+  /** The person's last input on it, on the hub's clock; null when it never said. */
+  inputAt: timestamp("input_at"),
+  /** Its machine's word: active, idle, locked or asleep. */
+  machine: text("machine").$type<MachineState>(),
+  lockedAt: timestamp("locked_at"),
+  /** What read a machine's desktop, for the log. */
+  source: text("source"),
+  /** The client's own clock when it said this, epoch ms. */
+  saidAt: integer("said_at").notNull(),
+  /** When the hub heard it. */
+  at: timestamp("at").notNull(),
 });
 
 /**
