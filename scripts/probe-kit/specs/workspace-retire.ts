@@ -79,7 +79,7 @@
  *     git clone", its file standing. A sweep then changes nothing, and the
  *     hub's log holds no "not retired" line for any of the three and one
  *     "held" line for S.
- * (d) `bun run typecheck`, and build-both.sh, refuse to start below the free-space
+ * (d) `bun run check`, and build-both.sh, refuse to start below the free-space
  *     threshold (here forced up with CAWCO_MIN_FREE_GB), exit 3, with one
  *     sentence naming the free space and the biggest folders. build-both.sh
  *     builds on the Mac: from a CawCo workspace on Linux it cannot reach it,
@@ -432,16 +432,16 @@ const refused = async (
   return { code: ran.exitCode, stderr: ran.stderr.toString().trim() };
 };
 
-/** (d) A typecheck and Apple builds refuse to start without room on the disk. */
+/** (d) The repository's check and Apple builds refuse to start without room on the disk. */
 const diskPhase = async (kit: Kit): Promise<void> => {
-  const typecheck = await refused("bun scripts/typecheck.ts");
+  const check = await refused("bun scripts/check.ts");
   kit.check(
-    "(d) bun run typecheck refuses below the threshold: exit 3, one sentence, nothing started",
-    typecheck.code === 3 &&
-      REFUSAL.test(typecheck.stderr) &&
-      typecheck.stderr.split("\n").length === 1 &&
-      typecheck.stderr.startsWith("bun run typecheck did not start:"),
-    `exit ${typecheck.code}: ${typecheck.stderr}`
+    "(d) bun run check refuses below the threshold: exit 3, one sentence, nothing started",
+    check.code === 3 &&
+      REFUSAL.test(check.stderr) &&
+      check.stderr.split("\n").length === 1 &&
+      check.stderr.startsWith("bun run check did not start:"),
+    `exit ${check.code}: ${check.stderr}`
   );
   const build = await refused(
     "bash apps/apple/scripts/build-both.sh ios --compile-only"

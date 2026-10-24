@@ -746,10 +746,23 @@ const run = async (kit: Kit) => {
           Boolean,
           60_000
         ).catch(() => false);
+      // The sandbox its session runs in: the workspace's boundary started as
+      // its clone was cut is handed over once its session's spill folder is
+      // added at the spawn (agent boundary.ts `boundaryFor`), so the one that
+      // counts is read once the session works there (its first command asked
+      // for), from the boundary the record names (an older one beside it
+      // closes at the next look).
+      await until(
+        `${tag}'s session at work in its workspace`,
+        () => steps[tag].committed || undefined,
+        Boolean,
+        300_000
+      );
+      const current = await boundaryOf(home, workspace);
       const before = {
         inode: (await stat(config)).ino,
         text: await readFile(config, "utf8"),
-        inner: (await inners())[0],
+        inner: current ? String(current.inner) : undefined,
         restarts: (await restarts()).length,
       };
       if (tag === "B") {
