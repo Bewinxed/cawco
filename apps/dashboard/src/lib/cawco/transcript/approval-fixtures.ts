@@ -10,7 +10,7 @@ import type { PendingPermission } from "../client.svelte";
 
 export type ApprovalAsk = "mcp" | "write" | "shell" | "destructive";
 
-/** The asking session, by its board title, and the words before its ask. */
+/** The asking session, by its board title, and the words before its ask (the hub's `said`, ask-intent.ts). */
 export interface ApprovalScene {
   /** The agent's last words before it asked. */
   said: string;
@@ -83,7 +83,7 @@ const ASKS: Record<
     },
     scene: {
       session: "Fix the tray chip overflow on phones",
-      said: "The label and its count share one flex row with no minimum, so the count gets pushed out on a 390px screen. I'll give the label its own component that clips first.",
+      said: "The label and its count share one flex row with no minimum width, so on a 390px screen the count gets pushed past the chip's edge. I'll move the label into its own component that clips before the count does.",
     },
   },
   shell: {
@@ -128,6 +128,7 @@ export function approvalAsk(ask: ApprovalAsk): {
       presentation: presentPermission(toolName, input, {
         asker: scene.session,
         project: PROJECT,
+        said: scene.said,
         current: (group, key) =>
           group === "mcp_servers" && key === "mobbin-web"
             ? MOBBIN_NOW

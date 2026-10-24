@@ -510,6 +510,7 @@ import {
   artifactSend,
   artifactSocket,
 } from "./artifacts/sync";
+import { createAskIntent } from "./ask-intent";
 import {
   answeredWithOriginal,
   clientCopy,
@@ -21947,6 +21948,8 @@ export const createServer = (
       headers: awayHeaders(fault.machineId ?? ""),
     });
 
+  /** What each session said just before each call, for its ask's head (ask-intent.ts). */
+  const askIntent = createAskIntent();
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
     lifetime,
@@ -22005,8 +22008,9 @@ export const createServer = (
   // route group, mounted rather than folded into the routes below — see
   // delegate-types.ts for why it keeps its own connection.
   const delegateTypes = makeDelegateTypes();
-  // What each ask says on every surface, read as it parks (ask-presentation.ts).
-  pending.presentWith(createAskPresenter(db, delegateTypes));
+  // What each ask says on every surface, read as it parks (ask-presentation.ts),
+  // its head's reason from what the session said before the call (ask-intent.ts).
+  pending.presentWith(createAskPresenter(db, delegateTypes, askIntent));
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
   const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**
@@ -33608,6 +33612,7 @@ export const createServer = (
                 // reason (routines.ts `said`): a lead's from before his wake's
                 // read receipt too.
                 if (admitted.message.type !== "stream_event") {
+                  askIntent.frame(message.instanceId, admitted.message);
                   const [framed] = db.getInstancesByIds([message.instanceId]);
                   routines.said(
                     message.instanceId,

@@ -76,7 +76,12 @@ export interface PermissionSentence {
   family: ToolKindId;
   /** What kind of thing the act is on: "MCP server", "skill". */
   kind?: string;
-  /** Why the session asks, in its own words: an admin write's `reason`, a shell call's `description`. */
+  /**
+   * Why the session asks, in its own words, as it follows "needs to": an
+   * admin write's `reason`, a shell call's `description`; where the input
+   * gives none, the intent the session stated just before the call
+   * ({@link PresentationContext.said}).
+   */
   reason?: string;
   /** The input the sentence and the settings leave unsaid. */
   rest: PermissionField[];
@@ -178,6 +183,12 @@ export interface PresentationContext {
   project?: string;
   /** A project's name by its id; undefined when the hub keeps no such project. */
   projectName: (id: string) => string | undefined;
+  /**
+   * What the asking session said just before the call, as the hub heard it
+   * (hub ask-intent.ts): its last text in the reply that made the call.
+   * Undefined when it said nothing there.
+   */
+  said?: string;
   /** An install's or a link's source, read when it was proposed; undefined for any other call. */
   source?: SourceFacts;
 }
@@ -1828,10 +1839,53 @@ const boundOf = (toolName: string, input: Record<string, unknown>): string => {
   return "Approving covers this one call. It does not widen what the agent may do later.";
 };
 
+/** A sentence's end: its stop, then space. */
+const SENTENCE_END = /(?<=[.!?])\s+/;
+/** Line breaks: a sentence never runs across one. */
+const LINES = /\n+/;
+/** Markdown's marks around words: code ticks, emphasis. */
+const MARKS = /[`*_]+/g;
+/**
+ * A sentence that states what the session is about to do, and the act it
+ * names: "I'll give the label its own component" → "give the label its own
+ * component". Its opener may lead with a word that sequences it ("Now",
+ * "First,").
+ */
+const INTENT =
+  /^(?:(?:now|next|so|ok(?:ay)?|first|then|instead),?\s+)?(?:i['’]ll|i will|let me|let['’]s|i['’]m going to|i am going to|i need to|i want to)\s+(?:now\s+|just\s+|first\s+)?(.+)$/i;
+/** Past this, a stated intent is a paragraph, not a reason the head can carry. */
+const INTENT_MAX = 200;
+
+/**
+ * The session's stated intent as the head's "needs to ‹reason›": of what it
+ * said just before the call, the last sentence that says what it will do,
+ * cut to the act. None when no sentence there says it, or one says it at a
+ * paragraph's length: the head then reads "needs your approval".
+ */
+const intentOf = (said: string | undefined): string | undefined => {
+  if (!said) {
+    return undefined;
+  }
+  const sentences = said
+    .replace(MARKS, "")
+    .split(LINES)
+    .flatMap((line) => line.trim().split(SENTENCE_END))
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence && !sentence.endsWith("?"));
+  for (const sentence of sentences.toReversed()) {
+    const act = INTENT.exec(sentence)?.[1]?.trim();
+    if (act && act.length <= INTENT_MAX) {
+      return act;
+    }
+  }
+  return undefined;
+};
+
 /**
  * A presenter's words with who asked, and the sentence whole: its act and
  * target where the presenter named them, else the summary as the act; the
- * input it leaves unsaid, the reason and the settings taken out.
+ * reason the input gives, else the intent the session stated before the
+ * call; the input it leaves unsaid, the reason and the settings taken out.
  */
 function assembled(
   context: PresentationContext,
@@ -1842,12 +1896,13 @@ function assembled(
   const { sentence: parts, ...rest } = presented;
   const changed = parts?.changed ?? [];
   const said = new Set(changed.map((setting) => setting.key));
+  const reason = parts?.reason ?? intentOf(context.said);
   const sentence: PermissionSentence = {
     act: parts?.act ?? continued(presented.summary),
     family: parts?.family ?? "other",
     ...(parts?.kind ? { kind: parts.kind } : {}),
     ...(parts?.target ? { target: parts.target } : {}),
-    ...(parts?.reason ? { reason: parts.reason } : {}),
+    ...(reason ? { reason } : {}),
     ...(parts?.caution ? { caution: parts.caution } : {}),
     changed,
     rest:

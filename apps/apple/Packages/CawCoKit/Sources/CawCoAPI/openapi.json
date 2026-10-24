@@ -57664,7 +57664,7 @@
             "type": "string"
           },
           "reason": {
-            "description": "Why the session asks, in its own words: an admin write's `reason`, a shell call's `description`.",
+            "description": "Why the session asks, in its own words, as it follows \"needs to\": an\nadmin write's `reason`, a shell call's `description`; where the input\ngives none, the intent the session stated just before the call\n({@link PresentationContext.said}).",
             "type": "string"
           },
           "rest": {

@@ -27,6 +27,7 @@
   } from "#lib/icons.js";
   import HarnessLogo from "../HarnessLogo.svelte";
   import CawFace from "../home/CawFace.svelte";
+  import { commandLines } from "./command-runs.js";
 
   let {
     presentation,
@@ -67,6 +68,8 @@
       : said;
   });
   const command = $derived(presentation.command ?? null);
+  /** The command cut where it may break: between commands, then between groups. */
+  const commandText = $derived(command ? commandLines(command) : null);
   /** What the sentence goes on to show under it, which its colon points at. */
   const shows = $derived(
     sentence.changed.length > 0 || !!command || presentation.changes.length > 0
@@ -113,21 +116,28 @@
       >{#if harness}<span data-box class="inline-flex"
           ><HarnessLogo {harness} /></span
         >{/if}<span data-slot="label">{agent}</span></span
-    >{#if session}{" "}on{" "}{#if sessionHref}<a
-          data-chip="session"
-          class={chipVariants({ variant: "inline", class: LINK })}
-          href={sessionHref}
-          ><IconChat class="text-ink-muted" /><span data-slot="label"
-            >{session}</span
-          ><IconArrowUpRight class="text-ink-muted" /></a
-        >{:else}<span
-          data-chip="session"
-          class={chipVariants({ variant: "inline" })}
-          ><IconChat class="text-ink-muted" /><span data-slot="label"
-            >{session}</span
-          ></span
-        >{/if}{/if}{#if reason}{" "}needs to {reason}.{:else}{" "}needs your
-      approval.{/if}</span
+    >{#if session}{" "}<!-- "on" and its chip break as one: the line breaks
+           before "on", never between it and the session it names. --><span
+        data-slot="ask-session"
+        class="inline-flex max-w-full items-baseline"
+        ><span class="flex-none">on&nbsp;</span>{#if sessionHref}<a
+            data-chip="session"
+            class={chipVariants({
+              variant: "inline",
+              class: `min-w-0 ${LINK}`,
+            })}
+            href={sessionHref}
+            ><IconChat class="text-ink-muted" /><span data-slot="label"
+              >{session}</span
+            ><IconArrowUpRight class="text-ink-muted" /></a
+          >{:else}<span
+            data-chip="session"
+            class={chipVariants({ variant: "inline", class: "min-w-0" })}
+            ><IconChat class="text-ink-muted" /><span data-slot="label"
+              >{session}</span
+            ></span
+          >{/if}</span
+      >{/if}{#if reason}{" "}needs to {reason}.{:else}{" "}needs your approval.{/if}</span
   >
   {#if place && place.of > 1}
     <Kbd data-num class="flex-none ms-auto" data-box figures="tabular"
@@ -219,12 +229,21 @@
       {/each}
     </dl>
   {/if}
-  <!-- The command whole, never a line of it: what runs is what is approved. -->
-  {#if command}
+  <!-- The command whole, never a line of it: what runs is what is approved.
+       It breaks only between commands, and inside one too long for its line
+       only between its groups (command-runs.ts): each run and each group is
+       an inline block that wraps only when it alone outgrows the line. -->
+  {#if commandText}
     <pre
       data-slot="ask-command"
-      class="mb-space-2 max-h-c-ask-value-max-h overflow-y-auto overscroll-contain border-s-2 border-s-border-hairline py-space-1 ps-space-3 font-mono text-size-label text-ink-strong whitespace-pre-wrap wrap-anywhere"><code
-        >{command}</code
+      class="mb-space-2 max-h-c-ask-value-max-h overflow-y-auto overscroll-contain border-s-2 border-s-border-hairline py-space-1 ps-space-3 font-mono text-size-label text-ink-strong whitespace-pre-wrap wrap-anywhere text-pretty"><code
+        >{#each commandText as line, l (l)}{#if l > 0}{"\n"}{/if}{line.lead}{#each line.runs as run, r (r)}<span
+          data-slot="command-run"
+          class="inline-block max-w-full"
+          >{#each run.parts as part, p (p)}<span class="inline-block max-w-full"
+            >{part.text}</span
+          >{part.after}{/each}</span
+        >{run.after}{/each}{/each}</code
       ></pre>
   {/if}
   <!-- The change itself, open: each diff stands to the token's share of the

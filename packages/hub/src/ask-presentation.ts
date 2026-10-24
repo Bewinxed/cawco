@@ -4,7 +4,9 @@
  * asked and what it is called, the fleet's memory as it stands, which named
  * settings already exist — handed to the one reading every surface renders.
  * Stamped onto the ask's payload as it parks (pending.ts `presentWith`), so a
- * memory write's diff is the change from what the fleet held at that moment.
+ * memory write's diff is the change from what the fleet held at that moment,
+ * and an ask whose input gives no reason reads what the session said just
+ * before the call (ask-intent.ts).
  */
 import {
   type AdminGroup,
@@ -16,6 +18,7 @@ import {
   redact,
   type SourceFacts,
 } from "@cawco/core";
+import type { AskIntentShape } from "./ask-intent";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
 import { boardTitle } from "./labels";
@@ -74,7 +77,8 @@ export const answeredWithOriginal = (
 
 export const createAskPresenter = (
   db: DbShape,
-  delegateTypes: DelegateTypesShape
+  delegateTypes: DelegateTypesShape,
+  intent: AskIntentShape
 ) => {
   /**
    * The session that asked, as the board names it (a project's lead is Caw;
@@ -192,8 +196,13 @@ export const createAskPresenter = (
       proposer?: unknown;
       sourceFacts?: SourceFacts;
     };
+    const instanceId = envelope.instanceId ?? payload.instanceId;
+    const said = instanceId
+      ? intent.said(instanceId, payload.toolUseId)
+      : undefined;
     payload.presentation = presentPermission(payload.toolName, payload.input, {
-      ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
+      ...askerOf(instanceId, payload),
+      ...(said ? { said } : {}),
       memory,
       current,
       projectName,
