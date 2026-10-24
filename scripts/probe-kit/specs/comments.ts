@@ -994,6 +994,49 @@ const runOn = async (kit: Kit, on: On) => {
   await cutoverCheck(kit);
 };
 
+interface ScreenBox {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Whether a thread's card stands where PinFloat puts it: `--space-2` (7px)
+ * from what the comment is about as drawn (its `subject`: the pill, past its
+ * 2px focus ring 2px out, and its element's box), at its end side, else its
+ * start side, else below or over them; never over the element.
+ */
+const cardBeside = (
+  cardBox: ScreenBox | null,
+  mark: ScreenBox | null,
+  el: { h: number; w: number; x: number; y: number } | null,
+  side: string | null
+): boolean => {
+  if (!(cardBox && mark && el)) {
+    return false;
+  }
+  const GAP = 7 + 4;
+  const about = {
+    x: Math.min(mark.x, el.x),
+    y: Math.min(mark.y, el.y),
+    right: Math.max(mark.x + mark.width, el.x + el.w),
+    bottom: Math.max(mark.y + mark.height, el.y + el.h),
+  };
+  const over =
+    cardBox.x < el.x + el.w &&
+    el.x < cardBox.x + cardBox.width &&
+    cardBox.y < el.y + el.h &&
+    el.y < cardBox.y + cardBox.height;
+  const at: Record<string, boolean> = {
+    end: Math.abs(cardBox.x - (about.right + GAP)) <= 3,
+    start: Math.abs(cardBox.x + cardBox.width - (about.x - GAP)) <= 3,
+    below: Math.abs(cardBox.y - (about.bottom + GAP)) <= 3,
+    above: Math.abs(cardBox.y + cardBox.height - (about.y - GAP)) <= 3,
+  };
+  return !over && !!side && !!at[side];
+};
+
 /** 1. C, a tap, the card at the pin, Esc and Esc. */
 const commentChecks = async (on: On, frame: Frame) => {
   const comment = on.page.locator(
@@ -1175,26 +1218,13 @@ const commentChecks = async (on: On, frame: Frame) => {
     .boundingBox({ timeout: 2000 })
     .catch(() => null);
   const side = await card.getAttribute("data-side").catch(() => null);
-  // `--space-2` (7px) from the pill as drawn, past its 2px focus ring 2px
-  // out (PinFloat `clear`): its end side, else its start side, else below
-  // or over it.
-  const GAP = 7 + 4;
-  const beside =
-    !!cardBox &&
-    !!mark &&
-    ((side === "end" &&
-      Math.abs(cardBox.x - (mark.x + mark.width + GAP)) <= 3) ||
-      (side === "start" &&
-        Math.abs(cardBox.x + cardBox.width - (mark.x - GAP)) <= 3) ||
-      (side === "below" &&
-        Math.abs(cardBox.y - (mark.y + mark.height + GAP)) <= 3) ||
-      (side === "above" &&
-        Math.abs(cardBox.y + cardBox.height - (mark.y - GAP)) <= 3));
+  const para = await screenBox(on, frame, "#para").catch(() => null);
+  const beside = cardBeside(cardBox, mark, para, side);
   const cardWanted = await readingWidth(on.page);
   on.kit.check(
-    "pick 2, where a thread opens: a press on pin 1's pill opens its thread as a card as wide as its composer (c-pin-card-reading-w) beside the pill, --space-2 from it",
+    "pick 2, where a thread opens: a press on pin 1's pill opens its thread as a card as wide as its composer (c-pin-card-reading-w) beside what it is about (the pill and its paragraph), --space-2 from them, never over the paragraph",
     !!cardBox && Math.abs(cardBox.width - cardWanted) <= 1 && beside,
-    `card ${JSON.stringify(cardBox)} on side ${side}, wanted ${cardWanted}px wide; pill ${JSON.stringify(mark)}`
+    `card ${JSON.stringify(cardBox)} on side ${side}, wanted ${cardWanted}px wide; pill ${JSON.stringify(mark)}; paragraph ${JSON.stringify(para)}`
   );
   const head = await headOf(card);
   on.kit.check(
