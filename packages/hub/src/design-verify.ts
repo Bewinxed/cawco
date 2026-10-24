@@ -56,6 +56,7 @@
  */
 import type { InstanceRow, ResultArtifact } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
 import type {
@@ -664,7 +665,14 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       artifact: AskedArtifact
     ): Promise<string> {
       const key = `${ARTIFACT_KEY}${artifact.id}`;
-      const [workspace] = db.workspacesNamed(artifact.workspaceId);
+      // A sheet made in a place (a session with no work item) names the
+      // place; its stage runs in the place's stage clone, the workspace a
+      // round is cut from (core workspace-policy.ts `stageCloneId`).
+      const [workspace] = db.workspacesNamed(
+        isPlace(artifact.workspaceId)
+          ? stageCloneId(artifact.workspaceId)
+          : artifact.workspaceId
+      );
       if (!workspace) {
         return `The workspace ${short(artifact.workspaceId)} its stage ran in is gone, so “${artifact.name}” can't be checked.`;
       }

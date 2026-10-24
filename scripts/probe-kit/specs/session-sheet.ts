@@ -141,10 +141,12 @@
  * A delegate's sheet in its parent's panel (the person's change there, as
  * their Send is):
  *
- * 26. A delegate of the first session makes a component canvas on the card;
- *     from the first session's panel a sheet's Save lands (the delegate's
- *     artifact_read reads it) and Verify answers; a session outside the tree
- *     is refused both, 404, with today's words; the first session's own
+ * 26. In the Kit checkout (its Prettier, and a design system), a delegate
+ *     of the Kit session makes a component canvas on the card; from the Kit
+ *     session's panel a sheet's Save lands (the delegate's artifact_read
+ *     reads it) and Verify starts a round on the place's stage clone, the
+ *     verifier's verdict reaching the delegate; a session outside the tree
+ *     is refused both, 404, with today's words; the Kit session's own
  *     artifact_update of it is still refused as the delegate's.
  *
  * The stage's boundary is made of user namespaces: like a spec that
@@ -262,6 +264,9 @@ export default defineConfig({ plugins: [sveltekit()] });
   "src/app.html":
     "<!doctype html>\n<html>\n<head>%sveltekit.head%</head>\n<body>%sveltekit.body%</body>\n</html>\n",
   "src/routes/+page.svelte": "<h1>kit</h1>\n",
+  // Its design system, which a Verify round judges against (leg 26).
+  "design/DESIGN.md":
+    "# Probe kit\n\nA card's title is a heading in the label role.\n",
 };
 
 const KIT_STORY = "src/lib/Card.stories.js";
@@ -286,10 +291,53 @@ const answered = new Map<string, string>();
 /** A call's marker: its leg's number, the letter of a leg's later calls (2c), and the count of a leg's repeated read (5b2). */
 const COMMAND = /PROBE-CALL:(\d+[a-z]?\d*)/g;
 
+/** A verifier's brief opens this way (hub design-verify.ts `VERIFIER_BRIEF`). */
+const VERIFIER_BRIEF = "You are the design system verifier";
+const VERDICT = "mcp__cawco__design_verdict";
+/** Whether leg 26's verifier has given its verdict, and has looked for the tool. */
+const verifierDid = new Set<"given" | "searched">();
+
+/** Leg 26's verifier: one design_verdict, a pass carrying {@link VERDICT_SUMMARY}, then nothing more. */
+const verifierTurn = (request: Seen): Reply => {
+  const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+  if (verifierDid.has("given")) {
+    return text("done");
+  }
+  if (request.toolNames.includes(VERDICT)) {
+    verifierDid.add("given");
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: VERDICT,
+        input: { findings: [], summary: VERDICT_SUMMARY },
+      },
+    };
+  }
+  if (
+    !verifierDid.has("searched") &&
+    request.toolNames.includes("ToolSearch")
+  ) {
+    verifierDid.add("searched");
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${VERDICT}`, max_results: 1 },
+      },
+    };
+  }
+  return text(`${VERDICT} is not offered`);
+};
+
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
+  }
+  if (request.all.includes(VERIFIER_BRIEF)) {
+    return verifierTurn(request);
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
@@ -924,7 +972,15 @@ async function panelLegs(
     `light ${JSON.stringify(light)}; dark ${JSON.stringify(dark)}; ${stayed ? "no reload" : "reloaded"}`
   );
 
-  // 20. A real held press on the canvas view.
+  // 20. A real held press on the canvas view, once leg 19's theme switch is
+  // over: its cross-fade is a view transition of the root, and while it runs
+  // its `::view-transition` takes every press ("The view transition fills
+  // the viewport and captures clicks", CSSWG, w3c/csswg-drafts#8278). The
+  // frame's scheme turns ~160ms into the switch's ~400ms, so a press made
+  // the moment leg 19 read it landed on the fade, by the race's luck.
+  await desk.waitForFunction(
+    () => !document.documentElement.hasAttribute("data-theme-flip")
+  );
   const trigger = `${PANE} [data-head-item="view"] [aria-label="Canvas view"]`;
   const box = await desk.locator(trigger).boundingBox();
   const before = await pressOf(desk, trigger);
@@ -1084,20 +1140,22 @@ async function centredLegs(
   }
 }
 
-/** Leg 25: a canvas whose page never comes stands on the cover no longer than its stage is given. */
 /** The title the parent's panel saves into its delegate's sheet (leg 26). */
 const PARENT_TITLE = "Saved from the parent's panel";
+/** The verifier's summary of its round on the delegate's sheet (leg 26): what its verdict carries to the delegate. */
+const VERDICT_SUMMARY = "The delegate's card draws in the kit's system.";
 
 /**
  * 26. A delegate's sheet in its parent's panel is the person's to change
- * there, as their Send is (artifacts/service.ts `panelHeld`): a delegate of
- * the session (spawned with `parent`, in its folder) makes a component canvas
- * on the card, and from the session's panel, as the panel calls them, a
- * sheet's Save lands (the delegate's `artifact_read` of story One reads the
- * title saved) and Verify answers its sentence; a session outside the tree
- * is refused both with today's words. The session's own tools still change
- * nothing of the delegate's: its `artifact_update` of the canvas is refused
- * as the delegate's.
+ * there, as their Send is (artifacts/service.ts `panelHeld`): in the Kit
+ * checkout (its own Prettier, its design system), a delegate of the Kit
+ * session (spawned with `parent`) makes a component canvas on the card, and
+ * from the Kit session's panel, as the panel calls them, a sheet's Save
+ * lands (the delegate's `artifact_read` of story One reads the title saved),
+ * and Verify starts a round on the place's stage clone whose verdict reaches
+ * the delegate, the canvas's session. A session outside the tree is refused
+ * both with today's words; the Kit session's own `artifact_update` of the
+ * canvas is still refused as the delegate's.
  */
 async function treeSheetLeg(
   kit: Kit,
@@ -1108,20 +1166,21 @@ async function treeSheetLeg(
     who?: string
   ) => Promise<string>,
   spawn: (title: string, extra: object) => Promise<string>,
+  told: (session: string) => string[],
   base: string,
-  session: string
+  parent: string
 ): Promise<void> {
-  const delegate = await spawn("Card delegate", {
-    parent: { instanceId: session },
+  const delegate = await spawn("Kit delegate", {
+    parent: { instanceId: parent },
   });
-  const outsider = await spawn("Card outsider", {});
+  const outsider = await spawn("Kit outsider", {});
   const made = await call(
     "26",
     "mcp__cawco__artifact_create",
     {
       kind: "component",
       name: "delegate-cards",
-      file: STORY,
+      file: KIT_STORY,
       does: "judge",
       ask: "Judge the delegate's card in each of its states",
     },
@@ -1132,7 +1191,7 @@ async function treeSheetLeg(
     kit.check("26: the delegate's sheet is made", false, short(made));
     return;
   }
-  const desk = await panelPage(kit, base, session, "desk", "light");
+  const desk = await panelPage(kit, base, parent, "desk", "light");
   /** A POST from the dashboard's page, as session `who`'s panel makes it. */
   const panelPost = (who: string, act: string, body: object) =>
     desk.evaluate(
@@ -1152,16 +1211,19 @@ async function treeSheetLeg(
   const save = {
     args: { story: "One", values: { title: PARENT_TITLE } },
   };
-  const saved = await panelPost(session, "sheet", save);
+  const saved = await panelPost(parent, "sheet", save);
+  let reads = 0;
   const readBack = await until(
     "the saved title in the delegate's read",
-    () =>
-      call(
-        `26r${Date.now() % 100_000}`,
+    () => {
+      reads += 1;
+      return call(
+        `26r${reads}`,
         "mcp__cawco__artifact_read",
         { id: sheet, detail: "story", story: "One" },
         delegate
-      ),
+      );
+    },
     (said) => said.includes(PARENT_TITLE),
     60_000
   ).catch(() => "");
@@ -1170,18 +1232,20 @@ async function treeSheetLeg(
     saved.status === 200 && readBack.includes(PARENT_TITLE),
     `${saved.status} ${short(saved.text).slice(0, 200)}; read: ${short(readBack).slice(0, 200)}`
   );
-  const verified = await panelPost(session, "verify", {});
-  const verdict = (() => {
-    try {
-      return (JSON.parse(verified.text) as { verify?: string }).verify ?? "";
-    } catch {
-      return "";
-    }
-  })();
+  const verified = await panelPost(parent, "verify", {});
+  const verdict = await until(
+    "the verifier's verdict told to the delegate",
+    () =>
+      Promise.resolve(
+        told(delegate).find((body) => body.includes(VERDICT_SUMMARY)) ?? ""
+      ),
+    Boolean,
+    300_000
+  ).catch(() => "");
   kit.check(
-    "26: Verify from the parent's panel answers its sentence (200)",
-    verified.status === 200 && verdict.length > 0,
-    `${verified.status} ${short(verified.text).slice(0, 300)}`
+    "26: Verify from the parent's panel starts a round on the delegate's sheet (200), and the verifier's verdict reaches the delegate",
+    verified.status === 200 && verdict.includes(VERDICT_SUMMARY),
+    `${verified.status} ${short(verified.text).slice(0, 300)}; the delegate told: ${short(verdict).slice(0, 200) || "nothing"}`
   );
   const refused = artifactToolWords.noArtifact(sheet);
   const outsiderSave = await panelPost(outsider, "sheet", save);
@@ -1194,13 +1258,18 @@ async function treeSheetLeg(
       outsiderVerify.text === refused,
     JSON.stringify({ outsiderSave, outsiderVerify }).slice(0, 400)
   );
-  // The session's own tools still change nothing of its delegate's.
-  const update = await call("26u", "mcp__cawco__artifact_update", {
-    id: sheet,
-    args: { story: "One", values: { title: "From the parent's tools" } },
-  });
+  // The parent's own tools still change nothing of its delegate's.
+  const update = await call(
+    "26u",
+    "mcp__cawco__artifact_update",
+    {
+      id: sheet,
+      args: { story: "One", values: { title: "From the parent's tools" } },
+    },
+    parent
+  );
   kit.check(
-    "26: the session's own artifact_update of its delegate's sheet is refused as the delegate's",
+    "26: the parent's own artifact_update of its delegate's sheet is refused as the delegate's",
     update.includes(
       artifactToolWords.othersArtifact("", "").split("'s: ").at(-1) ?? "-"
     ),
@@ -1209,6 +1278,7 @@ async function treeSheetLeg(
   await desk.close();
 }
 
+/** Leg 25: a canvas whose page never comes stands on the cover no longer than its stage is given. */
 async function neverDrawnLeg(
   kit: Kit,
   call: (n: string, name: string, input: object) => Promise<string>,
@@ -1532,9 +1602,16 @@ const run = async (kit: Kit) => {
   await treeSheetLeg(
     kit,
     call,
-    (title, extra) => fleet.spawn("claude", title, fleet.repo, extra),
+    (title, extra) => fleet.spawn("claude", title, kitDir, extra),
+    (who) =>
+      fleet
+        .query<{ body: string }>(
+          "SELECT body FROM sent_messages WHERE instance_id = ?",
+          who
+        )
+        .map((one) => one.body),
     await fleet.dashboard(),
-    session
+    kitSession
   );
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
