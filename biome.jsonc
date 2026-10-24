@@ -27,6 +27,9 @@
       "!packages/core/src/decisions-spec.json",
       // torph's build, vendored unchanged into the pairing design preview (a static page with no bundler).
       "!design-previews/pairing/lib/torph.mjs",
+      // the comment sizing preview's parts and stylesheet, captured from the dashboard's own components and CSS by its capture/capture.ts.
+      "!design-previews/comment-sizing/parts.js",
+      "!design-previews/comment-sizing/house.css",
       // DialKit's browser build and stylesheet, vendored unchanged.
       "!packages/hub/skills/decision-page/kit/vendor",
       // the decision-page template: {{KIT_CSS}}/{{KIT_JS}} slots src/decision-page.ts fills, not CSS or JS.

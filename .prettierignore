@@ -9,6 +9,8 @@ packages/hub/drizzle/meta/
 packages/core/src/views-spec.json
 packages/core/src/decisions-spec.json
 design-previews/pairing/lib/torph.mjs
+design-previews/comment-sizing/parts.js
+design-previews/comment-sizing/house.css
 packages/hub/skills/decision-page/kit/vendor/
 packages/hub/skills/decision-page/kit/page.html
 apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>How a comment opens · preview</title>
+    <link href="./house.css" rel="stylesheet" />
+    <link href="./preview.css" rel="stylesheet" />
+    <script src="./preview.js" type="module"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>How a comment opens</h1>
+      <fieldset class="row">
+        <legend class="label">Option</legend>
+        <div class="seg" data-slot="option">
+          <button aria-pressed="false" data-value="a" type="button">
+            <span class="long">A · Beside the comment</span
+            ><span class="short">A · Beside</span>
+          </button>
+          <button aria-pressed="false" data-value="b" type="button">
+            <span class="long">B · Small card, long ones in Comments</span
+            ><span class="short">B · Small card</span>
+          </button>
+          <button aria-pressed="false" data-value="c" type="button">
+            <span class="long">C · A panel on the right</span
+            ><span class="short">C · Panel</span>
+          </button>
+        </div>
+      </fieldset>
+      <p class="rule" data-slot="rule"></p>
+      <fieldset class="row">
+        <legend class="label">Comment</legend>
+        <div class="seg" data-slot="case">
+          <button aria-pressed="false" data-value="long" type="button">
+            <span class="long">Your long reply, Comments open</span
+            ><span class="short">Long, list open</span>
+          </button>
+          <button aria-pressed="false" data-value="closed" type="button">
+            <span class="long">Your long reply, Comments closed</span
+            ><span class="short">Long, list shut</span>
+          </button>
+          <button aria-pressed="false" data-value="short" type="button">
+            <span class="long">A short exchange</span
+            ><span class="short">Short</span>
+          </button>
+          <button aria-pressed="false" data-value="new" type="button">
+            <span class="long">Writing a new one</span
+            ><span class="short">New</span>
+          </button>
+        </div>
+      </fieldset>
+      <fieldset class="row">
+        <legend class="label">Screen</legend>
+        <div class="seg" data-slot="screen">
+          <button aria-pressed="false" data-value="desk" type="button">
+            <span class="long">Desk, 1440</span><span class="short">1440</span>
+          </button>
+          <button aria-pressed="false" data-value="window" type="button">
+            <span class="long">Your window, 1037</span
+            ><span class="short">1037</span>
+          </button>
+          <button aria-pressed="false" data-value="phone" type="button">
+            <span class="long">Phone, 390</span><span class="short">390</span>
+          </button>
+        </div>
+        <button class="replay" data-slot="replay" type="button">
+          Play the opening again
+        </button>
+      </fieldset>
+    </header>
+
+    <main class="stage">
+      <p aria-live="polite" class="readout" data-slot="readout"></p>
+      <div class="fit" data-slot="fit">
+        <div class="frame" data-slot="frame"></div>
+      </div>
+      <p class="note">
+        In the frame, Close, comment 3's pin and row, Comments and C's edge
+        work. Resolve, Delete, More and Reply are drawn, not wired.
+      </p>
+    </main>
+
+    <template id="page">
+      <article class="doc" data-slot="doc">
+        <p class="kicker">Decision page</p>
+        <h1 class="doc-title" id="title">Away mode</h1>
+        <p class="lede">
+          What CawCo does with your sessions while you are away from the desk,
+          and how it tells you what happened once you are back.
+        </p>
+        <section class="decision">
+          <h2>When should new sessions pause?</h2>
+          <p class="why">
+            A session that starts while nobody watches can wait on a question
+            for hours.
+          </p>
+          <ul class="options">
+            <li class="option" id="pause">
+              <span class="dot" data-picked="true"></span>
+              <span class="option-body"
+                ><span class="option-name"
+                  >Pause new sessions after 30 minutes away</span
+                ><span class="option-line"
+                  >Running ones finish their turn, nothing new starts.</span
+                ></span
+              >
+            </li>
+            <li class="option">
+              <span class="dot"></span>
+              <span class="option-body"
+                ><span class="option-name">Never pause</span
+                ><span class="option-line"
+                  >Routines keep starting on their schedule.</span
+                ></span
+              >
+            </li>
+          </ul>
+        </section>
+        <section class="decision">
+          <h2>Who hears about it?</h2>
+          <p class="why">
+            Most away notes are for you; some are for whoever shares the
+            machine.
+          </p>
+          <ul class="options">
+            <li class="option">
+              <span class="dot" data-picked="true"></span>
+              <span class="option-body"
+                ><span class="option-name">Only you</span
+                ><span class="option-line"
+                  >Notes go to the account that started the session.</span
+                ></span
+              >
+            </li>
+            <li class="option">
+              <span class="dot"></span>
+              <span class="option-body"
+                ><span class="option-name">Everyone on the hub</span
+                ><span class="option-line"
+                  >Each person sees the notes of every machine they can
+                  reach.</span
+                ></span
+              >
+            </li>
+          </ul>
+        </section>
+        <section class="decision">
+          <h2>Where should the away notes sit?</h2>
+          <p class="why">
+            Each session leaves a note when it stops for you: what it finished,
+            what it needs.
+          </p>
+          <ul class="options">
+            <li class="option" id="away-rail">
+              <span class="dot" data-picked="true"></span>
+              <span class="option-body"
+                ><span class="option-name"
+                  >In the rail <span class="badge">Recommended</span></span
+                ><span class="option-line"
+                  >The notes collect in the Comments rail, its tab counting the
+                  new ones.</span
+                ></span
+              >
+            </li>
+            <li class="option" id="away-card">
+              <span class="dot"></span>
+              <span class="option-body"
+                ><span class="option-name">On the session's card</span
+                ><span class="option-line"
+                  >One line under the card's title, the rest a press away.</span
+                ></span
+              >
+            </li>
+            <li class="option">
+              <span class="dot"></span>
+              <span class="option-body"
+                ><span class="option-name">In the transcript</span
+                ><span class="option-line"
+                  >A row in the conversation where the session stopped.</span
+                ></span
+              >
+            </li>
+          </ul>
+        </section>
+        <section class="decision">
+          <h2>What happens when you're back?</h2>
+          <p class="why">The first thing you see after a long break.</p>
+          <ul class="options">
+            <li class="option" id="digest">
+              <span class="dot" data-picked="true"></span>
+              <span class="option-body"
+                ><span class="option-name"
+                  >Send one digest when you're back</span
+                ><span class="option-line"
+                  >Every note in one list, newest first, each a link to its
+                  session.</span
+                ></span
+              >
+            </li>
+            <li class="option">
+              <span class="dot"></span>
+              <span class="option-body"
+                ><span class="option-name">Show each note where it is</span
+                ><span class="option-line"
+                  >No list: the rail's count and the cards say it.</span
+                ></span
+              >
+            </li>
+          </ul>
+        </section>
+        <p class="doc-foot">
+          Picks are kept as you make them. Send them to the session with I'm
+          done picking.
+        </p>
+      </article>
+    </template>
+  </body>
+</html>
