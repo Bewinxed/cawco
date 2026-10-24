@@ -232,9 +232,6 @@
   "scripts/probe-kit/specs/fork-ownership.ts": {
     "Restarting session": 1
   },
-  "scripts/probe-kit/specs/fsevents-scope.ts": {
-    ": attached to its live process": 1
-  },
   "scripts/probe-kit/specs/gate-row.ts": {
     "Edit gate.md": 1
   },
@@ -405,7 +402,6 @@
     "Added to AGENTS.md": 1
   },
   "scripts/probe-kit/specs/restart-rules.ts": {
-    ": attached to its live process": 2,
     "[full send: answered]": 2
   },
   "scripts/probe-kit/specs/room-held.ts": {

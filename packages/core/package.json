@@ -69,6 +69,7 @@
     "./words/notices": "./src/words/notices.ts",
     "./words/containers": "./src/words/containers.ts",
     "./words/spawn": "./src/words/spawn.ts",
+    "./words/machine-reads": "./src/words/machine-reads.ts",
     "./words/shell": "./src/words/shell.ts",
     "./words/updates": "./src/words/updates.ts",
     "./words/downloads": "./src/words/downloads.ts",

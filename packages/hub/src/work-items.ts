@@ -8954,6 +8954,17 @@ export const createWorkItems = ({
     /** {@link blockIfMissing}: the block `row`'s item has as its session is to start again, or nothing. */
     blockIfMissing,
 
+    /**
+     * Whether `row`'s live item would be blocked if its session were to
+     * start again now, read and nothing written: the question a reader asks
+     * (server.ts `inputRefusal`); only a start records the block
+     * ({@link blockIfMissing}).
+     */
+    missingNow(row: InstanceRow): boolean {
+      const item = itemOf(row);
+      return !!(item && LIVE.has(item.state) && missingFor(row));
+    },
+
     /** Whether `instanceId`'s live item is blocked ({@link blockIfMissing}): what it is sent waits at the hub. */
     blockedFor(instanceId: string): boolean {
       const [row] = db.getInstancesByIds([instanceId]);

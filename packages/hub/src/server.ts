@@ -466,6 +466,7 @@ import {
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";
+import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { isPlace } from "@cawco/core/workspace-policy";
@@ -4512,9 +4513,7 @@ export const createServer = (
     const [row] = db.getInstancesByIds([rowId]);
     if (row && row.harness === "claude" && row.sessionId) {
       launchClaims.set(rowId, { accountId, at: Date.now() });
-      console.log(
-        `[hub] ${rowId} launches on ${accountId} (${why}); its row says so once its conversation is there`
-      );
+      console.log(spawnWords.launchesOnLine(rowId, accountId, why));
       return;
     }
     db.patchInstance(rowId, { accountId });
@@ -4522,11 +4521,14 @@ export const createServer = (
   };
 
   /**
-   * A row with no account, placed now like a new session: its row names the
-   * account from its launch on ({@link placeForLaunch}). Nothing when
-   * placement finds none.
+   * The account a row with no account would be placed on now, like a new
+   * session, and why, without placing it: a launch already placed holds its
+   * account ({@link heldClaim}); one that ran from the machine's own login,
+   * which has moved into an account since, runs on that account
+   * ({@link repinMovedFrom}); any other is placed. Nothing when placement
+   * finds none. Only a launch acts on it ({@link claimAccount}).
    */
-  const claimAccount = (
+  const accountToPlace = (
     machineId: string,
     row: {
       harness: HarnessKind;
@@ -4534,26 +4536,19 @@ export const createServer = (
       model?: string | null;
       projectId?: string | null;
     }
-  ): { accountId?: string } | { refusal: string } => {
+  ):
+    | { accountId?: string; moved?: true; placed?: string }
+    | { refusal: string } => {
     const held = heldClaim(row.id);
     if (held) {
       return { accountId: held };
     }
-    // One that ran from the machine's own login, which has moved into an
-    // account since, runs on that account ({@link repinMovedFrom}); the
-    // launch carries its data there.
     const moved =
       row.harness === "claude" && movedFrom().has(row.id)
         ? homeMovedAccountOn(machineId)
         : undefined;
     if (moved) {
-      db.accounts.removeMovedFrom(row.id);
-      placeForLaunch(
-        row.id,
-        moved,
-        `it ran on ${machineName(machineId)}'s own login, which moved there`
-      );
-      return { accountId: moved };
+      return { accountId: moved, moved: true };
     }
     const input = placementInput(
       machineId,
@@ -4570,17 +4565,61 @@ export const createServer = (
     if (!placed?.ok) {
       return placed ? { refusal: placed.refusal } : {};
     }
-    const { accountId } = placed;
-    if (!accountId) {
-      return {};
+    return placed.accountId
+      ? { accountId: placed.accountId, placed: placed.why }
+      : {};
+  };
+
+  /**
+   * A row with no account, placed now for its launch ({@link accountToPlace}):
+   * its row names the account from its launch on ({@link placeForLaunch}).
+   * Nothing when placement finds none.
+   */
+  const claimAccount = (
+    machineId: string,
+    row: Parameters<typeof accountToPlace>[1]
+  ): { accountId?: string } | { refusal: string } => {
+    const chosen = accountToPlace(machineId, row);
+    if ("refusal" in chosen || !chosen.accountId) {
+      return chosen;
     }
-    placeForLaunch(row.id, accountId, `it ran on no account; ${placed.why}`);
+    const { accountId } = chosen;
+    if (chosen.moved) {
+      db.accounts.removeMovedFrom(row.id);
+      placeForLaunch(
+        row.id,
+        accountId,
+        `it ran on ${machineName(machineId)}'s own login, which moved there`
+      );
+    } else if (chosen.placed !== undefined) {
+      placeForLaunch(
+        row.id,
+        accountId,
+        `it ran on no account; ${chosen.placed}`
+      );
+    }
     return { accountId };
   };
+  /** {@link claimAccount} for a launch that goes, {@link accountToPlace} for one only asked about. */
+  const accountFor = (
+    machineId: string,
+    row: Parameters<typeof accountToPlace>[1],
+    use: AccountUse
+  ): { accountId?: string } | { refusal: string } =>
+    use === "claim"
+      ? claimAccount(machineId, row)
+      : accountToPlace(machineId, row);
+  /**
+   * Whether a launch's account is only asked about (`ask`: what would it run
+   * on, or why not, placing nothing) or taken for a launch that goes now
+   * (`claim`: a row with no account is placed on one, {@link claimAccount}).
+   */
+  type AccountUse = "ask" | "claim";
   const launchAccount = (
     machineId: string,
     row: Parameters<typeof accountLaunch>[1],
-    session: string
+    session: string,
+    use: AccountUse
   ):
     | { accountId?: string; homeLoginMove?: { accountId: string } }
     | { refusal: string; cause: SendRefusal } => {
@@ -4589,7 +4628,7 @@ export const createServer = (
     const move = homeLoginMoveOf(machineId, row);
     return move
       ? { homeLoginMove: { accountId: move.accountId } }
-      : accountLaunch(machineId, row, session);
+      : accountLaunch(machineId, row, session, use);
   };
   /** {@link launchAccount} for a session on a CawCo account, or to be placed on one. */
   const accountLaunch = (
@@ -4601,7 +4640,8 @@ export const createServer = (
       model?: string | null;
       projectId?: string | null;
     },
-    session: string
+    session: string,
+    use: AccountUse
   ): { accountId?: string } | { refusal: string; cause: SendRefusal } => {
     const { harness } = row;
     // A row on an account stays on it (nothing moves it on its own); one
@@ -4616,7 +4656,7 @@ export const createServer = (
     const claimed =
       row.accountId || !row.id
         ? { accountId: row.accountId ?? undefined }
-        : claimAccount(machineId, { ...row, id: row.id });
+        : accountFor(machineId, { ...row, id: row.id }, use);
     if ("refusal" in claimed) {
       return {
         refusal: claimed.refusal,
@@ -4768,7 +4808,7 @@ export const createServer = (
     row: Parameters<typeof launchAccount>[1],
     session: string
   ): string | undefined => {
-    const launch = launchAccount(machineId, row, session);
+    const launch = launchAccount(machineId, row, session, "claim");
     return "refusal" in launch ? launch.refusal : undefined;
   };
   /**
@@ -5063,8 +5103,10 @@ export const createServer = (
   };
   /**
    * Why a session takes no input from `origin` now, or nothing when it does
-   * ({@link WorkItems.refusal}). Every sender asks this, by way of
-   * {@link deliverSend} or {@link sendRoute}.
+   * ({@link WorkItems.refusal}). A question, never an act: it writes nothing
+   * and places no account (a wake's account is only asked of,
+   * {@link wakeOf} `ask`), so a reader may ask it of a thousand sessions.
+   * A send that goes asks {@link sendRefusal}, which records what it acts on.
    */
   const inputRefusal = (
     instanceId: string,
@@ -5093,8 +5135,8 @@ export const createServer = (
     // ({@link wakeOf}, the one rule every wake asks). A work item's session
     // whose type, machine or account is missing is no refusal: its item is
     // blocked, and the send waits for it (work-items.ts `blockIfMissing`).
-    if (row && wakesForSend(row) && !workItems.blockIfMissing(row)) {
-      const wake = wakeOf(row.machineId, row, false);
+    if (row && wakesForSend(row) && !workItems.missingNow(row)) {
+      const wake = wakeOf(row.machineId, row, false, "ask");
       if ("refused" in wake) {
         return wake.refused;
       }
@@ -5102,6 +5144,23 @@ export const createServer = (
     return row
       ? workItems.refusal(row, origin)
       : { reason: "This session is gone." };
+  };
+  /**
+   * {@link inputRefusal} for a send that goes now ({@link deliverSend}, an
+   * owed send handed over): a work item's session that would wake with its
+   * type, machine or account missing has its item's block recorded first
+   * (work-items.ts `blockIfMissing`), so the send waits for it. Its account
+   * is claimed by the wake itself ({@link resumeSpawn}).
+   */
+  const sendRefusal = (
+    instanceId: string,
+    origin: NeutralOrigin
+  ): ReturnType<typeof inputRefusal> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (row && wakesForSend(row)) {
+      workItems.blockIfMissing(row);
+    }
+    return inputRefusal(instanceId, origin);
   };
   /**
    * A session's standing instructions reach it through the one send path,
@@ -7117,7 +7176,12 @@ export const createServer = (
       return read;
     }
     const stored = takeOwedMove(read);
-    const where = launchAccount(machineId, stored, sessionName(stored));
+    const where = launchAccount(
+      machineId,
+      stored,
+      sessionName(stored),
+      "claim"
+    );
     if ("refusal" in where) {
       return { refusal: where.refusal };
     }
@@ -7243,7 +7307,7 @@ export const createServer = (
     if (reattachOnly) {
       return row.accountId ? { accountDir: { accountId: row.accountId } } : {};
     }
-    const launch = launchAccount(row.machineId, row, sessionName(row));
+    const launch = launchAccount(row.machineId, row, sessionName(row), "claim");
     if ("refusal" in launch) {
       throw new WorkItemRefusal(409, launch.refusal);
     }
@@ -7657,19 +7721,21 @@ export const createServer = (
    * (core `relaunchOf`), its launch directory known, and a permission mode
    * its machine takes be named for it (`settleMode`). Refused, it says why,
    * with what the page offers back: a sign-in or a move (`SendRefusal`), or
-   * a mode to pick (core `ModeAsk`, kept as `mode-ask`).
+   * a mode to pick (core `ModeAsk`, kept as `mode-ask`). The gate asks
+   * (`ask`: nothing is placed); only the launch claims its account.
    */
   const wakeOf = (
     machineId: string,
     row: ReturnType<typeof db.getInstancesByIds>[number],
-    relaunch: boolean
+    relaunch: boolean,
+    use: AccountUse
   ):
     | { refused: { reason: string; refusal?: StoredSendRefusal } }
     | {
         plan: Relaunch;
         settled: { payload: SettledSpawn; permissionMode: string | null };
       } => {
-    const launch = launchAccount(machineId, row, sessionName(row));
+    const launch = launchAccount(machineId, row, sessionName(row), use);
     if ("refusal" in launch) {
       return { refused: { reason: launch.refusal, refusal: launch.cause } };
     }
@@ -7752,7 +7818,7 @@ export const createServer = (
     // that can't start fails what it was sent, saying why, with what its
     // row offers back (a mode to pick among them), by the same rule as a
     // send's gate ({@link wakeOf}).
-    const wake = wakeOf(machineId, row, relaunch);
+    const wake = wakeOf(machineId, row, relaunch, "claim");
     if ("refused" in wake) {
       forgetPending(
         instanceId,
@@ -9069,7 +9135,7 @@ export const createServer = (
     }
     const refused = keepAlive
       ? undefined
-      : inputRefusal(instanceId, message.origin);
+      : sendRefusal(instanceId, message.origin);
     if (refused?.gone) {
       throw new WorkItemRefusal(409, refused.reason);
     }
@@ -9594,7 +9660,7 @@ export const createServer = (
     if (owedHeld(send.instanceId, row.machineId, origin, send.uuid)) {
       return false;
     }
-    const refused = inputRefusal(send.instanceId, origin);
+    const refused = sendRefusal(send.instanceId, origin);
     if (refused) {
       db.takeOwedSend(send.uuid);
       failSend(send, refused.reason, refused.refusal);
@@ -10010,7 +10076,13 @@ export const createServer = (
     }
     lapsed.delete(requestId);
     console.warn(
-      `[hub] ${machineName(call.machineId)} answered ${call.what ?? "a request"} (request ${requestId}) ${Date.now() - call.sentAt - call.timeoutMs} ms past its ${call.timeoutMs / 1000} s deadline; its caller had been told no answer came`
+      machineReadWords.lateLine(
+        machineName(call.machineId),
+        call.what ?? "a request",
+        requestId,
+        Date.now() - call.sentAt - call.timeoutMs,
+        call.timeoutMs
+      )
     );
     return true;
   };
@@ -14897,7 +14969,8 @@ export const createServer = (
         model: session.model,
         projectId: session.projectId,
       },
-      session.title || "this session"
+      session.title || "this session",
+      "ask"
     );
     const launchesOn =
       "refusal" in launch
@@ -35138,6 +35211,14 @@ export const createServer = (
                 if (answering) {
                   waiting.delete(message.requestId);
                   answering(message.payload as ControlResult);
+                  break;
+                }
+                // One whose caller was told no answer came is nobody's: said
+                // once and dropped as it came. Read on for dashboards, a late
+                // transcript's pictures were stored one by one on the hub's
+                // thread, and three such answers held it past its updater's
+                // 3 s (nightly 5575, obelisk, 2026-10-24 22:53:59).
+                if (lateAnswer(message)) {
                   break;
                 }
               }

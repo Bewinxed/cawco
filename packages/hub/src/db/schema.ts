@@ -1934,77 +1934,125 @@ export const marketplaces = sqliteTable("marketplaces", {
 });
 
 /** The plugins the fleet installs, by the CLI's own `plugin@marketplace` id. */
-export const plugins = sqliteTable("plugins", {
-  id: text("id").primaryKey(),
-  /** A disabled row is uninstalled from the machines, not merely switched off. */
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  /**
-   * The resolved content, the same way {@link skills} keeps it, and for the
-   * same reason: the hub fetches a plugin once and every machine is sent the
-   * bytes. Null until a resolve succeeds — a row with no files is one the
-   * machines still install the old way, by asking the CLI to go and get it.
-   */
-  hash: text("hash"),
-  bytes: integer("bytes"),
-  /** Why the last resolve failed. Kept, so the dashboard can say so. */
-  error: text("error"),
-  files: text("files", { mode: "json" }).$type<SkillFile[]>(),
-  /**
-   * What the source held when last read (latest_*, checked_at) and why that
-   * read failed (check_error), the version the stored files declare, and
-   * what the last fetch of a row that had files came to (FleetVersioned).
-   */
-  version: text("version"),
-  lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
-  latestHash: text("latest_hash"),
-  latestVersion: text("latest_version"),
-  checkedAt: timestamp("checked_at"),
-  checkError: text("check_error"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const plugins = sqliteTable(
+  "plugins",
+  {
+    id: text("id").primaryKey(),
+    /** A disabled row is uninstalled from the machines, not merely switched off. */
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /**
+     * The resolved content, the same way {@link skills} keeps it, and for the
+     * same reason: the hub fetches a plugin once and every machine is sent the
+     * bytes. Null until a resolve succeeds — a row with no files is one the
+     * machines still install the old way, by asking the CLI to go and get it.
+     */
+    hash: text("hash"),
+    bytes: integer("bytes"),
+    /** Why the last resolve failed. Kept, so the dashboard can say so. */
+    error: text("error"),
+    files: text("files", { mode: "json" }).$type<SkillFile[]>(),
+    /**
+     * What the source held when last read (latest_*, checked_at) and why that
+     * read failed (check_error), the version the stored files declare, and
+     * what the last fetch of a row that had files came to (FleetVersioned).
+     */
+    version: text("version"),
+    lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
+    latestHash: text("latest_hash"),
+    latestVersion: text("latest_version"),
+    checkedAt: timestamp("checked_at"),
+    checkError: text("check_error"),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  // Every column the fleet's listing reads (db/index.ts `listPlugins`), so
+  // it is read off this index alone: those after `files` sat behind its
+  // megabytes in each row, and a listing walked them all (12.6 ms a read on
+  // the live database, asked once per row of a pass). A column the listing
+  // reads is added here with it.
+  (table) => [
+    index("plugins_listing").on(
+      table.id,
+      table.enabled,
+      table.hash,
+      table.bytes,
+      table.error,
+      table.version,
+      table.lastRefresh,
+      table.latestHash,
+      table.latestVersion,
+      table.checkedAt,
+      table.checkError
+    ),
+  ]
+);
 
 /**
  * The plain skills the fleet writes into `~/.claude/skills/` (NEW.md §11). The
  * hub resolves a source once and keeps the files here, so a machine that joins
  * tomorrow is sent them without anything being downloaded again.
  */
-export const skills = sqliteTable("skills", {
-  /** The directory the files land in on every machine. */
-  name: text("name").primaryKey(),
-  /** A `skills:` / `github:` / `npm:` / URL source, stored as the user gave it. */
-  source: text("source").notNull(),
-  /** A disabled row stays here and is deleted from the machines. */
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  /** Null until a resolve succeeds; a machine writes only when this changes. */
-  hash: text("hash"),
-  bytes: integer("bytes"),
-  /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
-  error: text("error"),
-  files: text("files", { mode: "json" }).$type<SkillFile[]>(),
-  /**
-   * What the source held when last read (latest_*, checked_at) and why that
-   * read failed (check_error), the version the stored files declare, and
-   * what the last fetch of a row that had files came to (FleetVersioned).
-   */
-  version: text("version"),
-  lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
-  latestHash: text("latest_hash"),
-  latestVersion: text("latest_version"),
-  checkedAt: timestamp("checked_at"),
-  checkError: text("check_error"),
-  /**
-   * Bound to one project (`project`: `<checkout>/.claude/skills/<name>/`);
-   * null for every machine (`~/.claude/skills/`). Placed at every checkout
-   * and delegate workspace of the project, as a bound MCP server is.
-   */
-  scope: text("scope").$type<FleetScope>(),
-  projectId: text("project_id"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const skills = sqliteTable(
+  "skills",
+  {
+    /** The directory the files land in on every machine. */
+    name: text("name").primaryKey(),
+    /** A `skills:` / `github:` / `npm:` / URL source, stored as the user gave it. */
+    source: text("source").notNull(),
+    /** A disabled row stays here and is deleted from the machines. */
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Null until a resolve succeeds; a machine writes only when this changes. */
+    hash: text("hash"),
+    bytes: integer("bytes"),
+    /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
+    error: text("error"),
+    files: text("files", { mode: "json" }).$type<SkillFile[]>(),
+    /**
+     * What the source held when last read (latest_*, checked_at) and why that
+     * read failed (check_error), the version the stored files declare, and
+     * what the last fetch of a row that had files came to (FleetVersioned).
+     */
+    version: text("version"),
+    lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
+    latestHash: text("latest_hash"),
+    latestVersion: text("latest_version"),
+    checkedAt: timestamp("checked_at"),
+    checkError: text("check_error"),
+    /**
+     * Bound to one project (`project`: `<checkout>/.claude/skills/<name>/`);
+     * null for every machine (`~/.claude/skills/`). Placed at every checkout
+     * and delegate workspace of the project, as a bound MCP server is.
+     */
+    scope: text("scope").$type<FleetScope>(),
+    projectId: text("project_id"),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  // Every column the fleet's listing reads (db/index.ts `listSkills`), so it
+  // is read off this index alone, never past `files` (10 ms a read on the
+  // live database, 0.1 ms off the index). A column the listing reads is
+  // added here with it.
+  (table) => [
+    index("skills_listing").on(
+      table.name,
+      table.source,
+      table.enabled,
+      table.hash,
+      table.bytes,
+      table.error,
+      table.scope,
+      table.projectId,
+      table.version,
+      table.lastRefresh,
+      table.latestHash,
+      table.latestVersion,
+      table.checkedAt,
+      table.checkError
+    ),
+  ]
+);
 
 /**
  * The subagent definitions the fleet writes into `~/.claude/agents/` (NEW.md

@@ -17,6 +17,11 @@ export const spawnWords = {
   refused: "[hub] refused spawn",
   /** One refused start, in the refusal's own words. */
   refusedLine: (refusal: string) => `${spawnWords.refused}: ${refusal}`,
+  /** Between a session and the account its launch places it on, in the line the hub logs of it. */
+  launchesOn: "launches on",
+  /** The hub's line as a launch places a Claude session that ran on no account (server.ts `placeForLaunch`). */
+  launchesOnLine: (instanceId: string, accountId: string, why: string) =>
+    `[hub] ${instanceId} ${spawnWords.launchesOn} ${accountId} (${why}); its row says so once its conversation is there`,
   /** Each permission mode's name (the dashboard's permission-modes.ts says what each does). */
   modes: {
     default: "Ask first",
