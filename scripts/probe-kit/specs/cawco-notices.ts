@@ -24,6 +24,9 @@
  *   rest starts no turn: no request carries it for 20 s, and its session's
  *   turn stays closed; the person's next message's request carries it, and
  *   its transcript has it right before that message, no answer between.
+ * - (s1) A quiet notice owed to a sleeping session starts no process: the
+ *   hub keeps it and sessiond holds no process for the session; the
+ *   person's next message wakes it and its turn reads the notice first.
  * - A real leak: the session's command leaves `sleep 600.0971` in a session
  *   of its own and ends; the agent's leak watch finds it and the hub tells
  *   the session (agent leak-watch.ts, hub server.ts `tellLeak`). The pages
@@ -78,6 +81,7 @@ import {
 const MARK = "PROBE-NOTICES";
 const LEFT_TAG = "PROBE-NOTICES-LEFT";
 const QUIET = "PROBE-NOTICES-QUIET";
+const ASLEEP = "PROBE-NOTICES-ASLEEP";
 /** How long a quiet notice to a session at rest is watched for a turn it must not start. */
 const QUIET_WATCH_MS = 20_000;
 const LEFTOVER = "600.0971";
@@ -633,8 +637,10 @@ const oweWhileDown = async (
   fleet: KitFleet,
   sender: string,
   one: string,
-  quiet: string
+  quiet: string,
+  sleeper: string
 ): Promise<{
+  asleepNote: { id: string; content: string };
   ids: { id: string; sent: Sent }[];
   note: { id: string; content: string };
 }> => {
@@ -653,9 +659,88 @@ const oweWhileDown = async (
       quiet: true,
     }),
   };
+  const asleepContent = `${MARK} ${ASLEEP} the browser was handed back.`;
+  const asleepNote = {
+    content: asleepContent,
+    id: owe(fleet, sleeper, at + ids.length + 1, {
+      content: asleepContent,
+      origin: { kind: "system", name: "browser" },
+      quiet: true,
+    }),
+  };
   fleet.launch("hub");
   await fleet.hubUp();
-  return { ids, note };
+  return { asleepNote, ids, note };
+};
+
+/** Asks `id` to sleep (again every 15 s: a machine refuses one not at rest) until its row reads sleeping. */
+const asleep = async (fleet: KitFleet, id: string) => {
+  let askedAt = 0;
+  return await until(
+    `${id.slice(0, 8)} asleep`,
+    async () => {
+      const status = fleet.instance(id)?.status;
+      if (status !== "sleeping" && Date.now() - askedAt > 15_000) {
+        askedAt = Date.now();
+        await fleet.control(id, "sleep");
+      }
+      return status;
+    },
+    (status) => status === "sleeping",
+    90_000
+  ).catch(() => fleet.instance(id)?.status);
+};
+
+/**
+ * (s1) A quiet notice owed to a sleeping session starts no process: it is
+ * kept at the hub, the session asleep with no process in sessiond; the
+ * person's next message wakes it, and that turn reads the notice first.
+ * Read after the quiet leg's watch, so the hub has had that long.
+ */
+const asleepLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  sleeper: string,
+  note: { id: string; content: string }
+) => {
+  const status = fleet.instance(sleeper)?.status;
+  const pid = await fleet.sessionPid(sleeper);
+  const kept = fleet.sendRow(note.id);
+  kit.check(
+    "(s1) a quiet notice to a sleeping session starts no process: the session stays asleep with no process in sessiond, the notice kept at the hub",
+    status === "sleeping" &&
+      pid === undefined &&
+      kept?.state === "pending" &&
+      !!kept.owed,
+    JSON.stringify({ status, pid: pid ?? null, record: kept ?? null })
+  );
+  const next = `${MARK} ${ASLEEP}: wake up`;
+  await turn(fleet, sleeper, next);
+  const carried = fleet.seen.find((r) => r.last.includes(next));
+  const blocks = await until(
+    "the waking message in its transcript",
+    () => blocksOf(fleet, sleeper),
+    (now) => now.some((b) => b.type === "user" && b.content.includes(next)),
+    30_000
+  ).catch(() => blocksOf(fleet, sleeper));
+  const at = blocks.findIndex((b) => b.id === note.id);
+  const nextAt = blocks.findIndex(
+    (b) => b.type === "user" && b.content.includes(next)
+  );
+  kit.check(
+    "(s1) the person's next message wakes it, and that turn reads the notice: its request carries it, the transcript has it right before that message, read",
+    !!carried?.all.includes(note.content) &&
+      at >= 0 &&
+      nextAt > at &&
+      blocks[at]?.type === "ui.system_note" &&
+      fleet.sendRow(note.id)?.state === "read",
+    JSON.stringify({
+      carried: !!carried?.all.includes(note.content),
+      at,
+      nextAt,
+      state: fleet.sendRow(note.id)?.state,
+    })
+  );
 };
 
 /** (q1) The quiet notice owed to `quiet` starts no turn; the next message's turn reads it. */
@@ -685,7 +770,13 @@ const quietLeg = async (
   const next = `${MARK} ${QUIET}: the next message`;
   await turn(fleet, quiet, next);
   const carried = fleet.seen.find((r) => r.last.includes(next));
-  const blocks = await blocksOf(fleet, quiet);
+  // The record of the turn's own message reaches the transcript a moment after its answer.
+  const blocks = await until(
+    "the next message in its transcript",
+    () => blocksOf(fleet, quiet),
+    (now) => now.some((b) => b.type === "user" && b.content.includes(next)),
+    30_000
+  ).catch(() => blocksOf(fleet, quiet));
   const at = blocks.findIndex((b) => b.id === note.id);
   const nextAt = blocks.findIndex(
     (b) => b.type === "user" && b.content.includes(next)
@@ -817,11 +908,20 @@ const run = async (kit: Kit) => {
     const sender = await fleet.spawn("claude", "Sender", fleet.repo);
     const one = await fleet.spawn("claude", "Notices", fleet.repo);
     const quiet = await fleet.spawn("claude", "Quiet", fleet.repo);
+    const sleeper = await fleet.spawn("claude", "Asleep", fleet.repo);
     const hello = await turn(fleet, one, `${MARK}: hello`);
     await turn(fleet, quiet, `${MARK} ${QUIET}: hello`);
+    await turn(fleet, sleeper, `${MARK} ${ASLEEP}: hello`);
+    await asleep(fleet, sleeper);
     await refusedLeg(kit, fleet, one);
 
-    const { ids, note } = await oweWhileDown(fleet, sender, one, quiet);
+    const { asleepNote, ids, note } = await oweWhileDown(
+      fleet,
+      sender,
+      one,
+      quiet,
+      sleeper
+    );
     await until(
       "every owed send read",
       () => ids.map(({ id }) => fleet.sendRow(id)?.state),
@@ -835,6 +935,7 @@ const run = async (kit: Kit) => {
       120_000
     ).catch(() => undefined);
     await quietLeg(kit, fleet, quiet, note);
+    await asleepLeg(kit, fleet, sleeper, asleepNote);
 
     const base = await fleet.dashboard();
     const pages: { errors: string[]; label: string; page: Page }[] = [];

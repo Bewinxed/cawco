@@ -4234,11 +4234,21 @@ export const createServer = (
    * A send that may not wake its session is kept at the hub, owed, and goes
    * to it in order when a send that may wake it arrives
    * ({@link deliverSend}, {@link releaseOwed}).
+   *
+   * CawCo's quiet note (a `system` send with `shouldQuery: false`: a
+   * take-over's word, a fork's or a plan's note, an undelivered notice)
+   * never wakes one, whosever act it tells of: a live session at rest
+   * stores it and reads it with its next turn (agent claude.ts
+   * `quietNote`), and one with no process has it kept at the hub the same way, its
+   * next send's wake carrying it.
    */
   const startsTurnIn = (
     row: { status: string; parentInstanceId?: string | null },
-    origin: NeutralOrigin
+    { origin, shouldQuery }: { origin: NeutralOrigin; shouldQuery?: boolean }
   ): boolean => {
+    if (origin.kind === "system" && shouldQuery === false) {
+      return false;
+    }
     if (
       byPerson(origin) ||
       // A person's Continue files the session's open items first, stopped
@@ -4271,7 +4281,7 @@ export const createServer = (
         startsTurnIn(
           row,
           (JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>).payload
-            .message.origin
+            .message
         )
       );
   /**
@@ -5170,10 +5180,7 @@ export const createServer = (
       const [row] = db.getInstancesByIds([instanceId]);
       const keptAtRest = (send: SentMessageRow): boolean =>
         !!(send.owed && row) &&
-        !startsTurnIn(
-          { ...row, status: "stopped" },
-          (send.body as SentMessage).origin
-        );
+        !startsTurnIn({ ...row, status: "stopped" }, send.body as SentMessage);
       if (keep === "none") {
         settlePending(
           instanceId,
@@ -9074,7 +9081,7 @@ export const createServer = (
       !(refused || keepAlive) &&
       !!target &&
       wakesForSend(target) &&
-      !startsTurnIn(target, message.origin);
+      !startsTurnIn(target, message);
     // Kept, not handed: a turn at its account's limit would only be refused.
     const limited =
       !(refused || keepAlive || ahead) &&
@@ -22986,9 +22993,9 @@ export const createServer = (
       return (
         !!row &&
         db.sendsIn(instanceId, ["pending"]).some((send) => {
-          const origin = (send.body as SentMessage | null)?.origin;
+          const body = send.body as SentMessage | null;
           return (
-            !isKeepAlive(send.body) && !!origin && startsTurnIn(row, origin)
+            !isKeepAlive(send.body) && !!body?.origin && startsTurnIn(row, body)
           );
         })
       );
