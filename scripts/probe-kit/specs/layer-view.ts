@@ -257,7 +257,18 @@ const run = async (kit: Kit) => {
   const tree = join(home, "walk");
   await rm(tree, { recursive: true, force: true });
   await mkdir(tree, { recursive: true });
-  await Bun.$`for d in $(seq 1 100); do mkdir -p ${tree}/$d && (cd ${tree}/$d && seq 1 1000 | xargs touch); done`.quiet();
+  const made = Bun.spawnSync([
+    "/bin/sh",
+    "-c",
+    'for d in $(seq 1 100); do mkdir -p "$1/$d" && (cd "$1/$d" && seq 1 1000 | xargs touch) || exit 1; done',
+    "make-tree",
+    tree,
+  ]);
+  if (made.exitCode !== 0) {
+    throw new Error(
+      `the 100,000-file tree was not made: ${made.stderr.toString()}`
+    );
+  }
   const nativeAt = performance.now();
   const native = Bun.spawnSync([
     "/bin/sh",
