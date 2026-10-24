@@ -11,7 +11,7 @@
  *   `/git/` URLs to `cawco::<url>` (`url.<base>.insteadOf`, git-config(1)),
  *   so git runs the remote helper `git-remote-cawco` for them
  *   (gitremote-helpers(7): "<transport>::<address> … git-remote-<transport>
- *   is invoked"). That helper ({@link HELPER}) only pipes its stdin and
+ *   is invoked"). That helper ({@link helperScript}) only pipes its stdin and
  *   stdout through the workspace's git door, a unix socket in its door dir
  *   (`workspaceDoorDir`).
  * - On the host the agent takes the door's connection and runs git's own
@@ -66,6 +66,7 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   askRefusal,
@@ -116,18 +117,25 @@ export const gitHelperDirOf = (id: string): string =>
 
 /**
  * `git-remote-cawco <remote> <url>`, inside the boundary: sends the URL on
- * the door, then copies stdin to the door (half-closing it when git closes
- * stdin) and the door to stdout, and ends when the host closes the door.
+ * the door, reads the door's word (`ok`, or why not), then copies stdin to
+ * the door (half-closing it when git closes stdin) and the door's frames to
+ * stdout ({@link doorChannel}: a length, then that many bytes; an empty one
+ * is the door's keepalive), and ends when the host closes the door. Every
+ * read of the door waits at most {@link HELPER_SILENCE_S}: a door that says
+ * nothing for that long, not even a keepalive, ends git's command with a
+ * refusal on its stderr, so no push or fetch through the door waits forever.
  * Perl, as the boundary's runner already uses: no other tool is assumed
  * inside.
  */
-const HELPER = `#!/usr/bin/perl
+const helperScript = (): string => `#!/usr/bin/perl
 # CawCo: git's remote helper for the hub, through the workspace's git door.
 use strict;
 use warnings;
 use Cwd qw(abs_path);
+use IO::Select;
 use IO::Socket::UNIX;
 use Socket qw(SOCK_STREAM);
+my $silence = ${HELPER_SILENCE_S};
 my $door = $ENV{CAWCO_GIT_SOCKET} // '';
 my $url = $ARGV[1] // '';
 # The repository git runs this helper for (gitremote-helpers(7): git hands
@@ -135,19 +143,52 @@ my $url = $ARGV[1] // '';
 my $gitdir = abs_path($ENV{GIT_DIR} // '.git') // '';
 my $s = IO::Socket::UNIX->new(Type => SOCK_STREAM, Peer => $door)
   or die "cawco: the workspace's git door ($door) is not open: $!\\n";
+my $heard = IO::Select->new($s);
+my $writer = 0;
 sub put { my ($fh, $buf) = @_; my $at = 0; while ($at < length $buf) { my $n = syswrite($fh, $buf, length($buf) - $at, $at); die "cawco: git door: $!\\n" unless defined $n; $at += $n; } }
+# Up to $want bytes from the door, '' at its end; a door silent for $silence s ends the command.
+sub take {
+  my ($want) = @_;
+  unless ($heard->can_read($silence)) {
+    print STDERR "cawco: git did not finish through the workspace's git door: the door said nothing for $silence s, so this command was stopped. CawCo's agent on this machine is not answering; run it again, and restart the agent if it happens again.\\n";
+    kill 'TERM', $writer if $writer;
+    exit 128;
+  }
+  my $n = sysread($s, my $buf, $want);
+  die "cawco: git door: $!\\n" unless defined $n;
+  return $buf;
+}
+# Exactly $want bytes, or undef when the door ended before the first.
+sub exactly {
+  my ($want) = @_;
+  my $got = '';
+  while (length $got < $want) {
+    my $more = take($want - length $got);
+    if ($more eq '') { return undef if $got eq ''; die "cawco: the workspace's git door ended mid-answer\\n"; }
+    $got .= $more;
+  }
+  return $got;
+}
 put($s, "$url\\t$gitdir\\n");
 # The door's word first: "ok", or why it does not take this.
 my $said = '';
-while (1) { my $n = sysread($s, my $c, 1); die "cawco: the workspace's git door closed without a word\\n" unless $n; last if $c eq "\\n"; $said .= $c; }
+while (1) { my $c = take(1); die "cawco: the workspace's git door closed without a word\\n" if $c eq ''; last if $c eq "\\n"; $said .= $c; }
 if ($said ne 'ok') { print STDERR "$said\\n"; exit 128; }
-my $writer = fork() // die "cawco: fork: $!\\n";
+$writer = fork() // die "cawco: fork: $!\\n";
 if ($writer == 0) {
   while (1) { my $n = sysread(STDIN, my $buf, 65536); last unless $n; put($s, $buf); }
   shutdown($s, 1);
   exit 0;
 }
-while (1) { my $n = sysread($s, my $buf, 65536); last unless $n; put(\\*STDOUT, $buf); }
+while (1) {
+  my $head = exactly(${FRAME_HEAD});
+  last unless defined $head;
+  my $length = unpack('N', $head);
+  next if $length == 0;
+  my $body = exactly($length);
+  die "cawco: the workspace's git door ended mid-answer\\n" unless defined $body;
+  put(\\*STDOUT, $body);
+}
 kill 'TERM', $writer;
 waitpid($writer, 0);
 exit 0;
@@ -278,37 +319,123 @@ export const pushLfs = async (
   if (gone) {
     return gone;
   }
-  const child = Bun.spawn(
-    safeGitArgv(["lfs", "push", to ?? "origin", ...sources]),
-    {
-      cwd: ref.path,
-      env: {
-        ...(to ? withGitConfig(env, lfsConfigFor(to)) : env),
-        ...SAFE_GIT_ENV,
-        GIT_DIR: join(ref.path, ".git"),
-      },
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    }
+  const { code, out, err } = await runOnHost(
+    ref,
+    ["lfs", "push", to ?? "origin", ...sources],
+    to ? withGitConfig(env, lfsConfigFor(to)) : env
   );
-  const [code, out, err] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
   if (code === 0) {
     return;
   }
-  const said = withoutCredential(`${err}\n${out}`.trim())
-    .split("\n")
-    .filter(Boolean)
-    .at(-1);
+  const said = lastSaid(`${out}\n${err}`, `git lfs push exited ${code}`);
   console.warn(
-    `[hub-git] ${ref.id}: git lfs push ${to ? withoutCredential(to) : "origin"} of ${sources.join(" ")} failed: ${said ?? `exit ${code}`}`
+    `[hub-git] ${ref.id}: git lfs push ${to ? withoutCredential(to) : "origin"} of ${sources.join(" ")} failed: ${said}`
   );
-  return `the large files did not reach ${to ? `${withoutCredential(to)}'s LFS` : "the origin's LFS"}: ${said ?? `git lfs push exited ${code}`}`;
+  return `the large files did not reach ${to ? `${withoutCredential(to)}'s LFS` : "the origin's LFS"}: ${said}`;
 };
+
+/**
+ * How long a git or git-lfs the door runs on the host may say nothing
+ * before it is stopped. Our choice: each runs with its progress forced on
+ * ({@link runOnHost}), so a live transfer speaks every few hundred ms
+ * (git-lfs throttles its meter to one line per 200 ms, tasklog/log.go
+ * `DefaultLoggingThrottle`), and a stalled connection ends itself sooner
+ * (git-lfs's `lfs.activitytimeout`: "the maximum time, in seconds, that the
+ * HTTP client will wait for the next tcp read or write … Default: 30
+ * seconds", git-lfs-config(5)). What stays silent past this waits on
+ * something nobody will give: a credential helper's prompt with no one at
+ * the screen. On macOS, Apple's `git-credential-osxkeychain` first takes an
+ * exclusive lock on its own binary (`open(argv[0], O_EXLOCK)`), so one
+ * waiting for a keychain prompt holds every other keychain lookup on the
+ * machine until it ends: on 2026-10-24 the git-door probe's push of an LFS
+ * file waited 74 minutes on such a `store`.
+ */
+const HOST_RUN_SILENCE_MS = 120_000;
+
+/** The most of a host run's stderr kept: its progress repeats, its last words are what it said. */
+const HOST_RUN_ERR_KEPT = 64_000;
+
+/** A host run's whole stdout, the tail of its stderr, and its exit (128 when it was stopped or never ran). */
+interface HostRun {
+  readonly code: number;
+  readonly err: string;
+  readonly out: string;
+}
+
+/**
+ * One git (or `git lfs`) run on the host in `ref`'s clone, its progress
+ * forced on (`--progress` for git's push and fetch, which "forces progress
+ * status even if the standard error stream is not directed to a terminal",
+ * git-push(1); `GIT_LFS_FORCE_PROGRESS`, which forces git-lfs's "even when
+ * standard output stream is not a terminal", git-lfs-config(5)), in a
+ * process group of its own. When it says nothing for
+ * {@link HOST_RUN_SILENCE_MS}, the whole group is stopped (the credential
+ * helper it waits on included, and with it the lock that helper holds), and
+ * its last words say why it ended.
+ */
+const runOnHost = (
+  ref: WorkspaceRef,
+  args: readonly string[],
+  env: Record<string, string>
+): Promise<HostRun> =>
+  new Promise((resolve) => {
+    const [file = "git", ...rest] = safeGitArgv([...args]);
+    const child = spawn(file, rest, {
+      cwd: ref.path,
+      env: {
+        ...env,
+        ...SAFE_GIT_ENV,
+        GIT_DIR: join(ref.path, ".git"),
+        GIT_LFS_FORCE_PROGRESS: "1",
+      },
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    let err = "";
+    let silent = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      silent = true;
+      const leader = spawnedPid(child);
+      if (leader !== undefined && child.exitCode === null) {
+        try {
+          signalGroup(leader, "SIGKILL");
+        } catch (error) {
+          console.warn(
+            `[hub-git] ${ref.id}: git ${args[0]} said nothing and could not be stopped: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    };
+    const heard = () => {
+      clearTimeout(timer);
+      timer = setTimeout(stop, HOST_RUN_SILENCE_MS);
+    };
+    heard();
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+      heard();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      err = (err + chunk.toString()).slice(-HOST_RUN_ERR_KEPT);
+      heard();
+    });
+    child.on("error", (error) => {
+      err += `\n${error.message}`;
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      const what = `git ${args.slice(0, args[0] === "lfs" ? 2 : 1).join(" ")}`;
+      resolve({
+        code: silent ? 128 : (code ?? 128),
+        out,
+        err: silent
+          ? `${err}\ncawco: ${what} said nothing for ${HOST_RUN_SILENCE_MS / 1000} s and was stopped: it waited on something that never came, most likely a credential helper's prompt nobody was there to answer.`
+          : err,
+      });
+    });
+  });
 
 /** The clone's `origin` remote-tracking refs, each with the commit it is at. */
 const remoteRefs = (clone: string): Map<string, string> => {
@@ -399,20 +526,14 @@ const fetchLfs = async (
     await noteRefused(lfs.projectId, ref.path, refused);
     return;
   }
-  const child = Bun.spawn(safeGitArgv(["lfs", "fetch", "origin", ...refs]), {
-    cwd: ref.path,
-    env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-  const [code, err] = await Promise.all([
-    child.exited,
-    new Response(child.stderr).text(),
-  ]);
+  const { code, err } = await runOnHost(
+    ref,
+    ["lfs", "fetch", "origin", ...refs],
+    env
+  );
   if (code !== 0) {
     throw new Error(
-      `git lfs fetch of ${refs.join(" ")} failed: ${withoutCredential(err.trim()).split("\n").at(-1) ?? `exit ${code}`}`
+      `git lfs fetch of ${refs.join(" ")} failed: ${lastSaid(err, `exit ${code}`)}`
     );
   }
 };
@@ -428,7 +549,7 @@ const fetchLfs = async (
  */
 const protocolFeed = (
   ref: WorkspaceRef,
-  socket: Socket,
+  channel: DoorChannel,
   write: (bytes: Buffer | string) => void,
   env: Record<string, string>
 ) => {
@@ -452,7 +573,7 @@ const protocolFeed = (
       env
     );
     if (refused) {
-      socket.write(
+      channel.write(
         `${lines.map((line) => `error ${refspecOf(line).dst} ${refused}\n`).join("")}\n`
       );
       return;
@@ -806,30 +927,19 @@ interface HelperBackend {
   ) => Promise<readonly string[]>;
 }
 
-/** One git run on the host in the clone, its output whole. */
-const runHostGit = async (
-  ref: WorkspaceRef,
-  args: readonly string[],
-  env: Record<string, string>
-): Promise<{ code: number; err: string; out: string }> => {
-  const child = Bun.spawn(safeGitArgv(args), {
-    cwd: ref.path,
-    env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [code, out, err] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { code, out, err };
-};
-
-/** The last line git said on stderr, its credentials out. */
+/**
+ * The last line git said on stderr, its credentials out. A progress line
+ * ends in `\r` and is redrawn over ({@link runOnHost}), so each is a line
+ * of its own here, and the words after the last of them are the last said.
+ */
 const lastSaid = (err: string, fallback: string): string =>
-  withoutCredential(err.trim()).split("\n").filter(Boolean).at(-1) ?? fallback;
+  withoutCredential(err)
+    .split(LINE_BREAKS)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1) ?? fallback;
+
+const LINE_BREAKS = /[\r\n]+/;
 
 /** `git ls-remote --symref`'s `ref: <target>\tHEAD`. */
 const SYMREF = /^ref: (\S+)\t(\S+)$/;
@@ -861,7 +971,7 @@ const hostBackend = (
     if (forPush && rule.kind !== "go") {
       return [];
     }
-    const listed = await runHostGit(
+    const listed = await runOnHost(
       ref,
       ["ls-remote", ...(forPush ? [] : ["--symref"]), url],
       env
@@ -884,11 +994,11 @@ const hostBackend = (
       });
   },
   fetch: async (names) => {
-    const fetched = await runHostGit(
+    const fetched = await runOnHost(
       ref,
       [
         "fetch",
-        "--quiet",
+        "--progress",
         "--no-tags",
         "--no-write-fetch-head",
         url,
@@ -923,11 +1033,12 @@ const hostBackend = (
     if (refused) {
       return lines.map((line) => `error ${refspecOf(line).dst} ${refused}`);
     }
-    const pushed = await runHostGit(
+    const pushed = await runOnHost(
       ref,
       [
         "push",
         "--porcelain",
+        "--progress",
         ...(dryRun ? ["--dry-run"] : []),
         ...leases.map((lease) => `--force-with-lease=${lease}`),
         url,
@@ -1013,6 +1124,7 @@ const answerOption = (line: string, options: HelperOptions): string => {
 
 const serveHelper = (
   socket: Socket,
+  channel: DoorChannel,
   rest: Buffer,
   backend: HelperBackend,
   fail: (why: string) => void,
@@ -1029,16 +1141,16 @@ const serveHelper = (
     }
     ended = true;
     await done();
-    socket.end();
+    channel.end();
   };
   const answer = async (line: string): Promise<void> => {
     if (line === "capabilities") {
-      socket.write("fetch\npush\noption\n\n");
+      channel.write("fetch\npush\noption\n\n");
     } else if (line.startsWith("option ")) {
-      socket.write(`${answerOption(line, options)}\n`);
+      channel.write(`${answerOption(line, options)}\n`);
     } else if (line === "list" || line === "list for-push") {
       const refs = await backend.list(line === "list for-push");
-      socket.write(`${refs.map((each) => `${each}\n`).join("")}\n`);
+      channel.write(`${refs.map((each) => `${each}\n`).join("")}\n`);
     } else if (line.startsWith("fetch ") || line.startsWith("push ")) {
       batch.push(line);
     } else if (line === "" && batch.length > 0) {
@@ -1046,14 +1158,14 @@ const serveHelper = (
       batch = [];
       if (lines[0]?.startsWith("fetch ")) {
         await backend.fetch(lines.map((each) => each.split(" ")[2] ?? ""));
-        socket.write("\n");
+        channel.write("\n");
       } else {
         const results = await backend.push(
           lines,
           options.dryRun,
           options.leases.splice(0)
         );
-        socket.write(`${results.map((each) => `${each}\n`).join("")}\n`);
+        channel.write(`${results.map((each) => `${each}\n`).join("")}\n`);
       }
     } else if (line === "") {
       await finish();
@@ -1109,9 +1221,66 @@ const configProblem = async (ref: WorkspaceRef): Promise<string | undefined> =>
     ? await repositoryConfigProblem(join(ref.path, ".git"))
     : undefined;
 
+/**
+ * How often the door tells the helper it is still at work while it says
+ * nothing else ({@link DoorChannel}). Our choice: a fraction of
+ * {@link HELPER_SILENCE_S}, so a busy event loop's delay never reads as a
+ * door gone quiet.
+ */
+const DOOR_KEEPALIVE_MS = 10_000;
+
+/**
+ * How long the helper waits on the door with nothing heard, not even a
+ * keepalive, before it ends git's command with a refusal ({@link helperScript}).
+ * Our choice: six keepalives missed means the agent is stuck, not busy.
+ */
+const HELPER_SILENCE_S = 60;
+
+/** The bytes of a frame's length (`N` in Perl's pack, a 32-bit big-endian count). */
+const FRAME_HEAD = 4;
+
+/**
+ * The door's side of a connection once it has said `ok`: every byte for
+ * git goes to the helper in a frame (its length, then that many bytes), and
+ * an empty frame every {@link DOOR_KEEPALIVE_MS} while the connection is
+ * open says the door is still at work (a large file's upload, a remote that
+ * takes its time). The helper unwraps the frames and waits on no silence
+ * longer than {@link HELPER_SILENCE_S}. `write` answers false when the
+ * socket's buffer is full, as `socket.write` does.
+ */
+interface DoorChannel {
+  readonly end: () => void;
+  readonly write: (bytes: Buffer | string) => boolean;
+}
+
+const doorChannel = (socket: Socket): DoorChannel => {
+  const frame = (bytes: Buffer | string): Buffer => {
+    const body = typeof bytes === "string" ? Buffer.from(bytes) : bytes;
+    const head = Buffer.alloc(FRAME_HEAD);
+    head.writeUInt32BE(body.length);
+    return Buffer.concat([head, body]);
+  };
+  const open = () => !(socket.destroyed || socket.writableEnded);
+  const keepalive = setInterval(() => {
+    if (open()) {
+      socket.write(frame(Buffer.alloc(0)));
+    }
+  }, DOOR_KEEPALIVE_MS);
+  socket.once("close", () => clearInterval(keepalive));
+  return {
+    write: (bytes) => (open() ? socket.write(frame(bytes)) : false),
+    end: () => {
+      clearInterval(keepalive);
+      socket.end();
+    },
+  };
+};
+
 /** One door connection: the URL line, then the remote's side of git's helper protocol, as {@link doorTarget} reaches it. */
 const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
   let head = Buffer.alloc(0);
+  /** The door has said `ok`: everything after goes in frames ({@link doorChannel}). */
+  let answered = false;
   const fail = (why: string) => {
     console.warn(`[hub-git] ${ref.id}: ${why}`);
     socket.destroy();
@@ -1135,6 +1304,11 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     const rest = head.subarray(end + 1);
     start(url, gitDir, rest).catch((error: unknown) => {
       const why = error instanceof Error ? error.message : String(error);
+      if (answered) {
+        // Past `ok` the helper reads frames: the connection is cut short.
+        fail(why);
+        return;
+      }
       console.warn(`[hub-git] ${ref.id}: ${why}`);
       // The helper prints the door's word to git's stderr and stops.
       socket.end(
@@ -1165,18 +1339,26 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     // one (host-lfs.ts): read before the door answers, so a run whose
     // endpoint the hub could not say does not start.
     const lfs = await doorLfsOf(ref, originOf(ref.path));
+    // Read before the door answers too: what fails after `ok` reaches git
+    // only as a connection cut short.
+    let env: Record<string, string> = {};
+    if (target.kind === "host") {
+      env = target.origin
+        ? await hostOriginGitEnv(url, lfs.declared)
+        : await hostGitEnv();
+    }
     socket.write("ok\n");
+    answered = true;
+    const channel = doorChannel(socket);
     switch (target.kind) {
       case "hub":
-        pipeHubHelper(ref, socket, url, rest, lfs);
+        pipeHubHelper(ref, socket, channel, url, rest, lfs);
         return;
       case "host": {
-        const env = target.origin
-          ? await hostOriginGitEnv(url, lfs.declared)
-          : await hostGitEnv();
         const before = remoteRefs(ref.path);
         serveHelper(
           socket,
+          channel,
           rest,
           hostBackend(ref, url, env, target.origin, target.push),
           fail,
@@ -1218,6 +1400,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
 const pipeHubHelper = (
   ref: WorkspaceRef,
   socket: Socket,
+  channel: DoorChannel,
   url: string,
   rest: Buffer,
   lfs: DoorLfs
@@ -1253,7 +1436,7 @@ const pipeHubHelper = (
           `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
         )
       )
-      .finally(() => socket.end());
+      .finally(() => channel.end());
   });
   child.on("error", () => socket.destroy());
   child.stdin.on("error", () => undefined);
@@ -1263,10 +1446,17 @@ const pipeHubHelper = (
       child.kill("SIGTERM");
     }
   });
-  child.stdout.pipe(socket, { end: false });
+  // git's http helper's answers, framed for the helper; a full socket holds
+  // the helper's next answer back until it drains.
+  child.stdout.on("data", (chunk: Buffer) => {
+    if (!channel.write(chunk)) {
+      child.stdout.pause();
+    }
+  });
+  socket.on("drain", () => child.stdout.resume());
   const feed = protocolFeed(
     ref,
-    socket,
+    channel,
     (bytes) => child.stdin.write(bytes),
     env
   );
@@ -1322,7 +1512,7 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
   }
   await writeStateFile(
     join(gitHelperDirOf(ref.id), "git-remote-cawco"),
-    HELPER,
+    helperScript(),
     {
       mode: 0o755,
     }

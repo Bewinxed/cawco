@@ -16,12 +16,14 @@
  * the endpoint and how to declare it ({@link noteRefused}). It is a refusal
  * to fetch from an undeclared server, not a way round one.
  */
+import { spawn } from "node:child_process";
 import { CAWCO_ENV } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
 import { toHttpBase } from "./discovery";
 import { provenFetch } from "./hub-proof";
@@ -170,24 +172,47 @@ export const undeclaredEndpoint = async (
  */
 export const hostSigns = async (endpoint: string): Promise<boolean> => {
   const url = new URL(endpoint);
-  // A helper that does not answer in time holds nothing to give.
-  const read = await readWithin(HELPER_MS, async (signal) => {
-    const child = Bun.spawn(safeGitArgv(["credential", "fill"]), {
-      env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
-      stdin: new Blob([
-        `protocol=${url.protocol.slice(0, -1)}\nhost=${url.host}\n\n`,
-      ]),
-      stdout: "pipe",
-      stderr: "ignore",
-      signal,
-      killSignal: "SIGKILL",
-    });
-    const [out, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return code === 0 && PASSWORD.test(out);
-  });
+  // A helper that does not answer in time holds nothing to give. git runs
+  // in a group of its own, and the whole group is stopped then: the helper
+  // git waits on is git's child, and stopping git alone left it running (on
+  // macOS, an osxkeychain waiting on another's lock, one per door
+  // connection, hub-git.ts `HOST_RUN_SILENCE_MS`).
+  const read = await readWithin(
+    HELPER_MS,
+    (signal) =>
+      new Promise<boolean>((resolve) => {
+        const [file = "git", ...args] = safeGitArgv(["credential", "fill"]);
+        const child = spawn(file, args, {
+          env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
+          detached: true,
+          stdio: ["pipe", "pipe", "ignore"],
+        });
+        const stop = () => {
+          const leader = spawnedPid(child);
+          if (leader !== undefined && child.exitCode === null) {
+            try {
+              signalGroup(leader, "SIGKILL");
+            } catch {
+              // Gone between the look and the signal.
+            }
+          }
+        };
+        signal.addEventListener("abort", stop, { once: true });
+        let out = "";
+        child.stdout.on("data", (chunk: Buffer) => {
+          out += chunk.toString();
+        });
+        child.on("error", () => resolve(false));
+        child.on("close", (code) => {
+          signal.removeEventListener("abort", stop);
+          resolve(code === 0 && PASSWORD.test(out));
+        });
+        child.stdin.on("error", () => undefined);
+        child.stdin.end(
+          `protocol=${url.protocol.slice(0, -1)}\nhost=${url.host}\n\n`
+        );
+      })
+  );
   return read.kind === "answered" && read.value;
 };
 

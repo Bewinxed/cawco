@@ -64,6 +64,13 @@
  *     approval (`makeHeldPush`), its object reaches someone/else.git's
  *     LFS with the host's credential before the commit lands, and the trap
  *     is still never called.
+ * Every push through the door ends:
+ * (y) when the host's credential helper never answers (as macOS's
+ *     osxkeychain waits on a keychain prompt nobody is there for), the
+ *     door stops the git-lfs it runs, helper and all, after 120 s of
+ *     silence, and the push is refused in words that say so;
+ * (z) when the door says `ok` and then nothing (a stuck agent), the helper
+ *     ends git's push itself after 60 s, in words that say so.
  * A command's git, through the workspace's real executor and runner, on
  * the host (workspace-git-quiet.ts):
  * (x) a commit, a fetch and a rebase start no git maintenance or gc, and
@@ -579,6 +586,12 @@ const spec: Spec = {
       );
 
       // The host's credential for the loopback host, and the clone's trap.
+      // The store alone: `helper =` first clears the list git built from the
+      // system config ("If credential.helper is configured to the empty
+      // string, this resets the helper list to empty", gitcredentials(7)).
+      // macOS's git names osxkeychain there, which under this scratch HOME
+      // finds no keychain and waits on a prompt nobody answers, holding the
+      // machine's every other osxkeychain lookup behind its lock.
       const base = new URL(originUrl).origin;
       await mkdir(process.env.HOME, { recursive: true });
       await writeFile(
@@ -587,7 +600,7 @@ const spec: Spec = {
       );
       await writeFile(
         join(process.env.HOME, ".gitconfig"),
-        `[credential]\n\thelper = store --file=${join(process.env.HOME, ".git-credentials")}\n`
+        `[credential]\n\thelper =\n\thelper = store --file=${join(process.env.HOME, ".git-credentials")}\n`
       );
       const trap = `${base}/trap/info/lfs`;
       await writeFile(
@@ -692,6 +705,73 @@ const spec: Spec = {
           ) &&
           http.lfsCalls("trap") === 0,
         `held exit ${heldLfs.exitCode}; sent while held ${sentWhileHeld - elseObjects.length}; made ${JSON.stringify(made)}; else LFS ${JSON.stringify(afterApproval)}; trap calls ${http.lfsCalls("trap")}`
+      );
+
+      // (y): the host's credential helper waits forever, as osxkeychain does
+      // on a keychain prompt nobody answers.
+      await writeRule("on");
+      const marker = `probe-silent-helper-${crypto.randomUUID().slice(0, 8)}`;
+      const silentHelper = join(scratch, "silent-helper");
+      await writeFile(
+        silentHelper,
+        `#!/bin/sh\nexec perl -e 'sleep 86400' ${marker}\n`,
+        { mode: 0o755 }
+      );
+      const gitconfig = join(process.env.HOME, ".gitconfig");
+      const storeConfig = await Bun.file(gitconfig).text();
+      await writeFile(
+        gitconfig,
+        `[credential]\n\thelper =\n\thelper = ${silentHelper}\n`
+      );
+      const stallLfs = await lfsCommit("stall.bin");
+      const stallStart = Date.now();
+      const stalled = await inside(clone, [
+        "push",
+        elseUrl,
+        "HEAD:refs/heads/door-lfs-stall",
+      ]);
+      const stallTook = Math.round((Date.now() - stallStart) / 1000);
+      await writeFile(gitconfig, storeConfig);
+      const helperLeft = (
+        await Bun.$`pgrep -f ${marker}`.quiet().nothrow().text()
+      ).trim();
+      check(
+        "(y) when the host's credential helper never answers, the push ends within the door's silence limit, refused in words that say so; nothing lands and the helper is gone",
+        stalled.exitCode !== 0 &&
+          said(stalled).includes("said nothing for 120 s and was stopped") &&
+          stallTook < 180 &&
+          (await tip(ELSE, "door-lfs-stall")) === "" &&
+          !http.lfs(ELSE_LFS).some((one) => one.oid === stallLfs.oid) &&
+          helperLeft === "",
+        `exit ${stalled.exitCode} after ${stallTook} s; helper left ${helperLeft || "none"}; ${said(stalled)}`
+      );
+
+      // (z): a door that says ok and then nothing, as a stuck agent would.
+      const mutePath = join(scratch, "mute.sock");
+      const mute = Bun.listen({
+        unix: mutePath,
+        socket: {
+          open: (socket) => {
+            socket.write("ok\n");
+          },
+          data: () => undefined,
+        },
+      });
+      const muteStart = Date.now();
+      const muted = await inside(
+        clone,
+        ["push", elseUrl, "HEAD:refs/heads/door-mute"],
+        { CAWCO_GIT_SOCKET: mutePath }
+      );
+      const muteTook = Math.round((Date.now() - muteStart) / 1000);
+      mute.stop(true);
+      check(
+        "(z) a door that answers ok and then says nothing ends git's push from the helper's side, in words that say so",
+        muted.exitCode !== 0 &&
+          said(muted).includes("the door said nothing for 60 s") &&
+          muteTook < 120 &&
+          (await tip(ELSE, "door-mute")) === "",
+        `exit ${muted.exitCode} after ${muteTook} s; ${said(muted)}`
       );
 
       // (x)
