@@ -500,12 +500,12 @@ const SVGNS = "http://www.w3.org/2000/svg";
 // source's far side and enters its target's near side through one turn at the middle of the gap between
 // them (dagre's ranks); a way back (Try again) runs out to a lane beside both boxes, past every state of the
 // machine, and comes in from that side. Its label is the kit badge standing on its longest run.
-function route(S, T, dir, laneAt) {
+function route(S, T, dir, laneAt, viaLane) {
   const tb = dir === "TB";
   // The main axis (down the ranks) and the cross axis, in the box's own terms.
   const m0 = (b) => (tb ? b.t : b.l), m1 = (b) => (tb ? b.b : b.r), c = (b) => (tb ? (b.l + b.r) / 2 : (b.t + b.b) / 2);
   const P = (main, cross) => (tb ? { x: cross, y: main } : { x: main, y: cross });
-  if (m0(T) >= m1(S) - 0.5) {
+  if (!viaLane && m0(T) >= m1(S) - 0.5) {
     const mid = (m1(S) + m0(T)) / 2, a = c(S), b = c(T);
     return Math.abs(a - b) < 0.5 ? [P(m1(S), a), P(m0(T), a)] : [P(m1(S), a), P(mid, a), P(mid, b), P(m0(T), b)];
   }
@@ -542,13 +542,17 @@ function edgesSvg(g, m) {
   const box = (id) => { const n = g.node(id); return { l: n.x - n.width / 2, t: n.y - n.height / 2, r: n.x + n.width / 2, b: n.y + n.height / 2 }; };
   const all = g.nodes().map((id) => ({ id, ...box(id) })), farCross = Math.max(...all.map((b) => (tb ? b.r : b.b)));
   const s1 = px("--space-1"), s2 = px("--space-2"), badgeH = px("--c-badge-h");
-  const lanes = { hi: 0, lo: 0 }, ext = { l: 0, t: 0, r: g.graph().width, b: g.graph().height };
+  const lanes = { hi: null, lo: null }, ext = { l: 0, t: 0, r: g.graph().width, b: g.graph().height };
   const nearCross = Math.min(...all.map((b) => (tb ? b.l : b.t)));
   // Does a run across the ranks at `main`, from cross a to b, pass over a state other than these two?
   const blocked = (main, a, b, skip) => all.some((x) => !skip.includes(x.id) && (tb ? x.t < main && x.b > main && Math.min(x.r, Math.max(a, b)) > Math.max(x.l, Math.min(a, b)) : x.l < main && x.r > main && Math.min(x.b, Math.max(a, b)) > Math.max(x.t, Math.min(a, b))));
   for (const [from, to, label] of m.edges) {
     const S = box(from), T = box(to);
-    const back = !((tb ? T.t : T.l) >= (tb ? S.b : S.r) - 0.5);
+    // A forward edge whose straight run would cross another state (a skip in a column) takes a lane as a way
+    // back does.
+    const straight = Math.abs((tb ? (S.l + S.r) / 2 : (S.t + S.b) / 2) - (tb ? (T.l + T.r) / 2 : (T.t + T.b) / 2)) < 0.5;
+    const crosses = straight && all.some((x) => x.id !== from && x.id !== to && (tb ? x.t > S.b - 0.5 && x.b < T.t + 0.5 && x.l < (S.l + S.r) / 2 && x.r > (S.l + S.r) / 2 : x.l > S.r - 0.5 && x.r < T.l + 0.5 && x.t < (S.t + S.b) / 2 && x.b > (S.t + S.b) / 2));
+    const back = !((tb ? T.t : T.l) >= (tb ? S.b : S.r) - 0.5) || crosses;
     const words = label || "";
     const wordsW = words ? textW(words) + 2 * s2 : 0;
     let lane = 0;
@@ -556,11 +560,13 @@ function edgesSvg(g, m) {
       // The lane on the far side (right of a top-down machine, under a left-to-right one) unless a state stands
       // in the way there; then the near side. Each further lane on a side stands a badge and a gap out.
       const cs = (b) => (tb ? (b.t + b.b) / 2 : (b.l + b.r) / 2);
-      const hi = farCross + 2 * s2 + wordsW / 2 + lanes.hi * (wordsW + s2), lo = nearCross - 2 * s2 - wordsW / 2 - lanes.lo * (wordsW + s2);
+      // Each lane stands clear of the last one's label: its own label's half past the side's running reach.
+      lanes.hi ??= farCross + 2 * s2; lanes.lo ??= nearCross - 2 * s2;
+      const hi = lanes.hi + wordsW / 2, lo = lanes.lo - wordsW / 2;
       const hiFree = !blocked(cs(S), tb ? S.r : S.b, hi, [from, to]) && !blocked(cs(T), tb ? T.r : T.b, hi, [from, to]);
-      if (hiFree) { lane = hi; lanes.hi++; } else { lane = lo; lanes.lo++; }
+      if (hiFree) { lane = hi; lanes.hi = hi + wordsW / 2 + 2 * s2; } else { lane = lo; lanes.lo = lo - wordsW / 2 - 2 * s2; }
     }
-    const pts = route(S, T, dir, lane);
+    const pts = route(S, T, dir, lane, back);
     const grp = document.createElementNS(SVGNS, "g");
     grp.setAttribute("class", "edge"); grp.dataset.from = from; grp.dataset.to = to; grp.dataset.machine = m.id;
     const d = roundedPath(pts, px("--c-edge-elbow-r"));
@@ -659,7 +665,6 @@ function drawGraph(cid = tab) {
   const c = compOf(cid), graph = graphOf(cid), gs = G[cid];
   // A face out of view has no width; it draws when it comes back.
   if (!graph.clientWidth) return;
-  if (!touchFloors() && !gs.narrowing) gs.narrow = 0;
   graph.innerHTML = "";
   const zoomer = document.createElement("div"); zoomer.className = "zoomer";
   const world = document.createElement("div"); world.className = "world";
@@ -670,12 +675,13 @@ function drawGraph(cid = tab) {
   // The slabs stand --space-2 in from the well and --space-8 apart; each holds its states --space-5 in.
   const margin = px("--space-2"), apart = px("--space-8"), room = graph.clientWidth - 2 * margin;
   // Nodes are 168px. Two machines stand side by side only where both fit at 168; under that the chain stays
-  // top-to-bottom. Only a phone's single column, too narrow for two 168px states, narrows them, to 120px.
+  // top-to-bottom. Where targets keep the touch floor (a phone, a finger) each machine is one column instead,
+  // its states as wide as the view leaves beside their lanes (columnLayout), so nothing narrows to fit.
   const chrome = 2 * px("--space-5"), full = 168, gap = 22;
   const two = graph.clientWidth >= 2 * (2 * full + gap + chrome) + 2 * margin + apart;
   const mroom = two ? Math.floor((room - apart) / 2) : room;
-  const nodeW = clamp(Math.floor((mroom - chrome - gap) / 2), 120, full) - (gs.narrow || 0);
-  world.style.setProperty("--node-w", nodeW + "px");
+  const column = touchFloors() && !two;
+  world.style.setProperty("--node-w", (column ? mroom - chrome : clamp(Math.floor((mroom - chrome - gap) / 2), 120, full)) + "px");
   graph.dataset.two = String(two);
   const regions = {};
   for (const m of c.machines) {
@@ -688,8 +694,18 @@ function drawGraph(cid = tab) {
     r.append(head, body); world.append(r);
     const els = {};
     for (const it of m.states) { const b = stateNode(c, m, it); body.append(b); els[it.id] = b; }
-    const g = fitLayout(m.states.map((it) => ({ id: it.id, w: els[it.id].offsetWidth, h: els[it.id].offsetHeight })), m.edges, mroom - chrome, 0, { align: "UL" });
-    const { svg, ext } = edgesSvg(g, m);
+    let g, drawn;
+    if (column) {
+      // Laid once at the view's width to learn how far its lanes reach, then again with the states that much
+      // narrower, so the column and its lanes fill the view exactly.
+      const W0 = mroom - chrome;
+      const reach = edgesSvg(columnLayout(m, els, W0), m).ext;
+      const W = Math.floor(W0 - (reach.r - reach.l - W0));
+      r.style.setProperty("--node-w", W + "px");
+      g = columnLayout(m, els, W);
+    } else g = fitLayout(m.states.map((it) => ({ id: it.id, w: els[it.id].offsetWidth, h: els[it.id].offsetHeight })), m.edges, mroom - chrome, 0, { align: "UL" });
+    drawn = edgesSvg(g, m);
+    const { svg, ext } = drawn;
     // The body holds the states and every lane and label their edges reach; a lane on the near side shifts
     // the states in by its reach.
     const ox = -ext.l, oy = -ext.t;
@@ -701,10 +717,6 @@ function drawGraph(cid = tab) {
     for (const e of svg.querySelectorAll(".edge")) e.addEventListener("click", (ev) => { ev.stopPropagation(); keep(cid, m.id, e.dataset.to, varyOf(cid, m.id, e.dataset.to), e.dataset.from); });
     regions[m.id] = r;
   }
-  // A machine whose lanes and labels take it past the view at its least zoom (1 where targets keep the touch
-  // floor) draws again with its states narrower, down to --c-node-w-floor, so the kept machine stands whole.
-  const worst = Math.max(...c.machines.map((m) => regions[m.id].offsetWidth)) - mroom;
-  if (worst > 0.5 && touchFloors() && nodeW - Math.ceil(worst / 2) >= px("--c-node-w-floor") && !gs.narrowing) { gs.narrowing = true; gs.narrow = (gs.narrow || 0) + Math.ceil(worst / 2); drawGraph(cid); gs.narrowing = false; return; }
   const sized = c.machines.map((m) => ({ id: m.id, w: regions[m.id].offsetWidth, h: regions[m.id].offsetHeight }));
   let outer = fitLayout(sized, c.machineEdges, room + 2 * margin, margin, { align: "UL", nodesep: apart, ranksep: apart });
   if (outer.graph().width > room + 2 * margin) {
@@ -719,6 +731,16 @@ function drawGraph(cid = tab) {
   graph.onscroll = () => viewChanged(cid);
   applyZoom(cid);
   requestAnimationFrame(() => viewChanged(cid));
+}
+
+// A machine as one column (phones and touch): its states down its path's order, each the given width, the
+// house rank gap between them; shaped as the dagre graph the edge router reads.
+function columnLayout(m, els, width) {
+  const order = m.path.concat(m.states.map((x) => x.id).filter((id) => !m.path.includes(id))), sep = 46, nodes = {};
+  let y = 0;
+  for (const id of order) { const h = els[id].offsetHeight; nodes[id] = { x: width / 2, y: y + h / 2, width, height: h }; y += h + sep; }
+  const height = y - sep;
+  return { graph: () => ({ width, height, rankdir: "TB" }), nodes: () => order, node: (id) => nodes[id] };
 }
 
 // ---- Doorways and pinned names (round 29, section E) ----

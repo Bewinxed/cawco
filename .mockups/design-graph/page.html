@@ -1806,7 +1806,10 @@
   --c-edge-lit-fade: 36px;
 
   /* ---- Round 29, the designer's section 5 ("Tokens to add") ---- */
-  /* The clip kinds' hues (section B, `prop-*`), cut as the tool families are (DESIGN.md: one hue per family at
+  /* PROPOSED, local to the mockup: the hue-or-ink choice is the owner's, on the page's switch, which labels
+     these as a proposal. If he picks hue, the six hues and the two mixes below go into
+     design/tokens/cawco.resolver.json in the build; if ink, they go with the option.
+     The clip kinds' hues (section B, `prop-*`), cut as the tool families are (DESIGN.md: one hue per family at
      50% / 0.12 by day, 74% / 0.11 at night). The designer named opacity teal, position blue, size ochre,
      colour magenta, text violet, unfold green. The Reserved Hue Rule keeps crimson (22), spark yellow (85),
      olive and green (122 to 140) and blue (245 to 252) for status, and coral (33) is the action, so position
@@ -1846,8 +1849,6 @@
   --c-tucked-tab: 36px;
   /* Regions (section E): the doorway tab's height. */
   --c-doorway-tab-h: 28px;
-  /* The narrowest a state may draw where a machine must fit its view at the touch floor's zoom of 1. */
-  --c-node-w-floor: 96px;
   /* The slab's ground: one step down from the well by day (--surface-recess-deep). At night the well is
      already neutral-1, the deepest step (recess-deep is the same neutral-1, 1.0:1, the slab gone), so the slab
      takes the recess there, the one step the night has (1.09:1) (my call). Its edges' inks are held to 3:1 on
@@ -1918,6 +1919,10 @@ button { font: inherit; color: inherit; }
 /* The round's open choice, over the pages: one segmented control, its label in meta. */
 .review-bar { inline-size: min(100%, 600px); display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); margin-block-end: var(--space-5); }
 .review-label { font: var(--type-meta); color: var(--ink-muted); }
+/* The hue option is a proposal: its kit badge in the segment, and one line saying what picking it adds. */
+.review-bar .t-tab { display: inline-flex; align-items: center; gap: var(--space-2); }
+.review-bar .badge.proposal { block-size: var(--c-badge-h); padding-inline: var(--space-2); font: var(--type-meta); line-height: 1; color: var(--ink-muted); background: var(--surface-recess); }
+.review-note { flex-basis: 100%; margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 .pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
 .stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); container: page / inline-size; }
 .stage-wrap[hidden] { display: none; }
@@ -2023,7 +2028,8 @@ button { font: inherit; color: inherit; }
    Show tab's shape), its name in meta and a chevron pointing out, along the edge at the region's own place. It
    comes in over --dur-fade as its region leaves the view and goes over --dur-exit as it returns, sliding 4px
    from the edge. */
-.doors { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+/* It clips nothing, so a door's 44px touch layer reaches past its 28px band. */
+.doors { position: absolute; inset: 0; pointer-events: none; border-radius: inherit; }
 .door { all: unset; box-sizing: border-box; position: absolute; display: inline-flex; align-items: center; gap: var(--space-1); block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; opacity: 0; translate: var(--door-out); pointer-events: none; transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door[data-on] { opacity: 1; translate: 0 0; pointer-events: auto; transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -2267,10 +2273,10 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .clip[data-prop="size"] { --kind: var(--prop-size); }
 .clip[data-prop="colour"] { --kind: var(--prop-colour); }
 .clip[data-prop="unfold"] { --kind: var(--prop-unfold); }
-/* The chosen clip wears the card's selection frame (highlight.svelte.ts: "1px brand-solid over the recess at
-   the card's own radius"), not the apricot wash: a full row of coral would stand against the page's own coral
-   button, and coral is the act's. The hover ghost glides under the row a pointer is on. */
-.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--surface-recess); box-shadow: inset 0 0 0 1px var(--brand-solid); }
+/* The chosen clip: the brand wash with the card's 1px brand-solid ring (the second review: the recess alone
+   with a ring read as a focused input, not "this one is chosen"). The hover ghost glides under the row a
+   pointer is on. */
+.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--brand-wash); box-shadow: inset 0 0 0 1px var(--brand-solid); }
 .row-ghost { position: absolute; z-index: 0; inset-inline: calc(-1 * var(--space-2)); inset-block-start: 0; block-size: var(--ghost-h, 0px); translate: 0 var(--ghost-y, 0px); border-radius: var(--radius-sm); background: var(--surface-hover); opacity: 0; pointer-events: none; transition: translate var(--dur-ghost) var(--ease-in-out), block-size var(--dur-ghost) var(--ease-in-out), opacity var(--dur-control) var(--ease-out); }
 .row-ghost[data-on] { opacity: 1; }
 .row-ghost[data-fresh] { transition: opacity var(--dur-control) var(--ease-out); }
@@ -2319,7 +2325,10 @@ html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
    in the hue; in ink only, surface-fill with the 3:1 edge. */
 .lane { position: relative; block-size: var(--c-pill-h); user-select: none; touch-action: none; }
 .bar { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --bar-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--bar-fill); box-shadow: inset 0 0 0 1px var(--bar-edge); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
-html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill); --bar-edge: var(--border-row-outline); }
+/* In ink only the bar stands one step stronger than the row's own fills (the second review: surface-fill at
+   night read 0.31 on about 0.2): surface-fill-strong, its edge border-contrast; under the pointer and held,
+   the edge steps to the muted ink. */
+html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill-strong); --bar-edge: var(--border-contrast); }
 .bar[data-zone] { cursor: ew-resize; }
 /* A bar's touch layer: its lane's height grown to the touch floor, transparent; shown on touch and phones. */
 .bar-hit { display: none; position: absolute; inset-inline: 0; inset-block: calc((var(--c-pill-h) - var(--c-touch-floor)) / 2); }
@@ -2328,17 +2337,17 @@ html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill); --bar-edge: var(-
 .bar::after { inset-inline-end: var(--space-1); }
 @media (hover: hover) {
   .dock:not([data-view="original"]) .bar:hover { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix-held), transparent); }
-  html[data-kinds="ink"] .dock:not([data-view="original"]) .bar:hover { --bar-fill: var(--surface-fill-strong); }
+  html[data-kinds="ink"] .dock:not([data-view="original"]) .bar:hover { --bar-edge: var(--ink-muted); }
   .dock:not([data-view="original"]) .bar:hover::before, .dock:not([data-view="original"]) .bar:hover::after { opacity: 1; }
 }
 .bar[aria-pressed="true"] { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix-held), transparent); }
-html[data-kinds="ink"] .bar[aria-pressed="true"] { --bar-fill: var(--surface-fill-strong); --bar-edge: var(--border-contrast); }
+html[data-kinds="ink"] .bar[aria-pressed="true"] { --bar-edge: var(--ink-muted); }
 .bar[aria-pressed="true"]::before, .bar[aria-pressed="true"]::after { opacity: 1; }
 .bar.spring { border-start-end-radius: 0; border-end-end-radius: 0; box-shadow: inset 0 1px 0 0 var(--bar-edge), inset 0 -1px 0 0 var(--bar-edge), inset 1px 0 0 0 var(--bar-edge); }
 .lane.rescaling .bar, .lane.rescaling .ghost, .lane.rescaling .tail { transition: left var(--dur-reveal) var(--ease-in-out), width var(--dur-reveal) var(--ease-in-out), background-color var(--dur-control) var(--ease-out); }
 .ghost { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); border: 1px dashed var(--border-contrast); pointer-events: none; }
 .tail { --tail-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --tail-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--tail-edge), transparent) top / 100% 1px no-repeat, linear-gradient(to right, var(--tail-edge), transparent) bottom / 100% 1px no-repeat, linear-gradient(to right, var(--tail-fill), transparent); pointer-events: none; }
-html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill); --tail-edge: var(--border-row-outline); }
+html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-edge: var(--border-contrast); }
 .dock[data-view="original"] .bar { background: none; box-shadow: none; border: 1px dashed var(--border-contrast); cursor: default; }
 .dock[data-view="original"] .bar::before, .dock[data-view="original"] .bar::after { opacity: 0; }
 .dock[data-view="original"] .ghost, .dock[data-view="original"] .tail { display: none; }
@@ -2533,6 +2542,13 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show) { touch-action: manipulation; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
+/* Touch layers take presses only where nothing clips them and no neighbour's stands over them: a segmented
+   groove lets its segments' layers past its edge (it scrolls only on a desk), and the toolbar's end stands its
+   controls far enough apart that their 44px layers meet without crossing. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .t-tabs { overflow: visible; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-end { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+/* The toolbar's layers reach 4px under it and a door's 8px over its band: --space-4 between keeps them apart. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .toolbar { margin-block-end: var(--space-4); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
@@ -2552,7 +2568,9 @@ html:is([data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom :
 html:not([data-layout="desk"]) .tools { position: fixed; z-index: var(--layer-dock); display: flex; flex-direction: column; color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); font: var(--type-label); font-weight: var(--weight-body); }
 .edge-pill-top { position: absolute; z-index: 5; pointer-events: none; border-radius: var(--radius-pill); background: var(--border-row-outline); block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
 html:not([data-layout="desk"]) .sheet-head { position: relative; display: flex; align-items: center; gap: var(--space-2); flex: none; block-size: var(--c-sheet-inspector-head-h); padding-inline: var(--space-1) var(--space-2); }
-.sheet-title { all: unset; box-sizing: border-box; display: block; flex: 1 1 auto; min-inline-size: 0; block-size: var(--c-btn-h); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); line-height: var(--c-btn-h); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.sheet-title { all: unset; box-sizing: border-box; display: block; flex: 1 1 auto; min-inline-size: 0; block-size: var(--c-btn-h); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); line-height: var(--c-btn-h); color: var(--ink-muted); cursor: pointer; }
+/* Its words cut at their end inside it; the title itself clips nothing, so its 44px touch layer takes presses. */
+.sheet-title-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-title b { font-weight: var(--weight-strong); color: var(--ink-strong); }
 .sheet-title:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .faces { flex: none; overflow: visible; }
@@ -2560,11 +2578,13 @@ html:not([data-layout="desk"]) .tools > .tool { position: relative; inset: auto;
 html:not([data-layout="desk"]) :is(.sash, .lit, .arc, .panel-shell, #hide) { display: none !important; }
 html:not([data-layout="desk"]) .tools[data-face="graph"] > .dock,
 html:not([data-layout="desk"]) .tools[data-face="move"] > .panel { display: none; }
-html:not([data-layout="desk"]) .panel { padding-block-start: 0; }
+/* The face clips its content; the toolbar stands a step in from its top so its 44px touch layers fall inside. */
+html:not([data-layout="desk"]) .panel { padding-block-start: var(--space-1); }
 html:not([data-layout="desk"]) :is(.graphs, .gsec[data-current], .gview, .graph) { flex: 1 1 auto; }
 html:not([data-layout="desk"]) .graph { block-size: auto; }
-html:not([data-layout="desk"]) .dock { padding-block-start: 0; }
-html:not([data-layout="desk"]) .dock-head { min-block-size: var(--c-btn-h); }
+html:not([data-layout="desk"]) .dock { padding-block-start: var(--space-1); }
+/* The head bar on the face is the touch floor tall, so play and loop take presses over their whole 44px. */
+html:not([data-layout="desk"]) .dock-head { min-block-size: var(--c-touch-floor); }
 
 /* The drawer: the house bottom drawer, three stops (head, peek, full). The page takes the room above it. */
 html[data-layout="drawer"] .tools { inset-inline: 0; inset-block-end: 0; block-size: var(--drawer-h, var(--c-graph-drawer-stop)); border-block-end: 0; border-start-start-radius: var(--radius-panel); border-start-end-radius: var(--radius-panel); box-shadow: var(--shadow-drawer); padding-block-end: env(safe-area-inset-bottom, 0px); transition: block-size var(--dur-panel) var(--ease-drawer); }
@@ -2594,7 +2614,9 @@ html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c
   <main class="page" id="page">
     <div class="review-bar" role="group" aria-labelledby="kindsLabel">
       <span class="review-label" id="kindsLabel">Clip kinds</span>
-      <div class="t-tabs" id="kinds" role="tablist" aria-labelledby="kindsLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-kinds="hue" aria-selected="true">In their own hue</button><button class="t-tab" role="tab" type="button" data-kinds="ink" aria-selected="false">In ink only</button></div>
+      <div class="t-tabs" id="kinds" role="tablist" aria-labelledby="kindsLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-kinds="hue" aria-selected="true" aria-describedby="kindsNote">In their own hue <span class="badge proposal">Proposed</span></button><button class="t-tab" role="tab" type="button" data-kinds="ink" aria-selected="false">In ink only</button></div>
+      <!-- The six kind hues are the mockup's own, not the house's: picking hue is picking them too. -->
+      <p class="review-note" id="kindsNote">Own hue uses six proposed colours, one per kind. Picking it adds them to the design tokens.</p>
     </div>
     <div class="pages" id="pages"></div>
   </main>
@@ -2605,7 +2627,7 @@ html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c
   <div class="tools" id="tools" data-face="graph" data-stop="peek">
     <header class="sheet-head" id="sheetHead">
       <span class="edge-pill edge-pill-top" aria-hidden="true"></span>
-      <button class="sheet-title" id="sheetTitle" type="button"><b>Design graph</b> · <span id="sheetState"></span></button>
+      <button class="sheet-title" id="sheetTitle" type="button"><span class="sheet-title-text"><b>Design graph</b> · <span id="sheetState"></span></span></button>
       <div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph">Graph</button><button class="t-tab" role="tab" data-face="move">Timeline</button></div>
       <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph"></button>
     </header>
@@ -6390,12 +6412,12 @@ const SVGNS = "http://www.w3.org/2000/svg";
 // source's far side and enters its target's near side through one turn at the middle of the gap between
 // them (dagre's ranks); a way back (Try again) runs out to a lane beside both boxes, past every state of the
 // machine, and comes in from that side. Its label is the kit badge standing on its longest run.
-function route(S, T, dir, laneAt) {
+function route(S, T, dir, laneAt, viaLane) {
   const tb = dir === "TB";
   // The main axis (down the ranks) and the cross axis, in the box's own terms.
   const m0 = (b) => (tb ? b.t : b.l), m1 = (b) => (tb ? b.b : b.r), c = (b) => (tb ? (b.l + b.r) / 2 : (b.t + b.b) / 2);
   const P = (main, cross) => (tb ? { x: cross, y: main } : { x: main, y: cross });
-  if (m0(T) >= m1(S) - 0.5) {
+  if (!viaLane && m0(T) >= m1(S) - 0.5) {
     const mid = (m1(S) + m0(T)) / 2, a = c(S), b = c(T);
     return Math.abs(a - b) < 0.5 ? [P(m1(S), a), P(m0(T), a)] : [P(m1(S), a), P(mid, a), P(mid, b), P(m0(T), b)];
   }
@@ -6432,13 +6454,17 @@ function edgesSvg(g, m) {
   const box = (id) => { const n = g.node(id); return { l: n.x - n.width / 2, t: n.y - n.height / 2, r: n.x + n.width / 2, b: n.y + n.height / 2 }; };
   const all = g.nodes().map((id) => ({ id, ...box(id) })), farCross = Math.max(...all.map((b) => (tb ? b.r : b.b)));
   const s1 = px("--space-1"), s2 = px("--space-2"), badgeH = px("--c-badge-h");
-  const lanes = { hi: 0, lo: 0 }, ext = { l: 0, t: 0, r: g.graph().width, b: g.graph().height };
+  const lanes = { hi: null, lo: null }, ext = { l: 0, t: 0, r: g.graph().width, b: g.graph().height };
   const nearCross = Math.min(...all.map((b) => (tb ? b.l : b.t)));
   // Does a run across the ranks at `main`, from cross a to b, pass over a state other than these two?
   const blocked = (main, a, b, skip) => all.some((x) => !skip.includes(x.id) && (tb ? x.t < main && x.b > main && Math.min(x.r, Math.max(a, b)) > Math.max(x.l, Math.min(a, b)) : x.l < main && x.r > main && Math.min(x.b, Math.max(a, b)) > Math.max(x.t, Math.min(a, b))));
   for (const [from, to, label] of m.edges) {
     const S = box(from), T = box(to);
-    const back = !((tb ? T.t : T.l) >= (tb ? S.b : S.r) - 0.5);
+    // A forward edge whose straight run would cross another state (a skip in a column) takes a lane as a way
+    // back does.
+    const straight = Math.abs((tb ? (S.l + S.r) / 2 : (S.t + S.b) / 2) - (tb ? (T.l + T.r) / 2 : (T.t + T.b) / 2)) < 0.5;
+    const crosses = straight && all.some((x) => x.id !== from && x.id !== to && (tb ? x.t > S.b - 0.5 && x.b < T.t + 0.5 && x.l < (S.l + S.r) / 2 && x.r > (S.l + S.r) / 2 : x.l > S.r - 0.5 && x.r < T.l + 0.5 && x.t < (S.t + S.b) / 2 && x.b > (S.t + S.b) / 2));
+    const back = !((tb ? T.t : T.l) >= (tb ? S.b : S.r) - 0.5) || crosses;
     const words = label || "";
     const wordsW = words ? textW(words) + 2 * s2 : 0;
     let lane = 0;
@@ -6446,11 +6472,13 @@ function edgesSvg(g, m) {
       // The lane on the far side (right of a top-down machine, under a left-to-right one) unless a state stands
       // in the way there; then the near side. Each further lane on a side stands a badge and a gap out.
       const cs = (b) => (tb ? (b.t + b.b) / 2 : (b.l + b.r) / 2);
-      const hi = farCross + 2 * s2 + wordsW / 2 + lanes.hi * (wordsW + s2), lo = nearCross - 2 * s2 - wordsW / 2 - lanes.lo * (wordsW + s2);
+      // Each lane stands clear of the last one's label: its own label's half past the side's running reach.
+      lanes.hi ??= farCross + 2 * s2; lanes.lo ??= nearCross - 2 * s2;
+      const hi = lanes.hi + wordsW / 2, lo = lanes.lo - wordsW / 2;
       const hiFree = !blocked(cs(S), tb ? S.r : S.b, hi, [from, to]) && !blocked(cs(T), tb ? T.r : T.b, hi, [from, to]);
-      if (hiFree) { lane = hi; lanes.hi++; } else { lane = lo; lanes.lo++; }
+      if (hiFree) { lane = hi; lanes.hi = hi + wordsW / 2 + 2 * s2; } else { lane = lo; lanes.lo = lo - wordsW / 2 - 2 * s2; }
     }
-    const pts = route(S, T, dir, lane);
+    const pts = route(S, T, dir, lane, back);
     const grp = document.createElementNS(SVGNS, "g");
     grp.setAttribute("class", "edge"); grp.dataset.from = from; grp.dataset.to = to; grp.dataset.machine = m.id;
     const d = roundedPath(pts, px("--c-edge-elbow-r"));
@@ -6549,7 +6577,6 @@ function drawGraph(cid = tab) {
   const c = compOf(cid), graph = graphOf(cid), gs = G[cid];
   // A face out of view has no width; it draws when it comes back.
   if (!graph.clientWidth) return;
-  if (!touchFloors() && !gs.narrowing) gs.narrow = 0;
   graph.innerHTML = "";
   const zoomer = document.createElement("div"); zoomer.className = "zoomer";
   const world = document.createElement("div"); world.className = "world";
@@ -6560,12 +6587,13 @@ function drawGraph(cid = tab) {
   // The slabs stand --space-2 in from the well and --space-8 apart; each holds its states --space-5 in.
   const margin = px("--space-2"), apart = px("--space-8"), room = graph.clientWidth - 2 * margin;
   // Nodes are 168px. Two machines stand side by side only where both fit at 168; under that the chain stays
-  // top-to-bottom. Only a phone's single column, too narrow for two 168px states, narrows them, to 120px.
+  // top-to-bottom. Where targets keep the touch floor (a phone, a finger) each machine is one column instead,
+  // its states as wide as the view leaves beside their lanes (columnLayout), so nothing narrows to fit.
   const chrome = 2 * px("--space-5"), full = 168, gap = 22;
   const two = graph.clientWidth >= 2 * (2 * full + gap + chrome) + 2 * margin + apart;
   const mroom = two ? Math.floor((room - apart) / 2) : room;
-  const nodeW = clamp(Math.floor((mroom - chrome - gap) / 2), 120, full) - (gs.narrow || 0);
-  world.style.setProperty("--node-w", nodeW + "px");
+  const column = touchFloors() && !two;
+  world.style.setProperty("--node-w", (column ? mroom - chrome : clamp(Math.floor((mroom - chrome - gap) / 2), 120, full)) + "px");
   graph.dataset.two = String(two);
   const regions = {};
   for (const m of c.machines) {
@@ -6578,8 +6606,18 @@ function drawGraph(cid = tab) {
     r.append(head, body); world.append(r);
     const els = {};
     for (const it of m.states) { const b = stateNode(c, m, it); body.append(b); els[it.id] = b; }
-    const g = fitLayout(m.states.map((it) => ({ id: it.id, w: els[it.id].offsetWidth, h: els[it.id].offsetHeight })), m.edges, mroom - chrome, 0, { align: "UL" });
-    const { svg, ext } = edgesSvg(g, m);
+    let g, drawn;
+    if (column) {
+      // Laid once at the view's width to learn how far its lanes reach, then again with the states that much
+      // narrower, so the column and its lanes fill the view exactly.
+      const W0 = mroom - chrome;
+      const reach = edgesSvg(columnLayout(m, els, W0), m).ext;
+      const W = Math.floor(W0 - (reach.r - reach.l - W0));
+      r.style.setProperty("--node-w", W + "px");
+      g = columnLayout(m, els, W);
+    } else g = fitLayout(m.states.map((it) => ({ id: it.id, w: els[it.id].offsetWidth, h: els[it.id].offsetHeight })), m.edges, mroom - chrome, 0, { align: "UL" });
+    drawn = edgesSvg(g, m);
+    const { svg, ext } = drawn;
     // The body holds the states and every lane and label their edges reach; a lane on the near side shifts
     // the states in by its reach.
     const ox = -ext.l, oy = -ext.t;
@@ -6591,10 +6629,6 @@ function drawGraph(cid = tab) {
     for (const e of svg.querySelectorAll(".edge")) e.addEventListener("click", (ev) => { ev.stopPropagation(); keep(cid, m.id, e.dataset.to, varyOf(cid, m.id, e.dataset.to), e.dataset.from); });
     regions[m.id] = r;
   }
-  // A machine whose lanes and labels take it past the view at its least zoom (1 where targets keep the touch
-  // floor) draws again with its states narrower, down to --c-node-w-floor, so the kept machine stands whole.
-  const worst = Math.max(...c.machines.map((m) => regions[m.id].offsetWidth)) - mroom;
-  if (worst > 0.5 && touchFloors() && nodeW - Math.ceil(worst / 2) >= px("--c-node-w-floor") && !gs.narrowing) { gs.narrowing = true; gs.narrow = (gs.narrow || 0) + Math.ceil(worst / 2); drawGraph(cid); gs.narrowing = false; return; }
   const sized = c.machines.map((m) => ({ id: m.id, w: regions[m.id].offsetWidth, h: regions[m.id].offsetHeight }));
   let outer = fitLayout(sized, c.machineEdges, room + 2 * margin, margin, { align: "UL", nodesep: apart, ranksep: apart });
   if (outer.graph().width > room + 2 * margin) {
@@ -6609,6 +6643,16 @@ function drawGraph(cid = tab) {
   graph.onscroll = () => viewChanged(cid);
   applyZoom(cid);
   requestAnimationFrame(() => viewChanged(cid));
+}
+
+// A machine as one column (phones and touch): its states down its path's order, each the given width, the
+// house rank gap between them; shaped as the dagre graph the edge router reads.
+function columnLayout(m, els, width) {
+  const order = m.path.concat(m.states.map((x) => x.id).filter((id) => !m.path.includes(id))), sep = 46, nodes = {};
+  let y = 0;
+  for (const id of order) { const h = els[id].offsetHeight; nodes[id] = { x: width / 2, y: y + h / 2, width, height: h }; y += h + sep; }
+  const height = y - sep;
+  return { graph: () => ({ width, height, rankdir: "TB" }), nodes: () => order, node: (id) => nodes[id] };
 }
 
 // ---- Doorways and pinned names (round 29, section E) ----

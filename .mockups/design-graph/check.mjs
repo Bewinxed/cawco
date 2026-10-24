@@ -20,6 +20,17 @@ const boxNear = (a, b, tol = 1) => near(a.x, b.x, tol) && near(a.y, b.y, tol) &&
 function install() {
   const K = (window.__k = {});
   K.box = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+  // Contrast between two CSS colours (WCAG 2), each resolved on a 1px canvas.
+  { const cv = document.createElement("canvas").getContext("2d", { willReadFrequently: true }); const rgba = (c) => { cv.clearRect(0, 0, 1, 1); cv.fillStyle = "#000"; cv.fillStyle = c; cv.fillRect(0, 0, 1, 1); return [...cv.getImageData(0, 0, 1, 1).data]; }; const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }, L = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); K.ratio = (a, b) => { const x = L(rgba(a)), y = L(rgba(b)); return Math.round(((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)) * 100) / 100; }; K.over = (...cs) => { cv.clearRect(0, 0, 1, 1); for (const c of cs) { cv.fillStyle = "#000"; cv.fillStyle = c; cv.fillRect(0, 0, 1, 1); } const d = cv.getImageData(0, 0, 1, 1).data; return "rgb(" + d[0] + ", " + d[1] + ", " + d[2] + ")"; }; }
+  // The real hit area: from the element's centre out along each axis, half a pixel at a time, while
+  // elementFromPoint still lands on it (or inside it).
+  K.hitSpan = (el) => {
+    const b = el.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const on = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t)); };
+    if (!on(cx, cy)) return { covered: true, w: 0, h: 0 };
+    const run = (dx, dy) => { let d = 0; while (d < 60 && on(cx + dx * (d + 0.5), cy + dy * (d + 0.5))) d += 0.5; return d; };
+    return { w: run(-1, 0) + run(1, 0), h: run(0, -1) + run(0, 1) };
+  };
   // The arc's drawn lengths (each leg's path) and its body, painted from the clock as it stands.
   K.arc = (id) => { window.__paintArcs(); const s = document.getElementById(id), len = (p) => (p.getAttribute("d") ? p.getTotalLength() : 0); return { a: len(s.querySelector('[data-leg="a"]')), b: len(s.querySelector('[data-leg="b"]')), body: s.querySelector(".arc-body").getAttribute("d"), color: getComputedStyle(s).color, state: s.dataset.state, node: s }; };
   K.color = (name) => { const p = document.createElement("span"); p.style.color = "var(" + name + ")"; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; };
@@ -291,9 +302,9 @@ async function deskMotion(browser, scheme) {
   // The owner's switch: hue or ink.
   const one = await ev(() => ({ bar: getComputedStyle(document.querySelector('.clip[data-key="fade"] .bar')).backgroundColor, lead: getComputedStyle(document.querySelector('.clip[data-key="fade"] .lead')).color, prop: __k.color("--prop-opacity") }));
   await page.click('#kinds [data-kinds="ink"]'); await page.waitForTimeout(300);
-  const two = await ev(() => ({ bar: getComputedStyle(document.querySelector('.clip[data-key="fade"] .bar')).backgroundColor, lead: getComputedStyle(document.querySelector('.clip[data-key="fade"] .lead')).color, fill: __k.color("--surface-fill"), muted: __k.color("--ink-muted"), mode: document.documentElement.dataset.kinds }));
+  const two = await ev(() => ({ bar: getComputedStyle(document.querySelector('.clip[data-key="fade"] .bar')).backgroundColor, lead: getComputedStyle(document.querySelector('.clip[data-key="fade"] .lead')).color, fill: __k.color("--surface-fill-strong"), muted: __k.color("--ink-muted"), mode: document.documentElement.dataset.kinds }));
   await page.click('#kinds [data-kinds="hue"]'); await page.waitForTimeout(300);
-  ok(V, "Clip kinds switch: hue puts glyph and bar in the kind's hue; ink only leaves the glyph to name it and the bar surface-fill", one.lead === one.prop && two.mode === "ink" && two.bar === two.fill && two.lead === two.muted && one.bar !== two.bar, JSON.stringify({ one, two }));
+  ok(V, "Clip kinds switch: hue puts glyph and bar in the kind's hue; ink only leaves the glyph to name it and the bar surface-fill-strong", one.lead === one.prop && two.mode === "ink" && two.bar === two.fill && two.lead === two.muted && one.bar !== two.bar, JSON.stringify({ one, two }));
   ok(V, "no console errors", errors.length === 0, errors.join(" | "));
   await page.close();
 }
@@ -321,14 +332,17 @@ async function reviewFixes(browser, engine) {
     ok(V, "no console errors", errors.length === 0, errors.join(" | "));
     await page.close();
   }
-  // 2. The chosen row carries no coral fill: the card's selection frame, 1px coral over the recess.
-  {
-    const V = "1440-" + engine + "-fix2";
-    const { page, ev } = await openPage(browser, 1440, 900);
+  // Second review, #1: the chosen row is the brand wash with the 1px coral ring, by day and at night.
+  for (const scheme of ["light", "dark"]) {
+    const V = "1440-" + scheme + "-" + engine + "-chosen";
+    const { page, ev } = await openPage(browser, 1440, 900, scheme);
     const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
     await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
-    const row = await ev(() => { const r = document.querySelector('.clip[data-key="reveal"]'), cs = getComputedStyle(r, "::before"); const coral = (c) => c === __k.color("--selected-bg") || c === __k.color("--brand-wash") || c === __k.color("--brand-solid"); const fills = [...document.querySelectorAll(".dock *")].map((e) => [e, getComputedStyle(e).backgroundColor, e.getBoundingClientRect()]).filter(([, c, b]) => coral(c) && b.width * b.height > 40 * 24).map(([e, c, b]) => e.className + " " + Math.round(b.width) + "×" + Math.round(b.height)); return { chosen: r.hasAttribute("data-chosen"), fill: cs.backgroundColor, recess: __k.color("--surface-recess"), frame: cs.boxShadow, coral: __k.color("--brand-solid"), bigCoralFills: fills }; });
-    ok(V, "the chosen row: the recess with a 1px coral frame, no coral fill anywhere in the dock larger than a chip", row.chosen && row.fill === row.recess && row.frame.includes(row.coral) && /0px 0px 0px 1px inset/.test(row.frame) && row.bigCoralFills.length === 0, JSON.stringify(row));
+    const row = await ev(() => { const r = document.querySelector('.clip[data-key="reveal"]'), cs = getComputedStyle(r, "::before"); return { chosen: r.hasAttribute("data-chosen"), fill: cs.backgroundColor, wash: __k.color("--brand-wash"), frame: cs.boxShadow, coral: __k.color("--brand-solid") }; });
+    ok(V, "the chosen row's computed background is the brand wash (" + row.fill + "), the 1px coral ring kept", row.chosen && row.fill === row.wash && row.frame.includes(row.coral) && /0px 0px 0px 1px inset/.test(row.frame), JSON.stringify(row));
+    // Its figures still read as text on the wash (the wash laid over the dock, the figure's ink on that).
+    const fig = await ev(() => { const r = document.querySelector('.clip[data-key="reveal"]'), wash = getComputedStyle(r, "::before").backgroundColor, ground = __k.over(getComputedStyle(document.getElementById("dock")).backgroundColor, wash); return [...r.querySelectorAll(".fig")].map((f) => __k.ratio(getComputedStyle(f).color, ground)); });
+    ok(V, "on the wash the row's figures hold text contrast (" + fig.join(", ") + ":1)", fig.every((x) => x >= 4.5), JSON.stringify(fig));
     await page.close();
   }
   // 3, 4. Doors stand in the well's own bands: no slab text under any door, and nothing of the graph painted
@@ -358,6 +372,24 @@ async function reviewFixes(browser, engine) {
       }, scroll);
       ok(V, "scrolled to its " + scroll + ": " + res.doors + " doors, all in the well's " + res.band + "px bands, none over slab text, nothing of the graph drawn in the bands", res.inBands && res.under.length === 0 && res.strayCount === 0, JSON.stringify(res));
     }
+    await page.close();
+  }
+  // Second review, #4: in ink only the bars read at night as by day: a fill a step past the dock's and an edge
+  // at 3:1 against it.
+  for (const scheme of ["light", "dark"]) {
+    const V = "1440-" + scheme + "-" + engine + "-ink-bars";
+    const { page, ev } = await openPage(browser, 1440, 900, scheme);
+    await page.click('#kinds [data-kinds="ink"]'); await page.waitForTimeout(400);
+    const bar = await ev(() => { const b = document.querySelector('.clip[data-key="fade"] .bar'), cs = getComputedStyle(b), dock = getComputedStyle(document.getElementById("dock")).backgroundColor, edge = cs.getPropertyValue("--bar-edge").trim(), edgeC = (() => { const p = document.createElement("span"); p.style.color = edge; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; })(); return { fill: cs.backgroundColor, dock, edge: edgeC, fillStep: __k.ratio(cs.backgroundColor, dock), edgeOnDock: __k.ratio(edgeC, dock), fillToken: __k.color("--surface-fill-strong"), edgeToken: __k.color("--border-contrast") }; });
+    ok(V, "ink-only bars: surface-fill-strong (" + bar.fillStep + ":1 from the dock) with a border-contrast edge (" + bar.edgeOnDock + ":1)", bar.fill === bar.fillToken && bar.edge === bar.edgeToken && bar.edgeOnDock >= 3 && bar.fillStep >= 1.3, JSON.stringify(bar));
+    await page.close();
+  }
+  // Second review, #3: the hue option is labelled a proposal on the switch, with what picking it adds.
+  {
+    const V = "1440-" + engine + "-proposal";
+    const { page, ev } = await openPage(browser, 1440, 900);
+    const sw = await ev(() => { const t = document.querySelector('#kinds [data-kinds="hue"]'), note = document.getElementById(t.getAttribute("aria-describedby")); return { badge: t.querySelector(".badge.proposal")?.textContent, note: note && note.textContent, visible: !!note && note.getBoundingClientRect().height > 0 }; });
+    ok(V, "the hue option carries a Proposed badge and a line saying picking it adds its six colours to the tokens", sw.badge === "Proposed" && /proposed/.test(sw.note) && /design tokens/.test(sw.note) && sw.visible, JSON.stringify(sw));
     await page.close();
   }
   // Critique fixes (impeccable P2s): a band stands only while it holds a door, the view taking an empty one's
@@ -393,10 +425,22 @@ async function reviewFixes(browser, engine) {
       }).filter((x) => x.w < 43.5 || x.h < 43.5);
     });
     await ev(() => { window.__k.vis = (el) => { for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity === 0 || e.hidden) return false; } const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }; });
+    // Second review, #2: the real hit area, read by elementFromPoint from each control's centre to each edge,
+    // is 44 × 44 for every tab, title, door, zoom figure, Outline, play and loop at 390.
+    const sweep = async (face) => ev((face) => {
+      const sel = ".review-bar .t-tab, #tabs .t-tab, #faces .t-tab, #sheetTitle, #sheetHide, .gsec[data-current] .door[data-on], .zoom-fit, .toolbar .icon-btn, .dock-head .tbtn, .dock-head .ghost-btn, #compare .t-tab";
+      return [...document.querySelectorAll(sel)].filter((el) => __k.vis(el)).map((el) => ({ el: el.id || (el.getAttribute("aria-label") || el.textContent).trim().slice(0, 18), ...__k.hitSpan(el) })).filter((x) => x.covered || x.w < 43.5 || x.h < 43.5).map((x) => face + ":" + x.el + " " + x.w + "×" + x.h + (x.covered ? " covered" : ""));
+    }, face);
+    const hitsGraph = await sweep("graph");
+    // The column: on the phone each machine is one column, its states using the pane beside their lanes.
+    const col = await ev(() => { const g = document.querySelector(".gsec[data-current] .graph"), view = g.clientWidth, nodes = [...g.querySelectorAll(".region.kept-region .node")]; const filled = g.querySelector('.region.kept-region .node[data-state="filled"]'); const xs = new Set(nodes.map((n) => Math.round(n.getBoundingClientRect().left))); return { view, w: Math.round(nodes[0].getBoundingClientRect().width), columns: xs.size, filledH: Math.round(filled.getBoundingClientRect().height) }; });
+    ok(V, "the phone's machine is one column of states " + col.w + "px wide in a " + col.view + "px view (it was 107), Filled " + col.filledH + "px tall (it was 304)", col.columns === 1 && col.w >= 200 && col.filledH < 260, JSON.stringify(col));
     const graphFace = await small();
     ok(V, "graph face: every pressable target is at least 44 × 44 (slab names, variant chips, doors, edges, buttons)", graphFace.length === 0, JSON.stringify(graphFace.slice(0, 12)));
     await page.click('#faces [data-face="move"]'); await page.waitForTimeout(400);
     const tlFace = await small();
+    const hitsTl = await sweep("timeline");
+    ok(V, "every tab, title, door, zoom figure, Outline, Hide, play and loop takes a press over 44 × 44 by elementFromPoint, centre to each edge", hitsGraph.length === 0 && hitsTl.length === 0, hitsGraph.concat(hitsTl).join(", "));
     ok(V, "timeline face: every pressable target is at least 44 × 44 (facts, bars, play, loop)", tlFace.length === 0, JSON.stringify(tlFace.slice(0, 12)));
     const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
     await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
