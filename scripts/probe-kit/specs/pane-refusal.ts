@@ -4,12 +4,15 @@
  * artifacts/sync.ts `refusal`; core comments.ts `PIN_MAPS`, each part of a
  * pin its own key; overlay artifact.ts `keepRefused`). On a scratch fleet
  * (real hub, agent and sessiond; Claude Code against the mock model), a
- * session's judge page with a comment of the person's on it:
+ * session's judge page with two comments of the person's on it:
  *
  * - (h) The hub: a doc client writes a pin the hub refuses. It is told why
  *   on its socket, which stays open; the next write on that socket is not
  *   kept; a fresh client's write is, and the hub's doc holds nothing
  *   pending.
+ * - (m) Two doc clients, both offline, write to comment 2 at once: one a
+ *   reply, the other a resolve and an anchor move. Back online, all three
+ *   are on the hub, in its doc and in what comment_read reads.
  * - (p) The pane: its link from the hub held (the probe's route keeps what
  *   the hub sends it), the agent answers comment 1, and the person replies
  *   in the pane, which has not heard the answer. The reply and the answer
@@ -36,7 +39,12 @@ import {
   deletePin,
   type Pin,
   pinDelivered,
+  placeOf,
+  placePin,
+  readPin,
   readPins,
+  replyToPin,
+  resolvePin,
   writePin,
 } from "../../../packages/core/src/comments";
 import { commentWords } from "../../../packages/core/src/words/comments";
@@ -245,6 +253,77 @@ const legH = async (
   deletePin(tidy.doc, good);
   await Bun.sleep(1000);
   tidy.leave();
+};
+
+/** Where the merge leg moves comment 2: the page's heading. */
+const MOVED_TO = {
+  selector: "body > main > h1",
+  source: null,
+  text: "Refusal",
+};
+
+/** (m) Two clients, offline, write a reply, a resolve and an anchor move to one pin at once: all three are on the hub once they are back. */
+const legM = async (
+  kit: Kit,
+  fleet: KitFleet,
+  session: string,
+  artifact: string,
+  pin: string
+) => {
+  const replier = await joinHub(fleet, session, artifact);
+  const resolver = await joinHub(fleet, session, artifact);
+  replier.link.disconnect();
+  resolver.link.disconnect();
+  const offline = await until(
+    "(m) both clients offline",
+    () => !(replier.link.wsconnected || resolver.link.wsconnected),
+    Boolean,
+    10_000
+  ).catch(() => false);
+  // Neither has heard the other: each writes on the pin as it last had it.
+  const replied = replyToPin(replier.doc, pin, { text: "PROBE-MERGE-REPLY" });
+  const resolved = resolvePin(resolver.doc, pin, true);
+  const was = readPin(resolver.doc, pin);
+  if (was) {
+    placePin(resolver.doc, pin, { ...placeOf(was), anchor: MOVED_TO });
+  }
+  replier.link.connect();
+  resolver.link.connect();
+  const all = (seen: Pin | undefined) =>
+    !!seen &&
+    seen.thread.some((entry) => entry.text === "PROBE-MERGE-REPLY") &&
+    !!seen.resolvedAt &&
+    seen.resolvedBy === "person" &&
+    "selector" in seen.anchor &&
+    seen.anchor.selector === MOVED_TO.selector;
+  const landed = await until(
+    "(m) the reply, the resolve and the move on the hub",
+    async () => {
+      const now = await hubDoc(fleet, session, artifact);
+      return all(now.pins[pin]) ? now : undefined;
+    },
+    Boolean,
+    15_000
+  ).catch(() => undefined);
+  const read = await fleet.api<CommentRead>(
+    `/api/instances/${session}/artifacts/comments?artifact=${artifact}&filter=all`
+  );
+  const told = read.artifacts[0]?.pins.find((one) => one.id === pin);
+  replier.leave();
+  resolver.leave();
+  const end = await hubDoc(fleet, session, artifact);
+  const held = end.pins[pin];
+  kit.check(
+    "(m) a reply on one client and a resolve and an anchor move on another, written at once to one pin, all land: the hub's doc and comment_read's read hold all three, nothing pending",
+    offline &&
+      replied === null &&
+      resolved === null &&
+      !!was &&
+      !!landed &&
+      all(told) &&
+      !end.pending,
+    `offline first: ${offline}; written: reply ${replied ?? "ok"}, resolve ${resolved ?? "ok"}, move ${was ? "ok" : "no pin"}; on the hub: ${held ? JSON.stringify({ thread: held.thread.map((entry) => entry.text), resolvedAt: held.resolvedAt, resolvedBy: held.resolvedBy, anchor: held.anchor }) : "no pin"}; comment_read: ${told ? JSON.stringify({ entries: told.thread.length, resolvedAt: told.resolvedAt, anchor: told.anchor }) : "no pin"}; pending: ${end.pending}`
+  );
 };
 
 /** A link of the page's or the pane's to the hub, through the probe: it passes, or holds the doc updates the hub sends while `held`. */
@@ -829,10 +908,13 @@ const run = async (kit: Kit) => {
   }
   const seed = await joinHub(fleet, session, artifact);
   const first = crypto.randomUUID();
+  const second = crypto.randomUUID();
   writePin(seed.doc, personPin(first, 1, "PROBE-PERSON-COMMENT"));
+  writePin(seed.doc, personPin(second, 2, "PROBE-MERGE-COMMENT"));
   await Bun.sleep(1000);
   seed.leave();
   await legH(kit, fleet, session, artifact);
+  await legM(kit, fleet, session, artifact, second);
   await legP(kit, fleet, session, artifact, first);
   await legO(kit, fleet, session);
   await legW(kit, fleet, session);
