@@ -43,6 +43,7 @@ import type {
 import {
   ASK_USER_QUESTION,
   atProviderLimit,
+  byPerson,
   CODE_MODE_TOOL,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
@@ -96,6 +97,7 @@ import {
   type McpNotConnected,
   notAnswered,
   type OpencodeClient,
+  SEND_NOW_METADATA,
 } from "./opencode-client";
 import {
   forgetOpencodeCredential,
@@ -820,6 +822,12 @@ export class OpencodeSession implements HarnessSession {
     messageID: string;
     uuid: string;
   }[] = [];
+  /**
+   * The sends that are the person's own words (core `byPerson`), by the
+   * message id each becomes: each is admitted marked ({@link SEND_NOW_METADATA}),
+   * and CawCo's plugin moves the session's running shell commands aside for it.
+   */
+  readonly #sendsNow = new Set<string>();
   /** The held send being admitted, until its POST returns. */
   #draining: string | undefined;
   #commands: Promise<{
@@ -1137,7 +1145,9 @@ export class OpencodeSession implements HarnessSession {
         if (event.data.item.type === "synthetic") {
           this.#backgroundEnded(event.data.item.payload.metadata);
         }
-        // A send behind a running tool call is delivered at that call's end.
+        // A send behind a running tool call is delivered at that call's end,
+        // or at once when it is the person's own words and the call is one
+        // CawCo's plugin moves aside for it (opencode-plugin.ts `asideShell`).
         // OpenCode's own move to the background (`POST
         // /api/session/:id/background`) tells the model "User requested that
         // active blocking work be moved to the background" (OpenCode 2.0.29,
@@ -2779,6 +2789,9 @@ export class OpencodeSession implements HarnessSession {
     // OpenCode's word that the message is read says which send it was.
     const messageID = messageId();
     const { uuid } = message;
+    if (byPerson(message.origin)) {
+      this.#sendsNow.add(messageID);
+    }
     this.#ctx.frame({
       type: "system",
       subtype: MESSAGES_STORED,
@@ -2837,12 +2850,14 @@ export class OpencodeSession implements HarnessSession {
     this.#noteServerActivity();
     // Held until the server has it: a restart before then loses the send.
     const handed = holdRestart("write", `prompt:${messageID}`);
+    const now = this.#sendsNow.delete(messageID);
     try {
       await this.#client.session.prompt({
         sessionID: this.#opencodeSessionId(),
         id: messageID,
         text,
         ...(files.length > 0 ? { files } : {}),
+        ...(now ? { metadata: { [SEND_NOW_METADATA]: true } } : {}),
       });
     } catch (error) {
       // A prompt that was never admitted opens no turn there, so no event

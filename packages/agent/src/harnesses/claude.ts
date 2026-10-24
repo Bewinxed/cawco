@@ -68,9 +68,9 @@ import type {
 } from "@cawco/core";
 import {
   ACCOUNT_READ,
-  ARTIFACT_ORIGIN,
   ASK_USER_QUESTION,
   BOUNDARY_RELAUNCH,
+  byPerson,
   CAWCO_ENV,
   CLAUDE_SETTINGS_REFUSED,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
@@ -3004,11 +3004,7 @@ class ClaudeSession implements HarnessSession {
    * never asks of it.
    */
   #waitsForCalls(message: SentMessage): string | undefined {
-    const { origin } = message;
-    if (!(
-      origin.kind === "human" ||
-      (origin.kind === "system" && origin.name === ARTIFACT_ORIGIN)
-    )) {
+    if (!byPerson(message.origin)) {
       return "it is not the person's own words";
     }
     if (this.#calls.size === 0) {

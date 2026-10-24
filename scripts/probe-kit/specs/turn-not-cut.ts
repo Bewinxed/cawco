@@ -23,6 +23,11 @@
  * - (b) a person's message, the call a shell command (`sleep`): read early;
  * - (m) a person's message, the call an MCP tool (the fleet's `probehold`):
  *   read early;
+ * - (o) a person's message to an OpenCode session, the call its `shell`:
+ *   read early, CawCo's plugin moving the command aside in words that name
+ *   no one, and its output reaching the model as a message of its own when
+ *   it ends (agent opencode-plugin.ts `asideShell`); never OpenCode's own
+ *   move, whose note says "User requested…";
  * - (w) a person's message while the model writes a long answer: the answer
  *   is written to its end, and the message read after it;
  * - (s) the session's mode set to what Full Send runs the CLI in
@@ -65,8 +70,8 @@ const SERVER = "probehold";
 const MCP_TOOL = `mcp__${SERVER}__hold`;
 /** What would name the person for something they did not do. */
 const BLAME =
-  /backgrounded by user|manually backgrounded|doesn't want to proceed|Request interrupted/g;
-/** Claude Code's own words for a call it moved aside to deliver a message (2.1.309). */
+  /backgrounded by user|manually backgrounded|doesn't want to proceed|Request interrupted|User requested/g;
+/** The words for a call moved aside to deliver a message: Claude Code's own (2.1.309), and CawCo's OpenCode plugin's. */
 const MOVED_FOR_MESSAGE =
   "so that a message that arrived while it was running can reach you; it was not interrupted";
 /** Where a moved shell command's output goes, as its moved result names it. */
@@ -91,9 +96,30 @@ const accountOf = (request: Seen): string | undefined =>
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
-const shell = (leg: string) => ({
+/**
+ * The tool call's answer a request carries: its last message when that is
+ * the answer, else (chat completions, OpenCode's, the person's message
+ * after it) its newest `tool` message. None when it carries no answer.
+ */
+const toolAnswerOf = (request: Seen): string | undefined => {
+  if (request.afterTool) {
+    return request.last;
+  }
+  try {
+    const answered = (
+      JSON.parse(request.body) as {
+        messages?: { content?: unknown; role?: string }[];
+      }
+    ).messages?.findLast((message) => message.role === "tool");
+    return typeof answered?.content === "string" ? answered.content : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const shell = (leg: string, name = "Bash") => ({
   call: {
-    name: "Bash",
+    name,
     input: {
       command: `sleep ${HOLD_S}; echo PROBE-DONE-${leg.toUpperCase()}`,
       description: "Hold the turn",
@@ -110,6 +136,8 @@ const LEGS = {
     call: { name: MCP_TOOL, input: { seconds: HOLD_S } },
     result: `PROBE-HELD ${HOLD_S}`,
   },
+  /** OpenCode's `shell`, in the OpenCode session. */
+  o: shell("o", "shell"),
   w: { call: undefined, result: STREAMED.at(-1)?.trim() ?? "" },
   s: shell("s"),
   a: shell("a"),
@@ -228,6 +256,23 @@ const spec: Spec = {
       }),
     });
     check(`the fleet runs ${SERVER}`, put.ok, String(put.status));
+    // Its machine has it before any session starts, so each session's first
+    // turn already offers its tool.
+    await until(
+      `${SERVER} applied on the machine`,
+      () =>
+        fleet
+          .query<{ fleet: string | null }>("SELECT fleet FROM agents")
+          .map((one) => one.fleet ?? "")
+          .find((one) => one.includes(SERVER)),
+      (report) =>
+        (
+          JSON.parse(report) as {
+            mcp?: Record<string, { state?: string } | undefined>;
+          }
+        ).mcp?.[SERVER]?.state === "applied",
+      120_000
+    ).catch(() => undefined);
 
     const session = await fleet.spawn("claude", "Turn not cut", undefined, {
       permissionMode: "fullSend",
@@ -247,12 +292,12 @@ const spec: Spec = {
     const blamesIn = (from: readonly Seen[]): string[] =>
       [...(from.at(-1)?.body.matchAll(BLAME) ?? [])].map((one) => one[0]);
 
-    /** The session at rest on the hub: its turns closed. */
-    const atRest = (label: string) =>
+    /** The session (`target`) at rest on the hub: its turns closed. */
+    const atRest = (label: string, target = session) =>
       until(
         label,
         () =>
-          fleet.instance(session)?.turn_open_at === null ? true : undefined,
+          fleet.instance(target)?.turn_open_at === null ? true : undefined,
         Boolean,
         120_000
       ).catch(() => undefined);
@@ -296,11 +341,13 @@ const spec: Spec = {
     const runLeg = async (
       leg: Leg,
       words: string,
-      event: () => Promise<void>
+      event: () => Promise<void>,
+      /** The session the leg runs in, the Claude one unless named; another's requests start blameless. */
+      target = session
     ): Promise<Given> => {
       const before = fleet.seen.length;
-      const blamedBefore = blamesIn(fleet.seen).length;
-      await fleet.send(session, `${tagOf(leg)}: hold the turn.`);
+      const blamedBefore = target === session ? blamesIn(fleet.seen).length : 0;
+      await fleet.send(target, `${tagOf(leg)}: hold the turn.`);
       const at = await until(
         `leg ${leg}: its turn under way`,
         () => called.get(leg),
@@ -310,7 +357,7 @@ const spec: Spec = {
       await Bun.sleep(Math.max(0, at + INTO_MS - Date.now()));
       await event();
       const sentAt = Date.now();
-      await fleet.send(session, words);
+      await fleet.send(target, words);
       const read = await until(
         `leg ${leg}: the message read`,
         () =>
@@ -324,11 +371,11 @@ const spec: Spec = {
       ).catch(() => undefined);
       // Every call of the leg ended, and whatever it started told.
       await Bun.sleep(Math.max(0, at + (HOLD_S + 5) * 1000 - Date.now()));
-      await atRest(`leg ${leg}: at rest`);
+      await atRest(`leg ${leg}: at rest`, target);
       const after = fleet.seen.slice(before);
       const { call } = LEGS[leg];
       const answer = call
-        ? (after.find((request) => request.afterTool)?.last ?? "")
+        ? (after.map(toolAnswerOf).find((one) => one !== undefined) ?? "")
         : "";
       return {
         answer,
@@ -355,7 +402,7 @@ const spec: Spec = {
       );
       if (reading === "early") {
         check(
-          `(${leg}) the person's message is read within ${EARLY_MS / 1000} s, the ${name} moved aside in Claude Code's own words`,
+          `(${leg}) the person's message is read within ${EARLY_MS / 1000} s, the ${name} moved aside in words that name no one`,
           given.readAfter !== null &&
             given.readAfter <= EARLY_MS &&
             given.answer.includes(MOVED_FOR_MESSAGE),
@@ -385,6 +432,14 @@ const spec: Spec = {
     held(
       "m",
       await runLeg("m", "PROBE-PERSON-M: are you there?", nothing),
+      "early"
+    );
+
+    // ── (o) the same on OpenCode: its `shell` moved aside by CawCo's plugin ─
+    const opencode = await fleet.spawn("opencode", "Turn not cut OpenCode");
+    held(
+      "o",
+      await runLeg("o", "PROBE-PERSON-O: are you there?", nothing, opencode),
       "early"
     );
 

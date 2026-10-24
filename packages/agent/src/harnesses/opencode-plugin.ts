@@ -45,6 +45,13 @@
  *   credentials.ts `workspace`), and any not recorded yet, run inside it;
  *   a person's session there runs through the built-in it replaces, which
  *   asks and runs on the host as it always does, with no judge.
+ * - `ctx.tool.transform` again, and `ctx.event.subscribe`: every location's
+ *   `shell` wrapped so a send of the person's own words (the agent's
+ *   {@link SEND_NOW_METADATA} on its prompt, seen as its
+ *   `session.inbox.enqueued`) moves the running command aside: its call
+ *   answers at once in words that name no one, the command runs on, and its
+ *   output reaches the session as a synthetic message when it ends
+ *   (`asideShell`).
  * - `ctx.shell.hook("create.before")`: every shell a session's `shell` call
  *   opens acts as that session (its instance and credential, for `cawco
  *   tool` and git), and none gets the server's password or CawCo's wiring.
@@ -87,7 +94,7 @@ import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { GATE_PREFIX } from "../mcp-gate";
 import { hostKeyFile } from "../mcp-host";
 import { readJson, writeJson } from "./fleet-common";
-import { CAWCO_PLUGIN_ID } from "./opencode-client";
+import { CAWCO_PLUGIN_ID, SEND_NOW_METADATA } from "./opencode-client";
 import { opencodeCredentialFile } from "./opencode-credentials";
 
 /**
@@ -412,6 +419,79 @@ const boundedShell = (id, root, directory, bounded, host, permission) => ({
   },
 });
 
+// Each session's running \`shell\` calls a send of the person's own words
+// moves aside, by OpenCode session id: each call's move.
+const asideShells = new Map();
+const moveAside = (sessionID) => {
+  for (const move of [...(asideShells.get(sessionID) ?? [])]) move();
+};
+const textOf = (result) => contentOf(result ?? {}).flatMap((block) => (block?.type === "text" ? [block.text] : [])).join("\\n");
+let asideCount = 0;
+// The \`shell\` \`base\` is, which a send of the person's own words moves aside
+// (marked ${JSON.stringify(SEND_NOW_METADATA)} by the agent): its call answers at once, in words
+// that name no one, while the command runs on, its own abort no longer the
+// call's; its end reaches the session as a message of its own carrying its
+// output (\`session\`: the location's ctx.session), which starts a turn when
+// none runs. Only the \`shell\`: an MCP server's tools are called from Code
+// Mode programs (\`execute\`, no tool a plugin's transform is handed, 2.0.29),
+// whose program reads each call's answer. OpenCode's own move
+// (\`session.background\`) tells the model "User requested that active
+// blocking work be moved to the background", which no one did, so CawCo
+// never asks it.
+const asideShell = (base, session) => ({
+  name: "shell",
+  description: base.description,
+  input: base.input,
+  ...(base.options ? { options: base.options } : {}),
+  async execute(input, context) {
+    const own = new AbortController();
+    const forward = () => own.abort(context.signal.reason);
+    if (context.signal.aborted) own.abort(context.signal.reason);
+    else context.signal.addEventListener("abort", forward, { once: true });
+    let moved = false;
+    const call = { ...context, signal: own.signal, progress: (...args) => (moved ? undefined : context.progress?.(...args)) };
+    const running = Promise.resolve().then(() => base.execute(input, call));
+    const moves = asideShells.get(context.sessionID) ?? new Set();
+    asideShells.set(context.sessionID, moves);
+    return await new Promise((resolve, reject) => {
+      const settle = () => {
+        moves.delete(move);
+        if (moves.size === 0) asideShells.delete(context.sessionID);
+        context.signal.removeEventListener("abort", forward);
+      };
+      const move = () => {
+        if (moved) return;
+        moved = true;
+        settle();
+        const id = "cawco-shell-" + Date.now().toString(36) + "-" + (++asideCount);
+        const named = "Background command " + id + " (" + JSON.stringify(input.command) + ")";
+        resolve({ content: "Command moved to the background (ID: " + id + ") so that a message that arrived while it was running can reach you; it was not interrupted. Its result is delivered to you automatically when it finishes; carry on without waiting for it.", metadata: { background: id, ...(typeof input.description === "string" ? { description: input.description } : {}) } });
+        const tell = (text) => session.synthetic({ sessionID: context.sessionID, text, description: named, metadata: { source: "cawco-shell", id }, resume: true }).catch((error) => console.error("cawco: telling session " + context.sessionID + " that " + named + " ended failed: " + said(error)));
+        running.then(
+          (result) => tell(named + " finished. Its output:\\n" + textOf(result)),
+          (error) => tell(named + " failed: " + said(error)),
+        );
+      };
+      moves.add(move);
+      running.then(
+        (result) => {
+          if (moved) return;
+          settle();
+          // Its words and metadata; not a structured \`output\`, which this
+          // tool declares no schema for (the server refuses such a result).
+          const { output: _output, ...answer } = result ?? {};
+          resolve(answer);
+        },
+        (error) => {
+          if (moved) return;
+          settle();
+          reject(error);
+        },
+      );
+    });
+  },
+});
+
 // The names of the fleet's servers, its own and every project's placed copy:
 // in a workspace's location each one with a command goes through the
 // workspace's MCP gate. None when the set cannot be read.
@@ -616,9 +696,26 @@ export default {
     };
     await ctx.tool.transform((editor) => {
       // In a place, the built-in runs a person's session's commands: taken
-      // from the editor before it is replaced, each time it replays.
-      if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, inPlace ? editor.get("shell")?.execute : undefined, ctx.permission));
+      // from the editor before it is replaced, each time it replays. Every
+      // location's \`shell\` is one a send of the person's own words moves aside.
+      const host = editor.get("shell");
+      const shell = holding ? boundedShell(holding.id, holding.root, directory, bounded, inPlace ? host?.execute : undefined, ctx.permission) : host;
+      if (shell?.execute) editor.add(asideShell(shell, ctx.session));
     });
+    // A send of the person's own words admitted to a session's inbox moves its
+    // running shell commands aside, so the turn's next step reads it.
+    const events = new AbortController();
+    void (async () => {
+      try {
+        for await (const event of ctx.event.subscribe({ signal: events.signal })) {
+          if (event.type === "session.inbox.enqueued" && event.data?.item?.type === "user" && event.data.item.payload?.metadata?.[${JSON.stringify(SEND_NOW_METADATA)}] === true) {
+            moveAside(event.data.sessionID);
+          }
+        }
+      } catch (error) {
+        if (!events.signal.aborted) console.error("cawco: the server's events stopped reaching the plugin, so a send no longer moves a running command aside: " + said(error));
+      }
+    })();
 
     await ctx.mcp.transform((editor) => {
       // Servers kept from a location are removed: 2.0.29 starts one set
@@ -808,6 +905,7 @@ export default {
         }
       });
     }
+    return () => events.abort();
   },
 };
 `;
