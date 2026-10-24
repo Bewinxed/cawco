@@ -73,6 +73,7 @@ import {
 import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
+import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf, startedSince } from "../agent-records";
 import type { Kit, Spec } from "../kit";
@@ -255,6 +256,28 @@ const heldOf = async (
       () => "{}"
     )
   ) as { gen?: string; pid?: number };
+
+/** Process `pid`'s keeper tree mark (`CAWCO_SESSIOND_TREE` in its environment), as sessiond's sweep reads it. */
+const treeMarkOf = async (
+  pid: number | undefined
+): Promise<string | undefined> =>
+  pid === undefined
+    ? undefined
+    : (await readFile(`/proc/${pid}/environ`, "utf8").catch(() => ""))
+        .split("\0")
+        .find((entry) => entry.startsWith(`${CAWCO_ENV.sessiondTree}=`));
+
+/** The host pids of H's heartbeat loop's shell ({@link START}). */
+const loopProcesses = async (): Promise<number[]> =>
+  (
+    await Bun.$`pgrep -f ${"^sh -c while :; do date \\+%s >> beat"}`
+      .quiet()
+      .nothrow()
+  ).stdout
+    .toString()
+    .split("\n")
+    .filter(Boolean)
+    .map(Number);
 
 /** A decision, or several, in a check's words. */
 const decisionSaid = (
@@ -743,6 +766,20 @@ const deletedStops = async (
     "6: before the delete, H's boundary was started reading its project's folder, and its loop runs there again",
     had?.allowRead?.includes(folder) === true && loopPid !== undefined,
     `${folder} in its allowRead: ${had?.allowRead ? had.allowRead.includes(folder) : "not on record"}; loop pid ${loopPid ?? "unread"}`
+  );
+  // The loop is the boundary's work, not the session's process's: it carries
+  // no keeper tree mark of H's session (sessiond's, which its sweep of a
+  // session's process ends everything carrying: r291 swept the loop as H
+  // slept, its executor having handed the command H's whole environment).
+  const sessionMark = await treeMarkOf(await fleet.sessionPid(h.instanceId));
+  const loops = await loopProcesses();
+  const loopMarks = await Promise.all(loops.map(treeMarkOf));
+  kit.check(
+    "6: H's loop carries no tree mark of H's session process, so that process's end sweeps none of it",
+    sessionMark !== undefined &&
+      loops.length > 0 &&
+      !loopMarks.includes(sessionMark),
+    `H's session's mark: ${sessionMark ?? "unread"}; the loop's processes ${loops.join(", ") || "none"}, their marks: ${loopMarks.map((one) => one ?? "none").join(", ") || "none"}`
   );
   const sleeping: (string | undefined)[] = [];
   for (const session of [h.instanceId, ...h.others]) {

@@ -6784,8 +6784,11 @@ req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 { printf '%s\\n' "$req" > "$mark"; } 2>/dev/null
 printf '%s' "$command" > "$req/cmd"
 pwd -P > "$req/cwd"
+# The caller's environment but its keeper's tree mark: what the command
+# leaves running is the boundary's, under the boundary's own mark, never
+# swept as the calling session's when that session's process ends.
 {
-  export -p
+  (unset ${CAWCO_ENV.sessiondTree}; export -p)
 ${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
