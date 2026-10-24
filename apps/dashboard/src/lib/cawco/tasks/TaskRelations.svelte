@@ -18,7 +18,12 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { IconChevronDown, IconClose, IconLink } from "#lib/icons.js";
+  import {
+    IconChevronDown,
+    IconClose,
+    IconLink,
+    IconStructure,
+  } from "#lib/icons.js";
 
   let {
     task,
@@ -116,8 +121,9 @@
 
 <section class="flex flex-col gap-space-2">
   <div class="flex items-end gap-space-2">
-    <h3 class={sectionHeadVariants({ inset: "flush", class: "flex-auto" })}>
-      Relations
+    <h3 class={sectionHeadVariants({ inset: "pane", class: "flex-auto" })}>
+      <IconStructure aria-hidden="true" />
+      <span>Relations</span>
     </h3>
     <Popover.Root bind:open>
       <Popover.Trigger>

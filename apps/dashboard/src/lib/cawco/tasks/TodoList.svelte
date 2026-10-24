@@ -13,7 +13,7 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { IconPlus } from "#lib/icons.js";
+  import { IconPlus, IconToolTodo } from "#lib/icons.js";
   import { page } from "$app/state";
   import { dur, motionOk } from "../motion/curves.svelte";
 
@@ -193,8 +193,9 @@
 {/snippet}
 
 <section class="flex flex-col gap-space-2">
-  <h3 class={sectionHeadVariants({ inset: "flush" })}>
-    To-dos
+  <h3 class={sectionHeadVariants({ inset: "pane" })}>
+    <IconToolTodo aria-hidden="true" />
+    <span>To-dos</span>
     {#if todos.length > 0}
       <span
         data-num

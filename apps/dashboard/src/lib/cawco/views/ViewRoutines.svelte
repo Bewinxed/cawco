@@ -9,19 +9,12 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
-  import CantStart from "#lib/cawco/CantStart.svelte";
-  import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
+  import { cawco, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import {
-    failureWords as message,
-    THREAD_SEND_UNREACHED,
-    unreachable,
-  } from "#lib/cawco/hub-read.js";
-  import { idForWords, type SentWords } from "#lib/cawco/id.js";
-  import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
    * (Event sources), and what its runs asked you to approve (Approved
@@ -43,15 +36,18 @@
    * On a narrow ledger Last and Next fold into the schedule's line.
    *
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
-   * starters written for the project from what it repeats or waits on over
-   * the session Composer to Caw (words alone), whose words open a thread
-   * with him. A starter puts its words in the composer, unsent. Where Caw
-   * can't start, the way by hand: Create routine, the routine form
-   * (RoutineForm) in the empty state's place. Where Caw can start, the
-   * block's head offers Create routine beside the empty state; with
-   * routines, it offers both: Ask Caw (the composer over the ledger) and
-   * Create routine (the form over it). A routine made by hand lands in the
-   * ledger open, its test run going.
+   * the block's purpose line, then starters written for the project from
+   * what it repeats or waits on and Ask Caw for a routine, each opening
+   * Caw's panel with its words, unsent (`onask`). The block's head says
+   * Routines once, and no composer stands in it (the owner's pins: "ur
+   * repeating icons and titles again", "why is the composer even there?"):
+   * a routine is asked for where Caw is asked everything. Where Caw can't
+   * start, the way by hand: Create routine, the routine form (RoutineForm)
+   * in the empty state's place. Where Caw can start, the block's head
+   * offers Create routine beside the empty state; with routines, it offers
+   * both: Ask Caw (his panel on a new thread) and Create routine (the form
+   * over the ledger). A routine made by hand lands in the ledger open, its
+   * test run going.
    *
    * The page is the hub's (routines-api): read on arrival and on every
    * reconnect, again when the project's threads move (a run notes its slot
@@ -59,16 +55,14 @@
    * tab comes back, after each of its own row actions, and every few
    * seconds while a run goes.
    */
-  import {
-    type ProjectStarter,
-    tellStarterOutcome,
-  } from "#lib/cawco/project-tasks.js";
+  import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import ActionsTable, {
     waitsOnYou,
   } from "#lib/cawco/routines/ActionsTable.svelte";
   import RoutineDetail from "#lib/cawco/routines/RoutineDetail.svelte";
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
+  import RoutinesEmpty from "#lib/cawco/routines/RoutinesEmpty.svelte";
   import RunStatus, { type Status } from "#lib/cawco/routines/RunStatus.svelte";
   import {
     type RoutineAct,
@@ -88,16 +82,9 @@
   } from "#lib/cawco/routines/ScheduleStrip.svelte";
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
-  import { threadHref } from "#lib/cawco/thread-tabs.js";
-  import Composer from "#lib/cawco/transcript/Composer.svelte";
-  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    chipsVariants,
-    chipVariants,
-  } from "#lib/components/ui/chip/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -116,7 +103,7 @@
     IconShield,
     IconTrash,
   } from "#lib/icons.js";
-  import { goto, replaceState } from "$app/navigation";
+  import { replaceState } from "$app/navigation";
   import { page as here } from "$app/state";
 
   let {
@@ -127,7 +114,13 @@
     blocks,
     viewItems,
     onform,
+    onask,
   }: {
+    /**
+     * Caw's panel with these words in his composer, unsent; no words: his
+     * panel on a new thread (the head's Ask Caw).
+     */
+    onask: (text?: string) => void;
     /** The routine form opened: the page clears what would stand over it (a phone's Caw sheet). */
     onform?: () => void;
     /** The project: its id and its name. */
@@ -137,7 +130,7 @@
      * or waits on, written for it (hub project-starters.ts), in its order.
      */
     starters: ProjectStarter[];
-    /** Caw can start: the empty page's composer and New routine reach him. */
+    /** Caw can start: the empty page's starters and Ask Caw reach him. */
     canTalk: boolean;
     /** Why Caw can't start, said on the empty page instead. */
     cawProblem?: string | null;
@@ -597,57 +590,10 @@
     ];
   }
 
-  // --- asking Caw ------------------------------------------------------------------
-
-  /**
-   * The words to Caw, in the session Composer with words alone (`attach`
-   * off), as the project page's view ask is: they open a thread with him in
-   * the project, and the page goes there. A refusal puts the words back in
-   * the composer with the reason over them.
-   */
-  const askDraft = new ComposerDraft();
-  let askSending = $state(false);
-  let askRefused = $state("");
-  /** The words never reached the hub: the line offers Send again. */
-  let askAgain = $state(false);
-  /** What the Composer stands over its foot: its box holds that much room. */
-  let askFoot = $state(0);
-  /** The words an ask that did not go through carried, and its id: the same words again are the same ask. */
-  let askUnsent: SentWords | null = null;
-  async function ask(text: string, fresh: string) {
-    askSending = true;
-    askRefused = "";
-    askAgain = false;
-    askUnsent = idForWords(askUnsent, text, fresh);
-    try {
-      const said = await startThread(project.id, text, askUnsent.id);
-      askUnsent = null;
-      // A starter pressed into the field went, as it stood or changed:
-      // Jev's steering (hub project-starters.ts), told without a wait.
-      const pressed = askDraft.takePressed(text);
-      if (pressed) {
-        tellStarterOutcome(project.id, pressed).catch(() => undefined);
-      }
-      await goto(threadHref(said.thread.id));
-    } catch (error) {
-      askDraft.restore(text);
-      askAgain = unreachable(error);
-      askRefused = askAgain ? THREAD_SEND_UNREACHED : message(error);
-    } finally {
-      askSending = false;
-    }
-  }
-  /** A starter: its words in the composer, the caret after them; nothing is sent. */
-  function pick(text: string) {
-    askDraft.press(text, "routines");
-  }
-  /** Ask Caw: the composer over the ledger. */
-  let asking = $state(false);
   /** Create routine: the routine form over the ledger, or in the empty state's place. */
   let making = $state(false);
   function openForm() {
     making = true;
-    asking = false;
     onform?.();
   }
   /** The routine the form made: the ledger shows it open, its test run going. */
@@ -752,16 +698,14 @@
 {#snippet routinesAction()}
   <!-- The way by hand stands here wherever the empty state doesn't offer
        it (an empty block whose Caw can start offers him); Ask Caw beside it
-       once the empty state's composer is gone. -->
+       once the block has routines. -->
   {#if !empty || canTalk}
     <span class="flex flex-wrap justify-end gap-space-2">
       {#if !empty && canTalk}
         <Button
-          aria-expanded={asking}
           onclick={() => {
-            asking = !asking;
             making = false;
-            askDraft.focusWanted = asking;
+            onask();
           }}
           size="sm"
           variant="outline">{words.askCaw}</Button
@@ -792,34 +736,6 @@
       ><span>{relayLive ? words.relayLive : words.relayOff}</span></Badge
     >
   {/if}
-{/snippet}
-
-<!-- The session Composer, words alone: its box as tall as what it stands
-     over its foot (Composer .dock stands on its foot), as the view ask's. -->
-{#snippet askCaw()}
-  <div
-    data-slot="ask-caw"
-    class="relative h-(--ask-h) w-full flex-none"
-    style:--ask-h="calc({askFoot}px + var(--space-4))"
-  >
-    <Composer
-      agentName="Caw"
-      attach={false}
-      draft={askDraft}
-      onfoot={(foot) => {
-        askFoot = foot.stack;
-      }}
-      onstop={() => undefined}
-      onsubmit={(text, _extras, id) => {
-        // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
-        void ask(text, id);
-      }}
-      placeholder={words.placeholder}
-      sendAgain={askAgain}
-      sendError={askRefused}
-      sending={askSending}
-    />
-  </div>
 {/snippet}
 
 {#snippet routineRows(routine: Routine)}
@@ -1006,78 +922,23 @@
 
 {#snippet routinesBody()}
   {#if empty}
-    <div data-slot="starters" class="w-full max-w-c-starters-w p-space-3">
+    <div data-slot="starters" class="p-space-3">
       {#if making}
         <!-- Create routine: the form in the empty state's place. -->
         {@render routineForm()}
-      {:else if canTalk}
-        <EmptyState
-          actionWidth="fill"
-          icon={IconClock}
-          line={words.emptyCaw(project.name)}
-          title={words.empty}
-        >
-          {#snippet action()}
-            <!-- The starters as the kit's option chips,
-                 a press putting its words in the composer under them, unsent. -->
-            <div class="flex flex-col gap-space-3">
-              {#if starters.length > 0}
-                <ul
-                  data-slot="routine-starters"
-                  aria-label={words.startersLabel}
-                  class={chipsVariants({
-                    class:
-                      "m-0 list-none px-(--starters-inset) py-0 max-desk:px-space-3",
-                  })}
-                  style:--starters-inset="calc((100% - var(--c-composer-w)) / 2)"
-                >
-                  {#each starters as starter (starter.text)}
-                    {@const Glyph = GLYPHS[starter.glyph]}
-                    <li class="flex max-w-full">
-                      <button
-                        class={chipVariants({ class: "select-none" })}
-                        onclick={() => pick(starter.text)}
-                        type="button"
-                      >
-                        <Glyph
-                          data-starter-glyph
-                          aria-hidden="true"
-                          class="size-icon-md flex-none text-ink-muted"
-                        />
-                        <span>{starter.text}</span>
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-              {@render askCaw()}
-            </div>
-          {/snippet}
-        </EmptyState>
       {:else}
-        <!-- Caw makes routines and can't start (The Empty Starts Work
-             Rule's second sentence): the line says what the page is for, his
-             reason stands in its own line over the way by hand, the routine
-             form in this place, as every can't-start empty state has it. -->
-        <EmptyState
-          icon={IconClock}
-          line={words.emptyWhat(project.name)}
-          title={words.empty}
-        >
-          {#snippet action()}
-            <CantStart
-              byHand={createByHand}
-              reason={cawProblem ?? CAW_NO_MACHINE}
-            />
-          {/snippet}
-        </EmptyState>
+        <RoutinesEmpty
+          byHand={createByHand}
+          {canTalk}
+          {cawProblem}
+          {onask}
+          projectName={project.name}
+          {starters}
+        />
       {/if}
     </div>
   {:else}
-    {#if asking}
-      <!-- Ask Caw: the composer stands over the ledger it will land in. -->
-      <div class="p-space-3">{@render askCaw()}</div>
-    {:else if making}
+    {#if making}
       <!-- Create routine: the form stands over the ledger it will land in. -->
       <div class="p-space-3">{@render routineForm()}</div>
     {/if}
@@ -1163,14 +1024,7 @@
     byHand={addMachineByHand}
     canStart={canTalk}
     label={words.connectSource}
-    onask={() => {
-      if (!empty) {
-        asking = true;
-        making = false;
-        askDraft.focusWanted = true;
-      }
-      pick(words.connectSourceAsk);
-    }}
+    onask={() => onask(words.connectSourceAsk)}
     reason={cawProblem ?? CAW_NO_MACHINE}
     size="sm"
   />

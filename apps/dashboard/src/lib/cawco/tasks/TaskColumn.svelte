@@ -158,7 +158,7 @@
               onpick(task.id, !on, event.shiftKey);
             }}
             reveal="card-pick"
-            style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - var(--icon-md)) / 2)"
+            style="--pick-top: calc(var(--space-3) + (var(--text-body) * var(--leading-body) - var(--icon-md)) / 2)"
           />
         {/if}
         {#if moving?.(task.id)}

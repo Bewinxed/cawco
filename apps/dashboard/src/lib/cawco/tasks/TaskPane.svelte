@@ -5,61 +5,80 @@
    * the project page or a conversation's SideSplit), the board or the
    * transcript live beside it; on a phone its own page, with Back.
    *
-   * Its head stands still: the facts line (its stage, Working or Queued,
-   * its dates, its labels at the end), then its title; under it a Review ·
-   * Details switch, while there is a review: the task waits on you, a
-   * session handed in a result, it names outputs, or its newest session
-   * failed or was stopped. Review is TaskReview's fixed bands, where only
-   * the stage scrolls; it opens there. Details scroll: what else it needs
-   * from you (TaskNeeds), its description, acceptance criteria, to-dos,
-   * edges and the sessions that worked it, then what happened on it
-   * (TaskActivity: comments, history). Every change is the hub's to make
-   * (each is a commit in the project folder), so each waits for the hub's
-   * answer and shows the task
-   * as the hub wrote it back; a refusal is said beside what it refused, in
-   * the hub's own words. The task is read again whenever the list says it
-   * changed, so a move made anywhere shows here.
+   * One unit (the owner's pin: "this panel needs to be completely
+   * rethought as a single unit"). Its head stands still: its title; one
+   * group of setting chips, its stage said once (its glyph, its name, the
+   * moves the project's stages allow you from where it is, the rest
+   * listed, disabled, so the stages read in order) and its labels; one
+   * session row (its newest session's mark, name and age, and its state
+   * word only when the stage can't carry it); and why the hub could not
+   * start one, in its words. Then four tabs, each led by its glyph: Review
+   * (while there is one: the task waits on you, a session handed in a
+   * result, it names outputs, or its newest session failed or was
+   * stopped), Session (the session read in place, TaskSession), Details
+   * (what else it needs from you, its description, acceptance criteria,
+   * to-dos, fields and edges) and Activity (comments and history). Only
+   * the chosen tab scrolls, under the kit's edge fade, never between
+   * hairlines. The decision is the pane's foot (TaskDecide), right under
+   * what it decides on, only while there is one.
    *
-   * The stage picker offers the moves the project's stages allow you from
-   * where the task is; the rest are listed, disabled, so the stages read in
-   * order. The hub checks the move again either way.
+   * Every change is the hub's to make (each is a commit in the project
+   * folder), so each waits for the hub's answer and shows the task as the
+   * hub wrote it back; a refusal is said beside what it refused, in the
+   * hub's own words. The task is read again whenever the list says it
+   * changed, so a move made anywhere shows here.
    *
    * A task one record with a GitHub or Linear issue (the hub's tracker.ts)
    * names it under the title, its mark and its ref a link to it; when its
    * last sync stopped short, the tracker's words under it, with Sync now.
    */
-  import { commonWords, TRACKER_NAMES } from "@cawco/core";
+  import { commonWords, projectWords, TRACKER_NAMES } from "@cawco/core";
   import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
   import { type Snippet, untrack } from "svelte";
   import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
-  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
+    IconBlocked,
+    IconChevronDown,
     IconChevronLeft,
-    IconError,
+    IconDocument,
+    IconDot,
+    IconEye,
+    IconFailed,
+    IconHistory,
+    IconHourglass,
+    IconInfo,
+    IconListCheck,
+    IconMinusCircle,
     IconNeedsYou,
+    IconPost,
+    IconSuccess,
+    IconTranscript,
     IconWorking,
   } from "#lib/icons.js";
-  import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
   import { cawco } from "../client.svelte";
-  import { rowHref } from "../links";
+  import Caw from "../home/Caw.svelte";
   import {
     addComment,
     addTodo,
-    attemptWord,
+    approveTarget,
     changeTodo,
     flagsOf,
     linkTask,
@@ -67,6 +86,7 @@
     readTask,
     reviewOf,
     type StagesView,
+    sendBackTarget,
     stageLabel,
     syncTracker,
     type TaskEdge,
@@ -80,14 +100,16 @@
   import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import type { MarkStatus } from "../TreeMark.svelte";
-  import { openBeside } from "./beside.svelte";
   import { resultStamp } from "./review-stamp";
+  import { isPresented } from "./stage/Presented.svelte";
   import TaskActivity from "./TaskActivity.svelte";
+  import TaskDecide from "./TaskDecide.svelte";
   import TaskFields from "./TaskFields.svelte";
   import TaskLabels from "./TaskLabels.svelte";
   import TaskNeeds from "./TaskNeeds.svelte";
   import TaskRelations from "./TaskRelations.svelte";
   import TaskReview from "./TaskReview.svelte";
+  import TaskSession from "./TaskSession.svelte";
   import TextSection from "./TextSection.svelte";
   import TodoList from "./TodoList.svelte";
 
@@ -196,9 +218,25 @@
         reviewOf(shown) !== null ||
         ((flags.failed || flags.stopped) && !flags.live))
   );
-  /** The switch's choice; null: Review while there is one, else Details. */
-  let picked = $state<"review" | "details" | null>(null);
-  const view = $derived(picked ?? (reviewable ? "review" : "details"));
+  type Tab = "review" | "session" | "details" | "activity";
+  /**
+   * The tab it opens on: Review while there is one; else Session while a
+   * session works it, it failed, or the hub could not start one; else
+   * Details.
+   */
+  const fallback = $derived.by<Tab>(() => {
+    if (reviewable) {
+      return "review";
+    }
+    return flags.live || flags.failed || flags.startProblem
+      ? "session"
+      : "details";
+  });
+  /** The tab chosen; null: the one its state opens on. */
+  let picked = $state<Tab | null>(null);
+  const view = $derived<Tab>(
+    picked === "review" && !reviewable ? fallback : (picked ?? fallback)
+  );
 
   // A new task starts clean, and is read.
   let readFor = "";
@@ -360,22 +398,68 @@
     }
   }
 
-  /** A session's status word takes its status tint; anything else has none. */
-  const TINT: Record<string, BadgeVariant> = {
-    Working: "live",
-    [commonWords.needsYou]: "attn",
-    Done: "done",
-    Failed: "fail",
-  };
-  /** And its mark the same tone. */
-  const TONE: Record<string, MarkStatus> = {
-    Working: "live",
-    [commonWords.needsYou]: "attn",
-    Done: "done",
-    Failed: "fail",
-  };
+  /** Where the task's stage stands: its chip's glyph and its ink. */
+  const STAGE_GLYPH = {
+    todo: IconDot,
+    active: IconWorking,
+    waiting: IconHourglass,
+    you: IconNeedsYou,
+    done: IconSuccess,
+    dropped: IconMinusCircle,
+  } as const;
+  const kind = $derived(shown?.kind ?? summary?.kind ?? "todo");
+  const StageGlyph = $derived(STAGE_GLYPH[kind]);
 
-  const when = (at: number) => new Date(at).toLocaleString();
+  /**
+   * Its newest session, in the head's one session row: its mark and name,
+   * its age, and its state word only when the stage can't carry it (it
+   * failed or was stopped): Working and Done are what the stage already
+   * says, so the pane says one status (the owner's pin: "why are you
+   * mentioning working twice here?").
+   */
+  const newest = $derived(shown?.attempts[0] ?? null);
+  const sessionState = $derived.by<{
+    status: MarkStatus;
+    word: string | null;
+  } | null>(() => {
+    if (!newest) {
+      return null;
+    }
+    if (flags.live) {
+      return { status: "live", word: null };
+    }
+    if (newest.state === "failed") {
+      return { status: "fail", word: projectWords.failed };
+    }
+    if (newest.state === "cancelled") {
+      return { status: "idle", word: projectWords.stopped };
+    }
+    return { status: "done", word: null };
+  });
+  /** The hub could not start a session on it: its words whole, under the stage. */
+  const cantStart = $derived(
+    flags.startProblem && !flags.live ? flags.startProblem : null
+  );
+  /** A decision stands at the pane's foot (TaskDecide draws it). */
+  const hasFoot = $derived(
+    !!shown &&
+      ((shown.kind === "you" &&
+        (approveTarget(stages, shown.stage) !== null ||
+          sendBackTarget(stages, shown.stage) !== null)) ||
+        ((flags.failed || flags.stopped) && !flags.live) ||
+        !!cantStart)
+  );
+  /** The review presents something: it fills the tab's room. */
+  const filled = $derived.by(() => {
+    if (!shown) {
+      return false;
+    }
+    const ended = (flags.failed || flags.stopped) && !flags.live;
+    const result = ended
+      ? (shown.attempts[0]?.result ?? null)
+      : (reviewOf(shown)?.result ?? null);
+    return (result?.artifacts ?? []).some(isPresented);
+  });
 
   /**
    * The decision this task was made from (its `decided: <page>#<card>`
@@ -421,71 +505,18 @@
   <div
     class="@container/task-frame flex flex-auto flex-col min-h-0 overflow-hidden"
     data-task-pane={taskId}
+    data-tab={view}
     style:--pane-inline={page ? "var(--space-5)" : "var(--space-3)"}
   >
+    <!-- The head stands still: its title, one group of setting chips (its
+         stage, its labels), one session row, and why the hub could not
+         start it; then the tabs. One hierarchy, nothing said twice, the
+         controls apart from the facts (the owner's pin: "this panel needs
+         to be completely rethought as a single unit"). -->
     <header
       data-slot="head"
-      class="flex flex-none flex-col gap-space-2 pt-space-2 px-(--pane-inline) pb-space-3"
+      class="flex flex-none flex-col gap-space-2 pt-space-2 px-(--pane-inline) pb-space-2"
     >
-      <div data-slot="meta" class="flex flex-wrap items-center gap-space-2">
-        {#if shown}
-          <Select.Root
-            disabled={moving}
-            onValueChange={move}
-            type="single"
-            value={shown.stage}
-          >
-            <Select.Trigger aria-label="Stage" press="tint">
-              {stageLabel(shown.stage)}
-            </Select.Trigger>
-            <Select.Content>
-              {#each stages.stages as stage (stage.name)}
-                <Select.Item
-                  disabled={stage.name !== shown.stage &&
-                    !allowed.has(stage.name)}
-                  label={stageLabel(stage.name)}
-                  value={stage.name}
-                >
-                  <span>{stageLabel(stage.name)}</span>
-                  {#if stage.kind === "you"}
-                    <IconNeedsYou class="text-status-attn-glyph" />
-                  {/if}
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-          {#if flags.live}
-            <Badge variant="live"><IconWorking /><span>Working</span></Badge>
-          {:else if flags.queued}
-            <Badge variant="secondary"><span>Queued</span></Badge>
-          {/if}
-          <span class="type-meta text-ink-muted whitespace-nowrap">
-            Created
-            <time
-              datetime={new Date(shown.createdAt).toISOString()}
-              title={when(shown.createdAt)}
-              >{formatTimestamp(new Date(shown.createdAt))}</time
-            >
-            · Updated
-            <time
-              datetime={new Date(shown.updatedAt).toISOString()}
-              title={when(shown.updatedAt)}
-              >{formatDistanceToNow(new Date(shown.updatedAt))}</time
-            >
-          </span>
-          {#if shown.labels.length > 0}
-            <!-- Its labels, as the board's card draws them: facts at the
-                 line's end, never a row of their own. -->
-            <span class="flex flex-wrap gap-space-1 ms-auto">
-              {#each shown.labels as label (label)}
-                <Badge variant="secondary"><span>{label}</span></Badge>
-              {/each}
-            </span>
-          {/if}
-        {:else}
-          <Skeleton class="w-c-task-stage-skeleton-w" height="control-sm" />
-        {/if}
-      </div>
       {#if titleDraft !== null}
         <form
           onsubmit={(event) => {
@@ -512,7 +543,7 @@
       {:else}
         <h2 data-slot="title" class="m-0 type-title tracking-title">
           <button
-            class="select-none block w-(--title-w) -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance hover:enabled:bg-surface-hover press-tint focus-inset"
+            class="select-none block w-(--title-w) -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance wrap-anywhere hover:enabled:bg-surface-hover press-tint focus-inset"
             disabled={!shown}
             onclick={() => {
               titleDraft = shown?.title ?? "";
@@ -526,6 +557,179 @@
         </h2>
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
+
+      <!-- One group of equal setting chips: its stage, said once, and its
+           labels, beside each other (New-session dialog's chips). -->
+      <div
+        data-slot="chips"
+        class="flex min-w-0 flex-wrap items-center gap-space-1"
+      >
+        {#if shown}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger disabled={moving}>
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  aria-label="Stage: {stageLabel(shown.stage)}"
+                  class={chipVariants({ variant: "setting" })}
+                  data-kind={kind}
+                  data-stage-chip
+                  type="button"
+                >
+                  <StageGlyph
+                    aria-hidden="true"
+                    class={[
+                      "text-ink-muted",
+                      kind === "you" && "text-status-attn-glyph",
+                      kind === "active" && "text-status-live-glyph",
+                      kind === "done" && "text-status-done-glyph",
+                      kind === "active" &&
+                        flags.live &&
+                        "motion-safe:animate-breath",
+                    ]}
+                  />
+                  <span data-slot="chip-label">{stageLabel(shown.stage)}</span>
+                  <IconChevronDown aria-hidden="true" data-slot="chevron" />
+                </button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start" width="regular">
+              {#each stages.stages as stage (stage.name)}
+                {@const Glyph = STAGE_GLYPH[stage.kind]}
+                <DropdownMenu.Item
+                  disabled={stage.name === shown.stage ||
+                    !allowed.has(stage.name)}
+                  onSelect={() => move(stage.name)}
+                >
+                  <Glyph />
+                  <span>{stageLabel(stage.name)}</span>
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          <Popover.Root>
+            <Popover.Trigger>
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  aria-label="Labels"
+                  class={chipVariants({
+                    variant: "setting",
+                    tone: shown.labels.length > 0 ? undefined : "muted",
+                  })}
+                  data-labels-chip
+                  type="button"
+                >
+                  <IconPost aria-hidden="true" class="text-ink-muted" />
+                  <span data-slot="chip-label"
+                    >{shown.labels.length > 0
+                      ? shown.labels.join(" · ")
+                      : "Add label"}</span
+                  >
+                  <IconChevronDown aria-hidden="true" data-slot="chevron" />
+                </button>
+              {/snippet}
+            </Popover.Trigger>
+            <Popover.Content align="start" pad="inset" width="wide">
+              <TaskLabels
+                {known}
+                labels={shown.labels}
+                onchange={async (labels) => {
+                  if (shown) {
+                    took(await updateTask(projectId, shown.id, { labels }));
+                  }
+                }}
+              />
+            </Popover.Content>
+          </Popover.Root>
+        {:else}
+          <Skeleton class="w-c-task-stage-skeleton-w" height="control-sm" />
+        {/if}
+      </div>
+      <RowFault reason={stageProblem} />
+
+      {#if newest && sessionState}
+        <!-- One session row: its mark (echoing while it works), its name,
+             its word only when the stage can't say it, its age at the end. -->
+        <div
+          data-slot="session-row"
+          class="group/row mark-line flex min-h-c-btn-h-xs min-w-0 items-center gap-space-2"
+          data-session={newest.instanceId}
+          data-status={sessionState.status}
+        >
+          <SessionMark
+            id={newest.instanceId}
+            place={sessionPlace(newest.instanceId)}
+            status={sessionState.status}
+          />
+          <span
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
+            >{sessionTitle(newest.instanceId) ?? commonWords.itsSession}</span
+          >
+          {#if sessionState.word}
+            <span
+              data-slot="session-word"
+              class="mark-line inline-flex flex-none items-center gap-space-1 type-label text-ink-muted group-data-[status=fail]/row:text-status-fail-ink"
+              data-box
+            >
+              {#if sessionState.status === "fail"}
+                <IconFailed
+                  aria-hidden="true"
+                  class="size-icon-md text-status-fail-glyph"
+                />
+              {/if}
+              <span>{sessionState.word}</span>
+            </span>
+          {/if}
+          <time
+            data-slot="num"
+            class="num ms-auto flex-none type-meta text-ink-muted"
+            datetime={new Date(
+              newest.endedAt ?? newest.startedAt
+            ).toISOString()}
+            >{formatDistanceToNow(
+              new Date(newest.endedAt ?? newest.startedAt)
+            )}</time
+          >
+        </div>
+        {#if newest.state === "failed" && !flags.live && newest.endedHow}
+          <p
+            data-slot="ended"
+            style:--ended-in="calc(var(--c-row-mark) + var(--space-2))"
+            class="m-0 ps-(--ended-in) type-body text-status-fail-ink wrap-anywhere"
+          >
+            {newest.endedHow}
+          </p>
+        {/if}
+      {:else if flags.queued}
+        <p
+          data-slot="queued"
+          class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-muted"
+        >
+          <IconHourglass aria-hidden="true" class="size-icon-md flex-none" />
+          <span>Queued for a session</span>
+        </p>
+      {/if}
+      {#if cantStart}
+        <p
+          data-slot="refusal"
+          class="mark-line m-0 flex items-start gap-space-2 type-body text-ink-strong wrap-anywhere"
+        >
+          <span data-box
+            ><IconBlocked
+              aria-hidden="true"
+              class="size-icon-md text-status-attn-glyph"
+            /></span
+          >
+          <span
+            ><span class="font-medium text-status-attn-ink"
+              >{projectWords.cantStart}</span
+            >
+            · {cantStart}</span
+          >
+        </p>
+      {/if}
+
       {#if shown?.issue}
         {@const issue = shown.issue}
         <div
@@ -577,35 +781,53 @@
           >
         </p>
       {/if}
-      <RowFault reason={stageProblem} />
-      {#if reviewable}
-        <Tabs
-          onValueChange={(next) => {
-            picked = next === "details" ? "details" : "review";
-          }}
-          size="compact"
-          value={view}
-        >
-          <TabsList aria-label="Review or details">
-            <TabItem label="Review" value="review" />
-            <TabItem label="Details" value="details" />
-          </TabsList>
-        </Tabs>
-      {/if}
+
+      <Tabs
+        onValueChange={(next) => {
+          picked = next as Tab;
+        }}
+        size="compact"
+        value={view}
+      >
+        <!-- Each tab leads with its glyph (the owner's pin: "ICONS IN
+             SECTIONS"); a narrow pane scrolls the track under its edge
+             fade, never cutting a name. -->
+        <TabsList aria-label="Task" scrollable>
+          {#if reviewable}
+            <TabItem icon={IconEye} label="Review" value="review" />
+          {/if}
+          <TabItem icon={IconTranscript} label="Session" value="session" />
+          <TabItem icon={IconInfo} label="Details" value="details" />
+          <TabItem icon={IconHistory} label="Activity" value="activity" />
+        </TabsList>
+      </Tabs>
     </header>
 
     {#if readProblem}
-      <Alert variant="destructive">
-        <AlertDescription>
-          {readProblem}
-          <Button
-            class="mt-space-2"
-            onclick={() => read(taskId)}
-            size="sm"
-            variant="outline">Retry</Button
-          >
-        </AlertDescription>
-      </Alert>
+      <!-- A read the hub refused takes the pane's centre, with Caw: what
+           happened, the way out, and its words under Show details. -->
+      <div
+        data-slot="read-fault"
+        class="grid flex-auto place-items-center px-(--pane-inline) pb-space-6"
+      >
+        <EmptyState
+          line="Its file couldn't be read, so nothing of it is shown. Nothing was changed."
+          title="This task didn't open"
+        >
+          {#snippet mark()}
+            <div class="mb-space-3 grid justify-items-start">
+              <Caw size={48} status="ready" />
+            </div>
+          {/snippet}
+          {#snippet action()}
+            <RowFault
+              again={() => read(taskId)}
+              details={readProblem}
+              reason="The hub didn't send it."
+            />
+          {/snippet}
+        </EmptyState>
+      </div>
     {:else if !shown}
       <div
         data-slot="task-pane-skeleton"
@@ -618,183 +840,136 @@
         <Skeleton class="w-11/12" line="body" />
         <Skeleton class="w-3/5" line="body" />
       </div>
-    {:else if view === "review"}
-      <TaskReview
-        onchanged={took}
-        onmove={moveTo}
-        {projectId}
-        {stages}
-        task={shown}
-      />
     {:else}
+      <!-- Only the chosen tab scrolls, under the kit's edge fade: no
+           hairlines. As tall as what it holds, so the decision follows it;
+           past the pane's room it gives way and scrolls, the decision then
+           pinned under it. What a session presented fills the room. -->
       <div
-        data-slot="task-body"
-        class="flex flex-auto flex-col gap-space-5 min-h-0 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline overflow-y-auto overscroll-contain"
+        data-slot="content"
+        class="kit-edge-fade-block flex min-h-0 flex-initial flex-col overflow-y-auto overscroll-contain px-(--pane-inline) pt-space-2 pb-space-5 data-fill:flex-auto"
+        data-content={view}
+        data-fill={(view === "review" && filled) || undefined}
       >
-        <TaskNeeds
-          ended={false}
-          onchanged={took}
-          {onopen}
-          {projectId}
-          task={shown}
-          {tasks}
-        />
+        {#if view === "review"}
+          <TaskReview
+            onchanged={took}
+            onmove={moveTo}
+            {projectId}
+            {stages}
+            task={shown}
+          />
+        {:else if view === "session"}
+          <TaskSession onchanged={took} {projectId} task={shown} />
+        {:else if view === "details"}
+          <div data-slot="task-body" class="flex flex-col gap-space-5">
+            <TaskNeeds
+              ended={false}
+              onchanged={took}
+              {onopen}
+              {projectId}
+              task={shown}
+              {tasks}
+            />
 
-        {#if shown.problems.length > 0}
-          <Alert variant="warning">
-            <AlertDescription>{shown.problems.join(" ")}</AlertDescription>
-          </Alert>
-        {/if}
+            {#if shown.problems.length > 0}
+              <Alert variant="warning">
+                <AlertDescription>{shown.problems.join(" ")}</AlertDescription>
+              </Alert>
+            {/if}
 
-        <TextSection
-          empty="Say what this task is for, so a session picking it up starts from it."
-          heading="Description"
-          onsave={async (description) => {
-            if (shown) {
-              took(await updateTask(projectId, shown.id, { description }));
-            }
-          }}
-          text={shown.description}
-        />
+            <TextSection
+              empty="Say what this task is for, so a session picking it up starts from it."
+              heading="Description"
+              icon={IconDocument}
+              onsave={async (description) => {
+                if (shown) {
+                  took(await updateTask(projectId, shown.id, { description }));
+                }
+              }}
+              text={shown.description}
+            />
 
-        <TextSection
-          empty="List what has to be true for this task to count as done."
-          heading="Acceptance criteria"
-          onsave={async (acceptance) => {
-            if (shown) {
-              took(await updateTask(projectId, shown.id, { acceptance }));
-            }
-          }}
-          text={shown.acceptance}
-        />
+            <TextSection
+              empty="List what has to be true for this task to count as done."
+              heading="Acceptance criteria"
+              icon={IconListCheck}
+              onsave={async (acceptance) => {
+                if (shown) {
+                  took(await updateTask(projectId, shown.id, { acceptance }));
+                }
+              }}
+              text={shown.acceptance}
+            />
 
-        <TodoList
-          onadd={async (text, under) => {
-            if (shown) {
-              took(await addTodo(projectId, shown.id, { text, under }));
-            }
-          }}
-          onedit={async (todo, text) => {
-            if (shown) {
-              took(await changeTodo(projectId, shown.id, todo, { text }));
-            }
-          }}
-          ontick={async (todo, done) => {
-            if (shown) {
-              took(await changeTodo(projectId, shown.id, todo, { done }));
-            }
-          }}
-          todos={shown.todos}
-        />
+            <TodoList
+              onadd={async (text, under) => {
+                if (shown) {
+                  took(await addTodo(projectId, shown.id, { text, under }));
+                }
+              }}
+              onedit={async (todo, text) => {
+                if (shown) {
+                  took(await changeTodo(projectId, shown.id, todo, { text }));
+                }
+              }}
+              ontick={async (todo, done) => {
+                if (shown) {
+                  took(await changeTodo(projectId, shown.id, todo, { done }));
+                }
+              }}
+              todos={shown.todos}
+            />
 
-        <section class="flex flex-col gap-space-2">
-          <h3 class={sectionHeadVariants({ inset: "flush" })}>Labels</h3>
-          <TaskLabels
-            {known}
-            labels={shown.labels}
-            onchange={async (labels) => {
+            <TaskFields
+              {fields}
+              onsave={async (change) => {
+                if (shown) {
+                  took(
+                    await updateTask(projectId, shown.id, { fields: change })
+                  );
+                }
+              }}
+            />
+
+            <div class="flex flex-col gap-space-2">
+              <TaskRelations onlink={link} {onopen} task={shown} {tasks} />
+              <RowFault reason={edgeProblem} />
+            </div>
+          </div>
+        {:else}
+          <TaskActivity
+            comments={shown.comments}
+            {history}
+            {historyProblem}
+            oncomment={async (text, id) => {
               if (shown) {
-                took(await updateTask(projectId, shown.id, { labels }));
+                took(await addComment(projectId, shown.id, text, id));
               }
             }}
+            {reaches}
+            rereadHistory={() => shown && readActivity(shown.id)}
           />
-        </section>
-
-        <TaskFields
-          {fields}
-          onsave={async (change) => {
-            if (shown) {
-              took(await updateTask(projectId, shown.id, { fields: change }));
-            }
-          }}
-        />
-
-        <div class="flex flex-col gap-space-2">
-          <TaskRelations onlink={link} {onopen} task={shown} {tasks} />
-          <RowFault reason={edgeProblem} />
-        </div>
-
-        {#if shown.attempts.length > 0 || flags.startProblem}
-          <section class="flex flex-col gap-space-2">
-            <h3 class={sectionHeadVariants({ inset: "flush" })}>
-              Sessions
-              {#if shown.attempts.length > 0}
-                <span
-                  data-num
-                  data-slot="count"
-                  class="num ms-auto type-meta text-ink-subtle"
-                  >{shown.attempts.length}</span
-                >
-              {/if}
-            </h3>
-            <RowFault reason={flags.startProblem} />
-            <ol
-              data-slot="sessions"
-              class="flex flex-col gap-space-1 m-0 p-0 list-none"
-            >
-              {#each shown.attempts as attempt (attempt.workItemId)}
-                {@const word = attemptWord(attempt.state)}
-                <li>
-                  <a
-                    data-slot="session"
-                    class="flex flex-wrap items-center gap-space-2 py-space-2 px-space-3 rounded-sm bg-surface-recess text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
-                    href={rowHref(attempt.instanceId)}
-                    onclick={(event) => {
-                      event.preventDefault();
-                      openBeside(attempt.instanceId, projectId, taskId);
-                    }}
-                  >
-                    <SessionMark
-                      id={attempt.instanceId}
-                      place={sessionPlace(attempt.instanceId)}
-                      status={TONE[word] ?? "idle"}
-                    />
-                    <span
-                      class="flex-initial min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap"
-                      >{sessionTitle(attempt.instanceId) ??
-                        commonWords.itsSession}</span
-                    >
-                    <Badge data-box variant={TINT[word] ?? "secondary"}>
-                      {#if word === "Failed"}
-                        <IconError />
-                      {/if}
-                      <span>{word}</span>
-                    </Badge>
-                    <time
-                      class="ms-auto type-meta text-ink-muted"
-                      datetime={new Date(
-                        attempt.endedAt ?? attempt.startedAt
-                      ).toISOString()}
-                      >{formatDistanceToNow(
-                        new Date(attempt.endedAt ?? attempt.startedAt)
-                      )}</time
-                    >
-                    {#if attempt.endedHow}
-                      <span
-                        class="basis-full type-meta text-ink-muted wrap-anywhere"
-                        >{attempt.endedHow}</span
-                      >
-                    {/if}
-                  </a>
-                </li>
-              {/each}
-            </ol>
-          </section>
         {/if}
-
-        <TaskActivity
-          comments={shown.comments}
-          {history}
-          {historyProblem}
-          oncomment={async (text, id) => {
-            if (shown) {
-              took(await addComment(projectId, shown.id, text, id));
-            }
-          }}
-          {reaches}
-          rereadHistory={() => shown && readActivity(shown.id)}
-        />
       </div>
+
+      {#if hasFoot}
+        <!-- The decision, right under what it decides on, clear of the safe
+             area; only while there is one. -->
+        <div
+          data-slot="foot"
+          class="flex-none px-(--pane-inline) pt-space-3 pb-(--decide-end)"
+          style:--decide-end="max(var(--space-3), env(safe-area-inset-bottom))"
+        >
+          <TaskDecide
+            onchanged={took}
+            onmove={moveTo}
+            {projectId}
+            {stages}
+            task={shown}
+          />
+        </div>
+      {/if}
     {/if}
   </div>
 {/snippet}

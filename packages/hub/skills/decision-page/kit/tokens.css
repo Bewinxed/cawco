@@ -867,6 +867,8 @@
     --c-new-project-field-w: 570px;
     /* The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line). */
     --c-composer-w: min(720px, calc(100% - 50px));
+    /* The Work Column Rule: empty and starter content stands in the column the composer stands in, at most 720px and centred in a wider area, every line on its start edge; in a narrower area the column is the area's own width, from its start edge. */
+    --c-work-column-w: min(720px, 100%);
     /* A suggestion chip: its Tab key cap, padding and border. */
     --c-suggest-chip: calc(1.25rem + var(--space-1) * 2 + 2px);
     --c-suggest-row: calc(

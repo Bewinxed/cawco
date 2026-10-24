@@ -938,7 +938,6 @@
               {kindOf}
               onopen={openTaskOf}
               {task}
-              titleFirst
             />
             {#if stages && waitsOnYou(projectId, task)}
               <TaskNeedsFor
@@ -1070,9 +1069,9 @@
           {/snippet}
           {#snippet action()}
             {#if starters.length > 0}
-              <!-- In his panel, suggestion rows as wide as their words;
-                   in a tab, the starter cards. -->
-              <StarterCards onpick={pick} rows={!!docked} {starters} />
+              <!-- The starter cards, every one the column's width in his
+                   panel and one height; there, each with its reason. -->
+              <StarterCards onpick={pick} reasons={!!docked} {starters} />
             {/if}
             {@render docked?.under?.()}
           {/snippet}

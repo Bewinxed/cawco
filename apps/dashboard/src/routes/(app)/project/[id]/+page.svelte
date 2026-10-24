@@ -81,6 +81,7 @@
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
+  import WorkColumnEmpty from "#lib/cawco/project/WorkColumnEmpty.svelte";
   import {
     archiveTask,
     createTask,
@@ -152,7 +153,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     TabItem,
     Tabs,
@@ -1909,6 +1909,13 @@
       {blocks}
       {canTalk}
       cawProblem={lead.problem}
+      onask={(text) => {
+        if (text) {
+          lead.ask(text, "routines");
+        } else {
+          lead.newThread();
+        }
+      }}
       onform={() => {
         // A phone's Caw is a sheet over the page's foot: the routine form
         // the reader opened stands clear of it, his seat brings him back.
@@ -1940,24 +1947,20 @@
       {taskOf}
     />
   {:else if !list}
-    <div class="max-w-c-measure">
-      <EmptyState
-        icon={IconToolTodo}
-        line={unread ??
-          `The tasks for ${project?.name ?? "this project"} couldn't be read. Nothing was changed.`}
-        title="Tasks are not available"
-      >
-        {#snippet action()}
-          <Button
-            label="Retry"
-            onclick={readAgain}
-            pending={rereading}
-            pendingLabel="Retrying…"
-            variant="outline"
-          />
-        {/snippet}
-      </EmptyState>
-    </div>
+    <WorkColumnEmpty
+      icon={IconToolTodo}
+      line={unread ??
+        `The tasks for ${project?.name ?? "this project"} couldn't be read. Nothing was changed.`}
+      title="Tasks are not available"
+    >
+      <Button
+        label="Retry"
+        onclick={readAgain}
+        pending={rereading}
+        pendingLabel="Retrying…"
+        variant="outline"
+      />
+    </WorkColumnEmpty>
   {:else if empty && !adding}
     {#if !lead.project}
       <Skeleton class="w-full" height="chart" radius="card" width="chart-cap" />
@@ -1965,63 +1968,52 @@
       <!-- The project's starters are the empty board's one action (DESIGN.md,
            The Empty Starts Work Rule): while his panel is open they are in
            it (CawFloat); put away, they stand here and open it with their
-           words. -->
-      <div data-slot="caw-empty" class="w-full max-w-c-starters-w">
-        <EmptyState
-          actionWidth="fill"
-          line={cawLine}
-          title="Nothing on the board yet"
-        >
-          {#snippet mark()}
-            <!-- He stands here instead of sitting in the head, and is the
-                 same seat at 80: a press opens his panel beside the page
-                 (CawFloat). His switch is under the head's ⋯, empty board
-                 or not. -->
-            <div
-              data-slot="caw-80"
-              class="mb-space-3 grid justify-items-start"
-              data-share="caw:{projectId}"
-              out:sitDown|global
-            >
-              <CawSeat
-                {lead}
-                {projectId}
-                projectName={project?.name ?? ""}
-                size={80}
-              />
-            </div>
-          {/snippet}
-          {#snippet action()}
-            <!-- A starter opens his panel with its words in his composer. -->
-            {#if starters.length > 0 && !lead.open}
-              <StarterCards
-                onpick={(text) => lead.ask(text, "board")}
-                {starters}
-              />
-            {/if}
-          {/snippet}
-        </EmptyState>
-      </div>
+           words. The work column centres in the page (WorkColumnEmpty). -->
+      <WorkColumnEmpty
+        data-slot="caw-empty"
+        line={cawLine}
+        title="Nothing on the board yet"
+      >
+        {#snippet mark()}
+          <!-- He stands here instead of sitting in the head, and is the
+               same seat at 80: a press opens his panel beside the page
+               (CawFloat). His switch is under the head's ⋯, empty board
+               or not. -->
+          <div
+            data-slot="caw-80"
+            class="mb-space-3 grid justify-items-start"
+            data-share="caw:{projectId}"
+            out:sitDown|global
+          >
+            <CawSeat
+              {lead}
+              {projectId}
+              projectName={project?.name ?? ""}
+              size={80}
+            />
+          </div>
+        {/snippet}
+        <!-- A starter opens his panel with its words in his composer. -->
+        {#if starters.length > 0 && !lead.open}
+          <StarterCards onpick={(text) => lead.ask(text, "board")} {starters} />
+        {/if}
+      </WorkColumnEmpty>
     {:else}
-      <div class="max-w-c-measure">
-        <EmptyState
-          icon={IconToolTodo}
-          line="Add a task by hand while Caw can’t start."
-          title="Nothing on the board yet"
-        >
-          {#snippet action()}
-            <div class="flex flex-wrap items-start gap-space-2">
-              <NewTaskForm
-                oncreate={create}
-                primary
-                stage={newIn ?? ""}
-                stages={stageList}
-                bind:open={adding}
-              />
-            </div>
-          {/snippet}
-        </EmptyState>
-      </div>
+      <WorkColumnEmpty
+        icon={IconToolTodo}
+        line="Add a task by hand while Caw can’t start."
+        title="Nothing on the board yet"
+      >
+        <div class="flex flex-wrap items-start gap-space-2">
+          <NewTaskForm
+            oncreate={create}
+            primary
+            stage={newIn ?? ""}
+            stages={stageList}
+            bind:open={adding}
+          />
+        </div>
+      </WorkColumnEmpty>
     {/if}
   {:else if value === "board"}
     <BlockPage

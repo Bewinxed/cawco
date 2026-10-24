@@ -102,6 +102,12 @@ export {
   default as IconInteract,
   default as IconToolScreen,
 } from "~icons/solar/cursor-bold-duotone";
+/*
+ * A task that failed, and one that can't go on: solid, never duotone, so
+ * the mark reads whole at 16px on a board card and in the task's pane (the
+ * owner's pin on the card: "the x inside the circle is unreadable").
+ */
+export { default as IconFailed } from "~icons/solar/danger-circle-bold";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
 export { default as IconDatabase } from "~icons/solar/database-bold-duotone";
@@ -128,6 +134,7 @@ export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
 export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
 export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
+export { default as IconBlocked } from "~icons/solar/forbidden-circle-bold";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
 export {
   default as IconAgent,

@@ -1,28 +1,23 @@
 <script lang="ts">
   /**
-   * A task's review: a message from the session that worked it, then what
-   * that session presented. Three fixed bands and the decision; only the
-   * stage scrolls.
-   * 1. The result: the session (its mark and title, and Open ↗, which opens
-   *    it with this task beside it), its words at most three lines with
-   *    More, the `Check:` line, and what it attached (files and links), one
-   *    wrapping row. A session that failed or was stopped says so, in the
-   *    hub's words.
-   * 2. The stage: the artifact the session presented (`task_result`'s
-   *    primary artifact), drawn whole by the artifact panel's own renderer
-   *    (PreviewPane, inset). Nothing presented: its words whole, with what to
-   *    check as a list. The app never draws a file's format here.
-   * 3. The decision, pinned: Approve → the next stage the moves allow you,
-   *    and Send back, whose note takes the bar's place with the stage still
-   *    in view. A session that failed or was stopped: Try again in
-   *    Approve's place, a new session on the task.
+   * A task's review: what the session that worked it handed in. In the
+   * task pane (its Review tab) it is the result on the pane's own surface,
+   * no lines around it (the owner's pin: "what is this line above and
+   * below?"): its words whole (markdown), what to check as a list, what it
+   * attached (files and links, one wrapping row), then what it presented
+   * (`task_result`'s primary artifact), drawn whole by the artifact panel's
+   * own renderer (PreviewPane, inset), filling the room the tab has. The
+   * session it is from, and how a failed or stopped one ended, stand in the
+   * pane's head; the decision is the pane's foot (TaskDecide), right under
+   * the review. The app never draws a file's format here.
    *
    * Two columns once the review is wide enough (the pane expanded, the
-   * task's own page): the words beside the stage, unclamped.
+   * task's own page): the words beside what it presented.
    *
-   * `compact` (a Caw thread's card): the result band and the decision; what
-   * it attached, and what it presented, open the task beside the
-   * conversation.
+   * `compact` (a Caw thread's card): the session (its mark and title, and
+   * Open ↗, which opens it with this task beside it), its words at most
+   * three lines with More, what it attached, which opens the task beside
+   * the conversation, and the decision (TaskDecide) as its last band.
    */
   import {
     artifactName,
@@ -31,41 +26,30 @@
     type ResultArtifact,
   } from "@cawco/core";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconArrowUpRight,
     IconArtifactPage,
     IconDocument,
-    IconError,
+    IconFailed,
     IconLink,
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
-  import { failureWords as message } from "../hub-read";
-  import { idForWords, type SentWords } from "../id";
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import {
-    addComment,
-    approveTarget,
     folderFileHref,
     folderRawHref,
     outputUrl,
-    readTask,
-    retryTask,
     reviewOf,
     type StagesView,
-    sendBackTarget,
-    stageLabel,
     type TaskView,
   } from "../project-tasks";
-  import RowFault from "../RowFault.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import { sessionStatus } from "../session-status";
   import { openBeside } from "./beside.svelte";
   import Presented, { isPresented } from "./stage/Presented.svelte";
+  import TaskDecide from "./TaskDecide.svelte";
 
   let {
     projectId,
@@ -79,7 +63,7 @@
     projectId: string;
     task: TaskView;
     stages: StagesView;
-    /** A thread's card: no stage; what it attached opens the task. */
+    /** A thread's card: its session, no stage, its decision; what it attached opens the task. */
     compact?: boolean;
     /** Moves the task; throws the hub's refusal. */
     onmove: (stage: string) => Promise<TaskView>;
@@ -116,8 +100,6 @@
     ended ? (newest?.result?.summary ?? "") : (review?.whole ?? "")
   );
   const check = $derived(result?.check ?? []);
-  /** Nothing presented: its words are the stage. */
-  const wordsStage = $derived(!presented && whole.length > 0);
 
   const row = $derived(
     from ? cawco.instanceIndex.byId.get(from.instanceId) : undefined
@@ -152,73 +134,6 @@
     observer.observe(node);
     return () => observer.disconnect();
   });
-
-  // --- band 3: the decision ------------------------------------------------------
-
-  const deciding = $derived(task.kind === "you");
-  const approveTo = $derived(approveTarget(stages, task.stage));
-  const backTo = $derived(sendBackTarget(stages, task.stage));
-  let approving = $state(false);
-  let sending = $state(false);
-  let retrying = $state(false);
-  let problem = $state<string | null>(null);
-  /** Send back's note while it is open; null when closed. */
-  let note = $state<string | null>(null);
-  let noteField = $state<HTMLTextAreaElement | null>(null);
-
-  async function approve() {
-    if (!approveTo) {
-      return;
-    }
-    approving = true;
-    problem = null;
-    try {
-      await onmove(approveTo.name);
-    } catch (error) {
-      problem = message(error);
-    } finally {
-      approving = false;
-    }
-  }
-
-  /** A new session on the task, as the board's Retry starts one (the hub's `retry`). */
-  async function tryAgain() {
-    retrying = true;
-    problem = null;
-    try {
-      await retryTask(projectId, task.id);
-      onchanged(await readTask(projectId, task.id));
-    } catch (error) {
-      problem = message(error);
-    } finally {
-      retrying = false;
-    }
-  }
-
-  /** The note a Send back that did not go through carried, and its comment's id. */
-  let noteSent: SentWords | null = null;
-
-  /** Your note goes on the task as your comment, then the task goes back. */
-  async function sendBack() {
-    const text = note?.trim();
-    if (!(backTo && text)) {
-      return;
-    }
-    sending = true;
-    problem = null;
-    // The same note again, after a Send back that did not go through, is the same comment.
-    noteSent = idForWords(noteSent, text);
-    try {
-      onchanged(await addComment(projectId, task.id, text, noteSent.id));
-      await onmove(backTo.name);
-      noteSent = null;
-      note = null;
-    } catch (error) {
-      problem = message(error);
-    } finally {
-      sending = false;
-    }
-  }
 
   // --- what it attached ------------------------------------------------------------
 
@@ -332,24 +247,18 @@
 
 <section
   aria-label="Review {task.id}"
-  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:not-data-compact:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col data-compact:border data-compact:border-status-attn-glyph/40 data-compact:rounded-md data-compact:bg-surface-raised data-compact:overflow-hidden @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
+  class="group flex min-h-0 flex-auto flex-col not-data-compact:gap-y-space-3 data-compact:flex-none data-compact:overflow-hidden data-compact:rounded-md data-compact:border data-compact:border-status-attn-glyph/40 data-compact:bg-surface-raised @task-frame/task-frame:data-framed:grid @task-frame/task-frame:data-framed:grid-cols-(--review-cols) @task-frame/task-frame:data-framed:gap-x-space-5"
   data-compact={compact || undefined}
-  data-words-staged={wordsStage || undefined}
-  style:--review-areas={'"result" "stage" "decide"'}
-  style:--review-areas-wide={'"result stage" "decide decide"'}
-  style:--review-rows="auto minmax(0, 1fr) auto"
-  style:--review-rows-wide="minmax(0, 1fr) auto"
+  data-framed={(!compact && !!presented) || undefined}
   style:--review-cols="var(--c-review-words) minmax(0, 1fr)"
 >
-  <!-- Band 1: the session, its words, what it attached -->
+  <!-- The result: its words, what to check, what it attached -->
   <div
     data-slot="result"
-    style:--area="result"
-    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 @task-frame/task-frame:not-data-compact:min-h-0 @task-frame/task-frame:not-data-compact:overflow-y-auto @task-frame/task-frame:not-data-compact:overscroll-contain @task-frame/task-frame:not-data-compact:border-e @task-frame/task-frame:not-data-compact:border-e-border-hairline"
+    class="flex min-w-0 flex-col gap-space-2 group-data-compact:px-space-4 group-data-compact:py-space-3"
     data-band="result"
-    data-compact={compact || undefined}
   >
-    {#if from}
+    {#if compact && from}
       <div
         data-slot="session"
         class="flex items-center gap-space-2 min-w-0 mark-line"
@@ -365,13 +274,21 @@
           >{fromName}</span
         >
         {#if ended && newest}
-          {#if newest.state === "failed"}
-            <Badge data-box variant="fail"
-              ><IconError /><span>Failed</span></Badge
-            >
-          {:else}
-            <Badge data-box variant="secondary"><span>Stopped</span></Badge>
-          {/if}
+          <span
+            class="mark-line inline-flex flex-none items-center gap-space-1 type-label data-fail:text-status-fail-ink text-ink-muted"
+            data-box
+            data-fail={newest.state === "failed" || undefined}
+          >
+            {#if newest.state === "failed"}
+              <IconFailed
+                aria-hidden="true"
+                class="size-icon-md text-status-fail-glyph"
+              />
+              <span>Failed</span>
+            {:else}
+              <span>Stopped</span>
+            {/if}
+          </span>
         {/if}
         <a
           aria-label="Open its session beside this task"
@@ -397,11 +314,10 @@
         </p>
       {/if}
     {/if}
-    {#if summary && !wordsStage}
+    {#if compact && summary}
       <div
         data-slot="words"
-        class="group/words flex flex-col @task-frame/task-frame:not-data-compact:hidden"
-        data-compact={compact || undefined}
+        class="group/words flex flex-col"
         data-more={more || undefined}
         bind:this={wordsBox}
       >
@@ -437,14 +353,22 @@
           {/if}
         </div>
       </div>
-      <!-- Two columns: the words whole, what to check as the list. -->
-      <div
-        class="hidden flex-col gap-space-2 @task-frame/task-frame:not-data-compact:flex"
-        data-compact={compact || undefined}
-      >
+    {:else if whole}
+      <!-- Its words whole, what to check as the list. -->
+      <div data-slot="words" class="flex flex-col gap-space-2">
         <MessageBody source={whole} />
         {@render checkList()}
       </div>
+    {:else if !(compact || presented)}
+      <p data-slot="nothing" class="m-0 type-body text-ink-muted">
+        {#if attached.length > 0}
+          Nothing presented, only its files.
+        {:else if from}
+          Nothing handed in.
+        {:else}
+          No session has worked on it.
+        {/if}
+      </p>
     {/if}
     {#if listed.length > 0}
       <div class="flex flex-wrap gap-space-3" data-band-part="attachments">
@@ -455,131 +379,23 @@
     {/if}
   </div>
 
-  <!-- Band 2: the stage, the only part that scrolls -->
-  {#if !compact}
+  <!-- What it presented, drawn whole, filling the room the tab has -->
+  {#if !compact && presented}
     <div
       data-slot="stage"
-      style:--area="stage"
-      class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-none"
+      class="flex min-h-0 flex-auto flex-col overflow-hidden"
       data-band="stage"
-      data-framed={!!presented || undefined}
       id="stage-{task.id}"
     >
-      {#if presented}
-        <Presented {presented} />
-      {:else if wordsStage}
-        <div class="flex flex-col gap-space-2">
-          <MessageBody source={whole} />
-          {@render checkList()}
-        </div>
-      {:else}
-        <p class="m-0 type-body text-ink-muted">
-          {#if attached.length > 0}
-            Nothing presented, only its files.
-          {:else if from}
-            Nothing handed in.
-          {:else}
-            No session has worked on it.
-          {/if}
-        </p>
-      {/if}
+      <Presented {presented} />
     </div>
   {/if}
 
-  <!-- Band 3: the decision, pinned -->
-  {#if ended || (deciding && (approveTo || backTo))}
+  {#if compact}
     <div
-      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-4 group-data-compact:border-t group-data-compact:border-t-border-hairline row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
-      data-band="decide"
-      style:--area="decide"
-      style:--decide-end="max(var(--space-3), env(safe-area-inset-bottom))"
+      class="border-t border-t-border-hairline px-space-4 pt-space-3 pb-space-3"
     >
-      <RowFault reason={problem} />
-      {#if note === null}
-        <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
-          {#if ended}
-            <Button
-              label={commonWords.tryAgain}
-              onclick={tryAgain}
-              pending={retrying}
-              pendingLabel="Starting…"
-              size="sm"
-            />
-          {:else if deciding && approveTo}
-            <Button
-              label="Approve → {stageLabel(approveTo.name)}"
-              onclick={approve}
-              pending={approving}
-              pendingLabel="Approving…"
-              size="sm"
-            />
-          {/if}
-          {#if deciding && backTo}
-            <Button
-              disabled={approving || retrying}
-              label="Send back"
-              onclick={() => {
-                note = "";
-                requestAnimationFrame(() => noteField?.focus());
-              }}
-              size="sm"
-              variant="outline"
-            />
-          {/if}
-        </div>
-      {:else if backTo}
-        <form
-          class="flex flex-col gap-space-2"
-          onsubmit={(event) => {
-            event.preventDefault();
-            sendBack();
-          }}
-        >
-          <Textarea
-            aria-describedby="send-back-{task.id}-goes"
-            aria-label="What should change"
-            autocomplete="off"
-            onkeydown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                note = null;
-              } else if (
-                event.key === "Enter" &&
-                (event.metaKey || event.ctrlKey)
-              ) {
-                event.preventDefault();
-                sendBack();
-              }
-            }}
-            placeholder="What should change"
-            rows={2}
-            bind:ref={noteField}
-            bind:value={note}
-          />
-          <p class="m-0 type-meta text-ink-muted" id="send-back-{task.id}-goes">
-            Goes on the task as your comment.
-          </p>
-          <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
-            <Button
-              disabled={!note.trim()}
-              label="Send back → {stageLabel(backTo.name)}"
-              pending={sending}
-              pendingLabel="Sending back…"
-              size="sm"
-              type="submit"
-            />
-            <Button
-              disabled={sending}
-              label="Cancel"
-              onclick={() => {
-                note = null;
-              }}
-              size="sm"
-              variant="ghost"
-            />
-          </div>
-        </form>
-      {/if}
+      <TaskDecide {onchanged} {onmove} {projectId} {stages} {task} />
     </div>
   {/if}
 </section>

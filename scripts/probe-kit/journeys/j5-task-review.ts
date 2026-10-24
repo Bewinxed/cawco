@@ -54,7 +54,7 @@ const START_TASK = /JOURNEY-START (tsk-\d+)/;
 /** Only an attempt's brief opens this way (work-items.ts). */
 const ATTEMPT = /attempt at (tsk-\d+), “([^”]+)”/;
 const GATE_CHECK = "iOS build compiles";
-/** The review's actions (TaskReview.svelte): Approve → its next stage, Send back → its stage. */
+/** The decision's actions (TaskDecide.svelte): Approve → its next stage, Send back → its stage. */
 const APPROVE = /^Approve →/;
 const SEND_BACK_TO = /^Send back →/;
 /** The hub's end of a wait it declared (work-items.ts `endWait`). */
@@ -274,6 +274,12 @@ async function walk(leg: Leg): Promise<void> {
     page
       .getByRole("region", { name: `Review ${id}` })
       .filter({ visible: true });
+  /** The decision under it: the pane's foot, or the thread card's last band. */
+  const decide = (id: string) =>
+    page
+      .getByRole("group", { name: `Decide ${id}` })
+      .filter({ visible: true })
+      .first();
   /** Needs you's row for this leg's task, by its whole title: another leg's task of the same words may wait there too. */
   const needsRow = (title: string) =>
     page
@@ -292,7 +298,7 @@ async function walk(leg: Leg): Promise<void> {
 
   await leg.step(
     "Approve",
-    () => review(ios.id).getByRole("button", { name: APPROVE }).click(),
+    () => decide(ios.id).getByRole("button", { name: APPROVE }).click(),
     () =>
       eventually(
         "the hub moves the task to done",
@@ -328,7 +334,7 @@ async function walk(leg: Leg): Promise<void> {
   await leg.step(
     "Send it back with what should change",
     async () => {
-      const pane = review(notes.id);
+      const pane = decide(notes.id);
       await pane.getByRole("button", { name: "Send back" }).click();
       await pane.getByLabel("What should change").fill(changes);
       await pane.getByRole("button", { name: SEND_BACK_TO }).click();

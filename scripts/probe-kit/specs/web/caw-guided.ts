@@ -6,8 +6,8 @@
  * project's starters, in the built dashboard, read from the engine:
  *
  * 1. At 1440, 680 and 390, light and dark, a project just made from a
- *    folder opens with Caw's panel: his greeting, the starters as
- *    suggestion rows each as wide as its words, and the session Composer
+ *    folder opens with Caw's panel: his greeting, the starters as cards
+ *    every one one size, and the session Composer
  *    named for him (the caret in it at a desk); no plain input anywhere.
  *    On a desk the panel is docked: beside the page where it has the room
  *    (1440), under it across the column where it has not (680, the same
@@ -21,7 +21,8 @@
  *    the panel's room ends over its composer.
  * 2. The head's Ask Caw (the views bar's "+" on a phone) opens the panel on
  *    a new thread, its composer taking the caret; no popover but Caw's is
- *    open, and no "First prompt" field is in the DOM. Spin off stays.
+ *    open, and no "First prompt" field is in the DOM. New session stands
+ *    beside it, and no Spin off.
  * 3. A starter's words go in the composer; the send opens the project's
  *    Setup thread on the hub (a project made from a folder starts Caw's
  *    setup with its first words). Words he could not be woken for say why
@@ -179,7 +180,7 @@ const legPage = async (kit: Kit, { view, width }: Leg, theme: Theme) => {
 /** The panel, its parts, the head and the board, as the engine lays them out. */
 const readPanel = (page: Page) =>
   page.evaluate(
-    ([panelSel, firstPromptLabel, spinOffLabel]) => {
+    ([panelSel, firstPromptLabel, newSessionLabel]) => {
       const box = (el: Element | null | undefined) => {
         const r = el?.getBoundingClientRect();
         return r
@@ -340,9 +341,9 @@ const readPanel = (page: Page) =>
         ),
         act: words(document.querySelector("[data-new-session]")),
         // Its label and its pending wording stand in one cell (DESIGN.md, Buttons).
-        spinOff: [
+        newSession: [
           ...document.querySelectorAll('[data-slot="project-head"] button'),
-        ].some((button) => words(button).startsWith(spinOffLabel)),
+        ].some((button) => words(button).startsWith(newSessionLabel)),
         // Each column of the board as it shows: a column scrolled past the
         // board's edge is cut by it.
         columns: [...document.querySelectorAll('[data-slot="column"]')]
@@ -390,7 +391,7 @@ const readPanel = (page: Page) =>
           : null,
       };
     },
-    [PANEL, spawnWords.firstPrompt, projectWords.spinOff] as const
+    [PANEL, spawnWords.firstPrompt, projectWords.newSession] as const
   );
 
 type PanelRead = Awaited<ReturnType<typeof readPanel>>;
@@ -449,10 +450,10 @@ const clear = (kit: Kit, tag: string, at: PanelRead) =>
     })
   );
 
-/** The rows, on a leg: as wide as their words, one glyph style, their reasons and edges read, curly apostrophes. */
+/** The cards, on a leg: one size, the column's width, one glyph style, their reasons and edges read, curly apostrophes. */
 const rowChecks = (kit: Kit, tag: string, at: PanelRead) => {
   kit.check(
-    `${tag}: the starters are suggestion rows, each as wide as its words`,
+    `${tag}: the starters are cards, every one one size inside the column`,
     at.starters.length > 0 &&
       at.column !== null &&
       at.starters.every(
@@ -460,10 +461,9 @@ const rowChecks = (kit: Kit, tag: string, at: PanelRead) => {
           row.box !== null &&
           row.box.height > 0 &&
           row.text.length > 0 &&
-          row.box.right <= (at.column?.right ?? 0) + 0.5
-      ) &&
-      at.starters.some(
-        (row) => (row.box?.width ?? 0) < (at.column?.width ?? 0) - 1
+          row.box.right <= (at.column?.right ?? 0) + 0.5 &&
+          Math.abs(row.box.width - (at.starters[0]?.box?.width ?? 0)) <= 0.5 &&
+          Math.abs(row.box.height - (at.starters[0]?.box?.height ?? 0)) <= 0.5
       ),
     JSON.stringify({
       column: at.column?.width,
@@ -580,9 +580,9 @@ const dockChecks = (
   kit.check(`${tag}: the caret is in his composer`, at.caretInComposer);
   clear(kit, tag, at);
   kit.check(
-    `${tag}: the head's actions are Ask Caw and Spin off`,
-    at.act === "Ask Caw" && at.spinOff,
-    JSON.stringify({ act: at.act, spinOff: at.spinOff })
+    `${tag}: the head's actions are Ask Caw and New session`,
+    at.act === projectWords.askCaw && at.newSession,
+    JSON.stringify({ act: at.act, newSession: at.newSession })
   );
   const foot = at.shell ? at.vh - at.shell.bottom : Number.NaN;
   if (name === "1440") {
@@ -1394,9 +1394,10 @@ const unbrokenName = async (kit: Kit, setup: Setup) => {
 };
 
 /**
- * The routines' empty view: its starter chips stand on its composer field's
- * start edge, at 1280 and on each side of the drawer line (900, 899), where
- * the Composer's own margins change.
+ * The routines' empty view: no composer stands in its block (the owner's
+ * pin: "why is the composer even there?"); its line and its starter cards,
+ * the project's then Ask Caw for a routine, stand on one start edge, each
+ * card one size, at 1280 and on each side of the drawer line (900, 899).
  */
 const routinesEdge = async (kit: Kit, setup: Setup, width: number) => {
   const page = await legPage(
@@ -1408,11 +1409,9 @@ const routinesEdge = async (kit: Kit, setup: Setup, width: number) => {
   // workspace's boundary Caw never answers, so nothing he did gives Jev a
   // routine to offer.
   const send = await hubFrames(page);
-  await open(
-    page,
-    `${setup.url}?view=routines`,
-    '[data-slot="ask-caw"] form[data-slot="cin"]'
-  );
+  const STARTERS =
+    '[data-block="routines"] [data-slot="starters"] [data-slot="starter"]';
+  await open(page, `${setup.url}?view=routines`, STARTERS);
   send({
     kind: "starters.changed",
     place: "routines",
@@ -1433,25 +1432,38 @@ const routinesEdge = async (kit: Kit, setup: Setup, width: number) => {
     ],
   });
   await page
-    .locator('[data-slot="routine-starters"] button')
-    .first()
+    .locator(STARTERS)
+    .nth(2)
     .waitFor({ timeout: 20_000 })
     .catch(() => undefined);
   await settle(page, 400);
-  const read = await page.evaluate(() => ({
-    chips: [
-      ...document.querySelectorAll('[data-slot="routine-starters"] button'),
-    ].map((chip) => chip.getBoundingClientRect().left),
-    field:
-      document
-        .querySelector('[data-slot="ask-caw"] form[data-slot="cin"]')
-        ?.getBoundingClientRect().left ?? null,
-  }));
+  const read = await page.evaluate((cards) => {
+    const block = document.querySelector('[data-slot="starters"]');
+    const boxes = [...document.querySelectorAll(cards)].map((card) =>
+      card.getBoundingClientRect()
+    );
+    return {
+      composer: block?.querySelector('form[data-slot="cin"]') !== null,
+      line:
+        block
+          ?.querySelector('[data-slot="work-column-line"]')
+          ?.getBoundingClientRect().left ?? null,
+      lefts: boxes.map((box) => box.left),
+      sizes: boxes.map(
+        (box) => `${Math.round(box.width)}x${Math.round(box.height)}`
+      ),
+      last:
+        [...document.querySelectorAll(cards)].at(-1)?.textContent?.trim() ?? "",
+    };
+  }, STARTERS);
   kit.check(
-    `${width} routines: the starter chips and the composer's field start on one edge`,
-    read.field !== null &&
-      read.chips.length > 0 &&
-      Math.abs((read.chips[0] ?? -99) - read.field) <= 1,
+    `${width} routines: no composer in the empty block; its line and starter cards start on one edge, every card one size`,
+    !read.composer &&
+      read.line !== null &&
+      read.lefts.length === 3 &&
+      Math.abs((read.lefts[0] ?? -99) - read.line) <= 1 &&
+      new Set(read.sizes).size === 1 &&
+      read.last === projectWords.askForRoutine,
     JSON.stringify(read)
   );
   await page.close();

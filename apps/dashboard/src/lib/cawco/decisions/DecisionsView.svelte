@@ -23,10 +23,10 @@
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
+  import WorkColumnEmpty from "#lib/cawco/project/WorkColumnEmpty.svelte";
   import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -246,61 +246,47 @@
             <Skeleton class="w-full" height="board" radius="card" />
           {/if}
         {:else if decisions.problem && !list}
-          <div data-slot="state">
-            <EmptyState
-              icon={IconDecisions}
-              line={words.unavailableLine(projectName, decisions.problem)}
-              title={words.unavailable}
+          <WorkColumnEmpty
+            data-slot="state"
+            icon={IconDecisions}
+            line={words.unavailableLine(projectName, decisions.problem)}
+            title={words.unavailable}
+          >
+            <Button onclick={() => decisions.read()} variant="outline"
+              >{words.retry}</Button
             >
-              {#snippet action()}
-                <Button onclick={() => decisions.read()} variant="outline"
-                  >{words.retry}</Button
-                >
-              {/snippet}
-            </EmptyState>
-          </div>
+          </WorkColumnEmpty>
         {:else if empty && canTalk}
-          <div class="max-w-c-starters-w">
-            <EmptyState
-              actionWidth="fill"
-              line={words.emptyCaw}
-              title={words.empty}
-            >
-              {#snippet mark()}
-                <div
-                  data-slot="caw-80"
-                  class="mb-space-3 grid justify-items-start"
-                  data-share="caw:{projectId}"
-                  out:sitDown|global
-                >
-                  <CawSeat {lead} {projectId} {projectName} size={80} />
-                </div>
-              {/snippet}
-              {#snippet action()}
-                <!-- The ask is a starter: it opens his panel with its words
-                     in his composer, nothing sent. -->
-                <StarterCards
-                  onpick={(text) => lead.ask(text, "decisions")}
-                  {starters}
-                />
-              {/snippet}
-            </EmptyState>
-          </div>
+          <!-- The work column, centred in the tab (WorkColumnEmpty). -->
+          <WorkColumnEmpty line={words.emptyCaw} title={words.empty}>
+            {#snippet mark()}
+              <div
+                data-slot="caw-80"
+                class="mb-space-3 grid justify-items-start"
+                data-share="caw:{projectId}"
+                out:sitDown|global
+              >
+                <CawSeat {lead} {projectId} {projectName} size={80} />
+              </div>
+            {/snippet}
+            <!-- The ask is a starter: it opens his panel with its words
+                 in his composer, nothing sent. -->
+            <StarterCards
+              onpick={(text) => lead.ask(text, "decisions")}
+              {starters}
+            />
+          </WorkColumnEmpty>
         {:else if empty}
-          <div data-slot="state">
-            <EmptyState
-              icon={IconDecisions}
-              line={words.emptySession}
-              title={words.empty}
+          <WorkColumnEmpty
+            data-slot="state"
+            icon={IconDecisions}
+            line={words.emptySession}
+            title={words.empty}
+          >
+            <Button onclick={() => newSession({ projectId })} variant="outline"
+              >{words.newSession}</Button
             >
-              {#snippet action()}
-                <Button
-                  onclick={() => newSession({ projectId })}
-                  variant="outline">{words.newSession}</Button
-                >
-              {/snippet}
-            </EmptyState>
-          </div>
+          </WorkColumnEmpty>
         {:else}
           <!-- A page published while the list is open arrives as rows do
                (motion/rows); the tiles it moves slide to their places. -->

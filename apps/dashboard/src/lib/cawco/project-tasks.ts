@@ -605,6 +605,17 @@ export const retryTask = (
     json("POST", parentInstanceId ? { parentInstanceId } : {})
   );
 
+/**
+ * An attempt at a task no session has worked yet: its session, in a
+ * workspace of its own. The hub refuses, in a sentence, when it can't
+ * start one (no machine with the checkout online, no lead to report to).
+ */
+export const startTask = (
+  projectId: string,
+  taskId: string
+): Promise<AttemptStart> =>
+  send(`${one(projectId, taskId)}/attempts`, json("POST", {}));
+
 /** A file of the project's folder as its bytes, for an image, video or audio output. */
 export const folderRawHref = (projectId: string, path: string): string =>
   `${base(projectId)}/folder/raw?${new URLSearchParams({ path })}`;

@@ -77,44 +77,41 @@
    * column in a narrow container; wider, as many columns of at least
    * --c-starter-w as fit (3 + 1, then 4 across at --c-starters-w).
    *
-   * `rows`: in Caw's panel, the same tiles as suggestion rows, one under the
-   * other, each as wide as its words and no wider (the owner's pin 22), its
-   * reason under its words when the hub wrote one: a smaller caption in the
-   * muted ink, so the words lead and the reason says why (pin 10).
+   * Every card one size wherever they stand (the owner's pin: "why are
+   * these not having the consistent size?"): in Caw's panel, as narrow as
+   * one column, each card the panel's width and the tallest's height. A
+   * card's reason (`reasons`, Caw's panel), when the hub wrote one, stands
+   * under its words in the
+   * muted meta caption, so the words lead and the reason says why.
    */
   let {
     starters,
     onpick,
-    rows = false,
+    reasons = false,
   }: {
     starters: (Starter & { reason?: string })[];
     onpick: (text: string) => void;
-    rows?: boolean;
+    /** Each card's reason under its words (Caw's panel). */
+    reasons?: boolean;
   } = $props();
 </script>
 
-<div
-  data-slot="starter-cards"
-  class="group/starters @container w-full"
-  data-rows={rows || undefined}
->
-  <!-- One column in a narrow container; wider, as many columns as fit.
-       Suggestion rows (`rows`): one under the other, each as wide as its
-       words (never past the column), at a row's height rather than a
-       card's. -->
+<div data-slot="starter-cards" class="@container w-full">
+  <!-- One column in a narrow container; wider, as many columns as fit,
+       every row the tallest card's height. -->
   <ul
     data-slot="cards"
-    aria-label={rows ? "Things to ask Caw" : "Starters"}
-    class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols) group-data-rows/starters:flex group-data-rows/starters:flex-col group-data-rows/starters:items-start"
+    aria-label="Starters"
+    class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols)"
     style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
     style:--cards-rows="1fr"
   >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
-      <li class="group-data-rows/starters:max-w-full">
+      <li class="min-w-0">
         <button
           data-slot="starter"
-          class="select-none mark-line press-tint type-label flex size-full min-h-c-starter-h items-box-start gap-space-2 rounded-lg border border-solid border-border-row-outline bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-c-btn-h group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-md group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+          class="select-none mark-line press-tint type-label flex size-full min-h-c-starter-h items-box-start gap-space-2 rounded-lg border border-solid border-border-row-outline bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
           onclick={() => onpick(starter.text)}
           type="button"
         >
@@ -129,7 +126,7 @@
             <span data-slot="starter-text" class="wrap-anywhere"
               >{starter.text}</span
             >
-            {#if rows && starter.reason}
+            {#if reasons && starter.reason}
               <span
                 data-slot="starter-reason"
                 class="type-meta text-pretty wrap-anywhere text-ink-muted"

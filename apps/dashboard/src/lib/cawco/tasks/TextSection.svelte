@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { Component } from "svelte";
+  import type { SVGAttributes } from "svelte/elements";
   /**
    * One of a task file's own text sections (its description, its acceptance
    * criteria): read as markdown, edited as the text it is. Save writes it
@@ -13,11 +15,14 @@
 
   let {
     heading,
+    icon: Glyph,
     text,
     empty,
     onsave,
   }: {
     heading: string;
+    /** Its glyph, leading its heading. */
+    icon: Component<SVGAttributes<SVGSVGElement>>;
     text: string;
     /** What the section says while it holds nothing, and why it would. */
     empty: string;
@@ -46,7 +51,8 @@
 </script>
 
 <section class="flex flex-col gap-space-2">
-  <h3 class={sectionHeadVariants({ inset: "flush" })}>
+  <h3 class={sectionHeadVariants({ inset: "pane" })}>
+    <Glyph aria-hidden="true" />
     <span>{heading}</span>
     {#if draft === null}
       <Button

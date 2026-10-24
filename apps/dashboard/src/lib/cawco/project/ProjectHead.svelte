@@ -24,18 +24,21 @@
    * 48px, sitting at the head's end so the name's start edge stays where it
    * is when he stands over the empty board instead, Ask Caw (his panel on a
    * new thread, the caret in his composer: work in a project starts by
-   * telling Caw, PRD §5.6), Spin off, and `⋯`
+   * telling Caw, PRD §5.6), New session (the New Session form on the
+   * project's checkout, outlined, so Ask Caw stays the head's one coral
+   * action; the owner's pin on Spin off: "what the fuck is this button
+   * supposed to be?"), and `⋯`
    * holding Pick stages (while the code
    * stages stand in), Project details…, Caw's settings (CawPanel, off `⋯`:
    * a popover on a desk, the bottom sheet on touch), Spend, Other people's
    * repositories (the upstream choice: the fleet's answer until the project
-   * picks its own) and Forget (and, under 640px, Spin off, New task, Filter
+   * picks its own) and Forget (and, under 640px, New session first, New task, Filter
    * tasks… and Ask Caw for a view), each with its glyph. One tray stands
    * under the head at a time: the details or a forget.
    *
    * Under 640px the head carries no button but `⋯`: Ask Caw is the
    * coral "+" of the page's views bar (ViewBar), which opens Caw's panel as
-   * this one does, and Spin off is in `⋯` (Apple HIG,
+   * this one does, and New session is in `⋯` (Apple HIG,
    * Toolbars: "Prioritize only the most important items for inclusion in
    * the main toolbar area … Create a More menu to include additional
    * items").
@@ -83,10 +86,10 @@
   import {
     IconColumns,
     IconFilter,
-    IconFork,
     IconInfo,
     IconMore,
     IconPlus,
+    IconSessionAdd,
     IconSettings,
     IconSparkles,
     IconTrash,
@@ -298,22 +301,23 @@
   });
 
   /**
-   * Spin off: the New Session form at `trigger` (the button, or `⋯` on a
-   * phone, where the menu holds it), as a spin-off on the project's
-   * checkout. Harness, model and mode are the form's own, and Start waits
-   * for a mode.
+   * New session: the New Session form at `trigger` (the button, or `⋯` on a
+   * phone, where the menu holds it), on the project and its checkout when
+   * it has one. Harness, model, mode and lifetime are the form's own (a
+   * spin-off is its own choice there), and Start waits for a mode.
    */
-  function spinOff(trigger: HTMLElement | null) {
-    if (!(primary && trigger)) {
+  function openNewSession(trigger: HTMLElement | null) {
+    if (!trigger) {
       return;
     }
     newSession(
-      {
-        machineId: primary.machineId,
-        cwd: primary.path,
-        projectId: project.id,
-        spinOff: true,
-      },
+      primary
+        ? {
+            machineId: primary.machineId,
+            cwd: primary.path,
+            projectId: project.id,
+          }
+        : { projectId: project.id },
       trigger
     );
   }
@@ -475,18 +479,18 @@
       layout="wide"
       press="pressable"
       data-new-session
-      onclick={() => lead.newThread()}>Ask Caw</Button
+      onclick={() => lead.newThread()}>{projectWords.askCaw}</Button
     >
-    {#if primary}
-      <Button
-        aria-haspopup="dialog"
-        layout="wide"
-        press="pressable"
-        label={projectWords.spinOff}
-        onclick={(event) => spinOff(event.currentTarget)}
-        variant="outline"
-      />
-    {/if}
+    <!-- A session without Caw, on the project: the New Session form. -->
+    <Button
+      aria-haspopup="dialog"
+      data-new-session-form
+      layout="wide"
+      press="pressable"
+      label={projectWords.newSession}
+      onclick={(event) => openNewSession(event.currentTarget)}
+      variant="outline"
+    />
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
@@ -504,7 +508,7 @@
         {/snippet}
       </DropdownMenu.Trigger>
       <!-- A forget asked here keeps the focus its tray took, and the New
-           Session form a Spin off opened keeps the focus it took: the menu
+           Session form New session opened keeps the focus it took: the menu
            doesn't hand it back to `⋯` as it closes. -->
       <DropdownMenu.Content
         align="end"
@@ -516,12 +520,10 @@
         }}
       >
         {#if narrow.current}
-          {#if primary}
-            <DropdownMenu.Item onSelect={() => spinOff(more)}>
-              <IconFork />
-              <span>{projectWords.spinOff}</span>
-            </DropdownMenu.Item>
-          {/if}
+          <DropdownMenu.Item onSelect={() => openNewSession(more)}>
+            <IconSessionAdd />
+            <span>{projectWords.newSession}</span>
+          </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={onnewtask}>
             <IconPlus />
             <span>New task</span>
