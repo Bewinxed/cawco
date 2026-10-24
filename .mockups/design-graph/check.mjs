@@ -407,26 +407,29 @@ async function reviewFixes(browser, engine) {
   }
   // Third pass, (a): a door's drawing never leaves the well, at any frame of its slide in or out (sampled every
   // frame by requestAnimationFrame), while its touch layer still reaches past its band.
-  for (const [w, h] of [[1440, 900], [390, 844]]) {
+  for (const [w, h] of [[1440, 900], [390, 844], [320, 700]]) {
     const V = w + "-" + engine + "-door-slide";
     const { page, ev } = await openPage(browser, w, h);
     const res = await ev(() => new Promise((done) => {
-      const g = document.querySelector(".gsec[data-current] .graph"), well = g.parentNode, frames = [], worst = { out: 0, raw: 0, seen: 0, flips: 0, band: {} };
+      const g = document.querySelector(".gsec[data-current] .graph"), well = g.parentNode, frames = [], worst = { out: 0, raw: 0, seen: 0, flips: 0, band: {}, stale: 0 };
       const sample = () => {
         const wb = well.getBoundingClientRect();
-        for (const f of well.querySelectorAll(".door-face")) { if (+getComputedStyle(f).opacity === 0) continue; worst.seen++; const d = __k.drawn(f), q = f.getBoundingClientRect(); worst.raw = Math.max(worst.raw, wb.top - q.top, q.bottom - wb.bottom); const out = Math.max(wb.left - d.left, d.right - wb.right, wb.top - d.top, d.bottom - wb.bottom, 0); if (out > worst.out) { worst.out = out; worst.door = f.textContent; worst.t = getComputedStyle(f).translate; } }
-        for (const d of well.querySelectorAll(".door[data-on]")) { const k = d.dataset.machine; if (worst.band[k] && worst.band[k] !== d.dataset.band) worst.flips++; worst.band[k] = d.dataset.band; }
-        for (const d of well.querySelectorAll(".door:not([data-on])")) delete worst.band[d.dataset.machine];
+        for (const f of well.querySelectorAll(".door-face")) { if (+getComputedStyle(f).opacity === 0) continue; worst.seen++;
+          // Its clip belongs to the band it stands in: no reach out over the well's edge on that band's side.
+          { const v = getComputedStyle(f).clipPath.match(/inset\(([^)]*)\)/)[1].split(" round ")[0].trim().split(/\s+/).map(parseFloat), top = v[0], bot = v[2] ?? v[0], band = f.parentNode.dataset.band; if ((band === "top" && top < -0.01) || (band === "bottom" && bot < -0.01)) worst.stale++; } const d = __k.drawn(f), q = f.getBoundingClientRect(); worst.raw = Math.max(worst.raw, wb.top - q.top, q.bottom - wb.bottom); const out = Math.max(wb.left - d.left, d.right - wb.right, wb.top - d.top, d.bottom - wb.bottom, 0); if (out > worst.out) { worst.out = out; worst.door = f.textContent; worst.t = getComputedStyle(f).translate; } }
+        // A band change of any door whose face shows at all (coming, going or standing).
+        for (const d of well.querySelectorAll(".door")) { const k = d.dataset.machine || d.dataset.more, o = +getComputedStyle(d.querySelector(".door-face")).opacity; if (o > 0 && worst.band[k] && worst.band[k] !== d.dataset.band) worst.flips++; worst.band[k] = d.dataset.band; }
         frames.push(1);
       };
       // Doors come (scrolled to the foot), go (back to the top), and come again, each sampled to its end.
-      const steps = [() => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }, () => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }];
+      // Each jump left to settle, then the same jumps 60ms apart, so doors change band mid-fade too.
+      const steps = [() => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }, () => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }, () => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }, () => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }];
       let i = 0, t0 = performance.now();
-      const tick = (now) => { sample(); if (now - t0 > 320) { if (i === steps.length) { done({ frames: frames.length, worst }); return; } steps[i++](); g.dispatchEvent(new Event("scroll")); t0 = now; } requestAnimationFrame(tick); };
+      const tick = (now) => { sample(); if (now - t0 > (i >= 4 && i < steps.length ? 60 : 320)) { if (i === steps.length) { done({ frames: frames.length, worst }); return; } steps[i++](); g.dispatchEvent(new Event("scroll")); t0 = now; } requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
     }));
     const hit = await ev(() => { const d = document.querySelector(".gsec[data-current] .door[data-on]"); if (!d) return null; const pb = getComputedStyle(d, "::before"); return { door: Math.round(d.getBoundingClientRect().height), layer: pb.content !== "none" ? Math.round(parseFloat(pb.height)) : null }; });
-    ok(V, "no frame of a door's slide in or out, nor of a band change (" + res.worst.flips + " seen), draws past the well, its shadow's reach included (" + res.frames + " frames, " + res.worst.seen + " face samples; the face itself rode up to " + Math.round(res.worst.raw * 100) / 100 + "px out, its drawing at most " + Math.round(res.worst.out * 100) / 100 + "px)", res.frames >= 12 && res.worst.seen > 20 && res.worst.raw > 1 && res.worst.out <= 0.5, JSON.stringify(res));
+    ok(V, "no frame of a door's slide in or out, nor of a band change (" + res.worst.flips + " seen, settled and mid-fade), draws past the well or keeps the old band's clip (" + res.worst.stale + " stale), its shadow's reach included (" + res.frames + " frames, " + res.worst.seen + " face samples; the face itself rode up to " + Math.round(res.worst.raw * 100) / 100 + "px out, its drawn reach at most " + Math.round(res.worst.out * 100) / 100 + "px: 0px)", res.frames >= 12 && res.worst.seen > 20 && res.worst.raw > 1 && res.worst.flips > 0 && res.worst.out <= 0.01 && res.worst.stale === 0, JSON.stringify(res));
     if (w === 390) ok(V, "its touch layer is still 44px over its 28px door", !!hit && hit.door === 28 && hit.layer === 44, JSON.stringify(hit));
     await page.close();
   }
@@ -481,6 +484,19 @@ async function reviewFixes(browser, engine) {
     field.corner = field.focused = field.points.every(Boolean);
     ok(V, "graph face, timeline face and popover: every pressable thing takes a press over 44 × 44 (slab names, chips, states, doors, facts, bars, tabs, Hide, play, loop, fields)", graph.length === 0 && tl.length === 0 && pop.length === 0, graph.concat(tl, pop).join(", "));
     ok(V, "the Duration field is a " + field.w + "×" + field.h + " press: its wrapper takes a press at each edge and inside its corners and hands it to its input", field.w >= 44 && field.h >= 44 && field.corner && field.focused, JSON.stringify(field));
+    await page.close();
+  }
+  // Fourth review, #2: the mock page's own fields take a press over 44 × 44 by elementFromPoint at 390 and 320,
+  // each brought into the page's view first (the drawer covers the page's foot).
+  for (const [w, h] of [[390, 844], [320, 700]]) {
+    const V = w + "-" + engine + "-mock-fields";
+    const { page, ev } = await openPage(browser, w, h);
+    const res = await ev(async () => {
+      const out = [], all = [...document.querySelectorAll(".stage-wrap:not([hidden]) .stage .input")];
+      for (const el of all) { el.scrollIntoView({ block: "center" }); await new Promise((r) => requestAnimationFrame(r)); const s = __k.hitSpan(el); out.push({ w: s.w, h: s.h, by: s.by, box: Math.round(el.getBoundingClientRect().height) }); }
+      return out;
+    });
+    ok(V, "every one of the mock form's " + res.length + " fields takes a press over 44 × 44 (" + res.map((x) => x.w + "×" + x.h).join(", ") + ")", res.length >= 5 && res.every((x) => x.w >= 43.5 && x.h >= 43.5), JSON.stringify(res));
     await page.close();
   }
   // Third review, #4: a pinned slab name never stands on a state's words, scrolled through the whole view at 390

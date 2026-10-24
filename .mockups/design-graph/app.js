@@ -762,15 +762,16 @@ function drawDoors(c) {
     box.append(d);
   }
 }
-// A door that is showing and changes band takes the new band's clip and place in the same frame, its face's
-// transitions held for that frame, so no frame draws the old band's clip at the new place (the third review:
-// a flipped door's shadow reached below the well for a few frames).
+// Every door, shown, coming or going: the new band's clip, slide and place are committed with the face's
+// transitions off (a going door's last fade with them, so nothing of it shows at the new band), then the
+// transitions return before the door's data-on is set, so a coming door starts from the new band's own
+// starting clip (the fourth review: an entering door kept the old band's clip for 5 to 9 frames).
 function setBand(d, band) {
   if (d.dataset.band === band) return;
   const f = d.querySelector(".door-face");
-  if (!d.hasAttribute("data-on") || !f) { d.dataset.band = band; return; }
-  f.style.transition = "none"; d.dataset.band = band; void f.offsetWidth;
-  requestAnimationFrame(() => { f.style.transition = ""; });
+  if (!f) { d.dataset.band = band; return; }
+  f.style.transition = "none"; d.dataset.band = band; void getComputedStyle(f).clipPath; void f.offsetWidth;
+  f.style.transition = "";
 }
 // The chevron points out through the edge its door stands on.
 const DOOR_TURN = { bottom: "0deg", top: "180deg", right: "-90deg", left: "90deg" };
