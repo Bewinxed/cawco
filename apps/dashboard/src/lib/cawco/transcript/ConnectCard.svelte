@@ -1,201 +1,150 @@
 <script lang="ts">
   /**
-   * Option B of the connect ask (connect-ask.ts): one card in the
-   * transcript, at the point the agent asked, that holds every state in
-   * place (v0's paused agent action; Replit's Connect step as the consent).
-   * Its head is a rail-led row in the tool rows' recipe; while it asks, the
-   * in-page ask's tile hangs under it from the text column to the row's end,
-   * as wide as the tool rows beside it (DESIGN.md, Asking in the page:
-   * hairline, `radius-md`, the raised shadow, 12px in); only the why keeps
-   * the reading measure. The composer stays a pill.
+   * Option C of the connect ask (connect-ask.ts): a card in the transcript,
+   * at the point the agent asked, that turns into the record where it stands
+   * (Cofounder's card in the conversation; Tines's two marks at its head).
+   * The composer stays free. It is the house's ask in the page (DESIGN.md,
+   * Asking in the page: hairline, `radius-md`, the raised shadow, 12px in),
+   * hung at the text column as the tool rows are: who connects to what, what
+   * it reads and cannot do, the whole sign-in address, who keeps it and for
+   * how long, then Connect and a worded Not now. There is no Other line:
+   * words for the agent go in the composer.
    *
-   * Asked, the tile names the service, the agent's why and the address's
-   * host; Connect unfolds the consent step in the same tile, the whole
-   * address with its host in strong ink and what opens, and only Continue
-   * opens it. Settled, the tile is gone and the head is the record
-   * (ConnectRow), which a lapsed connection turns to signed out in place.
-   *
-   * Drawn only by its states files until the hub raises a connect ask.
+   * Settled, the card is gone and the record (ConnectRow) stands in its
+   * place. Drawn only by its states files until the hub raises a connect ask.
    */
-  import { askWords } from "@cawco/core/words/asks";
+  import { LogoFigma, LogoGoogleDrive } from "@cawco/icons/marks";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import {
-    OptionGroup,
-    OptionGroupItem,
-  } from "#lib/components/ui/option-group/index.js";
-  import { IconClose, IconKey, IconRefresh } from "#lib/icons.js";
+  import { IconKey, IconTick, IconTransfer } from "#lib/icons.js";
+  import CawFace from "../home/CawFace.svelte";
+  import { hubSeam } from "../hub-live";
+  import RowFault from "../RowFault.svelte";
   import ConnectAddress from "./ConnectAddress.svelte";
-  import ConnectFault from "./ConnectFault.svelte";
   import ConnectRow from "./ConnectRow.svelte";
   import {
     type ConnectAsk,
     type ConnectOutcome,
     connectWords,
-    connectYes,
-    hostOf,
+    faultWords,
   } from "./connect-ask";
 
   let {
     ask,
     asker,
-    consent = false,
+    reaches,
     outcome = null,
   }: {
     /** The ask while it is open. */
     ask: ConnectAsk;
     /** Who asks, as the conversation names its agent. */
     asker: string;
-    /** Connect was pressed: the consent step stands in the tile. */
-    consent?: boolean;
-    /** How it settled; the tile is gone and the head is the record. */
+    /** What the grant reads and cannot do, in one sentence. */
+    reaches: string;
+    /** How it settled: the card is gone and the record stands in its place. */
     outcome?: ConnectOutcome | null;
   } = $props();
 
-  let step = $state<"ask" | "consent" | "waiting" | "failed">(
-    untrack(() => {
-      if (ask.stage === "waiting" || ask.stage === "failed") {
-        return ask.stage;
-      }
-      return consent ? "consent" : "ask";
-    })
-  );
-  /** The Other line: words that go to the agent with Not now. */
-  let otherOpen = $state(false);
-  let other = $state("");
-  const host = $derived(hostOf(ask.url));
+  let stage = $state(untrack(() => ask.stage));
+  let fault = $state(untrack(() => ask.fault ?? null));
+  const hub = hubSeam();
+  /** The answer can reach the daemon that asked: the hub live, and its machine. */
+  const reachable = $derived(hub.state === "connected" && !hub.machineOffline);
+  const MARKS: Record<string, typeof LogoFigma> = {
+    figma: LogoFigma,
+    google: LogoGoogleDrive,
+  };
+  const Mark = $derived(MARKS[ask.server] ?? null);
+
+  function connect(): void {
+    if (!reachable) {
+      return;
+    }
+    fault = null;
+    stage = "waiting";
+  }
 </script>
 
 {#if outcome}
   <ConnectRow {outcome} />
 {:else}
   <div data-slot="connect-card" data-tx-rail class="rail-row">
-    <div
-      data-slot="trow"
-      class="rail-line w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong"
-    >
-      <span data-slot="rail-cell" class="rail-cell">
-        <span
-          data-slot="glyph"
-          class="grid place-items-center text-status-attn-glyph"
-          ><IconKey class="size-icon-md block" /></span
-        >
-      </span>
-      <span
-        class="flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-        >{connectWords.lede(ask.service)}</span
-      >
-      <span
-        class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-normal text-ink-muted text-end"
-        >{asker}</span
-      >
-    </div>
+    <!-- mark-line: the two marks stand on a row of their own, over the words -->
     <section
-      aria-label={connectWords.askFrom(asker)}
-      class="rail-hang mt-space-1 mb-space-2 grid grid-cols-1 gap-space-2 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+      aria-label={ask.again
+        ? connectWords.againFrom(asker)
+        : connectWords.askFrom(asker)}
+      class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
     >
-      {#if step === "failed" && ask.fault}
-        <ConnectFault
-          details={ask.fault.details}
-          next={connectWords.failedNext(asker)}
-          title={ask.fault.said}
-        />
-      {:else if step === "consent"}
-        <!-- Replit's Connect step: what opens, and the whole address,
-             before anything does. -->
-        <p class="m-0 type-label text-ink-strong text-pretty">
-          {connectWords.detail(ask.service, asker)}
-        </p>
-        <p class="m-0 min-w-0 text-size-meta">
-          <ConnectAddress url={ask.url} />
-        </p>
-      {:else}
-        <p
-          class="m-0 max-w-c-measure text-size-body leading-body text-ink-strong text-pretty wrap-anywhere"
+      <!-- Who connects to what: Caw&Co's mark, the arrow between, the
+           service's own mark. -->
+      <div
+        data-slot="marks"
+        class="flex items-center gap-space-2"
+        aria-hidden="true"
+      >
+        <span
+          class="grid flex-none size-c-btn-h-sm place-items-center rounded-sm border border-border-hairline bg-surface-page"
+          ><CawFace size={20} status="idle" /></span
         >
-          {ask.why}
+        <IconTransfer class="size-icon-md flex-none text-ink-muted" />
+        <span
+          class="grid flex-none size-c-btn-h-sm place-items-center rounded-sm border border-border-hairline bg-surface-page"
+          >{#if Mark}<Mark class="size-icon-md block" />{:else}<IconKey
+              class="size-icon-md block"
+            />{/if}</span
+        >
+      </div>
+      <h3
+        class="m-0 type-label font-medium text-ink-strong text-pretty wrap-anywhere"
+      >
+        {ask.again
+          ? connectWords.cardTitleAgain(ask.service)
+          : connectWords.cardTitle(ask.service)}
+      </h3>
+      <p
+        class="m-0 max-w-c-measure text-size-body leading-body text-ink-strong text-pretty wrap-anywhere"
+      >
+        {ask.again && ask.scope ? connectWords.asBefore(ask.scope) : reaches}
+      </p>
+      <p class="m-0 min-w-0 text-size-meta">
+        <ConnectAddress url={ask.url} />
+      </p>
+      <p class="m-0 max-w-c-measure text-size-label text-ink-muted text-pretty">
+        {connectWords.detailCard(ask.service)}
+      </p>
+      {#if stage === "waiting"}
+        <p class="m-0 text-size-meta text-ink-muted" role="status">
+          {connectWords.waiting(ask.provider)}
         </p>
-        <p class="m-0 type-meta text-ink-muted wrap-anywhere">
-          {[host, ...(ask.scopes ?? [])].join(" · ")}
+      {:else if !reachable}
+        <p class="m-0 text-size-meta text-ink-muted" role="status">
+          {connectWords.offline}
         </p>
-        {#if step === "ask"}
-          <!-- The question card's "Other", as the composer's ask has it. -->
-          <div class="flex h-c-input-h min-w-0 items-center gap-space-2">
-            <OptionGroup
-              aria-label={`Other answer to: ${ask.why}`}
-              class="flex-none"
-              value={otherOpen ? ["other"] : []}
-            >
-              <OptionGroupItem
-                onclick={(event: MouseEvent) => {
-                  event.preventDefault();
-                  otherOpen = true;
-                }}
-                value="other"
-              >
-                <span class="min-w-0 wrap-anywhere text-pretty">Other</span>
-              </OptionGroupItem>
-            </OptionGroup>
-            {#if otherOpen}
-              <Input
-                aria-label={askWords.yourAnswerTo(ask.why)}
-                class="flex-1"
-                placeholder={askWords.yourAnswer}
-                bind:value={other}
-              />
-            {/if}
-          </div>
-        {/if}
-        {#if step === "waiting"}
-          <div
-            class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
-            role="status"
-          >
-            <p class="m-0 min-w-0 text-size-label text-ink-muted">
-              {connectWords.waiting(ask.service)}
-            </p>
-            <Button
-              class="flex-none"
-              label={connectWords.openSignIn}
-              pad="none"
-              size="xs"
-              variant="link"
-            />
-          </div>
-        {/if}
+      {:else if stage === "failed" && fault}
+        <RowFault
+          class="text-size-meta"
+          again={fault.kind === "refused" ? undefined : connect}
+          data-connect-fault={fault.kind}
+          reason={faultWords(fault, ask.provider)}
+        />
       {/if}
-      <!-- The Peer Rule's transcript form: the yes and the refusal at the
-           tile's two ends, the one recessed fill, each outlined in its
-           tint. In the consent step the refusal is Back, to the ask. -->
+      <!-- Connect at the start, a worded Not now at the end: a parked call
+           must be answered, so the refusal is a word, not a cross. -->
       <div
         data-slot="choice"
         class="flex justify-between gap-space-8 mt-space-1"
       >
-        {#if step === "consent"}
+        {#if stage === "done"}
           <Button
             answer="approve-strong"
             class="flex-none"
             fit="prompt"
             width="shrink"
-            icon={IconKey}
-            label={connectWords.continueTo(host)}
-            onclick={() => {
-              step = "waiting";
-            }}
+            icon={IconTick}
+            label={connectWords.connectedAs(ask.as ?? ask.service)}
             size="sm"
             variant="secondary"
-          />
-          <Button
-            class="flex-none"
-            fit="prompt"
-            width="shrink"
-            label={connectWords.back}
-            onclick={() => {
-              step = "ask";
-            }}
-            size="sm"
-            variant="ghost"
           />
         {:else}
           <Button
@@ -203,25 +152,27 @@
             class="flex-none"
             fit="prompt"
             width="shrink"
-            icon={step === "failed" ? IconRefresh : IconKey}
-            label={connectYes(step === "failed", !!ask.again)}
-            onclick={() => {
-              step = step === "failed" ? "waiting" : "consent";
-            }}
-            pending={step === "waiting"}
-            pendingLabel={connectWords.connecting}
+            data-connect
+            disabled={!reachable}
+            icon={IconKey}
+            label={ask.again
+              ? connectWords.reconnectService(ask.service)
+              : connectWords.connectService(ask.service)}
+            onclick={connect}
+            pending={stage === "waiting"}
+            pendingLabel={connectWords.signingIn(ask.provider)}
             size="sm"
             variant="secondary"
           />
           <Button
-            answer="deny-strong"
             class="flex-none"
             fit="prompt"
             width="shrink"
-            icon={IconClose}
+            data-connect-decline
+            disabled={!reachable}
             label={connectWords.notNow}
             size="sm"
-            variant="secondary"
+            variant="ghost"
           />
         {/if}
       </div>

@@ -37,7 +37,6 @@
     IconGlobe,
     IconInteract,
     IconKey,
-    IconRefresh,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
@@ -53,9 +52,9 @@
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
+  import RowFault from "../RowFault.svelte";
   import ConnectAddress from "./ConnectAddress.svelte";
-  import ConnectFault from "./ConnectFault.svelte";
-  import { connectWords, connectYes } from "./connect-ask";
+  import { ADD, connectWords, faultWords } from "./connect-ask";
 
   let {
     request,
@@ -126,15 +125,64 @@
 
   /**
    * A connect ask (connect-ask.ts), drawn only by its states files until the
-   * hub raises one: the service, the agent's why and the whole sign-in
-   * address, with Connect and Not now at the row's two ends. Its stage is
-   * the request's; a press here moves it on in place (Connect to waiting,
-   * Try again to waiting), opening nothing, since no live ask reaches this
-   * branch yet. Not now declines, with the Other line's words, as a
-   * browser ask's Deny does.
+   * hub raises one, in two of its three drawings: A, the gate, the access
+   * offered as a choice (`scopes`); B, the pick, the accounts the hub keeps
+   * for the service as a list (`accounts`). The agent's why, the whole
+   * sign-in address, then Connect and Not now at the row's two ends. Its
+   * stage is the request's; a press here moves it on in place (Connect to
+   * waiting, a kept account straight to done), opening nothing, since no
+   * live ask reaches this branch yet. Not now declines, with the Other
+   * line's words, as a browser ask's Deny does, and stays live while the
+   * provider's page is open: nothing holds that answer but the person.
    */
   const connect = $derived(request.connectAsk ?? null);
   let connectStage = $state(untrack(() => request.connectAsk?.stage ?? null));
+  let connectFault = $state(untrack(() => request.connectAsk?.fault ?? null));
+  /** A's access, as picked: the one offered, or the first of a choice. */
+  let connectScope = $state(
+    untrack(
+      () => request.connectAsk?.scope ?? request.connectAsk?.scopes?.[0] ?? ""
+    )
+  );
+  /** B's account, as picked: the one asked with, the first kept, or a new one. */
+  let connectAccount = $state(
+    untrack(
+      () =>
+        request.connectAsk?.picked ??
+        request.connectAsk?.accounts?.find((one) => !one.expired)?.email ??
+        ADD
+    )
+  );
+  const pickedAccount = $derived(
+    connect?.accounts?.find((one) => one.email === connectAccount) ?? null
+  );
+  /** Connect opens the provider's page: A always; B to add an account, or to sign a lapsed one in again. */
+  const opensPage = $derived(
+    !connect?.accounts || connectAccount === ADD || !!pickedAccount?.expired
+  );
+  /** The yes, as the pick makes it. */
+  const connectYes = $derived.by(() => {
+    if (!connect) {
+      return "";
+    }
+    if (!connect.accounts) {
+      return connect.again ? connectWords.reconnect : connectWords.connect;
+    }
+    if (connectAccount === ADD) {
+      return connectWords.addAccount(connect.provider);
+    }
+    return pickedAccount?.expired
+      ? connectWords.reconnectAccount(connectAccount)
+      : connectWords.useAccount;
+  });
+
+  function pressConnect(): void {
+    if (!(answerable && connect)) {
+      return;
+    }
+    connectFault = null;
+    connectStage = opensPage ? "waiting" : "done";
+  }
 
   function declineConnect(): void {
     if (!(answerable && connect)) {
@@ -153,7 +201,9 @@
       return askWords.browserAskFrom(asker);
     }
     if (connect) {
-      return connectWords.askFrom(asker);
+      return connect.again
+        ? connectWords.againFrom(asker)
+        : connectWords.askFrom(asker);
     }
     return questions
       ? askWords.questionFrom(asker)
@@ -446,10 +496,10 @@
   type Choice = "allow" | "deny" | "always" | "answer";
   let pressed = $state<Choice | null>(null);
   const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
-  /** The session's machine is offline: the ask stands, its answer waits. */
-  const offline = $derived(row ? isStale(row) : false);
   /** The hub as this card reads it: the live client's, or a states file's stand-in. */
   const hub = hubSeam();
+  /** The session's machine is offline (a stand-in's word, else its row's): the ask stands, its answer waits. */
+  const offline = $derived(hub.machineOffline ?? (row ? isStale(row) : false));
   /** An answer can reach the daemon that asked: the hub is live, and its machine. */
   const reachable = $derived(hub.state === "connected" && !offline);
   const answerable = $derived(pressed === null && reachable);
@@ -607,7 +657,7 @@
       class="mt-space-2 text-size-meta font-normal text-ink-muted"
       role="status"
     >
-      Machine offline — can't answer yet.
+      {connect ? connectWords.offline : "Machine offline — can't answer yet."}
     </p>
   {:else if pressed === null && !reachable}
     <p
@@ -828,109 +878,197 @@
     {@render title(cardLabel)}
     <!-- A connect ask: the browser ask's slots, one for one with what an MCP
          client owes a URL-mode elicitation. Which agent asks is the title;
-         the line it is made on and the agent's why are the lede; the whole
-         address, its host in strong ink, stands before Connect opens
-         anything; what it may do, when the hub knows the scopes; the Other
-         line's words go with Not now; and what Connect does is the detail
-         line, the browser ask's own slot. Failed, the body is Caw in the
-         card's centre over what happened. -->
+         the agent's why is the lede; the whole address, its host in strong
+         ink, stands before Connect opens anything. Then what it gets: in A,
+         the access as a choice (the question card's chips, read-only
+         first), or one line in code type when the connector offers one; in
+         B, the accounts the hub keeps (the question card's list, each over
+         whose it is and what it holds) and a new one. The Other line's
+         words go with Not now; the detail line says who keeps the sign-in
+         and for how long. -->
     <div
       data-slot="body"
       class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
-      {#if connectStage === "failed" && connect.fault}
-        <ConnectFault
-          details={connect.fault.details}
-          next={connectWords.failedNext(asker)}
-          title={connect.fault.said}
-        />
+      <p
+        data-slot="lede"
+        class="text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty"
+        id="{claimId}-connect"
+      >
+        {connect.why}
+      </p>
+      <p data-slot="connect-meta" class="mb-space-2 min-w-0 text-size-meta">
+        <ConnectAddress url={connect.url} />
+      </p>
+      {#if connect.accounts}
+        {@const kept = connect.accounts.length}
+        <!-- B: the question card's list form, one row per kept account, its
+             address over whose it is and what it holds; a lapsed one says
+             it signs in again. Add an account opens the provider's page;
+             Other opens its line, as the question card's does. -->
+        <OptionGroup
+          aria-labelledby="{claimId}-connect"
+          class="mt-space-row mb-space-2"
+          disabled={!answerable || connectStage === "waiting"}
+          layout="list"
+          bind:value={
+            () => (otherAt === 0 ? [OTHER] : [connectAccount]),
+            (picks) => {
+              const pick = picks.find((one) => one !== OTHER);
+              if (pick) {
+                connectAccount = pick;
+                otherAt = null;
+              }
+            }
+          }
+        >
+          {#each connect.accounts as one, i (one.email)}
+            <OptionGroupItem digit={i + 1} value={one.email}>
+              <span class="mark-cell"
+                ><Kbd data-box look="keycap">{i + 1}</Kbd></span
+              ><span class="block min-w-0"
+                ><span
+                  data-slot="opt-label"
+                  class="block min-w-0 wrap-anywhere text-pretty"
+                  >{one.email}</span
+                ><span
+                  data-slot="opt-desc"
+                  class="block type-meta text-ink-muted wrap-anywhere text-pretty data-expired:text-status-attn-ink"
+                  data-expired={one.expired || undefined}
+                  >{one.expired
+                    ? connectWords.expiredAccount
+                    : `${connectWords.whose[one.whose]} · ${one.scopes}`}</span
+                ></span
+              >
+            </OptionGroupItem>
+          {/each}
+          <OptionGroupItem digit={kept + 1} value={ADD}>
+            <span class="mark-cell"
+              ><Kbd data-box look="keycap">{kept + 1}</Kbd></span
+            ><span class="block min-w-0"
+              ><span
+                data-slot="opt-label"
+                class="block min-w-0 wrap-anywhere text-pretty"
+                >{connectWords.addAnAccount}</span
+              ></span
+            >
+          </OptionGroupItem>
+          <OptionGroupItem
+            digit={kept + 2}
+            onclick={(event) => pressOther(event, 0)}
+            value={OTHER}
+          >
+            <span class="mark-cell"
+              ><Kbd data-box look="keycap">{kept + 2}</Kbd></span
+            ><span class="block min-w-0"
+              ><span
+                data-slot="opt-label"
+                class="block min-w-0 wrap-anywhere text-pretty">Other</span
+              ></span
+            >
+          </OptionGroupItem>
+        </OptionGroup>
+        {#if otherAt === 0}
+          <Input
+            data-other
+            aria-label={askWords.yourAnswerTo(connect.why)}
+            class="mb-space-2"
+            disabled={!answerable}
+            oninput={(event) => writeOther(event.currentTarget.value)}
+            onkeydown={otherKey}
+            placeholder={askWords.yourAnswer}
+            value={others[connect.why] ?? ""}
+            bind:ref={otherField}
+          />
+        {/if}
+        <p
+          data-slot="detail"
+          class="text-size-label font-normal text-ink-muted mb-space-2"
+        >
+          {connectWords.detailPick(connect.service)}
+        </p>
       {:else}
-        <p
-          data-slot="lede"
-          class="text-size-body font-medium leading-body text-ink-strong mb-space-1 max-w-c-measure wrap-anywhere text-pretty"
-        >
-          {connect.again
-            ? connectWords.ledeAgain(connect.service)
-            : connectWords.lede(connect.service)}
-        </p>
-        <p
-          data-slot="why"
-          class="text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty"
-        >
-          {connect.why}
-        </p>
-        <p data-slot="connect-meta" class="mb-space-2 min-w-0 text-size-meta">
-          <ConnectAddress url={connect.url} />
-        </p>
-        {#if connect.scopes?.length}
+        {#if connect.again && connectScope}
+          <!-- Asked again: the access he picked before is held, not asked. -->
           <p
-            data-slot="connect-scopes"
+            data-slot="connect-scope"
             class="mb-space-2 text-size-label font-normal text-ink-strong"
           >
-            {connect.scopes.join(" · ")}
+            {connectWords.asBefore(connectScope)}
           </p>
-        {/if}
-        {#if connectStage === "asking"}
-          <div
-            data-slot="connect-other"
-            class="mb-space-2 flex h-c-input-h min-w-0 items-center gap-space-2"
+        {:else if connect.scopes && connect.scopes.length > 1}
+          <!-- A: the access as a choice, the question card's chips, read-only
+               pressed; 1 and 2 pick, Enter connects. -->
+          <OptionGroup
+            aria-labelledby="{claimId}-connect"
+            class="mt-space-row mb-space-2"
+            disabled={!answerable || connectStage === "waiting"}
+            onenter={pressConnect}
+            bind:value={
+              () => [connectScope],
+              (picks) => {
+                connectScope = picks.at(-1) ?? connectScope;
+              }
+            }
           >
-            <OptionGroup
-              aria-label={`Other answer to: ${connect.why}`}
-              class="flex-none"
-              value={otherAt === 0 ? [OTHER] : []}
-            >
-              <OptionGroupItem
-                onclick={(event) => pressOther(event, 0)}
-                value={OTHER}
-              >
-                <span
+            {#each connect.scopes as one, i (one)}
+              <OptionGroupItem digit={i + 1} value={one}>
+                <Kbd data-box look="keycap">{i + 1}</Kbd><span
                   data-slot="opt-label"
-                  class="min-w-0 wrap-anywhere text-pretty">Other</span
+                  class="min-w-0 wrap-anywhere text-pretty">{one}</span
                 >
               </OptionGroupItem>
-            </OptionGroup>
-            {#if otherAt === 0}
-              <Input
-                data-other
-                aria-label={askWords.yourAnswerTo(connect.why)}
-                class="flex-1"
-                disabled={!answerable}
-                oninput={(event) => writeOther(event.currentTarget.value)}
-                onkeydown={otherKey}
-                placeholder={askWords.yourAnswer}
-                value={others[connect.why] ?? ""}
-                bind:ref={otherField}
-              />
-            {/if}
-          </div>
+            {/each}
+          </OptionGroup>
+        {:else if connect.scopes?.length === 1}
+          <p data-slot="connect-scope" class="mb-space-2 min-w-0">
+            <code class="type-code text-ink-strong wrap-anywhere"
+              >{connect.scopes[0]}</code
+            >
+          </p>
+        {/if}
+        <div
+          data-slot="connect-other"
+          class="mb-space-2 flex h-c-input-h min-w-0 items-center gap-space-2"
+        >
+          <OptionGroup
+            aria-label={`Other answer to: ${connect.why}`}
+            class="flex-none"
+            value={otherAt === 0 ? [OTHER] : []}
+          >
+            <OptionGroupItem
+              onclick={(event) => pressOther(event, 0)}
+              value={OTHER}
+            >
+              <span
+                data-slot="opt-label"
+                class="min-w-0 wrap-anywhere text-pretty">Other</span
+              >
+            </OptionGroupItem>
+          </OptionGroup>
+          {#if otherAt === 0}
+            <Input
+              data-other
+              aria-label={askWords.yourAnswerTo(connect.why)}
+              class="flex-1"
+              disabled={!answerable}
+              oninput={(event) => writeOther(event.currentTarget.value)}
+              onkeydown={otherKey}
+              placeholder={askWords.yourAnswer}
+              value={others[connect.why] ?? ""}
+              bind:ref={otherField}
+            />
+          {/if}
+        </div>
+        {#if !connect.again}
           <p
             data-slot="detail"
             class="text-size-label font-normal text-ink-muted mb-space-2"
           >
-            {connectWords.detail(connect.service, asker)}
+            {connectWords.detail(connect.service)}
           </p>
-        {:else}
-          <!-- The wait, said where the eye is, and the way back to the
-               provider's page should its tab be lost. -->
-          <div
-            data-slot="connect-wait"
-            class="mb-space-2 flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
-            role="status"
-          >
-            <p class="m-0 min-w-0 text-size-label font-normal text-ink-muted">
-              {connectWords.waiting(connect.service)}
-            </p>
-            <Button
-              class="flex-none"
-              label={connectWords.openSignIn}
-              pad="none"
-              size="xs"
-              variant="link"
-            />
-          </div>
         {/if}
       {/if}
     </div>
@@ -940,50 +1078,89 @@
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
-      {@render wait()}
-      <!-- The Peer Rule's transcript form, as the browser ask's: the yes
-           and the refusal at the row's two ends, the one recessed fill,
-           each outlined in its tint; no third control between them. Not now
-           stays live while the provider's page is open: the person may
-           change their mind there. -->
-      <div
-        data-slot="choice"
-        class="flex justify-between gap-space-8 mt-space-2"
-      >
-        <Button
-          answer="approve-strong"
-          class="flex-none"
-          fit="prompt"
-          width="shrink"
-          data-connect
-          disabled={!answerable}
-          icon={connectStage === "failed" ? IconRefresh : IconKey}
-          label={connectYes(connectStage === "failed", !!connect.again)}
-          onclick={() => {
-            connectStage = "waiting";
-          }}
-          pending={connectStage === "waiting"}
-          pendingLabel={connectWords.connecting}
-          size="sm"
-          variant="secondary"
-        />
-        <Button
-          answer="deny-strong"
-          class="flex-none"
-          fit="prompt"
-          width="shrink"
-          data-connect-decline
-          disabled={disabledOf("deny")}
-          failed={failedOf("deny")}
-          icon={IconClose}
-          label={connectWords.notNow}
-          onclick={declineConnect}
-          pending={pendingOf("deny")}
-          pendingLabel={connectWords.decliningNow}
-          size="sm"
-          variant="secondary"
-        />
-      </div>
+      {#if connectStage === "done"}
+        <!-- The hub said signed in: a beat in the card, as whom, before the
+             shape folds and the record stands in the transcript. Drawn on
+             the kit Button as it is; the build gives it a done morph. -->
+        <div data-slot="choice" class="flex mt-space-2">
+          <Button
+            answer="approve-strong"
+            class="flex-none"
+            fit="prompt"
+            width="shrink"
+            data-connect-done
+            icon={IconTick}
+            label={connectWords.connectedAs(
+              connect.as ?? pickedAccount?.email ?? connect.service
+            )}
+            size="sm"
+            variant="secondary"
+          />
+        </div>
+      {:else}
+        <!-- Over the pair, as the browser ask's refusal stands: the wait
+             (McpSignIn's), or why the sign-in did not come back with the way
+             to try again (RowFault, as McpSignIn says it), or why it cannot
+             be answered yet. -->
+        {#if connectStage === "waiting"}
+          <p
+            data-slot="wait"
+            class="mt-space-2 text-size-meta font-normal text-ink-muted"
+            role="status"
+          >
+            {connectWords.waiting(connect.provider)}
+          </p>
+        {:else if connectStage === "failed" && connectFault && reachable}
+          <RowFault
+            class="mt-space-2 text-size-meta"
+            again={connectFault.kind === "refused" ? undefined : pressConnect}
+            data-connect-fault={connectFault.kind}
+            reason={faultWords(connectFault, connect.provider)}
+          />
+        {:else}
+          {@render wait()}
+        {/if}
+        <!-- The Peer Rule's transcript form, as the browser ask's: the yes
+             and the refusal at the row's two ends, the one recessed fill,
+             each outlined in its tint; no third control between them. Not
+             now stays live while the provider's page is open. -->
+        <div
+          data-slot="choice"
+          class="flex justify-between gap-space-8 mt-space-2"
+        >
+          <Button
+            answer="approve-strong"
+            class="flex-none"
+            fit="prompt"
+            width="shrink"
+            data-connect
+            disabled={!answerable}
+            icon={connect.accounts && !opensPage ? IconTick : IconKey}
+            label={connectYes}
+            onclick={pressConnect}
+            pending={connectStage === "waiting"}
+            pendingLabel={connectWords.signingIn(connect.provider)}
+            size="sm"
+            variant="secondary"
+          />
+          <Button
+            answer="deny-strong"
+            class="flex-none"
+            fit="prompt"
+            width="shrink"
+            data-connect-decline
+            disabled={disabledOf("deny")}
+            failed={failedOf("deny")}
+            icon={IconClose}
+            label={connectWords.notNow}
+            onclick={declineConnect}
+            pending={pendingOf("deny")}
+            pendingLabel={connectWords.decliningNow}
+            size="sm"
+            variant="secondary"
+          />
+        </div>
+      {/if}
     </div>
   {:else if questions}
     {@render title(`Question from ${asker}`)}

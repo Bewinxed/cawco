@@ -2793,6 +2793,16 @@
   const minimized = $derived(
     !!(ask && askParks && minimizedAsks.has(ask.request.requestId))
   );
+  /** What a minimized connect ask's bar says: its wait while the provider's page is open, else who asks for what. */
+  const connectBar = $derived.by(() => {
+    const connect = ask?.request.connectAsk;
+    if (!(ask && connect)) {
+      return null;
+    }
+    return connect.stage === "waiting"
+      ? connectWords.signingIn(connect.provider)
+      : connectWords.bar(ask.asker, connect.service);
+  });
   /** The ask the composer grows into: the parked one, unless it is minimized. */
   const grownAsk = $derived(minimized ? null : ask);
   /** The minimized question's bar. */
@@ -3334,9 +3344,7 @@
           </span>
           <span
             class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
-            >{connect
-              ? connectWords.bar(ask.asker, connect.service)
-              : (first?.question ?? first?.header)}</span
+            >{connectBar ?? first?.question ?? first?.header}</span
           >
           {#if ask.more > 0}
             <span data-slot="num" class="num flex-none font-normal"

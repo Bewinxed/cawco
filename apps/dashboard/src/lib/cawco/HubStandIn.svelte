@@ -13,6 +13,9 @@
     get state() {
       return seam.state;
     },
+    get machineOffline() {
+      return seam.machineOffline;
+    },
     read: (path) => seam.read(path),
   });
 </script>

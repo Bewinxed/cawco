@@ -17,7 +17,9 @@
 export { default as SvgCerebras } from "~icons/logos/cerebras-icon?raw";
 export { default as LogoClaude } from "~icons/logos/claude-icon";
 export { default as SvgClaude } from "~icons/logos/claude-icon?raw";
+export { default as LogoFigma } from "~icons/logos/figma";
 export { default as LogoGithub } from "~icons/logos/github-icon";
+export { default as LogoGoogleDrive } from "~icons/logos/google-drive";
 export { default as LogoGrok } from "~icons/logos/grok-icon";
 export { default as SvgHuggingface } from "~icons/logos/hugging-face-icon?raw";
 export { default as LogoLinear } from "~icons/logos/linear-icon";

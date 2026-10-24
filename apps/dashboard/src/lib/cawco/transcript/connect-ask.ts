@@ -4,21 +4,17 @@
  * 2025-11-25/client/elicitation), so its running session gets the service's
  * tools. The person reads which agent asks and why, sees the whole sign-in
  * address before anything opens, signs in on the provider's page, and the
- * hub keeps the key.
+ * hub keeps the credential.
  *
- * Drawn only by its states files (ConnectAsk, ConnectCard, ConnectStrip
- * .stories.ts) until the hub raises one: nothing in the app makes a
- * `ConnectAsk`, so no live surface reaches these branches yet. The words
- * here are the drawing's proposal; the one picked moves into core's
+ * Drawn only by its states files until the hub raises one, three ways:
+ * A, the gate in the composer's grown shape with the access as a choice
+ * (ConnectAskGate.stories.ts); B, a pick among the accounts the hub keeps
+ * (ConnectAskPick.stories.ts); C, a card in the transcript that becomes
+ * its record where it stands (ConnectAskCard.stories.ts). Nothing in the
+ * app makes a `ConnectAsk`, so no live surface reaches these branches yet.
+ * The words are the design advisor's; the one picked moves into core's
  * `askWords` with the build.
- *
- * What the session hears, every option alike: Not now sends `decline`
- * with the Other line's words; putting the ask away (minimizing, the
- * strip's ✕ before it opens) sends nothing; a session that ends with the
- * ask open sends `cancel`.
  */
-
-import { commonWords } from "@cawco/core/words/common";
 
 /** Where an ask stands while it is open. */
 export type ConnectStage =
@@ -26,17 +22,54 @@ export type ConnectStage =
   | "asking"
   /** Connect pressed: the provider's page is open in a tab of its own. */
   | "waiting"
-  /** The sign-in did not come back (its tab closed, or the hub refused the start). */
+  /** The hub said signed in: a beat in the card before it folds. */
+  | "done"
+  /** The sign-in did not come back. */
   | "failed";
 
+/** Why a sign-in did not come back. */
+export type ConnectFault =
+  /** Its tab closed before the hub heard back (McpSignIn's `signInClosed`). */
+  | { kind: "closed" }
+  /** The hub refused to start it, in its own words (`failureWords`). */
+  | { kind: "refused"; reason: string }
+  /** The provider's authorization page ran out while it waited. */
+  | { kind: "expired" };
+
+/** An account the hub keeps for a service (option B). */
+export interface ConnectAccount {
+  /** As the provider names it. */
+  email: string;
+  /** Kept credential lapsed: picking it signs in again. */
+  expired?: boolean;
+  /** What it already holds there, in the provider's words. */
+  scopes: string;
+  /** His own, or the project's, which its delegates all use. */
+  whose: "yours" | "project";
+}
+
 export interface ConnectAsk {
-  /** A sign-in that ran out on the service's side: the card asks again. */
+  /** Option B: the accounts the hub keeps for the service, in its order. */
+  accounts?: ConnectAccount[];
+  /** A sign-in that lapsed: the agent asks again, its choice held. */
   again?: boolean;
-  /** What went wrong, said, and word for word under Show details. */
-  fault?: { said: string; details: string };
-  /** What it may do there, in plain words, when the hub knows the scopes. */
+  /** As whom the hub signed in: the done beat's words. */
+  as?: string;
+  fault?: ConnectFault;
+  /** Option B: the account pressed, or `ADD` for a new one. */
+  picked?: string;
+  /** Whose page the sign-in is on ("Google" for Google Drive). */
+  provider: string;
+  /** Option A: the access picked, of `scopes`. */
+  scope?: string;
+  /**
+   * Option A: the access the connector offers. Two or more are a choice;
+   * one is a line in code type where the choice would be.
+   */
   scopes?: string[];
-  /** The service, as Configure › Connections names it. */
+  /** The MCP server the record links to, as the MCP page names it. */
+  server: string;
+  /** The service, as Configure › MCP names it. */
   service: string;
   stage: ConnectStage;
   /** The sign-in address, whole: shown before consent, opened only on Connect. */
@@ -45,11 +78,30 @@ export interface ConnectAsk {
   why: string;
 }
 
+/** Option B's pick that adds an account instead of using a kept one. */
+export const ADD = "\u0000add";
+
 /** How an ask settled, as the transcript keeps it. */
 export type ConnectOutcome =
-  | { kind: "connected"; service: string; account: string | null }
-  | { kind: "declined"; service: string; words: string }
-  | { kind: "expired"; service: string; account: string | null };
+  | {
+      kind: "connected";
+      service: string;
+      server: string;
+      /** As whom, when the provider said. */
+      as: string | null;
+      /** The access granted, when it was a choice. */
+      scope?: string;
+      /** Option B: a kept account used, and whose it is. */
+      used?: "yours" | "project";
+    }
+  | { kind: "declined"; service: string; server: string; words: string }
+  | {
+      kind: "expired";
+      service: string;
+      server: string;
+      /** Option B: the account whose sign-in lapsed. */
+      as?: string;
+    };
 
 /** A sign-in address: its scheme, its host, and the rest. */
 const ADDRESS = /^(https?:\/\/)([^/?#]+)(.*)$/i;
@@ -85,54 +137,67 @@ export function addressRuns(rest: string): string[] {
   return runs;
 }
 
-/** The address's host alone: what a strip or a row has room for. */
-export const hostOf = (url: string): string => addressParts(url).host;
-
-/** The yes of an ask: Try again once it failed, Reconnect once it lapsed, else Connect. */
-export function connectYes(failed: boolean, again: boolean): string {
-  if (failed) {
-    return commonWords.tryAgain;
+/** What a sign-in that did not come back says, over Connect. */
+export function faultWords(fault: ConnectFault, provider: string): string {
+  switch (fault.kind) {
+    case "closed":
+      return `The ${provider} tab closed before it finished.`;
+    case "refused":
+      return `Couldn't start the ${provider} sign-in. ${fault.reason}`;
+    case "expired":
+      return `${provider}'s sign-in page expired before it finished.`;
   }
-  return again ? connectWords.reconnect : connectWords.connect;
 }
 
 export const connectWords = {
   /** The card's title, as a screen reader names it. */
   askFrom: (who: string) => `Connect ask from ${who}`,
-  /** The line the ask is made on. */
-  lede: (service: string) => `Sign in to ${service}`,
-  ledeAgain: (service: string) => `${service} signed CawCo out`,
-  /** What pressing Connect does, before it is pressed. */
-  detail: (service: string, who: string) =>
-    `${service}'s page opens in a new tab. The hub keeps the key, and ${who} never sees it.`,
+  againFrom: (who: string) => `Reconnect ask from ${who}`,
+  /** A's detail line: who keeps it, and for how long. */
+  detail: (service: string) =>
+    `The hub keeps the sign-in. This session gets ${service} until you disconnect it on the MCP page. No agent sees a password.`,
+  /** B's detail line. */
+  detailPick: (service: string) =>
+    `This session reads ${service} as the account you pick, through the hub, until you disconnect it on the MCP page.`,
+  /** C's span line. */
+  detailCard: (service: string) =>
+    `The hub keeps the sign-in. This session gets ${service} until you disconnect it on the MCP page.`,
+  /** A reconnect's held access. */
+  asBefore: (scope: string) => `${scope}, as before.`,
   connect: "Connect",
-  connecting: "Waiting for sign-in…",
   reconnect: "Reconnect",
   notNow: "Not now",
   decliningNow: "Declining…",
-  /** The wait, and the way back to the page. */
-  waiting: (service: string) =>
-    `${service}'s sign-in is open in a new tab; this turns connected when you finish there.`,
-  openSignIn: "Open sign-in",
-  /** The failure, in the error formula. */
-  failedTitle: (service: string) => `${service}'s sign-in didn't finish`,
-  failedNext: (who: string) =>
-    `Nothing was connected, and ${who} is still waiting. Try again to open the sign-in.`,
+  /** The wait, over the pair. */
+  waiting: (provider: string) =>
+    `Finish in the ${provider} tab. This card waits for it.`,
+  signingIn: (provider: string) => `Signing in to ${provider}…`,
+  /** The done beat, before the shape folds. */
+  connectedAs: (who: string) => `Connected as ${who}`,
+  offline: "Machine offline — can't connect yet.",
+  /** B's pick. */
+  useAccount: "Use this account",
+  addAnAccount: "Add an account",
+  addAccount: (provider: string) => `Add ${provider} account`,
+  reconnectAccount: (email: string) => `Reconnect ${email}`,
+  whose: { yours: "yours", project: "project" },
+  expiredAccount: "expired · signs in again",
+  /** C's card. */
+  cardTitle: (service: string) => `Connect ${service} to Caw&Co`,
+  cardTitleAgain: (service: string) => `Reconnect ${service} to Caw&Co`,
+  connectService: (service: string) => `Connect ${service}`,
+  reconnectService: (service: string) => `Reconnect ${service}`,
+  needsYou: (n: number) => `${n} needs you`,
   /** The record the transcript keeps. */
-  connectedAs: (service: string, account: string) =>
-    `Connected to ${service} as ${account}`,
-  connected: (service: string) => `Connected to ${service}`,
-  declined: (service: string) => `${service} not connected`,
-  signedOut: "signed out",
-  manage: "Manage",
+  recordConnected: (service: string, who: string | null) =>
+    who ? `Connected ${service} as ${who}` : `Connected ${service}`,
+  recordUsing: (service: string, who: string, whose: "yours" | "project") =>
+    `Using ${service} as ${who} (${whose})`,
+  recordDeclined: (service: string) => `${service} not connected`,
+  recordExpired: "sign-in expired",
   /** The parked ask's bar, and how a screen reader names it. */
   bar: (who: string, service: string) => `${who} asks to connect ${service}`,
   showAsk: (who: string, service: string) =>
     `Show the connect ask from ${who}: ${service}`,
   minimize: "Minimize connect ask",
-  /** Option B's consent step. */
-  continueTo: (host: string) => `Continue to ${host}`,
-  back: "Back",
-  /** Option C's strip: "{who} needs {service}", the service set in strong ink. */
-  needs: "needs",
 };
