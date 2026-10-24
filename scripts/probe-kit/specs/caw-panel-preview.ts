@@ -242,6 +242,72 @@ function readCaws(device: Device): { at: string; off: number }[] {
   );
 }
 
+/**
+ * The panel's controls drawn in coral (the action, the brand, link ink):
+ * each one by name. The surface keeps one, Send (DESIGN.md, The Coral Is
+ * Where You Act Rule).
+ */
+function readCoralActs(device: Device): string[] {
+  const { panel, shown, name } = shownIn(device);
+  const probe = document.createElement("i");
+  document.body.append(probe);
+  const CORAL = [
+    "--action-solid",
+    "--action-hover",
+    "--action-top",
+    "--action-bottom",
+    "--brand-solid",
+    "--brand-ink",
+    "--link-ink",
+    "--coral-9",
+    "--coral-10",
+    "--coral-11",
+  ].map((token) => {
+    probe.style.color = `var(${token})`;
+    return getComputedStyle(probe).color;
+  });
+  probe.remove();
+  const coral = (e: Element) => {
+    const cs = getComputedStyle(e);
+    const paint = [cs.color, cs.backgroundColor, cs.backgroundImage].join(" ");
+    return CORAL.some((c) => paint.includes(c));
+  };
+  return [
+    ...panel.querySelectorAll(
+      "button, a, [role='link'], [role='menuitem'], [role='button']"
+    ),
+  ]
+    .filter((e) => shown(e) && coral(e))
+    .map(name);
+}
+
+/** The can't-start block's words: each one's start against the block's own content start, and its alignment. */
+function readBlockWords(device: Device): string[] {
+  const { panel, shown, name } = shownIn(device);
+  const inner = panel.querySelector(".block-in") as HTMLElement | null;
+  if (!(inner && shown(inner))) {
+    return [];
+  }
+  const cs = getComputedStyle(inner);
+  const box = inner.getBoundingClientRect();
+  // The padding in the frame's own pixels: a frame fitted to a narrow window is zoomed.
+  const zoom = box.width / inner.offsetWidth;
+  const start = box.left + Number.parseFloat(cs.paddingLeft) * zoom;
+  const off: string[] = [];
+  if (!["start", "left"].includes(cs.textAlign)) {
+    off.push(`the block's words align ${cs.textAlign}`);
+  }
+  for (const e of inner.querySelectorAll(
+    ":scope > h3, :scope > .body, :scope > .ways > :first-child"
+  )) {
+    const { left } = e.getBoundingClientRect();
+    if (shown(e) && Math.abs(left - start) > zoom) {
+      off.push(`${name(e)} starts ${(left - start).toFixed(1)}px off`);
+    }
+  }
+  return off;
+}
+
 /** The page's own sideways scroll. */
 const sideways = (page: Page) =>
   page.evaluate(
@@ -291,11 +357,13 @@ async function arrive(page: Page, view: string, at: Case, was: Case | null) {
 /** One case's findings, each named for where it was read. */
 async function findings(page: Page, view: string, at: Case) {
   const where = `${view} ${at.device} ${at.state}${at.cause ? `/${at.cause}` : ""} arcs ${at.arcs}${at.block ? ` block ${at.block}` : ""}`;
-  const [spills, overlaps, caws, wide] = await Promise.all([
+  const [spills, overlaps, caws, wide, corals, words] = await Promise.all([
     page.evaluate(readSpills, at.device),
     page.evaluate(readOverlaps, at.device),
     page.evaluate(readCaws, at.device),
     sideways(page),
+    page.evaluate(readCoralActs, at.device),
+    page.evaluate(readBlockWords, at.device),
   ]);
   const off = caws.filter((c) => Math.abs(c.off) > 1);
   return [
@@ -307,6 +375,10 @@ async function findings(page: Page, view: string, at: Case) {
       ? []
       : [`${where}: ${caws.length} Caws drawn ${JSON.stringify(caws)}`]),
     ...(wide > 0 ? [`${where}: the page scrolls ${wide}px sideways`] : []),
+    ...(corals.length === 1 && corals[0]?.includes("send")
+      ? []
+      : [`${where}: coral acts ${JSON.stringify(corals)}`]),
+    ...words.map((line) => `${where}: ${line}`),
   ];
 }
 
@@ -328,7 +400,7 @@ async function boxesEverywhere(
   await pick(page, "arcs", "A");
   await pick(page, "block", "A");
   kit.check(
-    `${view}: in all ${all.length} cases nothing spills or overlaps, the page never scrolls sideways, and one Caw stands on the panel's axis within 1px`,
+    `${view}: in all ${all.length} cases nothing spills or overlaps, the page never scrolls sideways, one Caw stands on the panel's axis within 1px, Send is the one coral act on both forks, and the can't-start block's words stand at its start`,
     problems.length === 0,
     problems.slice(0, 12).join("\n      ")
   );
@@ -796,6 +868,327 @@ async function reduced(kit: Kit, page: Page) {
   await pick(page, "motion", "full");
 }
 
+/* ── The review's round (2026-10-24) ──────────────────────────────── */
+
+/** Installed in the page: a frame, painted (a read after the frame's own callbacks have run). */
+function installPainted(): void {
+  (globalThis as unknown as { painted: () => Promise<void> }).painted = () =>
+    new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)));
+}
+
+const NAN_KEYFRAME = /NaN|keyframe/i;
+
+/** Six asks with the stack expanded: the rows scroll in their cap; the composer and some thread keep their room. */
+async function expandedStack(kit: Kit, page: Page) {
+  await afresh("docked")(page);
+  for (let i = 0; i < 5; i += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each ask lands before the next
+    await page.locator('.moment:text("A delegate asks")').click();
+    await settled(page);
+  }
+  for (const device of ["desk", "phone"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one panel's more line at a time
+    await page
+      .locator(`.panel[data-device="${device}"] [data-slot="more"]`)
+      .click();
+    await settled(page);
+  }
+  const read = await page.evaluate(() =>
+    ["desk", "phone"].map((device) => {
+      const p = document.querySelector(
+        `.panel[data-device="${device}"]`
+      ) as HTMLElement;
+      const rows = p.querySelector('[data-slot="rows"]') as HTMLElement;
+      return {
+        device,
+        asks: rows.children.length,
+        composerPast:
+          (p.querySelector(".composer") as HTMLElement).getBoundingClientRect()
+            .bottom - p.getBoundingClientRect().bottom,
+        thread: (
+          p.querySelector('[data-slot="scroller"]') as HTMLElement
+        ).getBoundingClientRect().height,
+        rowsScroll: rows.scrollHeight > rows.clientHeight + 1,
+      };
+    })
+  );
+  kit.check(
+    "six asks with the stack expanded: the rows scroll inside their cap, the composer stands inside the panel, and at least 120px of thread stays (Desk and Phone)",
+    read.every(
+      (r) =>
+        r.asks === 6 && r.composerPast <= 0.5 && r.thread >= 120 && r.rowsScroll
+    ),
+    JSON.stringify(read)
+  );
+}
+
+/** Can't start, block A, full motion: a cause with longer words keeps the thread's last note whole, through the morph and after it. */
+async function causeKeepsTail(kit: Kit, page: Page) {
+  await pick(page, "block", "A");
+  await afresh("cant")(page);
+  await pick(page, "cause", "machine");
+  const clipped = () =>
+    page.evaluate(async () => {
+      await (
+        globalThis as unknown as { painted: () => Promise<void> }
+      ).painted();
+      return ["desk", "phone"].map((device) => {
+        const p = document.querySelector(
+          `.panel[data-device="${device}"]`
+        ) as HTMLElement;
+        const s = p.querySelector('[data-slot="scroller"]') as HTMLElement;
+        const note = p.querySelector('[data-slot="kept-note"]') as HTMLElement;
+        return Math.max(
+          0,
+          note.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom
+        );
+      });
+    });
+  const reads: Record<string, number[]> = {};
+  for (const cause of ["thread", "budget", "hub", "machine"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one cause after another, as a person switches them
+    const run = await readMotion(
+      page,
+      () => choose(page, "cause", cause),
+      DESK,
+      {
+        of: "morph-in",
+        fractions: [0.5, 1],
+        read: async () => Math.max(...(await clipped())),
+      }
+    );
+    await settled(page);
+    reads[cause] = [
+      ...run.at.map((a) => a.value),
+      Math.max(...(await clipped())),
+    ];
+  }
+  kit.check(
+    "can't start, block A, full motion: switching to each cause, the thread's last note is never clipped (0px at the morph's ½ and end, and once still, Desk and Phone)",
+    Object.values(reads).every((r) => r.every((v) => v <= 0.5)),
+    JSON.stringify(reads)
+  );
+}
+
+/** At the thread's foot a dock moves nothing; a wheel turned during a dock lands whole. */
+async function dockFootAndWheel(kit: Kit, page: Page, label: string) {
+  const foot: Record<string, number[]> = {};
+  for (const device of ["desk", "phone"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one panel at a time, from a fresh state
+    await afresh("needs")(page);
+    foot[device] = await page.evaluate(async (selector) => {
+      const p = document.querySelector(selector) as HTMLElement;
+      const s = p.querySelector('[data-slot="scroller"]') as HTMLElement;
+      const last = p.querySelector(".thread > li:last-child") as HTMLElement;
+      s.scrollTop = s.scrollHeight;
+      const base = last.getBoundingClientRect().top;
+      const moved: number[] = [];
+      for (let i = 0; i < 24; i += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one painted frame at a time
+        await (
+          globalThis as unknown as { painted: () => Promise<void> }
+        ).painted();
+        moved.push(last.getBoundingClientRect().top - base);
+      }
+      return [
+        p.querySelectorAll('[data-slot="rows"] li').length,
+        Math.max(...moved.map(Math.abs)),
+      ];
+    }, `.panel[data-device="${device}"]`);
+  }
+  kit.check(
+    `${label}: at the thread's foot the card docks and the last message moves 0px in every painted frame (Desk and Phone)`,
+    Object.values(foot).every(
+      ([rows, moved]) => rows === 1 && (moved ?? 1) <= 0.01
+    ),
+    JSON.stringify(foot)
+  );
+  await afresh("needs")(page);
+  const box = await page
+    .locator(`${DESK} [data-slot="scroller"]`)
+    .boundingBox();
+  if (!box) {
+    kit.check(
+      `${label}: a wheel during a dock lands whole`,
+      false,
+      "no scroller box"
+    );
+    return;
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const base = await page.evaluate((selector) => {
+    const p = document.querySelector(selector) as HTMLElement;
+    const s = p.querySelector('[data-slot="scroller"]') as HTMLElement;
+    const card = p.querySelector(".card") as HTMLElement;
+    const zone = (
+      p.querySelector(".top-zone") as HTMLElement
+    ).getBoundingClientRect().bottom;
+    s.scrollTop += card.getBoundingClientRect().bottom - (zone - 9);
+    const watched = card.closest("li")?.nextElementSibling as HTMLElement;
+    watched.dataset.wheelWatched = "";
+    return watched.getBoundingClientRect().top;
+  }, DESK);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(40);
+  await page.mouse.wheel(0, 120);
+  await settled(page);
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(
+    ([selector, before]) => {
+      const p = document.querySelector(selector as string) as HTMLElement;
+      const watched = p.querySelector("[data-wheel-watched]") as HTMLElement;
+      return {
+        moved: (before as number) - watched.getBoundingClientRect().top,
+        rows: p.querySelectorAll('[data-slot="rows"] li').length,
+      };
+    },
+    [DESK, base] as const
+  );
+  kit.check(
+    `${label}: two wheel turns of 120px during a dock land whole: the conversation moves 240px (within 1px) and the card docks`,
+    Math.abs(after.moved - 240) <= 1 && after.rows === 1,
+    JSON.stringify(after)
+  );
+}
+
+/** The scroll edge's scrim, as the engine computes it: the well solid under the controls, then the fade, its mask drawn. */
+async function scrim(kit: Kit, page: Page, label: string) {
+  await afresh("scrolled")(page);
+  const read = await page.evaluate((selector) => {
+    const edge = document.querySelector(
+      `${selector} [data-slot="edge"]`
+    ) as HTMLElement;
+    const cs = getComputedStyle(edge) as CSSStyleDeclaration & {
+      webkitMaskImage?: string;
+    };
+    const probe = document.createElement("i");
+    probe.style.color = "var(--surface-well)";
+    edge.append(probe);
+    const well = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      opacity: cs.opacity,
+      background: cs.backgroundImage,
+      mask: cs.maskImage || cs.webkitMaskImage || "none",
+      well,
+    };
+  }, DESK);
+  kit.check(
+    `${label}: scrolled, the scroll edge scrim is drawn: opacity 1, a gradient solid in the well's own colour to 72% and fading after, and its mask computed`,
+    read.opacity === "1" &&
+      read.background.startsWith(`linear-gradient(${read.well} 72%`) &&
+      read.mask.startsWith("linear-gradient(") &&
+      !read.background.includes(" from "),
+    JSON.stringify(read)
+  );
+}
+
+/** Night stills: the paper rim stands at least one device pixel wide at 80px, DPR 1; every still's ground is clear. */
+async function nightRims(kit: Kit, page: Page) {
+  const read = await page.evaluate(async () => {
+    const load = (src: string) =>
+      new Promise<HTMLImageElement>((done, fail) => {
+        const img = new Image();
+        img.onload = () => done(img);
+        img.onerror = fail;
+        img.src = src;
+      });
+    const alpha = (img: HTMLImageElement, side: number) => {
+      const c = document.createElement("canvas");
+      c.width = side;
+      c.height = side;
+      const g = c.getContext("2d") as CanvasRenderingContext2D;
+      g.drawImage(img, 0, 0, side, side);
+      const d = g.getImageData(0, 0, side, side).data;
+      return Array.from({ length: side * side }, (_, i) => d[i * 4 + 3] ?? 0);
+    };
+    const out: Record<string, { rim: number; corners: number }> = {};
+    for (const cause of ["machine", "budget", "thread", "hub"]) {
+      // biome-ignore lint/performance/noAwaitInLoops: four stills, read one by one
+      const [day, night] = await Promise.all([
+        load(`stills/hero-${cause}-day.png`),
+        load(`stills/hero-${cause}-night.png`),
+      ]);
+      const side = 80;
+      const a = alpha(day, side);
+      const b = alpha(night, side);
+      const inside = (i: number) => (a[i] ?? 0) > 127;
+      let rim = 0;
+      let edge = 0;
+      for (let i = 0; i < side * side; i += 1) {
+        if (!inside(i) && (b[i] ?? 0) > 127) {
+          rim += 1;
+        }
+        const x = i % side;
+        const neighbours = [i - 1, i + 1, i - side, i + side].filter(
+          (j) => j >= 0 && j < side * side && Math.abs((j % side) - x) <= 1
+        );
+        if (inside(i) && neighbours.some((j) => !inside(j))) {
+          edge += 1;
+        }
+      }
+      const big = alpha(day, 384);
+      out[cause] = {
+        rim: Math.round((rim / Math.max(1, edge)) * 100) / 100,
+        corners: Math.max(
+          big[0] ?? 0,
+          big[383] ?? 0,
+          big[384 * 383] ?? 0,
+          big[384 * 384 - 1] ?? 0
+        ),
+      };
+    }
+    return out;
+  });
+  kit.check(
+    "night stills: the paper rim averages at least one device pixel round the drawing at 80px, DPR 1, and every still's ground is clear",
+    Object.values(read).every((r) => r.rim >= 1 && r.corners === 0),
+    JSON.stringify(read)
+  );
+}
+
+/** Under 900px: the frame the Show switch brings out draws its large title, and the hidden one animates nothing. */
+async function hiddenFrames(kit: Kit, page: Page, warnings: string[]) {
+  await pick(page, "show", "phone");
+  const title = await page.evaluate(() => {
+    const p = document.querySelector(
+      '.panel[data-device="phone"]'
+    ) as HTMLElement;
+    return {
+      large: getComputedStyle(
+        p.querySelector('[data-slot="large-title"]') as HTMLElement
+      ).opacity,
+      small: getComputedStyle(
+        p.querySelector('[data-slot="small-title"]') as HTMLElement
+      ).opacity,
+    };
+  });
+  kit.check(
+    "390: the Phone frame, hidden as the page loaded and then shown, stands its large title at opacity 1 and its small title at 0",
+    title.large === "1" && title.small === "0",
+    JSON.stringify(title)
+  );
+  const running: string[] = [];
+  for (const state of ["cant", "rest", "fresh", "needs"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one state after another
+    await choose(page, "state", state);
+    running.push(
+      ...(await page.evaluate(() =>
+        (document.querySelector('.panel[data-device="desk"]') as HTMLElement)
+          .getAnimations({ subtree: true })
+          .filter((a) => Number(a.effect?.getComputedTiming().duration) > 0)
+          .map((a) => a.id)
+      ))
+    );
+    await settled(page);
+  }
+  kit.check(
+    "390, the Desk frame hidden: switching states animates nothing in it and the console warns of no NaN keyframe",
+    running.length === 0 && !warnings.some((w) => NAN_KEYFRAME.test(w)),
+    JSON.stringify({ running, warnings: warnings.slice(0, 3) })
+  );
+}
+
 const spec: Spec = {
   name: "caw-panel-preview",
   run: async (kit) => {
@@ -809,9 +1202,13 @@ const spec: Spec = {
         // biome-ignore lint/performance/noAwaitInLoops: one size at a time, each its own page
         const page = await kit.page(view);
         const errors: string[] = [];
+        const warnings: string[] = [];
         page.on("console", (message) => {
           if (message.type() === "error") {
             errors.push(message.text());
+          }
+          if (message.type() === "warning") {
+            warnings.push(message.text());
           }
         });
         page.on("pageerror", (error) => errors.push(String(error)));
@@ -819,7 +1216,11 @@ const spec: Spec = {
         await page.waitForFunction(() => "cawPreview" in window);
         await page.evaluate(`globalThis.numberOf = ${numberOf.toString()}`);
         await page.evaluate(installShown);
+        await page.evaluate(installPainted);
         await settled(page);
+        if (size === "390" && runs("round")) {
+          await hiddenFrames(kit, page, warnings);
+        }
         if (runs("boxes")) {
           await boxesEverywhere(kit, page, size, ["desk", "phone"]);
         }
@@ -827,6 +1228,13 @@ const spec: Spec = {
           if (runs("docking")) {
             await docking(kit, page, "desk", size);
             await docking(kit, page, "phone", size);
+          }
+          if (runs("round")) {
+            await expandedStack(kit, page);
+            await causeKeepsTail(kit, page);
+            await dockFootAndWheel(kit, page, size);
+            await scrim(kit, page, size);
+            await nightRims(kit, page);
           }
           if (runs("motion")) {
             await scrollLinked(kit, page);

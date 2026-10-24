@@ -27,6 +27,8 @@ const E = {
 };
 /** The dock's hysteresis (plan §5, Card docks): 8px past the floor either way. */
 const HYSTERESIS = 8;
+/** How long after the last wheel event a carried move waits before it is handed to the scroll offset, ms. */
+const WHEEL_QUIET = 120;
 /** The scroll-linked runs (plan §5): the last 24px of the title's travel, the first 24px of scroll. */
 const LINKED = 24;
 
@@ -36,7 +38,9 @@ const motionOk = () =>
 
 /** One run, named, on the house clock. */
 function run(node, keyframes, { id, dur, ease = E.out, fill = "none" }) {
-  return node.animate(keyframes, { id, duration: dur, easing: ease, fill });
+  // What is not drawn (a frame the Show switch hides) lands at once: nothing animates out of sight.
+  const duration = node.getClientRects().length > 0 ? dur : 0;
+  return node.animate(keyframes, { id, duration, easing: ease, fill });
 }
 
 /** Lets a run's end land and gives the element back its own style. */
@@ -328,7 +332,7 @@ const outcomeHtml = (words, denied) =>
 function morphText(node, text) {
   const now = node.dataset.text ?? node.textContent;
   if (now === text) {
-    return;
+    return Promise.resolve();
   }
   node.dataset.text = text;
   for (const old of node.querySelectorAll(".morph-old")) {
@@ -336,7 +340,7 @@ function morphText(node, text) {
   }
   if (node.getClientRects().length === 0) {
     node.textContent = text;
-    return;
+    return Promise.resolve();
   }
   const w0 = node.offsetWidth;
   const h0 = node.offsetHeight;
@@ -372,7 +376,7 @@ function morphText(node, text) {
       : [{ opacity: 0 }, { opacity: 1 }],
     { id: "morph-in", dur: D.morph }
   );
-  settle(out).then((done) => {
+  return settle(out).then((done) => {
     if (done && old.isConnected) {
       old.remove();
       node.style.minWidth = "";
@@ -469,7 +473,7 @@ class Panel {
     this.docked = new Map();
     this.open = true;
     this.holding = false;
-    this.scrollTarget = null;
+    this.carry = 0;
     this.titleId = `title-${device}`;
     this.slot("large-title").id = this.titleId;
     this.root.setAttribute("aria-labelledby", this.titleId);
@@ -477,7 +481,17 @@ class Panel {
   }
 
   wire() {
+    // A frame drawn while hidden (the Show switch under 900px) reads no
+    // boxes; its scroll-linked title and edge are drawn once it has one.
+    new ResizeObserver(() => this.onScroll()).observe(this.scroller);
     let ticking = false;
+    this.scroller.addEventListener(
+      "wheel",
+      () => {
+        this.lastWheel = performance.now();
+      },
+      { passive: true }
+    );
     this.scroller.addEventListener("scroll", () => {
       if (!ticking) {
         ticking = true;
@@ -606,7 +620,6 @@ class Panel {
     }
     this.holding = true;
     this.lastOrigin = before;
-    this.scrollTarget = this.exactTarget ?? this.scroller.scrollTop;
     const tick = () => {
       this.compensate();
       // Still moving: a run that has not finished (one that ended and fills forwards is done).
@@ -619,7 +632,7 @@ class Panel {
         requestAnimationFrame(tick);
       } else {
         this.holding = false;
-        this.scrollTarget = null;
+        this.commit();
       }
     };
     this.compensate();
@@ -630,44 +643,79 @@ class Panel {
     const s = this.scroller;
     if (this.holdMode === "tail") {
       s.scrollTop = s.scrollHeight;
-      s.style.removeProperty("--scroll-rem");
-      this.exactTarget = undefined;
+      this.dropCarry();
       this.lastOrigin = this.origin();
       return;
     }
     const now = this.origin();
     const moved = (now - this.lastOrigin) / this.zoom();
+    this.lastOrigin = now;
     if (moved !== 0) {
-      this.scrollTarget = (this.scrollTarget ?? s.scrollTop) + moved;
-      this.scrollExact(this.scrollTarget);
+      this.nudge(moved);
     }
-    this.lastOrigin = this.origin();
   }
 
   /**
-   * Puts the conversation at `target` exactly: the fraction of a device
-   * pixel the scroll offset snaps away is taken by the content's translate,
-   * so the rows stand still to the pixel. A scroll of the reader's own
-   * gives the fraction back (onScroll).
+   * Holds the conversation still while the layout moves it by `delta`: the
+   * content's translate takes the move at once, and the scroll offset is
+   * left to the reader, so a wheel turned meanwhile lands whole (WebKit
+   * drops the rest of a wheel's scroll when a script sets scrollTop under
+   * it). Once the layout is still, `commit` hands the carried move to the
+   * live scrollTop.
    */
-  scrollExact(target) {
+  nudge(delta) {
+    this.carry += delta;
+    this.scroller.style.setProperty("--scroll-rem", `${-this.carry}px`);
+  }
+
+  /**
+   * Hands the carried move to the scroll offset, read live: what the
+   * reader scrolled meanwhile stays theirs. The fraction of a device pixel
+   * the offset snaps away stays carried, so the rows stand still to the
+   * pixel. Waits out a wheel still turning (`lastWheel`).
+   */
+  commit() {
     const s = this.scroller;
-    s.scrollTop = target;
-    const rem = target - s.scrollTop;
-    s.style.setProperty("--scroll-rem", `${-rem}px`);
-    this.exactTarget = target;
-    this.exactTop = s.scrollTop;
+    clearTimeout(this.commitTimer);
+    const quiet = performance.now() - (this.lastWheel ?? 0);
+    if (quiet < WHEEL_QUIET) {
+      this.commitTimer = setTimeout(() => this.commit(), WHEEL_QUIET - quiet);
+      return;
+    }
+    const want = s.scrollTop + this.carry;
+    s.scrollTop = want;
+    this.carry = want - s.scrollTop;
+    s.style.setProperty("--scroll-rem", `${-this.carry}px`);
+    this.ownTop = s.scrollTop;
+  }
+
+  /** Whether a carried move waits to be handed to the scroll offset. */
+  carrying() {
+    return Math.abs(this.carry) >= 1;
+  }
+
+  dropCarry() {
+    clearTimeout(this.commitTimer);
+    this.carry = 0;
+    this.ownTop = undefined;
+    this.scroller.style.removeProperty("--scroll-rem");
   }
 
   /** A change to the stack's size, unfolding or folding from the size it is drawn at. */
   resizeStack(change, { grow, id, dur }) {
     const before = this.origin();
-    const from = this.stack.getBoundingClientRect().height / this.zoom();
+    const pad = () => Number.parseFloat(getComputedStyle(this.scroller).paddingTop);
+    const padBefore = pad();
+    const drawn = this.stack.getBoundingClientRect().height / this.zoom();
     for (const a of this.stack.getAnimations()) {
       a.cancel();
     }
     change();
     this.fillStack();
+    // The scroller's top room and the stack's own swap as the stack fills or
+    // empties: the stack starts from where that leaves the conversation, so
+    // the content's origin never jumps and the scroller is never clamped.
+    const from = Math.max(0, drawn + padBefore - pad());
     const to = this.stack.offsetHeight;
     let a = null;
     if (motionOk() && Math.abs(from - to) > 0.5) {
@@ -679,6 +727,11 @@ class Panel {
     }
     this.hold("anchor", before);
     return a;
+  }
+
+  /** Whether the panel's frame is drawn at all (the Show switch hides one under 900px). */
+  drawn() {
+    return this.root.getClientRects().length > 0 && this.root.offsetWidth > 0;
   }
 
   zoom() {
@@ -702,6 +755,14 @@ class Panel {
     more.hidden = items.length <= 3;
     for (const [i, li] of items.entries()) {
       li.hidden = i >= 3 && !this.expanded;
+    }
+    // Expanded, the rows stand three and a half deep and scroll inside;
+    // the half row says there is more.
+    if (this.expanded && items.length > 3) {
+      const [a, b, c, d] = items.map((li) => li.offsetHeight);
+      this.rows.style.setProperty("--rows-cap", `${a + b + c + d / 2}px`);
+    } else {
+      this.rows.style.removeProperty("--rows-cap");
     }
     if (!more.hidden) {
       const words = this.expanded
@@ -729,9 +790,7 @@ class Panel {
     this.toggleMenu(false, true);
     this.rows.replaceChildren();
     this.docked.clear();
-    this.scroller.style.removeProperty("--scroll-rem");
-    this.exactTarget = undefined;
-    this.exactTop = undefined;
+    this.dropCarry();
     this.expanded = false;
     this.root.dataset.block = S.block;
     this.root.toggleAttribute("data-blocked", S.state === "cant");
@@ -818,9 +877,21 @@ class Panel {
   }
 
   paintBlock(animate) {
+    const s = this.scroller;
+    // Read at its foot, the thread stays at its foot as the block's words
+    // change size: once as the morph holds the larger box, once as it lets go.
+    const atFoot = s.scrollTop >= s.scrollHeight - s.clientHeight - 1;
+    const keepFoot = () => {
+      if (atFoot) {
+        s.scrollTop = s.scrollHeight;
+        this.dropCarry();
+        this.onScroll();
+      }
+    };
+    const morphs = [];
     const cause = CAUSES[S.cause];
     const set = animate
-      ? morphText
+      ? (node, text) => morphs.push(morphText(node, text))
       : (node, text) => {
           node.dataset.text = text;
           node.textContent = text;
@@ -839,7 +910,11 @@ class Panel {
       night.src = `${next}-night.png`;
     }
     for (const note of this.root.querySelectorAll('[data-slot="kept-note"]')) {
-      (animate ? morphText : set)(note, cause.note);
+      set(note, cause.note);
+    }
+    if (animate) {
+      keepFoot();
+      Promise.all(morphs).then(keepFoot);
     }
   }
 
@@ -867,16 +942,17 @@ class Panel {
 
   onScroll() {
     const s = this.scroller;
+    if (!this.drawn()) {
+      return;
+    }
     const z = this.zoom();
     // A scroll that is none of the panel's own gives back the fraction it held.
     if (
-      !this.holding &&
-      this.exactTop !== undefined &&
-      Math.abs(s.scrollTop - this.exactTop) > 0.01
+      !(this.holding || this.carrying()) &&
+      this.ownTop !== undefined &&
+      Math.abs(s.scrollTop - this.ownTop) > 0.01
     ) {
-      s.style.removeProperty("--scroll-rem");
-      this.exactTarget = undefined;
-      this.exactTop = undefined;
+      this.dropCarry();
     }
     const t = this.slot("large-title");
     const shown = !this.slot("title-slot").hidden && t.textContent !== "";
@@ -959,8 +1035,10 @@ class Panel {
       li.remove();
       this.fillStack();
       const after = this.origin();
-      const base = this.exactTarget ?? this.scroller.scrollTop;
-      this.scrollExact(base + (after - before) / this.zoom());
+      this.nudge((after - before) / this.zoom());
+      if (!this.holding) {
+        this.commit();
+      }
       this.onScroll();
       then?.();
     };
@@ -1029,12 +1107,7 @@ class Panel {
       const delta = (now - last) * distance;
       last = now;
       if (delta !== 0) {
-        if (this.scrollTarget === null) {
-          s.scrollTop += delta;
-        } else {
-          this.scrollTarget += delta;
-          s.scrollTop = this.scrollTarget;
-        }
+        s.scrollTop += delta;
       }
       if (clock.playState === "running" || clock.playState === "paused") {
         requestAnimationFrame(step);
@@ -1243,6 +1316,9 @@ class Panel {
 
   /** A FLIP of one Caw between two places (The One Object Rule); the source hidden while its copy flies. */
   fly(from, to, toImgs, id) {
+    if (!this.drawn()) {
+      return Promise.resolve(true);
+    }
     const pr = this.root.getBoundingClientRect();
     const z = this.zoom();
     const a = from.getBoundingClientRect();
@@ -1486,6 +1562,9 @@ class Panel {
 
   /** A FLIP from a rect the source stood at (it is gone from the layout now) onto `to`. */
   flyRect(source, rect, to, id) {
+    if (!(this.drawn() && rect.width > 0)) {
+      return;
+    }
     const pr = this.root.getBoundingClientRect();
     const z = this.zoom();
     const b = to.getBoundingClientRect();
@@ -1522,6 +1601,9 @@ class Panel {
 
   /** Caw's flight from where he stood (gone from the layout now) onto `to`. */
   flyFromRect(html, rect, to, id) {
+    if (!(this.drawn() && rect.width > 0)) {
+      return;
+    }
     const stand = el("div", "caw");
     stand.style.position = "absolute";
     const pr = this.root.getBoundingClientRect();

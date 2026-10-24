@@ -651,14 +651,20 @@ button {
   inset: 0 0 auto;
   height: calc(var(--top-zone) + var(--space-2));
   opacity: 0;
+  /* The well itself, solid under the small title and the capsule, fading
+     over the last stretch: the words under the controls never print
+     through, whether or not an engine draws the backdrop's blur (Linux
+     WebKit drew none, so a fade that leaned on it let them through). The
+     blur softens the fade where it draws. */
   background: linear-gradient(
     to bottom,
-    var(--surface-well),
-    oklch(from var(--surface-well) l c h / 0.6) 55%,
-    oklch(from var(--surface-well) l c h / 0)
+    var(--surface-well) 72%,
+    color-mix(in oklab, var(--surface-well) 0%, transparent)
   );
+  -webkit-backdrop-filter: blur(var(--material-blur));
   backdrop-filter: blur(var(--material-blur));
-  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent);
 }
 
 .small-title {
@@ -851,10 +857,15 @@ button {
   background: var(--brand-solid);
 }
 
+/* Expanded past three, the rows scroll inside their own cap (panel.js), so the thread and the composer always keep their room. */
 .stack ul {
+  max-height: var(--rows-cap, none);
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
+  scrollbar-width: thin;
 }
 
 .stack li {
@@ -887,14 +898,18 @@ button {
   font-weight: 500;
 }
 
+/* A link in ink: the surface's one coral stays Send's. */
 .signpost a {
-  color: var(--link-ink);
-  text-decoration: none;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--border-control-strong);
+  text-underline-offset: 2px;
+  transition: color var(--dur-control) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .signpost a:hover {
-    text-decoration: underline;
+    color: var(--ink-strong);
   }
 }
 
@@ -1283,12 +1298,13 @@ button {
   display: none;
 }
 
+/* Words at the start; Caw alone stands on the panel's axis. */
 .block-in {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-5) var(--space-2);
-  text-align: center;
+  text-align: start;
 }
 
 .panel[data-block="B"] .block {
@@ -1310,6 +1326,7 @@ button {
 
 .hero {
   position: relative;
+  justify-self: center;
   width: var(--hero-w);
   height: var(--hero-h);
 }
@@ -1333,13 +1350,13 @@ button {
   margin: 0;
   font: var(--type-body);
   color: var(--ink-muted);
-  text-wrap: balance;
+  text-wrap: pretty;
 }
 
 .block .ways {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-1);
@@ -1577,6 +1594,11 @@ button {
 
 /* The scroller's foot fades while more is below (the house edge fade). */
 .scroller[data-more-below] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
   mask-image: linear-gradient(
     to bottom,
     #000 calc(100% - var(--c-edge-fade-len)),
