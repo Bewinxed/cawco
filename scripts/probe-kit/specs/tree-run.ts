@@ -36,6 +36,15 @@
  *   project's checkout, which delegates a child.
  * - r2. The session that made the routine is stopped by the person: the
  *   orchestrator and its child run on, no stop holds them.
+ * - o1. A Claude delegate's CLI killed alone (SIGKILL) mid-command: its
+ *   command (`sleep 3601`) is gone within seconds, named in the agent's log
+ *   (agent left-running.ts), and the turn handed back names it interrupted.
+ * - x1. The same for pi, its host killed alone: the command is gone and
+ *   named, and the turn handed back names it interrupted, its output not
+ *   kept (pi keeps none).
+ * - x2. The same for OpenCode, its server killed: the command is gone and
+ *   named, and the turn handed back when the agent takes the session up
+ *   again names it interrupted, its output not kept.
  * - u1. A delegate's process is killed while its agent is down, and the
  *   agent comes back with its sessiond frozen: while the machine's custody
  *   is undecided the item stays live and its parent hears nothing.
@@ -47,6 +56,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workWords } from "../../../packages/core/src/index";
+import {
+  commandLines,
+  processLineage,
+} from "../../../packages/core/src/process-identity";
+import { type Pid, signal } from "../../../packages/core/src/signal";
 import { toolWords } from "../../lib/tool-call";
 import {
   delay,
@@ -64,7 +78,25 @@ const TAGS = {
   custody: "PROBE-CUSTODY",
   retry: "PROBE-RETRY",
   orchestrate: "PROBE-BGORCH",
+  orphan: "PROBE-ORPHAN",
+  piCut: "PROBE-PICUT",
+  openCut: "PROBE-OCCUT",
 } as const;
+
+/** The commands whose CLI or server is killed under them: each its own `sleep`, found by its argument. */
+const LEFT = {
+  [TAGS.orphan]: "sleep 3601",
+  [TAGS.piCut]: "sleep 3602",
+  [TAGS.openCut]: "sleep 3603",
+} as const;
+/** Words a session is handed back after its process went (hub server.ts `killedWords`, `restartedWords`). */
+const HANDED_BACK = [
+  "Your process was killed",
+  "CawCo restarted",
+  "was interrupted when its process went",
+];
+/** The shell as each harness names it: Claude Code's Bash, pi's bash, OpenCode's shell. */
+const SHELLS = ["Bash", "bash", "shell"];
 
 /** What CUT's two commands print first: the marks a cut command's output carries. */
 const MARKS = ["PARTIAL-ONE-MARK", "PARTIAL-TWO-MARK"] as const;
@@ -139,10 +171,28 @@ const custody: { finished: boolean; turns: number; woken: boolean } = {
 /** BGORCH sessions that have held since they delegated. */
 const heldAfterDelegate = new Set<string>();
 
-/** A shell call, kept in {@link issued}. */
-const shell = (brief: string, command: string): Reply => {
+/** A shell call, kept in {@link issued}: Claude Code's Bash, or the shell `request` offers. */
+const shell = (brief: string, command: string, request?: Seen): Reply => {
   issued.push({ at: Date.now(), brief, command });
-  return useTool("Bash", { command, description: "Run and wait" });
+  const name = SHELLS.find((one) => request?.toolNames.includes(one)) ?? "Bash";
+  return useTool(name, { command, description: "Run and wait" });
+};
+
+/**
+ * ORPHAN, PICUT and OCCUT: the first turn runs its command; a turn handed
+ * back after its process went, or a shell result, ends quietly.
+ */
+const leftReply = (request: Seen, brief: string): Reply | undefined => {
+  const tag = (Object.keys(LEFT) as (keyof typeof LEFT)[]).find((one) =>
+    brief.includes(one)
+  );
+  if (!tag) {
+    return undefined;
+  }
+  return request.afterTool ||
+    HANDED_BACK.some((words) => request.last.includes(words))
+    ? text("ok")
+    : shell(brief, LEFT[tag], request);
 };
 
 /**
@@ -195,6 +245,10 @@ const respond = (request: Seen): Reply => {
   }
   if (brief.includes(TAGS.custody)) {
     return custodyReply(request, brief);
+  }
+  const left = leftReply(request, brief);
+  if (left) {
+    return left;
   }
   if (brief.includes(TAGS.orchestrate) && !delegated.has(brief)) {
     const reply = cawco(request, `${brief}:delegate`, "delegate", {
@@ -729,6 +783,130 @@ const routineLeg = async (
   );
 };
 
+/** Whether a process whose command line holds `command` runs now (the probe's own reading, no part of the fleet's). */
+const runs = async (command: string): Promise<boolean> =>
+  (await commandLines()).some((one) => one.command.includes(command));
+
+/**
+ * o1, x1, x2: a delegate on `harness` runs its command; `kill` ends its
+ * harness process alone (never the command); the command must be gone
+ * within a few seconds, named in the agent's log, and the turn handed back
+ * must name it interrupted: with no output kept where its harness keeps
+ * none (pi, OpenCode).
+ */
+const leftLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string,
+  how: {
+    harness: "claude" | "pi" | "opencode";
+    kill: (instanceId: string) => Promise<void>;
+    leg: string;
+    tag: keyof typeof LEFT;
+    unkept: boolean;
+  }
+): Promise<void> => {
+  const command = LEFT[how.tag];
+  const mark = await fleet.logMark("agent");
+  const started = await fleet.api<Started>("/api/work-items", {
+    parentInstanceId: parent,
+    title: `${how.harness} cut delegate`,
+    prompt: `${how.tag}: run and wait.`,
+    harness: how.harness,
+    model: MODEL[how.harness],
+    host: true,
+  });
+  await ran(
+    `the ${how.harness} delegate running its command`,
+    how.tag,
+    command
+  );
+  await until(`${command} running`, () => runs(command), Boolean, 60_000);
+  await delay(4000);
+  // Where the command runs, as the kill finds it: its ancestry, for a
+  // failure to say.
+  const ancestry = await ancestryOf(command);
+  await how.kill(started.instanceId);
+  const gone = await until(
+    `${command} ended`,
+    async () => !(await runs(command)),
+    Boolean,
+    20_000
+  ).catch(() => false);
+  const said = await until(
+    "the agent's line on what it ended",
+    async () => {
+      const log = await mark.since();
+      return log.includes(command) && log.includes(workWords.leftRunningEnded)
+        ? log
+        : undefined;
+    },
+    Boolean,
+    20_000
+  ).catch(async () => await mark.since());
+  const line =
+    said.split("\n").find((one) => one.includes(workWords.leftRunningEnded)) ??
+    "";
+  kit.check(
+    `${how.leg}: a ${how.harness} session's harness process killed alone mid-command: within seconds its command is gone, named in the agent's log`,
+    gone === true && line.includes(command),
+    line || `no such line in the agent's log; ${command} ran under ${ancestry}`
+  );
+  const words = workWords.commandInterrupted(
+    command,
+    how.unkept ? undefined : ""
+  );
+  // The session's transcript as the hub serves it: the message the turn
+  // was handed back in, as the session and the person both read it.
+  const handedBack = await until(
+    "the turn handed back",
+    async () => {
+      const read = await fetch(
+        `${fleet.base}/api/instances/${started.instanceId}/transcript`
+      );
+      const transcript = read.ok ? await read.text() : "";
+      return transcript.includes(JSON.stringify(words).slice(1, -1))
+        ? words
+        : undefined;
+    },
+    Boolean,
+    120_000
+  ).catch(() => "");
+  kit.check(
+    `${how.leg}: the turn handed back to the ${how.harness} session names the command interrupted${how.unkept ? ", its output not kept" : ""}`,
+    handedBack.includes(words),
+    handedBack.slice(0, 900)
+  );
+};
+
+/** A running `command`'s ancestors, nearest first, each its pid and command line. */
+const ancestryOf = async (command: string): Promise<string> => {
+  const lines = new Map(
+    (await commandLines()).map((one) => [one.pid, one.command])
+  );
+  const parents = new Map(
+    (await processLineage()).map((row) => [row.pid, row.ppid])
+  );
+  const start = [...lines].find(([, line]) => line.includes(command))?.[0];
+  const chain: string[] = [];
+  for (let at = start; at && at > 1; at = parents.get(at)) {
+    chain.push(`${at} ${(lines.get(at) ?? "?").slice(0, 80)}`);
+  }
+  return chain.join(" < ") || "nothing";
+};
+
+/** The pid of a fleet process sessiond holds whose proc id `match` takes. */
+const heldPid = async (
+  fleet: KitFleet,
+  match: (procId: string) => boolean
+): Promise<Pid> =>
+  until(
+    "a process sessiond holds",
+    async () => (await fleet.heldProcs()).find((one) => match(one.procId))?.pid,
+    Boolean,
+    60_000
+  );
+
 /** u1, u2. */
 const custodyLeg = async (
   kit: Kit,
@@ -842,6 +1020,35 @@ const spec: Spec = {
     await retryLeg(kit, fleet, parent);
     await cutLeg(kit, fleet, parent);
     await routineLeg(kit, fleet, src, project.id);
+    /** Its harness process alone, the one sessiond holds under `procId`, killed: never its command. */
+    const killHeld =
+      (match: (procId: string, id: string) => boolean) =>
+      async (id: string): Promise<void> => {
+        signal(await heldPid(fleet, (procId) => match(procId, id)), "SIGKILL");
+      };
+    await leftLeg(kit, fleet, parent, {
+      leg: "o1",
+      harness: "claude",
+      tag: TAGS.orphan,
+      unkept: false,
+      kill: killHeld((procId, id) => procId === id),
+    });
+    await leftLeg(kit, fleet, parent, {
+      leg: "x1",
+      harness: "pi",
+      tag: TAGS.piCut,
+      unkept: true,
+      kill: killHeld((procId, id) => procId === `pi:${id}`),
+    });
+    await leftLeg(kit, fleet, parent, {
+      leg: "x2",
+      harness: "opencode",
+      tag: TAGS.openCut,
+      unkept: true,
+      // Its server as sessiond holds it: the process the agent started
+      // OpenCode's server under.
+      kill: killHeld((procId) => procId.startsWith("opencode-server")),
+    });
     await custodyLeg(kit, fleet, parent);
   },
 };
