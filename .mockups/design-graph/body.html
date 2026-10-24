@@ -5,7 +5,9 @@
   <main class="page" id="page">
     <div class="review-bar" role="group" aria-labelledby="kindsLabel">
       <span class="review-label" id="kindsLabel">Clip kinds</span>
-      <div class="t-tabs" id="kinds" role="tablist" aria-labelledby="kindsLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-kinds="hue" aria-selected="true">In their own hue</button><button class="t-tab" role="tab" type="button" data-kinds="ink" aria-selected="false">In ink only</button></div>
+      <div class="t-tabs" id="kinds" role="tablist" aria-labelledby="kindsLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-kinds="hue" aria-selected="true" aria-describedby="kindsNote">In their own hue <span class="badge proposal">Proposed</span></button><button class="t-tab" role="tab" type="button" data-kinds="ink" aria-selected="false">In ink only</button></div>
+      <!-- The six kind hues are the mockup's own, not the house's: picking hue is picking them too. -->
+      <p class="review-note" id="kindsNote">Own hue uses six proposed colours, one per kind. Picking it adds them to the design tokens.</p>
     </div>
     <div class="pages" id="pages"></div>
   </main>
@@ -16,7 +18,7 @@
   <div class="tools" id="tools" data-face="graph" data-stop="peek">
     <header class="sheet-head" id="sheetHead">
       <span class="edge-pill edge-pill-top" aria-hidden="true"></span>
-      <button class="sheet-title" id="sheetTitle" type="button"><b>Design graph</b> · <span id="sheetState"></span></button>
+      <button class="sheet-title" id="sheetTitle" type="button"><span class="sheet-title-text"><b>Design graph</b> · <span id="sheetState"></span></span></button>
       <div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph">Graph</button><button class="t-tab" role="tab" data-face="move">Timeline</button></div>
       <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph"></button>
     </header>
