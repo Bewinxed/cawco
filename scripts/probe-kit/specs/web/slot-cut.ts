@@ -175,6 +175,17 @@ const spec: Spec = {
         ),
       JSON.stringify(progress)
     );
+    kit.check(
+      "the entrance plays out",
+      read.runs.length > 0 && read.runs.every((run) => run.ended),
+      JSON.stringify(
+        read.runs.map(({ ended, missed, target }) => ({
+          target,
+          ended,
+          missed,
+        }))
+      )
+    );
     // At rest, where the check stands in its slot, to set beside another tree's.
     const rest = await page.evaluate((slot) => {
       const box = document.querySelector(slot)?.getBoundingClientRect();

@@ -1887,6 +1887,12 @@ export interface MotionRun {
   heldAt: number | null;
   /** Its last keyframe's values (a CSS animation's, a Web Animation's), where the page's held clock read it. */
   last?: Record<string, string>;
+  /**
+   * Why it did not end, where it did not: cancelled before its end, still
+   * paused after the read let it go (where it stood, of how long), or the
+   * page drew no frame for {@link HUNG_MS}.
+   */
+  missed?: string;
   /** A CSS animation's name, a CSS transition's property, a Web Animation's id (else its keyframes' properties). */
   name: string;
   /** One iteration's length, ms: a loop's period (read with `loops`). */
@@ -1925,7 +1931,7 @@ export interface MotionOptions<T> {
    * only (Chromium); a held read refuses it.
    */
   loops?: boolean;
-  /** How long the action has to start its runs, and they to end once let go, ms. */
+  /** How long the action has to start its runs, ms. Once let go, each is waited for by its own `finished`, however long the page's frames take ({@link HUNG_MS} only for a page that draws none). */
   ms?: number;
   /** The run whose length the fractions are of; the longest unset. */
   of?: string;
@@ -2078,9 +2084,31 @@ export function stillWithin(
   return page.evaluate(stillInside, { within, own, ms });
 }
 
-/** Runs let go, played out: each one's own `finished`, given `ms`, not a frame watched for it. */
-const playedOut = <T>(ms: number, finished: () => Promise<T>) =>
-  readWithin(ms, finished);
+/**
+ * How long the read waits for runs it let go to play out before it takes the
+ * page as hung: each run is waited for by its own `finished` (or found still
+ * paused), however slow the page's frames, so this bounds only a page that
+ * draws none. A fixed 3000ms wait over all of them together read every run of
+ * slot-cut's as not ended, `[false,false,false]`, on a run 5s slower than its
+ * others: one late `finished` failed them all, and said nothing of why. Our call.
+ */
+const HUNG_MS = 60_000;
+
+/** How a run let go came out, as the page saw it. */
+interface Outcome {
+  ended: boolean;
+  why?: string;
+}
+
+/** Runs let go, played out: each one's own `finished`, not a frame watched for it. */
+const playedOut = <T>(finished: () => Promise<T>) =>
+  readWithin(HUNG_MS, finished);
+
+/** What a run let go is told when the page never answered. */
+const HUNG: Outcome = {
+  ended: false,
+  why: `the page drew no frame for ${HUNG_MS / 1000}s after the read let it go`,
+};
 
 /** The Chromium read: caught, sought, read, let go, played out. */
 async function clockRead<T>(
@@ -2130,32 +2158,44 @@ async function clockRead<T>(
     // A read that threw leaves no run held for the next read to find.
     await clock.release();
   }
-  const letGo = await playedOut(ms, () =>
+  const letGo = await playedOut(() =>
     page.evaluate(() => window.kitCaught?.finished() ?? [])
   );
   const ends = letGo.kind === "answered" ? [...letGo.value] : [];
   /** The first unclaimed page run on the same element by the same name. */
-  const playedTo = (target: string, name: string) => {
+  const playedTo = (target: string, name: string): Outcome => {
+    if (letGo.kind !== "answered") {
+      return HUNG;
+    }
     const found = ends.findIndex(
       (one) => one.target === target && one.name === name
     );
-    return found < 0 ? false : (ends.splice(found, 1)[0]?.ended ?? false);
+    return found < 0
+      ? {
+          ended: false,
+          why: "the page holds no run of this element and name to let go",
+        }
+      : (ends.splice(found, 1)[0] as Outcome);
   };
   return {
     by: "clock",
     at,
-    runs: caught.map((run, index) => ({
-      type: run.type,
-      name: run.name,
-      target: targets[index] ?? "",
-      start: run.start,
-      delay: run.delay,
-      end: run.loop ? Number.POSITIVE_INFINITY : run.end,
-      period: run.duration,
-      easing: run.easing,
-      heldAt: null,
-      ended: playedTo(targets[index] ?? "", run.name),
-    })),
+    runs: caught.map((run, index) => {
+      const { ended, why } = playedTo(targets[index] ?? "", run.name);
+      return {
+        type: run.type,
+        name: run.name,
+        target: targets[index] ?? "",
+        start: run.start,
+        delay: run.delay,
+        end: run.loop ? Number.POSITIVE_INFINITY : run.end,
+        period: run.duration,
+        easing: run.easing,
+        heldAt: null,
+        ended,
+        ...(why ? { missed: why } : {}),
+      };
+    }),
   };
 }
 
@@ -2196,14 +2236,22 @@ async function heldRead<T>(
     // navigated away has none to let go.
     await page.evaluate(() => window.kitHeld?.letGo()).catch(() => undefined);
   }
-  const played = await playedOut(ms, () =>
+  const played = await playedOut(() =>
     page.evaluate(() => window.kitHeld?.finished() ?? [])
   );
-  const ends = played.kind === "answered" ? played.value : [];
   return {
     by: "held",
     at,
-    runs: caught.map((run, index) => ({ ...run, ended: ends[index] ?? false })),
+    runs: caught.map((run, index) => {
+      const { ended, why } =
+        played.kind === "answered"
+          ? (played.value[index] ?? {
+              ended: false,
+              why: "the page let no such run go",
+            })
+          : HUNG;
+      return { ...run, ended, ...(why ? { missed: why } : {}) };
+    }),
   };
 }
 
@@ -2212,7 +2260,7 @@ declare global {
     /** The clock read's caught runs as the page holds them (kit.ts `keepCaught`). */
     kitCaught?: {
       finished: () => Promise<
-        { ended: boolean; name: string; target: string }[]
+        { ended: boolean; name: string; target: string; why?: string }[]
       >;
     };
     /** A motion read's clock, held by the page itself (kit.ts `readMotion`), while it reads. */
@@ -2220,8 +2268,8 @@ declare global {
       letGo: () => void;
       seek: (fraction: number, of?: string) => void;
       started: (ms: number) => Promise<Omit<MotionRun, "ended">[]>;
-      /** Whether each run `started` told played to its end, in its order. */
-      finished: () => Promise<boolean[]>;
+      /** How each run `started` told came out once let go, in its order. */
+      finished: () => Promise<{ ended: boolean; why?: string }[]>;
     };
   }
 }
@@ -2251,6 +2299,35 @@ function keepCaught(within: string): void {
     }
     return run instanceof CSSTransition ? run.transitionProperty : run.id;
   };
+  /**
+   * How `run`, let go, comes out: ended once its `finished` resolves, however
+   * long the page's frames take; not, once it is cancelled, or once it still
+   * stands paused three frames after it was let go (the read failed to let
+   * it go, and it would never end).
+   */
+  const outcome = (run: Animation) =>
+    new Promise<{ ended: boolean; why?: string }>((done) => {
+      run.finished.then(
+        () => done({ ended: true }),
+        () => done({ ended: false, why: "cancelled before its end" })
+      );
+      let looked = 0;
+      const look = () => {
+        if (run.playState === "finished" || run.playState === "idle") {
+          return;
+        }
+        looked += 1;
+        if (run.playState === "paused" && looked >= 3) {
+          done({
+            ended: false,
+            why: `still paused at ${Math.round(Number(run.currentTime))}ms of ${Math.round(Number(run.effect?.getComputedTiming().endTime))}ms after the read let it go`,
+          });
+          return;
+        }
+        requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
+    });
   const kept = window
     .kitRuns()
     .filter(
@@ -2268,12 +2345,11 @@ function keepCaught(within: string): void {
   window.kitCaught = {
     finished: () =>
       Promise.all(
-        kept.map(({ run, name, target }) =>
-          run.finished.then(
-            () => ({ name, target, ended: true }),
-            () => ({ name, target, ended: false })
-          )
-        )
+        kept.map(async ({ run, name, target }) => ({
+          name,
+          target,
+          ...(await outcome(run)),
+        }))
       ),
   };
 }
@@ -2421,6 +2497,35 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
         : {}),
     };
   };
+  /**
+   * How `run`, let go, comes out: ended once its `finished` resolves, however
+   * long the page's frames take; not, once it is cancelled, or once it still
+   * stands paused three frames after it was let go (the read failed to let
+   * it go, and it would never end).
+   */
+  const outcome = (run: Animation) =>
+    new Promise<{ ended: boolean; why?: string }>((done) => {
+      run.finished.then(
+        () => done({ ended: true }),
+        () => done({ ended: false, why: "cancelled before its end" })
+      );
+      let looked = 0;
+      const look = () => {
+        if (run.playState === "finished" || run.playState === "idle") {
+          return;
+        }
+        looked += 1;
+        if (run.playState === "paused" && looked >= 3) {
+          done({
+            ended: false,
+            why: `still paused at ${Math.round(Number(run.currentTime))}ms of ${Math.round(Number(run.effect?.getComputedTiming().endTime))}ms after the read let it go`,
+          });
+          return;
+        }
+        requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
+    });
   const stop = () => {
     watch.disconnect();
     for (const type of RUN_EVENTS) {
@@ -2492,15 +2597,7 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
       letGone = [...letGone, ...caught];
       caught = [];
     },
-    finished: () =>
-      Promise.all(
-        letGone.map((run) =>
-          run.finished.then(
-            () => true,
-            () => false
-          )
-        )
-      ),
+    finished: () => Promise.all(letGone.map(outcome)),
   };
 }
 
