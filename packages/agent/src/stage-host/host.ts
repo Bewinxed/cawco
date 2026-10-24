@@ -129,6 +129,8 @@ interface DevServer {
   config: { base: string };
   environments: {
     client: {
+      /** The environment's resolved options: its dependency optimizer's `include`, the packages the project forces into the pre-bundle. */
+      config: { optimizeDeps: { include?: string[] } };
       /** Vite's optimizer of the project's dependencies: its `browserHash` names the deps it last built (each served at `?v=<hash>`). */
       depsOptimizer?: { metadata: { browserHash: string } } | null;
       hot: { send: (payload: unknown, ...rest: unknown[]) => void };
@@ -157,6 +159,8 @@ interface DevServer {
       ) => void
     ) => void;
   };
+  /** Vite's own restart, its optimizer bundling every dependency again when `forceOptimize`. */
+  restart: (forceOptimize?: boolean) => Promise<void>;
   transformIndexHtml: (
     url: string,
     html: string,
@@ -164,6 +168,7 @@ interface DevServer {
   ) => Promise<string>;
   /** Vite's file watcher (chokidar): a `change` on it is what Vite's HMR runs on. */
   watcher: {
+    add: (paths: string[]) => unknown;
     emit: (event: "change", file: string) => boolean;
     on: (
       event: "add" | "change" | "unlink",
@@ -338,80 +343,89 @@ const packageName = (specifier: string): string =>
     .join("/");
 
 /**
- * Whether package `name`, found from the toolchain root up as Node finds
- * it, is linked: its real path lies under no `node_modules` (a workspace's
- * own package, `workspace:*`), where an installed one's, bun's shared
- * store's included, lies under one.
+ * Package `name`'s real folder, found from the toolchain root up as Node
+ * finds it, when it is linked: its real path lies under no `node_modules`
+ * (a workspace's own package, `workspace:*`), where an installed one's,
+ * bun's shared store's included, lies under one. Null for an installed one
+ * or none.
  */
-function linkedPackage(name: string): boolean {
+function linkedFolder(name: string): string | null {
   for (let dir = root; ; dir = dirname(dir)) {
     const at = join(dir, "node_modules", name);
     if (existsSync(at)) {
-      return !realpathSync(at).split(sep).includes("node_modules");
+      const real = realpathSync(at);
+      return real.split(sep).includes("node_modules") ? null : real;
     }
     if (dirname(dir) === dir) {
-      return false;
+      return null;
     }
   }
 }
 
-/** The linked workspace packages among the toolchain root's own dependencies. */
-function workspacePackages(): string[] {
-  const manifest = resolve(root, "package.json");
-  if (!existsSync(manifest)) {
-    return [];
-  }
-  const json = JSON.parse(readFileSync(manifest, "utf8")) as Record<
-    string,
-    Record<string, string> | undefined
-  >;
-  return Object.keys({
-    ...json.dependencies,
-    ...json.devDependencies,
-    ...json.peerDependencies,
-  }).filter(linkedPackage);
-}
+/** The real folders of the linked packages `include` forces into the pre-bundle: a package's own entry or its subpath's (`dep > cjs-dep` names a package inside one, never one of the workspace's). */
+const forcedLinked = (include: string[]): string[] => [
+  ...new Set(
+    include
+      .filter((entry) => !entry.includes(">"))
+      .map((entry) => linkedFolder(packageName(entry)))
+      .filter((dir): dir is string => dir !== null)
+  ),
+];
 
-/** An environment's options as the stage reads their dependency optimizer's (Vite's `configEnvironment`). */
-interface EnvironmentOptions {
-  optimizeDeps?: { exclude?: string[]; include?: string[] };
-}
+/** How long a forced package's writes settle before its pre-bundle is built again. Ours: a merge or a checkout writes many files at once. */
+const REBUNDLE_SETTLE_MS = 300;
+let rebundleTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
- * Every linked workspace package served from its source, never
- * pre-bundled, whatever the project's config forces: Vite builds a
- * pre-bundle once and keeps it while "Package manager lockfile content …
- * Relevant fields in your `vite.config.js` … `NODE_ENV` value" stay the
- * same (vite.dev/guide/dep-pre-bundling#file-system-cache), so a linked
- * package's source change never reached it: "When making changes to the
- * linked dep, restart the dev server with the `--force` command line
- * option" (same page). The dashboard forces `@cawco/icons` in ("Use this
- * option to force a linked package to be pre-bundled",
- * vite.dev/config/dep-optimization-options), and a canvas whose component
- * imported the icon a merge had added died on load: "does not provide an
- * export named 'IconTodoDone'". Each is dropped from `include` (a linked
- * package's own entry or subpath; `dep > cjs-dep`, a CommonJS package
- * inside one, stays) and named in `exclude`. Served as source, an edit to
- * one is a module Vite's watcher and HMR see like any other of the
- * project's. Vite 8.3.4 resolves `include` without reading `exclude`
- * (`addManuallyIncludedOptimizeDeps`), so the drop is what keeps one out.
+ * A linked workspace package the project's config forces into Vite's
+ * pre-bundle ("Use this option to force a linked package to be
+ * pre-bundled", vite.dev/config/dep-optimization-options) stays
+ * pre-bundled, and is bundled again whenever a file of it changes. The
+ * dashboard forces `@cawco/icons`: a canvas of a component drawing its
+ * icons opened cold in 663 requests with it, 1,097 with the barrel served
+ * from source (its icons one module each). Vite keeps a pre-bundle while
+ * "Package manager lockfile content … Relevant fields in your
+ * `vite.config.js` … `NODE_ENV` value" stay the same
+ * (vite.dev/guide/dep-pre-bundling), so an icon a merge added never reached
+ * it ("does not provide an export named 'IconTodoDone'"); the same page:
+ * "When making changes to the linked dep, restart the dev server with the
+ * `--force` command line option". The stage does that with Vite's own
+ * `restart(forceOptimize)` ("force the optimizer to re-bundle, same as
+ * --force cli flag", vite.dev/guide/api-javascript), on its watcher
+ * ("Chokidar watcher instance", same page), given each forced package's
+ * folder: Vite watches its root and the modules it serves, and a
+ * pre-bundled package's source is neither. A page open through it has its
+ * socket closed by the restart, and Vite's client waits for the server and
+ * reloads (its `vite:ws:disconnect`: "Polling for restart...",
+ * `location.reload()`), asking for the new bundle.
  */
-function fromSource(_name: string, options: EnvironmentOptions): void {
-  const deps = options.optimizeDeps;
-  const forced = (deps?.include ?? []).filter(
-    (entry) => !entry.includes(">") && linkedPackage(packageName(entry))
+function rebundleOnChange(dev: DevServer): void {
+  const folders = forcedLinked(
+    dev.environments.client.config.optimizeDeps.include ?? []
   );
-  const linked = [
-    ...new Set([...workspacePackages(), ...forced.map(packageName)]),
-  ];
-  if (linked.length === 0) {
+  if (folders.length === 0) {
     return;
   }
-  options.optimizeDeps = {
-    ...deps,
-    include: deps?.include?.filter((entry) => !forced.includes(entry)),
-    exclude: [...new Set([...(deps?.exclude ?? []), ...linked])],
+  dev.watcher.add(folders);
+  const changed = (file: string) => {
+    if (
+      file.includes(`${sep}node_modules${sep}`) ||
+      !folders.some((dir) => file.startsWith(`${dir}${sep}`))
+    ) {
+      return;
+    }
+    clearTimeout(rebundleTimer);
+    rebundleTimer = setTimeout(() => {
+      dev.restart(true).catch((error: unknown) => {
+        process.stderr.write(
+          `[cawco] the stage could not bundle ${relative(root, file)}'s package again: ${error instanceof Error ? error.message : String(error)}\n`
+        );
+      });
+    }, REBUNDLE_SETTLE_MS);
   };
+  for (const event of ["add", "change", "unlink"] as const) {
+    dev.watcher.on(event, changed);
+  }
 }
 
 /** The project's dev server, once it stands: what resolves a story's imports and sends its pages HMR words. */
@@ -778,7 +792,9 @@ async function svelteProps(): Promise<string> {
  * The canvas's entry: the app's global styles, the framework's adapter and
  * the canvas runtime (canvas/runtime.ts, bundled into this host), which
  * loads each section's module as it comes into view. Vite's HMR words
- * reach the runtime as window events: `cawco:after-update` after any
+ * reach the runtime as window events: `cawco:updates` with the modules an
+ * update names, before it applies (a section that failed to load, among
+ * them, loads again), `cawco:after-update` after any
  * update (a component's own edit redraws through its framework's HMR and
  * loads again each section drawn from it, and the canvas reads its frames
  * again), `cawco:stage-error` with Vite's error for a module it couldn't
@@ -802,6 +818,7 @@ boot({
   load: (file, fresh) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js" + (fresh ? "?t=" + Date.now() : "")),
 });
 if (import.meta.hot) {
+  import.meta.hot.on("vite:beforeUpdate", (payload) => dispatchEvent(new CustomEvent("cawco:updates", { detail: payload.updates.map((one) => one.path) })));
   import.meta.hot.on("vite:afterUpdate", () => dispatchEvent(new CustomEvent("cawco:after-update")));
   import.meta.hot.on("vite:error", (payload) => dispatchEvent(new CustomEvent("cawco:stage-error", { detail: payload.err })));
   import.meta.hot.on(${JSON.stringify(SECTION_WRITTEN)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_WRITTEN)}, { detail: data.file })));
@@ -2808,8 +2825,6 @@ function cawcoStage() {
 
   return {
     name: "cawco:stage",
-    // After every other plugin's: the project's own optimizer options as they stand.
-    configEnvironment: { order: "post" as const, handler: fromSource },
     resolveId(id: string) {
       return id.startsWith(VIRTUAL) || id.startsWith(VIRTUAL_STAGE)
         ? `\0${id}`
@@ -2879,6 +2894,7 @@ function cawcoStage() {
     },
     configureServer(dev: DevServer) {
       server = dev;
+      rebundleOnChange(dev);
       const { hot } = dev.environments.client;
       const send = hot.send.bind(hot);
       hot.send = (payload: unknown, ...rest: unknown[]) => {

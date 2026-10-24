@@ -528,10 +528,9 @@ export default defineConfig(({ command }) => {
        * an import of each `~icons/solar/*.svelte`, as many requests as
        * before (measured on Vite 8.3.4); with it, each icon's `.svelte` is
        * made there and vite-plugin-svelte's optimizer plugin compiles it in.
-       * A CawCo stage serves it from source all the same (agent stage-host
-       * host.ts `fromSource`): a pre-bundle is never rebuilt when a linked
-       * package's source changes, and a canvas importing an icon added since
-       * died on load.
+       * Vite never rebuilds it when the package's source changes; a CawCo
+       * stage does, restarting its Vite with the optimizer forced (agent
+       * stage-host host.ts `rebundleOnChange`).
        */
       // The brand marks (`@cawco/icons/marks`) are a module of their own, loaded by what draws one.
       include: ["@cawco/icons", "@cawco/icons/marks"],

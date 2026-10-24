@@ -286,13 +286,13 @@ export function pageError(
   base: string
 ): PageError {
   // Its first line: a framework's own trail ("in <unknown>") is not the message.
-  // A module it names at the stage's key, or at an HMR stamp ("The requested module '/@cawco/m/<key>/src/x.ts?t=…' does not provide …"), is named by its own address.
+  // A module it names at the stage's key, or with Vite's stamp ("The requested module '/@cawco/m/<key>/src/x.ts?t=…' does not provide …"), is named by its own address.
   const message = (
     error instanceof Error ? error.message : String(error ?? "error")
   )
     .split("\n")[0]
     ?.replace(KEYED_PREFIX, "")
-    .replace(HMR_STAMP, "")
+    .replace(VITE_STAMP, "")
     .trim()
     .slice(0, 300) as string;
   const stack = error instanceof Error ? (error.stack ?? "") : "";
@@ -325,6 +325,6 @@ export function pageError(
 const STACK_PLACE = /(https?:\/\/[^\s)]+?):(\d+):(\d+)\)?\s*$/;
 /** A keyed module's prefix in a message: `/@cawco/m/<key>`, before the module's own address. */
 const KEYED_PREFIX = new RegExp(`${MODULES_PATH}[^/\\s'"]+`, "g");
-/** Vite's HMR stamp on a quoted module address: `?t=<ms>` closing it. */
-const HMR_STAMP = /\?t=\d+(?=['"])/g;
+/** Vite's stamp on a quoted module address, closing it: an HMR update's `?t=<ms>`, a pre-bundle's `?v=<its hash>`. */
+const VITE_STAMP = /\?[tv]=[\w-]+(?=['"])/g;
 const LEADING_SLASH = /^\//;

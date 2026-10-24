@@ -89,16 +89,26 @@
  *     `[vite] Internal Server Error` in its console), and the canvas draws.
  * 20. A linked workspace package (`@probe/marks`, which the fixture's own
  *     config forces into Vite's pre-bundle as the dashboard forces
- *     `@cawco/icons`) is served from its source, never pre-bundled:
+ *     `@cawco/icons`) stays pre-bundled, and the stage bundles it again
+ *     whenever its source changes:
  *     a. an export it gains after the stage started reaches a states file
- *        that imports it, drawn with no restart and no cache cleared;
- *     b. a states file importing an export it never had is the stage's
+ *        that imports it, drawn with no restart by hand and no cache
+ *        cleared;
+ *     b. a states file importing an export it doesn't have is the stage's
  *        error (kind `page`), naming the module and the export, and its
- *        frames are `failed` with that error, never `unseen`.
+ *        frames are `failed` with that error, never `unseen`;
+ *     c. a page open on that section draws it once the package gains the
+ *        export, the test never reloading it.
+ * 21. A cold open of a canvas importing that package asks for it as its one
+ *     pre-bundled module, none of its five source modules.
+ * 22. A page open on a section that failed on its own helper's missing
+ *     export draws it within seconds of the export being written, never
+ *     navigating: the section's graph alone is fetched again.
  *
  *   bun scripts/probe-kit/run.ts component-canvas
  *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 and 19 alone
- *   bun scripts/probe-kit/run.ts component-canvas --leg workspace-package  # 20 alone
+ *   bun scripts/probe-kit/run.ts component-canvas --leg workspace-package  # 20 to 22 alone
+ *   bun scripts/probe-kit/run.ts component-canvas --leg dashboard-cold     # the dashboard's own stage, cold
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -106,6 +116,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -152,7 +163,7 @@ interface Stage {
 }
 
 /** The fixture copied to scratch, installed once, and its stage started as the daemon starts one. */
-async function stageOf(framework: Framework, host: string): Promise<Stage> {
+function stageOf(framework: Framework, host: string): Promise<Stage> {
   const dir = join(SCRATCH, framework);
   mkdirSync(dir, { recursive: true });
   cpSync(join(FIXTURES, framework), dir, { recursive: true });
@@ -172,6 +183,16 @@ async function stageOf(framework: Framework, host: string): Promise<Stage> {
       );
     }
   }
+  return startStage(dir, host, framework, false);
+}
+
+/** A stage started at toolchain root `dir`, as the daemon starts one: its host written beside it, run by bun, ready once it says so. */
+async function startStage(
+  dir: string,
+  host: string,
+  framework: Framework,
+  kit: boolean
+): Promise<Stage> {
   mkdirSync(join(dir, ".cawco/stage"), { recursive: true });
   writeFileSync(join(dir, ".cawco/stage/host.mjs"), host);
   const port = await freePort();
@@ -185,7 +206,7 @@ async function stageOf(framework: Framework, host: string): Promise<Stage> {
         CAWCO_STAGE: "1",
         CAWCO_STAGE_PORT: String(port),
         CAWCO_STAGE_FRAMEWORK: framework,
-        CAWCO_STAGE_KIT: "0",
+        CAWCO_STAGE_KIT: kit ? "1" : "0",
         CAWCO_STAGE_TOOLCHAIN: "vite",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -1768,7 +1789,118 @@ async function strayRequest(kit: Kit, stage: Stage): Promise<void> {
   await page.close();
 }
 
-/** `--leg comment-and-stray`: legs 18 and 19 alone; `--leg workspace-package`: leg 20 alone; on the Svelte stage. */
+/** A canvas opened cold: what its page asked for before its first frame drew, by each module's own address, and how long that took. */
+interface ColdOpen {
+  ms: number;
+  paths: string[];
+}
+
+/**
+ * Opens `files`' canvas in a fresh browser context (nothing cached) and
+ * waits for its first frame to hold the component (a frame body with an
+ * element in it): every request the page made until then, and the time from
+ * the navigation's start.
+ */
+async function coldOpen(
+  kit: Kit,
+  stage: Stage,
+  files: string[]
+): Promise<ColdOpen> {
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  const paths: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    paths.push(`${unkeyedPath(url.pathname)}${url.search}`);
+  });
+  const started = performance.now();
+  await page.goto(canvasUrl(stage, files, { name: "Cold" }), {
+    waitUntil: "commit",
+  });
+  await page.waitForFunction(
+    () => !!document.querySelector(".cawco-frame-body > *"),
+    null,
+    { timeout: 180_000, polling: "raf" }
+  );
+  const ms = Math.round(performance.now() - started);
+  const seen = [...paths];
+  await page.close();
+  return { ms, paths: seen };
+}
+
+/** A cold open in words: its requests, how many were a linked package's source or an icon compiled on its own, and its time. */
+const coldSaid = (open: ColdOpen, linked: RegExp) =>
+  `${open.paths.length} requests (${open.paths.filter((path) => linked.test(path)).length} of the linked package's source or its icons one by one), first frame at ${open.ms} ms`;
+
+/** The dashboard's own icon barrel's source, and an icon compiled on its own (`~icons/solar/*`): what a pre-bundle folds into one module. */
+const ICON_SOURCES = /\/packages\/icons\/|\/~icons\//;
+/** A dashboard states file whose component draws `@cawco/icons`' icons. */
+const DASHBOARD_STATES = "src/lib/cawco/home/NeedsCard.stories.ts";
+
+/**
+ * `--leg dashboard-cold`: the dashboard's own stage, its cache cleared
+ * first, a canvas of a real component that draws `@cawco/icons` opened cold
+ * twice (the stage's first page, then a fresh browser on the warm stage):
+ * each open's requests and its first frame's time. The icon barrel comes as
+ * its pre-bundle, none of its source or its icons asked for one by one.
+ * Then the barrel (packages/icons, outside the dashboard's root) gains an
+ * export: the stage bundles it again by itself, and a third cold open still
+ * asks for one bundle. The barrel is written back as it was, whatever fails.
+ */
+async function dashboardCold(kit: Kit, host: string): Promise<void> {
+  const dir = join(ROOT, "apps/dashboard");
+  const barrel = join(ROOT, "packages/icons/src/index.ts");
+  const barrelText = readFileSync(barrel, "utf8");
+  rmSync(join(dir, ".cawco/stage/cache"), { recursive: true, force: true });
+  const stage = await startStage(dir, host, "svelte", true);
+  try {
+    const first = await coldOpen(kit, stage, [DASHBOARD_STATES]);
+    const again = await coldOpen(kit, stage, [DASHBOARD_STATES]);
+    const loose = (open: ColdOpen) =>
+      open.paths.filter((path) => ICON_SOURCES.test(path)).length;
+    kit.check(
+      "dashboard cold open: a canvas of a component drawing @cawco/icons asks for the icon barrel as its pre-bundle, none of its source or its icons one by one",
+      loose(first) === 0 &&
+        loose(again) === 0 &&
+        first.paths.some((path) => path.includes("@cawco_icons.js")),
+      `stage's first page: ${coldSaid(first, ICON_SOURCES)}; a fresh browser on the warm stage: ${coldSaid(again, ICON_SOURCES)}`
+    );
+    // The barrel gains an export, outside the dashboard's own root: the stage bundles it again, and a cold open still asks for one bundle.
+    const bundle = join(dir, ".cawco/stage/cache/deps/@cawco_icons.js");
+    const bundled = () =>
+      existsSync(bundle) ? readFileSync(bundle, "utf8") : "";
+    const writtenAt = performance.now();
+    writeFileSync(
+      barrel,
+      `${barrelText}\nexport const cawcoStageProbe = "bundled again";\n`
+    );
+    const rebundled = await until(
+      "the icon barrel's pre-bundle holding the new export",
+      bundled,
+      (text) => text.includes("cawcoStageProbe"),
+      90_000
+    )
+      .then(() => Math.round(performance.now() - writtenAt))
+      .catch(() => null);
+    writeFileSync(barrel, barrelText);
+    await until(
+      "the icon barrel's pre-bundle as the package stands",
+      bundled,
+      (text) => text.length > 0 && !text.includes("cawcoStageProbe"),
+      90_000
+    ).catch(() => undefined);
+    const after = await coldOpen(kit, stage, [DASHBOARD_STATES]);
+    kit.check(
+      "dashboard: an export the icon barrel gains is bundled again by the stage on its own, and a cold open after it still asks for the barrel as one bundle",
+      rebundled !== null && loose(after) === 0,
+      `bundled again ${rebundled === null ? "never" : `${rebundled} ms after the write`}; cold open after: ${coldSaid(after, ICON_SOURCES)}`
+    );
+  } finally {
+    writeFileSync(barrel, barrelText);
+    stage.stop();
+  }
+}
+
+/** `--leg comment-and-stray`: legs 18 and 19 alone; `--leg workspace-package`: legs 20 to 22 alone; on the Svelte stage. `--leg dashboard-cold`: the dashboard's own stage alone. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -1784,15 +1916,50 @@ const stageAnswer = async (
     )
   ).json()) as ReportAnswer;
 
-/** Leg 20: a linked workspace package's source, as a canvas imports it. */
+/** The words of every frame of `file`'s section in a page's own newest report; none before it drew. */
+const drawnWords = (page: Page, file: string): Promise<string[]> =>
+  page.evaluate(
+    (wanted) =>
+      (
+        (
+          window as unknown as {
+            __cawcoCanvas?: { report: RenderReport | null };
+          }
+        ).__cawcoCanvas?.report?.sections ?? []
+      )
+        .filter((one) => one.file === wanted)
+        .flatMap((one) => one.frames)
+        .filter((one) => one.state === "drawn")
+        .map((one) => one.text),
+    file
+  );
+
+/**
+ * Leg 20: a linked workspace package the project's config forces into the
+ * pre-bundle, as a canvas imports it.
+ */
 async function workspacePackage(kit: Kit, stage: Stage): Promise<void> {
   const source = join(stage.dir, "packages/marks/src/index.js");
+  const bundled = join(stage.dir, ".cawco/stage/cache/deps/@probe_marks.js");
+  const bundle = () =>
+    existsSync(bundled) ? readFileSync(bundled, "utf8") : "";
   const plain = readFileSync(source, "utf8");
   const gained = "src/Gained.stories.js";
+  const changedAt = performance.now();
   writeFileSync(
     source,
     `${plain}\n/** Words the package gained after the stage started. */\nexport const gainedWords = "Gained since the start";\n`
   );
+  // The stage bundles the package again on its own; a canvas opened since asks for that bundle.
+  const rebundled = await until(
+    "the pre-bundle holding the gained export",
+    bundle,
+    (text) => text.includes("Gained since the start"),
+    60_000
+  )
+    .then(() => true)
+    .catch(() => false);
+  const rebundleMs = Math.round(performance.now() - changedAt);
   writeFileSync(
     join(stage.dir, gained),
     `import { gainedWords } from "@probe/marks";
@@ -1828,24 +1995,22 @@ export const Gained = { args: { text: gainedWords } };
       framesOf(now).every((one) => one.state !== "unseen"),
     10_000
   ).catch(() => stageAnswer(stage, [gained]));
-  const bundled = join(stage.dir, ".cawco/stage/cache/deps/@probe_marks.js");
   const gainedFrames = framesOf(drewGained);
   // The stage's errors are every section's: this one's are those filed under its states file.
   const gainedErrors = drewGained.errors.filter((one) =>
     one.sheets.includes(gained)
   );
   kit.check(
-    "20a: an export a linked workspace package gained after the stage started reaches the states file importing it, drawn with no restart and no cache cleared; the package is never pre-bundled",
-    gainedFrames.length > 0 &&
+    "20a: an export a forced, pre-bundled workspace package gained after the stage started is bundled again by the stage on its own and reaches the states file importing it, drawn with no restart by hand and no cache cleared",
+    rebundled &&
+      gainedFrames.length > 0 &&
       gainedFrames.every(
         (one) =>
           one.state === "drawn" && one.text.includes("Gained since the start")
       ) &&
-      gainedErrors.length === 0 &&
-      !existsSync(bundled),
-    `frames ${gainedFrames.map((one) => `${one.story}/${one.interaction}:${one.state} "${one.text}"`).join("; ")}; its errors ${JSON.stringify(gainedErrors)}; pre-bundle ${existsSync(bundled) ? "written" : "none"}`
+      gainedErrors.length === 0,
+    `pre-bundle ${rebundled ? `holds the export ${rebundleMs} ms after the write` : "never held the export"}; frames ${gainedFrames.map((one) => `${one.story}/${one.interaction}:${one.state} "${one.text}"`).join("; ")}; its errors ${JSON.stringify(gainedErrors)}`
   );
-  writeFileSync(source, plain);
 
   const unexported = "src/Unexported.stories.js";
   writeFileSync(
@@ -1855,7 +2020,7 @@ import Badge from "./Badge.svelte";
 
 export default { title: "Kit/Unexported", component: Badge };
 
-/** A mark in words its workspace package never exported. */
+/** A mark in words its workspace package doesn't export yet. */
 export const Gone = { args: { text: goneWords } };
 `
   );
@@ -1869,14 +2034,13 @@ export const Gone = { args: { text: goneWords } };
     (one) => !!fault(one),
     15_000
   ).catch(() => stageAnswer(stage, [unexported]));
-  await broken.close();
   const error = fault(answer);
   const frames = framesOf(answer);
   kit.check(
-    "20b: a states file importing an export its workspace package never had is the stage's page error, naming the module and the export, and its frames are failed with it, never unseen",
+    "20b: a states file importing an export its workspace package doesn't have is the stage's page error, naming the module and the export, and its frames are failed with it, never unseen",
     error?.kind === "page" &&
       error.message.includes("goneWords") &&
-      error.message.includes("'/packages/marks/src/index.js'") &&
+      error.message.includes("'/.cawco/stage/cache/deps/@probe_marks.js'") &&
       !error.message.includes(MODULES_PATH) &&
       frames.length > 0 &&
       frames.every(
@@ -1884,12 +2048,126 @@ export const Gone = { args: { text: goneWords } };
       ),
     `error ${JSON.stringify(error)}; frames ${frames.map((one) => `${one.story}:${one.state} ${one.error?.message ?? ""}`).join("; ")}`
   );
+
+  // 20c: the export lands with that page still open; the test never reloads it.
+  const addedAt = performance.now();
+  writeFileSync(
+    source,
+    `${plain}\n/** Words the package gained while a canvas waited on them. */\nexport const goneWords = "Back at last";\n`
+  );
+  const words = await until(
+    "the open page's draw of the export it waited on",
+    () => drawnWords(broken, unexported),
+    (drawn) => drawn.some((one) => one.includes("Back at last")),
+    60_000
+  ).catch(() => drawnWords(broken, unexported));
+  const drawnMs = Math.round(performance.now() - addedAt);
+  const cleared = !fault(await stageAnswer(stage, [unexported]));
+  await broken.close();
+  kit.check(
+    "20c: a page open on that failed section draws it once the package gains the export, with no reload by the test, and the stage's error for it is gone",
+    words.some((one) => one.includes("Back at last")) && cleared,
+    `${drawnMs} ms after the write: drawn ${JSON.stringify(words)}; the stage's error ${cleared ? "cleared" : "still kept"}`
+  );
+  writeFileSync(source, plain);
+  await until(
+    "the pre-bundle back to the package as it was",
+    bundle,
+    (text) => text.includes("markWords") && !text.includes("Back at last"),
+    60_000
+  ).catch(() => undefined);
+}
+
+/** The fixture's forced, linked package's own source modules. */
+const MARKS_SOURCES = /\/packages\/marks\//;
+
+/**
+ * Leg 21: a canvas of a component whose states import a forced, linked
+ * package opened cold asks for the package as its one pre-bundled module,
+ * none of its source modules (the fixture's five) one by one.
+ */
+async function coldCount(kit: Kit, stage: Stage): Promise<void> {
+  const linked = MARKS_SOURCES;
+  const open = await coldOpen(kit, stage, ["src/Marked.stories.js"]);
+  const bundles = open.paths.filter((path) =>
+    path.includes("/.cawco/stage/cache/deps/@probe_marks.js")
+  );
+  kit.check(
+    "21: a cold open of a canvas importing a forced, linked package asks for it as its one pre-bundled module, none of its five source modules",
+    bundles.length === 1 &&
+      open.paths.filter((path) => linked.test(path)).length === 0,
+    `${coldSaid(open, linked)}; its pre-bundle asked for ${bundles.length} time(s)`
+  );
+}
+
+/**
+ * Leg 22: a page open on a section that failed on an export its own
+ * module lacks draws it once the module gains it, with no reload: the
+ * section's graph alone is fetched again, the page never navigates.
+ */
+async function failedRedraws(kit: Kit, stage: Stage): Promise<void> {
+  const helper = join(stage.dir, "src/later-words.js");
+  const file = "src/Waits.stories.js";
+  writeFileSync(
+    helper,
+    `/** Words a states file waits on. */\nexport const soonWords = "Soon";\n`
+  );
+  writeFileSync(
+    join(stage.dir, file),
+    `import Badge from "./Badge.svelte";
+import { laterWords } from "./later-words.js";
+
+export default { title: "Kit/Waits", component: Badge };
+
+/** A mark in words its helper doesn't export yet. */
+export const Later = { args: { text: laterWords } };
+`
+  );
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  let navigations = 0;
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      navigations += 1;
+    }
+  });
+  await page.goto(canvasUrl(stage, [file], { name: "Waits" }));
+  const failed = await page
+    .waitForSelector(".cawco-section-failed", { timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  const addedAt = performance.now();
+  writeFileSync(
+    helper,
+    `/** Words a states file waits on. */\nexport const soonWords = "Soon";\nexport const laterWords = "Later words";\n`
+  );
+  const words = await until(
+    "the open page's draw of the section that failed",
+    () => drawnWords(page, file),
+    (drawn) => drawn.some((one) => one.includes("Later words")),
+    10_000
+  ).catch(() => drawnWords(page, file));
+  const ms = Math.round(performance.now() - addedAt);
+  const left = await page.locator(".cawco-section-failed").count();
+  await page.close();
+  kit.check(
+    "22: a page open on a section that failed on its helper's missing export draws it within seconds of the export being written, never navigating, its failure line gone",
+    failed &&
+      words.some((one) => one.includes("Later words")) &&
+      ms < 10_000 &&
+      navigations === 1 &&
+      left === 0,
+    `failed first ${failed}; ${ms} ms after the write: drawn ${JSON.stringify(words)}; main-frame navigations ${navigations}; failure lines left ${left}`
+  );
 }
 
 const spec: Spec = {
   name: "component-canvas",
   run: async (kit) => {
     const host = await buildStageHost();
+    if (ONLY_LEG === "dashboard-cold") {
+      await dashboardCold(kit, host);
+      return;
+    }
     const svelte = await stageOf("svelte", host);
     try {
       if (ONLY_LEG === "comment-and-stray") {
@@ -1898,6 +2176,8 @@ const spec: Spec = {
         return;
       }
       if (ONLY_LEG === "workspace-package") {
+        await coldCount(kit, svelte);
+        await failedRedraws(kit, svelte);
         await workspacePackage(kit, svelte);
         return;
       }
@@ -1912,6 +2192,9 @@ const spec: Spec = {
       await endless(kit, svelte);
       await commentMarksOne(kit, svelte);
       await strayRequest(kit, svelte);
+      // The pre-bundle's legs: 20 rebuilds it, a restart of the stage's Vite each time, so it goes last.
+      await coldCount(kit, svelte);
+      await failedRedraws(kit, svelte);
       await workspacePackage(kit, svelte);
     } finally {
       svelte.stop();

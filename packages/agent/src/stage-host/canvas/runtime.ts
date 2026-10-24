@@ -227,6 +227,15 @@ export interface Section {
   standIns: HTMLElement[];
 }
 
+/** A section module's address as an HMR update names it: `/@id/__x00__cawco:sheet/<the states file, encoded>.js`. */
+const SECTION_PATH = /cawco:sheet\/([^?]+)\.js(?:\?|$)/;
+
+/** The states file (from the toolchain root) an update's module path is the section of; null for any other module. */
+const sectionOfPath = (path: string): string | null => {
+  const encoded = path.match(SECTION_PATH)?.[1];
+  return encoded ? decodeURIComponent(encoded) : null;
+};
+
 const frameTick = () =>
   new Promise<void>((done) =>
     requestAnimationFrame(() => requestAnimationFrame(() => done()))
@@ -2782,6 +2791,36 @@ export function boot(options: BootOptions): void {
         dispatchEvent(new CustomEvent("cawco:hmr"));
       })
     );
+  });
+  /*
+   * A section that failed to load, named in an update Vite sends (a file
+   * its graph imports changed: Vite's propagation reaches its section's
+   * module, which accepts itself), loads again. Its module never ran, so it
+   * accepted nothing in this page, and Vite's client passes the update by
+   * (`fetchUpdate`: no module of that path in `hotModulesMap`). The browser
+   * keeps every module it fetched by its address, the failed one too ("If
+   * moduleMap[(url, moduleType)] is a module script, run onComplete given
+   * moduleMap[(url, moduleType)]", html.spec.whatwg.org fetch a single
+   * module script), so the section is asked for at a fresh `?t=`, and Vite
+   * writes each import of a module the change reached with that module's
+   * HMR stamp (`depModule.lastHMRTimestamp > 0`: `?t=`; an HMR invalidation
+   * stamps the changed module and every importer up to the one accepting
+   * it): only that section's graph is fetched again, at new addresses, never
+   * the page.
+   */
+  window.addEventListener("cawco:updates", (event) => {
+    const updated = new Set(
+      ((event as CustomEvent<string[]>).detail ?? []).map(sectionOfPath)
+    );
+    for (const section of sections) {
+      if (section.failure && !section.loading && updated.has(section.file)) {
+        quietly(
+          loadSection(section).then(() => {
+            dispatchEvent(new CustomEvent("cawco:hmr"));
+          })
+        );
+      }
+    }
   });
   window.addEventListener("cawco:after-update", () => {
     for (const section of sections) {
