@@ -26,6 +26,20 @@
  * - no box overlaps another, the Dropped rail and the columns included, and
  *   a board scrolled sideways never cuts a column at its leading edge;
  * - the empty project's starters share one height;
+ * - "needs you" said once per kind on each width: in words once (the
+ *   head's filter on a desk, the group head on a phone), and as the spark
+ *   band on a desk or the view bar's chip on a phone; no control inside an
+ *   anchor; the permission's card answers with Deny then Approve, the
+ *   question's with Answer;
+ * - Caw's column: his name and ✕ in the head with no mark, the asks first
+ *   with their acts, a brand-solid rule, then his notes each led by his
+ *   mark; a first thread on the empty recipe (Caw on the axis, words at the
+ *   start, three starters), its composer with no card of its own;
+ * - while an ask stands the verdict is outline (no coral but Ask Caw's, or
+ *   none where Ask Caw is out of view); answered, Approve takes the coral;
+ *   Send back's note unfolds where Approve stood and Send back stays put;
+ * - from 640 to 900 the board's list runs two-up, its columns fork shows two
+ *   columns, and the starters stand two-up; under 640, one-up;
  * - interface text starts at its column's edge (the empty and failed
  *   blocks' title and lines), while Caw keeps the composition's axis;
  * - the pane's tab strip stands directly over its panel, and the panel
@@ -55,7 +69,7 @@ import {
 const FOLDER = normalize(
   join(import.meta.dir, "..", "..", "..", "design-previews", "project")
 );
-const STATES = ["rest", "waiting", "open", "empty", "fault"] as const;
+const STATES = ["rest", "waiting", "open", "empty", "fault", "first"] as const;
 const SIZES: View[] = ["desk", "narrowDesk", "phone"];
 const ENGINES = ["chromium", "webkit"] as const;
 const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
@@ -121,9 +135,12 @@ const openFrame = async (
   page: Page,
   origin: string,
   state: string,
-  layout = "list"
+  layout = "list",
+  scheme = "light"
 ): Promise<void> => {
-  await page.goto(`${origin}/frame.html?state=${state}&layout=${layout}`);
+  await page.goto(
+    `${origin}/frame.html?state=${state}&layout=${layout}&scheme=${scheme}`
+  );
   await still(page);
 };
 
@@ -424,31 +441,231 @@ const starterBoxes = (page: Page) =>
       })
   );
 
-/** Caw's centre against his block's, and the block's against the page column's. */
+/**
+ * Caw's body centre against the composition's axis: read from his still in
+ * the page, as the stills were centred. His body is the largest shape his
+ * opaque pixels (alpha 128 and over) make, 8-connected, so a detached mark
+ * (a sparkle, a held card standing apart) is left out; its centre is the
+ * alpha-weighted mean of its columns, scaled from the still to his box.
+ * Also his box's centre against his block's, and the block's against the
+ * page column's.
+ */
 const cawAxis = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>(".caw-hero, .caw-fault")]
-      .filter((caw) => caw.getBoundingClientRect().width > 0)
-      .map((caw) => {
-        const centre = (box: DOMRect) => box.left + box.width / 2;
-        const block = caw.parentElement as HTMLElement;
-        const field = document.querySelector("#page") as HTMLElement;
-        const pageBox = field.getBoundingClientRect();
-        const pad = getComputedStyle(field);
-        const column =
-          (pageBox.left +
-            Number.parseFloat(pad.paddingLeft) +
-            pageBox.right -
-            Number.parseFloat(pad.paddingRight)) /
-          2;
+  page.evaluate(async () => {
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: it runs in the page as one function; the flood fill is its body
+    const bodyCentre = async (img: HTMLImageElement): Promise<number> => {
+      await img.decode();
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const pen = canvas.getContext("2d");
+      if (!pen) {
+        return Number.NaN;
+      }
+      pen.drawImage(img, 0, 0);
+      const { data } = pen.getImageData(0, 0, w, h);
+      const alpha = (i: number) => data[i * 4 + 3];
+      const seen = new Uint8Array(w * h);
+      let best: number[] = [];
+      for (let start = 0; start < w * h; start += 1) {
+        if (seen[start] || alpha(start) < 128) {
+          continue;
+        }
+        const shape: number[] = [];
+        const queue = [start];
+        seen[start] = 1;
+        while (queue.length > 0) {
+          const i = queue.pop() as number;
+          shape.push(i);
+          const x = i % w;
+          const y = (i - x) / w;
+          for (let dy = -1; dy <= 1; dy += 1) {
+            for (let dx = -1; dx <= 1; dx += 1) {
+              const nx = x + dx;
+              const ny = y + dy;
+              const j = ny * w + nx;
+              if (
+                nx >= 0 &&
+                nx < w &&
+                ny >= 0 &&
+                ny < h &&
+                !seen[j] &&
+                alpha(j) >= 128
+              ) {
+                seen[j] = 1;
+                queue.push(j);
+              }
+            }
+          }
+        }
+        if (shape.length > best.length) {
+          best = shape;
+        }
+      }
+      let mass = 0;
+      let moment = 0;
+      for (const i of best) {
+        mass += alpha(i);
+        moment += ((i % w) + 0.5) * alpha(i);
+      }
+      return moment / mass;
+    };
+    const centre = (box: DOMRect) => box.left + box.width / 2;
+    /** The composition he heads: the page's column, or Caw's column's. */
+    const axisOf = (caw: Element): number => {
+      const field = (caw.closest(".caw-col") ??
+        document.querySelector("#page")) as HTMLElement;
+      const frame = field.getBoundingClientRect();
+      const pad = getComputedStyle(field);
+      return (
+        (frame.left +
+          Number.parseFloat(pad.paddingLeft) +
+          frame.right -
+          Number.parseFloat(pad.paddingRight)) /
+        2
+      );
+    };
+    const cawImages = [
+      ...document.querySelectorAll<HTMLImageElement>(
+        ".caw-hero, .caw-fault, .caw-first"
+      ),
+    ].filter((caw) => caw.getBoundingClientRect().width > 0);
+    return await Promise.all(
+      cawImages.map(async (caw) => {
+        const drawn = caw.getBoundingClientRect();
+        const bodyX = await bodyCentre(caw);
         return {
           who: caw.className,
-          caw: centre(caw.getBoundingClientRect()),
-          block: centre(block.getBoundingClientRect()),
-          column,
+          caw: centre(drawn),
+          body: drawn.left + (bodyX / caw.naturalWidth) * drawn.width,
+          block: centre(
+            (caw.parentElement as HTMLElement).getBoundingClientRect()
+          ),
+          column: axisOf(caw),
         };
       })
-  );
+    );
+  });
+
+/**
+ * Every run of words in view and its contrast against what is drawn under
+ * it: its ink over the fills of its own box and every box behind it, down to
+ * the first opaque one, a background image counted as its first colour (the
+ * coral action's gradient). Large words (24px, or 18.66px at 500 and over)
+ * need 3:1, the rest 4.5:1 (WCAG 2.2, 1.4.3). The lowest is reported.
+ */
+const contrasts = (page: Page) =>
+  page.evaluate(() => {
+    const pen = document.createElement("canvas").getContext("2d");
+    const rgba = (colour: string): number[] => {
+      if (!pen) {
+        return [0, 0, 0, 0];
+      }
+      pen.clearRect(0, 0, 1, 1);
+      pen.fillStyle = "rgba(0, 0, 0, 0)";
+      pen.fillStyle = colour;
+      pen.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = pen.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, a / 255];
+    };
+    const over = (top: number[], back: number[]) => {
+      const [, , , a] = top;
+      return [0, 1, 2].map((c) => top[c] * a + back[c] * (1 - a)).concat([1]);
+    };
+    const firstColour = (image: string): string | null => {
+      const found = image.indexOf("gradient(");
+      if (found < 0) {
+        return null;
+      }
+      const rest = image.slice(found + "gradient(".length);
+      const [start] = ["rgb", "oklch", "oklab", "color", "lab", "lch"]
+        .map((name) => rest.indexOf(`${name}(`))
+        .filter((at) => at >= 0)
+        .sort((x, y) => x - y);
+      if (start === undefined) {
+        return null;
+      }
+      const close = rest.indexOf(")", start);
+      return rest.slice(start, close + 1);
+    };
+    const ground = (element: Element): number[] => {
+      const layers: number[][] = [];
+      for (let at: Element | null = element; at; at = at.parentElement) {
+        const style = getComputedStyle(at);
+        const image = firstColour(style.backgroundImage);
+        if (image) {
+          layers.push(rgba(image));
+        }
+        const fill = rgba(style.backgroundColor);
+        if (fill[3] > 0) {
+          layers.push(fill);
+        }
+        if (layers.some((layer) => layer[3] >= 1)) {
+          break;
+        }
+      }
+      let base = [255, 255, 255, 1];
+      for (const layer of layers.reverse()) {
+        base = over(layer, base);
+      }
+      return base;
+    };
+    const lum = ([r, g, b]: number[]) => {
+      const lin = (v: number) => {
+        const c = v / 255;
+        return c <= 0.040_45 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const runs = [...document.querySelectorAll("body *")].filter((element) => {
+      if (
+        element.closest(
+          "[aria-hidden='true'], .visually-hidden, svg, textarea"
+        ) ||
+        ![...element.childNodes].some(
+          (node) =>
+            node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim()
+        )
+      ) {
+        return false;
+      }
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        box.bottom > 0 &&
+        box.top < innerHeight &&
+        box.right > 0 &&
+        box.left < innerWidth &&
+        style.visibility === "visible" &&
+        style.opacity === "1"
+      );
+    });
+    let lowest = { ratio: Number.POSITIVE_INFINITY, what: "", need: 4.5 };
+    const under: string[] = [];
+    for (const element of runs) {
+      const style = getComputedStyle(element);
+      const back = ground(element);
+      const ink = over(rgba(style.color), back);
+      const [hi, lo] = [lum(ink), lum(back)].sort((x, y) => y - x);
+      const ratio = (hi + 0.05) / (lo + 0.05);
+      const size = Number.parseFloat(style.fontSize);
+      const large =
+        size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 500);
+      const need = large ? 3 : 4.5;
+      const what = `${element.localName}.${[...element.classList].join(".")} “${(element.textContent ?? "").trim().slice(0, 24)}”`;
+      if (ratio < need) {
+        under.push(`${what} ${ratio.toFixed(2)}`);
+      }
+      if (ratio / need < lowest.ratio / lowest.need) {
+        lowest = { ratio, what, need };
+      }
+    }
+    return { count: runs.length, lowest, under };
+  });
 
 /** Each card's lines: its title's, its stage fact's and its third line's. */
 const cardLines = (page: Page) =>
@@ -489,7 +706,7 @@ const GRAMMAR: Record<string, [number, number][]> = {
   // [min, max] of the stage fact's lines, then of the third line's.
   needs: [
     [1, 2],
-    [0, 0],
+    [1, 1],
   ],
   ready: [
     [0, 1],
@@ -539,6 +756,161 @@ const cardsBeforeTabs = (page: Page): Promise<number> =>
       : -1
   );
 
+/** Whether an ask stands open in view, and whether Ask Caw is in view. */
+const askInView = (page: Page) =>
+  page.evaluate(() => {
+    const inView = (element: Element): boolean => {
+      const box = element.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        box.bottom > 0 &&
+        box.right > 0 &&
+        box.left < innerWidth &&
+        box.top < innerHeight &&
+        getComputedStyle(element).visibility === "visible"
+      );
+    };
+    return {
+      ask: [...document.querySelectorAll(".ask-sec:not(.is-answered)")].some(
+        inView
+      ),
+      askCaw: [...document.querySelectorAll('[data-act="ask-caw"]')].some(
+        inView
+      ),
+    };
+  });
+
+/** Runs of words naming "needs you" in view, the spark bands and the phone's chip. */
+const needsSaid = (page: Page) =>
+  page.evaluate(() => {
+    const inView = (element: Element): boolean => {
+      const box = element.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        box.bottom > 0 &&
+        box.right > 0 &&
+        box.left < innerWidth &&
+        box.top < innerHeight &&
+        getComputedStyle(element).visibility === "visible"
+      );
+    };
+    const said = [...document.querySelectorAll("body *")].filter(
+      (element) =>
+        !element.closest(".visually-hidden, [aria-hidden='true'], svg") &&
+        [...element.childNodes].some(
+          (node) =>
+            node.nodeType === Node.TEXT_NODE &&
+            /* "need you" or "needs you", in any case */
+            ["need you", "needs you"].some((phrase) =>
+              (node.textContent ?? "").toLowerCase().includes(phrase)
+            )
+        ) &&
+        inView(element)
+    );
+    return {
+      words: said.map((element) => (element.textContent ?? "").trim()),
+      bands: [...document.querySelectorAll(".card[data-needs]")].filter(inView)
+        .length,
+      chip: [...document.querySelectorAll(".viewbar-needs")].some(inView),
+      nested: document.querySelectorAll(
+        "a button, a a, a input, button button, button a"
+      ).length,
+    };
+  });
+
+/** The acts on the two cards waiting on him: the pair's order and gap, and Answer. */
+const cardAnswers = (page: Page) =>
+  page.evaluate(() => {
+    const pair = [
+      ...document.querySelectorAll('.card[data-id="tsk-19"] [data-card-perm]'),
+    ];
+    const [deny, approve] = pair.map((button) =>
+      button.getBoundingClientRect()
+    );
+    return {
+      order: pair.map((button) => (button.textContent ?? "").trim()),
+      gap: deny && approve ? approve.left - deny.right : Number.NaN,
+      answer: Boolean(
+        document.querySelector('.card[data-id="tsk-16"] [data-card-answer]')
+      ),
+    };
+  });
+
+/** Caw's column as drawn: its head, its asks, the rule, his notes, a first thread. */
+const cawColumn = (page: Page) =>
+  page.evaluate(() => {
+    const col = document.querySelector(".caw-col") as HTMLElement;
+    const shown = (element: Element | null) =>
+      Boolean(element && element.getBoundingClientRect().height > 0);
+    const rule = document.querySelector('[data-slot="caw-rule"]');
+    const rows = [...document.querySelectorAll(".need-row")];
+    const notes = [...document.querySelectorAll(".thread .msg-caw")];
+    const thread = document.querySelector('[data-slot="thread"]');
+    const composer = document.querySelector(".composer-caw");
+    const first = document.querySelector('[data-slot="caw-first"]');
+    return {
+      open: shown(col),
+      headMark: Boolean(col.querySelector(".caw-col-head img")),
+      head: (col.querySelector(".caw-col-name")?.textContent ?? "").trim(),
+      rows: rows.length,
+      rowActs: rows.filter((row) =>
+        row.querySelector("[data-card-answer], [data-card-perm]")
+      ).length,
+      rule: shown(rule)
+        ? getComputedStyle(rule as Element).backgroundColor
+        : "",
+      ruleAfterRows:
+        !(rule && thread) ||
+        rows.every(
+          (row) =>
+            row.getBoundingClientRect().bottom <=
+            rule.getBoundingClientRect().top + 0.5
+        ),
+      notes: notes.length,
+      notesLed: notes.filter(
+        (note) =>
+          note.firstElementChild?.classList.contains("caw-mark") ?? false
+      ).length,
+      first: shown(first),
+      starters: document.querySelectorAll(".caw-starter").length,
+      align: [
+        ...document.querySelectorAll(".caw-start-title, .caw-start-line"),
+      ].map((words) => getComputedStyle(words).textAlign),
+      composerShadow: composer ? getComputedStyle(composer).boxShadow : "",
+    };
+  });
+
+/** How many columns of cards stand side by side: distinct left edges in a group, and columns whole in the board. */
+const across = (page: Page) =>
+  page.evaluate(() => {
+    const lefts = (selector: string) =>
+      new Set(
+        [...document.querySelectorAll(selector)]
+          .slice(0, 6)
+          .map((element) => Math.round(element.getBoundingClientRect().left))
+          .filter((left) => left > -1)
+      ).size;
+    const board = document.querySelector(".board") as HTMLElement | null;
+    const frame = board?.getBoundingClientRect();
+    const whole = frame
+      ? [...document.querySelectorAll(".board > .col")].filter((col) => {
+          const box = col.getBoundingClientRect();
+          return (
+            box.width > 0 &&
+            box.left >= frame.left - 0.5 &&
+            box.right <= frame.right + 0.5
+          );
+        }).length
+      : 0;
+    return {
+      cards: lefts('.col[data-col="ready"] .card'),
+      columns: whole,
+      starters: lefts(".starter"),
+    };
+  });
+
 /** Where the pane's strip, its panel and its composer stand. */
 const paneParts = (page: Page) =>
   page.evaluate(() => {
@@ -579,7 +951,7 @@ const blockAlign = (page: Page) =>
   page.evaluate(() =>
     [
       ...document.querySelectorAll(
-        ".empty-title, .empty-line, .fault-what, .fault-why"
+        ".empty-title, .empty-line, .fault-what, .fault-why, .caw-start-title, .caw-start-line"
       ),
     ]
       .filter((words) => words.getBoundingClientRect().width > 0)
@@ -1003,11 +1375,16 @@ const checkState = async (
     faults.slice(0, 6).join("; ")
   );
   const acts = await coralFills(page);
+  const standing = await askInView(page);
+  const asking = standing.ask && !standing.askCaw;
   kit.check(
-    `${where}: exactly one coral-filled control in view`,
-    acts.length === 1,
+    asking
+      ? `${where}: no coral while the ask stands and Ask Caw is out of view`
+      : `${where}: exactly one coral-filled control in view`,
+    acts.length === (asking ? 0 : 1),
     acts.join(", ") || "none"
   );
+  await checkNeeds(kit, page, where, state);
   const boxed = await boxedGlyphs(page);
   kit.check(
     `${where}: no glyph stands in a box of its own`,
@@ -1038,13 +1415,14 @@ const checkState = async (
   );
   for (const axis of await cawAxis(page)) {
     kit.check(
-      `${where}: Caw stands on the axis`,
-      Math.abs(axis.caw - axis.block) <= 1 &&
+      `${where}: Caw's body stands on the axis`,
+      Math.abs(axis.body - axis.column) <= 1 &&
+        Math.abs(axis.caw - axis.block) <= 1 &&
         Math.abs(axis.block - axis.column) <= 1,
-      `Caw ${axis.caw.toFixed(2)}, his block ${axis.block.toFixed(2)}, the page column ${axis.column.toFixed(2)}`
+      `his body ${axis.body.toFixed(2)}, his box ${axis.caw.toFixed(2)}, his block ${axis.block.toFixed(2)}, the page column ${axis.column.toFixed(2)}`
     );
   }
-  if (state === "empty" || state === "fault") {
+  if (state === "empty" || state === "fault" || state === "first") {
     const centred = (await blockAlign(page)).filter(
       ({ align }) => !["start", "left"].includes(align)
     );
@@ -1054,6 +1432,12 @@ const checkState = async (
       centred.map(({ align, what }) => `${what} ${align}`).join(", ")
     );
   }
+  const ink = await contrasts(page);
+  kit.check(
+    `${where}: every run of words in view holds its contrast`,
+    ink.under.length === 0,
+    `${ink.count} runs; lowest ${ink.lowest.ratio.toFixed(2)}:1 against ${ink.lowest.need}:1, ${ink.lowest.what}${ink.under.length > 0 ? `; under: ${ink.under.slice(0, 6).join("; ")}` : ""}`
+  );
   const fade = await edgeFade(page);
   kit.check(
     `${where}: the board fades at an edge with more past it`,
@@ -1074,6 +1458,171 @@ const checkState = async (
       `${count}`
     );
   }
+};
+
+/** "Needs you" once per kind, the cards' acts, and the 640–900 band, in one state. */
+const checkNeeds = async (
+  kit: Kit,
+  page: Page,
+  where: string,
+  state: string
+): Promise<void> => {
+  const said = await needsSaid(page);
+  kit.check(
+    `${where}: no control stands inside an anchor`,
+    said.nested === 0,
+    `${said.nested}`
+  );
+  if (state === "waiting") {
+    await checkWaiting(kit, page, where, said);
+  }
+  await checkBand(kit, page, where, state);
+};
+
+/** The waiting state: "needs you" once per kind, and each card's own act. */
+const checkWaiting = async (
+  kit: Kit,
+  page: Page,
+  where: string,
+  said: Awaited<ReturnType<typeof needsSaid>>
+): Promise<void> => {
+  const desk = (page.viewportSize()?.width ?? 0) >= 901;
+  // The phone's columns fork has no Needs-you lane: there the chip says it alone.
+  const lane = desk || !page.url().includes("layout=columns");
+  kit.check(
+    `${where}: "needs you" said ${lane ? "once in words, and once" : "only"} as ${desk ? "the spark band" : "the view bar's chip"}`,
+    said.words.length === (lane ? 1 : 0) && (desk ? said.bands > 0 : said.chip),
+    `${said.words.join(" | ") || "no words"}; ${said.bands} band(s), chip ${said.chip}`
+  );
+  const answers = await cardAnswers(page);
+  const coarse = await page.evaluate(
+    () => matchMedia("(pointer: coarse)").matches
+  );
+  const gap = coarse ? 14 : 7;
+  kit.check(
+    `${where}: the permission's card answers Deny then Approve, ${gap}px apart, the question's with Answer`,
+    answers.order.join(",") === "Deny,Approve" &&
+      Math.abs(answers.gap - gap) <= 0.5 &&
+      answers.answer,
+    `${answers.order.join(", ")}, ${answers.gap.toFixed(1)}px apart, Answer ${answers.answer}`
+  );
+};
+
+/** The board and the starters two-up from 640 to 900, one-up under 640. */
+const checkBand = async (
+  kit: Kit,
+  page: Page,
+  where: string,
+  state: string
+): Promise<void> => {
+  const width = page.viewportSize()?.width ?? 0;
+  if (width >= 640 && width < 901 && ["rest", "empty"].includes(state)) {
+    const two = await across(page);
+    const columns = page.url().includes("layout=columns");
+    kit.check(
+      `${where}: two-up between 640 and 900`,
+      state === "empty"
+        ? two.starters === 2
+        : (columns ? two.columns : two.cards) === 2,
+      `cards ${two.cards} across, ${two.columns} columns whole, starters ${two.starters} across`
+    );
+  }
+  if (width < 640 && state === "rest" && !page.url().includes("columns")) {
+    const one = await across(page);
+    kit.check(`${where}: one-up under 640`, one.cards === 1, `${one.cards}`);
+  }
+};
+
+/** Caw's column at rest on a live project (asks, rule, notes) or a first thread. */
+const checkCaw = async (
+  kit: Kit,
+  page: Page,
+  where: string,
+  first: boolean
+): Promise<void> => {
+  const caw = await cawColumn(page);
+  kit.check(
+    `${where}: Caw's column heads with his name and ✕, no mark`,
+    caw.open && !caw.headMark && caw.head === "Caw",
+    `open ${caw.open}, mark ${caw.headMark}, head “${caw.head}”`
+  );
+  kit.check(
+    `${where}: no card of its own round the column's composer`,
+    caw.composerShadow === "none",
+    caw.composerShadow
+  );
+  if (first) {
+    kit.check(
+      `${where}: a first thread on the empty recipe, three starters, words at the start`,
+      caw.first &&
+        caw.starters === 3 &&
+        caw.align.every((align) => ["start", "left"].includes(align)),
+      `first ${caw.first}, ${caw.starters} starters, ${caw.align.join(", ")}`
+    );
+    return;
+  }
+  kit.check(
+    `${where}: the asks first with their acts, a brand-solid rule, then his notes led by his mark`,
+    caw.rows === 2 &&
+      caw.rowActs === 2 &&
+      caw.rule !== "" &&
+      caw.ruleAfterRows &&
+      caw.notes >= 3 &&
+      caw.notesLed === caw.notes,
+    `${caw.rows} asks (${caw.rowActs} with acts), rule ${caw.rule || "none"}, ${caw.notes} notes (${caw.notesLed} led)`
+  );
+};
+
+/** While an ask stands the verdict is outline; answered, Approve is coral; Send back's note unfolds where Approve stood. */
+const checkDecision = async (
+  kit: Kit,
+  page: Page,
+  where: string
+): Promise<void> => {
+  const isCoral = (selector: string) =>
+    page.evaluate(
+      (s) => document.querySelector(s)?.classList.contains("primary") ?? false,
+      selector
+    );
+  const boxOf = (selector: string) =>
+    page.evaluate((s) => {
+      const box = document.querySelector(s)?.getBoundingClientRect();
+      return box ? { left: box.left, top: box.top } : null;
+    }, selector);
+  const standing =
+    (await isCoral('[data-act="approve"]')) ||
+    (await isCoral('[data-act="send-back"]'));
+  await page.click('.chip[data-answer="Correct them in place"]');
+  await still(page);
+  const answered = await isCoral('[data-act="approve"]');
+  kit.check(
+    `${where}: the verdict is outline while the ask stands, and Approve takes the coral once it's answered`,
+    !standing && answered,
+    `standing coral ${standing}, answered coral ${answered}`
+  );
+  const approveAt = await boxOf('[data-act="approve"]');
+  const before = await boxOf('[data-act="send-back"]');
+  await page.click('[data-act="send-back"]');
+  await still(page);
+  const after = await boxOf('[data-act="send-back-go"]');
+  const note = await boxOf(".note-cell");
+  const coral = await isCoral('[data-act="send-back-go"]');
+  const gone = (await boxOf('[data-act="approve"]')) === null;
+  kit.check(
+    `${where}: Send back stays put and takes the coral; its note stands where Approve stood`,
+    Boolean(
+      before &&
+      after &&
+      note &&
+      approveAt &&
+      Math.abs(before.left - after.left) <= 0.5 &&
+      Math.abs(before.top - after.top) <= 0.5 &&
+      Math.abs(note.left - approveAt.left) <= 0.5
+    ) &&
+      coral &&
+      gone,
+    `Send back ${before?.left.toFixed(1)} → ${after?.left.toFixed(1)}, note at ${note?.left.toFixed(1)} where Approve stood at ${approveAt?.left.toFixed(1)}, coral ${coral}, Approve gone ${gone}`
+  );
 };
 
 /** Every state and fork the size shows (the columns fork under the drawer's line only). */
@@ -1114,6 +1663,30 @@ const checkShell = async (
   );
 };
 
+/** Caw's column opened on a live project and on a first thread, and the pane's decision. */
+const checkFlows = async (
+  kit: Kit,
+  page: Page,
+  origin: string,
+  where: string
+): Promise<void> => {
+  await openFrame(page, origin, "waiting");
+  const ask = (await page.$$('[data-act="ask-caw"]')).filter(Boolean);
+  for (const button of ask) {
+    if (await button.isVisible()) {
+      await button.click();
+      break;
+    }
+  }
+  await still(page);
+  await checkCaw(kit, page, `${where} Caw's column`, false);
+  await checkState(kit, page, `${where} Caw's column`, "caw");
+  await openFrame(page, origin, "first");
+  await checkCaw(kit, page, `${where} first thread`, true);
+  await openFrame(page, origin, "open");
+  await checkDecision(kit, page, `${where} the pane's decision`);
+};
+
 const boxes = async (kit: Kit, origin: string): Promise<void> => {
   for (const engine of ENGINES) {
     for (const size of SIZES) {
@@ -1131,7 +1704,21 @@ const boxes = async (kit: Kit, origin: string): Promise<void> => {
           state
         );
       }
+      for (const state of ["waiting", "empty", "fault", "open", "first"]) {
+        await openFrame(page, origin, state, "list", "dark");
+        await checkState(kit, page, `${engine} ${size} ${state}, Night`, state);
+      }
+      await checkFlows(kit, page, origin, `${engine} ${size}`);
+      await openFrame(page, origin, "rest", "list", "dark");
       if (size === "desk") {
+        await page.click('[data-act="dropped"]');
+        await still(page);
+        await checkState(
+          kit,
+          page,
+          `${engine} ${size} rest, Dropped open, Night`,
+          "rest"
+        );
         await openFrame(page, origin, "rest");
         await page.click('[data-act="dropped"]');
         await still(page);

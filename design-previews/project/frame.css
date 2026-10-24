@@ -703,10 +703,6 @@ pre {
   align-self: center;
   color: var(--status-attn-glyph);
 }
-.col-needs {
-  font: var(--type-meta);
-  color: var(--status-attn-ink);
-}
 .col-cards {
   display: flex;
   flex-direction: column;
@@ -818,8 +814,39 @@ pre {
     box-shadow: var(--shadow-raised);
   }
 }
-.card:active {
+/* The title is the card's link, stretched over it; its controls stand above
+   that stretch, so a press on the pair never tints the card. */
+.card-link {
+  color: inherit;
+  outline: none;
+}
+.card-link::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+.card:has(.card-link:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.card:has(.card-link:active) {
   background: var(--surface-pressed);
+}
+.card .btn {
+  position: relative;
+  z-index: 1;
+}
+.card-meta code {
+  font: var(--type-code);
+  font-size: var(--text-meta);
+}
+.card-third .btn {
+  margin-block: calc(-1 * var(--space-1));
+}
+.card-acts {
+  justify-content: flex-end;
+  margin-block-start: 0;
 }
 .mark-cell {
   display: grid;
@@ -1188,9 +1215,31 @@ pre {
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
 }
-.ask {
-  border-color: var(--status-attn-glyph);
+/* The ask is the first section of the one card: a 2px spark rule on its
+   leading edge says it waits on him; the handoff follows under a hairline. */
+.ask-sec {
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-3);
   overflow: clip;
+}
+.ask-sec::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: var(--radius-hair);
+  background: var(--status-attn-glyph);
+  content: "";
+}
+.ask-sec.is-answered::before {
+  display: none;
+}
+.ask-sec + .review-who {
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--border-hairline);
 }
 .ask-who {
   font: var(--type-label);
@@ -1363,13 +1412,30 @@ pre {
 .decision {
   position: sticky;
   inset-block-end: calc(-1 * var(--space-3));
-  display: flex;
+  display: grid;
+  /* Approve's cell is where Send back's note unfolds; Send back keeps its own. */
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2);
   margin: var(--space-1) calc(-1 * var(--space-4)) calc(-1 * var(--space-3));
   padding: var(--space-3) var(--space-4);
   border-block-start: 1px solid var(--border-hairline);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--surface-raised);
+}
+.decision > [data-act="approve"],
+.note-cell {
+  grid-row: 1;
+  grid-column: 1;
+}
+.decision > [data-act^="send-back"] {
+  grid-row: 1;
+  grid-column: 2;
+}
+.note-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
 }
 .note-field {
   display: flex;
@@ -1526,12 +1592,127 @@ pre {
   flex: 1;
   font: var(--type-label);
 }
-.thread {
+.caw-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-4) var(--space-3);
   overflow: auto;
+  overscroll-behavior: contain;
+}
+.caw-needs {
+  display: grid;
+  gap: var(--space-3);
+}
+.caw-needs:empty {
+  display: none;
+}
+/* A Needs-you row on the panel's grid: the glyph in the lead column, the
+   ask over its wait, its act at the trailing edge. */
+.need-row {
+  display: grid;
+  grid-template-columns: var(--c-row-lead) minmax(0, 1fr) auto;
+  grid-template-areas:
+    "lead words act"
+    "lead meta act";
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  align-items: center;
+}
+.need-lead {
+  display: grid;
+  grid-area: lead;
+  place-items: center;
+  align-self: start;
+  color: var(--status-attn-glyph);
+}
+.need-words {
+  grid-area: words;
+  min-width: 0;
+  font: var(--type-label);
+  color: var(--ink-row);
+  text-wrap: pretty;
+}
+.need-words code {
+  font: var(--type-code);
+}
+.need-meta {
+  grid-area: meta;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+.need-row > .btn,
+.need-row > .peer {
+  grid-area: act;
+  margin: 0;
+}
+.caw-rule {
+  width: 100%;
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: var(--brand-solid);
+}
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.thread:empty {
+  display: none;
+}
+.note-age {
+  color: var(--ink-muted);
+}
+/* A first thread: the house empty recipe on the column's own surface. */
+.caw-start {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding-block: var(--space-5) var(--space-3);
+}
+.caw-first {
+  align-self: center;
+  width: var(--c-caw-hero);
+  height: var(--c-caw-hero);
+  margin-block-end: var(--space-3);
+}
+:root.dark .caw-first {
+  filter: drop-shadow(0 0 1px var(--paper)) drop-shadow(0 0 0.5px var(--paper));
+}
+.caw-start-title {
+  font: var(--type-title);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.caw-start-line {
+  max-width: 60ch;
+  color: var(--ink-muted);
+  text-wrap: pretty;
+}
+.caw-starters {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+.caw-starter {
+  min-height: var(--c-btn-h);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-row-outline);
+  border-radius: var(--radius-md);
+  font: var(--type-label);
+  color: var(--ink-row);
+  text-align: start;
+  transition: background-color var(--dur-control) var(--ease-out);
+}
+@media (hover: hover) {
+  .caw-starter:hover {
+    background: var(--surface-hover);
+  }
+}
+.caw-starter:active {
+  background: var(--surface-pressed);
 }
 .msg-you {
   align-self: flex-end;
@@ -1546,17 +1727,13 @@ pre {
   display: grid;
   grid-template-columns: var(--c-row-lead) minmax(0, 1fr);
   column-gap: var(--space-3);
-  row-gap: var(--space-1);
   align-items: center;
 }
-.msg-caw .caw-mark {
-  grid-row: 1;
-}
-.msg-caw .who {
-  font: var(--type-label);
-}
 .msg-caw .said {
-  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
   color: var(--ink-strong);
 }
 .live {
@@ -1571,9 +1748,13 @@ pre {
   border-radius: 50%;
   background: var(--status-live-glyph);
 }
+/* On the column's own surface, with no card of its own: the field keeps its edge. */
 .composer-caw {
   margin: 0 var(--space-3) var(--space-3);
   width: auto;
+  background: var(--surface-raised);
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 /* ---------- The phone (under the drawer's line) ---------- */
@@ -1643,6 +1824,10 @@ pre {
   }
   .head-line {
     font: var(--type-meta);
+  }
+  /* Said once per kind: the Needs-you group head and the view bar's chip. */
+  .head-needs {
+    display: none;
   }
 
   /* The board as one grouped list (the recommended fork). */
@@ -1787,6 +1972,31 @@ pre {
   }
   .app[data-pane] .viewbar {
     display: none;
+  }
+}
+
+/* 640 to 900: the chrome stays the phone's (the 900 line), the board and
+   the hero take the desk's measure two-up. */
+@media (640px <= width < 901px) {
+  .app[data-layout="list"] .col-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+  .app[data-layout="columns"] .board {
+    grid-template-columns: repeat(4, calc(50% - var(--space-3) / 2)) auto;
+  }
+  .starters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .empty,
+  .fault {
+    width: min(100%, var(--c-composer-w));
+  }
+}
+
+@media (pointer: coarse) {
+  .peer {
+    gap: var(--space-4);
   }
 }
 

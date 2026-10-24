@@ -13,10 +13,12 @@ const $$ = (selector, scope = document) => [
 const HINTS = {
   rest: "At rest with work going: Working shows each agent's current step, Review shows what was handed in.",
   waiting:
-    "Two agents wait on him: each card takes the spark band and moves to the top of Review; the head line gains “2 need you”. Press “2 need you” to filter.",
-  open: "The pane opens on tsk-16. Press an answer chip, then Approve → Done.",
+    "Two agents wait on him: each card takes the spark band and moves to the top of Review. Answer on the card: Deny or Approve the push, or Answer the question. Press Ask Caw for his column.",
+  open: "The pane opens on tsk-16 with its question standing: answer it with a chip, then Approve → Done takes the coral. Or press Send back.",
   empty: "An empty project: press a suggestion, then Send.",
   fault: "The hub refused the read: press Retry, or Show details.",
+  first:
+    "A project with no thread yet: Caw's column opens on his first-thread recipe. Press a starter, then Send.",
 };
 
 const frames = () => $$(".screen iframe");

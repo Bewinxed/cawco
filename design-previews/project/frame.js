@@ -187,10 +187,45 @@ const WORKING = [
 const ASKS = {
   "tsk-16": {
     kind: "ask",
-    line: "Asks: what should I do with the stored tide times?",
+    agent: "fix-tide",
+    line: "what should I do with the stored tide times?",
     wait: 34,
   },
-  "tsk-19": { kind: "permission", line: "Permission: run git push", wait: 12 },
+  "tsk-19": {
+    kind: "permission",
+    agent: "vouchers",
+    command: "git push",
+    consequence: "Pushes 3 commits to bewinxed/tidewater",
+    wait: 12,
+  },
+};
+
+/** Caw's own notes on each project's thread, newest last; `when` keeps a note to the ask it speaks of. */
+const CAW_NOTES = {
+  "cawco-dev": [
+    { words: "Filed 3 tasks from your note", age: "2h" },
+    { words: "fix-tide handed in PR #41", age: "2h" },
+    { words: "Asked you about the stored tide times", age: "34m", when: "tsk-16" },
+    { words: "Reading your note to rota", age: "now", live: true },
+  ],
+};
+
+/** A project with tasks filed by hand and no thread with Caw yet: his first-thread recipe. */
+const SITE = [
+  ["os-5", "Write the club's about page"],
+  ["os-4", "Add a map to the launch slipway", { after: "os-5" }],
+  ["os-3", "Set up the contact form"],
+];
+const SITE_DONE = [
+  ["os-2", "Pick the site's domain", "Landed on main · 4d"],
+  ["os-1", "Start the site's folder", "Landed on main · 6d"],
+];
+const FIRST_STARTERS = {
+  "obelisk-site": [
+    "What's left before the site goes live?",
+    "Review what landed this week",
+    "Plan the next three tasks",
+  ],
 };
 
 const FILED = [
@@ -267,6 +302,12 @@ const PROJECTS = {
     where: "obelisk-of-light · ~/tidewater",
     decisions: "",
   },
+  "obelisk-site": {
+    name: "obelisk-site",
+    place: "obelisk-of-light · ~/obelisk-site · 5 places",
+    where: "obelisk-of-light · ~/obelisk-site",
+    decisions: "",
+  },
 };
 
 const without = (map, id) =>
@@ -290,10 +331,16 @@ const ring = ([done, total]) => {
   return `<svg class="ring" viewBox="0 0 12 12" aria-hidden="true"><circle class="track" cx="6" cy="6" r="${r}"/><circle cx="6" cy="6" r="${r}" stroke-dasharray="${arc.toFixed(2)} ${whole.toFixed(2)}"/></svg>`;
 };
 
+/** What the agent waits on him for, in its own verb: the band and the hand-shake are the status. */
+const askWords = (ask) =>
+  ask.kind === "permission"
+    ? `${ask.agent} asks to run <code>${ask.command}</code>`
+    : `${ask.agent} asks · ${ask.line}`;
+
 const metaLine = (task) => {
   const ask = S.needs[task.id];
   if (ask) {
-    return `<span class="card-meta mark-line"><span class="mark-cell">${use("hand-shake")}</span><span class="words">Needs you · ${ask.line}</span></span>`;
+    return `<span class="card-meta mark-line"><span class="visually-hidden">Needs you: </span><span class="mark-cell">${use("hand-shake")}</span><span class="words">${askWords(ask)}</span></span>`;
   }
   if (task.cant) {
     return `<span class="card-meta mark-line">${use("close-circle", "glyph st-fail")}<span class="words">Can't start · ${task.cant}</span></span>`;
@@ -323,9 +370,20 @@ const metaLine = (task) => {
   return `<span class="card-meta mark-line"><span class="words">${task.line}</span></span>`;
 };
 
+/** The Peer Rule's list form: Deny then Approve, together at the trailing edge, each tinted by what it does. */
+const peerPair = (id) =>
+  `<span class="peer card-acts"><button class="btn sm deny" type="button" data-card-perm="deny" data-id="${id}">${use("close-l")}<span>Deny</span></button><button class="btn sm approve" type="button" data-card-perm="approve" data-id="${id}">${use("tick-l")}<span>Approve</span></button></span>`;
+
+/** The act on a card waiting on him: a permission's consequence, or the wait and Answer. */
+const needsLine = (task, ask) =>
+  ask.kind === "permission"
+    ? `<span class="card-third mark-line"><span class="words">${ask.consequence}</span></span>`
+    : `<span class="card-third mark-line"><span class="words num">waiting ${ask.wait}m</span><button class="btn outline sm" type="button" data-card-answer="${task.id}">Answer</button></span>`;
+
 const thirdLine = (task) => {
-  if (S.needs[task.id]) {
-    return "";
+  const ask = S.needs[task.id];
+  if (ask) {
+    return needsLine(task, ask);
   }
   if (task.stage === "working") {
     return `<span class="card-third mark-line">${ring(task.ring)}<span class="words num">${task.ring[0]}/${task.ring[1]} · ${task.age}</span></span>`;
@@ -336,15 +394,18 @@ const thirdLine = (task) => {
   return "";
 };
 
-const cardHTML = (task) =>
-  `<span class="card-title">${task.title}</span>${metaLine(task)}${thirdLine(task)}`;
+/** The card is an article; its title is the link (no control inside an anchor). */
+const cardHTML = (task) => {
+  const ask = S.needs[task.id];
+  const pair = ask?.kind === "permission" ? peerPair(task.id) : "";
+  return `<a class="card-title card-link" href="#${task.id}">${task.title}</a>${metaLine(task)}${thirdLine(task)}${pair}`;
+};
 
 const cardNode = (task) => {
   let node = nodes.get(task.id);
   if (!node) {
-    node = document.createElement("a");
+    node = document.createElement("article");
     node.className = "card";
-    node.href = `#${task.id}`;
     node.dataset.id = task.id;
     nodes.set(task.id, node);
   }
@@ -381,7 +442,7 @@ const boardKind = () =>
 
 const colHTML = (key, name) => `
   <div class="col" data-col="${key}">
-    <h2 class="col-head">${key === "needs" ? use("hand-shake", "glyph col-glyph") : ""}<span class="col-name">${name}</span><span class="col-count num"></span><span class="col-needs"></span></h2>
+    <h2 class="col-head">${key === "needs" ? use("hand-shake", "glyph col-glyph") : ""}<span class="col-name">${name}</span><span class="col-count num"></span></h2>
     <div class="col-cards"></div>
     ${key === "ready" ? `<button class="btn ghost sm col-foot" type="button">${use("plus-l")}<span>Add task</span></button>` : ""}
   </div>`;
@@ -449,9 +510,6 @@ const place = () => {
     }
     col.hidden = key === "needs" && list.length === 0;
     $(".col-count", col).textContent = list.length > 0 ? String(list.length) : "";
-    const waiting = list.filter((task) => S.needs[task.id]).length;
-    $(".col-needs", col).textContent =
-      S.boardKind === "columns" && waiting > 0 ? `· ${needWords(waiting)}` : "";
     const cards = $(".col-cards", col);
     for (const task of list) {
       const node = cardNode(task);
@@ -624,6 +682,9 @@ const drawHead = (animate) => {
   chip.setAttribute("aria-pressed", String(S.filter));
   $('[data-slot="needs-count"]').textContent = String(count);
   drawRing(count);
+  if (!$(".caw-col").hidden) {
+    drawCaw();
+  }
 };
 
 /**
@@ -724,13 +785,13 @@ const stagePill = (task) => {
   return `<span class="pill" data-tone="${tone}" data-slot="pill"><span>${word}</span></span>`;
 };
 
-const askCard = (task) => {
+const askSection = (task) => {
   const ask = S.needs[task.id];
   if (!ask) {
     return "";
   }
   if (ask.kind === "permission") {
-    return `<section class="pcard ask" aria-labelledby="ask-q" data-slot="ask">
+    return `<div class="ask-sec" role="group" aria-labelledby="ask-q" data-slot="ask">
       <p class="ask-who" id="ask-q">${task.agent} asks to run a command</p>
       <pre class="cmd"><code>git push origin vouchers/taster-sessions</code></pre>
       <p class="review-check">Pushes 3 commits to github.com/bewinxed/tidewater.</p>
@@ -738,7 +799,7 @@ const askCard = (task) => {
         <button class="btn sm deny" type="button" data-answer="Denied: git push">${use("close-l")}<span>Deny</span></button>
         <button class="btn sm approve" type="button" data-answer="Approved: git push">${use("tick-l")}<span>Approve</span></button>
       </div>
-    </section>`;
+    </div>`;
   }
   const options = [
     "Correct them in place",
@@ -751,11 +812,11 @@ const askCard = (task) => {
         `<button class="chip" type="button" aria-pressed="false" data-answer="${words}"><span class="keycap" data-box>${i + 1}</span><span>${words}</span></button>`
     )
     .join("");
-  return `<section class="pcard ask" aria-labelledby="ask-q" data-slot="ask">
+  return `<div class="ask-sec" role="group" aria-labelledby="ask-q" data-slot="ask">
     <p class="ask-who">${task.agent} asks</p>
     <p class="ask-q" id="ask-q">The tide times stored before the fix are still an hour out from late March. What should I do with them?</p>
     <div class="chips" role="group" aria-label="Answers">${chips}<button class="chip" type="button" data-act="other"><span class="keycap" data-box>4</span><span>Other…</span></button></div>
-  </section>`;
+  </div>`;
 };
 
 const tideStage = `<figure class="stage">
@@ -770,9 +831,14 @@ const tideStage = `<figure class="stage">
   </table>
 </figure>`;
 
+/**
+ * One raised card, read top to bottom: the ask first (a 2px spark rule on
+ * its leading edge), then the handoff, then the decision at its foot.
+ */
 const reviewCard = (task) => {
   if (task.stage !== "review" && !(S.approved && task.id === TIDE.id)) {
-    return "";
+    const ask = askSection(task);
+    return ask ? `<section class="pcard review" data-slot="review">${ask}</section>` : "";
   }
   if (S.approved && task.id === TIDE.id) {
     return `<section class="pcard review" data-slot="review"><p class="review-result">${use("tick-l", "glyph st-done")}<span>Approved · landing as PR #41</span></p></section>`;
@@ -787,13 +853,14 @@ const reviewCard = (task) => {
       ? `<p class="attachments"><span class="mark-line">${use("gallery", "glyph sm")}<span>tide-table.png</span></span><a class="mark-line" href="#pr-41">${use("link-minimalistic-2", "glyph sm")}<span>PR #41 · github.com</span></a></p>`
       : "";
   return `<section class="pcard review" data-slot="review">
+    ${askSection(task)}
     <p class="review-who mark-line">${agentMark(task.agent)}<span><span class="who">${task.agent}</span> handed in · ${task.age} ago</span><a class="btn ghost sm open" href="#session"><span>Open</span>${use("square-top-down", "glyph sm")}</a></p>
     <p class="review-words">${words} <button class="more" type="button">More</button></p>
     <p class="review-check">${task.check.replace("Check:", "<b>Check:</b>")}</p>
     ${files}
     ${shown}
     <div class="decision" data-slot="decision">
-      <button class="btn primary" type="button" data-act="approve">Approve → Done</button>
+      <button class="btn outline" type="button" data-act="approve">Approve → Done</button>
       <button class="btn outline" type="button" data-act="send-back">Send back</button>
     </div>
   </section>`;
@@ -866,7 +933,6 @@ const paneHTML = (task) => `
       <h2 class="pane-title" data-slot="pane-title">${task.title}</h2>
       <p class="pane-facts mark-line">${stagePill(task)}${task.agent ? `${agentMark(task.agent)}<span class="who">${task.agent}</span>` : ""}<span>${task.age ? `${task.age} ago` : ""}</span><span class="labels">${task.labels ?? ""}</span></p>
     </header>
-    ${askCard(task)}
     ${reviewCard(task)}
   </div>
   <section class="pane-tabs" aria-label="Task sections">
@@ -1017,7 +1083,7 @@ const closePane = () => {
   const finish = () => {
     pane.hidden = true;
     pane.replaceChildren();
-    nodes.get(id)?.focus({ preventScroll: true });
+    $(".card-link", nodes.get(id))?.focus({ preventScroll: true });
     paintActs();
   };
   if (!motionOk()) {
@@ -1112,6 +1178,7 @@ const answer = (button, words) => {
     ? `<b>${words}</b> · just now`
     : `Answered: <b>${words}</b> · just now`;
   foldTo(ask, `<p class="ask-answered">${label}</p>`, "ask-fold");
+  ask.classList.add("is-answered");
   hideTray();
   say(`Answered ${taskOf(id)?.agent}: ${words}`);
 };
@@ -1135,10 +1202,6 @@ const approve = () => {
   const pill = $('[data-slot="pill"]');
   pill.dataset.tone = "done";
   morph(pill, "Done", "pill-morph");
-  const ask = $('[data-slot="ask"]');
-  if (ask) {
-    foldAway(ask, "ask-fold");
-  }
   const review = $('[data-slot="review"]');
   if (review) {
     foldTo(
@@ -1180,13 +1243,63 @@ const sendBackGo = () => {
   say(`${task.title} sent back to ${task.agent}`);
 };
 
+/**
+ * Send back opens its note where Approve stood: Approve folds away, the
+ * field unfolds in its cell with Cancel at its end, and Send back, which
+ * never moves, becomes the act on the same clock.
+ */
 const sendBack = () => {
   const bar = $('[data-slot="decision"]');
-  if (!bar) {
+  const approveButton = $('[data-act="approve"]', bar ?? document);
+  const back = $('[data-act="send-back"]', bar ?? document);
+  if (!(bar && approveButton && back)) {
     return;
   }
-  bar.innerHTML = `<label class="note-field"><span class="visually-hidden">What should change?</span><textarea rows="1" placeholder="What should change?"></textarea></label><button class="btn outline" type="button" data-act="send-back-go">Send back</button><button class="btn ghost" type="button" data-act="send-back-cancel">Cancel</button>`;
-  $("textarea", bar).focus();
+  const cell = document.createElement("div");
+  cell.className = "note-cell";
+  cell.innerHTML = `<label class="note-field"><span class="visually-hidden">What should change?</span><textarea rows="1" placeholder="What should change?"></textarea></label><button class="btn ghost sm" type="button" data-act="send-back-cancel">Cancel</button>`;
+  bar.prepend(cell);
+  back.dataset.act = "send-back-go";
+  if (motionOk()) {
+    run(
+      cell,
+      [{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 0)" }],
+      { dur: "--dur-exit", ease: "--ease-out", id: "note-unfold" }
+    );
+    run(approveButton, [{ opacity: 1 }, { opacity: 0 }], {
+      dur: "--dur-exit",
+      ease: "--ease-out",
+      id: "approve-fold",
+      fill: "forwards",
+    }).ended(() => approveButton.remove());
+  } else {
+    approveButton.remove();
+  }
+  $("textarea", cell).focus();
+};
+
+const sendBackCancel = () => {
+  const bar = $('[data-slot="decision"]');
+  const cell = $(".note-cell", bar ?? document);
+  const back = $('[data-act="send-back-go"]', bar ?? document);
+  if (!(bar && cell && back)) {
+    return;
+  }
+  cell.remove();
+  back.dataset.act = "send-back";
+  const approveButton = document.createElement("button");
+  approveButton.className = "btn outline";
+  approveButton.type = "button";
+  approveButton.dataset.act = "approve";
+  approveButton.textContent = "Approve → Done";
+  bar.prepend(approveButton);
+  if (motionOk()) {
+    run(approveButton, [{ opacity: 0 }, { opacity: 1 }], {
+      dur: "--dur-pop",
+      ease: "--ease-out",
+      id: "approve-back",
+    });
+  }
 };
 
 /* The composer as a question: Other… hands the field the question. */
@@ -1283,6 +1396,7 @@ const openCaw = ({ focus = true, animate = true } = {}) => {
     return col;
   }
   col.hidden = false;
+  drawCaw();
   if (animate && motionOk()) {
     const keys = PHONE.matches
       ? [{ translate: "0 100%" }, { translate: "0 0" }]
@@ -1326,11 +1440,93 @@ const closeCaw = () => {
   }).ended(finish);
 };
 
+/** One of Caw's notes: his mark in the lead column, his words, its age; a live dot while it runs. */
+const noteHTML = ({ words, age, live }) =>
+  `<img class="caw-mark" src="${markSrc()}" alt="" width="28" height="28"/><span class="said">${live ? '<span class="live-dot breathe" aria-hidden="true"></span>' : ""}<span data-slot="caw-said">${words}</span>${age ? `<span class="note-age"> · ${age}</span>` : ""}</span>`;
+
 const cawRow = (words) =>
-  threadRow(
-    `<img class="caw-mark" src="${markSrc()}" alt="" width="28" height="28"/><span class="who">Caw</span><span class="said live"><span class="live-dot breathe" aria-hidden="true"></span><span data-slot="caw-said">${words}</span></span>`,
-    "msg-caw"
-  );
+  threadRow(noteHTML({ words, live: true }), "msg-caw");
+
+/** A Needs-you row in Caw's column: the hand-shake in the lead column, the ask, its act. */
+const needRow = (id, ask) => {
+  const act =
+    ask.kind === "permission"
+      ? peerPair(id)
+      : `<button class="btn outline sm" type="button" data-card-answer="${id}">Answer</button>`;
+  return `<li class="need-row"><span class="need-lead">${use("hand-shake")}</span><span class="need-words"><span class="visually-hidden">Needs you: </span>${askWords(ask)}</span><span class="need-meta num">waiting ${ask.wait}m</span>${act}</li>`;
+};
+
+/**
+ * What Caw's column holds at rest: the asks first, a brand-solid rule, then
+ * his thread (his notes, newest at the foot). A project with no thread yet
+ * takes the empty recipe: Caw still on the axis, the title and one line at
+ * the start, three starters from the project's own work, then the composer.
+ */
+const drawCaw = () => {
+  const thread = $('[data-slot="thread"]');
+  if (thread.children.length === 0) {
+    const notes = (CAW_NOTES[S.project] ?? []).filter(
+      (note) => !note.when || S.needs[note.when]
+    );
+    for (const note of notes) {
+      threadRow(noteHTML(note), "msg-caw");
+    }
+  }
+  const asks = Object.entries(S.needs);
+  $('[data-slot="caw-needs"]').innerHTML = asks
+    .map(([id, ask]) => needRow(id, ask))
+    .join("");
+  const first = thread.children.length === 0;
+  $('[data-slot="caw-rule"]').hidden = asks.length === 0 || first;
+  const start = $('[data-slot="caw-first"]');
+  start.hidden = !first;
+  $('[data-slot="caw-first-title"]').textContent =
+    `Talk to Caw about ${PROJECTS[S.project].name}`;
+  $('[data-slot="caw-starters"]').innerHTML = (FIRST_STARTERS[S.project] ?? [])
+    .map(
+      (words) =>
+        `<button class="caw-starter" type="button" data-words="${words}">${words}</button>`
+    )
+    .join("");
+};
+
+/** Deny or Approve on a card or a row of Caw's column: the band goes and the card settles. */
+const answerPermission = (id, verb) => {
+  const ask = S.needs[id];
+  if (!ask) {
+    return;
+  }
+  const before = rects();
+  S.needs = without(S.needs, id);
+  place();
+  flip(before, { id: "card-settle" });
+  drawHead(true);
+  const section = S.selected === id ? $('[data-slot="ask"]') : null;
+  const said = `${verb === "approve" ? "Approved" : "Denied"}: ${ask.command}`;
+  if (section) {
+    foldTo(section, `<p class="ask-answered"><b>${said}</b> · just now</p>`, "ask-fold");
+    section.classList.add("is-answered");
+  }
+  say(`${said} for ${ask.agent}`);
+};
+
+const putCawWords = (words) => {
+  const field = $('[data-slot="caw-field"]');
+  field.value = words;
+  autosize(field);
+  field.focus();
+  field.setSelectionRange(words.length, words.length);
+  if (motionOk()) {
+    run(
+      field,
+      [
+        { opacity: 0, translate: "8px 0" },
+        { opacity: 1, translate: "0 0" },
+      ],
+      { dur: "--dur-control", ease: "--ease-out", id: "draft-in" }
+    );
+  }
+};
 
 /**
  * Lifts a block out of the page's flow where it stands, so what replaces it
@@ -1413,6 +1609,7 @@ const sendFromEmpty = (words) => {
   const target = $(".composer-caw", col);
   const to = target.getBoundingClientRect();
   $('[data-slot="thread"]').replaceChildren();
+  $('[data-slot="caw-first"]').hidden = true;
   const mine = threadRow(words, "msg-you");
   const row = cawRow(`Reading ${PROJECTS[S.project].name}'s folder`);
   S.cawRow = row;
@@ -1680,6 +1877,14 @@ const enter = async (state) => {
     drawHead(false);
     return;
   }
+  if (state === "first") {
+    S.project = "obelisk-site";
+    S.tasks = [...fromRows(SITE, "ready"), ...fromRows(SITE_DONE, "done")];
+    place();
+    drawHead(false);
+    openCaw({ focus: false, animate: false });
+    return;
+  }
   S.tasks = boardTasks([CALENDAR, TIDE, VOUCHERS]);
   if (state === "open") {
     S.needs = { ...ASKS };
@@ -1721,13 +1926,18 @@ const paintActs = () => {
   const cawOpen = !$(".caw-col").hidden;
   const heroOpen = settled($(".empty"));
   const faultOpen = settled($(".fault"));
-  const decision = paneOpen
-    ? $('[data-act="send-back-go"], [data-act="approve"]', pane)
-    : null;
+  /* While an ask stands its answer is the entry point, never coral (the
+     Peer Rule's pair, or chips): the verdict waits, outline, beside it. */
+  const asking = paneOpen && Boolean(S.needs[S.selected]);
+  const decision =
+    paneOpen && !asking
+      ? ($('[data-act="send-back-go"]', pane) ??
+        $('[data-act="approve"]', pane))
+      : null;
   let act = null;
   if (decision) {
     act = decision;
-  } else if (paneOpen) {
+  } else if (paneOpen && !asking) {
     act = $(".composer-send", pane);
   } else if (cawOpen) {
     act = $(".composer-caw .composer-send");
@@ -1740,10 +1950,18 @@ const paintActs = () => {
     send.classList.toggle("act", send === act);
   }
   for (const button of $$(
-    '[data-act="approve"], [data-act="send-back-go"], [data-act="retry"]'
+    '[data-act="approve"], [data-act="send-back"], [data-act="send-back-go"], [data-act="retry"]'
   )) {
+    const becomes = button === act && !button.classList.contains("primary");
     button.classList.toggle("primary", button === act);
     button.classList.toggle("outline", button !== act);
+    if (becomes && motionOk()) {
+      run(button, [{ opacity: 0.55 }, { opacity: 1 }], {
+        dur: "--dur-exit",
+        ease: "--ease-out",
+        id: "act-coral",
+      });
+    }
   }
   for (const ask of $$('[data-act="ask-caw"]')) {
     const returning = ask.hidden && !(cawOpen || heroOpen);
@@ -1823,14 +2041,7 @@ const ACTS = {
   approve,
   "send-back": sendBack,
   "send-back-go": () => sendBackGo(),
-  "send-back-cancel": () => {
-    const task = taskOf(S.selected);
-    const bar = $('[data-slot="decision"]');
-    if (task && bar) {
-      bar.innerHTML =
-        '<button class="btn primary" type="button" data-act="approve">Approve → Done</button><button class="btn outline" type="button" data-act="send-back">Send back</button>';
-    }
-  },
+  "send-back-cancel": sendBackCancel,
   other: showTray,
   "filter-needs": () => {
     S.filter = !S.filter;
@@ -1873,6 +2084,22 @@ const pressed = (event) => {
     ACTS[acted.dataset.act](acted);
     return;
   }
+  const answerHere = target.closest("[data-card-answer]");
+  if (answerHere) {
+    openPane(answerHere.dataset.cardAnswer);
+    $('[data-slot="ask"] .chip, [data-slot="ask"] .btn')?.focus();
+    return;
+  }
+  const perm = target.closest("[data-card-perm]");
+  if (perm) {
+    answerPermission(perm.dataset.id, perm.dataset.cardPerm);
+    return;
+  }
+  const cawStarter = target.closest(".caw-starter");
+  if (cawStarter) {
+    putCawWords(cawStarter.dataset.words);
+    return;
+  }
   const answerChip = target.closest("[data-answer]");
   if (answerChip) {
     answer(answerChip, answerChip.dataset.answer);
@@ -1896,10 +2123,10 @@ const pressed = (event) => {
     placeThumb($(".views-track"), motionOk());
     return;
   }
-  const card = target.closest(".card[data-id]");
-  if (card) {
+  const link = target.closest(".card-link");
+  if (link) {
     event.preventDefault();
-    openPane(card.dataset.id);
+    openPane(link.closest(".card").dataset.id);
     return;
   }
   if (target.closest("a[href^='#']")) {
@@ -1927,6 +2154,7 @@ const sent = (form) => {
   if (form.dataset.composer === "caw") {
     field.value = "";
     autosize(field);
+    $('[data-slot="caw-first"]').hidden = true;
     threadRow(words, "msg-you");
     cawRow("Reading what you sent");
     return;

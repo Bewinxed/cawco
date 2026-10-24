@@ -215,13 +215,24 @@ request 4f1c-9a20 · 2026-10-24 18:02:11</code></pre>
           <aside class="caw-col" aria-label="Caw" hidden>
             <span class="sheet-grab" aria-hidden="true"></span>
             <header class="caw-col-head">
-              <img src="caw/mark-light.png" alt="" width="28" height="28" class="caw-mark" />
-              <p class="caw-col-name">Caw</p>
+              <h2 class="caw-col-name">Caw</h2>
               <button class="ghost-icon" type="button" aria-label="Close Caw" data-act="close-caw">
                 <svg class="glyph" aria-hidden="true"><use href="#i-close-l" /></svg>
               </button>
             </header>
-            <ol class="thread" data-slot="thread"></ol>
+            <div class="caw-body">
+              <ul class="caw-needs" data-slot="caw-needs" aria-label="Needs you"></ul>
+              <hr class="caw-rule" data-slot="caw-rule" hidden />
+              <ol class="thread" data-slot="thread" aria-label="Caw's thread"></ol>
+              <section class="caw-start" data-slot="caw-first" aria-labelledby="caw-first-title" hidden>
+                <img class="caw-first" src="caw/hero.png" alt="" width="80" height="80" />
+                <h3 class="caw-start-title" id="caw-first-title" data-slot="caw-first-title">Talk to Caw</h3>
+                <p class="caw-start-line">
+                  He files what you ask as tasks, runs them, and asks you before anything leaves this machine.
+                </p>
+                <div class="caw-starters" role="group" aria-label="Starters" data-slot="caw-starters"></div>
+              </section>
+            </div>
             <form class="composer composer-caw" data-composer="caw">
               <label class="composer-field">
                 <span class="visually-hidden">Message Caw</span>
