@@ -1669,6 +1669,20 @@
 
 /* The flip itself starts no element transitions: `overrides`, above. */
 
+/* ---- Containing blocks the motion helpers draw in ----------------------
+   A list the kit highlight draws its layers under (`highlight`,
+   `data-highlight`) and a box whose rows reflow (motion/rows `reflow`,
+   `data-reflow`) are the containing block of what they place inside them.
+   Unpositioned, they are relative by this default; a box's own position
+   (a utility, a recipe) outranks it from any later layer. Each helper read
+   the box's computed position as it mounted instead, and that read
+   restyled the page between the writes of the flush that mounted it. */
+@layer base {
+  :where([data-highlight], [data-reflow]) {
+    position: relative;
+  }
+}
+
 /* ---- Sheets ------------------------------------------------------------
    What scrolls in a sheet names the scroll timeline (`--sheet-scroll`) its
    header's seam follows (the kit drawer's `timeline-scope`, app.css): a

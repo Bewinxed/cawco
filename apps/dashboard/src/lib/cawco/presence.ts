@@ -1,5 +1,5 @@
 /**
- * This tab's presence (`POST /api/presence`): two facts the hub rolls up
+ * This tab's presence (`POST /api/presence`): three facts the hub rolls up
  * into whether the person is here (hub notifications.ts `rollup`).
  *
  * - **The chat in front and read** (`active`, `sessionId`): a session in
@@ -7,11 +7,19 @@
  *   notification about what landed in a session while some client was
  *   active on it. It goes inactive the moment the tab blurs, hides or
  *   unloads; a blur no longer means the person left.
- * - **The machine** (`machine`, `idleMs`): Chromium's Idle Detection, once
- *   the person allowed it for this browser (Needs you's onboarding row, the
- *   presence menu), says whether this computer is in use, idle or locked.
- *   Without it (Safari, Firefox, Brave, not allowed) the tab says only how
- *   long since the last key, pointer or scroll on this page.
+ * - **The person's input here** (`idleMs`): how long since their last key,
+ *   pointer press or move, wheel or touch on this page or a preview frame
+ *   in it, as the page's one input tracker hears it (reload.svelte.ts
+ *   `watchInput`); absent until the first since the page loaded. Input
+ *   decides whether the person is here: a tab open and focused with nobody
+ *   at it says no input, and they go away once the away clock passes.
+ * - **The machine** (`machine`): Chromium's Idle Detection, once the person
+ *   allowed it for this browser (Needs you's onboarding row, the presence
+ *   menu), says whether this computer is in use, idle or locked. Never
+ *   input: a lock makes the person away at once.
+ * - **A phone or tablet** (`handheld`): a coarse pointer that can't hover,
+ *   so what needs the person goes to the phone while this tab is the one
+ *   in use, never to a desk tab.
  *
  * Beside them, `alerts`: this tab may show desktop notifications, so the
  * hub can show what needs the person here instead of buzzing their phone
@@ -25,11 +33,14 @@ import {
 } from "@cawco/core/notifications";
 import { newId } from "#lib/cawco/id.js";
 import { store, stored } from "#lib/cawco/storage.js";
+import { lastInputAt, onInput } from "./reload.svelte";
 
 /** Per tab: sessionStorage outlives a reload and is the tab's own. */
 const CLIENT_KEY = "cawco-presence-client";
 /** Idle after this long without input: Idle Detection's least threshold, the agents' too. */
 const IDLE_AFTER_MS = 60_000;
+/** An input after this long without one is said at once, not on the next beat: the person came back. */
+const QUIET_MS = 60_000;
 
 /** Chromium's Idle Detection (wicg.github.io/idle-detection), not in TypeScript's DOM yet. */
 interface IdleDetectorLike extends EventTarget {
@@ -56,11 +67,8 @@ let listening = false;
 let beating: ReturnType<typeof setInterval> | undefined;
 /** The last state the hub was told, so only a change (or a beat) posts. */
 let told: string | undefined;
-/** The last key, pointer or scroll on this page, epoch ms. */
-let lastInput = Date.now();
-/** Idle Detection while it runs: its reading, and since when it said idle. */
+/** Idle Detection while it runs. */
 let detector: IdleDetectorLike | undefined;
-let idleSince: number | undefined;
 
 /** Minted once per page load where no storage keeps the tab's own. */
 let mintedHere: string | null = null;
@@ -97,15 +105,16 @@ const machineNow = (): MachineState | undefined => {
   return detector.userState === "idle" ? "idle" : "active";
 };
 
-/** How long since the last input this tab can know of, ms. */
-const idleNow = (now: number): number => {
-  if (detector) {
-    return detector.userState === "idle" && idleSince !== undefined
-      ? now - idleSince + IDLE_AFTER_MS
-      : 0;
-  }
-  return Math.max(0, now - lastInput);
+/** How long since the person's last input on this page, ms; undefined before any. */
+const idleNow = (now: number): number | undefined => {
+  const at = lastInputAt();
+  return at === null ? undefined : Math.max(0, now - at);
 };
+
+/** A phone or tablet: a coarse pointer that can't hover. */
+const handheld = (): boolean =>
+  typeof matchMedia !== "undefined" &&
+  matchMedia("(pointer: coarse) and (hover: none)").matches;
 
 const post = (beat: PresenceBeat, leaving: boolean): void => {
   const body = JSON.stringify(beat);
@@ -138,6 +147,7 @@ const report = (beat = false, leaving = false): void => {
   const state = `${front}|${active}|${machine}|${alerts}`;
   if (beat || state !== told) {
     told = state;
+    const idleMs = idleNow(now);
     post(
       {
         clientId: presenceClientId(),
@@ -145,7 +155,8 @@ const report = (beat = false, leaving = false): void => {
         sessionId: front,
         active,
         alerts,
-        idleMs: idleNow(now),
+        handheld: handheld(),
+        ...(idleMs === undefined ? {} : { idleMs }),
         ...(machine ? { machine } : {}),
         // Beats can land out of order; the hub keeps the newest said.
         saidAt: now,
@@ -159,11 +170,9 @@ const report = (beat = false, leaving = false): void => {
 export const notificationsAllowed = (): boolean =>
   typeof Notification !== "undefined" && Notification.permission === "granted";
 
-/** An input on the page: counted, and said at once when it ends a quiet stretch. */
-const touched = (): void => {
-  const quiet = Date.now() - lastInput > IDLE_AFTER_MS;
-  lastInput = Date.now();
-  if (quiet && !detector) {
+/** An input on the page: said at once when it is the first since the load, or ends a quiet stretch. */
+const touched = (at: number, before: number | null): void => {
+  if (before === null || at - before > QUIET_MS) {
     report(true);
   }
 };
@@ -179,9 +188,7 @@ const listen = (): void => {
   document.addEventListener("visibilitychange", changed);
   window.addEventListener("pageshow", changed);
   window.addEventListener("pagehide", () => report(false, true));
-  for (const kind of ["pointerdown", "keydown", "wheel", "touchstart"]) {
-    window.addEventListener(kind, touched, { capture: true, passive: true });
-  }
+  onInput(touched);
   beating = setInterval(() => report(true), PRESENCE_BEAT_MS);
   // Idle Detection runs again on every load once it is allowed.
   detectIdle().catch(() => undefined);
@@ -283,15 +290,7 @@ async function detectIdle(): Promise<void> {
     return;
   }
   const running = new Detector();
-  running.addEventListener("change", () => {
-    if (running.userState === "idle") {
-      idleSince ??= Date.now();
-    } else {
-      idleSince = undefined;
-      lastInput = Date.now();
-    }
-    report();
-  });
+  running.addEventListener("change", () => report());
   await running.start({
     threshold: IDLE_AFTER_MS,
     signal: new AbortController().signal,

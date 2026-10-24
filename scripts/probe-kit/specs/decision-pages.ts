@@ -76,6 +76,16 @@
  *     option's builds and its log.md says what the pick costs and builds;
  *     the same card without `builds` draws none, its cells the chip, line
  *     and cost rows alone.
+ * (o) A reply arriving, as the desk (1440) and the phone (390) draw it,
+ *     after a loop of ink the session hears and after a plain message from
+ *     elsewhere: every frame from the first change to the transcript's rows
+ *     less 500ms to the last plus 500ms. On Chromium, at 4x CPU throttle
+ *     with a trace of that window, no layout is forced from a mount's sites
+ *     (a helper's computed position read as it attached, the rendered check
+ *     as it mounted, a folder tab's first measure, a session row's trailing
+ *     width: `MOUNT_SITES`) and no frame runs past 250ms; on WebKit and
+ *     Firefox, which have no CPU throttle and no trace here, the frames are
+ *     read and said.
  * (n) Interact and Draw, ten presses over the page's ink and comments, the
  *     first the moment a fresh loop of ink is drawn, while its picture is
  *     made: each reaches the page's mode under 300ms, no frame in the desk
@@ -1472,8 +1482,13 @@ const quietSwitch = () => {
   state.quietAt = performance.now();
 };
 
-/** The watch read at the quiet window's end. */
-const readSwitch = (): SwitchWatch => {
+/**
+ * The watch read at the quiet window's end. `scope`, in the desk, is the
+ * pane the switch draws in: a run outside it (the rail's marks, the
+ * transcript's indicator) is the reply the fresh loop sets off, on its own
+ * clock whenever the session takes it, which no switch starts.
+ */
+const readSwitch = (scope: string | null): SwitchWatch => {
   const state = (window as unknown as { __switch: SwitchState }).__switch;
   state.counting = false;
   let gap = 0;
@@ -1497,13 +1512,15 @@ const readSwitch = (): SwitchWatch => {
     ...shadows.flatMap((root) => root.getAnimations()),
   ]);
   // On the document's clock (a scroll-driven run's timeline has a `source`,
-  // and moves only as its scroller does), and either never ending or begun
-  // before the window: a run the switch left going.
+  // and moves only as its scroller does), in `scope`, and either never
+  // ending or begun before the window: a run the switch left going.
   const running = [...all]
     .filter((one) => {
+      const target = (one.effect as KeyframeEffect | null)?.target;
       if (
         one.playState !== "running" ||
-        (one.timeline && "source" in one.timeline)
+        (one.timeline && "source" in one.timeline) ||
+        (scope && !target?.closest(scope))
       ) {
         return false;
       }
@@ -1657,8 +1674,8 @@ const pressOnce = async (
   await desk.waitForTimeout(SWITCH_QUIET_MS);
   const quiet = await metricsNow(sides);
   const seen = {
-    desk: await desk.evaluate(readSwitch),
-    frame: await frame.evaluate(readSwitch),
+    desk: await desk.evaluate(readSwitch, PANE),
+    frame: await frame.evaluate(readSwitch, null),
   };
   const longest = Math.max(
     seen.desk.gap,
@@ -1748,8 +1765,8 @@ const switchLeg = async (on: On, frame: Frame) => {
   await frame.evaluate(quietSwitch);
   await desk.waitForTimeout(2 * SWITCH_QUIET_MS);
   const rest = {
-    desk: await desk.evaluate(readSwitch),
-    frame: await frame.evaluate(readSwitch),
+    desk: await desk.evaluate(readSwitch, PANE),
+    frame: await frame.evaluate(readSwitch, null),
   };
   const resting = [
     ...rest.desk.running.map((one) => `desk ${one}`),
@@ -1771,6 +1788,375 @@ const switchLeg = async (on: On, frame: Frame) => {
   await sides.cdp.desk?.detach();
   await sides.cdp.frame?.detach();
   await mode(desk, frame, "V");
+};
+
+/**
+ * A turn's frames in one document: every frame's start (the engine's own
+ * frame clock, `requestAnimationFrame`), and when the transcript's rows
+ * changed (marked `turn-rows` for a trace to find).
+ */
+const watchTurn = () => {
+  const w = window as unknown as {
+    __turn?: {
+      frames: number[];
+      on: boolean;
+      rows: number[];
+      stop: () => void;
+    };
+  };
+  const own = window.requestAnimationFrame.bind(window);
+  const state: {
+    frames: number[];
+    on: boolean;
+    rows: number[];
+    stop: () => void;
+  } = {
+    frames: [],
+    on: true,
+    rows: [],
+    stop: () => undefined,
+  };
+  w.__turn = state;
+  const turnTick = (now: number) => {
+    if (state.on) {
+      state.frames.push(now);
+      own(turnTick);
+    }
+  };
+  own(turnTick);
+  const listing = document.querySelector("[data-slot=listing]");
+  const seen = new MutationObserver((records) => {
+    if (records.some((record) => record.type === "childList")) {
+      state.rows.push(performance.now());
+      performance.mark("turn-rows");
+    }
+  });
+  if (listing) {
+    seen.observe(listing, { childList: true, subtree: true });
+  }
+  state.stop = () => {
+    state.on = false;
+    seen.disconnect();
+  };
+  performance.mark("turn-start");
+  return performance.now();
+};
+
+const readTurn = () => {
+  const state = (
+    window as unknown as {
+      __turn: { frames: number[]; rows: number[]; stop: () => void };
+    }
+  ).__turn;
+  state.stop();
+  return { frames: state.frames, rows: state.rows };
+};
+
+/** A reply window's frames: how many, how many over 16.7ms and 33ms (on headless Chromium's 16.67ms grid, past 17.2 and 33.4), the longest. */
+const framesIn = (frames: number[], from: number, to: number) => {
+  const spans: number[] = [];
+  for (let at = 1; at < frames.length; at += 1) {
+    if (frames[at] >= from && frames[at] <= to) {
+      spans.push(frames[at] - frames[at - 1]);
+    }
+  }
+  return {
+    n: spans.length,
+    over16: spans.filter((span) => span > 17.2).length,
+    over33: spans.filter((span) => span > 33.4).length,
+    longest: Math.round(Math.max(0, ...spans) * 10) / 10,
+  };
+};
+
+/**
+ * The sites a mount forced layout from, by what their call says in any build
+ * (property names and strings survive minifying): a helper's computed
+ * position read as it attached (`highlight`, `reflow`: now the sheet's
+ * default, design.css), the rendered check as it mounted (utils/rendered
+ * `checkVisibility`: now its observers' first answers), a folder tab's first
+ * measure (TabItem, its `--flare`: now its size observer's first report) and
+ * a session row's trailing column read for its width (SessionRow
+ * `getComputedStyle(...).inlineSize`: now its observer's own entries).
+ */
+const MOUNT_SITES: [string, RegExp][] = [
+  ["position read at attach", /\.position\s*===\s*["'`]static["'`]/],
+  ["checkVisibility", /\.checkVisibility\(/],
+  ["folder tab measure", /["'`]--flare["'`]/],
+  ["row trail width", /\)\.inlineSize/],
+];
+
+/** The longest a frame of a reply may take at 4x CPU throttle on Chromium, ms. */
+const TURN_FRAME_MS = 250;
+
+/** What a long frame spent its time on, from a trace: script, the layout and style it forced, the frame's own, and painting. */
+const TASKS = new Set([
+  "FunctionCall",
+  "EventDispatch",
+  "TimerFire",
+  "FireAnimationFrame",
+  "RunMicrotasks",
+  "HandlePostMessage",
+]);
+const PAINTS = new Set([
+  "Paint",
+  "PrePaint",
+  "Layerize",
+  "Commit",
+  "RasterTask",
+]);
+
+interface TraceEvent {
+  args?: {
+    beginData?: {
+      stackTrace?: {
+        columnNumber: number;
+        functionName: string;
+        lineNumber: number;
+        url: string;
+      }[];
+    };
+  };
+  dur?: number;
+  name: string;
+  ph: string;
+  pid: number;
+  tid: number;
+  ts: number;
+}
+
+/** Each script's text by its URL, for what a stack frame's line and column say. */
+const scripts = new Map<string, Promise<string[]>>();
+const lineOf = (url: string, line: number) => {
+  let text = scripts.get(url);
+  if (!text) {
+    text = fetch(url)
+      .then((response) => response.text())
+      .then((body) => body.split("\n"))
+      .catch(() => [] as string[]);
+    scripts.set(url, text);
+  }
+  // A trace's stack frames count lines and columns from 1.
+  return text.then((lines) => lines[line - 1] ?? "");
+};
+
+/** Total duration of `events`, ms, rounded. */
+const durationOf = (events: TraceEvent[]) =>
+  Math.round(
+    events.reduce((total, event) => total + (event.dur ?? 0), 0) / 1000
+  );
+
+/** A layout or style recalc script forced: one with the stack that asked for it. */
+const forcedBy = (event: TraceEvent) =>
+  (event.name === "Layout" || event.name === "UpdateLayoutTree") &&
+  (event.args?.beginData?.stackTrace?.length ?? 0) > 0;
+
+/**
+ * Every layout script forced in a window, by its call's place and what the
+ * call says there, and each of `MOUNT_SITES` among them.
+ */
+const forcedSites = async (events: TraceEvent[]) => {
+  const sites = new Map<string, { count: number; ms: number }>();
+  const mount: string[] = [];
+  for (const event of events.filter(forcedBy)) {
+    const stack = event.args?.beginData?.stackTrace ?? [];
+    const top = stack.find((frame) => frame.url.startsWith("http")) ?? stack[0];
+    const source = await lineOf(top.url, top.lineNumber);
+    const column = top.columnNumber - 1;
+    const at = source.slice(Math.max(0, column - 80), column + 160);
+    const file = top.url.split("/").pop();
+    const site = MOUNT_SITES.find(([, token]) => token.test(at))?.[0];
+    if (site) {
+      mount.push(`${event.name} ${site} (${file}:${top.columnNumber})`);
+    }
+    const key = `${event.name} ${file}:${top.columnNumber} "${at.slice(70, 110).replace(SPACES_RUN, " ")}"`;
+    const held = sites.get(key) ?? { count: 0, ms: 0 };
+    held.count += 1;
+    held.ms += (event.dur ?? 0) / 1000;
+    sites.set(key, held);
+  }
+  return {
+    mount,
+    sites: [...sites]
+      .sort((a, b) => b[1].ms - a[1].ms)
+      .map(([key, one]) => `${one.count}x ${Math.round(one.ms)}ms ${key}`),
+  };
+};
+const SPACES_RUN = /\s+/g;
+
+/** What one frame spent its time on: script (its outermost tasks), the layout and style it forced, the frame's own, painting. */
+const frameSpent = (events: TraceEvent[], span: number) => {
+  const outermost = events.filter(
+    (event) =>
+      TASKS.has(event.name) &&
+      !events.some(
+        (other) =>
+          other !== event &&
+          TASKS.has(other.name) &&
+          other.tid === event.tid &&
+          other.ts <= event.ts &&
+          other.ts + (other.dur ?? 0) >= event.ts + (event.dur ?? 0)
+      )
+  );
+  const layouts = events.filter(
+    (event) => event.name === "Layout" || event.name === "UpdateLayoutTree"
+  );
+  return `${Math.round(span)}ms: script ${durationOf(outermost)}ms (of it forced layout and style ${durationOf(layouts.filter(forcedBy))}ms), the frame's own layout and style ${durationOf(layouts.filter((event) => !forcedBy(event)))}ms, painting ${durationOf(events.filter((event) => PAINTS.has(event.name)))}ms`;
+};
+
+/**
+ * A reply's trace read: the document's window from its first row change less
+ * 500ms to its last plus 500ms (`turn-rows` marks), its layout and style
+ * time, the layouts script forced and where from, and each frame over 33ms.
+ */
+const readTrace = async (
+  traced: TraceEvent[],
+  frames: number[],
+  t0: number,
+  window: { from: number; to: number }
+) => {
+  const pid = traced.find((event) => event.name === "turn-start")?.pid;
+  const start =
+    traced.find((event) => event.name === "turn-start" && event.pid === pid)
+      ?.ts ?? 0;
+  const traceAt = (at: number) => start + (at - t0) * 1000;
+  const lo = traceAt(window.from);
+  const hi = traceAt(window.to);
+  const inWindow = traced.filter(
+    (event) =>
+      event.pid === pid && event.ts >= lo && event.ts <= hi && event.ph === "X"
+  );
+  const longFrames: string[] = [];
+  for (let at = 1; at < frames.length; at += 1) {
+    const span = frames[at] - frames[at - 1];
+    if (span > 33.4 && frames[at] >= window.from && frames[at] <= window.to) {
+      const a = traceAt(frames[at - 1]);
+      const b = traceAt(frames[at]);
+      longFrames.push(
+        frameSpent(
+          inWindow.filter((event) => event.ts >= a && event.ts < b),
+          span
+        )
+      );
+    }
+  }
+  const forced = await forcedSites(inWindow);
+  return {
+    layout: durationOf(inWindow.filter((event) => event.name === "Layout")),
+    style: durationOf(
+      inWindow.filter((event) => event.name === "UpdateLayoutTree")
+    ),
+    forced: durationOf(inWindow.filter(forcedBy)),
+    longFrames,
+    ...forced,
+  };
+};
+
+/**
+ * One reply in `page`, set off by `trigger`: its frames, and on Chromium, at
+ * 4x CPU throttle with a trace of the window, what it spent them on
+ * (`readTrace`).
+ */
+const turnOnce = async (
+  page: Page,
+  trigger: () => Promise<void>,
+  chromium: boolean
+) => {
+  const cdp = chromium ? await page.context().newCDPSession(page) : null;
+  const traced: TraceEvent[] = [];
+  if (cdp) {
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    // The protocol's own type says each event is strings; a trace event's
+    // numbers and stacks are what it carries.
+    cdp.on("Tracing.dataCollected", (event) => {
+      traced.push(...(event.value as unknown as TraceEvent[]));
+    });
+    await cdp.send("Tracing.start", {
+      categories:
+        "devtools.timeline,blink.user_timing,disabled-by-default-devtools.timeline,disabled-by-default-devtools.timeline.stack",
+      transferMode: "ReportEvents",
+    });
+  }
+  const t0 = await page.evaluate(watchTurn);
+  await trigger();
+  await page.waitForTimeout(7000);
+  const got = await page.evaluate(readTurn);
+  const rows = got.rows.filter((at) => at > t0);
+  const window = {
+    from: rows.length > 0 ? rows[0] - 500 : t0,
+    to: rows.length > 0 ? (rows.at(-1) as number) + 500 : t0,
+  };
+  const frames = framesIn(got.frames, window.from, window.to);
+  if (!cdp) {
+    return { frames, rows: rows.length, trace: null };
+  }
+  const done = new Promise((resolve) =>
+    cdp.once("Tracing.tracingComplete", resolve)
+  );
+  await cdp.send("Tracing.end");
+  await done;
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  await cdp.detach();
+  return {
+    frames,
+    rows: rows.length,
+    trace: await readTrace(traced, got.frames, t0, window),
+  };
+};
+
+/**
+ * (o) A reply arriving, as the desk and the phone draw it: a loop of ink
+ * the session hears, and a plain message from elsewhere. Every frame is
+ * read from the first change to the transcript's rows less 500ms to the
+ * last plus 500ms; on Chromium at 4x CPU throttle, with a trace of that
+ * window. No layout is forced from a mount's sites (`MOUNT_SITES`), and no
+ * frame there runs past `TURN_FRAME_MS`.
+ */
+const turnLeg = async (on: On, frame: Frame) => {
+  const { desk, kit } = on;
+  const engine = desk.context().browser()?.browserType().name() ?? "?";
+  const chromium = engine === "chromium";
+  const inkLoop = async () => {
+    await mode(desk, frame, "D");
+    const option = frame.locator('#decision-host [data-option="hub"]');
+    await toPaneTop(option);
+    const box = await option.boundingBox();
+    if (box) {
+      await loopRound(frame, box);
+    }
+    await mode(desk, frame, "V");
+  };
+  const plain = async () => {
+    await on.fleet.send(on.writer, "A plain message from elsewhere.");
+  };
+  const phone = await kit.page("phone", { theme: "light" });
+  await open(phone, `${on.base}/session/${on.writer}`, '[data-slot="pane"]');
+  await settle(phone, 3000);
+  const runs: [string, Page, () => Promise<void>][] = [
+    ["desk ink loop", desk, inkLoop],
+    ["desk plain arrival", desk, plain],
+    ["phone ink loop", phone, inkLoop],
+    ["phone plain arrival", phone, plain],
+  ];
+  for (const [label, page, trigger] of runs) {
+    await settle(page, 2000);
+    const read = await turnOnce(page, trigger, chromium);
+    const { frames: f, trace: t } = read;
+    const said = `${read.rows} row changes; ${f.n} frames, ${f.over16} over 16.7ms, ${f.over33} over 33ms, longest ${f.longest}ms`;
+    if (!t) {
+      // No CPU throttle and no trace outside Chromium: the frames alone.
+      kit.check(
+        `(o) ${engine} ${label}: a reply's frames, unthrottled (${said})`,
+        read.rows > 0 && f.n > 0
+      );
+      continue;
+    }
+    kit.check(
+      `(o) ${engine} ${label} at 4x CPU throttle: no layout forced from a mount's sites, and no frame past ${TURN_FRAME_MS}ms (${said}; Layout ${t.layout}ms, UpdateLayoutTree ${t.style}ms, forced in script ${t.forced}ms; long frames: ${t.longFrames.join(" | ") || "none"}; forced from: ${t.sites.slice(0, 6).join(" | ")})`,
+      read.rows > 0 && t.mount.length === 0 && f.longest <= TURN_FRAME_MS,
+      [...t.mount, ...t.sites].join("\n    ")
+    );
+  }
+  await phone.close();
 };
 
 /** (b) the revision that puts a decision ahead: marks stay on their cards, the hash moves. */
@@ -3533,6 +3919,7 @@ const run = async (kit: Kit) => {
   await drawOverEmbed(on, await frameWith(on.desk, 3));
   await commentInEmbed(on, await frameWith(on.desk, 3));
   await switchLeg(on, await frameWith(on.desk, 3));
+  await turnLeg(on, await frameWith(on.desk, 3));
   await insertAhead(on, first);
   for (const theme of ["light", "dark"] as const) {
     await foldLeg(on, theme);

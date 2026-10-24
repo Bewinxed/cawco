@@ -47,18 +47,20 @@
  *   since the item landed, so nothing the owner saw there reaches a device
  *   afterwards.
  * - **The person gate**: while the person is here at a desk (notifications.ts
- *   `person`, the device in use not the phone) and a tab there can show a
+ *   `person`, the device in use not a phone or tablet) and a tab there can show a
  *   desktop notification, an item about to go out goes to that tab instead
  *   (`desk_alert`) and is held. When the person goes away (the away clock, a
  *   lock, Appear away), each held item that still needs them and landed at
- *   most {@link HELD_RECENT_MS} before their last input goes to the phone as
- *   it would have; an older one waits on the board (the owner's pick: "only
- *   items from the last 10 min"). The device in use being the phone, or no
+ *   most one away clock (the person's setting, notifications.ts
+ *   `awayAfter`) before their last input goes to the phone as it would
+ *   have; an older one waits on the board (the owner's pick: "only items
+ *   from the last 10 min", on the same clock). The device in use being a
+ *   phone or tablet (the iPhone app, a phone's browser), or no
  *   desk tab able to show it, the push goes as before. The tab answers each
  *   desk alert (`POST /api/presence/desk-ack`); one silent for
  *   {@link DESK_ACK_MS} or unable to show it is no longer an alert target,
  *   and the item goes on: to the next tab that can show it, else to the
- *   phone while it is under {@link HELD_RECENT_MS} old.
+ *   phone while it is under one away clock old.
  *   Every visible push carries the
  *   last day's cleared collapse ids (`cawco.cleared`), and each clear queues
  *   one background push per device, at most one per device every
@@ -82,7 +84,6 @@ import {
   type Envelope,
   type FleetWatchNotice,
   type HarnessKind,
-  HELD_RECENT_MS,
   type Install,
   type InstanceRow,
   installName,
@@ -93,6 +94,7 @@ import {
   type PermissionRequestFrame,
   PROJECT_SETTINGS_TOOL,
   pairingWords,
+  presenceLogWords,
   questionsOf,
   type TurnWakes,
 } from "@cawco/core";
@@ -1159,7 +1161,7 @@ export const createPush = ({
     shown: ReadonlySet<string>
   ): Arrival[] => {
     const person = notifications.person();
-    if (person.state !== "here" || person.inUse?.kind === "ios") {
+    if (person.state !== "here" || person.inUse?.handheld) {
       return [...live];
     }
     const tab = notifications.deskTab();
@@ -1182,7 +1184,7 @@ export const createPush = ({
       atDesk.set(id, item);
       alertDesk(tab, item);
       console.log(
-        `[notify] push ${id}: held, the person is at a desk; shown on tab ${tab.slice(0, 8)}`
+        `[notify] ${presenceLogWords.heldAtDesk(id)}; shown on tab ${tab.slice(0, 8)}`
       );
     }
     return going;
@@ -1227,7 +1229,7 @@ export const createPush = ({
   /**
    * A held item whose tab is gone or refused it, sent to the next place: the
    * next tab that can show it, while the person is still at the desk; else
-   * the phone, as long as it landed within {@link HELD_RECENT_MS}; else it
+   * the phone, as long as it landed within one away clock; else it
    * waits on the board.
    */
   const deskOn = (id: string): void => {
@@ -1237,7 +1239,7 @@ export const createPush = ({
     }
     const person = notifications.person();
     const tab =
-      person.state === "here" && person.inUse?.kind !== "ios"
+      person.state === "here" && !person.inUse?.handheld
         ? notifications.deskTab()
         : undefined;
     if (tab) {
@@ -1249,7 +1251,7 @@ export const createPush = ({
     }
     atDesk.delete(id);
     const age = Date.now() - item.landedAt.getTime();
-    if (age > HELD_RECENT_MS) {
+    if (age > notifications.awayAfter()) {
       console.log(
         `[notify] push ${id}: no tab can show it and it landed ${(age / 60_000).toFixed(1)} min ago; it waits on the board`
       );
@@ -1288,11 +1290,11 @@ export const createPush = ({
 
   /**
    * The person left the desk: each held item that still needs them and
-   * landed at most {@link HELD_RECENT_MS} before their last input goes to
+   * landed at most one away clock before their last input goes to
    * the phone, through a burst as it would have; older ones wait on the board.
    */
   const releaseFromDesk = (lastInputAt: number): void => {
-    const floor = lastInputAt - HELD_RECENT_MS;
+    const floor = lastInputAt - notifications.awayAfter();
     for (const [id, item] of atDesk) {
       settleAtDesk(id);
       const landed = item.landedAt.getTime();

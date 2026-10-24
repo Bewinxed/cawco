@@ -2,11 +2,13 @@
  * Where the owner is, and which notifications are over: the shapes the hub,
  * the dashboard and the apps share (hub notifications.ts).
  *
- * Each device says two things apart: which chat it has in front and read
- * (`active` and `sessionId`), and what its machine is doing, in use, idle,
- * locked or asleep (`machine`, from Chromium's Idle Detection on a tab, the
- * desktop on a machine's agent). The hub rolls every device up to one
- * {@link Person}: here, on which chat, or away.
+ * Each device says three things apart: which chat it has in front and read
+ * (`active` and `sessionId`), when the person last gave it input (`idleMs`),
+ * and what its machine is doing, in use, idle, locked or asleep (`machine`,
+ * from Chromium's Idle Detection on a tab, the desktop on a machine's
+ * agent). The hub rolls every device up to one {@link Person}: here, on
+ * which chat, or away. Input decides it: a chat merely open, visible and
+ * focused is no input, and a machine's word can only make them away sooner.
  *
  * A notification about a session is dropped when a client had that session
  * in front, foreground and focused, at any moment since it landed: the owner
@@ -24,7 +26,10 @@ export type MachineState = "active" | "idle" | "locked" | "asleep";
  * `POST /api/presence`, sent on every change and every
  * {@link PRESENCE_BEAT_MS}. A client is active on a session while `active`
  * and `sessionId` is it, until {@link PRESENCE_TTL_MS} pass without a beat.
- * The iOS and Mac apps send the first five fields alone: the chat in front.
+ * The iOS and Mac apps send the first five fields alone: the chat in front,
+ * and no input time, so the hub counts their coming to a chat (from none,
+ * from another, from inactive) as their input, and a beat that says the
+ * same again as none (hub notifications.ts `inputOf`).
  */
 export interface PresenceBeat {
   /** The chat `sessionId` is in front and read: the window visible, focused and taking input. */
@@ -39,9 +44,17 @@ export interface PresenceBeat {
   /** Stable per browser tab or app install. */
   readonly clientId: string;
   /**
-   * How long since the person's last input on this device, ms as of
-   * `saidAt`: the browser's idle reading while Idle Detection is allowed,
-   * else the page's own last key, pointer or scroll. Web only.
+   * This tab runs on a phone or tablet (a coarse pointer that can't hover):
+   * while it has the person's newest input, what needs them goes to the
+   * phone, never to a desk tab. The iOS app is one by its `client`. Web only.
+   */
+  readonly handheld?: boolean;
+  /**
+   * How long since the person's last input on this client, ms as of
+   * `saidAt`: on a tab, the page's own last key, pointer press or move,
+   * wheel or touch, a preview frame's included (dashboard reload.svelte.ts
+   * `watchInput`); absent while it has had none since it loaded. Never the
+   * machine's idle reading: that is `machine`. Web only, for now.
    */
   readonly idleMs?: number;
   /**
@@ -87,14 +100,31 @@ export const DEVICE_TTL_MS = 150_000;
  * three of its 15 s heartbeats missed, as a Mac asleep stops beating.
  */
 export const MACHINE_TTL_MS = 45_000;
-/** The away clock (the owner's pick): no input on any device this long, and the person is away. */
-export const AWAY_AFTER_MS = 10 * 60_000;
 /**
- * A push held while the person was at a desk follows them to the phone once
- * they are away only if it landed at most this long before their last input
- * (the owner's pick: "only items from the last 10 min").
+ * The away clock until the person sets their own (the owner's pick): no
+ * input on any device this long, and the person is away. The same clock
+ * says how far back a push held at a desk follows them to the phone once
+ * they are away ("only items from the last 10 min"): it went only if it
+ * landed at most one away clock before their last input.
  */
-export const HELD_RECENT_MS = 10 * 60_000;
+export const AWAY_AFTER_DEFAULT_MS = 10 * 60_000;
+/** The shortest away clock the person can set. Our call. */
+export const AWAY_AFTER_MIN_MS = 60_000;
+/** The longest away clock the person can set. Our call. */
+export const AWAY_AFTER_MAX_MS = 4 * 60 * 60_000;
+/** The away clocks the presence menu offers, ms. Our call, the default among them. */
+export const AWAY_AFTER_CHOICES_MS = [
+  5 * 60_000,
+  10 * 60_000,
+  15 * 60_000,
+  30 * 60_000,
+  60 * 60_000,
+] as const;
+
+/** `POST /api/person/away-clock`: the person's away clock, ms. */
+export interface AwayClockSet {
+  readonly awayAfterMs: number;
+}
 /**
  * How long the tab a desk alert went to has to answer it: a tab that says
  * nothing in this time is gone (closed without its last beacon, its
@@ -132,23 +162,25 @@ export interface PresenceDevice {
 
 /**
  * The person, as the hub rolls every device up (hub notifications.ts
- * `rollup`), in order: Appear away first; then any device in use (a chat in
- * front, or a machine active) means here; then a lock or sleep newer than
- * every input means away at once; then here until {@link AWAY_AFTER_MS}
- * pass with no input anywhere.
+ * `rollup`), in order: Appear away first; then a lock or sleep newer than
+ * every input means away at once; then away once the away clock
+ * passes with no input on any device, whatever is open; else here, on the
+ * chat in front on the device that had the newest input.
  */
 export interface Person {
   /** The person turned Appear away on. */
   readonly manual: boolean;
-  /** The chat in front and read on a device in use, when here on one. */
+  /** The chat in front and read on the device that had the newest input, when here on one. */
   readonly on: string | null;
   /** Away: since their last input or the lock, epoch ms; null when here, or no device has ever said. */
   readonly since: number | null;
   readonly state: "here" | "away";
 }
 
-/** The socket's `person` frame, and `GET /api/person` beside its {@link PersonRead}: the person, and the machines that can count toward it. */
+/** The socket's `person` frame, and `GET /api/person` beside its {@link PersonRead}: the person, their away clock, and the machines that can count toward it. */
 export interface PersonView extends Person {
+  /** The away clock, ms: the person's setting, else {@link AWAY_AFTER_DEFAULT_MS}. */
+  readonly awayAfterMs: number;
   readonly devices: readonly PresenceDevice[];
 }
 

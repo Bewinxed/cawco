@@ -786,10 +786,87 @@ async function checkHeld(
   );
 }
 
+const HALF = '[data-probe="half"]';
+
+/**
+ * A list's ghost and pill cover the whole row they mark, on a row sitting a
+ * half pixel in and down (a message well's `ms-(--well-x)`), at device pixel
+ * ratios 1 and 2 in Chromium and WebKit: each edge of each layer is the
+ * row's edge put outward on the device-pixel grid (at 2 the row's own edge,
+ * already on it), within 0.01px, so neither is ever narrower or shorter.
+ */
+async function checkHalf(kit: Kit, bench: string): Promise<void> {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const scale of [1, 2]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one engine and ratio at a time, each its own page
+      const page = await kit.page("desk", { engine, scale });
+      await open(page, `${bench}/motion/chosen-hover`, `${HALF} button`);
+      await page.mouse.move(1, 1);
+      await settle(page, 400);
+      const other = `${HALF} button[aria-pressed="false"]`;
+      const read = (layer: string) =>
+        page.evaluate(
+          ([row, slot, grid]) => {
+            const rowEl = document.querySelector(row);
+            const layerEl = document
+              .querySelector(`${row.split(" ")[0]} [data-highlight]`)
+              ?.querySelector(`:scope > [data-slot="${slot}"]`);
+            if (!(rowEl && layerEl)) {
+              return null;
+            }
+            const r = rowEl.getBoundingClientRect();
+            const l = layerEl.getBoundingClientRect();
+            const start = (v: number) => Math.floor(v * grid + 0.01) / grid;
+            const end = (v: number) => Math.ceil(v * grid - 0.01) / grid;
+            return {
+              row: [r.left, r.top, r.right, r.bottom],
+              want: [start(r.left), start(r.top), end(r.right), end(r.bottom)],
+              layer: [l.left, l.top, l.right, l.bottom],
+              shown: getComputedStyle(layerEl).opacity,
+            };
+          },
+          [
+            layer === "highlight-ghost"
+              ? other
+              : `${HALF} button[aria-pressed="true"]`,
+            layer,
+            scale,
+          ] as const
+        );
+      const judge = (name: string, got: Awaited<ReturnType<typeof read>>) => {
+        const fits =
+          got !== null &&
+          got.shown === "1" &&
+          got.layer.every(
+            (edge, i) => Math.abs(edge - (got.want[i] ?? Number.NaN)) <= 0.01
+          ) &&
+          // and it covers the row: never inside it
+          got.layer[0] <= got.row[0] + 0.01 &&
+          got.layer[1] <= got.row[1] + 0.01 &&
+          got.layer[2] >= got.row[2] - 0.01 &&
+          got.layer[3] >= got.row[3] - 0.01;
+        kit.check(
+          `${engine} at ${scale}x: a ${name} on a row a half pixel in covers it, each edge on the row's own put outward on the device-pixel grid`,
+          fits,
+          JSON.stringify(got)
+        );
+      };
+      await page.hover(other);
+      await settle(page, 400);
+      judge("hovered row's ghost", await read("highlight-ghost"));
+      await page.click(other);
+      await page.mouse.move(1, 1);
+      await settle(page, 400);
+      judge("chosen row's pill", await read("highlight-pill"));
+    }
+  }
+}
+
 const spec: Spec = {
   name: "chosen-hover",
   run: async (kit: Kit) => {
     const bench = await kit.bench();
+    await checkHalf(kit, bench);
     const sheets = await railSheets();
     for (const theme of THEMES) {
       // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time, each on its own page

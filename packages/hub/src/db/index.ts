@@ -198,6 +198,7 @@ import {
   parkedAsks,
   planChanges,
   plugins,
+  presenceClients,
   presenceDevices,
   presenceSettings,
   projectAccounts,
@@ -353,6 +354,14 @@ export type BoardInstanceRow = PublicInstanceRow;
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
 export type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
+/** One device's last word on the person, as notifications.ts keeps it. */
+export type PresenceClientRow = typeof presenceClients.$inferSelect;
+/** The person's last away stretch: since when, when it ended (null while away), and who was given its recap. */
+export interface AwayStretch {
+  readonly awaySince: Date | null;
+  readonly backAt: Date | null;
+  readonly recapped: readonly string[];
+}
 /**
  * A project as every client reads it: its row, whose `machineId` and `cwd`
  * are its primary place, and every place it has, the primary first.
@@ -1545,7 +1554,7 @@ export interface DbShape {
     instanceId: string,
     limit: number
   ) => PlanChangeRow[];
-  /** The person's Appear away and the machines that count toward their presence (notifications.ts). */
+  /** The person's Appear away, the machines that count toward their presence, each device's last word and the last away stretch (notifications.ts). */
   readonly presence: {
     /** Appear away: on since when, or null while off. */
     readonly appearAway: () => Date | null;
@@ -1553,6 +1562,16 @@ export interface DbShape {
     /** The machines the person opted in. */
     readonly counted: () => Set<string>;
     readonly setCounts: (machineId: string, counts: boolean) => void;
+    /** Every device's last word, as the hub's restart reads it back. */
+    readonly clients: () => PresenceClientRow[];
+    readonly keepClient: (row: PresenceClientRow) => void;
+    readonly dropClient: (clientId: string) => void;
+    /** The person's away clock, ms; null while they keep the default. */
+    readonly awayAfter: () => number | null;
+    readonly setAwayAfter: (ms: number) => void;
+    /** The person's last away stretch. */
+    readonly stretch: () => AwayStretch;
+    readonly setStretch: (stretch: AwayStretch) => void;
   };
   /** Host mode's preview passes, one per browser (preview-access.ts). */
   readonly previewPasses: PreviewPassesDb;
@@ -10323,6 +10342,53 @@ const make = async (path: string): Promise<DbShape> => {
             target: presenceDevices.machineId,
             set: { counts },
           })
+          .run();
+      },
+      clients: () => db.select().from(presenceClients).all(),
+      keepClient: (row) => {
+        const { clientId, ...set } = row;
+        db.insert(presenceClients)
+          .values(row)
+          .onConflictDoUpdate({ target: presenceClients.clientId, set })
+          .run();
+      },
+      dropClient: (clientId) => {
+        db.delete(presenceClients)
+          .where(eq(presenceClients.clientId, clientId))
+          .run();
+      },
+      awayAfter: () =>
+        db
+          .select({ ms: presenceSettings.awayAfterMs })
+          .from(presenceSettings)
+          .where(eq(presenceSettings.id, PRESENCE_ID))
+          .get()?.ms ?? null,
+      setAwayAfter: (ms) => {
+        db.insert(presenceSettings)
+          .values({ id: PRESENCE_ID, appearAway: false, awayAfterMs: ms })
+          .onConflictDoUpdate({
+            target: presenceSettings.id,
+            set: { awayAfterMs: ms },
+          })
+          .run();
+      },
+      stretch: () => {
+        const row = db
+          .select()
+          .from(presenceSettings)
+          .where(eq(presenceSettings.id, PRESENCE_ID))
+          .get();
+        return {
+          awaySince: row?.awaySince ?? null,
+          backAt: row?.backAt ?? null,
+          recapped: row?.recapped ?? [],
+        };
+      },
+      setStretch: ({ awaySince, backAt, recapped }) => {
+        const set = { awaySince, backAt, recapped: [...recapped] };
+        db.insert(presenceSettings)
+          .values({ id: PRESENCE_ID, appearAway: false, ...set })
+          .onConflictDoUpdate({ target: presenceSettings.id, set })
           .run();
       },
     },

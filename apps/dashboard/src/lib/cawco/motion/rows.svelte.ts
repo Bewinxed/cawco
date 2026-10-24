@@ -1207,7 +1207,8 @@ class Reflow {
   readonly #moves = new Map<HTMLElement, Move>();
   readonly #edges = new Map<HTMLElement, Animation>();
   readonly #spans = new Map<HTMLElement, Animation>();
-  #placed: Map<HTMLElement, Placed>;
+  /** Where each marked element was last laid out; null until the container is first read (`firstRead`). */
+  #placed: Map<HTMLElement, Placed> | null = null;
   /** The scroll the rows were last drawn at (`#anchor`). */
   #scroll: number;
   /** Where the content's top is in the viewport, read once a change. */
@@ -1229,11 +1230,31 @@ class Reflow {
     return this.#view;
   }
 
-  constructor(node: HTMLElement, rendered: boolean) {
+  /**
+   * Nothing is read as the container mounts: read in the effect that
+   * mounted it, its places laid the page out between the writes of that
+   * flush. It is read first where a frame has laid it out (`firstRead`):
+   * its size observer's first report, or the first change heard before
+   * that report, in the frame's callbacks.
+   */
+  constructor(node: HTMLElement) {
     this.#node = node;
-    this.#skipped = !rendered;
-    this.#placed = rendered ? placesIn(node) : new Map();
-    this.#scroll = rendered ? node.scrollTop : 0;
+    this.#skipped = false;
+    this.#scroll = 0;
+  }
+
+  /**
+   * The container's first reading: every place and the scroll as they
+   * stand, none of it a change to animate. Nothing was painted before it,
+   * so nothing has a place to travel from.
+   */
+  firstRead() {
+    if (this.#placed !== null || this.#skipped) {
+      return;
+    }
+    this.#placed = placesIn(this.#node);
+    this.#scroll = this.#node.scrollTop;
+    this.#view = null;
   }
 
   get skipped(): boolean {
@@ -1281,9 +1302,28 @@ class Reflow {
     }
   }
 
+  /**
+   * Where the marked elements were last laid out, for a change to move them
+   * from; null when there is nothing to move: the container is skipped, or
+   * this change is its first reading (heard before its size observer's first
+   * report), which reads them now.
+   */
+  #placedBefore(): Map<HTMLElement, Placed> | null {
+    if (this.#skipped) {
+      return null;
+    }
+    if (this.#placed === null) {
+      this.firstRead();
+      return null;
+    }
+    return this.#placed;
+  }
+
   /** Every place is new and none of it is a change to animate (the container resized). */
   reread() {
-    if (!this.#skipped) {
+    if (this.#placed === null) {
+      this.firstRead();
+    } else if (!this.#skipped) {
       this.#placed = placesIn(this.#node);
     }
   }
@@ -1295,7 +1335,8 @@ class Reflow {
    * row's read, ten layouts in the update that opened a tree.
    */
   change() {
-    if (this.#skipped) {
+    const placed = this.#placedBefore();
+    if (!placed) {
       return;
     }
     const still = !motionOk.current;
@@ -1309,19 +1350,19 @@ class Reflow {
       if (element.hasAttribute("data-flip-anchor")) {
         continue;
       }
-      const was = this.#placed.get(element);
+      const was = placed.get(element);
       if (was && !still) {
         this.#travel(element, was, place, drawn.get(element), scrolled, plan);
       } else if (
         !was &&
-        (place.ref === this.#node || this.#placed.has(place.ref)) &&
+        (place.ref === this.#node || placed.has(place.ref)) &&
         onScreen(element)
       ) {
         arrivals.push([element, place.h]);
       }
     }
     const departures: [HTMLElement, Placed, { x: number; y: number }][] = [];
-    for (const [element, was] of this.#placed) {
+    for (const [element, was] of placed) {
       const gone = !(
         now.has(element) ||
         element.isConnected ||
@@ -1438,7 +1479,7 @@ class Reflow {
       return this.#scroll - before;
     }
     let anchor: { cy: number; was: number } | null = null;
-    for (const [element, was] of this.#placed) {
+    for (const [element, was] of this.#placed ?? []) {
       const place = now.get(element);
       if (
         place &&
@@ -1808,15 +1849,15 @@ const canMove = (record: MutationRecord): boolean =>
  */
 export function reflow({ on = [] }: { on?: readonly string[] } = {}) {
   return (node: HTMLElement) => {
+    // Unpositioned, it is the containing block of the copies it draws by
+    // the sheet's own default for `[data-reflow]` (design.css); read here as
+    // it mounted, its computed position restyled the page mid-flush.
     node.setAttribute("data-reflow", "");
-    if (getComputedStyle(node).position === "static") {
-      node.style.position = "relative";
-    }
     // It anchors its own scroll (`#anchor`): the browser's would move every
     // row a second time.
     node.style.overflowAnchor = "none";
+    const state = new Reflow(node);
     const watching = watchRendered(node, (shown) => state.rendered(shown));
-    const state = new Reflow(node, watching.rendered);
     states.set(node, state);
     const depth = depthOf(node);
     const watcher = new MutationObserver((records) => {

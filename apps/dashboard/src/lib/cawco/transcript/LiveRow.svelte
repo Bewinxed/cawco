@@ -19,6 +19,7 @@
    * generation, if the turn goes on, arrives as a row of its own.
    */
   import { untrack } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import MessageBody from "../MessageBody.svelte";
   import { useVoice } from "../turn/voice";
@@ -90,6 +91,32 @@
   let drawn = untrack(() => row);
   /** The height the row had when its phase changed, until the tween reads it. */
   let from: number | null = null;
+  /**
+   * The row's height as the last frame laid it out, from its size observer's
+   * reports (read inside the delivery, on the layout that frame did): the
+   * height the change starts from, the one on screen. Read off the row as the
+   * phase changed instead, in the update that changed it, it laid the page
+   * out between that update's writes. Null until a frame has laid it out: a
+   * row whose phase changes before its first frame (it arrives and its answer
+   * starts in one turn of the stream) is read off the page as it was, so its
+   * tween is the one it always had.
+   */
+  let drawnHeight: number | null = null;
+  $effect(() => {
+    const el = box;
+    if (!el) {
+      return;
+    }
+    const sized = frameObserver(() => undefined, {
+      read: (entries) => {
+        for (const entry of entries) {
+          drawnHeight = entry.borderBoxSize[0]?.blockSize ?? drawnHeight;
+        }
+      },
+    });
+    sized.observe(el);
+    return () => sized.disconnect();
+  });
 
   $effect.pre(() => {
     const next = row;
@@ -100,7 +127,7 @@
         const moving = !!box && motionOk.current && !!ledger?.watched;
         serial += 1;
         if (moving && box) {
-          from = box.getBoundingClientRect().height;
+          from = drawnHeight ?? box.getBoundingClientRect().height;
           faces = [
             {
               ...current,

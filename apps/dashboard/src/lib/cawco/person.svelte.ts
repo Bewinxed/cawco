@@ -4,9 +4,10 @@
  * what this browser lets the presence model use. The presence menu (rail
  * footer, PresenceMenu.svelte) and Needs you's onboarding row read it.
  *
- * - Appear away and each machine's opt-in are the hub's: a press asks the
- *   hub, and the view changes when it answers (its `person` frame, or the
- *   answer itself), so a reload or another screen shows the same.
+ * - Appear away, the away clock and each machine's opt-in are the hub's: a
+ *   press asks the hub, and the view changes when it answers (its `person`
+ *   frame, or the answer itself), so a reload or another screen shows the
+ *   same.
  * - A desk alert (`desk_alert`) names one tab, the one the person uses: that
  *   tab shows it as a desktop notification, the item's real words, a click
  *   opening the session it is about, and answers the hub it did.
@@ -53,7 +54,7 @@ const state = $state({
   view: null as PersonView | null,
   /** This browser's permissions; null until read. */
   permissions: null as DeskPermissions | null,
-  /** A press on its way: Appear away (`away`), a machine by id, or this browser (`allow`). */
+  /** A press on its way: Appear away (`away`), the away clock (`clock`), a machine by id, or this browser (`allow`). */
   pending: null as string | null,
   /** The hub's or the browser's refusal of the last press: its words, and what refused. */
   refusal: null as Refusal | null,
@@ -121,7 +122,7 @@ export async function readPerson(): Promise<void> {
 async function press(
   key: string,
   url: string,
-  body: Record<string, boolean>
+  body: Record<string, boolean | number>
 ): Promise<void> {
   state.pending = key;
   state.refusal = null;
@@ -141,6 +142,10 @@ async function press(
 /** Appear away on or off: agents go quiet and the phone gets pushes while it is on. */
 export const setAppearAway = (on: boolean): Promise<void> =>
   press("away", "/api/person/away", { on });
+
+/** The away clock, ms: how long without input on any device before the person is away. */
+export const setAwayAfter = (awayAfterMs: number): Promise<void> =>
+  press("clock", "/api/person/away-clock", { awayAfterMs });
 
 /** Whether a machine's desktop counts toward whether the person is here. */
 export const setMachineCounts = (
