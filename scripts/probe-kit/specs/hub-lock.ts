@@ -1,5 +1,5 @@
 /**
- * One hub to a database (hub db-lock.ts), on a scratch fleet's real hub:
+ * One hub to a database (core db-lock.ts), on a scratch fleet's real hub:
  *
  * 1. The fleet's hub up, `<db>.lock` names its process.
  * 2. A second hub on the same database (its own port) exits 1 within a
@@ -25,7 +25,7 @@ import type { Kit, Spec } from "../kit";
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const HUB_ENTRY = join(ROOT, "packages", "hub", "src", "index.ts");
 
-/** What a hub's lock names (hub db-lock.ts): its process, with its start and the boot. */
+/** What a hub's lock names (core db-lock.ts): its process, with its start and the boot. */
 interface Holder {
   bootId?: string;
   pid?: number;

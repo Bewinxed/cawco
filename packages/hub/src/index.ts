@@ -1,4 +1,5 @@
 import "@cawco/core/no-huge-pages";
+import { DatabaseHeld, lockDatabase } from "@cawco/core/db-lock";
 import { detach } from "@cawco/core/detach";
 import { Effect, Layer } from "effect";
 import { buildInfo } from "./build";
@@ -10,7 +11,6 @@ import {
   MAX_REQUEST_BYTES,
 } from "./config";
 import { Db, DbLayer } from "./db";
-import { DatabaseHeld, lockDatabase } from "./db-lock";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
 import { Pending, PendingLayer } from "./pending";

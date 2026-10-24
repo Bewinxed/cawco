@@ -26,6 +26,7 @@
     "./cli-failure": "./src/cli-failure.ts",
     "./binary-wrapper": "./src/binary-wrapper.ts",
     "./process-identity": "./src/process-identity.ts",
+    "./db-lock": "./src/db-lock.ts",
     "./signal": "./src/signal.ts",
     "./signal-wall": "./src/signal-wall.ts",
     "./machine-room": "./src/machine-room.ts",

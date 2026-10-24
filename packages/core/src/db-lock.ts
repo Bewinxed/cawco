@@ -17,10 +17,16 @@
  * Not SQLite's own locking: `locking_mode=EXCLUSIVE` would also shut out
  * every reader beside a running hub (the update helper's `VACUUM INTO` copy
  * before a schema change, the probes that read a scratch hub's rows).
+ *
+ * The update helper takes the same lock while a rollback puts the database
+ * copy back (cli binary-apply.ts `restoreDatabase`): it is taken only once the
+ * hub that held it is gone, and a hub any unit starts meanwhile (the
+ * dashboard's and the agent's `Wants=` on the hub's unit, launchd's
+ * KeepAlive) refuses to open the file until the helper lets it go.
  */
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { markerIsLive, ownIdentity } from "@cawco/core/process-identity";
+import { markerIsLive, ownIdentity } from "./process-identity";
 
 interface Holder {
   readonly bootId?: string;
@@ -104,5 +110,17 @@ export const lockDatabase = async (path: string): Promise<void> => {
     );
   } finally {
     await rm(written, { force: true });
+  }
+};
+
+/**
+ * Lets `<path>.lock` go when this process holds it; a lock naming any other
+ * process is left as it is. A hub never calls it (every way it ends frees the
+ * lock): the update helper does, once a restored database is in place.
+ */
+export const releaseDatabase = async (path: string): Promise<void> => {
+  const lock = `${path}.lock`;
+  if (same(await readHolder(lock), await ownIdentity())) {
+    await rm(lock, { force: true });
   }
 };

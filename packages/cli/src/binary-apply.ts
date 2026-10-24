@@ -70,6 +70,11 @@ import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { timerMs } from "@cawco/core/clock";
 import {
+  DatabaseHeld,
+  lockDatabase,
+  releaseDatabase,
+} from "@cawco/core/db-lock";
+import {
   answers,
   currentKeeper,
   keeperEndpoint,
@@ -571,15 +576,35 @@ async function handOverKeeperAlone(version: string): Promise<void> {
   });
 }
 
-/** `VACUUM INTO` a copy of the hub database beside it, named for the build it belongs to. */
-function backUpDatabase(db: string, previous: string): string {
+/**
+ * `VACUUM INTO` a copy of the hub database beside it, named for the build it
+ * belongs to: one read transaction, so the copy is the database as one commit
+ * left it while the hub goes on writing. A copy SQLite does not check `ok`
+ * throws, before anything is swapped. A journal left from a copy before is
+ * removed with it: opened beside this one, SQLite would play it in.
+ */
+export function backUpDatabase(db: string, previous: string): string {
   const copy = `${db}.pre-${previous}.bak`;
   rmSync(copy, { force: true });
+  rmSync(`${copy}-journal`, { force: true });
   const handle = new Database(db, { readonly: true });
   try {
     handle.run(`VACUUM INTO '${copy.replaceAll("'", "''")}'`);
   } finally {
     handle.close();
+  }
+  const copied = new Database(copy, { readonly: true });
+  try {
+    const check = copied
+      .query<{ quick_check: string }, []>("PRAGMA quick_check")
+      .all()
+      .map((row) => row.quick_check)
+      .join("; ");
+    if (check !== "ok") {
+      throw new Error(`The database copy ${copy} is not sound: ${check}`);
+    }
+  } finally {
+    copied.close();
   }
   return copy;
 }
@@ -903,7 +928,7 @@ async function confirm(trial: TrialMarker): Promise<void> {
  * The previous build back, on every unit: the update says installing again
  * while it restarts them (the hub keeps this machine's new starts), `current`
  * and the installation point at the previous build, the database copy replaces
- * the migrated file (which is kept beside it, with its WAL, never deleted),
+ * the migrated file (which is kept beside it, with its journal or WAL, never deleted),
  * and every unit that runs from `current` is restarted, so none is left on the
  * build that failed. A keeper handed over to the build that failed is handed
  * over again, to the build rolled back to, which keeps the sessions the failed
@@ -988,17 +1013,8 @@ async function putBackPins(
   }
 }
 
-/**
- * The hub is stopped while its database is swapped. The migrated file is
- * moved aside whole, with its WAL and shared-memory files: the WAL holds the
- * trial build's committed writes that were not yet checkpointed, and the file
- * beside it is the only place they still are.
- */
-async function restoreDatabase(
-  db: string,
-  backup: string,
-  version: string
-): Promise<void> {
+/** One stop of the hub's unit, said; one that failed or did not answer is said and waited past by the lock. */
+async function stopHub(version: string): Promise<void> {
   await readWithin(SERVICE_TIMEOUT_MS, () => stopService("hub"))
     .then((stopped) => {
       switch (stopped.kind) {
@@ -1017,18 +1033,100 @@ async function restoreDatabase(
     .catch((error) =>
       say(`roll back ${version}: stopping the hub: ${message(error)}`)
     );
+}
+
+/**
+ * The hub stopped, and kept off its database: the helper takes the hub's own
+ * lock (core db-lock.ts), which it gets only once no hub process holds it, so
+ * the hub that was stopped is gone. While the helper holds it, a hub any unit
+ * starts (the dashboard's and the agent's units want the hub's, so their
+ * restarts start it again after a stop; launchd's KeepAlive) refuses the
+ * database before it opens it. A hub still holding it is stopped again; one
+ * still there after {@link SERVICE_TIMEOUT_MS} throws, and the database is
+ * left as it is: the trial keeps its rollback, which a resumed helper finishes.
+ */
+async function holdDatabase(db: string, version: string): Promise<void> {
+  const end = Date.now() + SERVICE_TIMEOUT_MS;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each stop follows the lock the last one left held
+    await stopHub(version);
+    try {
+      await lockDatabase(db);
+      return;
+    } catch (error) {
+      if (!(error instanceof DatabaseHeld)) {
+        throw error;
+      }
+      if (Date.now() > end) {
+        throw new Error(
+          `the hub still holds ${db} ${SERVICE_TIMEOUT_MS / 1000}s after it was stopped, so its copy is not put back under it`,
+          { cause: error }
+        );
+      }
+      await say(
+        `roll back ${version}: a hub process still holds the database; it is stopped again`
+      );
+    }
+    await Bun.sleep(250);
+  }
+}
+
+/**
+ * The hub is stopped, gone and held off while its database is swapped
+ * ({@link holdDatabase}); the copy goes in ({@link putBackup}); the hub's lock
+ * is let go, and the restart that follows starts the hub on the copy.
+ */
+async function restoreDatabase(
+  db: string,
+  backup: string,
+  version: string
+): Promise<void> {
+  await holdDatabase(db, version);
+  try {
+    await putBackup(db, backup, version);
+  } finally {
+    await releaseDatabase(db);
+  }
+  if (process.platform === "darwin") {
+    await startAgain(["hub"]);
+  }
+}
+
+/**
+ * Every file SQLite keeps beside a database: the rollback journal (the hub's
+ * own mode: it opens its file with no `journal_mode`), the WAL and the
+ * shared-memory index. Each belongs to the one file beside it; left beside
+ * another, SQLite plays it into that one ("database disk image is malformed").
+ */
+const SIDECARS = ["-journal", "-wal", "-shm"] as const;
+
+/**
+ * The copy in place of the migrated file, with no file of the migrated one's
+ * left beside it. The migrated file is moved aside whole: a hub its unit
+ * killed mid-write (SIGTERM is the kernel's, hub lifetime.ts) leaves a hot
+ * journal, a WAL holds committed writes not yet checkpointed, and either is
+ * only good beside the file it belongs to. Its sidecars go first and the file
+ * itself last, so a moved-aside file means every sidecar went with it, and
+ * what a helper that died half-way left at `db` is a copy of ours. The hub
+ * is held off the database while this runs ({@link holdDatabase}).
+ */
+export async function putBackup(
+  db: string,
+  backup: string,
+  version: string
+): Promise<void> {
   const aside = `${db}.migrated-${version}`;
   if (existsSync(aside)) {
     // A helper before this one moved it aside already: what is at `db` now is
     // no copy of ours, and goes.
-    for (const suffix of ["", "-wal", "-shm"]) {
-      // biome-ignore lint/performance/noAwaitInLoops: three files, in order
+    for (const suffix of [...SIDECARS, ""]) {
+      // biome-ignore lint/performance/noAwaitInLoops: four files, in order
       await rm(`${db}${suffix}`, { force: true });
     }
   } else {
-    for (const suffix of ["", "-wal", "-shm"]) {
+    for (const suffix of [...SIDECARS, ""]) {
       if (existsSync(`${db}${suffix}`)) {
-        // biome-ignore lint/performance/noAwaitInLoops: the main file first, then its WAL and shm with it
+        // biome-ignore lint/performance/noAwaitInLoops: the sidecars first, then the file they belong to
         await rename(`${db}${suffix}`, `${aside}${suffix}`);
       }
     }
@@ -1039,7 +1137,4 @@ async function restoreDatabase(
   await say(
     `roll back ${version}: database restored from ${backup}; the migrated one is ${aside}`
   );
-  if (process.platform === "darwin") {
-    await startAgain(["hub"]);
-  }
 }
