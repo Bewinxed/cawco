@@ -46,6 +46,10 @@ const READ_WHOLE = /couldn't read .* to make it a git repository/;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
+/** Whether a create was refused by the host, a boundary inside another. */
+const refusedByHost = (refused: string): boolean =>
+  refused.includes("Workspace create on") && NESTED.test(refused);
+
 /** A plain folder of a few small sources. */
 const plainFolder = async (folder: string): Promise<void> => {
   await mkdir(join(folder, "src"), { recursive: true });
@@ -116,10 +120,7 @@ const legA = async (
         )
       : [];
   const refused = "refused" in cut ? cut.refused : "";
-  const cutByHost =
-    refused.includes("Workspace create on") &&
-    NESTED.test(refused) &&
-    !READ_WHOLE.test(refused);
+  const cutByHost = refusedByHost(refused) && !READ_WHOLE.test(refused);
   check(
     "A: a delegate with cwd = a repository in the home place is cut from that repository, with no repo step on the home",
     !existsSync(join(home, ".git")) &&
@@ -146,8 +147,7 @@ const legB = async (
         )
       : [];
   const refused = "refused" in homeCut ? homeCut.refused : "";
-  const cutByHost =
-    refused.includes("Workspace create on") && NESTED.test(refused);
+  const cutByHost = refusedByHost(refused);
   check(
     "B: a delegate with cwd = the home folder works in a private copy of it, a folder's, and no repository is made",
     (workspace?.kind === "folder" && workspace.repo_root === home) || cutByHost,

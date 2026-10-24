@@ -362,8 +362,6 @@
     "its text holds": 1
   },
   "scripts/probe-kit/specs/place-repo-home.ts": {
-    "is the home folder on this machine, which holds far more than one project, so CawCo won't make it a git repository.": 1,
-    "Make a folder for the project": 1,
     "Workspace create on": 1
   },
   "scripts/probe-kit/specs/plan-changes-host.ts": {
