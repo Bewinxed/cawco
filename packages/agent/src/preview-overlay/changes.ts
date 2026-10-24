@@ -212,8 +212,20 @@ export function startChanges(deps: ChangesDeps): Changes {
     { capture: true, passive: true }
   );
   addEventListener("resize", () => draw(), { passive: true });
-  // The page laid out again (a font, a picture, a morph): each wash stands where its element is now.
-  new ResizeObserver(() => draw()).observe(document.documentElement);
+  // The page laid out again (a font, a picture, a morph): each wash stands
+  // where its element is now, drawn in the next frame. Drawn inside the
+  // delivery, what it wrote laid the page out again where the delivery had
+  // already passed, and WebKit reported "ResizeObserver loop completed with
+  // undelivered notifications" (a decision page's embed, its root 0×0).
+  let laidOut = 0;
+  new ResizeObserver(() => {
+    if (!laidOut) {
+      laidOut = requestAnimationFrame(() => {
+        laidOut = 0;
+        draw();
+      });
+    }
+  }).observe(document.documentElement);
 
   return {
     layer,
