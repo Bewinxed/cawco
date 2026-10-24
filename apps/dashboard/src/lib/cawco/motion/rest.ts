@@ -9,7 +9,8 @@
  *
  * `data-offscreen` has two writers: {@link restOffscreen} here, on an
  * element scrolled out of view, and PaneLeaf, on a pane put away
- * (`.pane-hidden`), whose skipped subtree would otherwise run its loops on.
+ * (`.pane-hidden`), whose skipped subtree would otherwise run its loops on
+ * ({@link holdSkipped} carries the hold into it).
  */
 
 /** Marks the root while the tab is hidden. Returns the cleanup. */
@@ -19,6 +20,40 @@ export function restWhenHidden(): () => void {
   sync();
   document.addEventListener("visibilitychange", sync);
   return () => document.removeEventListener("visibilitychange", sync);
+}
+
+/**
+ * An attachment for a pane `away` (put away: `data-offscreen` and
+ * `content-visibility: hidden` in one update): its loops' style asked for
+ * once, after the frame that put it away has painted.
+ *
+ * Chrome restyles nothing inside content it skips, so the hold set in the
+ * same update as the skip never reached a loop running as its pane went
+ * away: it stayed running, and the page drew a main-thread frame every
+ * frame for nothing drawn (measured: 120 frames in 2s with one such loop,
+ * none once it was held; tab-return 1a, an empty transcript's breath). A
+ * loop's computed style, asked for, restyles what the skip held back, the
+ * hold among it. Asked after the paint, the rest of the page is styled
+ * already, so that is all it restyles.
+ */
+export function holdSkipped(away: boolean) {
+  return (node: Element): (() => void) | undefined => {
+    if (!away) {
+      return;
+    }
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      task = setTimeout(() => {
+        for (const loop of node.querySelectorAll(".loops")) {
+          getComputedStyle(loop).getPropertyValue("animation-play-state");
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+    };
+  };
 }
 
 /** An attachment: marks its element while none of it is in view. */

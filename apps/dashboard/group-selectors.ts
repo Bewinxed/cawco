@@ -25,6 +25,17 @@
  * after a sibling combinator (`S ~ X:is(A *)`) goes before them all
  * (`A S ~ X`).
  *
+ * A group's or peer's state negated (`not-group-*`: `X:not(:is(A *))`) has
+ * no combinator to stand for it, and Chrome keyed it to the universal just
+ * the same: a session row made current restyled every element in it, a tab
+ * chosen every element in the tab (tab-return 1c's pointerup: "Invalidation
+ * set invalidates subtree on DIV.group/session-row (by [data-current])",
+ * "… on SPAN.group/ff-tab (by [data-tab-item-selected])"). Its universal is
+ * written as the compound's own class, weightless: `X:not(:is(A
+ * :where(.x)))`. It matches what it matched (X carries `.x`, so "not under
+ * A" and "not under A with `.x`" are the same for it) at the same weight,
+ * and Chrome keys it to `.x`.
+ *
  * A group's or peer's `:is()` anywhere else fails the build, as does a sheet
  * with none: Tailwind writing them another way would leave them all.
  */
@@ -218,6 +229,42 @@ function unwrapped(selector: parser.Selector): Node[] | null {
   ];
 }
 
+/**
+ * Each group's or peer's `:is()` a `:not()` in the selector negates, its
+ * universal written as its compound's own class, weightless; how many.
+ * Throws for one in a compound with no class.
+ */
+function namedNegations(selector: parser.Selector): number {
+  let named = 0;
+  for (const compound of compoundsOf(selector).compounds) {
+    const own = compound.find((node) => node.type === "class");
+    for (const node of compound) {
+      if (node.type !== "pseudo" || node.value !== ":not") {
+        continue;
+      }
+      for (const argument of node.nodes) {
+        const [only] = argument.nodes;
+        if (argument.nodes.length !== 1 || !anchorOf(only)) {
+          continue;
+        }
+        if (!own) {
+          throw new Error(
+            `a group's or peer's negated :is() in a compound with no class to key it to: ${selector}`
+          );
+        }
+        const universal = (only as parser.Pseudo).nodes[0].nodes.at(-1);
+        const name = parser.selector({ value: "" });
+        name.append(own.clone());
+        const where = parser.pseudo({ value: ":where" });
+        where.append(name);
+        universal?.replaceWith(where);
+        named += 1;
+      }
+    }
+  }
+  return named;
+}
+
 /** `css` with every group's and peer's `:is()` written as its combinator, and how many selectors changed. */
 export function groupsAsCombinators(
   css: string,
@@ -228,14 +275,14 @@ export function groupsAsCombinators(
   const rewrite = parser((selectors) => {
     selectors.each((selector) => {
       const nodes = unwrapped(selector);
-      if (!nodes) {
-        return;
+      if (nodes) {
+        selector.removeAll();
+        for (const node of nodes) {
+          selector.append(node);
+        }
+        rewritten += 1;
       }
-      selector.removeAll();
-      for (const node of nodes) {
-        selector.append(node);
-      }
-      rewritten += 1;
+      rewritten += namedNegations(selector);
     });
   });
   root.walkRules((rule) => {

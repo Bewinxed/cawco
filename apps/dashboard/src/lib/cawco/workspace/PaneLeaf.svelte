@@ -24,6 +24,7 @@
     easeOut,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { holdSkipped } from "#lib/cawco/motion/rest.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
@@ -459,7 +460,9 @@
            subtree still runs its loops, and a skeleton's sweep went on in a
            pane put away (tab-return, leg 3), so app.css's rest rule holds
            them still. Set and lifted with `.pane-hidden`, in the one update
-           that already restyles the pane whole. -->
+           that already restyles the pane whole; the skip holds back that
+           restyle under it, so the pane asks its loops' style once it has
+           painted (`holdSkipped`). -->
       <div
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}
@@ -470,6 +473,7 @@
         data-pane={paneId}
         inert={shown && !isActive}
         use:slot={{ id: paneId, shown }}
+        {@attach holdSkipped(!(shown || laidOut))}
         {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
           mode: "clip",
         })}
