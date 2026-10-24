@@ -530,8 +530,9 @@
         role="status"
         out:revealOut
       >
-        <!-- Each stands for a row as a row is dressed (The Row Dress Rule): its
-             place and age, its words, what came back; at that row's height. -->
+        <!-- Each stands for the row most comments are (The Row Dress Rule): its
+             place and age, its words, nothing back yet; at that row's height,
+             so the list holds still as it lands. -->
         {#each [0, 1, 2] as skeleton (skeleton)}
           <span
             class="flex items-start gap-space-3 min-h-c-artifact-row-h px-space-2 py-space-2"
@@ -554,12 +555,6 @@
                 class="mt-space-row w-17/20"
                 line="body"
                 radius="text"
-              />
-              <Skeleton
-                class="mt-space-1"
-                line="meta"
-                radius="text"
-                width="name"
               />
             </span>
           </span>

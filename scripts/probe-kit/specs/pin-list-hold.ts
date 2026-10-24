@@ -20,7 +20,7 @@
  *    on `/ws/artifact/`, the hub's messages kept 2.5 s): from the socket's
  *    start until the doc lands no empty state, no row, no tab count and no
  *    head count element is drawn; nothing inside `--dur-wait-grace`, then
- *    skeleton rows at a pin row's height, their fill apart from the list's
+ *    skeleton rows at the common row's height (place and age, words), their fill apart from the list's
  *    surface (The Claim Of Nothing Rule); once the doc lands, the rows of (1)
  *    and the counts in their place.
  * 3. The pane's socket refused before it ever synced (the hub's own terminal
@@ -99,7 +99,11 @@ interface Drawn {
   faultContrast: number | null;
   moved: number[];
   reading: boolean;
-  /** A pin row's height and each skeleton row's, px. */
+  /**
+   * The common row's height, px: a comment with no answer, its place and
+   * age on one line and its words on the next, nothing under them; and
+   * each skeleton row's.
+   */
   rowHeight: number | null;
   rows: number[];
   skeletonFillApart: boolean | null;
@@ -176,7 +180,11 @@ const drawn = (page: Page): Promise<Drawn> =>
           skeletonHeights: [
             ...(root?.querySelectorAll('[data-slot="skeleton-row"]') ?? []),
           ].map((row) => heightOf(row) ?? 0),
-          rowHeight: heightOf(root?.querySelector('[data-slot="pin-row"]')),
+          rowHeight: heightOf(
+            root?.querySelector(
+              '[data-slot="pin-row"]:has([data-line="words"]):not(:has([data-line="back"], [data-attach-strip]))'
+            )
+          ),
           tabs: [...(root?.querySelectorAll('[role="tab"]') ?? [])].map(
             (tab) => tab.textContent?.trim() ?? ""
           ),
@@ -589,12 +597,12 @@ const heldBack = async (at: At, leg: Leg) => {
     `${said}; at ${HOLD_MS} ms: ${JSON.stringify(during)}`
   );
   check(
-    "2: each skeleton row stands at a pin row's height",
+    "2: each skeleton row stands at the common row's height (a comment with no answer: its place and age, its words), so the list doesn't jump as it lands",
     after.rowHeight !== null &&
       during.skeletonHeights.every(
         (height) => Math.abs(height - (after.rowHeight ?? 0)) <= 1
       ),
-    `skeleton ${JSON.stringify(during.skeletonHeights)}; pin row ${after.rowHeight}`
+    `skeleton ${JSON.stringify(during.skeletonHeights)}; two-line pin row ${after.rowHeight ?? "none drawn"}`
   );
   check(
     "2: once the doc lands, its rows and counts replace the skeleton",
