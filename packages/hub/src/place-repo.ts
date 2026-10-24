@@ -1,10 +1,9 @@
 /**
  * A project's place made a git repository when a plain folder is first
  * needed as one (agent place-repo.ts does the work on the place's machine):
- * before a workspace is cut from it (a task's attempt, a delegate, a
- * routine's run, a retry, a check on another machine), and as a project is
- * made from or joined to a folder. Every workspace is then a clone, on one
- * path. The person is never asked: CawCo makes one local commit of what is
+ * as a project is made from or joined to a folder. A workspace needs none:
+ * it is a private copy of any folder (agent layer.ts). The person is never
+ * asked: CawCo makes one local commit of what is
  * safe to keep in history, pushes nothing, adds no remote, and notes in the
  * project's newest conversation what the commit took and what it left out.
  *
@@ -26,7 +25,6 @@
  */
 import {
   CONTROL_PLACE_REPO,
-  CONTROL_REPO_ROOT,
   LARGE_FILE_BYTES,
   machineCalled,
   type PlaceLeftOut,
@@ -229,37 +227,6 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     ensure,
     hold,
     settled,
-
-    /**
-     * Before a workspace is cut from `cwd` on `machineId` for `projectId`.
-     * The workspace is cut from the git checkout `cwd` is in: once the
-     * project's place holding `cwd` has settled, a `cwd` already in a
-     * checkout needs nothing, and nothing else is touched. Only a `cwd` in no
-     * checkout has the project's place that holds it made a repository (the
-     * machine refuses a home or cache folder, in its words). A folder that
-     * is none of the project's places is left alone, and the workspace's own
-     * create says why it cannot be cut.
-     */
-    async beforeCut(
-      projectId: string,
-      machineId: string,
-      cwd: string
-    ): Promise<void> {
-      const place = placeHolding(
-        db.project(projectId)?.places ?? [],
-        machineId,
-        cwd
-      );
-      if (!place) {
-        return;
-      }
-      await settled(machineId, place.path);
-      const root = (await call(machineId, CONTROL_REPO_ROOT, [cwd])) as
-        string | null;
-      if (root === null) {
-        await ensure({ projectId, machineId, path: place.path });
-      }
-    },
   };
 };
 

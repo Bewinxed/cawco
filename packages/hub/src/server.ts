@@ -22726,8 +22726,6 @@ export const createServer = (
     }
   };
   const workItems = createWorkItems({
-    beforeCut: (projectId, machineId, cwd) =>
-      placeRepos.beforeCut(projectId, machineId, cwd),
     // Undecided while the machine is away or has not read its custody since
     // it came back, and while it holds the session's process alive: neither
     // proves the session gone.

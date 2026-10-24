@@ -831,17 +831,6 @@ export interface WorkItemDeps {
    */
   readonly awaitsSend: (instanceId: string) => boolean;
   /**
-   * Before a workspace of `projectId` is cut from `cwd` on `machineId`: the
-   * project's place that holds `cwd` made a git repository when it is a
-   * plain folder (place-repo.ts `beforeCut`). Throws, in the machine's
-   * words, when it cannot be one.
-   */
-  readonly beforeCut: (
-    projectId: string,
-    machineId: string,
-    cwd: string
-  ) => Promise<void>;
-  /**
    * Its machine's own word that the session is between turns (server.ts
    * `sessionIdle`): what a hub that started reads for a turn whose end it
    * never heard. False while the machine is away or does not answer.
@@ -2257,7 +2246,6 @@ const TRAY_HOLD_MS = 6000;
 export const createWorkItems = ({
   placeTaken,
   awaitsSend,
-  beforeCut,
   call,
   command,
   custodyPending,
@@ -4664,11 +4652,9 @@ export const createWorkItems = ({
   };
 
   /**
-   * A new workspace: the project's place made a git repository first when it
-   * is a plain folder ({@link WorkItemDeps.beforeCut}), then its machine cuts
-   * the clone and starts its boundary, and the hub files it. A place that
-   * cannot be made one refuses the workspace in the machine's words, before
-   * anything is cut. `checksFor` makes it the gate workspace of that one;
+   * A new workspace: its machine makes its private copy of the folder `cwd`
+   * is in, any folder (agent layer.ts), and starts its boundary, and the hub
+   * files it. `checksFor` makes it the gate workspace of that one;
    * `account` is the Claude account its first session launches on
    * ({@link ItemPlacement}), whose user layer the boundary reads from its
    * first start; `first` is that session ({@link WorkspaceFirstSession}),
@@ -4690,9 +4676,6 @@ export const createWorkItems = ({
       first?: WorkspaceFirstSession;
     } = {}
   ): Promise<WorkspaceRow> => {
-    if (projectId) {
-      await beforeCut(projectId, machineId, cwd);
-    }
     const id = crypto.randomUUID();
     db.beginWorkspaceCreate(id, machineId);
     opening.add(id);
