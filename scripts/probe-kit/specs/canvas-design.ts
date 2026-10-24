@@ -114,7 +114,12 @@
  * width (what the words key on) is the content box of the size container
  * the old `@container (width < 640px)` label rule queried. D
  * (`CANVAS_DESIGN=desk` alone): at session-sheet leg 18's 523px desk pane
- * that box is under 640 and Comments' word is not drawn.
+ * that box is under 640 and Comments' word is not drawn. B
+ * (`CANVAS_DESIGN=bounce` alone), in Chromium and WebKit: the bench pane
+ * grown 390 → 1440 → 680 → 390, slowly and a frame or two a step; at each
+ * width it settles on, the head holds its controls in its width, Close
+ * stands whole and takes a press at its centre, and every folded control is
+ * in More.
  */
 import { Database } from "bun:sqlite";
 import { type ChildProcess, spawn } from "node:child_process";
@@ -3741,6 +3746,286 @@ async function deskLeg(kit: Kit, bench: string, stage: Stage): Promise<void> {
   await page.close();
 }
 
+/** The pane widths a bounce passes through: a phone's, past WORDS_FROM (640) to a desk's, back under it and to a phone's. */
+const BOUNCE = [390, 1440, 680, 390] as const;
+
+/** The head's fit as drawn: its width against what it holds, Close whole and pressable, and the controls standing and folded (each folded one by the names its controls carry). */
+interface FitRead {
+  client: number;
+  closeHit: string;
+  closeWhole: boolean;
+  folded: { key: string; names: string[] }[];
+  more: boolean;
+  scroll: number;
+  standing: string[];
+  w: number;
+}
+
+const FIT_READ = (): FitRead => {
+  const pane = document.querySelector("[data-bench-pane]") as HTMLElement;
+  const head = pane.querySelector("[data-slot=side-head]") as HTMLElement;
+  const close = head.querySelector(":scope > [data-slot=close]") as HTMLElement;
+  const edge = head.getBoundingClientRect();
+  const box = close.getBoundingClientRect();
+  const hit = document.elementFromPoint(
+    box.x + box.width / 2,
+    box.y + box.height / 2
+  );
+  const keyOf = (one: Element) => (one as HTMLElement).dataset.headItem ?? "";
+  return {
+    w: pane.offsetWidth,
+    client: head.clientWidth,
+    scroll: head.scrollWidth,
+    closeWhole:
+      box.width > 0 &&
+      box.left >= edge.left - 0.5 &&
+      box.right <= edge.right + 0.5,
+    closeHit:
+      hit && close.contains(hit)
+        ? "Close"
+        : `${hit?.outerHTML.slice(0, 80) ?? "nothing"} at ${Math.round(box.x + box.width / 2)},${Math.round(box.y + box.height / 2)} in ${innerWidth}×${innerHeight}`,
+    standing: [
+      ...head.querySelectorAll(":scope > [data-head-item]:not([hidden])"),
+    ].map(keyOf),
+    folded: [...head.querySelectorAll(":scope > [data-head-item][hidden]")].map(
+      (one) => ({
+        key: keyOf(one),
+        names: [...one.querySelectorAll("button, a, [role=tab]")]
+          .map((each) =>
+            (each.getAttribute("aria-label") ?? each.textContent ?? "").trim()
+          )
+          .filter(Boolean),
+      })
+    ),
+    more: !!head.querySelector(":scope > [data-slot=more]"),
+  };
+};
+
+/**
+ * The pane set to each of `widths` in turn, `frames` frames apart (a quick
+ * grow and shrink, as a split dragged or a window snapped does), then left
+ * to settle.
+ */
+const BOUNCE_QUICK = async ({
+  widths,
+  frames,
+  zoomed,
+}: {
+  frames: number;
+  widths: number[];
+  zoomed: boolean;
+}): Promise<void> => {
+  const pane = document.querySelector("[data-bench-pane]") as HTMLElement;
+  const frame = () =>
+    new Promise<void>((done) => requestAnimationFrame(() => done()));
+  pane.style.transformOrigin = "0 0";
+  for (const w of widths) {
+    pane.style.inlineSize = `${w}px`;
+    for (let k = 0; k < frames; k += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one frame after another
+      await frame();
+    }
+    // Zoomed to fit as a canvas does once its frame has its new width: a
+    // phone's 390 at 1, wider frames smaller.
+    pane.style.transform = zoomed ? `scale(${Math.min(1, 390 / w)})` : "";
+    for (let k = 0; k < frames; k += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one frame after another
+      await frame();
+    }
+  }
+  for (let k = 0; k < 12; k += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: the head's fit lands
+    await frame();
+  }
+};
+
+/** More's entries, opened by a press and shut again; none while More doesn't stand. */
+async function moreEntries(page: Page): Promise<string[]> {
+  const trigger = page.locator(
+    "[data-bench-pane] [data-slot=side-head] > [data-slot=more]"
+  );
+  if ((await trigger.count()) === 0) {
+    return [];
+  }
+  await trigger.click();
+  await page
+    .locator("[data-slot=dropdown-menu-content]")
+    .waitFor({ timeout: 5000 });
+  const entries = await page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        "[data-slot=dropdown-menu-content] :is([role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [data-slot=dropdown-menu-sub-trigger])"
+      ),
+    ].map((one) => one.textContent?.trim() ?? "")
+  );
+  await page.keyboard.press("Escape");
+  await page
+    .locator("[data-slot=dropdown-menu-content]")
+    .waitFor({ state: "detached", timeout: 5000 })
+    .catch(() => undefined);
+  return entries;
+}
+
+/** A check that the head holds its controls, Close stands whole and pressable, and every folded control is in More, read now. */
+type Holds = (leg: string) => Promise<void>;
+
+/** The bench pane set to `w` px wide (`transformOrigin` top left, for a zoom), or zoomed to `scale`. */
+const SET_PANE = ({ w, scale }: { scale?: number; w?: number }) => {
+  const pane = document.querySelector("[data-bench-pane]") as HTMLElement;
+  pane.style.transformOrigin = "0 0";
+  if (w !== undefined) {
+    pane.style.inlineSize = `${w}px`;
+  }
+  if (scale !== undefined) {
+    pane.style.transform = scale === 1 ? "" : `scale(${scale})`;
+  }
+};
+
+/** Each bounce width settled before it is read; zoomed, the pane is then zoomed to fit (a phone's 390 at 1) and settled again. */
+async function slowBounce(page: Page, holds: Holds): Promise<void> {
+  for (const zoomed of [false, true]) {
+    for (const w of BOUNCE.slice(1)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one width settled, then read, before the next
+      await page.evaluate(SET_PANE, { w });
+      await page.waitForTimeout(600);
+      if (zoomed) {
+        await page.evaluate(SET_PANE, { scale: Math.min(1, 390 / w) });
+        await page.waitForTimeout(600);
+      }
+      await holds(`slowly${zoomed ? ", zoomed to fit" : ""}`);
+    }
+  }
+  await page.evaluate(SET_PANE, { scale: 1 });
+}
+
+/** The bounce a frame, then two, at each width, and the grow-then-shrink ending at each of its narrower widths, plain and zoomed to fit. */
+async function quickBounce(page: Page, holds: Holds): Promise<void> {
+  const runs = [false, true].flatMap((zoomed) =>
+    [1, 2].flatMap((frames) =>
+      [
+        [1440, 680, 390],
+        [1440, 390],
+        [1440, 680],
+      ].map((widths) => ({ zoomed, frames, widths }))
+    )
+  );
+  for (const run of runs) {
+    // biome-ignore lint/performance/noAwaitInLoops: one bounce, settled and read, before the next
+    await page.evaluate(BOUNCE_QUICK, run);
+    await holds(
+      `quickly ${[390, ...run.widths].join("→")}, ${run.frames} frame${run.frames > 1 ? "s" : ""} a step${run.zoomed ? ", zoomed to fit" : ""}`
+    );
+    await page.evaluate(BOUNCE_QUICK, { ...run, widths: [390], frames: 1 });
+  }
+  await page.evaluate(SET_PANE, { scale: 1 });
+}
+
+/** The pane as wide as the bench's main, the window bounced as a person drags or snaps it, each size handed to the engine at once. */
+async function windowBounce(page: Page, holds: Holds): Promise<void> {
+  await page.evaluate(() => {
+    (
+      document.querySelector("[data-bench-pane]") as HTMLElement
+    ).style.inlineSize = "100%";
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(800);
+  await holds("window fresh");
+  for (const sizes of [
+    [1440, 680, 390],
+    [1440, 390],
+  ]) {
+    for (const width of sizes) {
+      // biome-ignore lint/performance/noAwaitInLoops: one size after another, no wait between
+      await page.setViewportSize({ width, height: 844 });
+    }
+    await page.waitForTimeout(800);
+    await holds(`window quickly 390→${sizes.join("→")}`);
+  }
+}
+
+/**
+ * B: the head's invariant at every width however the width got there. The
+ * bench pane grown from a phone's 390 to 1440, past WORDS_FROM, and back
+ * through 680 to 390: slowly (each width settled) and quickly (a frame or
+ * two at each), plain and zoomed to fit after each width as a component
+ * canvas zooms its frames, and by the window. At each width it settles on,
+ * the head holds its controls in its width (scrollWidth ≤ clientWidth),
+ * Close stands whole and a press at its centre meets Close, and every
+ * control folded out of the head is in More. The design leaf's reading
+ * before the fix, sweeping a canvas frame 1440 → 680 → 390: scrollWidth 454
+ * in clientWidth 376, Close cut off (the fit read its controls' drawn
+ * widths under the zoom, which changed after).
+ */
+async function bounceLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  engine: "chromium" | "webkit",
+  kind: "component" | "preview",
+  picks: boolean
+): Promise<void> {
+  const page = await kit.page("desk", { theme: "light", engine });
+  await page.setViewportSize({ width: 1920, height: 844 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  await serveDoc(page, {}, picks);
+  await page.goto(
+    `${bench}/motion/artifact-head?w=${BOUNCE[0]}&kind=${kind}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  const ready = await page
+    .waitForSelector("[data-bench-pane] [data-head-item=create]", {
+      state: "attached",
+      timeout: 60_000,
+    })
+    .then(() => true)
+    .catch(() => false);
+  const config = `${engine}, ${kind === "component" ? "component canvas" : "plain preview"}, ${picks ? "Send standing" : "no Send"}`;
+  if (!ready) {
+    kit.check(`B: ${config}: the head draws`, false, "never drew");
+    await page.close();
+    return;
+  }
+  await page.waitForTimeout(3000);
+  const holds: Holds = async (leg) => {
+    const read = await page.evaluate(FIT_READ);
+    const more = await moreEntries(page);
+    const missing = read.folded.filter(
+      (one) =>
+        !one.names.some((name) => more.some((entry) => entry.startsWith(name)))
+    );
+    kit.check(
+      `B: ${config}, ${leg}, at ${read.w}: the head holds its controls (scrollWidth ${read.scroll} ≤ clientWidth ${read.client}), Close whole and pressed at its centre, every folded control in More`,
+      read.scroll <= read.client &&
+        read.closeWhole &&
+        read.closeHit === "Close" &&
+        (read.folded.length === 0 || read.more) &&
+        missing.length === 0,
+      JSON.stringify({ ...read, moreEntries: more, missing })
+    );
+  };
+  await holds("fresh");
+  await slowBounce(page, holds);
+  await quickBounce(page, holds);
+  await windowBounce(page, holds);
+  await page.close();
+}
+
+/** B in Chromium and WebKit, for a component canvas and a plain preview, with Send standing and without. */
+async function bounces(kit: Kit, bench: string, stage: Stage): Promise<void> {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const kind of ["component", "preview"] as const) {
+      for (const picks of [true, false]) {
+        // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+        await bounceLeg(kit, bench, stage, engine, kind, picks);
+      }
+    }
+  }
+}
+
 /** W0–W3 for a component canvas and a plain preview, with Send standing and without. */
 async function sweeps(kit: Kit, bench: string, stage: Stage): Promise<void> {
   for (const kind of ["component", "preview"] as const) {
@@ -3766,13 +4051,13 @@ async function countLegs(kit: Kit, bench: string, stage: Stage): Promise<void> {
 const ALONE: Record<
   string,
   (kit: Kit, bench: string, stage: Stage) => Promise<void>
-> = { sweep: sweeps, desk: deskLeg, count: countLegs };
+> = { sweep: sweeps, desk: deskLeg, count: countLegs, bounce: bounces };
 
 const spec: Spec = {
   name: "canvas-design",
   run: async (kit) => {
     const stage = await stageOf();
-    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W4 alone; `=desk` leg D alone; `=count` legs 8j and 8h alone.
+    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W4 alone; `=desk` leg D alone; `=count` legs 8j and 8h alone; `=bounce` leg B alone.
     const only = process.env.CANVAS_DESIGN;
     try {
       if (only === "switch") {
@@ -3851,6 +4136,7 @@ const spec: Spec = {
         await backLeg(kit, bench, stage);
         await sweeps(kit, bench, stage);
         await deskLeg(kit, bench, stage);
+        await bounces(kit, bench, stage);
       }
       sameLoadPlace(kit);
     } finally {

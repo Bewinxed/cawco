@@ -165,6 +165,27 @@
     more.find((one) => one.count && one.count.n > 0)?.count
   );
 
+  /**
+   * The head's drawn px to its laid-out px: other than 1 under a transform
+   * (a component canvas zoomed to fit its frames, `scale(z)`). Every width
+   * the fit reads is in laid-out px, the head's room's own: read as drawn,
+   * a measure taken under a zoom that changes after it (a frame grown, then
+   * narrowed back, and zoomed to fit again) stood every control whole, and
+   * a zoom resizes no box, so no observer heard it to measure again.
+   */
+  let zoom = 1;
+
+  /** A box's width as laid out: its drawn width over the head's zoom. */
+  const laidOut = (el: Element): number =>
+    el.getBoundingClientRect().width / zoom;
+
+  /** The head's zoom as it is drawn now. */
+  function zoomOf(el: HTMLElement): number {
+    const drawn = el.getBoundingClientRect().width;
+    const laid = Number.parseFloat(getComputedStyle(el).width);
+    return drawn > 0 && laid > 0 ? drawn / laid : 1;
+  }
+
   /** How far a box's text runs past it (a truncated name's): its own width is that much more. */
   const runsPast = (el: Element): number =>
     Math.max(
@@ -199,7 +220,7 @@
   function compactWidth(one: HTMLElement): number {
     const was = one.dataset.form;
     one.dataset.form = "compact";
-    const { width } = one.getBoundingClientRect();
+    const width = laidOut(one);
     if (was === undefined) {
       delete one.dataset.form;
     } else {
@@ -213,7 +234,7 @@
     const kept: number[] = [];
     for (const child of el.children) {
       const one = child as HTMLElement;
-      const { width } = one.getBoundingClientRect();
+      const width = laidOut(one);
       const item = one.dataset.headItem;
       if (item && !one.hidden) {
         if (one.dataset.form === "compact") {
@@ -252,9 +273,7 @@
     const pad =
       (Number.parseFloat(style.paddingInlineStart) || 0) +
       (Number.parseFloat(style.paddingInlineEnd) || 0);
-    const own = lead
-      ? lead.getBoundingClientRect().width + runsPast(lead) + pad
-      : 0;
+    const own = lead ? laidOut(lead) + runsPast(lead) + pad : 0;
     return Math.ceil(Math.min(own, NAME_KEEPS + pad));
   }
 
@@ -286,6 +305,7 @@
     if (!(head && identity)) {
       return null;
     }
+    zoom = zoomOf(head);
     const keeps = nameWidth(identity);
     const line = identity.querySelector<HTMLElement>('[data-slot="subtitle"]');
     const lineFits = !line || identity.clientWidth >= lineNeeds(line);
