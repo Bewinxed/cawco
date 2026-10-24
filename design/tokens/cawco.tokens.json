@@ -7217,46 +7217,6 @@
       },
       "$description": "The Canvas view's least height, the floor its graph reads at (ViewCanvas)."
     },
-    "c-pipeline-name-min": {
-      "$type": "dimension",
-      "$value": {
-        "value": 6,
-        "unit": "rem"
-      },
-      "$description": "A pipeline row's stage-name column at its narrowest (ViewPipeline)."
-    },
-    "c-pipeline-name-max": {
-      "$type": "dimension",
-      "$value": {
-        "value": 10,
-        "unit": "rem"
-      },
-      "$description": "A pipeline row's stage-name column at its widest."
-    },
-    "c-pipeline-kind-min": {
-      "$type": "dimension",
-      "$value": {
-        "value": 4,
-        "unit": "rem"
-      },
-      "$description": "A pipeline row's stage-kind column at its narrowest."
-    },
-    "c-pipeline-kind-max": {
-      "$type": "dimension",
-      "$value": {
-        "value": 6,
-        "unit": "rem"
-      },
-      "$description": "A pipeline row's stage-kind column at its widest."
-    },
-    "c-pipeline-count-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 3,
-        "unit": "rem"
-      },
-      "$description": "A pipeline row's count column."
-    },
     "c-deck-gap": {
       "$type": "dimension",
       "$value": {

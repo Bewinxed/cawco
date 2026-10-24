@@ -1420,16 +1420,6 @@
     --c-made-tile-min: 18rem;
     /* The Canvas view's least height, the floor its graph reads at (ViewCanvas). */
     --c-canvas-min-h: 280px;
-    /* A pipeline row's stage-name column at its narrowest (ViewPipeline). */
-    --c-pipeline-name-min: 6rem;
-    /* A pipeline row's stage-name column at its widest. */
-    --c-pipeline-name-max: 10rem;
-    /* A pipeline row's stage-kind column at its narrowest. */
-    --c-pipeline-kind-min: 4rem;
-    /* A pipeline row's stage-kind column at its widest. */
-    --c-pipeline-kind-max: 6rem;
-    /* A pipeline row's count column. */
-    --c-pipeline-count-w: 3rem;
     /* The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel. */
     --c-deck-gap: 12px;
     /* The new-project page's column. */

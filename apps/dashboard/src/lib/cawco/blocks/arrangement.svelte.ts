@@ -13,10 +13,10 @@
  */
 import {
   BLOCK_BUILT_INS,
-  BLOCK_PAGES,
   type BlockArrangement,
-  type BlockPage,
   type BlockPlace,
+  SHOWN_BLOCK_PAGES,
+  type ShownBlockPage,
   viewBlock,
   viewOfBlock,
 } from "@cawco/core";
@@ -26,8 +26,8 @@ import { json, send } from "../project-tasks";
 const blocksPath = (projectId: string) =>
   `/api/projects/${encodeURIComponent(projectId)}/blocks`;
 
-export const isBlockPage = (value: string): value is BlockPage =>
-  (BLOCK_PAGES as readonly string[]).includes(value);
+export const isBlockPage = (value: string): value is ShownBlockPage =>
+  (SHOWN_BLOCK_PAGES as readonly string[]).includes(value);
 
 export class ProjectBlocks {
   readonly #projectId: () => string;
@@ -36,7 +36,7 @@ export class ProjectBlocks {
   /** As the hub last answered it; null until the first read lands. */
   arrangement = $state<BlockArrangement | null>(null);
   /** The hub's words for a page's last refused write. */
-  refused = $state<Partial<Record<BlockPage, string>>>({});
+  refused = $state<Partial<Record<ShownBlockPage, string>>>({});
   /** Reads so far: only the newest one's answer is kept. */
   #reads = 0;
 
@@ -66,7 +66,7 @@ export class ProjectBlocks {
    * counts a proposed block's place among, so both count it alike. A view no longer kept is left out; a block this build does not
    * know keeps its place.
    */
-  placesOf(page: BlockPage): BlockPlace[] {
+  placesOf(page: ShownBlockPage): BlockPlace[] {
     const kept = this.#kept();
     const stored = (this.arrangement?.pages[page] ?? []).filter((place) => {
       const view = viewOfBlock(place.block);
@@ -82,10 +82,10 @@ export class ProjectBlocks {
   }
 
   /** The page a custom view stands on as a block, or null: it is its own tab. */
-  pageOfView(name: string): BlockPage | null {
+  pageOfView(name: string): ShownBlockPage | null {
     const block = viewBlock(name);
     return (
-      BLOCK_PAGES.find((page) =>
+      SHOWN_BLOCK_PAGES.find((page) =>
         this.placesOf(page).some((place) => place.block === block)
       ) ?? null
     );
@@ -95,7 +95,7 @@ export class ProjectBlocks {
    * Writes a page's arrangement whole. Answers whether the hub took it;
    * refused, the page stands as it was and its end row says why.
    */
-  async set(page: BlockPage, places: BlockPlace[]): Promise<boolean> {
+  async set(page: ShownBlockPage, places: BlockPlace[]): Promise<boolean> {
     const id = this.#projectId();
     try {
       const next = await send<BlockArrangement>(
@@ -117,7 +117,7 @@ export class ProjectBlocks {
   }
 
   /** One block of a page changed in place (its width, hidden or shown). */
-  change(page: BlockPage, block: string, change: Partial<BlockPlace>) {
+  change(page: ShownBlockPage, block: string, change: Partial<BlockPlace>) {
     return this.set(
       page,
       this.placesOf(page).map((place) =>
@@ -127,7 +127,7 @@ export class ProjectBlocks {
   }
 
   /** A block moved to `to`, its place in the page's order. */
-  move(page: BlockPage, block: string, to: number) {
+  move(page: ShownBlockPage, block: string, to: number) {
     const places = this.placesOf(page);
     const from = places.findIndex((place) => place.block === block);
     if (from < 0 || to === from) {
@@ -139,7 +139,7 @@ export class ProjectBlocks {
   }
 
   /** A kept view placed on `page`, at its end, narrow: it is no tab now, and on no other page. */
-  place(name: string, page: BlockPage) {
+  place(name: string, page: ShownBlockPage) {
     const block = viewBlock(name);
     return this.set(page, [
       ...this.placesOf(page).filter((place) => place.block !== block),

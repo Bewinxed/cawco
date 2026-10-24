@@ -13,10 +13,18 @@
 import type { ThreadSaid } from "./threads";
 
 /**
- * The pages that hold blocks: the four tabs every project has. A custom
- * view is placed on one of these, never on a tab that comes and goes with
- * what the tasks draw (Canvas, Calendar, Made), where it would vanish with
- * the tab.
+ * The pages that hold blocks: the three tabs every project has, as the
+ * dashboard draws them. A custom view is placed on one of these, never on a
+ * tab that comes and goes with what the tasks draw (Canvas, Calendar,
+ * Made), where it would vanish with the tab.
+ */
+export const SHOWN_BLOCK_PAGES = ["board", "table", "routines"] as const;
+export type ShownBlockPage = (typeof SHOWN_BLOCK_PAGES)[number];
+
+/**
+ * The pages the hub's wire names (its routes, rows and Caw's view_draft):
+ * the shown ones, and `pipeline`, which stays only for TestFlight 20261018's
+ * reads and goes with the app's own Pipeline removal (tsk-59).
  */
 export const BLOCK_PAGES = ["board", "table", "pipeline", "routines"] as const;
 export type BlockPage = (typeof BLOCK_PAGES)[number];

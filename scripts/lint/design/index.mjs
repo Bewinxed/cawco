@@ -191,7 +191,6 @@ const INLINE_STYLES = {
   "src/lib/cawco/usage/SessionsChip.svelte": ["min-block-size"],
   "src/lib/cawco/usage/WeekMark.svelte": ["stroke-dashoffset"],
   "src/lib/cawco/usage/WhereItGoes.svelte": ["animation", "opacity"],
-  "src/lib/cawco/views/ViewPipeline.svelte": ["inline-size"],
   "src/lib/cawco/views/canvas/TaskEdgeLine.svelte": [
     "stroke",
     "stroke-dasharray",

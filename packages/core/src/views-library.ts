@@ -268,7 +268,6 @@ export const VIEW_COMPONENTS = [
   "TaskCard",
   "Table",
   "Calendar",
-  "Pipeline",
 ] as const;
 export type ViewComponentName = (typeof VIEW_COMPONENTS)[number];
 
@@ -383,16 +382,6 @@ export const viewLibrary = <C>(
         .describe('"week" when left out.'),
     })
   );
-  const Pipeline = define(
-    "Pipeline",
-    "One row per stage with a bar sized by its share of the tasks; stages of kind dropped sit apart.",
-    z.object({
-      stages: z
-        .array(stage)
-        .describe("The stages tool's stages, or the ones to show, in order."),
-      tasks: z.array(task).describe("The tasks tool's rows, to count."),
-    })
-  );
   // A layout holds any component, layouts included.
   const child: z.ZodType = z.lazy(() =>
     z.union([
@@ -406,7 +395,6 @@ export const viewLibrary = <C>(
       TaskCard.ref,
       Table.ref,
       Calendar.ref,
-      Pipeline.ref,
     ])
   );
   const align = z
@@ -443,7 +431,6 @@ export const viewLibrary = <C>(
       TaskCard,
       Table,
       Calendar,
-      Pipeline,
     ],
     root: VIEW_ROOT,
   });

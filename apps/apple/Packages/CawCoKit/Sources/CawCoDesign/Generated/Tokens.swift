@@ -1238,16 +1238,6 @@ public enum Size {
     public static let cMadeTileMin: Double = 288
     /// The Canvas view's least height, the floor its graph reads at (ViewCanvas).
     public static let cCanvasMinH: Double = 280
-    /// A pipeline row's stage-name column at its narrowest (ViewPipeline).
-    public static let cPipelineNameMin: Double = 96
-    /// A pipeline row's stage-name column at its widest.
-    public static let cPipelineNameMax: Double = 160
-    /// A pipeline row's stage-kind column at its narrowest.
-    public static let cPipelineKindMin: Double = 64
-    /// A pipeline row's stage-kind column at its widest.
-    public static let cPipelineKindMax: Double = 96
-    /// A pipeline row's count column.
-    public static let cPipelineCountW: Double = 48
     /// The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel.
     public static let cDeckGap: Double = 12
     /// The new-project page's column.

@@ -8,6 +8,8 @@
  * On the built dashboard against a scratch fleet's hub, one project with a
  * few tasks and one kept view ("spend", written to its folder):
  *
+ * 0. The view bar: Board, Table, Routines and Decisions, no Pipeline; an
+ *    old `?view=pipeline` opens the Board; each tab opens its own view.
  * 1. Columns: the Routines page's grid at 1440, 1024, 768 and 390 holds 4,
  *    2, 1 and 1 columns; at 1440 each of its three blocks takes the two
  *    columns its measure needs; at 1024 Routines takes both (its ledger
@@ -510,6 +512,66 @@ const stripOf = (page: Page) =>
       .join(",")
   );
 
+const paneViewOf = (page: Page) =>
+  page.evaluate(
+    () =>
+      document.querySelector<HTMLElement>('[data-slot="pane"]')?.dataset.view ??
+      ""
+  );
+
+/**
+ * The view bar: Board, Table, Routines and Decisions lead it, no Pipeline;
+ * an old `?view=pipeline` opens the Board, and each tab clicked opens its
+ * own view.
+ */
+async function viewBar(kit: Kit, page: Page, base: string, projectId: string) {
+  await open(
+    page,
+    `${base}/project/${projectId}?view=pipeline`,
+    '[data-slot="pane"]'
+  );
+  await settle(page);
+  const strip = await stripOf(page);
+  const fallback = await paneViewOf(page);
+  kit.check(
+    "view bar: Board, Table, Routines, Decisions lead the strip and no Pipeline tab stands; ?view=pipeline opens the Board",
+    strip.startsWith("Board,Table,Routines,Decisions") &&
+      !strip.split(",").includes("Pipeline") &&
+      fallback === "board",
+    `${strip} · pane ${fallback}`
+  );
+  const opened: string[] = [];
+  for (const [name, view] of [
+    ["Table", "table"],
+    ["Routines", "routines"],
+    ["Decisions", "decisions"],
+    ["Board", "board"],
+  ] as const) {
+    await page.getByRole("tab", { name, exact: true }).click();
+    const reached = await page
+      .waitForFunction(
+        (want) =>
+          (
+            document.querySelector<HTMLElement>('[data-slot="pane"]')?.dataset
+              .view ?? ""
+          ).startsWith(want) &&
+          new URL(location.href).searchParams.get("view") !== "pipeline",
+        view,
+        { timeout: 10_000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    opened.push(
+      `${name}:${reached ? "ok" : "no"}:${await paneViewOf(page)}:${new URL(page.url()).searchParams.get("view")}`
+    );
+  }
+  kit.check(
+    "view bar: Table, Routines, Decisions and Board each open their own view from the strip",
+    opened.every((each) => each.split(":")[1] === "ok"),
+    opened.join(" ")
+  );
+}
+
 /** Opens the view's own tab; its head not up, says what the page and the hub show instead. */
 async function openView(
   page: Page,
@@ -561,6 +623,17 @@ async function tabAndBlock(
   const strip = await stripOf(page);
   await page.getByRole("button", { name: "More for Spend" }).click();
   await page.getByRole("menuitem", { name: blocksWords.placeOnPage }).click();
+  await page.getByRole("menuitem", { name: "Routines", exact: true }).waitFor();
+  const targets = (await page.getByRole("menuitem").allInnerTexts())
+    .map((text) => text.trim())
+    .filter((text) =>
+      ["Board", "Table", "Pipeline", "Routines"].includes(text)
+    );
+  kit.check(
+    "Place on a page offers Board, Table and Routines, no Pipeline",
+    targets.join(",") === "Board,Table,Routines",
+    targets.join(",")
+  );
   await page.getByRole("menuitem", { name: "Routines", exact: true }).click();
   await page.waitForSelector(
     `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
@@ -734,6 +807,13 @@ const spec: Spec = {
       await orderOf(page)
     );
 
+    await viewBar(kit, page, base, project.id);
+    await open(
+      page,
+      url,
+      '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
+    );
+    await settle(page);
     await columns(kit, page, phone, url);
     await throughHub(kit, page, other, fleet.base, project.id, url);
     await motion(kit, page);

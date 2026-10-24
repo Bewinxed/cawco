@@ -11,7 +11,6 @@ import ViewBadge from "./ViewBadge.svelte";
 import ViewBoard from "./ViewBoard.svelte";
 import ViewCalendarNode from "./ViewCalendarNode.svelte";
 import ViewColumn from "./ViewColumn.svelte";
-import ViewPipelineNode from "./ViewPipelineNode.svelte";
 import ViewRow from "./ViewRow.svelte";
 import ViewStageColumn from "./ViewStageColumn.svelte";
 import ViewStat from "./ViewStat.svelte";
@@ -30,5 +29,4 @@ export const VIEW_LIBRARY = viewLibrary<OpenUIComponent>({
   TaskCard: ViewTaskCard,
   Table: ViewTable,
   Calendar: ViewCalendarNode,
-  Pipeline: ViewPipelineNode,
 });

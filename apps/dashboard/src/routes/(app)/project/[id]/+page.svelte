@@ -5,8 +5,8 @@
    * a wide screen and under the head on a narrow one. On a phone (under
    * 640px) the page is the one scroller: the head scrolls away with the
    * view, and the views, Needs you and Ask Caw stand in one bar docked
-   * at the foot where a session's composer docks (ViewBar). Board, Table and
-   * Pipeline always; Calendar when a task carries a date; then each view
+   * at the foot where a session's composer docks (ViewBar). Board and Table
+   * always; Calendar when a task carries a date; then each view
    * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and
    * Discard over it. The tasks are the hub's: every change is a commit, so
    * the page shows what the hub answered and reads the list again after
@@ -29,12 +29,12 @@
    */
   import {
     BLOCK_PAGE_TITLES,
-    BLOCK_PAGES,
-    type BlockPage as BlockPageId,
+    type ShownBlockPage as BlockPageId,
     blocksWords,
     commonWords,
     madeWords,
     type ProjectView,
+    SHOWN_BLOCK_PAGES,
     viewOfBlock,
     viewsWords,
   } from "@cawco/core";
@@ -137,7 +137,6 @@
   import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
   import ViewMade from "#lib/cawco/views/ViewMade.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
-  import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
   import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
   import {
     discardView,
@@ -170,7 +169,6 @@
     IconFileTable,
     IconLayers,
     IconMore,
-    IconPipeline,
     IconPlus,
     IconSparkles,
     IconToolTodo,
@@ -496,8 +494,7 @@
   const tabs = $derived<StripTab[]>([
     { value: "board", label: "Board", draft: false },
     { value: "table", label: "Table", draft: false },
-    { value: "pipeline", label: "Pipeline", draft: false },
-    // Routines, the fourth tab, always there.
+    // Routines, the third tab, always there.
     { value: "routines", label: "Routines", draft: false },
     // The project's decision pages, always: an empty one starts Caw on one.
     { value: "decisions", label: "Decisions", draft: false },
@@ -1153,7 +1150,6 @@
   const TASK_GLYPHS = {
     board: IconColumns,
     table: IconFileTable,
-    pipeline: IconPipeline,
   } as const;
 
   /** The kept views placed on `on`, each a block there. */
@@ -1191,7 +1187,7 @@
    * the board fills the page's height.
    */
   function taskPageItems(
-    view: "board" | "table" | "pipeline",
+    view: "board" | "table",
     content: Snippet<[string]>
   ): Record<string, BlockItem> {
     return {
@@ -1489,7 +1485,7 @@
   const filterHere = $derived(
     list !== null &&
       !empty &&
-      ["board", "table", "pipeline", "canvas", "calendar"].includes(current)
+      ["board", "table", "canvas", "calendar"].includes(current)
   );
   /** Something stands after the tabs: the hairline marks where it starts. */
   const trailing = $derived(
@@ -1774,9 +1770,6 @@
     />
   </div>
 {/snippet}
-{#snippet pipelineBody(_block: string)}
-  <ViewPipeline stages={stageList} tasks={shownTasks} />
-{/snippet}
 <!-- A task view's block counts the tasks it shows. -->
 {#snippet taskCount()}
   <span data-slot="num" class="type-meta num text-ink-subtle"
@@ -1873,7 +1866,7 @@
                       <span>{blocksWords.placeOnPage}</span>
                     </DropdownMenu.SubTrigger>
                     <DropdownMenu.SubContent class="w-auto" min="compact">
-                      {#each BLOCK_PAGES as target (target)}
+                      {#each SHOWN_BLOCK_PAGES as target (target)}
                         <DropdownMenu.Item
                           onSelect={() => placeView(view.name, target)}
                           >{BLOCK_PAGE_TITLES[target]}</DropdownMenu.Item
@@ -2045,12 +2038,6 @@
       {blocks}
       items={taskPageItems("table", tableBody)}
       page="table"
-    />
-  {:else if value === "pipeline"}
-    <BlockPage
-      {blocks}
-      items={taskPageItems("pipeline", pipelineBody)}
-      page="pipeline"
     />
   {:else if value === "canvas"}
     <ViewCanvas

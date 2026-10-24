@@ -6,8 +6,8 @@
  * id, title or description (the rows carry no description): the page asks
  * it, and its answer's ids are `found`. The rest is matched on the rows the
  * hub listed, which carry each of them. Every view narrows at once: the
- * board, the table, the pipeline, the canvas and the calendar, and the
- * board's Archived rail.
+ * board, the table, the canvas and the calendar, and the board's
+ * Archived rail.
  */
 import type { TaskSummary } from "#lib/cawco/project-tasks.js";
 

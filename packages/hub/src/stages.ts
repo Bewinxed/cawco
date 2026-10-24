@@ -648,7 +648,7 @@ moves
   replied → lost         lead, session
   meeting → prospect     lead, session
 views
-  pipeline   by stage
+  board      by stage
   table      by rank`,
     },
     seo: {

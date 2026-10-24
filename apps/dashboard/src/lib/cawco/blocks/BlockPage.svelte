@@ -50,9 +50,9 @@
    * refused write is said there in the hub's words.
    */
   import {
-    type BlockPage,
     type BlockPlace,
     type BlockWidth,
+    type ShownBlockPage,
     blocksWords as words,
   } from "@cawco/core";
   import { untrack } from "svelte";
@@ -72,7 +72,7 @@
     blocks,
     items,
   }: {
-    page: BlockPage;
+    page: ShownBlockPage;
     blocks: ProjectBlocks;
     /** Every block this page can draw, by id: its own, and the views placed on it. */
     items: Record<string, BlockItem>;
