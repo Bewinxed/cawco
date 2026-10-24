@@ -431,6 +431,8 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   while (Date.now() < deadline) {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
+      // biome-ignore lint/performance/noAwaitInLoops: once, as the view is up
+      await openWorkDirs(layer);
       return record.pid;
     }
     if (holder.exitCode !== null) {
@@ -449,10 +451,35 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
 };
 
 /**
+ * Moves into its first word, inside the view, and runs the rest in place of
+ * itself. nsenter's own `--wd=DIR` opens DIR before it enters the namespace
+ * (util-linux nsenter.c `open_target_fd`), so the working directory would
+ * be the person's folder beneath the view, not the view.
+ */
+const VIEW_CD = 'cd -- "$1" || exit 125; shift; exec "$@"';
+
+/**
+ * Each overlay's own `work/work` given back to its owner (0700) once the
+ * view is mounted: the kernel makes it with no mode bits at all
+ * (overlayfs `ovl_workdir_create`), which leaves the workspace's state dir
+ * a folder its owner's tools cannot read or remove (a walk, `du`, a
+ * scratch fleet's collection: EACCES). The overlay itself works in it as
+ * the mounter, its owner.
+ */
+const openWorkDirs = async (layer: Layer): Promise<void> => {
+  await Promise.all(
+    (layer.mounts ?? []).map((mount) =>
+      chmod(join(mount.work, "work"), 0o700).catch(() => undefined)
+    )
+  );
+};
+
+/**
  * `argv` run in workspace `id`'s view, in `cwd` there: `nsenter` into its
- * member `pid`'s mount namespace, and its user namespace when that is not
- * ours (an agent run as root makes none), keeping our uid
- * (`--preserve-credentials`).
+ * member `pid`'s mount namespace (which starts it at the namespace's root),
+ * and its user namespace when that is not ours (an agent run as root makes
+ * none), keeping our uid (`--preserve-credentials`); then `cwd` is entered
+ * as the view has it ({@link VIEW_CD}) and `argv` replaces that shell.
  */
 export const viewArgv = (
   pid: number,
@@ -465,8 +492,12 @@ export const viewArgv = (
   ...(nsOf(pid, "user") === nsOf(process.pid, "user") ? [] : ["-U"]),
   "-m",
   "--preserve-credentials",
-  `--wd=${cwd}`,
   "--",
+  "/bin/sh",
+  "-c",
+  VIEW_CD,
+  "cawco-view",
+  cwd,
   ...argv,
 ];
 

@@ -4238,6 +4238,15 @@ export const createWorkItems = ({
         const { dirty, stashes, ahead } = workspace.holding;
         return { workspaceId: id, changed: dirty + stashes, ahead };
       }
+      // A folder's unlanded work is its change set (agent layer.ts).
+      if (workspace.kind === "folder") {
+        const changes = (await call(
+          workspace.machineId,
+          CONTROL_WORKSPACE_CHANGES,
+          [refOf(workspace)]
+        )) as WorkspaceChanges;
+        return { workspaceId: id, changed: changes.changed.length, ahead: 0 };
+      }
       const skip = handedOver(workspace).map(
         (path) => ` ${quote(`:(exclude,literal)${path}`)}`
       );
@@ -4352,18 +4361,27 @@ export const createWorkItems = ({
 
   /**
    * Whether a workspace is retired and may be cut again: archived, not a
-   * gate workspace, and its machine said where its clone's HEAD was as it
+   * gate workspace, and a folder's (whose work is in its folder once it
+   * landed, so it is made again from the folder as it is), or one whose
+   * machine said where its clone's HEAD was as it
    * deleted it ({@link closeWorkspace}): on a branch of its remote, or, its
    * items landing none, in its carry (`head.carry`). A discard's carry is let
    * go of, and its row keeps no head. One with no such word (a clone already
    * gone, a folder that was no clone, a retirement before the hub kept it)
    * is not: any other commit could leave its commits behind.
    */
-  const recuttable = (workspace: WorkspaceRow): boolean =>
-    workspace.state === "archived" &&
-    workspace.head !== null &&
-    (workspace.carry === null || workspace.head.carry !== undefined) &&
-    !workspace.checksFor;
+  const recuttable = (workspace: WorkspaceRow): boolean => {
+    if (workspace.state !== "archived" || workspace.checksFor) {
+      return false;
+    }
+    if (workspace.kind === "folder") {
+      return workspace.carry === null;
+    }
+    return (
+      workspace.head !== null &&
+      (workspace.carry === null || workspace.head.carry !== undefined)
+    );
+  };
 
   /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
   const archivedWords = (workspace: WorkspaceRow): string => {
@@ -4405,6 +4423,38 @@ export const createWorkItems = ({
    * `onCut` runs in the step that files it active, before anything else
    * can settle it: what wakes its session there.
    */
+  /** What a workspace made again records: active, its new boundary, and for a repository's the commit it was cut again at, for its delegate to be told. */
+  const recutRecord = (
+    checkout: WorkspaceCheckout,
+    head: WorkspaceRow["head"]
+  ): Partial<WorkspaceRow> => ({
+    state: "active",
+    boundaryPid: checkout.boundaryPid,
+    base: checkout.base,
+    tmp: checkout.tmp,
+    // A folder's is made again from the folder as it is: no commit to tell.
+    ...(head
+      ? {
+          movedUntold: {
+            kind: "recut" as const,
+            ...head,
+            ...(checkout.restored ? { restored: checkout.restored } : {}),
+          },
+        }
+      : {}),
+    // Its commits are in the clone again: a carry of its next end is its own.
+    carry: null,
+  });
+
+  /** The log line of a workspace made again. */
+  const recutLine = (
+    workspace: WorkspaceRow,
+    head: WorkspaceRow["head"]
+  ): string =>
+    head
+      ? `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
+      : `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: made again of ${workspace.repoRoot} as it is now, for its delegate to go on`;
+
   const recut = (
     workspace: WorkspaceRow,
     onCut?: () => void
@@ -4419,7 +4469,7 @@ export const createWorkItems = ({
         : pending;
     }
     const { head } = workspace;
-    if (!head) {
+    if (!head && workspace.kind !== "folder") {
       return Promise.reject(
         new Error(
           `workspace ${handle(workspace.id)}: ${archivedWords(workspace)}`
@@ -4469,24 +4519,11 @@ export const createWorkItems = ({
         await placeTaken(workspace.machineId, place.id);
       }
       const again =
-        db.updateWorkspace(workspace.id, {
-          state: "active",
-          boundaryPid: checkout.boundaryPid,
-          base: checkout.base,
-          tmp: checkout.tmp,
-          movedUntold: {
-            kind: "recut",
-            ...head,
-            ...(checkout.restored ? { restored: checkout.restored } : {}),
-          },
-          // Its commits are in the clone again: a carry of its next end is its own.
-          carry: null,
-        }) ?? workspace;
+        db.updateWorkspace(workspace.id, recutRecord(checkout, head)) ??
+        workspace;
       onCut?.();
       workspaceChanged?.(again);
-      console.log(
-        `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
-      );
+      console.log(recutLine(workspace, head));
       return again;
     })().finally(() => recutting.delete(workspace.id));
     recutting.set(workspace.id, work);
@@ -7101,6 +7138,10 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string> => {
+    // A folder has no commits: its landing line names every path it changed.
+    if (workspace.kind === "folder") {
+      return "";
+    }
     const git = (cmd: string) => runIn(workspace, item)(cmd, GIT_TIMEOUT_MS);
     const since = Math.floor(item.createdAt.getTime() / 1000);
     const kept = (await git(keptCommits(since))).stdout
