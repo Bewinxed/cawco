@@ -93,9 +93,13 @@ export const createRepoPublish = ({
     // A connection the hub cannot sign in as is refused before anyone is
     // asked; so is a GitHub App's, which makes no repository under a person
     // (`POST /user/repos` takes a user's token).
-    if (pick.auth !== "bearer") {
+    if (!(
+      pick.auth === "bearer" ||
+      pick.auth === "gh" ||
+      pick.auth === "device"
+    )) {
       refuse(
-        `${pick.name} signs in with ${pick.auth}; creating a repository takes a GitHub connection with a personal access token.`
+        `${pick.name} signs in with ${pick.auth}; creating a repository takes a GitHub connection that acts as you: gh on a machine, a code sign-in, or a token.`
       );
     }
     connections.githubClient(pick.name);

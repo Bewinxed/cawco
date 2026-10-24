@@ -12565,7 +12565,9 @@
                       "bearer",
                       "header",
                       "oauth",
-                      "app"
+                      "app",
+                      "gh",
+                      "device"
                     ]
                   },
                   "header": {
@@ -12678,7 +12680,9 @@
                       "bearer",
                       "header",
                       "oauth",
-                      "app"
+                      "app",
+                      "gh",
+                      "device"
                     ]
                   },
                   "header": {
@@ -12949,6 +12953,9 @@
                 "properties": {
                   "origin": {
                     "type": "string"
+                  },
+                  "organization": {
+                    "type": "string"
                   }
                 }
               }
@@ -12979,6 +12986,93 @@
           },
           "422": {
             "description": "postApiConnectionsByNameSignIn 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/github-sign-in/gh": {
+      "get": {
+        "operationId": "getApiGithubSignInGh",
+        "responses": {
+          "200": {
+            "description": "getApiGithubSignInGh 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiGithubSignInGh200"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "host": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "login": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "projects": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "machineId",
+                  "host",
+                  "login"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiGithubSignInGh",
+        "responses": {
+          "200": {
+            "description": "postApiGithubSignInGh 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiGithubSignInGh 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiGithubSignInGh 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27519,6 +27613,39 @@
         },
         "required": [
           "authorizationUrl"
+        ]
+      },
+      "getApiGithubSignInGh200": {
+        "type": "object",
+        "properties": {
+          "signIns": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/GhSignIn"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "connection": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "unread": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "signIns",
+          "unread"
         ]
       },
       "getApiConnectionsByNameTools200": {
@@ -42236,6 +42363,9 @@
                     "enum": [
                       "github"
                     ]
+                  },
+                  "slug": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -42279,6 +42409,50 @@
           },
           "createdAt": {
             "type": "number"
+          },
+          "device": {
+            "description": "For `device` auth, while its code sign-in can still finish: the code the\nperson enters, where, and when it lapses, epoch ms.",
+            "type": "object",
+            "properties": {
+              "expiresAt": {
+                "type": "number"
+              },
+              "userCode": {
+                "type": "string"
+              },
+              "verificationUri": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expiresAt",
+              "userCode",
+              "verificationUri"
+            ]
+          },
+          "gh": {
+            "description": "For `gh` auth: the machine whose gh it reads, and the account there.",
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "login": {
+                "type": "string"
+              },
+              "machine": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "host",
+              "login",
+              "machine",
+              "machineId"
+            ]
           },
           "hasSecret": {
             "description": "Whether a key or OAuth tokens are held for it.",
@@ -42365,6 +42539,8 @@
         "enum": [
           "app",
           "bearer",
+          "device",
+          "gh",
           "header",
           "none",
           "oauth"
@@ -42385,6 +42561,42 @@
           "http",
           "sse",
           "stdio"
+        ]
+      },
+      "GhSignIn": {
+        "description": "A machine's gh account the hub can make a connection from: Sign in to GitHub lists each.",
+        "type": "object",
+        "properties": {
+          "machine": {
+            "description": "The machine as a sentence names it.",
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": "string"
+          },
+          "login": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "active",
+          "host",
+          "login",
+          "machine",
+          "machineId",
+          "scopes"
         ]
       },
       "TrackerView": {

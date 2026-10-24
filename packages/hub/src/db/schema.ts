@@ -4731,15 +4731,22 @@ export const routineRuns = sqliteTable(
 );
 
 /**
- * An `app` connection's registration (connections.ts): a GitHub App's id,
- * installation and private key, or a Linear OAuth app's client id and secret.
+ * An `app` connection's registration (connections.ts): a GitHub App the hub
+ * registered from a manifest (its id, slug, private key, client and webhook
+ * secrets, and once installed its installation), or a Linear OAuth app's
+ * client id and secret.
  */
 export type ConnectionAppSecret =
   | {
       appId: string;
-      installationId: string;
+      clientId?: string;
+      clientSecret?: string;
+      /** Set once GitHub's setup redirect names it and the app's JWT reads it. */
+      installationId?: string;
       privateKey: string;
       service: "github";
+      slug?: string;
+      webhookSecret?: string;
     }
   | { clientId: string; clientSecret: string; service: "linear" };
 
@@ -4747,6 +4754,20 @@ export type ConnectionAppSecret =
 export interface ConnectionSecret {
   app?: ConnectionAppSecret;
   client?: import("@modelcontextprotocol/sdk/shared/auth.js").OAuthClientInformationMixed;
+  /**
+   * A `device` connection's code sign-in under way: the device code the hub
+   * polls GitHub with, the code the person enters and where, when it lapses
+   * (epoch ms), and the least seconds between two polls.
+   */
+  device?: {
+    deviceCode: string;
+    expiresAt: number;
+    interval: number;
+    userCode: string;
+    verificationUri: string;
+  };
+  /** A `gh` connection's machine and account, whose gh the token (`key`) is read from. */
+  gh?: { host: string; login: string; machineId: string };
   key?: string;
   tokens?: OAuthTokens;
   verifier?: string;
@@ -4922,7 +4943,7 @@ export const githubPollers = sqliteTable("github_pollers", {
   projectId: text("project_id")
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
-  /** The connection (service `github`, a bearer token) it polls with. */
+  /** The connection (service `github`, one that reads GitHub's API: core `readsGitHubApi`) it polls with. */
   connection: text("connection").notNull(),
   /** `owner/repo` the cursors are for; another repository starts them afresh. */
   repo: text("repo"),

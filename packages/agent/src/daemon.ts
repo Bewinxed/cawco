@@ -34,6 +34,8 @@ import {
   CONTROL_CLONE_HOLDING,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
+  CONTROL_GH_ACCOUNTS,
+  CONTROL_GH_TOKEN,
   CONTROL_INPUTS_ADMIT,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
@@ -230,6 +232,7 @@ import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
+import { ghAccounts, ghAccountToken } from "./host-gh";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, followHub, stopCarrying } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
@@ -3566,6 +3569,14 @@ export const startDaemon = (rediscover = false) =>
       }
       return makeUpstreamPost(id, post);
     });
+    // The hub's gh connections (hub connections.ts): the accounts this
+    // machine's gh is signed in to, and one account's token, read each time.
+    supervisor.registerDaemonFunction(CONTROL_GH_ACCOUNTS, () => ghAccounts());
+    supervisor.registerDaemonFunction(CONTROL_GH_TOKEN, (host, login) =>
+      typeof host === "string" && typeof login === "string"
+        ? ghAccountToken(host, login)
+        : Promise.reject(new Error("ghToken takes a host and a login"))
+    );
     // A session's forge write under its project's rule (forges/forge.ts):
     // made, held for the person, or refused here.
     supervisor.registerDaemonFunction(CONTROL_FORGE_POST, (rule, ask) => {

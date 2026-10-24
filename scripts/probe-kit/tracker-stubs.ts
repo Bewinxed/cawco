@@ -25,7 +25,24 @@
  *   integration").
  * - A GitHub App's installation token is minted at `POST
  *   /app/installations/{id}/access_tokens` for a JWT signed with the app's
- *   key (RS256, `iss` its id), answered 201 with `token` and `expires_at`.
+ *   key (RS256, `iss` its id), answered 201 with `token` and `expires_at`;
+ *   `GET /app/installations/{id}` answers that JWT for the app's own
+ *   installation alone.
+ * - GitHub's site, on the same origin (docs.github.com, registering a GitHub
+ *   App from a manifest; authorizing OAuth apps):
+ *   - the manifest form (`POST /settings/apps/new`, or an organization's)
+ *     takes the `manifest` field, and as a person pressing Create GitHub App
+ *     redirects to its `redirect_url` with a code and the `state`; `POST
+ *     /app-manifests/{code}/conversions` answers that code once, 201 with
+ *     `id`, `slug`, `pem`, `webhook_secret`, `client_id`, `client_secret`;
+ *     the installation page (`/apps/{slug}/installations/new`) redirects to
+ *     its `setup_url` with `installation_id`, `setup_action=install` and the
+ *     `state`, as a person installing it would be;
+ *   - a code sign-in: `POST /login/device/code` for the app's client ID
+ *     answers a device code, `user_code` and `interval`; `POST
+ *     /login/oauth/access_token` answers `authorization_pending` the first
+ *     polls, then a token with `expires_in` and a `refresh_token`; `GET
+ *     /user` answers the token's login.
  *
  * Linear (linear.app/developers):
  * - `/graphql` answers the sync's named operations; an API key comes as
@@ -46,6 +63,9 @@ const TOKEN_SCHEME = /^(?:Bearer|token)\s+/i;
 const BEARER = /^Bearer\s+/i;
 const OPERATION = /^\s*(?:query|mutation)\s+(\w+)/;
 const SLUG_UNSAFE = /[^a-z0-9]+/g;
+const MANIFEST_FORM = /^(?:\/organizations\/([^/]+))?\/settings\/apps\/new$/;
+const CONVERSION = /^\/app-manifests\/([^/]+)\/conversions$/;
+const INSTALLATION_ONE = /^\/app\/installations\/(\d+)$/;
 
 const json = (status: number, body: unknown, headers: HeadersInit = {}) =>
   Response.json(body, { status, headers });
@@ -134,8 +154,23 @@ interface ProjectItem {
 const base64url = (text: string) => Buffer.from(text, "base64url").toString();
 
 export const githubStub = (options: {
-  /** The GitHub App the stand-in installs: its id, installation, and public key's PEM. */
-  app: { appId: string; installationId: string; publicKey: string };
+  /**
+   * The GitHub App the stand-in installs: its id, installation, and public
+   * key's PEM; and, for a manifest's registration, its slug and the private
+   * key (PKCS#1, as GitHub hands it) the conversion answers.
+   */
+  app: {
+    appId: string;
+    installationId: string;
+    privateKey?: string;
+    publicKey: string;
+    slug?: string;
+  };
+  /**
+   * CawCo's OAuth app, for a code sign-in: its client ID, how many polls
+   * answer `authorization_pending`, and whom the token signs in as.
+   */
+  device?: { clientId: string; login: string; pending: number };
   owner: string;
   repo: string;
   /** The owner's one Project (v2), linked to the repository: its title and its Status options' names. */
@@ -169,6 +204,31 @@ export const githubStub = (options: {
   }[] = [];
   const mcpBearers: string[] = [];
   const minted = new Map<string, GitHubGrant>();
+  /** Each manifest posted to the form, with its organization and `state`. */
+  const manifests: {
+    manifest: {
+      default_permissions?: Record<string, string>;
+      hook_attributes?: { active?: boolean; url?: string };
+      name?: string;
+      public?: boolean;
+      redirect_url: string;
+      setup_url: string;
+    };
+    org: string | null;
+    state: string | null;
+  }[] = [];
+  /** Each code the form handed back, until its conversion spends it. */
+  const manifestCodes = new Set<string>();
+  let converted = 0;
+  /** Each code sign-in's polls, and the token it hands out. */
+  const device = {
+    codes: 0,
+    polls: 0,
+    token: `gho_probe${crypto.randomUUID().replaceAll("-", "")}`,
+    refresh: `ghr_probe${crypto.randomUUID().replaceAll("-", "")}`,
+    deviceCode: "3584d83530557fdd1f46af8289938c8ef79f9dc5",
+    userCode: "WDJB-MJHT",
+  };
   let clock = Date.now();
   /** Each moment the stand-in writes is later than the last, to the second as GitHub's are. */
   const tick = () => {
@@ -582,10 +642,124 @@ export const githubStub = (options: {
     owner: { login: options.owner },
   };
 
+  /** GitHub's site: the manifest form, the installation page, and a code sign-in's two endpoints. */
+  const site = async (
+    request: Request,
+    url: URL
+  ): Promise<Response | undefined> => {
+    const { pathname } = url;
+    const form = MANIFEST_FORM.exec(pathname);
+    if (form && request.method === "POST") {
+      const posted = await request.formData();
+      const manifest = JSON.parse(String(posted.get("manifest") ?? "{}"));
+      const state = url.searchParams.get("state");
+      manifests.push({ manifest, org: form[1] ?? null, state });
+      const code = `manifest${crypto.randomUUID().replaceAll("-", "")}`;
+      manifestCodes.add(code);
+      const back = new URL(manifest.redirect_url);
+      back.searchParams.set("code", code);
+      if (state) {
+        back.searchParams.set("state", state);
+      }
+      return Response.redirect(back.toString(), 302);
+    }
+    const conversion = CONVERSION.exec(pathname);
+    if (conversion && request.method === "POST") {
+      if (!manifestCodes.delete(conversion[1] ?? "")) {
+        return json(404, { message: "Not Found", status: "404" });
+      }
+      converted += 1;
+      return json(201, {
+        id: Number(options.app.appId),
+        slug: options.app.slug,
+        name: manifests.at(-1)?.manifest.name,
+        pem: options.app.privateKey,
+        webhook_secret: `whsec${crypto.randomUUID().replaceAll("-", "")}`,
+        client_id: "Iv23liProbe",
+        client_secret: `secret${crypto.randomUUID().replaceAll("-", "")}`,
+        html_url: `https://github.com/apps/${options.app.slug}`,
+        owner: { login: options.owner },
+      });
+    }
+    if (
+      pathname === `/apps/${options.app.slug}/installations/new` &&
+      request.method === "GET"
+    ) {
+      const setup = manifests.at(-1)?.manifest.setup_url;
+      if (!setup) {
+        return json(404, { message: "Not Found", status: "404" });
+      }
+      const back = new URL(setup);
+      back.searchParams.set("installation_id", options.app.installationId);
+      back.searchParams.set("setup_action", "install");
+      const state = url.searchParams.get("state");
+      if (state) {
+        back.searchParams.set("state", state);
+      }
+      return Response.redirect(back.toString(), 302);
+    }
+    const app = options.device;
+    if (pathname === "/login/device/code" && request.method === "POST") {
+      const posted = await request.formData();
+      if (!app || posted.get("client_id") !== app.clientId) {
+        return json(200, { error: "incorrect_client_credentials" });
+      }
+      device.codes += 1;
+      device.polls = 0;
+      return json(200, {
+        device_code: device.deviceCode,
+        user_code: device.userCode,
+        verification_uri: `${url.origin}/login/device`,
+        expires_in: 900,
+        interval: 1,
+      });
+    }
+    if (pathname === "/login/oauth/access_token" && request.method === "POST") {
+      const posted = await request.formData();
+      if (!app || posted.get("client_id") !== app.clientId) {
+        return json(200, { error: "incorrect_client_credentials" });
+      }
+      if (posted.get("grant_type") === "refresh_token") {
+        return json(200, { error: "bad_refresh_token" });
+      }
+      if (posted.get("device_code") !== device.deviceCode) {
+        return json(200, { error: "incorrect_device_code" });
+      }
+      device.polls += 1;
+      if (device.polls <= app.pending) {
+        return json(200, { error: "authorization_pending" });
+      }
+      minted.set(device.token, { issuesWrite: true, login: app.login });
+      return json(200, {
+        access_token: device.token,
+        token_type: "bearer",
+        scope: "repo,read:org",
+        expires_in: 28_800,
+        refresh_token: device.refresh,
+        refresh_token_expires_in: 15_897_600,
+      });
+    }
+    const installation = INSTALLATION_ONE.exec(pathname);
+    if (installation && request.method === "GET") {
+      return appJwt(request) && installation[1] === options.app.installationId
+        ? json(200, {
+            id: Number(options.app.installationId),
+            account: { login: options.owner },
+            app_slug: options.app.slug,
+          })
+        : json(404, { message: "Not Found", status: "404" });
+    }
+    return undefined;
+  };
+
   const handle = async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.pathname === "/mcp") {
       return mcpOf(mcpBearers)(request);
+    }
+    const onSite = await site(request, url);
+    if (onSite) {
+      return onSite;
     }
     if (MINT.test(url.pathname) && request.method === "POST") {
       if (!appJwt(request)) {
@@ -609,6 +783,9 @@ export const githubStub = (options: {
     }
     if (url.pathname === repoPath) {
       return json(200, repository);
+    }
+    if (url.pathname === "/user") {
+      return json(200, { login: grant.login });
     }
     if (url.pathname === "/graphql" && request.method === "POST") {
       return graphql(request, grant);
@@ -655,6 +832,11 @@ export const githubStub = (options: {
     comments,
     calls,
     mcpBearers,
+    /** Each manifest the form was posted, and the code sign-in's counts and token. */
+    manifests,
+    device,
+    /** How many times the manifest's code was exchanged. */
+    converted: () => converted,
     /** Someone opens an issue on GitHub. */
     open,
     /** Someone changes an issue on GitHub. */

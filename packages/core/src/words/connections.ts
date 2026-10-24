@@ -65,14 +65,55 @@ export const connectionsWords = {
   setAppNow: "Set app",
   saveApp: "Save app",
   appOf: (row: string) => `${row} app`,
-  appId: "App ID",
-  appIdHint: "On the GitHub App's settings page: its App ID, or its client ID.",
-  installationId: "Installation ID",
-  installationIdHint:
-    "The number at the end of the installation's settings URL.",
-  privateKey: "Private key",
-  privateKeyHint:
-    "The .pem file's text, from Generate a private key. The hub keeps it sealed.",
+  /** Sign in to GitHub's first way: a fleet machine's gh, one row per account it is signed in to. */
+  ghLooking: "Looking for gh on your machines…",
+  ghNone:
+    "No machine's gh is signed in. Run gh auth login on one, or sign in with a code.",
+  ghUnread: (clause: string) =>
+    `Could not ask the machines about gh — ${clause}.`,
+  /** The list of gh accounts, as a screen reader names it. */
+  ghList: "gh on your machines",
+  /** Machines that didn't answer, as one list ("obelisk and mini"). */
+  ghUnanswered: (machines: string) => `${machines} didn't answer about gh.`,
+  ghScopes: "Scopes:",
+  ghScopesNone: "no scopes",
+  ghConnect: "Connect",
+  ghConnecting: "Connecting…",
+  ghConnected: "Connected",
+  /** A gh account's row: the account and where it is signed in. */
+  ghAccountOn: (login: string, machine: string) => `${login} on ${machine}`,
+  /** Where a gh account is: its machine, and its host when that is a GitHub Enterprise. */
+  ghWhere: (machine: string, host: string) =>
+    host === "github.com" ? machine : `${machine} · ${host}`,
+  ghConnectOne: (login: string, machine: string) =>
+    `Connect ${login} on ${machine}`,
+  /** The line on a gh connection's row: whose it acts as, and where it follows the sign-in. */
+  ghActsAs: (login: string, machine: string) =>
+    `Acts as ${login}, with gh's sign-in on ${machine}. It follows gh there when you sign in again.`,
+  /** The hub's reason when the machine's gh is no longer signed in for the account. */
+  ghSignInAgain: (login: string, machine: string) =>
+    `gh on ${machine} has no sign-in for ${login}. Run gh auth login there; the next read picks it up.`,
+  /** A code sign-in's line while it can still finish: the code, and where it goes. */
+  deviceEnter: "Enter this code at github.com/login/device:",
+  deviceCopy: "Copy code",
+  deviceCopied: "Copied",
+  deviceOpen: "Open github.com/login/device",
+  /** The line on a code sign-in's row once signed in. */
+  deviceActsAs: (account: string) =>
+    `Acts as ${account}, through CawCo's GitHub sign-in.`,
+  /** A GitHub App's old registration (an App ID, Installation ID and private key), refused: the hub registers it now. */
+  githubAppRegisters: (name: string) =>
+    `${name} is a GitHub App, which the hub registers for you: sign in to it from Connections.`,
+  /** A GitHub App's way: the organization it is registered under, or none for your own account. */
+  appOrganization: "Organization",
+  appOrganizationHint:
+    "Leave empty to register the app under your own account.",
+  /** The line on a GitHub App's row while it waits for its installation. */
+  appInstall: (service: string) =>
+    `${service}'s page is open in a new tab: name the app, then install it on the repositories this hub reads.`,
+  /** The line on an installed GitHub App's row. */
+  appActsAsItself: (slug: string) =>
+    `Acts as the app ${slug}, on the repositories you installed it on.`,
   callbackLine: "Add this callback URL to the app in Linear:",
   clientId: "Client ID",
   clientIdHint: "On the app's page in Linear's settings.",
@@ -95,7 +136,7 @@ export const connectionsWords = {
  * where it is picked, and what it takes, said under the pick.
  */
 export interface ConnectionWay {
-  auth: "oauth" | "bearer" | "app";
+  auth: "oauth" | "bearer" | "app" | "gh" | "device";
   /** What the key is, said under its field. */
   key?: string;
   label: string;
@@ -107,12 +148,17 @@ export interface ConnectionWay {
  * A service the page can start a connection to: its MCP server and the
  * ways the hub signs in there, the first the one offered first. For the
  * dashboard's Connections page and the app's alike.
- * - GitHub: "To access resources on behalf of an organization, or for
- *   long-lived integrations, you should use a GitHub App"
- *   (docs.github.com, managing your personal access tokens); its remote
- *   MCP server takes the app's `ghs_` token or a token as
- *   `Authorization: Bearer` (github/github-mcp-server#696). A project's
- *   tracker needs "Issues" (write) (docs.github.com, create an issue).
+ * - GitHub: first the gh a fleet machine is signed in with, whose token the
+ *   hub reads there each time (`gh auth token`, cli.github.com/manual);
+ *   where no machine has gh, a code at github.com/login/device through
+ *   CawCo's own OAuth app ("The `client_secret` is not needed for the device
+ *   flow", docs.github.com, authorizing OAuth apps); or a GitHub App the hub
+ *   registers from a manifest ("they only need to follow a URL and name the
+ *   app", docs.github.com, registering a GitHub App from a manifest); or a
+ *   token, for a GitHub Enterprise the machines' gh doesn't reach. Its remote
+ *   MCP server takes each of their tokens as `Authorization: Bearer`
+ *   (github/github-mcp-server#696). A project's tracker needs "Issues"
+ *   (write) (docs.github.com, create an issue).
  * - Linear: an app acting as itself ("This option should be used for
  *   agents and service accounts", linear.app/developers/oauth-2-0-authentication),
  *   or an API key, both of which its MCP server takes as a bearer
@@ -155,14 +201,24 @@ export const CONNECTION_SERVICES: readonly ConnectionService[] = [
     url: "https://api.githubcopilot.com/mcp/",
     ways: [
       {
+        auth: "gh",
+        label: "gh on a machine",
+        says: "The gh login on one of your machines. It acts as you, and follows gh when you sign in again there.",
+      },
+      {
+        auth: "device",
+        label: "Sign in with a code",
+        says: "Enter a short code at github.com/login/device. It acts as you.",
+      },
+      {
         auth: "app",
         label: "GitHub App",
-        says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.",
+        says: "The hub registers an app for you on GitHub; you name it and install it on the repositories it reads. It acts as itself.",
       },
       {
         auth: "bearer",
         label: "Token",
-        says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.",
+        says: "A fine-grained personal access token limited to the projects' repositories, for a GitHub Enterprise your machines' gh doesn't reach.",
         key: "It acts as you.",
       },
     ],

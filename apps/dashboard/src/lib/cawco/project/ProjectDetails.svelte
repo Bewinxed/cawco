@@ -50,6 +50,7 @@
     machineLabel,
     type ProjectGate,
     projectWords,
+    readsGitHubApi,
     statusOptionFor,
     TRACKER_NAMES,
     type Tracker,
@@ -374,7 +375,9 @@
       usable = connections.filter(
         (each) =>
           each.service.toLowerCase() === next &&
-          (each.auth === "app" || each.auth === "bearer")
+          (next === "github"
+            ? readsGitHubApi(each.auth)
+            : each.auth === "app" || each.auth === "bearer")
       );
     } catch (error) {
       bindFault = failureWords(error);

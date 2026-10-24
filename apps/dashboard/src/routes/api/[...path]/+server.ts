@@ -152,6 +152,11 @@ async function proxyToHub(
       },
       // Streamed through as bytes: an attached file is up to 100 MB and not text.
       body: hasBody ? request.body : undefined,
+      // A hub redirect is the browser's to follow, never this server's: a
+      // GitHub App's sign-in sends the person on to GitHub's installation
+      // page (hub connections.ts `appCreated`), where only their browser is
+      // signed in.
+      redirect: "manual",
       ...(hasBody && { duplex: "half" }),
     } as RequestInit);
 
@@ -191,6 +196,10 @@ async function proxyToHub(
         // device cookie, set by the hub (HttpOnly, SameSite=Lax).
         ...(response.headers.has("Set-Cookie") && {
           "Set-Cookie": response.headers.get("Set-Cookie") as string,
+        }),
+        // Where a hub redirect sends the browser.
+        ...(response.headers.has("Location") && {
+          Location: response.headers.get("Location") as string,
         }),
         // The hub requires paired devices and this browser is none.
         ...(response.headers.has("X-Cawco-Pairing") && {

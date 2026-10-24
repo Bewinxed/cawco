@@ -10,6 +10,13 @@ const asked = standIns();
 
 export const GITHUB_API = asked.githubApi ?? "https://api.github.com";
 
+export const GITHUB_WEB = asked.githubWeb ?? "https://github.com";
+
+export const GITHUB_DEVICE_CLIENT_ID = asked.githubClientId ?? "";
+
+export const GITHUB_MCP =
+  asked.githubMcp ?? "https://api.githubcopilot.com/mcp/";
+
 export const LINEAR_API = asked.linearApi ?? "https://api.linear.app";
 
 export const TYPESAFE_URL =

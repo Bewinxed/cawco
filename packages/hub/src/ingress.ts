@@ -9,8 +9,9 @@
  * and a poll of the same event land once" holds whichever comes first.
  *
  * - **GitHub** (github.ts): a project whose checkout's origin is on
- *   github.com, and that names a `github` connection (a bearer token held in
- *   the hub), has its repository polled every 60 s: pulls, issues and issue
+ *   github.com, and that names a `github` connection that reads GitHub's
+ *   API (core `readsGitHubApi`: a machine's gh, a code sign-in, a GitHub
+ *   App or a token, held in the hub), has its repository polled every 60 s: pulls, issues and issue
  *   comments, each with its ETag and its high-water mark kept in
  *   `github_pollers`, so a restart neither re-delivers nor misses. With no
  *   connection named, its repository isn't polled, and its ingress view says
@@ -36,7 +37,7 @@
  * - **A merged pull request** an attempt opened moves its task on
  *   (dispatch.ts `pullRequestMerged`), once, since only the insert calls it.
  */
-import type { InstanceRow } from "@cawco/core";
+import { type InstanceRow, readsGitHubApi } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
@@ -1015,10 +1016,10 @@ export const createIngress = ({
           `${connection} is a ${found.service} connection; name one of service github.`
         );
       }
-      if (found.auth !== "bearer") {
+      if (!readsGitHubApi(found.auth)) {
         refuse(
           400,
-          `${connection} signs in with ${found.auth}; GitHub polling takes a bearer token.`
+          `${connection} signs in with ${found.auth}; GitHub polling takes gh on a machine, a code sign-in, a GitHub App or a token.`
         );
       }
     }

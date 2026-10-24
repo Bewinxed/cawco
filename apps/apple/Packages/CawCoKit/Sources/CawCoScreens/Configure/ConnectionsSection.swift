@@ -96,19 +96,21 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     /// Where a Linear app's sign-in comes back, once the hub has said its dashboard's address.
     private var callback = ""
 
-    /// A row whose app is not set yet, or a GitHub App, which a new key replaces (`needsApp`).
+    /// A Linear app whose client is not set yet (`needsApp`).
     private func needsApp(_ row: ConnectionView) -> Bool {
-        row.auth == .app && (row.app == nil || row.app?.value1 != nil)
+        row.auth == .app && row.app == nil && row.service.lowercased() != "github"
     }
 
-    /// A row that signs in through the service's page: OAuth, or a Linear app once set (`signsIn`).
+    /// A row that signs in through a page: OAuth, a Linear app once set, or a
+    /// GitHub App, whose sign-in registers and installs it (`signsIn`).
     private func signsIn(_ row: ConnectionView) -> Bool {
-        row.auth == .oauth || (row.auth == .app && row.app?.value2 != nil)
+        row.auth == .oauth || (row.auth == .app && (row.service.lowercased() == "github" || row.app?.value2 != nil))
     }
 
-    /// A way that signs in through a page of the service's own, in the sign-in browser (`signsInByPage`).
+    /// A way that signs in through a page, in the sign-in browser: OAuth, a
+    /// Linear app's, or a GitHub App's registration (`signsInByPage`).
     private static func signsInByPage(_ service: String, _ way: Words.Connections.Way) -> Bool {
-        way.auth == "oauth" || (way.auth == "app" && service == "linear")
+        way.auth == "oauth" || way.auth == "app"
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -160,7 +162,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
             }
         })
         // An app's ⋯ also sets its app (`Set app…`).
-        let setApp = row.auth == .app ? [RowAction(label: Words.Connections.setApp, glyph: .toolMcp) { [weak self] in self?.openApp(name) }] : []
+        let setApp = row.auth == .app && row.service.lowercased() != "github" ? [RowAction(label: Words.Connections.setApp, glyph: .toolMcp) { [weak self] in self?.openApp(name) }] : []
         view.show(name: service, meta: row.account, mark: mark,
                   actions: setApp + [RowAction(label: Words.Connections.remove, glyph: .trash, destructive: true, disabled: removing == name) { [weak self] in
                       self?.remove(row)
@@ -248,17 +250,6 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
         startAdding(service)
         form.probePick(way.label)
         form.probeFill(account: account, key: key)
-        form.probeSend()
-    }
-
-    /// A service's app way picked in the form, its registration typed, then sent.
-    func probeAddApp(service name: String, account: String, app: FleetConnections.AppRegistration) {
-        guard let service = Words.Connections.services.first(where: { $0.service == name }),
-              let way = service.ways.first(where: { $0.auth == "app" }) else { return }
-        startAdding(service)
-        form.probePick(way.label)
-        form.probeFillApp(app)
-        form.probeFill(account: account, key: "")
         form.probeSend()
     }
 
@@ -659,10 +650,11 @@ private final class ConnectionForm: UIView {
         address.setPlaceholder(next.serverExample ?? "")
         address.text = next.url ?? ""
         addressProblem = nil
-        way = next.ways.first
-        wayField.isHidden = next.ways.count <= 1
-        waySays.isHidden = next.ways.count <= 1
-        wayChoice.set(next.ways.map { ($0.label, $0.label) }, value: way?.label ?? "")
+        let ways = Self.waysHere(next)
+        way = ways.first
+        wayField.isHidden = ways.count <= 1
+        waySays.isHidden = ways.count <= 1
+        wayChoice.set(ways.map { ($0.label, $0.label) }, value: way?.label ?? "")
         app.show(service: next.service)
         drawWay()
         fold(self, open: true)
@@ -671,14 +663,20 @@ private final class ConnectionForm: UIView {
         DispatchQueue.main.async { self.account.becomeFirstResponder() }
     }
 
-    #if DEBUG
-    func probePick(_ label: String) {
-        guard let service, let at = service.ways.firstIndex(where: { $0.label == label }) else { return }
-        wayChoice.set(service.ways.map { ($0.label, $0.label) }, value: service.ways[at].label)
-        pick(label)
+    /// The ways this form offers: GitHub's gh on a machine and its code
+    /// sign-in are the web's alone for now, so the app offers the rest.
+    private static func waysHere(_ service: Words.Connections.Service) -> [Words.Connections.Way] {
+        service.ways.filter { $0.auth != "gh" && $0.auth != "device" }
     }
 
-    func probeFillApp(_ registration: FleetConnections.AppRegistration) { app.probeFill(registration) }
+    #if DEBUG
+    func probePick(_ label: String) {
+        guard let service else { return }
+        let ways = Self.waysHere(service)
+        guard let at = ways.firstIndex(where: { $0.label == label }) else { return }
+        wayChoice.set(ways.map { ($0.label, $0.label) }, value: ways[at].label)
+        pick(label)
+    }
 
     func probeFill(account words: String, key typed: String) {
         account.text = words
@@ -718,7 +716,8 @@ private final class ConnectionForm: UIView {
         waySays.text = way?.says
         keyField.say(hint: way?.key)
         keyField.isHidden = way?.auth != "bearer"
-        app.isHidden = way?.auth != "app"
+        // A GitHub App takes nothing here: its sign-in registers it.
+        app.isHidden = way?.auth != "app" || service?.service == "github"
         draw()
     }
 
@@ -740,7 +739,7 @@ private final class ConnectionForm: UIView {
         let named = !(account.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty
         return switch way?.auth {
         case "bearer": named && !(key.text ?? "").isEmpty
-        case "app": named && app.registration != nil
+        case "app": named && (service.service == "github" || app.registration != nil)
         default: named
         }
     }
@@ -757,7 +756,7 @@ private final class ConnectionForm: UIView {
             }
         }
         onSubmit(Sent(service: service, way: way, account: account.text ?? "", key: key.text ?? "",
-                      app: way.auth == "app" ? app.registration : nil, url: url))
+                      app: way.auth == "app" && service.service != "github" ? app.registration : nil, url: url))
     }
 
     private func draw() {
@@ -867,40 +866,23 @@ private final class SecretField: UIStackView {
     }
 }
 
-/// An app's registration (`appFields`): a GitHub App's App ID, Installation ID
-/// and private key; or, for a Linear app, the callback URL its settings must
-/// list, then its client ID and client secret. The hub keeps the secrets sealed.
+/// A Linear app's registration (`appFields`): the callback URL its settings
+/// must list, then its client ID and client secret. The hub keeps the secret sealed.
 private final class AppFields: UIStackView {
     var onChange: () -> Void = {}
     private(set) var service = ""
-    private let appId = KitField(mono: true)
-    private let installationId = KitField(mono: true)
-    private let privateKey = SecretField(label: Words.Connections.privateKey)
     private let callback = KitLabel(TypeScale.typeCode.with(points: TypeScale.textMeta), ink: Palette.inkStrong, lines: 0)
     private let clientId = KitField(mono: true)
     private let clientSecret = SecretField(label: Words.Connections.clientSecret)
-    private var github: [UIView] = []
-    private var linear: [UIView] = []
 
     init() {
         super.init(frame: .zero)
         axis = .vertical
         spacing = Space.space3
-        for field in [appId, installationId] {
-            field.keyboardType = .numberPad
-            field.addAction(UIAction { [weak self] _ in self?.onChange() }, for: .editingChanged)
-        }
         clientId.autocorrectionType = .no
         clientId.autocapitalizationType = .none
         clientId.addAction(UIAction { [weak self] _ in self?.onChange() }, for: .editingChanged)
-        for secret in [privateKey, clientSecret] { secret.onChange = { [weak self] in self?.onChange() } }
-        let appIdField = ConfigField(label: Words.Connections.appId, control: appId)
-        appIdField.say(hint: Words.Connections.appIdHint)
-        let installationField = ConfigField(label: Words.Connections.installationId, control: installationId)
-        installationField.say(hint: Words.Connections.installationIdHint)
-        let keyField = ConfigField(label: Words.Connections.privateKey, control: privateKey)
-        keyField.say(hint: Words.Connections.privateKeyHint)
-        github = [appIdField, installationField, keyField]
+        clientSecret.onChange = { [weak self] in self?.onChange() }
         callback.lineBreakMode = .byCharWrapping
         let callbackLine = UIStackView(arrangedSubviews: [metaLine(Words.Connections.callbackLine), callback])
         callbackLine.axis = .vertical
@@ -909,8 +891,7 @@ private final class AppFields: UIStackView {
         clientIdField.say(hint: Words.Connections.clientIdHint)
         let secretField = ConfigField(label: Words.Connections.clientSecret, control: clientSecret)
         secretField.say(hint: Words.Connections.clientSecretHint)
-        linear = [callbackLine, clientIdField, secretField]
-        (github + linear).forEach(addArrangedSubview)
+        [callbackLine, clientIdField, secretField].forEach(addArrangedSubview)
     }
 
     @available(*, unavailable)
@@ -922,8 +903,6 @@ private final class AppFields: UIStackView {
     func show(service next: String) {
         service = next
         clear()
-        for part in github { part.isHidden = next != "github" }
-        for part in linear { part.isHidden = next == "github" }
     }
 
     /// Where a Linear app's sign-in comes back, as the hub's dashboard names it.
@@ -933,35 +912,15 @@ private final class AppFields: UIStackView {
 
     /// What was typed, once every field holds something.
     var registration: FleetConnections.AppRegistration? {
-        let trimmed = { (text: String?) in (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
-        if service == "github" {
-            let (id, installation, key) = (trimmed(appId.text), trimmed(installationId.text), privateKey.text)
-            return id.isEmpty || installation.isEmpty || key.isEmpty ? nil : .github(appId: id, installationId: installation, privateKey: key)
-        }
-        let (client, secret) = (trimmed(clientId.text), clientSecret.text)
+        let client = (clientId.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let secret = clientSecret.text
         return client.isEmpty || secret.isEmpty ? nil : .linear(clientId: client, clientSecret: secret)
     }
 
     func clear() {
-        for field in [appId, installationId, clientId] { field.text = "" }
-        privateKey.clear()
+        clientId.text = ""
         clientSecret.clear()
     }
-
-    #if DEBUG
-    func probeFill(_ app: FleetConnections.AppRegistration) {
-        switch app {
-        case let .github(id, installation, key):
-            appId.text = id
-            installationId.text = installation
-            privateKey.text = key
-        case let .linear(client, secret):
-            clientId.text = client
-            clientSecret.text = secret
-        }
-        onChange()
-    }
-    #endif
 }
 
 /// A row's app, set under it (`.row-app`): its registration's fields, then

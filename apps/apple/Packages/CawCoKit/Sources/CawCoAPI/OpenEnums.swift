@@ -1668,6 +1668,8 @@ public enum OpenEnums {
     public enum ConnectionAuth: OpenEnum {
         case app
         case bearer
+        case device
+        case gh
         case header
         case none
         case oauth
@@ -1678,6 +1680,8 @@ public enum OpenEnums {
             switch rawValue {
             case "app": self = .app
             case "bearer": self = .bearer
+            case "device": self = .device
+            case "gh": self = .gh
             case "header": self = .header
             case "none": self = .none
             case "oauth": self = .oauth
@@ -1689,6 +1693,8 @@ public enum OpenEnums {
             switch self {
             case .app: "app"
             case .bearer: "bearer"
+            case .device: "device"
+            case .gh: "gh"
             case .header: "header"
             case .none: "none"
             case .oauth: "oauth"
@@ -1700,7 +1706,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.app, .bearer, .header, .none, .oauth]
+        public static let allCases: [Self] = [.app, .bearer, .device, .gh, .header, .none, .oauth]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

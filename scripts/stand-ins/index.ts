@@ -14,6 +14,12 @@ export const STAND_INS_ENV = "SCRATCH_FLEET_STAND_INS";
 export interface StandIns {
   /** GitHub's REST API origin the hub's pollers, relay and publisher call: a fake one in the spec's process. */
   githubApi?: string;
+  /** CawCo's GitHub OAuth app's client ID a code sign-in sends: one the spec's fake GitHub takes. */
+  githubClientId?: string;
+  /** GitHub's MCP server a `gh` connection the hub makes reaches: a fake one's `/mcp` in the spec's process. */
+  githubMcp?: string;
+  /** GitHub's site origin (device codes, the app manifest form, installations): a fake one in the spec's process. */
+  githubWeb?: string;
   /** Linear's API origin the tracker sync and a Linear app's sign-in call: a fake one in the spec's process. */
   linearApi?: string;
   /**

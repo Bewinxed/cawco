@@ -179,6 +179,8 @@ import {
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
+  CONTROL_GH_ACCOUNTS,
+  CONTROL_GH_TOKEN,
   CONTROL_GIT_CHANGES,
   CONTROL_INPUTS_ADMIT,
   CONTROL_INPUTS_COPY,
@@ -250,6 +252,7 @@ import {
   FRESH_START,
   forkNotice,
   GENERATE_IMAGE,
+  type GhAccount,
   HARNESS_TOOL,
   HARNESSES,
   type HarnessConfigKind,
@@ -1034,6 +1037,8 @@ function searchMiss(answer: Bounded<ControlResult>): string {
  * delays when a new terminal session becomes findable by name.
  */
 const STORED_LISTING_MS = 15_000;
+/** A machine's gh asked for its accounts or a token: gh checks each account with GitHub. Our choice. */
+const GH_ASK_MS = 20_000;
 /**
  * How long an agent's `find` waits on a machine for a conversation's turns
  * from its index (find-tool.ts `around`, a detailed hit's neighbours): one
@@ -24410,6 +24415,65 @@ export const createServer = (
           )?.connections ?? [])
         : [],
     changed: () => toolsMayHaveChanged(),
+    // The machines' gh (agent host-gh.ts): each connected machine's
+    // accounts, asked together, and one account's token on its machine.
+    gh: {
+      machineName,
+      accounts: async () => {
+        const asked = await Promise.all(
+          onlineMachines().map(async (machineId) => ({
+            machineId,
+            answer: await readAgent(
+              machineId,
+              CONTROL_GH_ACCOUNTS,
+              [],
+              GH_ASK_MS
+            ),
+          }))
+        );
+        return {
+          signIns: asked.flatMap(({ machineId, answer }) =>
+            answer.kind === "answered" &&
+            answer.value.ok &&
+            Array.isArray(answer.value.result)
+              ? (answer.value.result as GhAccount[]).map((account) => ({
+                  ...account,
+                  machineId,
+                  machine: machineName(machineId),
+                }))
+              : []
+          ),
+          unread: asked
+            .filter(({ answer }) => answer.kind !== "answered")
+            .map(({ machineId }) => machineName(machineId)),
+        };
+      },
+      token: async (machineId, host, login) => {
+        const answer = await readAgent(
+          machineId,
+          CONTROL_GH_TOKEN,
+          [host, login],
+          GH_ASK_MS
+        );
+        if (answer.kind === "unanswered") {
+          return {
+            kind: "away",
+            why:
+              answer.reason === "dead"
+                ? `${machineName(machineId)} isn't connected.`
+                : `${machineName(machineId)} didn't answer in time.`,
+          };
+        }
+        const token = (answer.value.result as { token?: unknown } | undefined)
+          ?.token;
+        return answer.value.ok && typeof token === "string" && token
+          ? { kind: "token", token }
+          : {
+              kind: "refused",
+              why: answer.value.error ?? "gh has no sign-in for it.",
+            };
+      },
+    },
     // A forge connection's write tool (connection-writes.ts) to another
     // person's repository: decided as every write is (core decideWrite),
     // refused under off, held for the person under ask.

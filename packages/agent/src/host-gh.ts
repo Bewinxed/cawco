@@ -4,11 +4,13 @@
  * a workspace's gh requests with gh's token (github-door.ts), an approved
  * held request is made with it (upstream-posts.ts), and the forge adapters
  * sign in with it, or start gitea-mcp (forges/). No workspace is ever handed
- * a token.
+ * a token; the hub is, for a `gh` connection made from this machine's gh
+ * (core `CONTROL_GH_TOKEN`), and seals it as it seals every connection's.
  */
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { GhAccount } from "@cawco/core";
 import {
   workspaceCacheDir,
   workspaceScratchRoot,
@@ -52,18 +54,18 @@ export const hostProgram = async (
 export const hostGh = (): Promise<string | undefined> => hostProgram("gh");
 
 /**
- * The host's GitHub token (`gh auth token`, from its keyring); none when gh
- * has none or is not here. gh runs with the host's environment as it is now
- * (core `hostEnvironment`), as the GitHub adapter runs it (forges/github.ts).
+ * What the host's gh prints for `args`, when it exits 0; none when gh is not
+ * here or refuses. gh runs with the host's environment as it is now (core
+ * `hostEnvironment`), as the GitHub adapter runs it (forges/github.ts).
  */
-export const hostGhToken = async (): Promise<string | undefined> => {
+const ghSays = async (args: string[]): Promise<string | undefined> => {
   const gh = await hostGh();
   if (!gh) {
     return;
   }
   // Not spawnSync: gh reads its token from the login keychain, and a
   // spawnSync would wait on the keychain on the agent's JS thread.
-  const read = Bun.spawn([gh, "auth", "token"], {
+  const read = Bun.spawn([gh, ...args], {
     env: hostEnvironment(),
     stdin: "ignore",
     stdout: "pipe",
@@ -73,6 +75,72 @@ export const hostGhToken = async (): Promise<string | undefined> => {
     new Response(read.stdout).text(),
     read.exited,
   ]);
-  const token = out.trim();
-  return read.exitCode === 0 && token ? token : undefined;
+  return read.exitCode === 0 ? out : undefined;
+};
+
+/** The host's GitHub token (`gh auth token`, from its keyring); none when gh has none or is not here. */
+export const hostGhToken = async (): Promise<string | undefined> =>
+  (await ghSays(["auth", "token"]))?.trim() || undefined;
+
+/**
+ * One account's token, as `gh auth token --hostname <host> --user <login>`
+ * reads it (cli.github.com/manual/gh_auth_token): what a hub's `gh`
+ * connection signs in with, read each time it is asked so a new `gh auth
+ * login` here is what the next read finds. Refused when gh has none.
+ */
+export const ghAccountToken = async (
+  host: string,
+  login: string
+): Promise<{ token: string }> => {
+  const token = (
+    await ghSays(["auth", "token", "--hostname", host, "--user", login])
+  )?.trim();
+  if (!token) {
+    throw new Error(`gh here has no sign-in for ${login} on ${host}`);
+  }
+  return { token };
+};
+
+const SCOPE_SEPARATOR = /\s*,\s*/;
+
+/**
+ * The accounts the host's gh is signed in to, as `gh auth status --json
+ * hosts` lists them, each one gh checked with GitHub (`state` "success"),
+ * its scopes as GitHub's `X-OAuth-Scopes` header gave them ("repo, read:org",
+ * cli/cli pkg/cmd/auth/status). The JSON form "will always exit with zero
+ * regardless of any authentication issues" (`gh auth status --help`). None
+ * when gh is not here, signed in to nothing, or too old to answer JSON.
+ */
+export const ghAccounts = async (): Promise<GhAccount[]> => {
+  const out = await ghSays(["auth", "status", "--json", "hosts"]);
+  let read: { hosts?: Record<string, unknown> };
+  try {
+    read = JSON.parse(out ?? "{}") as { hosts?: Record<string, unknown> };
+  } catch {
+    return [];
+  }
+  return Object.values(read.hosts ?? {}).flatMap((entries) =>
+    (Array.isArray(entries) ? entries : []).flatMap((entry) => {
+      const one = entry as Partial<{
+        active: boolean;
+        host: string;
+        login: string;
+        scopes: string;
+        state: string;
+      }>;
+      return one.state === "success" && one.host && one.login
+        ? [
+            {
+              host: one.host,
+              login: one.login,
+              active: one.active === true,
+              scopes: (one.scopes ?? "")
+                .split(SCOPE_SEPARATOR)
+                .map((scope) => scope.trim())
+                .filter(Boolean),
+            },
+          ]
+        : [];
+    })
+  );
 };

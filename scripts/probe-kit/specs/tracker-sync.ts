@@ -48,10 +48,10 @@
  *  P4 a stage mapped in the binding's form (working → Review): the next
  *     move to working puts the item in Review.
  * GitHub, a GitHub App (A):
- *  A1 its registration set (its private key pasted on one line, as a
- *     password field takes it): the hub mints an installation token with a
- *     JWT the app's key signed, and GitHub's MCP endpoint is sent that token;
- *     the connection is signed in.
+ *  A1 registered from the hub's manifest (github-connect proves each hop):
+ *     GitHub's code exchanged for the app, its installation kept; the hub
+ *     mints an installation token with a JWT the app's key signed, and
+ *     GitHub's MCP endpoint is sent that token; the connection is signed in.
  *  A2 a project bound through it files its task's issue as the app.
  * Linear, an API key (L):
  *  L1 a key with read, issues:create and comments:create binds to its team
@@ -82,10 +82,6 @@
  *  U3 the project's details show the tracker bound (its tasks linked as the
  *     hub counts them); Change opens the form
  *     on the binding as it stands; another project binds from its Tasks row.
- *  U4 Connections makes a GitHub App through its form, the private key in
- *     a password field with show and hide, and the app mints its
- *     installation token with that key (the form names GitHub's own MCP
- *     address, which no stand-in answers; A1 signs in at the stand-in's).
  *  U5 a task's pane open, a fourth comment and a hand edit of its title
  *     land in one second: the pane shows both (the hub's frame names the
  *     project's tasks; their times are whole seconds), the page stands, the
@@ -107,7 +103,6 @@ import { generateKeyPairSync } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { connectionsWords } from "../../../packages/core/src/words/connections";
 import { until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { type GitHubGrant, githubStub, linearStub } from "../tracker-stubs";
@@ -126,6 +121,8 @@ const APP_ID = "424242";
 /** The review stage's label in the binding's stage-to-Status map. */
 const REVIEW_STAGE = /^review$/;
 const INSTALLATION = "7777";
+const MANIFEST_ACTION = /<form id="manifest" method="post" action="([^"]+)">/;
+const MANIFEST_FIELD = /name="manifest" value="([^"]+)"/;
 
 interface IssueLink {
   problem: string | null;
@@ -195,6 +192,8 @@ const run = async (kit: Kit) => {
       appId: APP_ID,
       installationId: INSTALLATION,
       publicKey: keys.publicKey,
+      privateKey: keys.privateKey,
+      slug: "probe-app",
     },
     project: {
       title: "Probe roadmap",
@@ -241,6 +240,7 @@ const legs = async (
   const { check } = kit;
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   fleet.standIns.githubApi = github.url;
+  fleet.standIns.githubWeb = github.url;
   fleet.standIns.linearApi = linear.url;
   fleet.launch("hub");
   await fleet.hubUp();
@@ -747,26 +747,50 @@ const legs = async (
 
   // ── GitHub, a GitHub App ─────────────────────────────────────────────
   await connect("github-app", "github", "app");
-  const oneLine = privateKey.replaceAll("\n", " ");
-  const appSet = await hub<Connection>(
-    "PUT",
-    "/api/connections/github-app/app",
-    {
-      appId: APP_ID,
-      installationId: INSTALLATION,
-      privateKey: oneLine,
-    }
+  // The browser's hops, by hand: the hub's manifest page, GitHub's form and
+  // its redirect back, the installation page and its setup redirect.
+  const appStart = await hub<{ authorizationUrl: string }>(
+    "POST",
+    "/api/connections/github-app/sign-in",
+    { origin: fleet.base }
   );
+  const manifestPage = await (
+    await fetch(appStart.body.authorizationUrl)
+  ).text();
+  const manifestField = (MANIFEST_FIELD.exec(manifestPage)?.[1] ?? "{}")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+  const action = (MANIFEST_ACTION.exec(manifestPage)?.[1] ?? "").replaceAll(
+    "&amp;",
+    "&"
+  );
+  let hop = await fetch(action, {
+    method: "POST",
+    body: new URLSearchParams({ manifest: manifestField }),
+    redirect: "manual",
+  });
+  for (let hops = 0; hops < 3 && hop.status === 302; hops += 1) {
+    hop = await fetch(hop.headers.get("location") ?? "", {
+      redirect: "manual",
+    });
+  }
+  const appSet = {
+    status: hop.status,
+    body: (await connectionNamed("github-app")) as Connection,
+  };
   const minted = github.calls.filter(
     (one) =>
       one.path === `/app/installations/${INSTALLATION}/access_tokens` &&
       one.status === 201
   );
   check(
-    "A1: the app's key, pasted on one line, mints an installation token; GitHub's MCP side is sent it; signed in",
+    "A1: the app registered from the manifest mints an installation token with its key; GitHub's MCP side is sent it; signed in",
     appSet.status === 200 &&
       appSet.body.state === "signed-in" &&
       appSet.body.app?.appId === APP_ID &&
+      appSet.body.app.slug === "probe-app" &&
       appSet.body.app.installationId === INSTALLATION &&
       !JSON.stringify(appSet.body).includes("PRIVATE KEY") &&
       minted.length >= 1 &&
@@ -1506,56 +1530,8 @@ const legs = async (
     JSON.stringify(remappedInUi.binding?.githubProject?.map)
   );
 
-  await open(desk, `${base}/config/connections`, '[aria-label="Connections"]');
-  await desk.getByRole("button", { name: connectionsWords.signInTo }).click();
-  await desk.getByRole("menuitem", { name: "GitHub" }).click();
-  await desk.waitForSelector('form[aria-label="Sign in to GitHub"]');
-  await desk.fill("#connection-account", "ui app");
-  await desk.fill("#connection-app-id", APP_ID);
-  await desk.fill("#connection-installation", INSTALLATION);
-  await desk.fill("#connection-private-key", oneLine);
-  const hidden = await desk.getAttribute("#connection-private-key", "type");
-  await desk.getByRole("button", { name: "Show the private key" }).click();
-  const shown = await desk.getAttribute("#connection-private-key", "type");
-  const mintsOf = () =>
-    github.calls.filter(
-      (one) =>
-        one.path === `/app/installations/${INSTALLATION}/access_tokens` &&
-        one.status === 201
-    ).length;
-  const mintedBefore = mintsOf();
-  await desk
-    .locator('form[aria-label="Sign in to GitHub"]')
-    .getByRole("button", { name: "Sign in" })
-    .click();
-  // The form names GitHub's own MCP address, which no stand-in answers:
-  // what the form decides is the app it makes and the token its key mints
-  // (A1 signs an app in at the stand-in's MCP address).
-  const madeInUi = await until(
-    "U4: the GitHub App made in the form mints its installation token",
-    () => connectionNamed("github-ui-app"),
-    (one) => one?.auth === "app" && mintsOf() > mintedBefore,
-    30_000
-  ).catch(() => connectionNamed("github-ui-app"));
   check(
-    "U4: Connections › GitHub › GitHub App: the private key in a password field that shows and hides; the app made from the form mints an installation token with a JWT its one-line key signed",
-    hidden === "password" &&
-      shown === "text" &&
-      madeInUi?.auth === "app" &&
-      madeInUi.app?.appId === APP_ID &&
-      madeInUi.app.service === "github" &&
-      madeInUi.app.installationId === INSTALLATION &&
-      madeInUi.hasSecret === true &&
-      mintsOf() > mintedBefore,
-    JSON.stringify({
-      hidden,
-      shown,
-      minted: mintsOf() - mintedBefore,
-      made: madeInUi,
-    })
-  );
-  check(
-    "U: the task pane, the project's details and Connections threw nothing",
+    "U: the task pane and the project's details threw nothing",
     thrown.length === 0,
     thrown.join(" | ") || "none"
   );

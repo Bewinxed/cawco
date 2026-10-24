@@ -2490,17 +2490,90 @@ public enum Words {
             "\(row) app"
         }
 
-        public static let appId = "App ID"
+        /// Sign in to GitHub's first way: a fleet machine's gh, one row per account it is signed in to.
+        public static let ghLooking = "Looking for gh on your machines…"
 
-        public static let appIdHint = "On the GitHub App's settings page: its App ID, or its client ID."
+        public static let ghNone = "No machine's gh is signed in. Run gh auth login on one, or sign in with a code."
 
-        public static let installationId = "Installation ID"
+        public static func ghUnread(clause: String) -> String {
+            "Could not ask the machines about gh — \(clause)."
+        }
 
-        public static let installationIdHint = "The number at the end of the installation's settings URL."
+        /// The list of gh accounts, as a screen reader names it.
+        public static let ghList = "gh on your machines"
 
-        public static let privateKey = "Private key"
+        /// Machines that didn't answer, as one list ("obelisk and mini").
+        public static func ghUnanswered(machines: String) -> String {
+            "\(machines) didn't answer about gh."
+        }
 
-        public static let privateKeyHint = "The .pem file's text, from Generate a private key. The hub keeps it sealed."
+        public static let ghScopes = "Scopes:"
+
+        public static let ghScopesNone = "no scopes"
+
+        public static let ghConnect = "Connect"
+
+        public static let ghConnecting = "Connecting…"
+
+        public static let ghConnected = "Connected"
+
+        /// A gh account's row: the account and where it is signed in.
+        public static func ghAccountOn(login: String, machine: String) -> String {
+            "\(login) on \(machine)"
+        }
+
+        /// Where a gh account is: its machine, and its host when that is a GitHub Enterprise.
+        public static func ghWhere(machine: String, host: String) -> String {
+            host == "github.com" ? machine : "\(machine) · \(host)"
+        }
+
+        public static func ghConnectOne(login: String, machine: String) -> String {
+            "Connect \(login) on \(machine)"
+        }
+
+        /// The line on a gh connection's row: whose it acts as, and where it follows the sign-in.
+        public static func ghActsAs(login: String, machine: String) -> String {
+            "Acts as \(login), with gh's sign-in on \(machine). It follows gh there when you sign in again."
+        }
+
+        /// The hub's reason when the machine's gh is no longer signed in for the account.
+        public static func ghSignInAgain(login: String, machine: String) -> String {
+            "gh on \(machine) has no sign-in for \(login). Run gh auth login there; the next read picks it up."
+        }
+
+        /// A code sign-in's line while it can still finish: the code, and where it goes.
+        public static let deviceEnter = "Enter this code at github.com/login/device:"
+
+        public static let deviceCopy = "Copy code"
+
+        public static let deviceCopied = "Copied"
+
+        public static let deviceOpen = "Open github.com/login/device"
+
+        /// The line on a code sign-in's row once signed in.
+        public static func deviceActsAs(account: String) -> String {
+            "Acts as \(account), through CawCo's GitHub sign-in."
+        }
+
+        /// A GitHub App's old registration (an App ID, Installation ID and private key), refused: the hub registers it now.
+        public static func githubAppRegisters(name: String) -> String {
+            "\(name) is a GitHub App, which the hub registers for you: sign in to it from Connections."
+        }
+
+        /// A GitHub App's way: the organization it is registered under, or none for your own account.
+        public static let appOrganization = "Organization"
+
+        public static let appOrganizationHint = "Leave empty to register the app under your own account."
+
+        /// The line on a GitHub App's row while it waits for its installation.
+        public static func appInstall(service: String) -> String {
+            "\(service)'s page is open in a new tab: name the app, then install it on the repositories this hub reads."
+        }
+
+        /// The line on an installed GitHub App's row.
+        public static func appActsAsItself(slug: String) -> String {
+            "Acts as the app \(slug), on the repositories you installed it on."
+        }
 
         public static let callbackLine = "Add this callback URL to the app in Linear:"
 
@@ -2557,7 +2630,7 @@ public enum Words {
         }
 
         public static let services: [Service] = [
-            Service(service: "github", label: "GitHub", url: "https://api.githubcopilot.com/mcp/", ways: [Way(auth: "app", label: "GitHub App", says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.", key: "It acts as you.")], serverExample: nil),
+            Service(service: "github", label: "GitHub", url: "https://api.githubcopilot.com/mcp/", ways: [Way(auth: "gh", label: "gh on a machine", says: "The gh login on one of your machines. It acts as you, and follows gh when you sign in again there.", key: nil), Way(auth: "device", label: "Sign in with a code", says: "Enter a short code at github.com/login/device. It acts as you.", key: nil), Way(auth: "app", label: "GitHub App", says: "The hub registers an app for you on GitHub; you name it and install it on the repositories it reads. It acts as itself.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token limited to the projects' repositories, for a GitHub Enterprise your machines' gh doesn't reach.", key: "It acts as you.")], serverExample: nil),
             Service(service: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", ways: [Way(auth: "app", label: "Linear app", says: "An OAuth app you create in Linear's settings. It acts as itself, with read and write.", key: nil), Way(auth: "bearer", label: "API key", says: "A personal API key limited to the projects' teams.", key: "It acts as you."), Way(auth: "oauth", label: "Sign in", says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.", key: nil)], serverExample: nil),
             Service(service: "gitlab", label: "GitLab", url: "https://gitlab.com/api/v4/mcp", ways: [Way(auth: "oauth", label: "Sign in", says: "GitLab's own sign-in, for agents' GitLab tools.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token with the MCP tool resource's Execute permission, limited to the projects' groups.", key: "It acts as you.")], serverExample: "https://gitlab.example.com/api/v4/mcp"),
             Service(service: "gitea", label: "Gitea", url: nil, ways: [Way(auth: "bearer", label: "Token", says: "A Gitea access token, which your gitea-mcp passes to Gitea.", key: "A Gitea access token. gitea-mcp, run in http mode at the address above, passes it to Gitea; it acts as you.")], serverExample: "https://gitea.example.com/mcp"),

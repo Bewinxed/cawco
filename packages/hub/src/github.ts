@@ -26,8 +26,8 @@
  *   and comments are asked `since` the mark, so the poll after a change asks
  *   a new URL (one 200 with nothing new); unchanged polls after it are 304s.
  * - **Octokit reads it** (github.com/octokit/octokit.js), signed in as the
- *   poller's connection (connections.ts `githubClient`: a fine-grained token
- *   or a GitHub App installation): each resource's pages through
+ *   poller's connection (connections.ts `githubClient`: a machine's gh, a code
+ *   sign-in, a fine-grained token or a GitHub App installation): each resource's pages through
  *   `octokit.paginate.iterator`, which follows GitHub's `link` header, one
  *   page at a time within {@link REQUEST_MS}. The token goes to the API's own
  *   origin only: a next page anywhere else is not asked for, and a redirect

@@ -25,17 +25,32 @@
  * row: the redirect lands on the hub (`/api/connections/oauth/callback`), and
  * a 401 on a call refreshes the tokens here before the call is retried.
  *
- * An `app` connection is an app the owner registered, acting as itself. A
- * GitHub App's private key mints its installation's token, an hour long,
- * which Octokit's app auth caches and renews ("The SDK will take care of
- * generating an installation access token for you and will regenerate the
- * token once it expires", docs.github.com); GitHub's MCP server takes it as
- * a bearer (github/github-mcp-server#696: "You can now use `ghs_` tokens to
- * authorize against remote MCP server"). A Linear app signs in through
- * Linear's own OAuth with `actor=app`, its 24-hour access token refreshed
- * here and its rotated refresh token kept; Linear's MCP server takes the
- * token as a bearer ("You can use this to interact with the MCP server as an
- * `app` user", linear.app/docs/mcp).
+ * An `app` connection is an app acting as itself. A GitHub App is
+ * registered by the hub from a manifest ("they only need to follow a URL and
+ * name the app", docs.github.com, registering a GitHub App from a manifest):
+ * the person's browser posts the manifest to GitHub, GitHub's redirect brings
+ * a code the hub exchanges for the app's ID and private key, and the person
+ * installs it, GitHub's setup redirect naming the installation, which the
+ * app's own JWT is asked about before it is kept. Its private key mints the
+ * installation's token, an hour long, which Octokit's app auth caches and
+ * renews ("The SDK will take care of generating an installation access token
+ * for you and will regenerate the token once it expires", docs.github.com);
+ * GitHub's MCP server takes it as a bearer (github/github-mcp-server#696:
+ * "You can now use `ghs_` tokens to authorize against remote MCP server"). A
+ * Linear app signs in through Linear's own OAuth with `actor=app`, its
+ * 24-hour access token refreshed here and its rotated refresh token kept;
+ * Linear's MCP server takes the token as a bearer ("You can use this to
+ * interact with the MCP server as an `app` user", linear.app/docs/mcp).
+ *
+ * A `gh` connection acts as the person with the token a fleet machine's gh
+ * holds, which the hub asks that machine for (core `CONTROL_GH_TOKEN`) when
+ * the last read is a minute old or GitHub refused it, and seals here; while
+ * the machine is away the sealed one is sent. A `device` connection acts as
+ * the person through CawCo's own OAuth app, signed in with a code at
+ * github.com/login/device, the hub polling GitHub at the interval it names
+ * and keeping the token and its refresh token ("The access token expires
+ * after eight hours, and the refresh token expires after six months without
+ * use", docs.github.com, authorizing OAuth apps).
  */
 import { createHash, createPrivateKey } from "node:crypto";
 import {
@@ -50,6 +65,7 @@ import {
   type ConnectionView,
   connectionsWords,
   connectionToolName,
+  type GhSignIn,
   type InstanceRow,
   parseConnectionTool,
   pushOnlyProvider,
@@ -97,10 +113,56 @@ import { undoable } from "./db/trash";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
 import { connectionToolsFor, roleOf } from "./roles";
-import { GITHUB_API, LINEAR_API } from "./upstreams";
+import {
+  GITHUB_API,
+  GITHUB_DEVICE_CLIENT_ID,
+  GITHUB_MCP,
+  GITHUB_WEB,
+  LINEAR_API,
+} from "./upstreams";
 
 /** Where an OAuth sign-in's redirect lands: on the hub, never a session. */
 export const CONNECTION_CALLBACK_PATH = "/api/connections/oauth/callback";
+
+/** Sign in to GitHub's own routes: a machine's gh, and a GitHub App's manifest, creation and installation. */
+const GITHUB_SIGN_IN = "/api/github-sign-in";
+/** The page that posts a GitHub App's manifest to GitHub, in the person's browser. */
+export const GITHUB_MANIFEST_PATH = `${GITHUB_SIGN_IN}/app`;
+/** GitHub's `redirect_url` once the app is made: the code to exchange. */
+export const GITHUB_CREATED_PATH = `${GITHUB_SIGN_IN}/app/created`;
+/** GitHub's `setup_url` once the app is installed: the installation. */
+export const GITHUB_INSTALLED_PATH = `${GITHUB_SIGN_IN}/app/installed`;
+
+/**
+ * What a GitHub App the hub registers may read: what a project's poller reads
+ * (issues, pull requests, discussions) and the metadata every app has
+ * ("Permissions required for GitHub Apps", docs.github.com).
+ */
+export const GITHUB_APP_PERMISSIONS = {
+  issues: "read",
+  pull_requests: "read",
+  discussions: "read",
+  metadata: "read",
+} as const;
+
+/**
+ * What a code sign-in asks of the person's account: the repositories its
+ * projects poll, private ones included, and the organizations they sit in
+ * ("Scopes for OAuth apps", docs.github.com). Our choice of the least that
+ * reads them.
+ */
+const DEVICE_SCOPE = "repo read:org";
+/** "You must complete all three steps in the GitHub App Manifest flow within one hour" (docs.github.com). */
+const MANIFEST_MS = 60 * 60_000;
+/** A gh token read this long ago is read from its machine again. Our choice: a re-login there is found within it. */
+const GH_FRESH_MS = 60_000;
+/** A GitHub organization's login: letters, digits and single hyphens, up to 39 characters. */
+const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+/** A GitHub App's name, as GitHub caps it. */
+const APP_NAME_MAX = 34;
+const DIGITS = /^\d{1,20}$/;
+const NOT_NAME = /[^a-z0-9]+/g;
+const TRAILING_HYPHENS = /-+$/;
 
 /**
  * What a Linear app asks for: "`read` … This scope will always be present";
@@ -136,15 +198,13 @@ const PEM_BLOCK =
 const BASE64 = /^[A-Za-z0-9+/=]+$/;
 const WHITESPACE = /\s+/g;
 const PEM_LINE = /.{1,64}/g;
-const DIGITS = /^\d{1,20}$/;
 
 /**
- * A private key as PKCS#8 PEM, however it was pasted: a password field
- * takes it on one line, its line breaks spaces, and a copy from an env file
- * carries literal `\n`s; its body goes back on 64-character lines. GitHub
- * hands out PKCS#1 (`BEGIN RSA PRIVATE KEY`), which the app JWT's WebCrypto
- * signer refuses ("only PKCS#8 is supported", universal-github-app-jwt), so
- * it is kept as PKCS#8. Undefined when it is no private key that reads.
+ * A private key as PKCS#8 PEM, its body on 64-character lines. GitHub hands
+ * a manifest's app PKCS#1 (`BEGIN RSA PRIVATE KEY`), which the app JWT's
+ * WebCrypto signer refuses ("only PKCS#8 is supported",
+ * universal-github-app-jwt), so it is kept as PKCS#8. Undefined when it is
+ * no private key that reads.
  */
 const pemOf = (text: string): string | undefined => {
   const [, kind, raw] = PEM_BLOCK.exec(text.replaceAll("\\n", "\n")) ?? [];
@@ -161,8 +221,6 @@ const pemOf = (text: string): string | undefined => {
     // Not a key that reads: no private key.
   }
 };
-/** A GitHub App's id: its number, or its client id (`Iv23li…`), which "may also be used and is recommended" (octokit/auth-app.js). */
-const GITHUB_APP_ID = /^(?:\d{1,20}|Iv[0-9A-Za-z.]{4,40})$/;
 
 /** How long a sign-in waits for its redirect. Our choice, as fleet MCP's. */
 const SIGN_IN_MS = 10 * 60_000;
@@ -218,6 +276,32 @@ export interface ConnectionsDeps {
   /** Something a session's tool list depends on moved. */
   readonly changed: () => void;
   readonly db: ConnectionsDb;
+  /** The fleet machines' gh (agent host-gh.ts), for `gh` connections. */
+  readonly gh: {
+    /**
+     * Every account each connected machine's gh is signed in to; `unread`,
+     * the machines that did not answer, as a sentence names them.
+     */
+    readonly accounts: () => Promise<{
+      signIns: GhSignIn[];
+      unread: string[];
+    }>;
+    /** A machine as a sentence names it. */
+    readonly machineName: (machineId: string) => string;
+    /**
+     * One account's token, read on its machine now: `away` while the
+     * machine is not connected or did not answer, `refused` when its gh has
+     * no sign-in for the account.
+     */
+    readonly token: (
+      machineId: string,
+      host: string,
+      login: string
+    ) => Promise<
+      | { kind: "token"; token: string }
+      | { kind: "refused" | "away"; why: string }
+    >;
+  };
   /** The origin a sign-in's redirect uses when its caller names none. */
   readonly hubOrigin: () => string;
   readonly lifetime: HubLifetimeShape;
@@ -322,6 +406,12 @@ const inputProblem = (input: ConnectionInput): string | undefined => {
   ) {
     return "An app connection is a GitHub App or a Linear app: its service is github or linear, reached over http.";
   }
+  if (
+    (input.auth === "gh" || input.auth === "device") &&
+    !(appServiceOf(input.service) === "github" && input.transport === "http")
+  ) {
+    return `A ${input.auth} connection signs in to GitHub: its service is github, reached over http.`;
+  }
   return input.transport === "stdio" ? stdioProblem(input) : httpProblem(input);
 };
 
@@ -331,37 +421,14 @@ const inputProblem = (input: ConnectionInput): string | undefined => {
  */
 export type LinearClientFor = (signal?: AbortSignal) => LinearClient;
 
-/** An app's registration as the person gives it, for {@link Connections.setApp}. */
-export type AppInput =
-  | { appId: string; installationId: string; privateKey: string }
-  | { clientId: string; clientSecret: string };
+/** A Linear app's registration as the person gives it, for {@link Connections.setApp}. */
+export interface AppInput {
+  clientId: string;
+  clientSecret: string;
+}
 
-/** `input` as `service`'s registration, or why it is not one. */
-const appOf = (
-  service: AppService,
-  input: AppInput
-): ConnectionAppSecret | string => {
-  if (service === "github") {
-    if (!("appId" in input)) {
-      return "A GitHub App is set with its app id, its installation id and its private key.";
-    }
-    const appId = input.appId.trim();
-    const installationId = input.installationId.trim();
-    const privateKey = pemOf(input.privateKey);
-    if (!GITHUB_APP_ID.test(appId)) {
-      return "The app id is the number on the GitHub App's settings page, or its client id (Iv…).";
-    }
-    if (!DIGITS.test(installationId)) {
-      return "The installation id is the number at the end of the installation's settings URL (…/installations/12345678).";
-    }
-    if (!privateKey || privateKey.length > 8192) {
-      return "The private key is the .pem file the GitHub App's settings generate, -----BEGIN … PRIVATE KEY----- and all.";
-    }
-    return { service, appId, installationId, privateKey };
-  }
-  if (!("clientId" in input)) {
-    return "A Linear app is set with its client id and client secret.";
-  }
+/** `input` as a Linear app's registration, or why it is not one. */
+const linearAppOf = (input: AppInput): ConnectionAppSecret | string => {
   const clientId = input.clientId.trim();
   const clientSecret = input.clientSecret.trim();
   if (
@@ -370,18 +437,88 @@ const appOf = (
   ) {
     return "A Linear app is set with the client id and client secret its settings page shows.";
   }
-  return { service, clientId, clientSecret };
+  return { service: "linear", clientId, clientSecret };
 };
 
-/** What names an app, for a view: never its private key or client secret. */
-const appView = (app: ConnectionAppSecret): ConnectionApp =>
-  app.service === "github"
+/**
+ * What names an app, for a view: never its private key or client secret. A
+ * GitHub App is named once it is installed: before, it reads nothing.
+ */
+const appView = (app: ConnectionAppSecret): ConnectionApp | undefined => {
+  if (app.service === "linear") {
+    return { service: app.service, clientId: app.clientId };
+  }
+  return app.installationId
     ? {
         service: app.service,
         appId: app.appId,
         installationId: app.installationId,
+        ...(app.slug ? { slug: app.slug } : {}),
       }
-    : { service: app.service, clientId: app.clientId };
+    : undefined;
+};
+
+/** Text as HTML text or an attribute's value: nothing in it is read as markup. */
+const htmlText = (text: string): string =>
+  text
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+/** The address a sign-in's browser reaches the hub at, as a URL; refused when it is no http(s) address. */
+const originOf = (origin: string): URL => {
+  let base: URL;
+  try {
+    base = new URL(origin);
+  } catch {
+    return problem("origin is the address the browser reaches the hub at.");
+  }
+  if (base.protocol !== "http:" && base.protocol !== "https:") {
+    problem("origin is an http or https address.");
+  }
+  return base;
+};
+
+/** A GitHub token endpoint's JSON answer: a token, or the error its device and refresh flows name. */
+interface GitHubTokenAnswer {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+  expires_in?: number;
+  interval?: number;
+  refresh_token?: string;
+  scope?: string;
+  token_type?: string;
+}
+
+/** A form posted to GitHub's site (device codes, tokens), answered as JSON ("Accept: application/json"). */
+const postToGitHub = async <T>(
+  path: string,
+  form: Record<string, string>
+): Promise<T> => {
+  const read = await readWithin(CONNECT_MS, async (signal) => {
+    const answer = await fetch(`${GITHUB_WEB}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(form),
+      signal,
+    });
+    if (!answer.ok) {
+      throw new Error(`GitHub answered ${answer.status}`);
+    }
+    return (await answer.json()) as T;
+  });
+  if (read.kind === "unanswered") {
+    throw new Error(
+      `GitHub did not answer within ${Math.round(read.after / 1000)} s`
+    );
+  }
+  return read.value;
+};
 
 /** An update laid over a row: what the connection would be. */
 const merged = (
@@ -532,7 +669,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
       sealed.tokens?.refresh_token,
       sealed.client?.client_secret,
       sealed.app?.service === "github" ? sealed.app.privateKey : undefined,
+      sealed.app?.service === "github" ? sealed.app.clientSecret : undefined,
+      sealed.app?.service === "github" ? sealed.app.webhookSecret : undefined,
       sealed.app?.service === "linear" ? sealed.app.clientSecret : undefined,
+      sealed.device?.deviceCode,
     ].filter((one): one is string => typeof one === "string" && one.length > 0);
   };
 
@@ -558,6 +698,11 @@ export const createConnections = (deps: ConnectionsDeps) => {
     r: ConnectionRow,
     app: Extract<ConnectionAppSecret, { service: "github" }>
   ): Octokit => {
+    if (!app.installationId) {
+      return problem(
+        `${r.name}'s GitHub App isn't installed yet: install it on the repositories it reads.`
+      );
+    }
     const made = createHash("sha256")
       .update(JSON.stringify([app, GITHUB_API]))
       .digest("hex");
@@ -579,8 +724,100 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return octokit;
   };
 
-  /** A Linear app's refresh under way, by row id: two callers share one. */
+  /** A token's refresh under way (a Linear app's, a code sign-in's), by row id: two callers share one. */
   const refreshing = new Map<string, Promise<string>>();
+
+  /** Each `gh` connection's last token read from its machine, by row id, and when. */
+  const ghRead = new Map<string, { at: number; token: string }>();
+
+  /**
+   * A `gh` connection's token: read on its machine when the last read is
+   * {@link GH_FRESH_MS} old (or was let go on GitHub's refusal), so a new
+   * `gh auth login` there is what the next read finds; sealed here when it
+   * moved. While the machine is away, the sealed token goes; a machine whose
+   * gh has no sign-in for the account puts its words on the row.
+   */
+  const ghToken = async (r: ConnectionRow): Promise<string> => {
+    const { gh, key } = opened(r);
+    if (!gh) {
+      return problem(`${r.name} names no machine's gh: connect it again.`);
+    }
+    const held = ghRead.get(r.id);
+    if (held && held.at > Date.now() - GH_FRESH_MS) {
+      return held.token;
+    }
+    const read = await deps.gh.token(gh.machineId, gh.host, gh.login);
+    if (read.kind === "token") {
+      ghRead.set(r.id, { token: read.token, at: Date.now() });
+      if (read.token !== key) {
+        reseal(r.id, (sealed) => ({ ...sealed, key: read.token }));
+      }
+      return read.token;
+    }
+    if (read.kind === "away" && key) {
+      return key;
+    }
+    const machine = deps.gh.machineName(gh.machineId);
+    const said =
+      read.kind === "refused"
+        ? connectionsWords.ghSignInAgain(gh.login, machine)
+        : `${read.why} The hub holds no token from its gh yet.`;
+    setState(r, "error", said);
+    return problem(`${r.name}: ${said}`);
+  };
+
+  /**
+   * A `device` connection's access token, refreshed with its refresh token
+   * when near its end ("`client_secret` … Required unless the token was
+   * generated using the device flow", docs.github.com): the new pair is kept
+   * at once, since "Once you use a refresh token, that refresh token and the
+   * old access token will no longer work". A token without an end (expiring
+   * tokens off on the app) is sent as it is.
+   */
+  const deviceAccess = (r: ConnectionRow): Promise<string> => {
+    const { tokens } = opened(r);
+    if (!tokens) {
+      return Promise.reject(
+        new ConnectionProblem(
+          `${r.name} is not signed in: ${r.reason ?? connectionsWords.saidSignIn}`
+        )
+      );
+    }
+    if (
+      !r.tokensExpireAt ||
+      r.tokensExpireAt.getTime() > Date.now() + LINEAR_REFRESH_EARLY_MS
+    ) {
+      return Promise.resolve(tokens.access_token);
+    }
+    const under = refreshing.get(r.id);
+    if (under !== undefined) {
+      return under;
+    }
+    const refreshToken = tokens.refresh_token;
+    const refresh = (async () => {
+      const answer = refreshToken
+        ? await postToGitHub<GitHubTokenAnswer>("/login/oauth/access_token", {
+            client_id: GITHUB_DEVICE_CLIENT_ID,
+            grant_type: "refresh_token",
+            refresh_token: refreshToken,
+          }).catch((error: unknown): GitHubTokenAnswer => ({
+            error: error instanceof Error ? error.message : String(error),
+          }))
+        : { error: "no refresh token" };
+      if (!answer.access_token) {
+        const said = `GitHub refused to refresh its sign-in (${answer.error_description ?? answer.error ?? "no token"}). Sign in again.`;
+        setState(r, "needs-sign-in", said);
+        return problem(`${r.name}: ${said}`);
+      }
+      keepTokens(r.id, answer as OAuthTokens);
+      drop(r.id);
+      return answer.access_token;
+    })();
+    refreshing.set(r.id, refresh);
+    const done = () => refreshing.delete(r.id);
+    refresh.then(done, done);
+    return refresh;
+  };
 
   /**
    * A Linear app's access token, refreshed when it is near its end. Linear
@@ -655,8 +892,36 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return refresh;
   };
 
-  /** Each app connection's MCP client's token, when it runs out, ms: the client is let go before. */
+  /** Each app, gh or code connection's MCP client's token, when it runs out, ms: the client is let go before. */
   const appExpiry = new Map<string, number>();
+
+  /**
+   * The bearer an `app`, `gh` or `device` connection's MCP client is made
+   * with, and when the client is let go for a new one: a gh token's after a
+   * read's freshness, so the next client carries whatever gh holds then.
+   */
+  const bearerOf = async (
+    r: ConnectionRow
+  ): Promise<{ expiresAt: number; token: string } | undefined> => {
+    if (r.auth === "app") {
+      return await appToken(r);
+    }
+    if (r.auth === "gh") {
+      return {
+        token: await ghToken(r),
+        expiresAt: Date.now() + GH_FRESH_MS + APP_TOKEN_EARLY_MS,
+      };
+    }
+    if (r.auth === "device") {
+      const token = await deviceAccess(r);
+      return {
+        token,
+        expiresAt:
+          db.byId(r.id)?.tokensExpireAt?.getTime() ?? Number.POSITIVE_INFINITY,
+      };
+    }
+    return undefined;
+  };
 
   /**
    * An app connection's token and when it runs out: a GitHub App's
@@ -693,11 +958,11 @@ export const createConnections = (deps: ConnectionsDeps) => {
       setState(
         r,
         "needs-sign-in",
-        `GitHub refused the app's token (${said}). Set its app again.`
+        `GitHub refused the app's token (${said}). Sign in to register it again.`
       );
       // biome-ignore lint/style/useErrorCause: GitHub's error may echo the JWT; only scrubbed words go on
       throw new ConnectionProblem(
-        `${r.name}: GitHub refused the app's token (${said}). Set its app again.`
+        `${r.name}: GitHub refused the app's token (${said}). Sign in to register it again.`
       );
     }
   };
@@ -709,9 +974,38 @@ export const createConnections = (deps: ConnectionsDeps) => {
       text
     );
 
+  /** A `gh` connection's machine and account, and a code sign-in's code while it can finish, for a view. */
+  const githubWays = (
+    sealed: ConnectionSecret
+  ): Pick<ConnectionView, "device" | "gh"> => {
+    const { device, gh } = sealed;
+    return {
+      ...(gh
+        ? {
+            gh: {
+              machineId: gh.machineId,
+              machine: deps.gh.machineName(gh.machineId),
+              host: gh.host,
+              login: gh.login,
+            },
+          }
+        : {}),
+      ...(device && device.expiresAt > Date.now()
+        ? {
+            device: {
+              userCode: device.userCode,
+              verificationUri: device.verificationUri,
+              expiresAt: device.expiresAt,
+            },
+          }
+        : {}),
+    };
+  };
+
   const view = (r: ConnectionRow): ConnectionView => {
     const sealed = opened(r);
     const tools = listed.get(r.id);
+    const app = sealed.app ? appView(sealed.app) : undefined;
     return {
       id: r.id,
       name: r.name,
@@ -722,7 +1016,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
       ...(r.command ? { command: r.command } : {}),
       ...(r.args?.length ? { args: r.args } : {}),
       auth: r.auth,
-      ...(sealed.app ? { app: appView(sealed.app) } : {}),
+      ...(app ? { app } : {}),
+      ...githubWays(sealed),
       ...(r.header ? { header: r.header } : {}),
       state: r.state,
       ...(r.reason ? { reason: r.reason } : {}),
@@ -937,8 +1232,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
       }
     );
     return readWithin(CONNECT_MS, async (signal) => {
-      // An app's token is minted or refreshed within the same time.
-      const bearer = r.auth === "app" ? await appToken(r) : undefined;
+      // An app's token is minted, a gh token read or a code sign-in's
+      // refreshed, within the same time.
+      const bearer = await bearerOf(r);
       if (bearer) {
         appExpiry.set(r.id, bearer.expiresAt);
       }
@@ -1071,7 +1367,16 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (r.auth === "app") {
       return appServiceOf(r.service) === "linear"
         ? "Sign in again."
-        : "Set its app again.";
+        : "Sign in to register its app again.";
+    }
+    if (r.auth === "gh") {
+      const { gh } = opened(r);
+      return gh
+        ? `Run gh auth login on ${deps.gh.machineName(gh.machineId)}; the next read picks it up.`
+        : "Connect it again.";
+    }
+    if (r.auth === "device") {
+      return "Sign in again with a code.";
     }
     return "Set its key again.";
   };
@@ -1101,7 +1406,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
     drop(r.id);
     if (refusedSignIn(error)) {
       const again = againOf(r);
-      setState(r, "needs-sign-in", `The service refused the sign-in. ${again}`);
+      // A gh token is read again on the next use: a new gh login there is
+      // what signs it back in, so the row stays one the hub tries.
+      ghRead.delete(r.id);
+      setState(
+        r,
+        r.auth === "gh" ? "error" : "needs-sign-in",
+        `The service refused the sign-in. ${again}`
+      );
       return new ConnectionProblem(
         `${r.name} refused the hub's sign-in. ${again}`
       );
@@ -1428,14 +1740,20 @@ export const createConnections = (deps: ConnectionsDeps) => {
 
   /** Where a row stands with no secret yet: signed in only once it is looked at. */
   const startState = (
-    authKind: ConnectionAuth
+    authKind: ConnectionAuth,
+    service: string
   ): Pick<ConnectionRow, "state" | "reason"> => {
-    if (authKind === "none") {
+    if (authKind === "none" || authKind === "gh") {
       return { state: "error", reason: "Not looked at yet." };
     }
-    const reasons: Record<Exclude<ConnectionAuth, "none">, string> = {
+    const reasons: Record<Exclude<ConnectionAuth, "none" | "gh">, string> = {
       oauth: connectionsWords.saidSignIn,
-      app: connectionsWords.saidSetApp,
+      // A GitHub App is registered and installed through its sign-in.
+      app:
+        appServiceOf(service) === "github"
+          ? connectionsWords.saidSignIn
+          : connectionsWords.saidSetApp,
+      device: connectionsWords.saidSignIn,
       bearer: connectionsWords.saidSetKey,
       header: connectionsWords.saidSetKey,
     };
@@ -1446,6 +1764,11 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const said = inputProblem(input);
     if (said) {
       problem(said);
+    }
+    if (input.auth === "gh") {
+      problem(
+        "A gh connection is made from a machine's gh: pick it in Sign in to GitHub."
+      );
     }
     if (db.byName(input.name)) {
       problem(`There is a connection ${input.name} already.`);
@@ -1459,7 +1782,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       service: input.service.trim(),
       account: input.account.trim(),
       ...whereOf(input),
-      ...startState(input.auth),
+      ...startState(input.auth, input.service),
       ...LET_GO,
       createdAt: now,
       updatedAt: now,
@@ -1492,12 +1815,17 @@ export const createConnections = (deps: ConnectionsDeps) => {
     projectsProblem(patch.projects);
     const where = whereOf(next);
     const moved = JSON.stringify(where) !== JSON.stringify(whereOf(r));
+    if (moved && (next.auth === "gh" || r.auth === "gh")) {
+      problem(
+        `${name} reads a machine's gh: remove it and connect another way instead.`
+      );
+    }
     const had = new Set(db.projectsOf(r.id));
     db.update(r.id, {
       service: next.service.trim(),
       account: next.account.trim(),
       ...where,
-      ...(moved ? { ...startState(next.auth), ...LET_GO } : {}),
+      ...(moved ? { ...startState(next.auth, next.service), ...LET_GO } : {}),
     });
     if (patch.projects) {
       db.setProjects(r.id, patch.projects);
@@ -1526,10 +1854,15 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const setKey = async (name: string, key: string): Promise<ConnectionView> => {
     const r = row(name);
     if (r.auth !== "bearer" && r.auth !== "header") {
-      const instead: Record<"none" | "oauth" | "app", string> = {
+      const instead: Record<
+        "none" | "oauth" | "app" | "gh" | "device",
+        string
+      > = {
         none: "it takes none.",
         oauth: "start its sign-in instead.",
-        app: "set its app instead.",
+        app: "sign in instead.",
+        gh: "it reads its machine's gh.",
+        device: "sign in with a code instead.",
       };
       problem(`${name} signs in with ${r.auth}, not a key: ${instead[r.auth]}`);
     }
@@ -1546,39 +1879,32 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
-   * Holds an `app` connection's registration: a GitHub App's id,
-   * installation and private key, which is looked at at once (its token
-   * minted, its MCP server's tools listed), or a Linear app's client id and
-   * secret, which then signs in. What it held before is let go.
+   * Holds a Linear app's client id and secret, which then signs in. What it
+   * held before is let go. A GitHub App is registered by its sign-in instead
+   * ({@link startManifest}).
    */
-  const setApp = async (
-    name: string,
-    input: AppInput
-  ): Promise<ConnectionView> => {
+  const setApp = (name: string, input: AppInput): ConnectionView => {
     const r = row(name);
     const service = appServiceOf(r.service);
     if (r.auth !== "app" || !service) {
       return problem(`${name} signs in with ${r.auth}, not as an app.`);
     }
-    const app = appOf(service, input);
+    if (service === "github") {
+      return problem(connectionsWords.githubAppRegisters(name));
+    }
+    const app = linearAppOf(input);
     if (typeof app === "string") {
       return problem(app);
     }
     reseal(r.id, () => ({ app }));
     drop(r.id);
     appExpiry.delete(r.id);
-    githubApps.delete(r.id);
     db.update(r.id, {
       tokensExpireAt: null,
-      ...(service === "github"
-        ? { state: "error", reason: "Not looked at yet." }
-        : { state: "needs-sign-in", reason: connectionsWords.saidSignIn }),
+      state: "needs-sign-in",
+      reason: connectionsWords.saidSignIn,
     });
     console.info(`[connections] ${name}: app set`);
-    if (service === "github") {
-      await probe(name);
-      reached(name, db.projectsOf(r.id));
-    }
     deps.changed();
     return view(row(name));
   };
@@ -1596,9 +1922,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const { app } = opened(r);
     if (app?.service !== "linear") {
       return problem(
-        appServiceOf(r.service) === "github"
-          ? `${r.name} is a GitHub App, which signs in with its private key: set its app instead.`
-          : `${r.name} needs its Linear app first: set its client id and client secret.`
+        `${r.name} needs its Linear app first: set its client id and client secret.`
       );
     }
     const state = crypto.randomUUID();
@@ -1636,6 +1960,485 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return { authorizationUrl: started.authorizationUrl.toString() };
   };
 
+  // --- GitHub App from a manifest ------------------------------------------
+
+  /**
+   * A GitHub App's sign-in: the hub's own page that posts the app's manifest
+   * to GitHub from the person's browser ("a `POST` request to
+   * `https://github.com/settings/apps/new` for a personal account or
+   * `https://github.com/organizations/ORGANIZATION/settings/apps/new` for an
+   * organization account", docs.github.com). Whatever app it held is let go:
+   * this registers a new one. The steps run within the hour GitHub gives.
+   */
+  const startManifest = (
+    r: ConnectionRow,
+    base: URL,
+    organization: string | undefined
+  ): { authorizationUrl: string } => {
+    const org = organization?.trim() ?? "";
+    if (org && !GITHUB_LOGIN.test(org)) {
+      return problem(
+        "The organization is its login on GitHub, like the name in github.com/your-org."
+      );
+    }
+    const state = crypto.randomUUID();
+    const page = new URL(`${base.origin}${GITHUB_MANIFEST_PATH}`);
+    page.searchParams.set("state", state);
+    if (org) {
+      page.searchParams.set("org", org);
+    }
+    reseal(r.id, () => ({}));
+    db.update(r.id, {
+      signInState: state,
+      signInRedirect: base.origin,
+      signInExpiresAt: new Date(Date.now() + MANIFEST_MS),
+      signInUrl: page.toString(),
+      tokensExpireAt: null,
+    });
+    drop(r.id);
+    appExpiry.delete(r.id);
+    githubApps.delete(r.id);
+    setState(r, "needs-sign-in", connectionsWords.saidUnderWay);
+    console.info(`[connections] ${r.name}: GitHub App registration started`);
+    return { authorizationUrl: page.toString() };
+  };
+
+  /** The row a GitHub App sign-in's `state` names, while it can still finish. */
+  const manifestRow = (state: string | undefined): ConnectionRow => {
+    const r = state ? db.bySignInState(state) : undefined;
+    if (!(
+      r?.signInExpiresAt &&
+      r.signInExpiresAt.getTime() > Date.now() &&
+      r.auth === "app" &&
+      appServiceOf(r.service) === "github"
+    )) {
+      return problem(
+        "This GitHub App sign-in expired or was already completed. Sign in again from Connections."
+      );
+    }
+    return r;
+  };
+
+  /**
+   * The page that posts the manifest: a form to GitHub's, sent as it loads,
+   * its button for a browser that runs no script. The manifest asks for what
+   * polling reads and no webhook ("`hook_attributes` … `active` … Deliver
+   * event details when this hook is triggered"); GitHub's redirect and the
+   * installation's setup come back to the hub at the address the browser
+   * reached it by.
+   */
+  const manifestPage = (state: string | undefined): string => {
+    const r = manifestRow(state);
+    const page = new URL(r.signInUrl ?? "");
+    const org = page.searchParams.get("org") ?? "";
+    const origin = r.signInRedirect ?? deps.hubOrigin();
+    const manifest = {
+      name: `CawCo ${r.account}`.slice(0, APP_NAME_MAX).trim(),
+      url: origin,
+      description:
+        "Reads issues, pull requests and discussions for a CawCo hub.",
+      public: false,
+      redirect_url: `${origin}${GITHUB_CREATED_PATH}`,
+      setup_url: `${origin}${GITHUB_INSTALLED_PATH}`,
+      hook_attributes: { url: `${origin}/`, active: false },
+      default_permissions: GITHUB_APP_PERMISSIONS,
+      default_events: [],
+    };
+    const action = new URL(
+      org
+        ? `${GITHUB_WEB}/organizations/${org}/settings/apps/new`
+        : `${GITHUB_WEB}/settings/apps/new`
+    );
+    action.searchParams.set("state", r.signInState ?? "");
+    return [
+      "<!doctype html>",
+      '<html lang="en"><meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      "<title>Register CawCo's GitHub App</title>",
+      `<form id="manifest" method="post" action="${htmlText(action.toString())}">`,
+      `<input type="hidden" name="manifest" value="${htmlText(JSON.stringify(manifest))}">`,
+      "<p>Taking you to GitHub to name the app.</p>",
+      '<button type="submit">Continue to GitHub</button>',
+      "</form>",
+      '<script>document.getElementById("manifest").submit()</script>',
+      "</html>",
+    ].join("\n");
+  };
+
+  /**
+   * GitHub's redirect once the app is made: its code exchanged for the app's
+   * ID, private key, client and webhook secrets ("POST
+   * /app-manifests/{code}/conversions"), kept sealed, and the installation
+   * page the person goes on to, carrying the sign-in's `state` back ("you can
+   * include a `state` query parameter in the installation URL").
+   */
+  const appCreated = async (
+    code: string,
+    state: string | undefined
+  ): Promise<string> => {
+    const r = manifestRow(state);
+    let made: {
+      client_id: string;
+      client_secret: string;
+      id: number;
+      pem: string;
+      slug?: string;
+      webhook_secret: string | null;
+    };
+    try {
+      made = (
+        await new Octokit({
+          baseUrl: GITHUB_API,
+          userAgent: "CawCo-hub",
+        }).rest.apps.createFromManifest({ code })
+      ).data as typeof made;
+    } catch (error) {
+      setState(r, "needs-sign-in", connectionsWords.saidSignIn);
+      return problem(
+        `GitHub did not hand over the app (${error instanceof Error ? error.message.slice(0, 200) : String(error)}). Sign in again from Connections.`
+      );
+    }
+    const privateKey = pemOf(made.pem);
+    if (!(privateKey && made.slug)) {
+      return problem(
+        "GitHub handed over an app without a private key or a name. Sign in again from Connections."
+      );
+    }
+    reseal(r.id, () => ({
+      app: {
+        service: "github",
+        appId: String(made.id),
+        slug: made.slug,
+        privateKey,
+        clientId: made.client_id,
+        clientSecret: made.client_secret,
+        ...(made.webhook_secret ? { webhookSecret: made.webhook_secret } : {}),
+      },
+    }));
+    const install = new URL(
+      `${GITHUB_WEB}/apps/${encodeURIComponent(made.slug)}/installations/new`
+    );
+    install.searchParams.set("state", r.signInState ?? "");
+    db.update(r.id, { signInUrl: install.toString() });
+    console.info(
+      `[connections] ${r.name}: GitHub App ${made.slug} registered, to be installed`
+    );
+    deps.changed();
+    return install.toString();
+  };
+
+  /**
+   * GitHub's setup redirect once the app is installed. Its `installation_id`
+   * is asked of GitHub with the app's own JWT before it is kept ("Bad actors
+   * can hit this URL with a spoofed `installation_id`", docs.github.com,
+   * about the setup URL): only the app's own installation answers. Then the
+   * connection is looked at. An organization's owner asked to approve it
+   * (`setup_action` request) leaves the sign-in waiting.
+   */
+  const appInstalled = async (
+    installationId: string | undefined,
+    setupAction: string | undefined,
+    state: string | undefined
+  ): Promise<ConnectionView | "requested"> => {
+    const r = manifestRow(state);
+    const { app } = opened(r);
+    if (app?.service !== "github") {
+      return problem(
+        "This app was never handed over by GitHub. Sign in again from Connections."
+      );
+    }
+    if (setupAction === "request" && !installationId) {
+      return "requested";
+    }
+    if (!(installationId && DIGITS.test(installationId))) {
+      return problem(
+        "GitHub's redirect named no installation. Install the app again from its page on GitHub."
+      );
+    }
+    try {
+      await new Octokit({
+        authStrategy: createAppAuth,
+        auth: { appId: app.appId, privateKey: app.privateKey },
+        baseUrl: GITHUB_API,
+        userAgent: "CawCo-hub",
+      }).rest.apps.getInstallation({ installation_id: Number(installationId) });
+    } catch {
+      return problem(
+        `GitHub doesn't know installation ${installationId} of ${app.slug ?? "this app"}. Install it again from its page on GitHub.`
+      );
+    }
+    reseal(r.id, (sealed) => ({
+      ...sealed,
+      app: { ...app, installationId },
+    }));
+    db.update(r.id, {
+      signInState: null,
+      signInExpiresAt: null,
+      signInUrl: null,
+      state: "error",
+      reason: "Not looked at yet.",
+    });
+    githubApps.delete(r.id);
+    appExpiry.delete(r.id);
+    drop(r.id);
+    console.info(
+      `[connections] ${r.name}: GitHub App installed (${installationId})`
+    );
+    await probe(r.name);
+    reached(r.name, db.projectsOf(r.id));
+    deps.changed();
+    return view(row(r.name));
+  };
+
+  // --- GitHub with a code (device flow) -------------------------------------
+
+  /** Each code sign-in's next poll, by row id. */
+  const devicePolls = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /** Polls `id`'s code sign-in after `seconds`, the least GitHub's `interval` allows. */
+  const pollDeviceIn = (id: string, seconds: number) => {
+    deps.lifetime.cancel(devicePolls.get(id));
+    devicePolls.set(
+      id,
+      deps.lifetime.after(seconds * 1000, () => {
+        devicePolls.delete(id);
+        detach(devicePoll(id), "connection code sign-in poll");
+      })
+    );
+  };
+
+  /** Lets go of a code sign-in under way: its code, and the row's sign-in. */
+  const endDevice = (id: string) => {
+    deps.lifetime.cancel(devicePolls.get(id));
+    devicePolls.delete(id);
+    reseal(id, (sealed) => ({ ...sealed, device: undefined }));
+    db.update(id, {
+      signInState: null,
+      signInExpiresAt: null,
+      signInUrl: null,
+    });
+  };
+
+  /**
+   * A code sign-in: GitHub's device and user codes for CawCo's OAuth app
+   * ("POST https://github.com/login/device/code"), the user code shown on
+   * the row until the person enters it at github.com/login/device, the hub
+   * polling meanwhile. Any token held is let go: this is a new sign-in.
+   */
+  const startDevice = async (
+    r: ConnectionRow
+  ): Promise<{ authorizationUrl: string }> => {
+    if (!GITHUB_DEVICE_CLIENT_ID) {
+      return problem(
+        "Sign-in with a code needs CawCo's GitHub app, which isn't registered yet. Connect with gh on a machine, or as a GitHub App."
+      );
+    }
+    let codes: {
+      device_code?: string;
+      error?: string;
+      error_description?: string;
+      expires_in?: number;
+      interval?: number;
+      user_code?: string;
+      verification_uri?: string;
+    };
+    try {
+      codes = await postToGitHub("/login/device/code", {
+        client_id: GITHUB_DEVICE_CLIENT_ID,
+        scope: DEVICE_SCOPE,
+      });
+    } catch (error) {
+      return problem(
+        `GitHub did not hand out a code: ${error instanceof Error ? error.message : String(error)}.`
+      );
+    }
+    if (!(codes.device_code && codes.user_code && codes.verification_uri)) {
+      return problem(
+        `GitHub did not hand out a code (${codes.error_description ?? codes.error ?? "no code"}).`
+      );
+    }
+    const expiresAt = Date.now() + (codes.expires_in ?? 900) * 1000;
+    const interval = codes.interval ?? 5;
+    reseal(r.id, () => ({
+      device: {
+        deviceCode: codes.device_code ?? "",
+        userCode: codes.user_code ?? "",
+        verificationUri: codes.verification_uri ?? "",
+        expiresAt,
+        interval,
+      },
+    }));
+    db.update(r.id, {
+      signInState: crypto.randomUUID(),
+      signInRedirect: null,
+      signInExpiresAt: new Date(expiresAt),
+      signInUrl: codes.verification_uri,
+      tokensExpireAt: null,
+    });
+    drop(r.id);
+    appExpiry.delete(r.id);
+    setState(r, "needs-sign-in", connectionsWords.saidUnderWay);
+    pollDeviceIn(r.id, interval);
+    console.info(`[connections] ${r.name}: code sign-in started`);
+    return { authorizationUrl: codes.verification_uri };
+  };
+
+  /**
+   * One poll of a code sign-in ("POST https://github.com/login/oauth/access_token"
+   * with the device code): `authorization_pending` polls again after the
+   * interval, `slow_down` after the interval it names; a token is kept, its
+   * refresh token with it, and the connection looked at; anything else
+   * (`expired_token`, `access_denied`) ends the sign-in in GitHub's words.
+   */
+  const devicePoll = async (id: string): Promise<void> => {
+    const r = db.byId(id);
+    const pending = r ? opened(r).device : undefined;
+    if (!(r && pending)) {
+      return;
+    }
+    if (pending.expiresAt <= Date.now()) {
+      endDevice(id);
+      setState(r, "needs-sign-in", connectionsWords.signInLapsed);
+      return;
+    }
+    let answer: GitHubTokenAnswer;
+    try {
+      answer = await postToGitHub<GitHubTokenAnswer>(
+        "/login/oauth/access_token",
+        {
+          client_id: GITHUB_DEVICE_CLIENT_ID,
+          device_code: pending.deviceCode,
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        }
+      );
+    } catch (error) {
+      console.warn(
+        `[connections] ${r.name}: GitHub did not answer a code sign-in's poll (${error instanceof Error ? error.message : String(error)}); polling on`
+      );
+      pollDeviceIn(id, pending.interval);
+      return;
+    }
+    if (answer.access_token) {
+      endDevice(id);
+      keepTokens(id, answer as OAuthTokens);
+      db.update(id, { state: "error", reason: "Not looked at yet." });
+      drop(id);
+      console.info(`[connections] ${r.name}: signed in with a code`);
+      await probe(r.name);
+      reached(r.name, db.projectsOf(id));
+      deps.changed();
+      return;
+    }
+    if (answer.error === "authorization_pending") {
+      pollDeviceIn(id, pending.interval);
+      return;
+    }
+    if (answer.error === "slow_down") {
+      const interval = answer.interval ?? pending.interval + 5;
+      reseal(id, (sealed) => ({
+        ...sealed,
+        ...(sealed.device ? { device: { ...sealed.device, interval } } : {}),
+      }));
+      pollDeviceIn(id, interval);
+      return;
+    }
+    endDevice(id);
+    setState(
+      r,
+      "needs-sign-in",
+      `GitHub ended the code sign-in (${answer.error_description ?? answer.error ?? "no token"}). Sign in again.`
+    );
+  };
+
+  // --- GitHub with a machine's gh -------------------------------------------
+
+  /**
+   * Every account a connected machine's gh is signed in to, each with the
+   * connection already made from it, so Sign in to GitHub lists what one
+   * press would make and what it already has.
+   */
+  const ghSignIns = async (): Promise<{
+    signIns: (GhSignIn & { connection?: string })[];
+    unread: string[];
+  }> => {
+    const { signIns, unread } = await deps.gh.accounts();
+    const made = db.list().flatMap((r) => {
+      const { gh } = r.auth === "gh" ? opened(r) : {};
+      return gh ? [{ name: r.name, ...gh }] : [];
+    });
+    return {
+      unread,
+      signIns: signIns.map((one) => {
+        const connection = made.find(
+          (each) =>
+            each.machineId === one.machineId &&
+            each.host === one.host &&
+            each.login === one.login
+        )?.name;
+        return connection ? { ...one, connection } : one;
+      }),
+    };
+  };
+
+  /**
+   * One press of a machine's gh account: a `github` connection that reads
+   * that account's token on that machine each time, named for the account,
+   * acting as it. Its token is read at once, sealed, and the connection
+   * looked at.
+   */
+  const connectGh = async (input: {
+    host: string;
+    login: string;
+    machineId: string;
+    projects?: string[];
+  }): Promise<ConnectionView> => {
+    const name = `github-${input.login.toLowerCase().replace(NOT_NAME, "-")}`
+      .slice(0, 24)
+      .replace(TRAILING_HYPHENS, "");
+    if (db.byName(name)) {
+      return problem(`There is a connection ${name} already.`);
+    }
+    projectsProblem(input.projects);
+    const read = await deps.gh.token(input.machineId, input.host, input.login);
+    if (read.kind !== "token") {
+      return problem(
+        read.kind === "refused"
+          ? connectionsWords.ghSignInAgain(
+              input.login,
+              deps.gh.machineName(input.machineId)
+            )
+          : read.why
+      );
+    }
+    const now = new Date();
+    const id = crypto.randomUUID();
+    db.insert({
+      id,
+      name,
+      service: "github",
+      account: input.login,
+      ...whereOf({ transport: "http", url: GITHUB_MCP, auth: "gh" }),
+      state: "error",
+      reason: "Not looked at yet.",
+      ...LET_GO,
+      createdAt: now,
+      updatedAt: now,
+    });
+    reseal(id, () => ({
+      gh: { machineId: input.machineId, host: input.host, login: input.login },
+      key: read.token,
+    }));
+    ghRead.set(id, { token: read.token, at: Date.now() });
+    db.setProjects(id, input.projects ?? []);
+    console.info(
+      `[connections] made ${name} from gh on ${deps.gh.machineName(input.machineId)}`
+    );
+    await probe(name);
+    reached(name, input.projects ?? []);
+    deps.changed();
+    return view(row(name));
+  };
+
   /**
    * Starts an OAuth sign-in: the URL the person opens. Its redirect lands on
    * the hub at `origin` (where their browser reaches it), else the hub's own
@@ -1643,22 +2446,21 @@ export const createConnections = (deps: ConnectionsDeps) => {
    */
   const startSignIn = async (
     name: string,
-    origin?: string
+    origin?: string,
+    organization?: string
   ): Promise<{ authorizationUrl: string }> => {
     const r = row(name);
+    if (r.auth === "device") {
+      return startDevice(r);
+    }
     if (r.auth !== "oauth" && r.auth !== "app") {
       problem(`${name} signs in with ${r.auth}, not OAuth.`);
     }
-    let base: URL;
-    try {
-      base = new URL(origin ?? deps.hubOrigin());
-    } catch {
-      return problem("origin is the address the browser reaches the hub at.");
-    }
-    if (base.protocol !== "http:" && base.protocol !== "https:") {
-      problem("origin is an http or https address.");
-    }
+    const base = originOf(origin ?? deps.hubOrigin());
     const redirect = `${base.origin}${CONNECTION_CALLBACK_PATH}`;
+    if (r.auth === "app" && appServiceOf(r.service) === "github") {
+      return startManifest(r, base, organization);
+    }
     if (r.auth === "app") {
       return startAppSignIn(r, redirect);
     }
@@ -1826,9 +2628,29 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (r.auth === "app") {
       return sealed.app?.service === "github"
         ? githubAppOctokit(r, sealed.app)
-        : problem(
-            `${name} needs its GitHub App: set its app id, installation id and private key.`
-          );
+        : problem(`${name} needs its GitHub App: sign in to register it.`);
+    }
+    if (r.auth === "gh" || r.auth === "device") {
+      // Each request is signed with the token as it is then: a gh token
+      // read again once a minute old, a code sign-in's refreshed near its end.
+      const octokit = new Octokit({
+        baseUrl: GITHUB_API,
+        userAgent: "CawCo-hub",
+      });
+      octokit.hook.before("request", async (options) => {
+        const fresh = db.byId(r.id) ?? r;
+        const token =
+          r.auth === "gh" ? await ghToken(fresh) : await deviceAccess(fresh);
+        options.headers.authorization = `token ${token}`;
+      });
+      octokit.hook.error("request", (error) => {
+        // GitHub refused the token: a gh connection reads its machine again.
+        if ((error as { status?: number }).status === 401) {
+          ghRead.delete(r.id);
+        }
+        throw error;
+      });
+      return octokit;
     }
     if (r.auth === "bearer") {
       return new Octokit({
@@ -1838,7 +2660,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       });
     }
     return problem(
-      `${name} signs in with ${r.auth}; a tracker reads GitHub through a GitHub App or a fine-grained personal access token.`
+      `${name} signs in with ${r.auth}; a tracker reads GitHub through gh on a machine, a code sign-in, a GitHub App or a fine-grained personal access token.`
     );
   };
 
@@ -1881,7 +2703,12 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const r = db.byName(name);
     if (r) {
       drop(r.id);
-      setState(r, "needs-sign-in", `${words} ${againOf(r)}`);
+      ghRead.delete(r.id);
+      setState(
+        r,
+        r.auth === "gh" ? "error" : "needs-sign-in",
+        `${words} ${againOf(r)}`
+      );
     }
   };
 
@@ -1892,6 +2719,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     listed.delete(r.id);
     githubApps.delete(r.id);
     appExpiry.delete(r.id);
+    ghRead.delete(r.id);
+    deps.lifetime.cancel(devicePolls.get(r.id));
+    devicePolls.delete(r.id);
     const restore =
       deps.trash(name) ?? problem(`There is no connection ${name}.`);
     console.info(`[connections] removed ${name}`);
@@ -1937,11 +2767,23 @@ export const createConnections = (deps: ConnectionsDeps) => {
     setApp,
     startSignIn,
     completeSignIn,
+    ghSignIns,
+    connectGh,
+    manifestPage,
+    appCreated,
+    appInstalled,
     remove,
     returned,
-    /** At hub start: each connection with a secret (or none needed) is looked at once, off the boot path. */
+    /**
+     * At hub start: each connection with a secret (or none needed) is looked
+     * at once, off the boot path, and each code sign-in under way polled on.
+     */
     start: () => {
       for (const r of db.list()) {
+        const { device } = opened(r);
+        if (device) {
+          pollDeviceIn(r.id, device.interval);
+        }
         if (r.state !== "needs-sign-in") {
           detach(probe(r.name), `connection ${r.name} first look`);
         }
@@ -1965,10 +2807,22 @@ const INPUT = {
     t.Literal("header"),
     t.Literal("oauth"),
     t.Literal("app"),
+    t.Literal("gh"),
+    t.Literal("device"),
   ]),
   header: t.Optional(t.String()),
   projects: t.Optional(t.Array(t.String())),
 };
+
+/** A page of plain text for a browser that lands on the hub: nothing it carries is read as markup. */
+const plainText = (text: string, code = 200) =>
+  new Response(text, {
+    status: code,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 
 /** A refusal as a 400 in words; anything else is the hub's own failure. */
 const refused = (error: unknown) => {
@@ -2019,9 +2873,12 @@ export const connectionRoutes = (connections: Connections) =>
         }
       }
     )
-    // An app connection's registration: a GitHub App's id, installation
-    // and private key, or a Linear app's client id and secret. Answered as
-    // the view, which names the app and never holds its secret.
+    // A Linear app's client id and secret. Answered as the view, which
+    // names the app and never holds its secret. A GitHub App is registered
+    // by its sign-in instead: the GitHub App body TestFlight ios 20261018
+    // sends (installable until 2027-01-16) stays declared so that build
+    // reads the refusal in words; it goes once that build expires (bash
+    // apps/apple/scripts/testflight.sh --expire 20261018).
     .put(
       "/api/connections/:name/app",
       {
@@ -2039,20 +2896,154 @@ export const connectionRoutes = (connections: Connections) =>
       },
       async ({ params, body }) => {
         try {
+          if (!("clientId" in body)) {
+            return status(
+              400,
+              connectionsWords.githubAppRegisters(params.name)
+            );
+          }
           return await connections.setApp(params.name, body);
         } catch (error) {
           return refused(error);
         }
       }
     )
+    // A sign-in: an MCP server's or a Linear app's OAuth, a GitHub App's
+    // registration (under `organization` when named), or a code sign-in.
     .post(
       "/api/connections/:name/sign-in",
-      { body: t.Object({ origin: t.Optional(t.String()) }) },
+      {
+        body: t.Object({
+          origin: t.Optional(t.String()),
+          organization: t.Optional(t.String()),
+        }),
+      },
       async ({ params, body }) => {
         try {
-          return await connections.startSignIn(params.name, body.origin);
+          return await connections.startSignIn(
+            params.name,
+            body.origin,
+            body.organization
+          );
         } catch (error) {
           return refused(error);
+        }
+      }
+    )
+    // Sign in to GitHub's first way: every account the fleet machines' gh
+    // is signed in to, and the machines that didn't say.
+    .get("/api/github-sign-in/gh", () => connections.ghSignIns())
+    .post(
+      "/api/github-sign-in/gh",
+      {
+        body: t.Object({
+          machineId: t.String({ minLength: 1 }),
+          host: t.String({ minLength: 1 }),
+          login: t.String({ minLength: 1 }),
+          projects: t.Optional(t.Array(t.String())),
+        }),
+      },
+      async ({ body }) => {
+        try {
+          return await connections.connectGh(body);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A GitHub App's registration, in the person's browser: the page that
+    // posts its manifest to GitHub, GitHub's redirect with the code, and the
+    // installation's setup redirect. Each answers a page or plain text,
+    // never JSON a script reads.
+    .get(
+      GITHUB_MANIFEST_PATH,
+      {
+        ...hidden,
+        query: t.Object({
+          state: t.Optional(t.String()),
+          org: t.Optional(t.String()),
+        }),
+      },
+      ({ query }) => {
+        try {
+          return new Response(connections.manifestPage(query.state), {
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "X-Content-Type-Options": "nosniff",
+              "Cache-Control": "no-store",
+            },
+          });
+        } catch (error) {
+          return plainText(
+            error instanceof ConnectionProblem
+              ? error.message
+              : "The app's registration could not start. Sign in again from Connections.",
+            400
+          );
+        }
+      }
+    )
+    .get(
+      GITHUB_CREATED_PATH,
+      {
+        ...hidden,
+        query: t.Object({
+          code: t.Optional(t.String()),
+          state: t.Optional(t.String()),
+        }),
+      },
+      async ({ query }) => {
+        if (!query.code) {
+          return plainText(
+            "GitHub did not make the app. Sign in again from Connections.",
+            400
+          );
+        }
+        try {
+          const install = await connections.appCreated(query.code, query.state);
+          return new Response(null, {
+            status: 302,
+            headers: { Location: install, "Cache-Control": "no-store" },
+          });
+        } catch (error) {
+          return plainText(
+            error instanceof ConnectionProblem
+              ? error.message
+              : "The app could not be handed over. Sign in again from Connections.",
+            400
+          );
+        }
+      }
+    )
+    .get(
+      GITHUB_INSTALLED_PATH,
+      {
+        ...hidden,
+        query: t.Object({
+          installation_id: t.Optional(t.String()),
+          setup_action: t.Optional(t.String()),
+          state: t.Optional(t.String()),
+        }),
+      },
+      async ({ query }) => {
+        try {
+          const installed = await connections.appInstalled(
+            query.installation_id,
+            query.setup_action,
+            query.state
+          );
+          return plainText(
+            installed === "requested"
+              ? "An owner of the organization was asked to approve the app. Connections signs it in once they do."
+              : `Installed ${installed.app?.service === "github" ? (installed.app.slug ?? "the app") : "the app"} for ${installed.name}. You can close this tab.`
+          );
+        } catch (error) {
+          return plainText(
+            error instanceof ConnectionProblem
+              ? error.message
+              : "The installation could not finish. Install the app again from its page on GitHub.",
+            400
+          );
         }
       }
     )
@@ -2091,16 +3082,8 @@ export const connectionRoutes = (connections: Connections) =>
         }),
       },
       async ({ query }) => {
-        const plain = (text: string, code = 200) =>
-          new Response(text, {
-            status: code,
-            headers: {
-              "Content-Type": "text/plain; charset=utf-8",
-              "X-Content-Type-Options": "nosniff",
-            },
-          });
         if (!(query.code && query.state)) {
-          return plain(
+          return plainText(
             `The sign-in did not finish${query.error ? ` (${query.error.slice(0, 100)})` : ""}. Start it again.`,
             400
           );
@@ -2111,11 +3094,11 @@ export const connectionRoutes = (connections: Connections) =>
             query.state,
             query.iss
           );
-          return plain(
+          return plainText(
             `Signed in to ${signed.service} as ${signed.account} (${signed.name}). You can close this tab.`
           );
         } catch (error) {
-          return plain(
+          return plainText(
             error instanceof ConnectionProblem
               ? error.message
               : "The sign-in could not finish. Start it again.",

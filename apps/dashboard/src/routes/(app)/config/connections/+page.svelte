@@ -3,6 +3,7 @@
     CONNECTION_SERVICES,
     type ConnectionService,
     type ConnectionWay,
+    type GhSignIn,
   } from "@cawco/core";
 
   /** One way the hub signs in to a service (core `ConnectionWay`). */
@@ -12,32 +13,13 @@
 
   export const SERVICES: readonly Service[] = CONNECTION_SERVICES;
 
-  /** What an app connection is set with, before the hub holds it. */
+  /** What a Linear app is set with, before the hub holds it. */
   export interface AppDraft {
-    appId: string;
     clientId: string;
     clientSecret: string;
-    installationId: string;
-    privateKey: string;
   }
 
-  export const emptyApp = (): AppDraft => ({
-    appId: "",
-    installationId: "",
-    privateKey: "",
-    clientId: "",
-    clientSecret: "",
-  });
-
-  /** The registration a service's app is set with, from what was typed. */
-  export const appBody = (service: string, draft: AppDraft) =>
-    service === "github"
-      ? {
-          appId: draft.appId,
-          installationId: draft.installationId,
-          privateKey: draft.privateKey,
-        }
-      : { clientId: draft.clientId, clientSecret: draft.clientSecret };
+  export const emptyApp = (): AppDraft => ({ clientId: "", clientSecret: "" });
 
   /** A typed server address as the hub takes one: an http(s) URL, or none. */
   export const serverUrl = (typed: string): string | undefined => {
@@ -51,9 +33,26 @@
     }
   };
 
-  /** Whether a way signs in through a page of the service's own, in a tab. */
-  export const signsInByPage = (service: string, way: Way): boolean =>
-    way.auth === "oauth" || (way.auth === "app" && service === "linear");
+  /**
+   * Whether a way signs in through a page in a tab: an OAuth sign-in, a
+   * Linear app's, or a GitHub App's registration. A code sign-in shows its
+   * code on the row first, so its page opens from there.
+   */
+  export const signsInByPage = (way: Way): boolean =>
+    way.auth === "oauth" || way.auth === "app";
+
+  /** Whether a way's row exists before anything else is asked of the person: its sign-in starts at once. */
+  export const startsSignIn = (service: string, way: Way): boolean =>
+    way.auth === "oauth" ||
+    way.auth === "device" ||
+    (way.auth === "app" && service === "github");
+
+  /** A machine's gh account as Sign in to GitHub lists it, with the connection already made from it. */
+  export type GhRow = GhSignIn & { connection?: string };
+
+  /** A gh account's key in the list: its machine, host and login. */
+  export const ghKey = (one: GhSignIn) =>
+    `${one.machineId}/${one.host}/${one.login}`;
 
   /** Services ProviderLogo draws a mark for. */
   const MARKED = new Set(["github", "linear", "slack", "gmail"]);
@@ -80,13 +79,15 @@
    * holds; connections.ts on the hub): one row each, led by the service's
    * mark, with the account it signs in as and its state, both the hub's
    * word, and which projects may use it. A row that is not signed in carries
-   * its way in: Sign in (OAuth, or a Linear app, in a tab of its own, the
-   * row turning signed in when the hub says so), Set key (a field under the
-   * row, emptied the moment the hub has the key) or Set app (a GitHub App's
-   * or a Linear app's registration, under the row). Signing in to a service
-   * that has more than one way asks which first. ⋯ holds Projects… (a
-   * checklist) and Remove, which goes through at once with Undo in its toast
-   * (JOURNEY.md Flow 5).
+   * its way in: Sign in (OAuth, a Linear app, or a GitHub App's registration,
+   * in a tab of its own, the row turning signed in when the hub says so; a
+   * code sign-in shows its code on the row), Set key (a field under the row,
+   * emptied the moment the hub has the key) or Set app (a Linear app's
+   * client, under the row). Signing in to a service that has more than one
+   * way asks which first; GitHub's first is the gh a fleet machine is signed
+   * in with, one press per account, and where no machine has one, a code.
+   * ⋯ holds Projects… (a checklist) and Remove, which goes through at once
+   * with Undo in its toast (JOURNEY.md Flow 5).
    */
   import {
     type ConnectionView,
@@ -121,6 +122,7 @@
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import {
     IconConnection,
     IconEye,
@@ -172,6 +174,11 @@
     callbackUrl = `${window.location.origin}/api/connections/oauth/callback`;
     // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
     void read();
+    // A GitHub sign-in kept through a reload asks the machines again.
+    if (typed.service === "github") {
+      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
+      void readGh();
+    }
     // A refused Undo tried again after a reload (SectionFrame) put one back.
     const reread = () => {
       // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
@@ -186,16 +193,19 @@
   const labelOf = (row: ConnectionView) => serviceOf(row)?.label ?? row.service;
   const takesKey = (row: ConnectionView) =>
     row.auth === "bearer" || row.auth === "header";
-  /**
-   * An app connection whose registration is owed: none held yet, or a
-   * GitHub App's that GitHub refused (it signs in with nothing else).
-   */
+  const isGithub = (row: ConnectionView) =>
+    row.service.toLowerCase() === "github";
+  /** A Linear app whose client is owed. */
   const needsApp = (row: ConnectionView) =>
-    row.auth === "app" && (!row.app || row.app.service === "github");
-  /** A row that signs in through the service's page: OAuth, or a Linear app once set. */
+    row.auth === "app" && !isGithub(row) && !row.app;
+  /**
+   * A row that signs in through a page: OAuth, a code sign-in, a Linear app
+   * once set, or a GitHub App, whose sign-in registers and installs it.
+   */
   const signsIn = (row: ConnectionView) =>
     row.auth === "oauth" ||
-    (row.auth === "app" && row.app?.service === "linear");
+    row.auth === "device" ||
+    (row.auth === "app" && (isGithub(row) || row.app?.service === "linear"));
 
   /** The hub's state, as the row's word. */
   const STATE = {
@@ -221,6 +231,17 @@
     if (problem) {
       return { tone: "fail", text: problem };
     }
+    // A code sign-in's code stands under the row (`below`).
+    if (row.device) {
+      return undefined;
+    }
+    if (
+      (signing[row.name] || row.signIn) &&
+      row.auth === "app" &&
+      isGithub(row)
+    ) {
+      return { tone: "busy", text: words.appInstall(labelOf(row)) };
+    }
     if (signing[row.name] || row.signIn) {
       return {
         tone: "busy",
@@ -236,6 +257,26 @@
       !SAID_BY_BUTTON.has(row.reason)
     ) {
       return { tone: "fail", text: row.reason };
+    }
+    return actsAs(row);
+  }
+
+  /** Whom a signed-in GitHub connection acts as, in its row's line. */
+  function actsAs(row: ConnectionView): RowNote | undefined {
+    if (row.state !== "signed-in") {
+      return undefined;
+    }
+    if (row.gh) {
+      return {
+        tone: "done",
+        text: words.ghActsAs(row.gh.login, row.gh.machine),
+      };
+    }
+    if (row.auth === "device") {
+      return { tone: "done", text: words.deviceActsAs(row.account) };
+    }
+    if (row.app?.service === "github" && row.app.slug) {
+      return { tone: "done", text: words.appActsAsItself(row.app.slug) };
     }
     return undefined;
   }
@@ -282,19 +323,32 @@
     return () => clearInterval(watch);
   });
 
-  /** Starts `name`'s OAuth sign-in in `tab`, opened by the press itself so no pop-up blocker stops it. */
-  async function startSignIn(name: string, tab: Window) {
+  /**
+   * Starts `name`'s sign-in: in `tab`, opened by the press itself so no
+   * pop-up blocker stops it, or with none for a code sign-in, whose code the
+   * row then shows. A GitHub App registers under `organization` when named.
+   */
+  async function startSignIn(
+    name: string,
+    tab: Window | null,
+    organization?: string
+  ) {
     signing[name] = true;
     delete problems[name];
     try {
       const { authorizationUrl } = await send<{ authorizationUrl: string }>(
         `${path(name)}/sign-in`,
-        json("POST", { origin: window.location.origin })
+        json("POST", {
+          origin: window.location.origin,
+          ...(organization ? { organization } : {}),
+        })
       );
-      tab.location.assign(authorizationUrl);
-      tabs[name] = tab;
+      if (tab) {
+        tab.location.assign(authorizationUrl);
+        tabs[name] = tab;
+      }
     } catch (error) {
-      tab.close();
+      tab?.close();
       problems[name] = failureWords(error);
     }
     await read();
@@ -309,6 +363,12 @@
    */
   function signIn(row: ConnectionView) {
     const open = row.signIn;
+    if (row.auth === "device" && !open) {
+      // A new code: shown on the row, its page opened from there.
+      // biome-ignore lint/complexity/noVoid: the sign-in reports its own outcome on its row
+      void startSignIn(row.name, null);
+      return;
+    }
     const tab = window.open(open ? open.url : "", "_blank");
     if (!tab) {
       problems[row.name] = BLOCKED;
@@ -344,7 +404,21 @@
     await read();
   }
 
-  // --- Set app: a GitHub App's or a Linear app's registration, under the row ---
+  // --- A code sign-in's code: copied from the row ---------------------------
+
+  /** The copy of a code, and the row it was copied from. */
+  const clipboard = new UseClipboard();
+  let copiedFrom = $state<string | null>(null);
+  function copyCode(row: ConnectionView) {
+    if (!row.device) {
+      return;
+    }
+    copiedFrom = row.name;
+    // biome-ignore lint/complexity/noVoid: the copy says how it went on its button
+    void clipboard.copy(row.device.userCode);
+  }
+
+  // --- Set app: a Linear app's client, under the row -----------------------
 
   let appFor = $state<string | null>(null);
   let rowApp = $state<AppDraft>(emptyApp());
@@ -354,18 +428,14 @@
 
   async function saveApp(row: ConnectionView) {
     // A Linear app signs in once it is set: its tab opens on the press.
-    const tab =
-      row.service.toLowerCase() === "linear" ? openTab(row.name) : null;
-    if (row.service.toLowerCase() === "linear" && !tab) {
+    const tab = openTab(row.name);
+    if (!tab) {
       return;
     }
     appPending = true;
     delete problems[row.name];
     try {
-      await send<ConnectionView>(
-        `${path(row.name)}/app`,
-        json("PUT", appBody(row.service.toLowerCase(), rowApp))
-      );
+      await send<ConnectionView>(`${path(row.name)}/app`, json("PUT", rowApp));
       rowApp = emptyApp();
       appFor = null;
     } catch (error) {
@@ -376,9 +446,7 @@
     }
     appPending = false;
     await read();
-    if (tab) {
-      await startSignIn(row.name, tab);
-    }
+    await startSignIn(row.name, tab);
   }
 
   /** A tab for a sign-in, opened by the press itself; a blocked one is said on its row. */
@@ -404,8 +472,8 @@
     way: null as string | null,
     account: "",
     address: "",
-    appId: "",
-    installationId: "",
+    /** A GitHub App's organization, empty for the person's own account. */
+    organization: "",
     clientId: "",
     /** A key or secret was typed before the page went away. */
     secretTyped: false,
@@ -422,23 +490,13 @@
   );
   let addressProblem = $state<string | null>(null);
   let addKey = $state("");
-  let addApp = $state<AppDraft>({
-    ...emptyApp(),
-    appId: typed.appId,
-    installationId: typed.installationId,
-    clientId: typed.clientId,
-  });
+  let addApp = $state<AppDraft>({ ...emptyApp(), clientId: typed.clientId });
   let addPending = $state(false);
   /** The secrets asked for again after a reload, until one is typed. */
   const secretAskedAgain = $derived(
-    typed.secretTyped &&
-      addKey === "" &&
-      addApp.privateKey === "" &&
-      addApp.clientSecret === ""
+    typed.secretTyped && addKey === "" && addApp.clientSecret === ""
   );
   $effect(() => {
-    typed.appId = addApp.appId;
-    typed.installationId = addApp.installationId;
     typed.clientId = addApp.clientId;
   });
 
@@ -450,6 +508,69 @@
     addressProblem = null;
     addKey = "";
     addApp = emptyApp();
+    if (service.service === "github") {
+      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
+      void readGh();
+    }
+  }
+
+  // --- Sign in to GitHub's first way: a machine's gh, one press an account ---
+
+  /** Each connected machine's gh accounts, as the hub last asked them; null while it asks. */
+  let gh = $state<{ signIns: GhRow[]; unread: string[] } | null>(null);
+  let ghProblem = $state<string | null>(null);
+  /** The account a press is connecting, by {@link ghKey}. */
+  let ghPending = $state<string | null>(null);
+  const listOf = new Intl.ListFormat(undefined, { type: "conjunction" });
+
+  /**
+   * Asks the hub for every machine's gh accounts. Where none is signed in,
+   * the form moves on to a code, unless the person picked a way since.
+   */
+  async function readGh() {
+    gh = null;
+    ghProblem = null;
+    const offered = typed.way;
+    try {
+      gh = await send<{ signIns: GhRow[]; unread: string[] }>(
+        "/api/github-sign-in/gh"
+      );
+    } catch (error) {
+      ghProblem = words.ghUnread(failureClause(error));
+      gh = { signIns: [], unread: [] };
+    }
+    const ways = adding?.ways ?? [];
+    const ghWay = ways.find((way) => way.auth === "gh");
+    const codeWay = ways.find((way) => way.auth === "device");
+    if (
+      gh.signIns.length === 0 &&
+      typed.way === offered &&
+      offered === ghWay?.label &&
+      codeWay
+    ) {
+      typed.way = codeWay.label;
+    }
+  }
+
+  async function connectGh(one: GhRow) {
+    ghPending = ghKey(one);
+    ghProblem = null;
+    try {
+      await send<ConnectionView>(
+        "/api/github-sign-in/gh",
+        json("POST", {
+          machineId: one.machineId,
+          host: one.host,
+          login: one.login,
+        })
+      );
+      stopAdding();
+    } catch (error) {
+      ghProblem = failureWords(error);
+    } finally {
+      ghPending = null;
+    }
+    await read();
   }
 
   function stopAdding() {
@@ -460,16 +581,12 @@
 
   // What the page holds of a secret is only whether one was typed.
   $effect(() => {
-    if (
-      addKey !== "" ||
-      addApp.privateKey !== "" ||
-      addApp.clientSecret !== ""
-    ) {
+    if (addKey !== "" || addApp.clientSecret !== "") {
       typed.secretTyped = true;
     }
   });
 
-  /** What follows the row's making: its key, or its app, said on the row when refused. */
+  /** What follows the row's making: its key, or a Linear app's client, said on the row when refused. */
   async function setUp(
     name: string,
     service: string,
@@ -479,16 +596,13 @@
   ) {
     addKey = "";
     addApp = emptyApp();
-    if (way.auth === "oauth") {
+    if (startsSignIn(service, way)) {
       return true;
     }
     try {
       await send<ConnectionView>(
         way.auth === "app" ? `${path(name)}/app` : `${path(name)}/key`,
-        json(
-          "PUT",
-          way.auth === "app" ? appBody(service, typedApp) : { key: typedKey }
-        )
+        json("PUT", way.auth === "app" ? typedApp : { key: typedKey })
       );
       return true;
     } catch (error) {
@@ -510,7 +624,7 @@
       return;
     }
     // The sign-in tab opens on the press, before anything is awaited.
-    const byPage = signsInByPage(service.service, way);
+    const byPage = signsInByPage(way);
     const tab = byPage ? window.open("", "_blank") : null;
     if (byPage && !tab) {
       typed.problem = BLOCKED;
@@ -540,19 +654,17 @@
     // The row exists now: what follows is said on it.
     const typedKey = addKey;
     const typedApp = addApp;
+    const organization =
+      way.auth === "app" ? typed.organization.trim() : undefined;
     addDraft.clear();
     addPending = false;
     await read();
     const ready = await setUp(name, service.service, way, typedKey, typedApp);
-    if (!tab) {
-      await read();
+    if (ready && (tab || way.auth === "device")) {
+      await startSignIn(name, tab, organization);
       return;
     }
-    if (ready) {
-      await startSignIn(name, tab);
-      return;
-    }
-    tab.close();
+    tab?.close();
     await read();
   }
 
@@ -641,13 +753,7 @@
 {/snippet}
 
 <!-- A secret typed in the kit's password field, with show and hide. -->
-{#snippet secret(
-  id: string,
-  label: string,
-  hint: string,
-  draft: AppDraft,
-  key: "clientSecret" | "privateKey"
-)}
+{#snippet secret(id: string, label: string, hint: string, draft: AppDraft)}
   <Field {hint} {id} {label}>
     <InputGroup.Root>
       <InputGroup.Input
@@ -656,7 +762,7 @@
         required
         spellcheck="false"
         type={revealed[id] ? "text" : "password"}
-        bind:value={draft[key]}
+        bind:value={draft.clientSecret}
       />
       <InputGroup.Addon align="inline-end">
         <InputGroup.Button
@@ -680,68 +786,110 @@
   </Field>
 {/snippet}
 
-<!-- An app's registration: a GitHub App's ids and private key, or a
-     Linear app's client id and secret with the callback its settings list. -->
-{#snippet appFields(service: string, draft: AppDraft, at: string)}
-  {#if service === "github"}
-    <Field hint={words.appIdHint} id="{at}-app-id" label={words.appId}>
-      <Input
-        autocomplete="off"
-        id="{at}-app-id"
-        inputmode="numeric"
-        required
-        spellcheck="false"
-        bind:value={draft.appId}
-      />
-    </Field>
-    <Field
-      hint={words.installationIdHint}
-      id="{at}-installation"
-      label={words.installationId}
+<!-- A Linear app's client id and secret, with the callback its settings list. -->
+{#snippet appFields(draft: AppDraft, at: string)}
+  <p
+    data-slot="callback"
+    class="flex min-w-0 max-w-c-measure flex-col gap-space-1 type-meta text-ink-muted"
+  >
+    <span>{words.callbackLine}</span>
+    <code class="min-w-0 font-mono wrap-anywhere text-ink-strong select-all"
+      >{callbackUrl}</code
     >
-      <Input
-        autocomplete="off"
-        id="{at}-installation"
-        inputmode="numeric"
-        required
-        spellcheck="false"
-        bind:value={draft.installationId}
-      />
-    </Field>
-    {@render secret(
-      `${at}-private-key`,
-      words.privateKey,
-      words.privateKeyHint,
-      draft,
-      "privateKey"
-    )}
-  {:else}
-    <p
-      data-slot="callback"
-      class="flex min-w-0 max-w-c-measure flex-col gap-space-1 type-meta text-ink-muted"
-    >
-      <span>{words.callbackLine}</span>
-      <code class="min-w-0 font-mono wrap-anywhere text-ink-strong select-all"
-        >{callbackUrl}</code
-      >
-    </p>
-    <Field hint={words.clientIdHint} id="{at}-client-id" label={words.clientId}>
-      <Input
-        autocomplete="off"
-        id="{at}-client-id"
-        required
-        spellcheck="false"
-        bind:value={draft.clientId}
-      />
-    </Field>
-    {@render secret(
-      `${at}-client-secret`,
-      words.clientSecret,
-      words.clientSecretHint,
-      draft,
-      "clientSecret"
-    )}
-  {/if}
+  </p>
+  <Field hint={words.clientIdHint} id="{at}-client-id" label={words.clientId}>
+    <Input
+      autocomplete="off"
+      id="{at}-client-id"
+      required
+      spellcheck="false"
+      bind:value={draft.clientId}
+    />
+  </Field>
+  {@render secret(
+    `${at}-client-secret`,
+    words.clientSecret,
+    words.clientSecretHint,
+    draft
+  )}
+{/snippet}
+
+<!-- Sign in to GitHub's first way: each account a fleet machine's gh is
+     signed in to, its scopes, and one press that connects it. -->
+{#snippet ghAccounts()}
+  <div data-slot="gh" class="flex min-w-0 flex-col gap-space-2">
+    {#if gh === null}
+      <p class="type-meta text-ink-muted" role="status">{words.ghLooking}</p>
+    {:else}
+      {#if gh.signIns.length > 0}
+        <ul aria-label={words.ghList} class="flex min-w-0 flex-col gap-space-2">
+          {#each gh.signIns as one (ghKey(one))}
+            <li
+              data-slot="gh-account"
+              aria-label={words.ghAccountOn(one.login, one.machine)}
+              class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-md border border-border-hairline p-space-2"
+            >
+              <span class="flex min-w-0 grow basis-0 flex-col gap-space-1">
+                <span class="type-label wrap-anywhere text-ink-strong"
+                  >{one.login}</span
+                >
+                <span class="type-meta wrap-anywhere text-ink-muted"
+                  >{words.ghWhere(one.machine, one.host)}</span
+                >
+                <span
+                  data-slot="gh-scopes"
+                  class="flex min-w-0 flex-wrap items-center gap-space-1"
+                >
+                  <span class="sr-only">{words.ghScopes}</span>
+                  {#each one.scopes as scope (scope)}
+                    <Badge variant="secondary"><span>{scope}</span></Badge>
+                  {:else}
+                    <span class="type-meta text-ink-muted"
+                      >{words.ghScopesNone}</span
+                    >
+                  {/each}
+                </span>
+              </span>
+              {#if one.connection}
+                <Badge data-gh-connected variant="done"
+                  ><span>{words.ghConnected}</span></Badge
+                >
+              {:else}
+                <Button
+                  aria-label={words.ghConnectOne(one.login, one.machine)}
+                  disabled={ghPending !== null && ghPending !== ghKey(one)}
+                  label={words.ghConnect}
+                  onclick={() => connectGh(one)}
+                  pending={ghPending === ghKey(one)}
+                  pendingLabel={words.ghConnecting}
+                  press="pressable"
+                  size="sm"
+                />
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {:else if !ghProblem}
+        <p class="max-w-c-measure type-meta text-pretty text-ink-muted">
+          {words.ghNone}
+        </p>
+      {/if}
+      {#if gh.unread.length > 0}
+        <p class="max-w-c-measure type-meta text-pretty text-ink-muted">
+          {words.ghUnanswered(listOf.format(gh.unread))}
+        </p>
+      {/if}
+      {#if ghProblem}
+        <p
+          data-slot="gh-problem"
+          class="type-meta wrap-anywhere text-status-fail-ink"
+          role="alert"
+        >
+          {ghProblem}
+        </p>
+      {/if}
+    {/if}
+  </div>
 {/snippet}
 
 <!-- The sign-in form opens where it was asked for: under the empty
@@ -784,45 +932,49 @@
         {/if}
       </div>
     {/if}
-    {#if service.serverExample}
+    {#if addWay?.auth === "gh"}
+      {@render ghAccounts()}
+    {:else}
+      {#if service.serverExample}
+        <Field
+          id="connection-server"
+          label={words.serverAddress}
+          problem={addressProblem ?? undefined}
+        >
+          <Input
+            autocomplete="off"
+            id="connection-server"
+            inputmode="url"
+            oninput={() => {
+              addressProblem = null;
+            }}
+            oninvalid={(event: Event) => {
+              // Said under the field, never as the browser's bubble.
+              event.preventDefault();
+              addressProblem = words.serverAddressProblem;
+            }}
+            placeholder={service.serverExample}
+            spellcheck="false"
+            type="url"
+            bind:value={typed.address}
+          />
+        </Field>
+      {/if}
       <Field
-        id="connection-server"
-        label={words.serverAddress}
-        problem={addressProblem ?? undefined}
+        hint={words.accountHint}
+        id="connection-account"
+        label={words.account(service.label)}
       >
         <Input
           autocomplete="off"
-          id="connection-server"
-          inputmode="url"
-          oninput={() => {
-            addressProblem = null;
-          }}
-          oninvalid={(event: Event) => {
-            // Said under the field, never as the browser's bubble.
-            event.preventDefault();
-            addressProblem = words.serverAddressProblem;
-          }}
-          placeholder={service.serverExample}
-          spellcheck="false"
-          type="url"
-          bind:value={typed.address}
+          id="connection-account"
+          placeholder={words.accountPlaceholder}
+          required
+          {@attach focusOnOpen}
+          bind:value={typed.account}
         />
       </Field>
     {/if}
-    <Field
-      hint={words.accountHint}
-      id="connection-account"
-      label={words.account(service.label)}
-    >
-      <Input
-        autocomplete="off"
-        id="connection-account"
-        placeholder={words.accountPlaceholder}
-        required
-        {@attach focusOnOpen}
-        bind:value={typed.account}
-      />
-    </Field>
     {#if addWay?.auth === "bearer"}
       <Field
         hint={addWay.key}
@@ -837,10 +989,23 @@
           bind:value={addKey}
         />
       </Field>
+    {:else if addWay?.auth === "app" && service.service === "github"}
+      <Field
+        hint={words.appOrganizationHint}
+        id="connection-organization"
+        label={words.appOrganization}
+      >
+        <Input
+          autocomplete="off"
+          id="connection-organization"
+          spellcheck="false"
+          bind:value={typed.organization}
+        />
+      </Field>
     {:else if addWay?.auth === "app"}
-      {@render appFields(service.service, addApp, "connection")}
+      {@render appFields(addApp, "connection")}
     {/if}
-    {#if secretAskedAgain && addWay && addWay.auth !== "oauth"}
+    {#if secretAskedAgain && addWay && (addWay.auth === "bearer" || (addWay.auth === "app" && service.service !== "github"))}
       <p
         data-slot="secret-again"
         class="type-meta max-w-c-measure text-pretty text-ink-muted"
@@ -867,14 +1032,16 @@
         size="sm"
         variant="ghost"
       />
-      <Button
-        press="pressable"
-        label={words.signIn}
-        pending={addPending}
-        pendingLabel={words.signingIn}
-        size="sm"
-        type="submit"
-      />
+      {#if addWay?.auth !== "gh"}
+        <Button
+          press="pressable"
+          label={words.signIn}
+          pending={addPending}
+          pendingLabel={words.signingIn}
+          size="sm"
+          type="submit"
+        />
+      {/if}
     </div>
   </form>
 {/snippet}
@@ -947,7 +1114,7 @@
               icon: IconToolTodo,
               onselect: () => chooseFor(row),
             },
-            ...(row.auth === "app"
+            ...(row.auth === "app" && !isGithub(row)
               ? [
                   {
                     label: words.setApp,
@@ -979,6 +1146,29 @@
             {/if}
           {/snippet}
           {#snippet below()}
+            {#if row.device && !problems[row.name]}
+              <!-- A code sign-in's code: the person enters it on GitHub's
+                   page, opened from the row's button. -->
+              <p
+                data-slot="device-code"
+                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
+                role="status"
+              >
+                <span>{words.deviceEnter}</span>
+                <code class="font-mono type-label text-ink-strong select-all"
+                  >{row.device.userCode}</code
+                >
+                <Button
+                  label={copiedFrom === row.name && clipboard.copied
+                    ? words.deviceCopied
+                    : words.deviceCopy}
+                  onclick={() => copyCode(row)}
+                  press="pressable"
+                  size="xs"
+                  variant="ghost"
+                />
+              </p>
+            {/if}
             {#if appFor === row.name}
               <form
                 data-slot="row-app"
@@ -990,11 +1180,7 @@
                 }}
                 transition:unfold
               >
-                {@render appFields(
-                  row.service.toLowerCase(),
-                  rowApp,
-                  `app-${row.name}`
-                )}
+                {@render appFields(rowApp, `app-${row.name}`)}
                 <div class="flex justify-end gap-space-2">
                   <Button
                     press="pressable"
@@ -1095,13 +1281,14 @@
             {:else if row.state !== "signed-in" && signsIn(row)}
               <!-- One press returns to the sign-in under way, the same
                    page; only when none can still finish does it start one. -->
+              {@const again = row.device ? words.deviceOpen : words.openSignIn}
               <Button
-                aria-label="{row.signIn
-                  ? words.openSignIn
-                  : words.signIn} {labelOf(row)} {row.account}"
+                aria-label="{row.signIn ? again : words.signIn} {labelOf(
+                  row
+                )} {row.account}"
                 data-sign-in
                 press="pressable"
-                label={row.signIn ? words.openSignIn : words.signIn}
+                label={row.signIn ? again : words.signIn}
                 onclick={() => signIn(row)}
                 pending={signing[row.name] ?? false}
                 pendingLabel={words.signingIn}

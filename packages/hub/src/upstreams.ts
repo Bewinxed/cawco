@@ -5,8 +5,30 @@
  * (scripts/scratch-fleet-stand-ins.ts); no installed hub can.
  */
 
+import { CONNECTION_SERVICES } from "@cawco/core";
+
 /** GitHub's REST API, which the pollers, the relay and the publisher call. */
 export const GITHUB_API = "https://api.github.com";
+
+/**
+ * GitHub's own site: a code sign-in's `/login/device/code` and
+ * `/login/oauth/access_token`, the manifest form a GitHub App is registered
+ * through (`/settings/apps/new`), and an app's installation page.
+ */
+export const GITHUB_WEB = "https://github.com";
+
+/**
+ * CawCo's own GitHub OAuth app, which every hub's code sign-in goes through:
+ * its client ID, public by design ("The `client_secret` is not needed for
+ * the device flow", docs.github.com, authorizing OAuth apps). Empty until the
+ * app is registered once on GitHub with device flow enabled; while it is, a
+ * code sign-in says so and the other ways stand.
+ */
+export const GITHUB_DEVICE_CLIENT_ID: string = "";
+
+/** GitHub's MCP server, which a `gh` connection the hub makes reaches: the one Sign in to GitHub's ways name (core `CONNECTION_SERVICES`). */
+export const GITHUB_MCP =
+  CONNECTION_SERVICES.find((one) => one.service === "github")?.url ?? "";
 
 /**
  * Linear's API: its `/graphql`, which the tracker sync calls, and its

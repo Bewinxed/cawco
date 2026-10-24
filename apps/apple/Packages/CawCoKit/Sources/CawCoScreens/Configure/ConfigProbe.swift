@@ -292,13 +292,6 @@ enum ConfigProbe {
             say("connections linear app", connections.probeOpen(service: "linear", way: "Linear app"))
             await atStage("connections-linear-app", shell)
             connections.probeCloseForm()
-            // A GitHub App, its registration typed in the form: the hub holds it, sealed.
-            if let key = ids["appkey"].flatMap({ Data(base64Encoded: $0) }).flatMap({ String(data: $0, encoding: .utf8) }) {
-                connections.probeAddApp(service: "github", account: "probe app", app: .github(appId: "424242", installationId: "4242", privateKey: key))
-                await until(60) { connections.probeRow("github-probe-app")?.app != nil && !connections.probeAdding }
-                try? await Task.sleep(for: .seconds(1))
-                say("connections app", AccountsProbe.texts(in: connections.view).joined(separator: " | "))
-            }
             await serverAddress(connections, shell)
         }
 

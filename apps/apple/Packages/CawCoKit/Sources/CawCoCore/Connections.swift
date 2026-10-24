@@ -79,10 +79,9 @@ public final class FleetConnections {
         return name
     }
 
-    /// An app connection's registration (connections/+page.svelte `appBody`):
-    /// a GitHub App's ids and private key, or a Linear app's client.
+    /// A Linear app's client (connections/+page.svelte `AppDraft`). A GitHub
+    /// App is registered by its sign-in, from a manifest the hub posts.
     public enum AppRegistration: Sendable, Equatable {
-        case github(appId: String, installationId: String, privateKey: String)
         case linear(clientId: String, clientSecret: String)
     }
 
@@ -90,8 +89,6 @@ public final class FleetConnections {
     public func setApp(_ name: String, _ app: AppRegistration) async throws {
         typealias Body = Operations.PutApiConnectionsByNameApp.Input.Body.JsonPayload
         let body: Body = switch app {
-        case let .github(appId, installationId, privateKey):
-            Body(value1: .init(appId: appId, installationId: installationId, privateKey: privateKey), value2: nil)
         case let .linear(clientId, clientSecret):
             Body(value1: nil, value2: .init(clientId: clientId, clientSecret: clientSecret))
         }
