@@ -2074,7 +2074,7 @@ env_is_clean() {
   echo "$id, pid $pid: $(printf '%s\n' "$env" | grep -oE '^(CAWCO_[A-Z0-9_]*|PI_PACKAGE_DIR)=' | tr -d = | sort | tr '\n' ' ')"
   printf '%s\n' "$env" | grep -qx "CAWCO_INSTANCE_ID=$id"
   ! printf '%s\n' "$env" | grep -q '^PI_PACKAGE_DIR=' || { echo "it carries PI_PACKAGE_DIR"; return 1; }
-  extra=$(printf '%s\n' "$env" | grep -oE '^CAWCO_[A-Z0-9_]*' | grep -vxE 'CAWCO_HUB_URL|CAWCO_INSTANCE_ID|CAWCO_SESSION_CREDENTIAL|CAWCO_MODEL' || true)
+  extra=$(printf '%s\n' "$env" | grep -oE '^CAWCO_[A-Z0-9_]*' | grep -vxE "$SESSION_CAWCO_ALLOWED|CAWCO_MODEL" || true)
   [[ -z $extra ]] || { echo "it carries $(echo $extra)"; return 1; }
 }
 handover_on_joined_machine() {
@@ -2173,6 +2173,12 @@ handover_on_joined_machine() {
 }
 export -f env_is_clean handover_on_joined_machine
 rig_handover() {
+  # The CAWCO_* a session may carry (env_is_clean), read from core so a renamed one cannot fall out of step: those its
+  # tools read (SESSION_CAWCO_ENV), and the keeper's tree mark (CAWCO_ENV.sessiondTree), which sessiond itself puts in
+  # each child it starts and reads back to end what the child left running, and no tool reads.
+  export SESSION_CAWCO_ALLOWED
+  SESSION_CAWCO_ALLOWED=$(cd "$here/../.." && bun -e 'const { SESSION_CAWCO_ENV } = await import("./packages/core/src/session-env.ts"); const { CAWCO_ENV } = await import("./packages/core/src/cawco-env.ts"); console.log([...SESSION_CAWCO_ENV, CAWCO_ENV.sessiondTree].join("|"))')
+  [[ -n $SESSION_CAWCO_ALLOWED ]]
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, the old keeper is kept while its unit holds a process CawCo did not start (its update state and Update cell name it) and goes once that ends; the hub's machine keeps the build its trial would restore until the trial is confirmed" handover_on_joined_machine 1200
