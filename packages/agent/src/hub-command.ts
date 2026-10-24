@@ -33,6 +33,7 @@ import {
   ensureBoundary,
   whileSandboxDown,
 } from "./boundary";
+import { copyPathSync, inCopySync, viewRunning } from "./layer";
 import { type DenyPaths, denyPathspecs, shimPaths } from "./worktree-guard";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
@@ -853,7 +854,8 @@ const onHost = async (
       `a move that writes ${writes.join(", ")} runs on the host, and only a command that runs git as safe-git.ts says runs there`
     );
   }
-  const refused = await hostGitRefusal(workspace.path);
+  await viewRunning(workspace.id);
+  const refused = await hostGitRefusal(workspace);
   if (refused) {
     return { exitCode: 1, stdout: "", stderr: `${refused}\n` };
   }
@@ -863,13 +865,20 @@ const onHost = async (
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: one look at the boundary at a time, until it is idle
       const down = await whileSandboxDown(workspace, async () => {
-        const now = await hostGitRefusal(workspace.path);
+        const now = await hostGitRefusal(workspace);
         if (now) {
           return { exitCode: 1, stdout: "", stderr: `${now}\n` };
         }
+        // In the copy as its layer holds it: a Linux view's, never the
+        // person's folder beneath it (layer.ts).
+        const [file = "/bin/sh", ...args] = inCopySync(workspace.id, cwd, [
+          "/bin/sh",
+          "-c",
+          cmd,
+        ]).argv;
         return await spawned({
-          file: "/bin/sh",
-          args: ["-c", cmd],
+          file,
+          args,
           cwd,
           cmd,
           env: {
@@ -912,9 +921,11 @@ const onHost = async (
   }
 };
 
-/** Why git must not run on this host in the clone at `path`: its `.git` no folder of its own, or its config past the allowlist. */
-const hostGitRefusal = async (path: string): Promise<string | undefined> => {
-  const dotGit = join(path, ".git");
+/** Why git must not run on this host in `workspace`'s copy: its `.git` no folder of its own, or its config past the allowlist. */
+const hostGitRefusal = async (
+  workspace: WorkspaceRef
+): Promise<string | undefined> => {
+  const dotGit = join(copyPathSync(workspace.id, workspace.path), ".git");
   const found = await lstat(dotGit).catch(() => undefined);
   if (!found?.isDirectory()) {
     return `${dotGit} is ${found?.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through on the host`;

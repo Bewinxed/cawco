@@ -210,7 +210,9 @@
   );
 
   /**
-   * Reads what the clone holds that is nowhere else before asking. Held
+   * Reads what the workspace's private copy of its folder holds that is
+   * nowhere else before asking (on Linux a view of the folder itself, whose
+   * folder an archive never touches; a clone on the Mac). Held
    * work turns the question into Keep or Save and archive, which has its
    * machine write it to a carry before deleting anything. A read that fails
    * asks plainly: the hub reads again on archive and refuses in its own
@@ -225,8 +227,8 @@
         at: instance.id,
         title: "This workspace holds work that is nowhere else",
         body: [
-          `Its clone ${held.path} on ${held.machine} holds ${held.holds}, ${held.size} in all.`,
-          `Save and archive writes its unlanded commits, changes and stashes to a carry on ${held.machine} (in ~/.cawco/carries), then deletes the clone, its boundary and its records. Keep leaves it all where it is.`,
+          `Its private copy of ${held.path} on ${held.machine} holds ${held.holds}, ${held.size} in all.`,
+          `Save and archive writes its unlanded commits and changes to a carry on ${held.machine} (in ~/.cawco/carries), then deletes its private copy, its boundary and its records. Your folder stays as it is. Keep leaves it all where it is.`,
         ],
         cancelLabel: "Keep",
         confirmLabel: "Save and archive",
@@ -239,7 +241,7 @@
     await asker.ask({
       at: instance.id,
       title: "Archive this workspace?",
-      body: `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its clone, its boundary and its records on ${where}, for good. Every other workspace runs as before.`,
+      body: `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its private copy, its boundary and its records on ${where}, for good. Your folder stays as it is, and every other workspace runs as before.`,
       confirmLabel: "Archive workspace",
       destructive: true,
       pendingLabel: "Archiving…",

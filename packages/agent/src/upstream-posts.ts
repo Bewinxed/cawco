@@ -29,6 +29,7 @@ import { forgeLocation, forgeOn, makeForgePost } from "./forges/forge";
 import { hostGhToken } from "./host-gh";
 import { hostGitEnv, isNetworkRemote, pushLfs, runOnHost } from "./hub-git";
 import { provenFetch } from "./hub-proof";
+import { copyPathSync, viewRunning } from "./layer";
 import { workspaceRefs } from "./workspace-records";
 
 /** How long GitHub may take to answer one approved request. Our choice. A held push is bounded by its silence instead (hub-git.ts `runOnHost`). */
@@ -218,7 +219,8 @@ export const makeHeldPush = async (
       said: `CawCo did not push: ${bad.sha}:${bad.dst} is not a commit and a ref.`,
     };
   }
-  const gitDir = join(ref.path, ".git");
+  await viewRunning(ref.id);
+  const gitDir = join(copyPathSync(ref.id, ref.path), ".git");
   const problem = await repositoryConfigProblem(gitDir);
   if (problem) {
     return { ok: false, said: `CawCo did not push: ${problem}.` };
