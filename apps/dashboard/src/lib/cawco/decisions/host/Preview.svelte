@@ -11,7 +11,10 @@
   says. A component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
-  `sayShape`), so its frame is that wide and that tall. Each stands in its
+  `sayShape`), so its frame is that wide and that tall; a page's canvases
+  load one at a time, each once the one before it has said its shape
+  (embed-turns.ts: together they ask more than the browser takes in
+  flight). Each stands in its
   well, which hugs it and scrolls it sideways where it is wider
   (Well.svelte). While the origin is asked, the well holds the frame's own
   height where it is known (a screen's), else one status row, a skeleton
@@ -41,6 +44,7 @@
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-working.webp";
   import { dur, reveal, revealHere } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
+  import { type EmbedTurn, embedTurn } from "./embed-turns.js";
   import { served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
   import Well from "./Well.svelte";
@@ -80,6 +84,8 @@
   /** It stands at a screen's shape, known before it serves: a dev server's preview or a sheet, not a component canvas, which says its own height. */
   const screen = $derived(held?.kind !== "component");
   let watch: FrameObserver | undefined;
+  /** A component canvas's place among the page's canvases, which load one at a time (embed-turns.ts): its turn ends once it says its shape. */
+  let turn: EmbedTurn | undefined;
 
   /** A component canvas's own height and widest story, as it says them (agent canvas runtime `by=embed`): its frame is as tall and as wide. */
   $effect(() => {
@@ -96,6 +102,7 @@
       ) {
         tall = said.height;
         saidWidth = typeof said.width === "number" ? said.width : null;
+        turn?.done();
       }
     };
     addEventListener("message", heard);
@@ -210,14 +217,25 @@
     if (!embed) {
       return;
     }
-    const address =
-      held?.kind === "component" ? canvasEmbedUrl(embed, stories) : embed;
+    const canvas = held?.kind === "component";
+    const address = canvas ? canvasEmbedUrl(embed, stories) : embed;
     let gone = false;
     const after = setTimeout(() => {
       slow = true;
     }, grace());
     const at = new URL(embed);
     const deadline = Date.now() + START_MS;
+    /** The frame's address set once its origin serves, a canvas's once it is its turn among the page's canvases (embed-turns.ts). */
+    const open = async () => {
+      if (canvas) {
+        turn = embedTurn();
+        await turn.granted;
+      }
+      if (!gone) {
+        ready = address;
+        asking = false;
+      }
+    };
     asking = true;
     (async () => {
       for (;;) {
@@ -234,8 +252,7 @@
           return;
         }
         if (!why) {
-          ready = address;
-          asking = false;
+          await open();
           return;
         }
         if (why.cause !== "status" || Date.now() >= deadline) {
@@ -250,6 +267,8 @@
       gone = true;
       asking = false;
       clearTimeout(after);
+      turn?.done();
+      turn = undefined;
     };
   });
 
