@@ -570,6 +570,8 @@ const launch = async (
     rulesWaiting.delete(key);
     console.info(`[browser] ${key} live on the ${host.kind} host`);
     gateFor(now);
+    // Its row is the record's: live, not the start's last step.
+    starting.delete(key);
     return rowOf(now);
   } catch (error) {
     const running = await host.running(record).catch(() => false);

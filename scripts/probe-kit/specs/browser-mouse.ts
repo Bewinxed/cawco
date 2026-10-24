@@ -308,28 +308,25 @@ const containerPress = async (
   await link.call("Target.closeTarget", { targetId: page.targetId });
 };
 
-/** What the container's X server says of its input devices, in its log. */
-const xorgDevices = async (kit: Kit, record: BrowserRecord): Promise<void> => {
+/** What `cmd` wrote in the browser's container, as neko, once it ended; or why it could not run. */
+const inContainer = async (
+  record: BrowserRecord,
+  cmd: string
+): Promise<string> => {
   const { findRuntime } =
     await import("../../../packages/agent/src/browser/runtime");
   const runtime = await findRuntime();
   if ("missing" in runtime || !record.container) {
-    kit.check("container: the runtime and the record's container", false);
-    return;
+    return `no runtime or no container: ${"missing" in runtime ? runtime.missing : "the record names none"}`;
   }
   const exec = await runtime.docker.getContainer(record.container.id).exec({
-    // Its log file, and its output as supervisord keeps it.
-    Cmd: [
-      "sh",
-      "-c",
-      "cat /home/neko/.local/share/xorg/Xorg.*.log /var/log/neko/xorg.log 2>&1",
-    ],
+    Cmd: ["sh", "-c", cmd],
     User: "neko",
     AttachStdout: true,
     AttachStderr: true,
   });
   const stream = await exec.start({ hijack: true, stdin: false });
-  const log = await new Promise<string>((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     let text = "";
     stream.on("data", (chunk: Buffer) => {
       text += chunk.toString();
@@ -337,6 +334,15 @@ const xorgDevices = async (kit: Kit, record: BrowserRecord): Promise<void> => {
     stream.on("end", () => resolve(text));
     stream.on("error", reject);
   });
+};
+
+/** What the container's X server says of its input devices, in its log. */
+const xorgDevices = async (kit: Kit, record: BrowserRecord): Promise<void> => {
+  // Its log file, and its output as supervisord keeps it.
+  const log = await inContainer(
+    record,
+    "cat /home/neko/.local/share/xorg/Xorg.*.log /var/log/neko/xorg.log 2>&1"
+  );
   const devices = log
     .split("\n")
     .filter((line) => line.includes("Adding extended input device"))
@@ -349,6 +355,96 @@ const xorgDevices = async (kit: Kit, record: BrowserRecord): Promise<void> => {
   );
 };
 
+/** How long a start may take: the first builds the image, which runs to minutes. */
+const START_MS = 15 * 60_000;
+
+/**
+ * The browser's own words on a start that did not go live: on the container
+ * host its runtime's log and neko's, Chromium's and the X server's logs in
+ * it; on the local host Chromium's log beside its profile.
+ */
+const browserLogs = async (
+  host: "container" | "local",
+  key: BrowserKey,
+  record: BrowserRecord | undefined
+): Promise<string> => {
+  const { chromiumDir } =
+    await import("../../../packages/agent/src/browser/state");
+  if (host === "local") {
+    const log = await Bun.file(join(chromiumDir(key), "chromium.log"))
+      .text()
+      .catch((error: unknown) => `no chromium.log (${String(error)})`);
+    return `chromium.log: ${log.slice(-1500)}`;
+  }
+  if (!record?.container) {
+    return "the record names no container";
+  }
+  const { findRuntime } =
+    await import("../../../packages/agent/src/browser/runtime");
+  const runtime = await findRuntime();
+  if ("missing" in runtime) {
+    return `no runtime: ${runtime.missing}`;
+  }
+  const said = await runtime.docker
+    .getContainer(record.container.id)
+    .logs({ stdout: true, stderr: true, tail: 40 })
+    .then((buffer) => String(buffer))
+    .catch((error: unknown) => `no runtime log (${String(error)})`);
+  const logs = await inContainer(
+    record,
+    "tail -n 25 /var/log/neko/neko.log /var/log/neko/chromium.log /var/log/neko/xorg.log 2>&1"
+  ).catch((error: unknown) => `no logs in it (${String(error)})`);
+  return `runtime log: ${said.slice(-1500)} | in the container: ${logs.slice(-3000)}`;
+};
+
+/**
+ * Starts the browser of `key` and waits, up to {@link START_MS}, until it is
+ * live on `host` or has failed; its record once it is live, else nothing,
+ * with the check's detail naming why.
+ */
+const started = async (
+  kit: Kit,
+  browsers: Browsers,
+  key: BrowserKey,
+  host: "container" | "local"
+): Promise<BrowserRecord | undefined> => {
+  const { readBrowser } =
+    await import("../../../packages/agent/src/browser/state");
+  const at = performance.now();
+  const start = await readWithin(START_MS, () =>
+    browsers.startBrowser({ key }).then(
+      (row) => ({ row, error: undefined }),
+      (error: unknown) => ({ row: undefined, error })
+    )
+  );
+  const record = await readBrowser(key);
+  const seconds = Math.round((performance.now() - at) / 1000);
+  const live =
+    start.kind === "answered" &&
+    start.value.row?.state === "live" &&
+    start.value.row.host === host &&
+    record?.state === "live" &&
+    record.host === host;
+  let why = `record ${record?.state ?? "none"} on ${record?.host ?? "no host"}`;
+  if (start.kind === "unanswered") {
+    why = `not live within ${START_MS / 60_000} min; ${why}`;
+  } else if (start.value.error) {
+    const { error } = start.value;
+    why = `the start failed: ${error instanceof Error ? error.message : String(error)}; ${why}`;
+  } else {
+    why = `the start answered ${start.value.row?.state} on ${start.value.row?.host}; ${why}`;
+  }
+  const detail = live
+    ? why
+    : `${why}${record?.why ? `; its why: ${record.why}` : ""}; ${await browserLogs(host, key, record)}`;
+  kit.check(
+    `${host}: ${key} live on the ${host} host in ${seconds} s`,
+    live,
+    detail
+  );
+  return live ? record : undefined;
+};
+
 /** One host's leg: its browser started, read, pressed, removed. */
 const hostLeg = async (
   kit: Kit,
@@ -358,17 +454,11 @@ const hostLeg = async (
 ): Promise<void> => {
   const { CdpLink } =
     (await import("../../../packages/agent/src/browser/cdp-takeover")) as Takeover;
-  const { portsOf, readBrowser } =
-    await import("../../../packages/agent/src/browser/state");
+  const { portsOf } = await import("../../../packages/agent/src/browser/state");
   await browsers.removeBrowser(key);
-  const row = await browsers.startBrowser({ key });
-  const record = await readBrowser(key);
-  kit.check(
-    `${host}: ${key} live on the ${host} host`,
-    row.state === "live" && row.host === host && !!record,
-    `${row.state} on ${row.host}`
-  );
-  if (!(record && row.state === "live")) {
+  const record = await started(kit, browsers, key, host);
+  if (!record) {
+    await browsers.removeBrowser(key);
     return;
   }
   const devtools = `http://127.0.0.1:${portsOf(record).devtools}`;
