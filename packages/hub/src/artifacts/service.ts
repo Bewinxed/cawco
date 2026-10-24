@@ -1436,6 +1436,8 @@ export interface ArtifactServiceDeps {
     next?: ArtifactRow
   ) => Promise<void>;
   instance: (id: string) => InstanceRow | undefined;
+  /** The rows of `ids` the hub holds, in one read. */
+  instances: (ids: string[]) => InstanceRow[];
   /**
    * Whether the session's work item ended (done, failed or cancelled),
    * whatever its workspace's state: the sessions up its delegation tree may
@@ -1841,13 +1843,40 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
   };
 
+  /**
+   * The other sessions of `instance`'s delegation tree that hold an
+   * artifact, in the tree's order, each with its row and its artifacts,
+   * newest first: one read of the artifacts and one of their holders'
+   * rows, so a read costs what the tree holds, not the tree's size. Walked
+   * one session at a time, with a turn's input check on each, an
+   * orchestrator's 1,347 delegates held the hub's thread for 2.6 s on every
+   * artifact_list (2026-10-24, nightly 5540 rolled back for it).
+   */
+  const holdersInTree = (
+    instance: InstanceRow
+  ): { artifacts: ArtifactRow[]; row: InstanceRow }[] => {
+    const others = [...deps.tree(instance)].filter((id) => id !== instance.id);
+    const held = Map.groupBy(
+      db.ofInstances(others),
+      (row) => row.instanceId as string
+    );
+    const rows = new Map(
+      deps.instances([...held.keys()]).map((row) => [row.id, row])
+    );
+    return others.flatMap((id) => {
+      const row = rows.get(id);
+      const artifacts = held.get(id);
+      return row && artifacts ? [{ row, artifacts }] : [];
+    });
+  };
+
   /** The artifacts of the other sessions of `instance`'s delegation tree in its project ({@link inTree}). */
-  const ofTree = (instance: InstanceRow): ArtifactRow[] =>
-    [...deps.tree(instance)].flatMap((sessionId) =>
-      sessionId !== instance.id &&
-      deps.instance(sessionId)?.projectId === instance.projectId
-        ? db.ofInstance(sessionId)
-        : []
+  const ofTree = (
+    instance: InstanceRow,
+    holders = holdersInTree(instance)
+  ): ArtifactRow[] =>
+    holders.flatMap(({ row, artifacts }) =>
+      row.projectId === instance.projectId ? artifacts : []
     );
 
   /**
@@ -1861,9 +1890,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return asked;
     }
     const seen = new Map<string, ArtifactRow>();
+    const holders = holdersInTree(instance);
     for (const row of [
-      ...answerable(instance),
-      ...ofTree(instance),
+      ...answerable(instance, holders),
+      ...ofTree(instance, holders),
       ...(instance.projectId
         ? db.ofProject(instance.projectId).filter((one) => one.kind === "page")
         : []),
@@ -2290,15 +2320,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * project's lead (Caw), those of every session of the project he leads,
    * whose ended writer's marks come to him. No other session's.
    */
-  const answerable = (instance: InstanceRow): ArtifactRow[] => [
+  const answerable = (
+    instance: InstanceRow,
+    holders = holdersInTree(instance)
+  ): ArtifactRow[] => [
     ...db.ofInstance(instance.id),
-    // Its delegates' that have ended: their marks come to it (server.ts `deliverArtifactMarks`).
-    ...[...deps.tree(instance)].flatMap((id) => {
-      const delegate = id === instance.id ? undefined : deps.instance(id);
-      return delegate?.parentInstanceId === instance.id && deps.ended(delegate)
-        ? db.ofInstance(id)
-        : [];
-    }),
+    // Its delegates' that have ended: their marks come to it (server.ts
+    // `deliverArtifactMarks`). Only a delegate holding an artifact is asked.
+    ...holders.flatMap(({ row, artifacts }) =>
+      row.parentInstanceId === instance.id && deps.ended(row) ? artifacts : []
+    ),
     ...deps
       .ledProjects(instance)
       .flatMap((projectId) =>
@@ -5328,10 +5359,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** What artifact `row`'s doc says, read once per change of it or of its row. */
-  const factsOf = (row: ArtifactRow): ArtifactFacts => {
+  /**
+   * What artifact `row`'s doc says, read once per change of it or of its
+   * row. `heldNext`: whether a maker's change is held for it, when the
+   * caller read that for every artifact at once.
+   */
+  const factsOf = (
+    row: ArtifactRow,
+    heldNext = db.heldOf(row.id) !== undefined
+  ): ArtifactFacts => {
     // A maker's change held for its parent to open: the parent's move.
-    const heldNext = db.heldOf(row.id) !== undefined;
     const mark = factsMark(row);
     const kept = factsKept.get(row.id);
     if (kept?.mark === mark) {
@@ -5642,6 +5679,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const needs: ArtifactNeedsRead["needs"] = [];
       const notices: ArtifactNeedsRead["notices"] = [];
       const rows = db.asking();
+      // Which of them a maker's change is held for, in one read.
+      const heldNext = db.heldTargets();
       // An artifact gone takes its facts with it.
       const standing = new Set(rows.map((row) => row.id));
       for (const id of factsKept.keys()) {
@@ -5657,7 +5696,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       for (const row of rows) {
         const kept = withMedia(
           row,
-          factsOf(row),
+          factsOf(row, heldNext.has(row.id)),
           pages.get(row.instanceId) ?? []
         );
         if (!mayWait(row, kept)) {
@@ -5943,12 +5982,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      */
     status: (instanceId: string, waitingOnly = false): ArtifactStatus[] => {
       const instance = sessionOf(instanceId);
+      const holders = holdersInTree(instance);
       const rows = [
         ...new Map(
-          [...answerable(instance), ...ofTree(instance)].map((row) => [
-            row.id,
-            row,
-          ])
+          [...answerable(instance, holders), ...ofTree(instance, holders)].map(
+            (row) => [row.id, row]
+          )
         ).values(),
       ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       const all = rows.map((row) => statusOf(instance, row));

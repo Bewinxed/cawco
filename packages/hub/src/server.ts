@@ -13286,6 +13286,7 @@ export const createServer = (
     handedUp: (parent, maker, artifact, next) =>
       handArtifactUp(parent, maker, artifact, next),
     instance: (id) => db.getInstancesByIds([id])[0],
+    instances: (ids) => db.getInstancesByIds(ids),
     ended: (instance) =>
       !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
     // Over for good (Needs you's rule 4), never a machine away or a sign-in to make.
@@ -20159,9 +20160,23 @@ export const createServer = (
       ? { at: Date.now(), error: read.error }
       : { at: Date.now(), hash: read.hash, version: read.version };
 
+  /**
+   * A turn of the loop between two rows of a source check: each row's note
+   * rewrites its row, files and all (megabytes for a plugin), so a pass
+   * over the fleet's rows in one go held the hub 630 ms as it started
+   * (hub-restart-live-db, 2026-10-24).
+   */
+  const sourceTurn = (): Promise<void> =>
+    new Promise<void>((resolve) => setImmediate(resolve));
+
   /** {@link checkSources}' skills: one source at a time. */
   const checkSkillSources = async (): Promise<void> => {
     for (const row of db.listSkills()) {
+      // biome-ignore lint/performance/noAwaitInLoops: one row a turn, so the hub answers between them
+      await sourceTurn();
+      if (lifetime.closed()) {
+        return;
+      }
       if (fetches.has(`skill:${row.name}`)) {
         continue;
       }
@@ -20169,7 +20184,7 @@ export const createServer = (
         unwatch({ skill: row.name }, row);
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one source at a time, so GitHub is not hit in a burst
+      // One source at a time, so GitHub is not hit in a burst.
       const resolved = await resolveSkill(
         row.source,
         db.heldSkillNames(row.name)
@@ -20223,30 +20238,49 @@ export const createServer = (
         );
   };
 
+  /** What a read of `marketplace` found, noted on each plugin's row, one row a turn ({@link sourceTurn}). */
+  const notePluginSources = async (
+    marketplace: string,
+    found: ResolvedPlugin[]
+  ): Promise<void> => {
+    for (const plugin of found) {
+      // biome-ignore lint/performance/noAwaitInLoops: one row a turn, so the hub answers between them
+      await sourceTurn();
+      if (lifetime.closed()) {
+        return;
+      }
+      const id = `${plugin.name}@${marketplace}`;
+      db.noteSource({ plugin: id }, { checked: checkedOf(plugin) });
+      const row = db.listPlugins().find((entry) => entry.id === id);
+      if (row) {
+        announceFetch({ plugin: pluginRow(row) });
+      }
+    }
+  };
+
   /** {@link checkSources}' plugins: one marketplace, every plugin of it, at a time. */
   const checkPluginSources = async (): Promise<void> => {
     for (const [marketplace, ids] of pluginsByMarketplace()) {
-      const rows = db.listPlugins().filter((row) => ids.includes(row.id));
+      // biome-ignore lint/performance/noAwaitInLoops: one row a turn, so the hub answers between them
+      await sourceTurn();
+      if (lifetime.closed()) {
+        return;
+      }
       if (!watched({ plugin: ids[0] ?? "" })) {
-        for (const row of rows) {
+        for (const row of db
+          .listPlugins()
+          .filter((one) => ids.includes(one.id))) {
           unwatch({ plugin: row.id }, row);
         }
         continue;
       }
       const names = ids.map((id) => id.split("@")[0] ?? id);
-      // biome-ignore lint/performance/noAwaitInLoops: one source at a time, so GitHub is not hit in a burst
+      // One source at a time, so GitHub is not hit in a burst.
       const found = await readPluginSource(marketplace, names);
       if (lifetime.closed()) {
         return;
       }
-      for (const plugin of found) {
-        const id = `${plugin.name}@${marketplace}`;
-        db.noteSource({ plugin: id }, { checked: checkedOf(plugin) });
-        const row = db.listPlugins().find((entry) => entry.id === id);
-        if (row) {
-          announceFetch({ plugin: pluginRow(row) });
-        }
-      }
+      await notePluginSources(marketplace, found);
     }
   };
 
@@ -32792,6 +32826,10 @@ export const createServer = (
                   row.kind !== "summariser" &&
                   !returningRemoved.has(row.id)
               );
+              // A turn between the settle and the restores: a register of a
+              // machine holding thousands of rows held the hub's thread for
+              // 640 ms in one piece on the live database (hub-restart-live-db).
+              await new Promise<void>((resolve) => setImmediate(resolve));
               await readLaunchDirs(message.machineId);
               let restoreBatch = 0;
               for (const orphan of revivable) {
@@ -32932,7 +32970,11 @@ export const createServer = (
               );
               // Behind the restores and the ack, so the agent reads each send
               // after the spawn it waits on: the register ends its window and
-              // hands over what was held for it (core handover.ts).
+              // hands over what was held for it (core handover.ts). A turn
+              // first: handing over a hundred kept sends is 200 ms of its own,
+              // and a send to one of their sessions that arrives meanwhile is
+              // owed behind them ({@link sendWaits}).
+              await new Promise<void>((resolve) => setImmediate(resolve));
               hubStep({
                 kind: "agent-register",
                 machineId: message.machineId,

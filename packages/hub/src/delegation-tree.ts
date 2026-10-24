@@ -190,7 +190,7 @@ const isLive = (item: WorkItemRow, now: number): boolean =>
  * session row's `parentInstanceId` walked up to the top (a session with no
  * parent, or one a routine or a design check started, which reports to no
  * session), then every child under that top, one level at a time: by the
- * same work items `delegate_list` reads ({@link sessionsOf}), and by the
+ * same work items `delegate_list` reads (their sessions alone), and by the
  * children's own `parentInstanceId`, so a child started with no work item (a
  * harness's subagent, OpenCode's `delegate`) is in the tree as it is from
  * its own side.
@@ -198,7 +198,7 @@ const isLive = (item: WorkItemRow, now: number): boolean =>
 export const treeSessions = (
   db: Pick<
     DbShape,
-    "childIdsOfParents" | "getInstancesByIds" | "workItemsOfParents"
+    "childIdsOfParents" | "getInstancesByIds" | "itemSessionsOfParents"
   >,
   caller: InstanceRow
 ): Set<string> => {
@@ -216,9 +216,7 @@ export const treeSessions = (
   let level = [top.id];
   while (level.length > 0) {
     const below = [
-      ...sessionsOf(db.workItemsOfParents(level)).map(
-        (session) => session.item.instanceId
-      ),
+      ...db.itemSessionsOfParents(level),
       ...db.childIdsOfParents(level),
     ];
     level = [...new Set(below)].filter((id) => !tree.has(id));

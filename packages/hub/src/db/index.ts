@@ -794,7 +794,9 @@ export interface DbShape {
   ) => WorkspaceRow;
   /**
    * A machine's catalog's word on when each stored conversation last changed,
-   * written onto its rows that are not live. Returns how many rows it moved.
+   * written onto its rows that are not live, but for those whose newest send
+   * is a keep-alive (read as each chunk is written). Returns how many rows
+   * the catalog moved.
    */
   readonly dateStoredSessions: (
     machineId: string,
@@ -1058,6 +1060,12 @@ export interface DbShape {
   readonly instanceIdOf: (id: string) => string;
   /** The MCP servers and tools a session's newest `init` announced. */
   readonly instanceTooling: (id: string) => SessionTooling | null | undefined;
+  /**
+   * The sessions of the work items `parentInstanceIds` delegated, each once:
+   * their ids alone, never the items' briefs and reports, which a delegation
+   * tree's walk has no use for (3,134 items read whole took 200 ms a walk).
+   */
+  readonly itemSessionsOfParents: (parentInstanceIds: string[]) => string[];
   /** The listed sessions whose keep-alive is on: the only ones it schedules. */
   readonly keepAliveInstances: () => PublicInstanceRow[];
   /** Keeps a pending send whole, as its machine was handed it. */
@@ -4354,7 +4362,15 @@ const make = async (path: string): Promise<DbShape> => {
         // biome-ignore lint/performance/noAwaitInLoops: one chunk a turn, so the hub answers between them
         await new Promise<void>((resolve) => setImmediate(resolve));
         try {
-          writeDates(chunk);
+          // The transcript's mtime includes maintenance; it is not real
+          // activity. Read here, a chunk's sessions at a time: all of a
+          // machine's at once read 36,000 sends' bodies and held its
+          // register 130 ms (hub-restart-live-db, 2026-10-24).
+          const keptAlive = newestKeptAlive(chunk.map((row) => row.id));
+          const dates = chunk.filter((row) => !keptAlive.has(row.id));
+          if (dates.length > 0) {
+            writeDates(dates);
+          }
         } finally {
           for (const row of chunk) {
             dating.delete(row.id);
@@ -4397,7 +4413,7 @@ const make = async (path: string): Promise<DbShape> => {
       )
       .all();
     // Only a row whose time the catalog moves is read further: its newest
-    // send, all of them in one read. Each row's newest send was read on its
+    // send, a chunk's at a time as the chunk is written. Each row's newest send was read on its
     // own, moved or not: a statement prepared and run per session, 314 ms
     // for a machine's 3,024 at every register and heartbeat, the hub's
     // thread held all that time (hub-restart-load, 2026-10-23).
@@ -4410,16 +4426,13 @@ const make = async (path: string): Promise<DbShape> => {
     if (moving.length === 0) {
       return 0;
     }
-    const keptAlive = newestKeptAlive(moving.map((row) => row.id));
-    // The transcript's mtime includes maintenance; it is not real activity.
-    const dates = moving.filter((row) => !keptAlive.has(row.id));
     // Each chunk's rows in one statement, each a turn of the loop after the
     // last, so the hub answers between them and the register that asked
     // waits on none: 4,277 rows whose times all moved held the thread 0.9 s
     // in one go on the live database (hub-restart-live-db).
-    const chunks: (typeof dates)[] = [];
-    for (let from = 0; from < dates.length; from += DATES_WRITTEN_AT_ONCE) {
-      const chunk = dates
+    const chunks: (typeof moving)[] = [];
+    for (let from = 0; from < moving.length; from += DATES_WRITTEN_AT_ONCE) {
+      const chunk = moving
         .slice(from, from + DATES_WRITTEN_AT_ONCE)
         .filter((row) => !dating.has(row.id));
       if (chunk.length > 0) {
@@ -4427,7 +4440,7 @@ const make = async (path: string): Promise<DbShape> => {
       }
     }
     writeDatesLater(machineId, chunks, written);
-    return dates.length;
+    return moving.length;
   };
 
   const store: DbShape = {
@@ -9451,6 +9464,15 @@ const make = async (path: string): Promise<DbShape> => {
             .where(inArray(workItems.parentInstanceId, parentInstanceIds))
             .orderBy(desc(workItems.createdAt))
             .all(),
+    itemSessionsOfParents: (parentInstanceIds) =>
+      parentInstanceIds.length === 0
+        ? []
+        : db
+            .selectDistinct({ id: workItems.instanceId })
+            .from(workItems)
+            .where(inArray(workItems.parentInstanceId, parentInstanceIds))
+            .all()
+            .map((row) => row.id),
     childIdsOfParents: (parentInstanceIds) =>
       parentInstanceIds.length === 0
         ? []

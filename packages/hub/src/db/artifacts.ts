@@ -8,6 +8,8 @@ import {
   eq,
   gt,
   gte,
+  inArray,
+  isNotNull,
   isNull,
   or,
   sql,
@@ -158,8 +160,16 @@ export interface ArtifactsDb {
   readonly get: (id: string) => ArtifactRow | undefined;
   /** The next version held for artifact `id` (`heldFor`), if one waits. */
   readonly heldOf: (id: string) => ArtifactRow | undefined;
+  /** Every artifact a next version is held for, in one read. */
+  readonly heldTargets: () => Set<string>;
   /** A session's artifacts, newest first; never a held next version, as no list below holds one. */
   readonly ofInstance: (instanceId: string) => ArtifactRow[];
+  /**
+   * The artifacts any of `instanceIds` holds, newest first, in one read
+   * however many sessions are named: a delegation tree of 1,600 sessions,
+   * read one session at a time, held the hub for seconds.
+   */
+  readonly ofInstances: (instanceIds: readonly string[]) => ArtifactRow[];
   /** A project's artifacts, any of its sessions', newest first. */
   readonly ofProject: (projectId: string) => ArtifactRow[];
   /**
@@ -299,6 +309,15 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .get();
     return row && artifactOf(row);
   },
+  heldTargets: () =>
+    new Set(
+      db
+        .select({ heldFor: artifacts.heldFor })
+        .from(artifacts)
+        .where(isNotNull(artifacts.heldFor))
+        .all()
+        .flatMap((row) => (row.heldFor ? [row.heldFor] : []))
+    ),
   ofInstance: (instanceId) =>
     db
       .select()
@@ -309,6 +328,21 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .orderBy(desc(artifacts.createdAt))
       .all()
       .map(artifactOf),
+  ofInstances: (instanceIds) =>
+    instanceIds.length === 0
+      ? []
+      : db
+          .select()
+          .from(artifacts)
+          .where(
+            and(
+              inArray(artifacts.instanceId, [...instanceIds]),
+              isNull(artifacts.heldFor)
+            )
+          )
+          .orderBy(desc(artifacts.createdAt))
+          .all()
+          .map(artifactOf),
   asking: () =>
     db
       .select()
