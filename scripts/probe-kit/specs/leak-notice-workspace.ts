@@ -13,7 +13,7 @@
  *
  * - a background command whose process, named `leak-probe-W`, grows 8 MiB a
  *   second to 1.5 GiB and holds it;
- * - a foreground command that runs the machine's Chromium headless (the one
+ * - a background command that runs the machine's Chromium headless (the one
  *   the daemon's render draws with, agent capabilities.ts
  *   `browserExecutable`) {@link BROWSER_HOLD_S} s, past a leftover's grace
  *   and two looks, counting its crash handlers, then ends it and counts
@@ -44,8 +44,9 @@
  *
  *   bun scripts/probe-kit/run.ts leak-notice-workspace
  */
+import { realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { browserExecutable } from "../../../packages/agent/src/capabilities";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
@@ -65,9 +66,36 @@ const LEAKER = "leak-probe-W";
 const LEFTOVER = "600.0961";
 /** How long the browser runs: a leftover's 10 s grace, two looks of 10 s, and room. */
 const BROWSER_HOLD_S = 35;
-/** Chromium headless for {@link BROWSER_HOLD_S} s, its crash handlers counted while it runs and once it ended. */
+/** The browser the daemon's render draws with, its links followed (`/usr/bin/google-chrome` is one into `/opt/google/chrome`). */
+const FOUND = browserExecutable();
+const BROWSER = FOUND ? realpathSync(FOUND) : "chromium";
+/**
+ * Where it is installed: its `.app` bundle on macOS, its folder elsewhere
+ * (leak-watch.ts `installOf`). Its crash handlers live there, and a notice
+ * naming one names it within the notice's cut of a command line (on macOS
+ * the cut falls before `crashpad`). With no browser found, the handler's
+ * own name.
+ */
+const INSTALL = (() => {
+  if (!FOUND) {
+    return "crashpad";
+  }
+  return BROWSER.includes(".app/")
+    ? BROWSER.slice(0, BROWSER.indexOf(".app/") + 4)
+    : dirname(BROWSER);
+})();
+/**
+ * Its crash handlers, as a `pgrep -f` pattern: on macOS those inside its `.app`
+ * bundle (beside them run any other browser's or Electron app's); elsewhere
+ * every one. `handle[r]` keeps the pattern from matching the shell whose
+ * command line carries it.
+ */
+const HANDLERS = BROWSER.includes(".app/")
+  ? `${INSTALL}/.*crashpad_handle[r]`
+  : "crashpad_handle[r]";
+/** Chromium headless for {@link BROWSER_HOLD_S} s, its crash handlers counted while it runs and once it ended (`| wc -l`: BSD pgrep has no -c). */
 const BROWSE = (executable: string) =>
-  `D=$(mktemp -d); ${JSON.stringify(executable)} --headless --disable-gpu --no-sandbox --user-data-dir="$D" about:blank > /dev/null 2>&1 & P=$!; sleep ${BROWSER_HOLD_S}; echo "HANDLERS-RUNNING=$(pgrep -fc crashpad_handler)"; kill $P; wait $P; sleep 3; echo "HANDLERS-AFTER=$(pgrep -fc crashpad_handler)"; rm -rf "$D"; echo BROWSER-DONE`;
+  `D=$(mktemp -d); H=${JSON.stringify(HANDLERS)}; ${JSON.stringify(executable)} --headless --disable-gpu --no-sandbox --user-data-dir="$D" about:blank > /dev/null 2>&1 & P=$!; sleep ${BROWSER_HOLD_S}; echo "HANDLERS-RUNNING=$(pgrep -f "$H" | wc -l | tr -d ' ')"; kill $P; wait $P; sleep 3; echo "HANDLERS-AFTER=$(pgrep -f "$H" | wc -l | tr -d ' ')"; rm -rf "$D"; echo BROWSER-DONE`;
 const HANDLERS_RUNNING = /HANDLERS-RUNNING=(\d+)/;
 const HANDLERS_AFTER = /HANDLERS-AFTER=(\d+)/;
 /** Where Claude Code writes a background command's output, as its tool result says. */
@@ -142,11 +170,7 @@ const respond = (request: Seen): Reply => {
   if (step === 1 && request.afterTool) {
     step = 2;
     // In the background: a notice arriving while it runs (main's watcher told one for its crash handlers) backgrounds a foreground command, and its result never comes back.
-    return bash(
-      BROWSE(browserExecutable() ?? "chromium"),
-      true,
-      "Run a browser"
-    );
+    return bash(BROWSE(BROWSER), true, "Run a browser");
   }
   if (step === 2 && request.afterTool) {
     step = 3;
@@ -309,7 +333,7 @@ const spec: Spec = {
       ).catch(() => undefined);
       const running = Number(browsed?.match(HANDLERS_RUNNING)?.[1]);
       const after = Number(browsed?.match(HANDLERS_AFTER)?.[1]);
-      const told = toldWith(fleet.seen, [leakWords.leftBehind, "crashpad"]);
+      const told = toldWith(fleet.seen, [leakWords.leftBehind, INSTALL]);
       // The notice itself, from where the session's message says it, not the tool result before it.
       const handlerTold = told?.slice(
         Math.max(0, told.indexOf(leakWords.leftBehind) - 60),
@@ -317,13 +341,11 @@ const spec: Spec = {
       );
       const logged = (await fleet.logs("agent"))
         .split("\n")
-        .filter(
-          (line) => line.includes("[leaks]") && line.includes("crashpad")
-        );
+        .filter((line) => line.includes("[leaks]") && line.includes(INSTALL));
       check(
         "(w5) a browser run in the workspace for 35 s had its crash handlers, they ended with it, and no session read a leftover naming one nor did the agent's log",
         running > 0 && after === 0 && !handlerTold && logged.length === 0,
-        `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}${browsed ? "" : ` (no output reached BROWSER-DONE among ${outputs().length} background outputs)`}; ${handlerTold ? `the session was told: ${handlerTold}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? "no [leaks] line naming crashpad" : logged.join(" | ").slice(0, 400)}`
+        `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}${browsed ? "" : ` (no output reached BROWSER-DONE among ${outputs().length} background outputs)`}; ${handlerTold ? `the session was told: ${handlerTold}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? `no [leaks] line naming ${INSTALL}` : logged.join(" | ").slice(0, 400)}`
       );
     } finally {
       const probes = await Promise.all([

@@ -41,7 +41,7 @@
  *    opened through the session's preview origin draws; then
  *    {@link COST_GETS} GETs of one of its keyed modules, {@link COST_AT_ONCE}
  *    at a time, through the hub's and the agent's listeners and that
- *    bridge: every answer 200, and `ps --ppid <the relay>` empty
+ *    bridge: every answer 200, and `pgrep -P <the relay>` empty
  *    throughout (sampled every 5 ms). Inside a workspace, where a boundary
  *    cannot start, it says so in one line and the legs above stand.
  * 4. 300 GETs of one immutable module (the largest prebundled dependency
@@ -658,9 +658,9 @@ const KEYED_AT = /^\/@cawco\/m\/[^/]+/;
 const COST_GETS = 300;
 const COST_AT_ONCE = 50;
 
-/** The child processes of `pid` now. */
+/** The child processes of `pid` now (`pgrep -P`: BSD ps, macOS's, has no `--ppid`, and its refusal read as no children). */
 const childrenOf = (pid: number): number[] =>
-  Bun.spawnSync(["ps", "--ppid", String(pid), "-o", "pid="])
+  Bun.spawnSync(["pgrep", "-P", String(pid)])
     .stdout.toString()
     .split("\n")
     .map((line) => Number(line.trim()))

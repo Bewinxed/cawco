@@ -89,6 +89,9 @@ function playwrightBrowser(): string | undefined {
       "chrome-linux/chrome",
       "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
       "chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium",
+      // Playwright 1.5x+ ships Chrome for Testing on macOS (playwright-core registry "mac-arm64"/"mac-x64").
+      "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+      "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
     ]) {
       const path = join(root, name, suffix);
       if (existsSync(path)) {

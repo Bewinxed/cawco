@@ -64,8 +64,15 @@ const KERN_PROC_PID = 1;
 /** `proc_pidinfo`'s `PROC_PIDTASKINFO` and its `struct proc_taskinfo` (<sys/proc_info.h>), 96 bytes. */
 const PROC_PIDTASKINFO = 4;
 const TASKINFO_SIZE = 96;
-/** `pti_resident_size`, in bytes (after `pti_virtual_size`). */
-const TASKINFO_RESIDENT = 8;
+/**
+ * `proc_pid_rusage`'s `RUSAGE_INFO_V0` (<libproc.h>: "Returns 0 on success")
+ * and its `struct rusage_info_v0` (xnu bsd/sys/resource.h): `ri_uuid[16]`
+ * then ten `uint64_t`, 96 bytes.
+ */
+const RUSAGE_INFO_V0 = 0;
+const RUSAGE_SIZE = 96;
+/** `ri_phys_footprint`, in bytes: after the uuid and seven counters (`ri_user_time` … `ri_resident_size`), 16 + 7 × 8. */
+const RUSAGE_FOOTPRINT = 72;
 /** `pti_total_user` and `pti_total_system`, in Mach absolute time units. */
 const TASKINFO_USER = 16;
 const TASKINFO_SYSTEM = 24;
@@ -104,6 +111,10 @@ const openLibSystem = () =>
   dlopen("/usr/lib/libSystem.B.dylib", {
     proc_pidinfo: {
       args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
+      returns: FFIType.i32,
+    },
+    proc_pid_rusage: {
+      args: [FFIType.i32, FFIType.i32, FFIType.ptr],
       returns: FFIType.i32,
     },
     sysctl: {
@@ -1128,23 +1139,19 @@ const LSOF_LISTEN = /^n.*:(\d+)$/;
 const VM_RSS = /^VmRSS:\s+(\d+) kB$/m;
 
 /**
- * The memory `pid` holds resident now, in bytes: Linux's `VmRSS` in
- * `/proc/<pid>/status`, the Mac's `pti_resident_size` (`proc_pidinfo`
- * `PROC_PIDTASKINFO`). Undefined when it is gone, has none (a kernel thread,
- * a zombie), or is not ours to read.
+ * The memory `pid` holds now, in bytes: Linux's `VmRSS` in
+ * `/proc/<pid>/status`, the Mac's `ri_phys_footprint` (`proc_pid_rusage`
+ * `RUSAGE_INFO_V0`), the figure Activity Monitor's Memory column shows. The
+ * Mac's resident size is not it: the memory compressor takes a process's
+ * idle pages out of it, so a leak of compressible data reads flat or falling
+ * there while the footprint keeps them. Undefined when it is gone, has none
+ * (a kernel thread, a zombie), or is not ours to read.
  */
 export async function residentBytes(pid: number): Promise<number | undefined> {
   if (process.platform !== "linux") {
-    const info = new Uint8Array(TASKINFO_SIZE);
-    const filled = lib().symbols.proc_pidinfo(
-      pid,
-      PROC_PIDTASKINFO,
-      0,
-      info,
-      TASKINFO_SIZE
-    );
-    return filled === TASKINFO_SIZE
-      ? Number(new DataView(info.buffer).getBigUint64(TASKINFO_RESIDENT, true))
+    const usage = new Uint8Array(RUSAGE_SIZE);
+    return lib().symbols.proc_pid_rusage(pid, RUSAGE_INFO_V0, usage) === 0
+      ? Number(new DataView(usage.buffer).getBigUint64(RUSAGE_FOOTPRINT, true))
       : undefined;
   }
   const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => "");

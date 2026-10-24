@@ -20,7 +20,7 @@
  * boundary: a workspace sees none of these folders but its own.
  */
 import { Database } from "bun:sqlite";
-import { readdir, stat } from "node:fs/promises";
+import { lstat, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import {
@@ -201,7 +201,14 @@ for (const name of await list(apple)) {
   }
 }
 
-/** A live clone's size, and its `node_modules` split into files of its own and files shared by a link. */
+/** How many files {@link cloneSize} reads the links and size of at once. */
+const LSTAT_BATCH = 512;
+
+/**
+ * A live clone's size, and its `node_modules` split into files of its own and
+ * files shared by a link. `find` lists them and each is read here: BSD find
+ * (macOS) has no `-printf`.
+ */
 const cloneSize = async (path: string) => {
   const total = await du(path);
   const find = Bun.spawn(
@@ -213,8 +220,7 @@ const cloneSize = async (path: string) => {
       "*/node_modules/*",
       "-type",
       "f",
-      "-printf",
-      "%n %s\\n",
+      "-print0",
     ],
     { stdout: "pipe", stderr: "ignore" }
   );
@@ -222,17 +228,25 @@ const cloneSize = async (path: string) => {
     new Response(find.stdout).text(),
     find.exited,
   ]);
+  const files = out.split("\0").filter(Boolean);
   let own = 0;
   let shared = 0;
-  for (const line of out.split("\n")) {
-    const [links, bytes] = line.split(" ").map(Number);
-    if (links === undefined || bytes === undefined || Number.isNaN(bytes)) {
-      continue;
-    }
-    if (links > 1) {
-      shared += bytes;
-    } else {
-      own += bytes;
+  for (let at = 0; at < files.length; at += LSTAT_BATCH) {
+    // biome-ignore lint/performance/noAwaitInLoops: a batch at a time, so a large node_modules holds no more than a batch of reads open
+    const infos = await Promise.all(
+      files
+        .slice(at, at + LSTAT_BATCH)
+        .map((file) => lstat(file).catch(() => undefined))
+    );
+    for (const info of infos) {
+      if (!info) {
+        continue;
+      }
+      if (info.nlink > 1) {
+        shared += info.size;
+      } else {
+        own += info.size;
+      }
     }
   }
   return { total, nodeModulesOwn: own, nodeModulesShared: shared };
