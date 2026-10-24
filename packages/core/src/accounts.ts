@@ -1632,6 +1632,68 @@ export const accountMoveWords = (
   }
 };
 
+/**
+ * What costs most among `moves`, as a run's line names it: a compaction
+ * ("compacted on B"), else the largest re-read of a cold cache ("re-read
+ * 737k tokens on B"). Undefined when every move kept its cache.
+ */
+const costliestWords = (moves: readonly AccountMove[]): string | undefined => {
+  const moved = moves.filter(
+    (move): move is Extract<AccountMove, { kind: "moved" }> =>
+      move.kind === "moved"
+  );
+  const compacted = moved.findLast(
+    (move) => move.compact !== undefined && move.compact !== "stopped"
+  );
+  if (compacted) {
+    return `compacted on ${compacted.to.name}`;
+  }
+  const [cold] = moved
+    .filter(
+      (move) =>
+        !move.sameOrganization &&
+        move.because?.kind !== "cold" &&
+        move.tokens !== null
+    )
+    .sort((a, b) => (b.tokens ?? 0) - (a.tokens ?? 0));
+  return cold
+    ? `re-read ${tokenWords(cold.tokens)} on ${cold.to.name}`
+    : undefined;
+};
+
+/**
+ * A run of account lines with no turn between them, as one line in words at
+ * `now` (oldest first; the transcript folds them, and opening the line shows
+ * each in {@link accountMoveWords}' words): where the session is now, by its
+ * newest line, and the move that cost most when an earlier one did. Its
+ * detail counts the run, then says the newest line's detail. One line is
+ * that line's own words.
+ */
+export const accountRunWords = (
+  moves: readonly AccountMove[],
+  now: number
+): { line: string; detail: string } => {
+  const newest = moves.at(-1);
+  if (!newest) {
+    return { line: "", detail: "" };
+  }
+  const own = accountMoveWords(newest, now);
+  if (moves.length === 1) {
+    return own;
+  }
+  // The newest line's reason goes under it, so the line keeps room for
+  // what an earlier move cost.
+  const where = newest.kind === "unmoved" ? unmovedWords(newest) : own.line;
+  const earlier = costliestWords(moves.slice(0, -1));
+  return {
+    line: earlier ? `${where} · earlier ${earlier}` : where,
+    detail: [
+      `${moves.length} account changes in a row`,
+      newest.kind === "unmoved" ? newest.reason : own.detail,
+    ].join(" · "),
+  };
+};
+
 /** What failed, by its action: "Couldn't move from A to B", "Couldn't continue on B". */
 const unmovedWords = (
   move: Extract<AccountMove, { kind: "unmoved" }>

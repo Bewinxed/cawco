@@ -91,15 +91,17 @@ export type Row =
       error?: string;
     }
   /**
-   * The hub's line where the session's account reached its limit: it moved,
-   * waited for the reset, or went on from a summary (core `AccountMove`),
-   * as its message says it now ({@link moveOf}).
+   * The hub's lines about the session's account (core `AccountMove`: it
+   * moved, waited, couldn't move, went on from a summary) with no turn
+   * between them, as one row ({@link accountRunAt}): the newest says where
+   * the session is now, and the row opens to every one. Each line is read
+   * off its message as it says it now ({@link movesOf}).
    */
   | {
       kind: "account";
       key: string;
-      /** Its `system.account_move` message, which carries its `accountMove`. */
-      message: Message;
+      /** Its `system.account_move` messages, oldest first: one at least. */
+      messages: Message[];
       /**
        * A `continued` line's: the message its fresh conversation opened on
        * (the summary, the artifact index and the last turns), folded under
@@ -109,13 +111,21 @@ export type Row =
     };
 
 /**
- * What an account row's line says now, read off its message each time: the
- * hub says a line again in its place (a move waiting for work in flight
- * taking another target, a compaction's move line as it goes), and a row
- * folded before the last turn opener is never folded again.
+ * What an account row's lines say now, oldest first, read off their messages
+ * each time: the hub says a line again in its place (a move waiting for work
+ * in flight taking another target, a compaction's move line as it goes), and
+ * a row folded before the last turn opener is never folded again.
  */
+export const movesOf = (
+  row: Extract<Row, { kind: "account" }>
+): AccountMove[] =>
+  row.messages.flatMap((m) =>
+    m.metadata?.accountMove ? [m.metadata.accountMove] : []
+  );
+
+/** An account row's newest line: where the session is now. */
 export const moveOf = (row: Extract<Row, { kind: "account" }>): AccountMove =>
-  row.message.metadata?.accountMove as AccountMove;
+  row.messages.at(-1)?.metadata?.accountMove as AccountMove;
 
 /**
  * Who has the floor, row by row: a speaker line appears only when the speaker
@@ -507,13 +517,62 @@ function continuedAt(
       row: {
         kind: "account",
         key: `am:${keyOf(m, i)}`,
-        message: m,
+        messages: [m],
         brief: next.content,
       },
       span: 2,
     };
   }
   return null;
+}
+
+/** One of the hub's account lines. */
+const isAccountLine = (m: Message | undefined): m is Message =>
+  m?.type === "system.account_move" && !!m.metadata?.accountMove;
+
+/**
+ * A RUN OF ACCOUNT LINES IS ONE ROW. The hub's lines about the session's
+ * account that stand together, nothing the session or its person said
+ * between them (only messages that paint nothing), are one row from
+ * `messages[i]`: a long session that moved a dozen times between two turns
+ * read as a dozen dividers stacked. The row says where the session is now
+ * and opens to every line, in order. A wait for a reset that a later line
+ * in the run follows was not waited out and is left out (as
+ * {@link withoutEndedWaits} leaves one out across rows); a `continued` line
+ * with its opening is a row of its own ({@link continuedAt}) and ends the
+ * run. Null at anything but an account line.
+ */
+function accountRunAt(
+  messages: Message[],
+  i: number
+): { row: Extract<Row, { kind: "account" }>; span: number } | null {
+  if (!isAccountLine(messages[i])) {
+    return null;
+  }
+  const lines = [messages[i]];
+  let end = i + 1;
+  for (let j = i + 1; j < messages.length; j += 1) {
+    const m = messages[j];
+    if (isAccountLine(m) && !continuedAt(messages, j)) {
+      lines.push(m);
+      end = j + 1;
+    } else if (voiceOfMessage(m) !== "none") {
+      break;
+    }
+  }
+  const shown = lines.filter(
+    (m, at) =>
+      at === lines.length - 1 || m.metadata?.accountMove?.kind !== "waiting"
+  );
+  return {
+    row: {
+      kind: "account",
+      key: `am:${keyOf(shown[0], i)}`,
+      messages: shown,
+      brief: null,
+    },
+    span: end - i,
+  };
 }
 
 /** The branch a tool.use spawned, when it opened one — a real subagent fold. */
@@ -602,14 +661,6 @@ function ownRow(
   i: number,
   subagents: Record<string, SubagentState>
 ): Row | null {
-  if (m.type === "system.account_move" && m.metadata?.accountMove) {
-    return {
-      kind: "account",
-      key: `am:${keyOf(m, i)}`,
-      message: m,
-      brief: null,
-    };
-  }
   if (isHarnessNote(m)) {
     return {
       kind: "harness",
@@ -662,7 +713,7 @@ function foldRange(
       continue;
     }
 
-    const continued = continuedAt(messages, i);
+    const continued = continuedAt(messages, i) ?? accountRunAt(messages, i);
     if (continued) {
       rows.push(continued.row);
       i += continued.span;
@@ -1108,28 +1159,37 @@ function withoutEchoes(rows: Row[]): Row[] {
   return echoes ? rows.filter((row) => !echoes.has(row)) : rows;
 }
 
+/** Each account row less the wait for a reset it ended on, by the row, for as long as it stands so. */
+const withoutWait = new WeakMap<object, Row>();
+
 /**
  * A wait for an account's reset that a later account line follows is not
  * drawn: the session did not wait it out, and the later line (a move, a
- * continuation, another wait) says what happened instead. Read over every
- * row on each fold, as a wait already folded is followed later.
+ * continuation, another wait) says what happened instead. A run ending on
+ * one draws the lines before it; a row that is only that wait goes. Read
+ * over every row on each fold, as a wait already folded is followed later.
  */
 export function withoutEndedWaits(rows: Row[]): Row[] {
   const last = rows.findLastIndex((row) => row.kind === "account");
-  const ended = rows.some(
-    (row, at) =>
-      at < last && row.kind === "account" && moveOf(row).kind === "waiting"
-  );
-  return ended
-    ? rows.filter(
-        (row, at) =>
-          !(
-            at < last &&
-            row.kind === "account" &&
-            moveOf(row).kind === "waiting"
-          )
-      )
-    : rows;
+  const ended = (row: Row, at: number): boolean =>
+    at < last && row.kind === "account" && moveOf(row).kind === "waiting";
+  if (!rows.some(ended)) {
+    return rows;
+  }
+  return rows.flatMap((row, at) => {
+    if (!(ended(row, at) && row.kind === "account")) {
+      return [row];
+    }
+    if (row.messages.length === 1) {
+      return [];
+    }
+    let kept = withoutWait.get(row);
+    if (!kept) {
+      kept = { ...row, messages: row.messages.slice(0, -1) };
+      withoutWait.set(row, kept);
+    }
+    return [kept];
+  });
 }
 
 /** Each compaction's drawn row by the row it is drawn from, for as long as it stands so. */
