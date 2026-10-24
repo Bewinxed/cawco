@@ -420,10 +420,20 @@ function silent(names: string[], says: (name: string) => unknown) {
 
 /**
  * modern-screenshot's rule for a copied `::before` or `::after`, in the form
- * it writes into the picture's `<style>`: its selectors (`.u1a2b3::before`),
- * then a declaration a line.
+ * it writes into the picture's `<style>`: its selectors, each the class it
+ * made for the copy (`u`, four base-36 letters and a count: its `uuid`) and
+ * the pseudo-element (`.uk3f912::before`), one a line, then a declaration a
+ * line. Matched only from a line's start and only as that form: the same
+ * sheet holds the `@font-face` rules the library embeds, each font file a
+ * data URL of hundreds of KB on one line with no brace in it, and a
+ * selector taken as any run of text but braces was tried from every
+ * character of it, each try reading on to the line's end: on a decision
+ * page, 6 s of WebKit's thread in one task per pass over a 205 KB sheet,
+ * twice a part (the match and the replace), so a mark's picture held the
+ * page and, on WebKit, the dashboard beside it for 40 s.
  */
-const PSEUDO_RULE = /([^{}]+)\{\n {2}([^{}]*)\n\}\n/g;
+const PSEUDO_RULE =
+  /^(\.u[\da-z]+::?[-\w]+(?:,\n\.u[\da-z]+::?[-\w]+)* )\{\n {2}([^{}]*)\n\}\n/gm;
 const DECLARATION = /^([-\w]+): (.*?)( !important)?;$/s;
 
 /**

@@ -76,12 +76,19 @@
  *     option's builds and its log.md says what the pick costs and builds;
  *     the same card without `builds` draws none, its cells the chip, line
  *     and cost rows alone.
+ * (n) Interact and Draw, ten presses over the page's ink and comments, the
+ *     first the moment a fresh loop of ink is drawn, while its picture is
+ *     made: each reaches the page's mode under 300ms, no frame in the desk
+ *     or the page waits 200ms (Chromium's long tasks, and on WebKit, which
+ *     reports none, the gap between two frames), no animation a switch
+ *     started is left going, and once the presses are done nothing runs
+ *     on: no frame asked for, no animation.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Frame, Locator, Page } from "playwright-core";
+import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { HOUSE_FACES } from "../../../packages/core/src/house-faces";
@@ -1362,6 +1369,407 @@ const commentInEmbed = async (on: On, frame: Frame) => {
     })
   );
   await desk.keyboard.press("Escape");
+  await mode(desk, frame, "V");
+};
+
+/**
+ * What a document did around one mode switch, read in it: the longest wait
+ * between two of its frames from the press on (its thread or its renderer
+ * busy: WebKit reports no long tasks), its long tasks where the engine
+ * reports them (Chromium), and, over a quiet window once the switch is done,
+ * the frames its own code asked for and what still animates in it.
+ */
+interface SwitchWatch {
+  /** Frames the document's own code asked for in the quiet window. */
+  asked: number;
+  /** The longest gap between two frames from the press until the quiet window, ms. */
+  gap: number;
+  /** Long tasks (Chromium's `longtask` entries) from the press on, ms each. */
+  long: number[];
+  /** What animates at the quiet window's end on the document's clock and began before the window or never ends, by its target and its name. */
+  running: string[];
+}
+
+interface SwitchState {
+  asked: number;
+  counting: boolean;
+  frames: number[];
+  long: number[];
+  own: (callback: FrameRequestCallback) => number;
+  quietAt: number;
+  timing: boolean;
+}
+
+/**
+ * Starts the watch in this document: its frames timed on the engine's own
+ * clock by a frame callback of the watch's own (named `switchTick`, which
+ * the count leaves out), and every other `requestAnimationFrame` counted
+ * once the quiet window opens.
+ */
+const watchSwitch = () => {
+  const w = window as unknown as {
+    __switch?: SwitchState;
+    requestAnimationFrame: typeof requestAnimationFrame;
+  };
+  if (!w.__switch) {
+    const own = window.requestAnimationFrame.bind(window);
+    const made: SwitchState = {
+      asked: 0,
+      counting: false,
+      frames: [],
+      long: [],
+      own,
+      quietAt: 0,
+      timing: false,
+    };
+    w.__switch = made;
+    // The browser driver's own frame callbacks (on WebKit, its scripts run
+    // from `web-inspector://`) are none of the page's.
+    w.requestAnimationFrame = (callback) => {
+      if (
+        made.counting &&
+        callback.name !== "switchTick" &&
+        !(new Error("who asks").stack ?? "").includes("web-inspector://")
+      ) {
+        made.asked += 1;
+      }
+      return own(callback);
+    };
+    try {
+      new PerformanceObserver((list) => {
+        if (made.timing) {
+          for (const entry of list.getEntries()) {
+            made.long.push(Math.round(entry.duration));
+          }
+        }
+      }).observe({ type: "longtask" });
+    } catch {
+      // No long tasks in this engine (WebKit): the frames' gaps say it.
+    }
+  }
+  const state = w.__switch;
+  state.frames = [performance.now()];
+  state.long = [];
+  state.asked = 0;
+  state.counting = false;
+  state.timing = true;
+  const switchTick = (now: number) => {
+    if (!state.timing) {
+      return;
+    }
+    state.frames.push(now);
+    state.own(switchTick);
+  };
+  state.own(switchTick);
+};
+
+/** The quiet window opens: the frame clock stops, and the page's own asks are counted from here. */
+const quietSwitch = () => {
+  const state = (window as unknown as { __switch: SwitchState }).__switch;
+  state.timing = false;
+  state.asked = 0;
+  state.counting = true;
+  state.quietAt = performance.now();
+};
+
+/** The watch read at the quiet window's end. */
+const readSwitch = (): SwitchWatch => {
+  const state = (window as unknown as { __switch: SwitchState }).__switch;
+  state.counting = false;
+  let gap = 0;
+  for (let at = 1; at < state.frames.length; at += 1) {
+    gap = Math.max(gap, state.frames[at] - state.frames[at - 1]);
+  }
+  const named = (target: unknown) => {
+    const el = target as Element | null;
+    if (!el) {
+      return "?";
+    }
+    const { host } = el.getRootNode() as ShadowRoot;
+    const slot = el.getAttribute("data-slot");
+    return `${host ? `${host.localName}>>` : ""}${el.localName}${slot ? `[${slot}]` : ""}`;
+  };
+  const shadows = [...document.querySelectorAll("*")]
+    .map((el) => el.shadowRoot)
+    .filter((root): root is ShadowRoot => !!root);
+  const all = new Set([
+    ...document.getAnimations(),
+    ...shadows.flatMap((root) => root.getAnimations()),
+  ]);
+  // On the document's clock (a scroll-driven run's timeline has a `source`,
+  // and moves only as its scroller does), and either never ending or begun
+  // before the window: a run the switch left going.
+  const running = [...all]
+    .filter((one) => {
+      if (
+        one.playState !== "running" ||
+        (one.timeline && "source" in one.timeline)
+      ) {
+        return false;
+      }
+      const timing = one.effect?.getComputedTiming();
+      const began = typeof one.startTime === "number" ? one.startTime : 0;
+      return (
+        timing?.endTime === Number.POSITIVE_INFINITY || began < state.quietAt
+      );
+    })
+    .map((one) => {
+      const name =
+        (one as CSSAnimation).animationName ??
+        (one as CSSTransition).transitionProperty ??
+        one.id;
+      return `${named((one.effect as KeyframeEffect | null)?.target)} ${name || "(script)"}`;
+    });
+  return {
+    asked: state.asked,
+    gap: Math.round(gap),
+    long: state.long,
+    running,
+  };
+};
+
+/** When the overlay's layer is in `want` (Draw's `draw`, Interact's none), on the shared clock (`timeOrigin + now`); NaN after 5s. */
+const modeAt = (frame: Frame, want: string) =>
+  frame.evaluate(
+    (wanted) =>
+      new Promise<number>((done) => {
+        const layer = document
+          .querySelector("cawco-overlay")
+          ?.shadowRoot?.querySelector(".layer");
+        const there = () => {
+          if (layer?.classList.contains("comment")) {
+            return wanted === "comment";
+          }
+          return (layer?.classList.contains("draw") ? "draw" : "") === wanted;
+        };
+        const at = () => performance.timeOrigin + performance.now();
+        if (there()) {
+          done(at());
+          return;
+        }
+        const seen = new MutationObserver(() => {
+          if (there()) {
+            seen.disconnect();
+            done(at());
+          }
+        });
+        if (layer) {
+          seen.observe(layer, { attributes: true, attributeFilter: ["class"] });
+        }
+        setTimeout(() => {
+          seen.disconnect();
+          done(Number.NaN);
+        }, 5000);
+      }),
+    want
+  );
+
+/** Chromium's counters for one renderer (DevTools `Performance.getMetrics`): layouts, style recalcs, and the time in tasks, layout and style, ms. */
+const metricsOf = async (cdp: CDPSession | null) => {
+  if (!cdp) {
+    return null;
+  }
+  const { metrics } = (await cdp.send("Performance.getMetrics")) as {
+    metrics: { name: string; value: number }[];
+  };
+  const of = (name: string) =>
+    metrics.find((one) => one.name === name)?.value ?? 0;
+  return {
+    layouts: of("LayoutCount"),
+    styles: of("RecalcStyleCount"),
+    task: of("TaskDuration") * 1000,
+    layout: of("LayoutDuration") * 1000,
+    style: of("RecalcStyleDuration") * 1000,
+  };
+};
+
+type Metrics = NonNullable<Awaited<ReturnType<typeof metricsOf>>>;
+const metricsSince = (a: Metrics | null, b: Metrics | null) =>
+  a && b
+    ? {
+        layouts: b.layouts - a.layouts,
+        styles: b.styles - a.styles,
+        task: Math.round(b.task - a.task),
+        layout: Math.round(b.layout - a.layout),
+        style: Math.round(b.style - a.style),
+      }
+    : null;
+const countsOf = (m: ReturnType<typeof metricsSince>) =>
+  m
+    ? ` ${m.styles} styles ${m.layouts} layouts, task ${m.task}ms (style ${m.style}, layout ${m.layout})`
+    : "";
+
+/** How long a switch may take from the press to the page's mode, ms. */
+const SWITCH_MS = 300;
+/** The longest a frame may wait in a switch, ms: the long task's bound. */
+const SWITCH_TASK_MS = 200;
+/** The quiet window after a switch in which nothing the switch started may still run, ms. */
+const SWITCH_QUIET_MS = 500;
+
+/** The two documents a switch is read in, and Chromium's counters for each (none on WebKit). */
+interface SwitchSides {
+  cdp: { desk: CDPSession | null; frame: CDPSession | null };
+  desk: Page;
+  frame: Frame;
+}
+
+/** Both documents' counters now. */
+const metricsNow = async ({ cdp }: SwitchSides) => ({
+  desk: await metricsOf(cdp.desk),
+  frame: await metricsOf(cdp.frame),
+});
+
+/**
+ * One press of the mode's segment `key`, read in the desk and the page:
+ * its row (when the mode was reached, the longest frame, Chromium's counts
+ * of the work and of what came in the quiet window after) and, when it
+ * broke a bound, why.
+ */
+const pressOnce = async (
+  sides: SwitchSides,
+  key: "V" | "D",
+  turn: number
+): Promise<{ fail: string | null; row: string }> => {
+  const { desk, frame } = sides;
+  // Its place read without waiting for it to stand still: a segment that
+  // never settles is what this leg reads, never a wait it stalls in.
+  const segment = await desk
+    .locator(`${PANE} [role='tab'][aria-keyshortcuts='${key}']`)
+    .boundingBox();
+  await desk.evaluate(watchSwitch);
+  await frame.evaluate(watchSwitch);
+  const before = await metricsNow(sides);
+  const pressed = await desk.evaluate(
+    () => performance.timeOrigin + performance.now()
+  );
+  const reached = modeAt(frame, key === "D" ? "draw" : "");
+  if (segment) {
+    await desk.mouse.click(
+      segment.x + segment.width / 2,
+      segment.y + segment.height / 2
+    );
+  }
+  const took = Math.round((await reached) - pressed);
+  await desk.waitForTimeout(SWITCH_MS);
+  await desk.evaluate(quietSwitch);
+  await frame.evaluate(quietSwitch);
+  const switched = await metricsNow(sides);
+  await desk.waitForTimeout(SWITCH_QUIET_MS);
+  const quiet = await metricsNow(sides);
+  const seen = {
+    desk: await desk.evaluate(readSwitch),
+    frame: await frame.evaluate(readSwitch),
+  };
+  const longest = Math.max(
+    seen.desk.gap,
+    seen.frame.gap,
+    ...seen.desk.long,
+    ...seen.frame.long
+  );
+  const still = [
+    ...seen.desk.running.map((one) => `desk ${one}`),
+    ...seen.frame.running.map((one) => `page ${one}`),
+  ];
+  const said = Number.isNaN(took) ? "never" : `${took}ms`;
+  const long = (watch: SwitchWatch) =>
+    watch.long.length > 0 ? ` long ${watch.long.join("/")}` : "";
+  const row = `${turn} ${key} ${said}, longest frame ${longest}ms; desk${countsOf(metricsSince(before.desk, switched.desk))}${long(seen.desk)}; page${countsOf(metricsSince(before.frame, switched.frame))}${long(seen.frame)}; after: ${seen.desk.asked}/${seen.frame.asked} frames asked, ${still.length} running${countsOf(metricsSince(switched.desk, quiet.desk))}`;
+  const broke =
+    Number.isNaN(took) ||
+    took >= SWITCH_MS ||
+    longest >= SWITCH_TASK_MS ||
+    still.length > 0;
+  return {
+    row,
+    fail: broke
+      ? `${turn} ${key}: ${said}, longest frame ${longest}ms, still ${still.join(", ") || "none"}`
+      : null,
+  };
+};
+
+/**
+ * (n) Interact and Draw, ten presses, over a page holding ink and comments
+ * as the legs above leave it, the first pressed the moment a fresh loop of
+ * ink is drawn, while its picture is made (the mark's picture runs on the
+ * page's thread, on WebKit the dashboard's too): each press reaches the
+ * page's mode within 300ms, no frame in the desk or the page waits 200ms or
+ * more, no animation is left going half a second on, and once the presses
+ * are done nothing runs on: no frame asked for, no animation.
+ */
+const switchLeg = async (on: On, frame: Frame) => {
+  const { desk, kit } = on;
+  const engine = desk.context().browser()?.browserType().name() ?? "?";
+  const chromium = engine === "chromium";
+  const sides: SwitchSides = {
+    desk,
+    frame,
+    cdp: {
+      desk: chromium ? await desk.context().newCDPSession(desk) : null,
+      frame: chromium
+        ? await desk
+            .context()
+            .newCDPSession(frame)
+            .catch(() => null)
+        : null,
+    },
+  };
+  await sides.cdp.desk?.send("Performance.enable");
+  await sides.cdp.frame?.send("Performance.enable");
+  await mode(desk, frame, "D");
+  const option = frame.locator('#decision-host [data-option="hub"]');
+  await toPaneTop(option);
+  await settle(desk, 300);
+  const box = await option.boundingBox();
+  if (box) {
+    await loopRound(frame, box);
+  }
+  const rows: string[] = [];
+  const fails: string[] = [];
+  for (let turn = 1; turn <= 10; turn += 1) {
+    const { row, fail } = await pressOnce(
+      sides,
+      turn % 2 === 1 ? "V" : "D",
+      turn
+    );
+    rows.push(row);
+    if (fail) {
+      fails.push(fail);
+    }
+  }
+  // Once the presses are done, a loop the switches started would still be
+  // going: a window as long as the last ten switches' each, and nothing in
+  // it. (Inside the run, the desk's own answer to the fresh loop, its rows
+  // laid out again as they come, may fall in a switch's window: that is
+  // the mark's, not the switch's.)
+  await settle(desk, SWITCH_MS);
+  await desk.evaluate(watchSwitch);
+  await frame.evaluate(watchSwitch);
+  await desk.evaluate(quietSwitch);
+  await frame.evaluate(quietSwitch);
+  await desk.waitForTimeout(2 * SWITCH_QUIET_MS);
+  const rest = {
+    desk: await desk.evaluate(readSwitch),
+    frame: await frame.evaluate(readSwitch),
+  };
+  const resting = [
+    ...rest.desk.running.map((one) => `desk ${one}`),
+    ...rest.frame.running.map((one) => `page ${one}`),
+  ];
+  rows.push(
+    `then ${2 * SWITCH_QUIET_MS}ms at rest: ${rest.desk.asked}/${rest.frame.asked} frames asked, ${resting.length} running`
+  );
+  if (rest.desk.asked + rest.frame.asked > 0 || resting.length > 0) {
+    fails.push(
+      `at rest: frames asked ${rest.desk.asked}/${rest.frame.asked}, still ${resting.join(", ") || "none"}`
+    );
+  }
+  kit.check(
+    `(n) ${engine}: ten presses between Interact and Draw over the page's ink and comments, the first as a fresh loop's picture is made, each reach the page's mode under ${SWITCH_MS}ms with no frame waiting ${SWITCH_TASK_MS}ms and no animation left going, and nothing runs on after them (${rows.join(" | ")})`,
+    fails.length === 0,
+    fails.join("\n    ")
+  );
+  await sides.cdp.desk?.detach();
+  await sides.cdp.frame?.detach();
   await mode(desk, frame, "V");
 };
 
@@ -3119,6 +3527,7 @@ const run = async (kit: Kit) => {
   const first = await marks(on, await frameWith(on.desk, 3));
   await drawOverEmbed(on, await frameWith(on.desk, 3));
   await commentInEmbed(on, await frameWith(on.desk, 3));
+  await switchLeg(on, await frameWith(on.desk, 3));
   await insertAhead(on, first);
   for (const theme of ["light", "dark"] as const) {
     await foldLeg(on, theme);
