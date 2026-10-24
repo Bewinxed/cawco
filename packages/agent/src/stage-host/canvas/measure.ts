@@ -4,11 +4,12 @@
  * elements came from, the computed-style delta a forced state makes, and the
  * animations a change fired, from `getAnimations()`.
  */
-import type {
-  AnimationRead,
-  PageError,
-  PartUse,
-  StyleDelta,
+import {
+  type AnimationRead,
+  type PageError,
+  type PartUse,
+  type StyleDelta,
+  unkeyedPath,
 } from "@cawco/core/stage";
 
 /** Svelte's dev stack on an element (a dev compile's `__svelte_meta`). */
@@ -298,7 +299,8 @@ export function pageError(
     }
     let path: string;
     try {
-      path = new URL(at[1] as string).pathname;
+      // A module the stage keyed at its generation is named by its own address.
+      path = unkeyedPath(new URL(at[1] as string).pathname);
     } catch {
       continue;
     }

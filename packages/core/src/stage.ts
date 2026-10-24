@@ -23,6 +23,23 @@ import type { PreviewDown } from "./index";
 export const CANVAS_PATH = "/@cawco/canvas";
 
 /**
+ * Where a stage serves a canvas page's modules, at its generation:
+ * `/@cawco/m/<key>/<the module's own address>` (stage-host host.ts
+ * `serveKeyed`). A page's stack names a module there; its place in the
+ * project is the address after the key.
+ */
+export const MODULES_PATH = "/@cawco/m/";
+
+/** A keyed module's address as its own: `/@cawco/m/<key>/src/A.svelte` is `/src/A.svelte`; any other as it is. */
+export const unkeyedPath = (path: string): string => {
+  if (!path.startsWith(MODULES_PATH)) {
+    return path;
+  }
+  const cut = path.indexOf("/", MODULES_PATH.length);
+  return cut === -1 ? path : path.slice(cut);
+};
+
+/**
  * A section as the canvas page has it before its module loads (the stage
  * reads it from the states file itself, no transform): its name in plain
  * words and its stories, so the page names the section and stands each

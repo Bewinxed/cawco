@@ -65,6 +65,7 @@ import {
   type Found,
   type FrameRender,
   HEALTH_PATH,
+  MODULES_PATH,
   type PageError,
   RENDERED_PATH,
   REPORT_PATH,
@@ -1052,7 +1053,6 @@ async function serveCanvas(
  * open page by Vite's HMR, which Vite's client asks for at the page's key
  * with its `?t=`.
  */
-const MODULES_PATH = "/@cawco/m/";
 const KEPT = "private, max-age=31536000, immutable";
 const newGeneration = (): string => randomBytes(9).toString("base64url");
 let generation = newGeneration();

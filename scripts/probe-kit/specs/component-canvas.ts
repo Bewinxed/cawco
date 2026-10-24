@@ -92,11 +92,12 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { renderCanvas } from "../../../packages/agent/src/stage-render";
-import type {
-  CanvasSpec,
-  DesignMap,
-  FrameRender,
-  RenderReport,
+import {
+  type CanvasSpec,
+  type DesignMap,
+  type FrameRender,
+  type RenderReport,
+  unkeyedPath,
 } from "../../../packages/core/src/stage";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { until } from "../../scratch-fleet";
@@ -726,24 +727,30 @@ async function lazy(kit: Kit, stage: Stage): Promise<void> {
     })
   );
   await reportOn(page, 1500);
-  const requested = () =>
-    page.evaluate(() => {
-      const modules = performance
+  // The page asks for each module at the stage's generation
+  // (`/@cawco/m/<key>/src/Far.svelte`): read by its own address.
+  const requested = async () => {
+    const seen = await page.evaluate(() => ({
+      paths: performance
         .getEntriesByType("resource")
-        .map((entry) => new URL(entry.name).pathname)
-        .filter(
-          (path) => path.startsWith("/src/") || path.includes("cawco:sheet")
-        );
-      return {
-        modules: modules.length,
-        far: modules.filter(
-          (path) => path.includes("Far") || path.includes("/far/")
-        ),
-        loaded: (
-          window as unknown as { __cawcoCanvas: { loaded: () => string[] } }
-        ).__cawcoCanvas.loaded(),
-      };
-    });
+        .map((entry) => new URL(entry.name).pathname),
+      loaded: (
+        window as unknown as { __cawcoCanvas: { loaded: () => string[] } }
+      ).__cawcoCanvas.loaded(),
+    }));
+    const modules = seen.paths
+      .map(unkeyedPath)
+      .filter(
+        (path) => path.startsWith("/src/") || path.includes("cawco:sheet")
+      );
+    return {
+      modules: modules.length,
+      far: modules.filter(
+        (path) => path.includes("Far") || path.includes("/far/")
+      ),
+      loaded: seen.loaded,
+    };
+  };
   const before = await requested();
   await page.mouse.move(720, 520);
   for (let at = 0; at < 6; at += 1) {
