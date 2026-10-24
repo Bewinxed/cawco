@@ -5,6 +5,7 @@
  * (hub decision-program.ts `programHost`, preview.ts `servePage`).
  */
 import type { ChoiceEntry } from "@cawco/core/choices";
+import type { CanvasShapes } from "@cawco/core/stage";
 import { SvelteMap } from "svelte/reactivity";
 
 /**
@@ -44,6 +45,8 @@ export type MediaArtifact = {
   embed?: string;
   kind: string;
   name: string;
+  /** A component canvas's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
+  shapes?: CanvasShapes;
 } | null;
 
 export const served = $state<{

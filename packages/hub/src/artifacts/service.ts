@@ -125,12 +125,14 @@ import {
   type CanvasEdge,
   type CanvasMap,
   type CanvasMapNode,
+  type CanvasShapes,
   type CanvasSpec,
   canvasOf,
   canvasPath,
   type DesignLink,
   type DesignMap,
   type DesignQuery,
+  type EmbedShape,
   type RenderReport,
   type ServeSpec,
   type SheetRead,
@@ -4458,6 +4460,44 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
 
   /**
+   * Each story's rest frame as a browser drew it (the stage's render
+   * report), kept in the canvas's doc (`meta.drawnShapes`, core
+   * `CanvasShapes.drawn`) for a decision page's Preview of it: its
+   * skeleton stands at that shape before any embed of it has said its own.
+   * A story the report has no drawn rest frame of keeps the size it had.
+   */
+  const drawnWritten = (row: ArtifactRow, report: RenderReport) => {
+    const doc = docs.doc(row.id);
+    const had = (doc.getMap("meta").get("drawnShapes") ??
+      {}) as CanvasShapes["drawn"];
+    const now: CanvasShapes["drawn"] = { ...had };
+    for (const frame of report.sections.flatMap((one) => one.frames)) {
+      if (
+        frame.interaction === "rest" &&
+        frame.state === "drawn" &&
+        frame.box.w > 0 &&
+        frame.box.h > 0
+      ) {
+        now[frame.story] = { w: frame.box.w, h: frame.box.h };
+      }
+    }
+    if (JSON.stringify(now) !== JSON.stringify(had)) {
+      docs.transact(row.id, "hub", (written) => {
+        written.getMap("meta").set("drawnShapes", now);
+      });
+    }
+  };
+
+  /** The shapes a decision page's media carries of component canvas `row` (core `CanvasShapes`). */
+  const shapesOf = (row: ArtifactRow): CanvasShapes => {
+    const meta = docs.doc(row.id).getMap("meta");
+    return {
+      said: (meta.get("saidShapes") ?? {}) as CanvasShapes["said"],
+      drawn: (meta.get("drawnShapes") ?? {}) as CanvasShapes["drawn"],
+    };
+  };
+
+  /**
    * A read that couldn't reach the canvas's stage, kept in its doc (core
    * `StageUnreached`) for the panel and the agent's read alike: the hop that
    * failed, by the hub's refusal (a workspace gone or on no machine, a
@@ -4784,6 +4824,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       opened,
       openedOf(shown).opened
     );
+    drawnWritten(row, report);
     return {
       id: row.id,
       kind: row.kind,
@@ -4842,6 +4883,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...(ask.state ? { state: ask.state } : {}),
           ...(ask.png ? { png: true } : {}),
         }));
+      }
+      if (report) {
+        drawnWritten(row, report);
       }
     }
     const meta = docs.doc(row.id).getMap("meta");
@@ -6139,22 +6183,62 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: string
     ): {
       hash: string;
-      media: Record<string, { kind: ArtifactKind; name: string } | null>;
+      media: Record<
+        string,
+        { kind: ArtifactKind; name: string; shapes?: CanvasShapes } | null
+      >;
     } | null => {
       const row = db.get(id);
       const program = row ? programOf(row) : undefined;
       if (program === undefined) {
         return null;
       }
-      const media: Record<string, { kind: ArtifactKind; name: string } | null> =
-        {};
+      const media: Record<
+        string,
+        { kind: ArtifactKind; name: string; shapes?: CanvasShapes } | null
+      > = {};
       for (const { id: shown } of readKept(program).artifacts) {
         const shownRow = row && mediaSeen(row, shown);
-        media[shown] = shownRow
-          ? { kind: shownRow.kind, name: shownRow.name }
-          : null;
+        if (!shownRow) {
+          media[shown] = null;
+          continue;
+        }
+        media[shown] = {
+          kind: shownRow.kind,
+          name: shownRow.name,
+          ...(shownRow.kind === "component"
+            ? { shapes: shapesOf(shownRow) }
+            : {}),
+        };
       }
       return { hash: pageHash(program), media };
+    },
+
+    /**
+     * The shape an embed of component canvas `id` said for the stories a
+     * Preview names (core `storiesKey`), as a decision page's Preview heard
+     * it, kept in the canvas's doc (`meta.saidShapes`): the page's media
+     * carries it from then on, so the next Preview of it, in any browser,
+     * stands its skeleton at that shape from its first paint. Changed only
+     * when it differs. False for an artifact that is no component canvas.
+     */
+    keepSaidShape: (id: string, key: string, shape: EmbedShape): boolean => {
+      const row = db.get(id);
+      if (row?.kind !== "component") {
+        return false;
+      }
+      const meta = docs.doc(id).getMap("meta");
+      const had = (meta.get("saidShapes") ?? {}) as CanvasShapes["said"];
+      const before = had[key];
+      if (before?.h === shape.h && before.w === shape.w) {
+        return true;
+      }
+      docs.transact(id, "hub", (doc) => {
+        doc
+          .getMap("meta")
+          .set("saidShapes", { ...had, [key]: { h: shape.h, w: shape.w } });
+      });
+      return true;
     },
 
     /**

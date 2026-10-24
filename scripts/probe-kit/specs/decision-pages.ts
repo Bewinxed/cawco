@@ -127,7 +127,10 @@
  *     of view gets its turn while one in view still waits. Sampled every 50
  *     ms, a picture not yet drawn is never an empty box: its skeleton stands
  *     with a box, pulsing, and a take of one story stands as tall as its
- *     story, within 2px (on 2026-10-24 the owner's project-screens picture
+ *     story, within 2px. The first page's Previews tell the hub's stand-in
+ *     the shapes their canvas said (`/shape`); in a fresh WebKit and then a
+ *     fresh Chromium, with those shapes in the page's media, every skeleton
+ *     stands at its frame's box from its first sample, no jump (on 2026-10-24 the owner's project-screens picture
  *     "In Review, its agent asking you" stood as an empty dark box while it
  *     waited its turn). On 2026-10-24 the owner's
  *     pairing page of twelve such Previews drew two: Chromium fails a
@@ -4810,8 +4813,26 @@ function dozenWaits(): void {
   const embedOf = (well: Element) =>
     well.querySelector<HTMLIFrameElement>("iframe[data-slot=embed]");
   // Every 50 ms until each picture stands drawn: a well holds its drawn frame, or its pulsing skeleton with a box; anything else is an empty box.
-  const wait = { empty: [] as string[], samples: 0, skeletons: 0, still: 0 };
+  const wait = {
+    /** Each picture's skeleton box as sampled, every distinct one in turn: more than one is a jump. */
+    boxes: {} as Record<number, string[]>,
+    empty: [] as string[],
+    samples: 0,
+    skeletons: 0,
+    still: 0,
+  };
   (window as unknown as { __kitWait?: typeof wait }).__kitWait = wait;
+  const keepBox = (well: Element, at: number) => {
+    const box = well
+      .querySelector("[data-slot=embed-wait]")
+      ?.getBoundingClientRect();
+    const said = `${Math.round(box?.width ?? 0)}×${Math.round(box?.height ?? 0)}`;
+    const seen = wait.boxes[at] ?? [];
+    wait.boxes[at] = seen;
+    if (seen.at(-1) !== said) {
+      seen.push(said);
+    }
+  };
   /** What a well holds now: its drawn frame, its skeleton (pulsing or still), or what stands in an empty box. */
   const holds = (well: Element): "drawn" | "pulse" | "still" | string => {
     const frame = embedOf(well);
@@ -4858,6 +4879,7 @@ function dozenWaits(): void {
       if (now === "pulse" || now === "still") {
         wait.skeletons += 1;
         wait.still += now === "still" ? 1 : 0;
+        keepBox(well, at);
       } else if (wait.empty.length < 8) {
         wait.empty.push(`picture ${at + 1}: ${now}`);
       }
@@ -4881,6 +4903,8 @@ interface DozenEmbed {
   /** Its frame's height on the page, px: the shape it said. */
   tall: number;
   waitingInView: number;
+  /** Its frame's width on the page, px. */
+  wide: number;
 }
 
 /** Each embed on the page open in `page`, read in its own frame. */
@@ -4900,7 +4924,10 @@ async function dozenEmbeds(page: Page): Promise<DozenEmbed[]> {
         await handle.getAttribute("data-kit-waiting-in-view")
       ),
       read: frame ? await frame.evaluate(dozenRead) : null,
-      tall: Math.round((await handle.boundingBox())?.height ?? 0),
+      ...(await handle.boundingBox().then((box) => ({
+        tall: Math.round(box?.height ?? 0),
+        wide: Math.round(box?.width ?? 0),
+      }))),
       drew:
         (await frame?.evaluate(
           () => (window as unknown as { __kitDrewAt?: number }).__kitDrewAt
@@ -4980,9 +5007,11 @@ async function dozenOn(
   kit: Kit,
   engine: "chromium" | "webkit",
   pageUrl: string,
-  preloads: number
+  preloads: number,
+  /** The page's media knows each Preview's shape (a run before told them): its skeletons are checked against its frames. */
+  known: boolean
 ): Promise<void> {
-  const leg = `(r) ${engine}, 1440 light, twelve Previews of ${HEAVY.split("/").at(-1)}`;
+  const leg = `(r) ${engine}, 1440 light, twelve Previews of ${HEAVY.split("/").at(-1)}${known ? ", their shapes in the media" : ""}`;
   const page = await kit.page("desk", {
     engine,
     theme: "light",
@@ -5051,7 +5080,46 @@ async function dozenOn(
       .join("\n    ")
   );
   await waitAndViewChecks(kit, leg, page, order);
+  if (known) {
+    await shapeChecks(kit, leg, page, embeds);
+  }
   await page.close();
+}
+
+/**
+ * (r) with its shapes in the page's media: from its first sample to its
+ * frame, each picture's skeleton stood at one box, its frame's once drawn,
+ * so nothing on the page jumped as it drew.
+ */
+async function shapeChecks(
+  kit: Kit,
+  leg: string,
+  page: Page,
+  embeds: DozenEmbed[]
+): Promise<void> {
+  const boxes = await page.evaluate(
+    () =>
+      (window as unknown as { __kitWait?: { boxes: Record<number, string[]> } })
+        .__kitWait?.boxes ?? {}
+  );
+  const read = embeds.map((one, at) => ({
+    take: one.take,
+    frame: `${one.wide}×${one.tall}`,
+    stood: boxes[at] ?? [],
+  }));
+  const off = read.filter(
+    (one) => one.stood.length !== 1 || one.stood[0] !== one.frame
+  );
+  kit.check(
+    `${leg}: every skeleton stood at its frame's box from its first sample, no jump (${read.length - off.length} of ${read.length})`,
+    read.length === HEAVY_TAKES.length && off.length === 0,
+    read
+      .map(
+        (one) =>
+          `${one.take}: skeleton ${one.stood.join(" → ") || "never sampled"}, frame ${one.frame}`
+      )
+      .join("\n    ")
+  );
 }
 
 /**
@@ -5127,8 +5195,20 @@ async function dozenLeg(kit: Kit): Promise<void> {
   );
   try {
     const preloads = await warmDozen(kit, stage.stagePort);
-    for (const engine of ["chromium", "webkit"] as const) {
-      await dozenOn(kit, engine, stage.pageUrl(HEAVY_PAGE, "light"), preloads);
+    // The first page's Previews tell the shapes their canvas said; each next fresh browser's media carries them.
+    const runs = [
+      ["chromium", false],
+      ["webkit", true],
+      ["chromium", true],
+    ] as const;
+    for (const [engine, known] of runs) {
+      await dozenOn(
+        kit,
+        engine,
+        stage.pageUrl(HEAVY_PAGE, "light"),
+        preloads,
+        known
+      );
     }
   } finally {
     await stage.stop();

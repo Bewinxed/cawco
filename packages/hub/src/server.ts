@@ -428,6 +428,7 @@ import {
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type DesignMap,
+  isEmbedShape,
   type RenderReport,
   type SheetWritten,
   STAGE_CLONE_MS,
@@ -445,6 +446,7 @@ import {
   type StageOpened,
   type StageState,
   type StageStatus,
+  storiesKey,
 } from "@cawco/core/stage";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { decideWrite, type UpstreamRules } from "@cawco/core/upstream-guard";
@@ -14061,6 +14063,38 @@ export const createServer = (
         }
         throw error;
       }
+    },
+    // A decision page's Preview heard its canvas's shape: kept for the next Preview of it.
+    keepShape: async (request, artifactId) => {
+      if (request.method !== "POST") {
+        return new Response("Tell a shape with a POST.", {
+          status: 405,
+          headers: { allow: "POST" },
+        });
+      }
+      const told = (await request.json().catch(() => null)) as {
+        h?: unknown;
+        stories?: unknown;
+        w?: unknown;
+      } | null;
+      const shape = { h: told?.h, w: told?.w ?? null };
+      if (!(
+        Array.isArray(told?.stories) &&
+        told.stories.every((one) => typeof one === "string") &&
+        isEmbedShape(shape)
+      )) {
+        return new Response(
+          "A shape is { stories: string[], h: px, w: px or null }.",
+          { status: 400 }
+        );
+      }
+      return artifacts.keepSaidShape(
+        artifactId,
+        storiesKey(told.stories as string[]),
+        shape
+      )
+        ? new Response(null, { status: 204 })
+        : new Response("No component canvas of that id.", { status: 404 });
     },
   };
   /**

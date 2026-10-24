@@ -75,6 +75,39 @@ export const sectionName = (
  */
 export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 
+/** A canvas embed's shape as it said it (`CANVAS_EMBED_SIZE`), CSS px: its height, and its widest story's width (null where none says one). */
+export interface EmbedShape {
+  h: number;
+  w: number | null;
+}
+
+/**
+ * A component canvas's shapes as a decision page's media carries them, so a
+ * Preview's skeleton stands at its picture's own shape from its first paint
+ * (dashboard decisions host Preview.svelte):
+ * - `said`: what an embed of it said, by the stories its Preview names
+ *   ({@link storiesKey}), as a Preview heard it and told its page's origin
+ *   (`/__cawco/artifact/<id>/shape`);
+ * - `drawn`: each story's rest frame as the stage's render report has it,
+ *   for a Preview no embed has said yet.
+ */
+export interface CanvasShapes {
+  drawn: Record<string, { h: number; w: number }>;
+  said: Record<string, EmbedShape>;
+}
+
+/** The key of a Preview's stories, in the order it names them; empty for every story. */
+export const storiesKey = (stories: readonly string[]): string =>
+  stories.join("|");
+
+/** Whether `value` is a shape an embed could say: a height past 0 and a width past 0 or none, finite, within reason. Ours: 20,000 px. */
+export const isEmbedShape = (value: unknown): value is EmbedShape => {
+  const one = value as { h?: unknown; w?: unknown } | null;
+  const px = (n: unknown) =>
+    typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 20_000;
+  return !!one && px(one.h) && (one.w === null || px(one.w));
+};
+
 /**
  * A component canvas's address (`embed`, as the hub answers it in a
  * decision page's media) drawn as a Preview: `by=embed`, a `story` per name

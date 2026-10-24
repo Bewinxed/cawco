@@ -18,8 +18,10 @@
   and scrolls it sideways where it is wider (Well.svelte). While a screen's
   origin is asked, the well holds its 16:10, a skeleton until the wait
   outlasts its grace; a canvas waiting its turn or loading holds its
-  skeleton at the shape it last said in this browser (the kit's picture
-  where it never has) until it stands drawn, never an empty box; past the
+  skeleton at its picture's own shape as the page's media knows it (what an
+  embed of its stories said, in any browser, else its stories as the stage
+  drew them; the kit's picture where none was ever drawn) until it stands
+  drawn, never an empty box; past the
   grace Caw and the line stand over either (DESIGN.md, Skeleton, The Claim
   Of Nothing Rule, The Real Wait Rule). One the hub no longer holds says so
   in words where it would stand.
@@ -34,12 +36,16 @@
     previewUnreachedWords,
     probePreview,
   } from "@cawco/core/preview-reach";
-  import { CANVAS_EMBED_SIZE, canvasEmbedUrl } from "@cawco/core/stage";
+  import {
+    CANVAS_EMBED_SIZE,
+    canvasEmbedUrl,
+    type EmbedShape,
+    storiesKey,
+  } from "@cawco/core/stage";
   import {
     type FrameObserver,
     frameObserver,
   } from "#lib/cawco/frame-observer.js";
-  import { readJson, writeJson } from "#lib/cawco/storage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconRefresh } from "#lib/icons.js";
@@ -71,23 +77,37 @@
   let tall = $state<number | null>(null);
   /** A component canvas's widest story, as it says it: its frame is that wide. */
   let saidWidth = $state<number | null>(null);
-  /** Where this browser keeps the shape this Preview's canvas last said, by the artifact and the stories it names. */
-  const shapeKey = $derived(`cawco-preview-shape:${id}:${stories.join("|")}`);
   /**
-   * The shape the canvas said when this browser last drew it, if it did: its
-   * skeleton stands at it until it draws again (Skeleton, at exactly the size
-   * of what it stands for).
+   * Its picture's loading shape, from the page's media (core
+   * `CanvasShapes`), so its skeleton stands at the picture's own shape from
+   * its first paint: the shape an embed of these stories said, as any
+   * browser's Preview heard it; else each story it names as the stage drew
+   * it, one under another with the embed's own gap (agent canvas chrome.ts
+   * `cawco-embed`: `--space-3`). Null where none has been drawn anywhere:
+   * the kit's picture stands in.
    */
-  const known = $derived.by((): { h: number; w: number | null } | null => {
-    const kept = readJson<{ h?: unknown; w?: unknown } | null>(shapeKey, null);
-    return typeof kept?.h === "number" && kept.h > 0
-      ? { h: kept.h, w: typeof kept.w === "number" ? kept.w : null }
-      : null;
-  });
+  const known = $derived.by(
+    (): {
+      parts: { h: number; w: number | null }[];
+      w: number | null;
+    } | null => {
+      const shapes = held?.shapes;
+      const said = shapes?.said[storiesKey(stories)];
+      if (said) {
+        return { parts: [said], w: said.w };
+      }
+      const drawn = stories.map((one) => shapes?.drawn[one]);
+      if (stories.length === 0 || !drawn.every((one) => one !== undefined)) {
+        return null;
+      }
+      const parts = drawn as { h: number; w: number }[];
+      return { parts, w: Math.max(...parts.map((one) => one.w)) };
+    }
+  );
   /**
    * The design's own width, px: the program's `width`, or the canvas's
-   * widest story (as it says it, else as it last said it) where that is
-   * wider. Its frame stands at it, 1 CSS px per px; none, it takes the
+   * widest story (as it says it, else as the page's media knows it) where
+   * that is wider. Its frame stands at it, 1 CSS px per px; none, it takes the
    * well's width.
    */
   const picture = $derived.by(() => {
@@ -106,6 +126,24 @@
   /** A component canvas's place among the page's canvases, which load one at a time (embed-turns.ts): its turn ends once it says its shape. */
   let turn: EmbedTurn | undefined;
 
+  /**
+   * The shape its canvas said, told to the page's origin (hub preview.ts
+   * `/shape`) where the media knew another: kept for every next Preview of
+   * these stories, in any browser. Unheard, the next stands at what the
+   * media knew; nothing waits on it.
+   */
+  const tellShape = (heard: EmbedShape) => {
+    const had = held?.shapes?.said[storiesKey(stories)];
+    if (had?.h === heard.h && had.w === heard.w) {
+      return;
+    }
+    fetch(`/__cawco/artifact/${id}/shape`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stories, ...heard }),
+    }).catch(() => undefined);
+  };
+
   /** A component canvas's own height and widest story, as it says them (agent canvas runtime `by=embed`): its frame is as tall and as wide. */
   $effect(() => {
     const heard = (event: MessageEvent) => {
@@ -122,7 +160,7 @@
         tall = said.height;
         saidWidth = typeof said.width === "number" ? said.width : null;
         turn?.done();
-        writeJson(shapeKey, { h: tall, w: saidWidth });
+        tellShape({ h: tall, w: saidWidth });
       }
     };
     addEventListener("message", heard);
@@ -328,7 +366,7 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at the shape it last said here (the kit's picture where it never has), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace Caw and the wait's line stand over the screen's place or the canvas's skeleton (The Real Wait Rule), until it stands at its shape; then the row stands over the frame, empty. An origin that can't be reached says why in its place past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at its picture's own shape as the page's media knows it (the kit's picture where none was ever drawn), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace Caw and the wait's line stand over the screen's place or the canvas's skeleton (The Real Wait Rule), until it stands at its shape; then the row stands over the frame, empty. An origin that can't be reached says why in its place past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div
       bind:this={box}
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
@@ -406,14 +444,21 @@
           {/if}
         {/if}
         {#if !(screen || (shaped && drawn))}
-          <!-- A canvas waiting its turn or loading: its skeleton at the shape it last said in this browser (the kit's picture where it never has), pulsing, over its frame once that holds its height; it goes in its reveal as the frame comes. -->
+          <!-- A canvas waiting its turn or loading: its skeleton at its picture's own shape as the page's media knows it (`known`: what an embed of these stories said, else each story as drawn, one under another; the kit's picture where none was ever drawn), pulsing, over its frame once that holds its height; it goes in its reveal as the frame comes. -->
           <div
             class={tall === null ? "w-full" : "absolute inset-0"}
             data-slot="embed-wait"
             out:reveal
           >
             {#if tall === null && known}
-              <Skeleton class="w-full" style={`block-size: ${known.h}px`} />
+              <div class="flex flex-col items-start gap-space-3">
+                {#each known.parts as part, at (at)}
+                  <Skeleton
+                    class={part.w === null ? "w-full" : undefined}
+                    style={`block-size: ${part.h}px;${part.w === null ? "" : ` inline-size: ${part.w}px;`}`}
+                  />
+                {/each}
+              </div>
             {:else if tall === null}
               <Skeleton class="w-full" height="picture" />
             {:else}

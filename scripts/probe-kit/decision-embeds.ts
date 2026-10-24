@@ -23,6 +23,7 @@ import {
   OVERLAY_PATH,
   overlayResponse,
 } from "../../packages/core/src/preview-proxy";
+import { type EmbedShape, storiesKey } from "../../packages/core/src/stage";
 import {
   checkProgram,
   DECISION_ASSETS,
@@ -61,6 +62,8 @@ export const STAGE_START_MS = 240_000;
 /** An embed on a decision page: a Preview's live frame (dashboard decisions host Preview.svelte). */
 export const EMBED_FRAME = "[data-slot=media] iframe[data-slot=embed]";
 const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
+/** Where a Preview tells its page's origin the shape its canvas said (hub preview.ts `/shape`). */
+const SHAPE_PATH = /^\/__cawco\/artifact\/([0-9a-f-]{36})\/shape$/;
 /** A page artifact's own address, as the hub serves it. */
 const PAGE_ARTIFACT = /^\/__cawco\/page\/([^/]+)\/$/;
 const TITLE = /Decisions\("([^"]*)"/;
@@ -341,6 +344,8 @@ function decisionPage(
     embedAt: string;
     files: Readonly<Record<string, readonly string[]>>;
     pages: Readonly<Record<string, string>>;
+    /** Each canvas's shapes as its Previews told them (`/shape`), as the hub's media carries them. */
+    said: ReadonlyMap<string, Record<string, EmbedShape>>;
     theme: string;
   },
   withOverlay: boolean
@@ -352,6 +357,7 @@ function decisionPage(
         kind: "component",
         name: held[0]?.split("/").at(-1) ?? id,
         embed: `${media.embedAt}/@cawco/canvas?${held.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&scheme=${media.theme}`,
+        shapes: { said: media.said.get(id) ?? {}, drawn: {} },
       },
     ]),
     ...Object.keys(media.pages).map((id) => [id, { kind: "page", name: id }]),
@@ -417,6 +423,8 @@ export async function startDecisionStage(
   const overlaidHost =
     overlaid.size > 0 ? embedOrigin(stagePort, () => parents, latencyMs) : null;
   const picking = await pickWiring();
+  /** The shapes Previews told, by canvas id, served in every page's media after. */
+  const said = new Map<string, Record<string, EmbedShape>>();
   // The top document has no parent to frame it.
   const answerOverlay = overlaidHost
     ? (request: Request) => overlayAnswer(request, [])
@@ -424,7 +432,7 @@ export async function startDecisionStage(
   const pageOf = (name: string, program: string, theme: string) => {
     const on = overlaidHost !== null && overlaid.has(name);
     const embedAt = `http://127.0.0.1:${on ? overlaidHost.port : embedHost.port}`;
-    return decisionPage(program, { files, pages, embedAt, theme }, on);
+    return decisionPage(program, { files, pages, embedAt, said, theme }, on);
   };
   const served = Bun.serve({
     hostname: "127.0.0.1",
@@ -434,6 +442,20 @@ export async function startDecisionStage(
       const script = await answerOverlay(request);
       if (script) {
         return script;
+      }
+      // A Preview tells the shape its canvas said, as the hub keeps it (hub preview.ts `/shape`).
+      const shaped = pathname.match(SHAPE_PATH)?.[1];
+      if (shaped && request.method === "POST") {
+        const told = (await request.json()) as {
+          h: number;
+          stories: string[];
+          w: number | null;
+        };
+        said.set(shaped, {
+          ...said.get(shaped),
+          [storiesKey(told.stories)]: { h: told.h, w: told.w },
+        });
+        return new Response(null, { status: 204 });
       }
       const artifact = pathname.match(PAGE_ARTIFACT)?.[1];
       if (artifact && pages[artifact] !== undefined) {

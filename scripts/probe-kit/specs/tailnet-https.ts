@@ -34,7 +34,8 @@
  *    tailnet address with `origin-agent-cluster: ?1`, plain http beside it,
  *    and plain http on the tailnet address the door's 308 as in 5; its
  *    address names its tailnet origin, which `previewRoute` gives a client
- *    that reached the hub over the tailnet and no other.
+ *    that reached the hub over the tailnet and no other; a browser on the
+ *    name loads it over HTTP/2.
  *
  *   bun scripts/probe-kit/run.ts tailnet-https
  */
@@ -452,6 +453,46 @@ const doorAndRenewal = async (
   );
   held.close();
 };
+
+/**
+ * 6, a preview port's HTTPS to a browser on the name: HTTP/2, so a canvas's
+ * whole module graph rides one connection, where HTTP/1.1's six queued it
+ * (hub preview.ts `http2`). Read from the page's own navigation entry.
+ */
+async function previewOverH2(kit: Kit, origin: string): Promise<void> {
+  const browser = await chromium.launch({
+    headless: true,
+    env: launchEnv(
+      Object.fromEntries(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] =>
+            !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
+        )
+      )
+    ),
+    args: ["--no-sandbox", `--host-resolver-rules=MAP ${NAME} [::1]`],
+  });
+  try {
+    const page = await (
+      await browser.newContext({ ignoreHTTPSErrors: true })
+    ).newPage();
+    const answer = await page.goto(`${origin}/`);
+    const protocol = await page.evaluate(
+      () =>
+        (
+          performance.getEntriesByType("navigation")[0] as
+            PerformanceNavigationTiming | undefined
+        )?.nextHopProtocol ?? ""
+    );
+    kit.check(
+      `6: a preview port's HTTPS on its name speaks HTTP/2 to a browser (${protocol || "no protocol"}, ${answer?.status() ?? "no answer"})`,
+      protocol === "h2" && answer !== null,
+      `${origin}/ answered ${answer?.status()} over ${protocol}`
+    );
+  } finally {
+    await browser.close();
+  }
+}
 
 /** 6, the door on preview port `port`: plain http on the tailnet address answers its 308 as in 5. */
 const previewDoor = async (kit: Kit, port: number) => {
@@ -890,6 +931,7 @@ const run = async (kit: Kit) => {
     );
     await previewDoor(kit, address.port);
     const origin = `https://${NAME}:${address.port}`;
+    await previewOverH2(kit, origin);
     const viaTailnet = previewRoute(address, {
       hostname: "[::1]",
       protocol: "http:",

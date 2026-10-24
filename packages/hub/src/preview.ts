@@ -385,6 +385,13 @@ export interface PreviewListenerDeps {
     instanceId: string,
     artifactId: string
   ) => Promise<Response>;
+  /**
+   * The shape a decision page's Preview heard component canvas
+   * `artifactId` say (`POST /__cawco/artifact/<id>/shape`, a JSON body of
+   * core `storiesKey`'s stories and an `EmbedShape`), kept for every next
+   * Preview of it (artifacts service `keepSaidShape`).
+   */
+  keepShape: (request: Request, artifactId: string) => Promise<Response>;
   /** An artifact's kind; undefined when there is none. */
   kindOf: (artifactId: string) => ArtifactKind | undefined;
   /**
@@ -458,6 +465,9 @@ const joinArtifact = (
     return server.upgrade(request, { data: { artifactId, screen } })
       ? undefined
       : new Response("WebSocket upgrade failed", { status: 400 });
+  }
+  if (action === "/shape") {
+    return deps.keepShape(request, artifactId);
   }
   // What the page asks of its session: the one that holds it now.
   const instanceId = deps.ownerOf(artifactId);
@@ -1171,9 +1181,23 @@ export function createPreviewListeners(
       error,
       fetch,
     });
+    /*
+     * Its HTTPS speaks HTTP/2 to a browser that offers it (ALPN): a component
+     * canvas's first draw asks for its whole module graph, 845 modules for
+     * caw-panel's States, and over HTTP/1.1 a browser takes six connections
+     * to an origin, so they queued (median 580 ms, the tail 11 s, measured on
+     * the owner's tailnet) and the picture drew 13.8 s in. One HTTP/2
+     * connection carries them all at once. "`Bun.serve` now supports HTTP/2
+     * on the same port as HTTP/1.1 ... Over TLS the protocol is negotiated
+     * with ALPN" (bun.com/blog/bun-v1.4.1); "`server.upgrade()` only works on
+     * HTTP/1.1 requests" (bun.com/docs/runtime/http/server), and a browser
+     * opens a preview's sockets (Vite's HMR, the overlay's) on HTTP/1.1 of
+     * its own, as no extended CONNECT is offered.
+     */
     const secure = tailnet.beside(port, (at) =>
       Bun.serve<ListenerSocket>({
         ...at,
+        http2: true,
         websocket,
         error,
         fetch: (request, server) => fetch(asReached(request), server),
