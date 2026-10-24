@@ -112,6 +112,29 @@
  *     sheet begins, Send's box is clear of the sheet's, and a press at its
  *     centre sends. The page's thumbnail from the parent's panel is kept; an
  *     outsider's is refused with today's words.
+ * (r) A dozen Previews of one heavy component canvas on one page all draw,
+ *     in Chromium and in WebKit: the dashboard's own stage (decision-embeds.ts
+ *     `startDecisionStage`, no fleet) drawing the Needs you card's states
+ *     file, the canvas drawn once on the stage first, as a canvas the person
+ *     was shown is (its modules then preloaded by every embed), each engine
+ *     in a fresh context (nothing cached), each answer of the embed origin
+ *     held {@link HEAVY_HOLD_MS} as the hops to a stage hold it. Every
+ *     Preview stands at its drawn shape, none says "didn't load", and every
+ *     story it names has a rest frame with a box past 0 by 0; and the page
+ *     loaded them one at a time, each embed given its address only once the
+ *     one before it had mounted its stories. On 2026-10-24 the owner's
+ *     pairing page of twelve such Previews drew two: Chromium fails a
+ *     renderer's requests past 2,700 in flight
+ *     (`net::ERR_INSUFFICIENT_RESOURCES`), and the twelve asked for some
+ *     7,500 modules at once; a page's canvases now load one at a time
+ *     (dashboard decisions host embed-turns.ts), and an embed says its shape,
+ *     which ends its turn, only once it drew (canvas runtime.ts `sayShape`;
+ *     said at boot, 11 of these twelve began before the one before them
+ *     drew, and caw-panel's 33 had ten say "didn't load").
+ *
+ *   DECISION_PAGES=embeds bun scripts/probe-kit/run.ts decision-pages
+ *
+ *     runs (r) alone, with no fleet.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -126,8 +149,17 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
+import { checkProgram } from "../../../packages/hub/src/decision-program";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { pageReach } from "../decision-embeds";
+import {
+  APP,
+  CAWCO_BRIDGE,
+  EMBED_FRAME,
+  idOf,
+  pageReach,
+  STAGE_START_MS,
+  startDecisionStage,
+} from "../decision-embeds";
 import {
   type Kit,
   type KitFleet,
@@ -4601,7 +4633,317 @@ const tapLeg = async (on: On) => {
   await phone.close();
 };
 
+/** (r)'s canvas: the dashboard's Needs you card, whose sheet brings the dashboard's artifact doc, Yjs and its icons. */
+const HEAVY = "src/lib/cawco/home/NeedsCard.stories.ts";
+const HEAVY_ID = idOf("heavy-needs");
+const HEAVY_PAGE = "dozen";
+/** How long (r)'s embed origin holds each answer: the hops between the owner's browser and a stage hold a request in flight, where a loopback answers it at once. Ours. */
+const HEAVY_HOLD_MS = 20;
+/** The stories each of (r)'s twelve Previews names, as a page shows a canvas's takes beside each other. */
+const HEAVY_TAKES = [
+  ["Issue"],
+  ["Comment"],
+  ["GitLab"],
+  ["LongNames"],
+  ["LongNamesNarrow"],
+  ["Budget"],
+  ["Issue", "Comment"],
+  ["GitLab", "Budget"],
+  ["LongNames", "Issue"],
+  ["Comment", "GitLab"],
+  ["Budget", "LongNamesNarrow"],
+  ["Issue", "GitLab", "Budget"],
+] as const;
+const previewOf = (take: readonly string[], at: number) =>
+  `p${at} = Preview("${HEAVY_ID}", "Take ${at + 1}", [${take.map((one) => `"${one}"`).join(", ")}])`;
+/** One card of four options, three Previews each: twelve embeds of one canvas on one page. */
+const HEAVY_PROGRAM = [
+  `root = Decisions("Twelve takes of one card", [takes])`,
+  `takes = Decision("takes", "Which take of the card reads right?", [a, b, c, d], "Each option shows three takes of the same card.")`,
+  ...["a", "b", "c", "d"].map(
+    (id, at) =>
+      `${id} = Option("${id}", "Takes ${at * 3 + 1} to ${at * 3 + 3}", "Three takes of the card.", ${at === 0}, [p${at * 3}, p${at * 3 + 1}, p${at * 3 + 2}], "The other takes.")`
+  ),
+  ...HEAVY_TAKES.map(previewOf),
+].join("\n");
+
+/** What an embed drew, read in its own frame: its failure line, and each rest frame's story and box. */
+function dozenRead() {
+  return {
+    failed:
+      document.querySelector(".cawco-section-failed")?.textContent?.trim() ??
+      null,
+    frames: [
+      ...document.querySelectorAll<HTMLElement>(
+        '.cawco-frame[data-cawco-interaction="rest"]'
+      ),
+    ].map((frame) => {
+      const box = frame
+        .querySelector(".cawco-frame-body")
+        ?.getBoundingClientRect();
+      return {
+        story: frame.dataset.cawcoStory ?? "",
+        w: Math.round(box?.width ?? 0),
+        h: Math.round(box?.height ?? 0),
+      };
+    }),
+  };
+}
+
+/**
+ * (r)'s clock, in every frame of the page: the decision page stamps each
+ * iframe with when it got its address (`data-kit-src-at`); an embed keeps
+ * when its stories stood mounted, its states file's whole graph fetched
+ * (a rest frame in its grid, runtime.ts `showSection`), or its section said
+ * it failed (`__kitDrewAt`). Wall-clock ms, one clock across the frames.
+ * Each frame's own status says drawn a report later, past this.
+ */
+function dozenClock(): void {
+  const own = window as unknown as { __kitDrewAt?: number };
+  if (location.pathname.includes("/@cawco/canvas")) {
+    const mark = () => {
+      const done =
+        document.querySelector(".cawco-section-failed") !== null ||
+        document.querySelector(
+          '.cawco-frame[data-cawco-interaction="rest"]'
+        ) !== null;
+      if (done && own.__kitDrewAt === undefined) {
+        own.__kitDrewAt = Date.now();
+      }
+    };
+    new MutationObserver(mark).observe(document, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    return;
+  }
+  const stamp = (el: Node) => {
+    if (
+      el instanceof HTMLIFrameElement &&
+      el.getAttribute("src") &&
+      !el.dataset.kitSrcAt
+    ) {
+      el.dataset.kitSrcAt = String(Date.now());
+    }
+  };
+  new MutationObserver((changes) => {
+    for (const change of changes) {
+      stamp(change.target);
+      for (const added of change.addedNodes) {
+        stamp(added);
+        if (added instanceof Element) {
+          for (const inner of added.querySelectorAll("iframe")) {
+            stamp(inner);
+          }
+        }
+      }
+    }
+  }).observe(document, {
+    attributeFilter: ["src"],
+    attributes: true,
+    childList: true,
+    subtree: true,
+  });
+}
+
+/** One embed of (r)'s page, as its Preview named it and as it drew. */
+interface DozenEmbed {
+  /** When its frame got its address, and when it mounted its stories (`dozenClock`). */
+  at: number;
+  drew: number | null;
+  named: string[];
+  read: ReturnType<typeof dozenRead> | null;
+  take: string;
+}
+
+/** Each embed on the page open in `page`, read in its own frame. */
+async function dozenEmbeds(page: Page): Promise<DozenEmbed[]> {
+  const embeds: DozenEmbed[] = [];
+  for (const handle of await page.$$(EMBED_FRAME)) {
+    const named = new URL(
+      (await handle.getAttribute("src")) ?? "http://x/"
+    ).searchParams.getAll("story");
+    const frame = await handle.contentFrame();
+    embeds.push({
+      named,
+      take: named.join("+"),
+      at: Number(await handle.getAttribute("data-kit-src-at")),
+      read: frame ? await frame.evaluate(dozenRead) : null,
+      drew:
+        (await frame?.evaluate(
+          () => (window as unknown as { __kitDrewAt?: number }).__kitDrewAt
+        )) ?? null,
+    });
+  }
+  return embeds;
+}
+
+/** What an embed shows that is not its Preview's stories drawn: its failure line, another set of stories, a frame without a box. */
+const dozenFaults = (one: DozenEmbed): string[] => {
+  if (!one.read) {
+    return [`${one.take}: no frame`];
+  }
+  const stories = one.read.frames.map((frame) => frame.story);
+  return [
+    ...(one.read.failed ? [`${one.take}: ${one.read.failed}`] : []),
+    ...(stories.join() === one.named.join()
+      ? []
+      : [
+          `${one.take}: draws ${stories.join(", ") || "nothing"} of ${one.named.join(", ")}`,
+        ]),
+    ...one.read.frames
+      .filter((frame) => frame.w <= 0 || frame.h <= 0)
+      .map((frame) => `${one.take}/${frame.story}: ${frame.w}×${frame.h}`),
+  ];
+};
+
+/** Each embed that got its address before the one given its address before it had mounted its stories. */
+const dozenOverlaps = (order: DozenEmbed[]): string[] =>
+  order.flatMap((one, at) => {
+    const before = order[at - 1];
+    if (!before || (before.drew !== null && one.at >= before.drew)) {
+      return [];
+    }
+    return [
+      before.drew === null
+        ? `${one.take} began with ${before.take} never drawn`
+        : `${one.take} began ${before.drew - one.at} ms before ${before.take} drew`,
+    ];
+  });
+
+/**
+ * (r)'s canvas drawn on the stage's own port, twice, as a canvas the person
+ * was shown: the stage then preloads its whole graph into every embed of it
+ * (stage-host host.ts `preloadsOf`). Answers how many modules the second
+ * open preloaded.
+ */
+async function warmDozen(kit: Kit, stagePort: number): Promise<number> {
+  let preloads = 0;
+  for (const _ of [1, 2]) {
+    const first = await kit.page("desk", { theme: "light" });
+    await first.goto(
+      `http://127.0.0.1:${stagePort}/@cawco/canvas?file=${encodeURIComponent(HEAVY)}&by=embed&story=Issue`,
+      { waitUntil: "load" }
+    );
+    await first
+      .waitForFunction(
+        () =>
+          document.querySelector(
+            '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status[data-state="drawn"]'
+          ) !== null,
+        undefined,
+        { timeout: STAGE_START_MS, polling: 250 }
+      )
+      .catch(() => undefined);
+    preloads = await first.evaluate(
+      () => document.querySelectorAll('link[rel="modulepreload"]').length
+    );
+    await first.close();
+  }
+  return preloads;
+}
+
+/** (r) on one engine: the page of twelve opened fresh, each embed read once all stand at their shape. */
+async function dozenOn(
+  kit: Kit,
+  engine: "chromium" | "webkit",
+  pageUrl: string,
+  preloads: number
+): Promise<void> {
+  const leg = `(r) ${engine}, 1440 light, twelve Previews of ${HEAVY.split("/").at(-1)}`;
+  const page = await kit.page("desk", {
+    engine,
+    theme: "light",
+    init: [CAWCO_BRIDGE, dozenClock],
+  });
+  const started = Date.now();
+  await page.goto(pageUrl, { waitUntil: "load" });
+  const shaped = await until(
+    `${leg}: every Preview at its drawn shape`,
+    () =>
+      page.evaluate(
+        (selector) =>
+          [...document.querySelectorAll<HTMLElement>(selector)].filter(
+            (one) => one.dataset.shape === "drawn"
+          ).length,
+        EMBED_FRAME
+      ),
+    (count) => count === HEAVY_TAKES.length,
+    STAGE_START_MS
+  ).catch(() => -1);
+  const seconds = Math.round((Date.now() - started) / 100) / 10;
+  const embeds = await dozenEmbeds(page);
+  const faults = embeds.flatMap(dozenFaults);
+  kit.check(
+    `${leg}: all ${HEAVY_TAKES.length} at their drawn shape (${shaped === -1 ? "not all" : shaped} in ${seconds} s, ${preloads} modules preloaded each), none failed, every story it names drawn with a box`,
+    shaped === HEAVY_TAKES.length &&
+      embeds.length === HEAVY_TAKES.length &&
+      faults.length === 0,
+    [
+      ...faults,
+      ...embeds.map(
+        (one) =>
+          `${one.take} ${(one.read?.frames ?? []).map((frame) => `${frame.w}×${frame.h}`).join(" ")}`
+      ),
+    ].join("\n    ")
+  );
+  // One at a time: each embed got its address only once the one before it had mounted its stories (Preview's turn, ended by the embed's shape, said once it drew).
+  const order = [...embeds].sort((a, b) => a.at - b.at);
+  const overlaps = dozenOverlaps(order);
+  kit.check(
+    `${leg}: the page loads its canvases one at a time, each once the one before it drew (${overlaps.length} began early)`,
+    embeds.length === HEAVY_TAKES.length &&
+      embeds.every((one) => one.at > 0) &&
+      overlaps.length === 0,
+    [
+      ...overlaps,
+      ...order.map(
+        (one) =>
+          `${one.take}: address at +${one.at - started} ms, drew at ${one.drew === null ? "never" : `+${one.drew - started} ms`}`
+      ),
+    ].join("\n    ")
+  );
+  await page.close();
+}
+
+/** (r): a dozen Previews of one heavy canvas on one page, each drawn whole, in Chromium and WebKit. */
+async function dozenLeg(kit: Kit): Promise<void> {
+  let refusal = "";
+  try {
+    checkProgram(HEAVY_PROGRAM);
+  } catch (error) {
+    refusal = (error as Error).message;
+  }
+  kit.check(
+    "(r) the hub's check keeps the page of twelve Previews",
+    refusal === "",
+    refusal
+  );
+  const stage = await startDecisionStage(
+    new Map([[HEAVY_PAGE, HEAVY_PROGRAM]]),
+    { [HEAVY_ID]: [HEAVY] },
+    { root: APP, kit: true },
+    {},
+    new Set(),
+    HEAVY_HOLD_MS
+  );
+  try {
+    const preloads = await warmDozen(kit, stage.stagePort);
+    for (const engine of ["chromium", "webkit"] as const) {
+      await dozenOn(kit, engine, stage.pageUrl(HEAVY_PAGE, "light"), preloads);
+    }
+  } finally {
+    await stage.stop();
+  }
+}
+
 const run = async (kit: Kit) => {
+  // `DECISION_PAGES=embeds`: (r) alone, which stands no fleet.
+  if (process.env.DECISION_PAGES === "embeds") {
+    await dozenLeg(kit);
+    return;
+  }
   const on = await publish(kit, await standUp(kit));
   for (const view of ["desk", "phone"] as const) {
     for (const theme of ["light", "dark"] as const) {
@@ -4666,6 +5008,7 @@ const run = async (kit: Kit) => {
   await burstLeg(on);
   await treeMediaLeg(on);
   await panelOfTreeLeg(on);
+  await dozenLeg(kit);
   kit.check(
     "the pages said no error",
     on.said.length === 0,

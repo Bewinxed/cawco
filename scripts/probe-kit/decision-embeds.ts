@@ -210,10 +210,14 @@ async function overlayAnswer(
  * The embed origin: the ping the hub answers on a preview origin, and the
  * stage behind it; with `overlaid`, the overlay too, on every page it relays
  * (a machine's preview proxy, agent preview.ts), framed by `parents()`.
+ * With `latencyMs`, each answer from the stage waits that long first, as
+ * the hops between the owner's browser and a stage hold each request (some
+ * 350 ms through the hub's preview proxy, stage-host host.ts `preloadsOf`).
  */
 export function embedOrigin(
   stage: number,
-  overlaid: (() => readonly string[]) | null = null
+  overlaid: (() => readonly string[]) | null = null,
+  latencyMs = 0
 ) {
   return Bun.serve<Socket>({
     hostname: "127.0.0.1",
@@ -241,6 +245,9 @@ export function embedOrigin(
         return upgraded
           ? undefined
           : new Response("No upgrade", { status: 400 });
+      }
+      if (latencyMs > 0) {
+        await Bun.sleep(latencyMs);
       }
       const headers = new Headers(request.headers);
       headers.set("host", `127.0.0.1:${stage}`);
@@ -370,7 +377,8 @@ function decisionPage(
  * Each program named in `overlaid` is served with the overlay, as the hub
  * serves a decision page, and its Previews embed through an origin that
  * gives every page the overlay, as a machine's preview proxy does: such a
- * page needs no `CAWCO_BRIDGE`, the overlay being its bridge.
+ * page needs no `CAWCO_BRIDGE`, the overlay being its bridge. Each answer
+ * of the embed origin waits `latencyMs` (`embedOrigin`).
  * Answers once the stage says it is ready.
  */
 export async function startDecisionStage(
@@ -378,7 +386,8 @@ export async function startDecisionStage(
   files: Readonly<Record<string, readonly string[]>>,
   project: StageProject = { root: APP, kit: true },
   pages: Readonly<Record<string, string>> = {},
-  overlaid: ReadonlySet<string> = new Set()
+  overlaid: ReadonlySet<string> = new Set(),
+  latencyMs = 0
 ): Promise<DecisionStage> {
   const host = join(project.root, ".cawco/stage/host.mjs");
   mkdirSync(join(project.root, ".cawco/stage"), { recursive: true });
@@ -402,11 +411,11 @@ export async function startDecisionStage(
   };
   stage.stdout.on("data", hear);
   stage.stderr.on("data", hear);
-  const embedHost = embedOrigin(stagePort);
+  const embedHost = embedOrigin(stagePort, null, latencyMs);
   /** The decision pages' origin: the one an overlaid embed's overlay is framed from. */
   const parents: string[] = [];
   const overlaidHost =
-    overlaid.size > 0 ? embedOrigin(stagePort, () => parents) : null;
+    overlaid.size > 0 ? embedOrigin(stagePort, () => parents, latencyMs) : null;
   const picking = await pickWiring();
   // The top document has no parent to frame it.
   const answerOverlay = overlaidHost

@@ -1341,9 +1341,19 @@ export function boot(options: BootOptions): void {
    * delivery: said only from there, nine of ten Previews of one canvas below
    * the fold stood in a 16:10 box at 252px beside the first at its own
    * 760px. Its height read here lays it out, rendering steps or none.
+   *
+   * Said once every section has drawn or says why it didn't, never of its
+   * stand-ins: the page holding it loads its canvases one at a time, the
+   * next when this one has said its shape (dashboard decisions host
+   * embed-turns.ts), and a shape said at boot, 0.6 s in with no frame
+   * drawn, let the next start while this one still fetched its graph; a
+   * page of 33 such Previews had ten say "didn't load".
    */
   function sayShape(): void {
-    if (!embed) {
+    if (
+      !embed ||
+      sections.some((section) => !(section.loaded || section.failure))
+    ) {
       return;
     }
     const height = Math.ceil(world.offsetHeight);
@@ -1633,7 +1643,7 @@ export function boot(options: BootOptions): void {
    * Loads the sections near the view, in the file's order: one only once
    * every section before it stands at its drawn height (a section not yet
    * drawn is a short placeholder, which would put the next one in view
-   * before its time).
+   * before its time). An embed loads every one, in order.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of the sections, in order, for a person's view and for the stage's sweep alike
   const pump = async () => {
@@ -1648,7 +1658,7 @@ export function boot(options: BootOptions): void {
         }
         // A section taken down keeps its drawn height; one never drawn is a placeholder, past which nothing is judged yet.
         const asleep = section.el.dataset.cawcoAsleep !== undefined;
-        if (!(sweeping || nearView(section))) {
+        if (!(sweeping || embed || nearView(section))) {
           if (asleep) {
             continue;
           }
@@ -1656,7 +1666,10 @@ export function boot(options: BootOptions): void {
         }
         // biome-ignore lint/performance/noAwaitInLoops: each section laid out before the next is judged
         await loadSection(section);
-        await frameTick();
+        // An embed draws every section, judging no view, and says its shape only once all have drawn (`sayShape`), so until then its frame is 0px tall and gets no rendering steps: it waits on no frame.
+        if (!embed) {
+          await frameTick();
+        }
         if (sweeping) {
           await settled(section);
         }
