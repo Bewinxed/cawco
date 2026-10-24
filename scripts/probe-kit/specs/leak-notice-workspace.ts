@@ -70,6 +70,10 @@ const BROWSE = (executable: string) =>
   `D=$(mktemp -d); ${JSON.stringify(executable)} --headless --disable-gpu --no-sandbox --user-data-dir="$D" about:blank > /dev/null 2>&1 & P=$!; sleep ${BROWSER_HOLD_S}; echo "HANDLERS-RUNNING=$(pgrep -fc crashpad_handler)"; kill $P; wait $P; sleep 3; echo "HANDLERS-AFTER=$(pgrep -fc crashpad_handler)"; rm -rf "$D"; echo BROWSER-DONE`;
 const HANDLERS_RUNNING = /HANDLERS-RUNNING=(\d+)/;
 const HANDLERS_AFTER = /HANDLERS-AFTER=(\d+)/;
+/** Where Claude Code writes a background command's output, as its tool result says. */
+const OUTPUT_FILE = /Output is being written to: (\S+?\.output)/g;
+/** How long the browser's output is waited on once the other legs are read. */
+const BROWSER_WAIT_MS = 120_000;
 const GROW = `exec -a ${LEAKER} perl -e 'my @k; for (1 .. 192) { push @k, "x" x (8 * 1024 * 1024); select(undef, undef, undef, 1); } sleep 900;'`;
 const LEAVE = `perl -MPOSIX -e 'fork and exit; POSIX::setsid(); open(STDIN, "<", "/dev/null"); open(STDOUT, ">", "/dev/null"); open(STDERR, ">", "/dev/null"); exec @ARGV' sleep ${LEFTOVER}; echo LEFT-DONE`;
 
@@ -88,14 +92,18 @@ const tool = (name: string, input: object): Reply => ({
   words: [],
   tool: { name, input },
 });
-const bash = (command: string, background: boolean): Reply => ({
+const bash = (
+  command: string,
+  background: boolean,
+  description: string
+): Reply => ({
   everyMs: 5,
   words: [],
   tool: {
     name: "Bash",
     input: {
       command,
-      description: background ? "Grow memory" : "Leave a process behind",
+      description,
       ...(background ? { run_in_background: true } : { timeout: 120_000 }),
     },
   },
@@ -129,15 +137,20 @@ const respond = (request: Seen): Reply => {
   }
   if (step === 0) {
     step = 1;
-    return bash(GROW, true);
+    return bash(GROW, true, "Grow memory");
   }
   if (step === 1 && request.afterTool) {
     step = 2;
-    return bash(BROWSE(browserExecutable() ?? "chromium"), false);
+    // In the background: a notice arriving while it runs (main's watcher told one for its crash handlers) backgrounds a foreground command, and its result never comes back.
+    return bash(
+      BROWSE(browserExecutable() ?? "chromium"),
+      true,
+      "Run a browser"
+    );
   }
   if (step === 2 && request.afterTool) {
     step = 3;
-    return bash(LEAVE, false);
+    return bash(LEAVE, false, "Leave a process behind");
   }
   if (request.afterTool) {
     if (pending) {
@@ -157,6 +170,15 @@ const respond = (request: Seen): Reply => {
     return want(request, WAIT, REST);
   }
   return text("ok");
+};
+
+/** A file's text, or nothing where it is not there yet. */
+const textOf = async (file: string): Promise<string> => {
+  try {
+    return await Bun.file(file).text();
+  } catch {
+    return "";
+  }
 };
 
 const pidsOf = async (start: string): Promise<number[]> =>
@@ -268,15 +290,31 @@ const spec: Spec = {
           leftovers.some((pid) => isAlive(listedPid(pid))),
         `${LEAKER}: ${leakers.join(", ") || "none"}; sleep ${LEFTOVER}: ${leftovers.join(", ") || "none"}`
       );
-      const browsed = fleet.seen.find(
-        (request) => request.afterTool && request.body.includes("BROWSER-DONE")
-      )?.body;
+      // The browser command's output, from the file Claude Code writes a background command's into.
+      const outputs = () => [
+        ...new Set(
+          fleet.seen.flatMap((request) =>
+            [...request.body.matchAll(OUTPUT_FILE)].map((one) => one[1] ?? "")
+          )
+        ),
+      ];
+      const browsed = await until(
+        "the browser command's output",
+        async () =>
+          (await Promise.all(outputs().map(textOf))).find((said) =>
+            said.includes("BROWSER-DONE")
+          ),
+        Boolean,
+        BROWSER_WAIT_MS
+      ).catch(() => undefined);
       const running = Number(browsed?.match(HANDLERS_RUNNING)?.[1]);
       const after = Number(browsed?.match(HANDLERS_AFTER)?.[1]);
-      const handlerTold = toldWith(fleet.seen, [
-        leakWords.leftBehind,
-        "crashpad",
-      ]);
+      const told = toldWith(fleet.seen, [leakWords.leftBehind, "crashpad"]);
+      // The notice itself, from where the session's message says it, not the tool result before it.
+      const handlerTold = told?.slice(
+        Math.max(0, told.indexOf(leakWords.leftBehind) - 60),
+        told.indexOf(leakWords.leftBehind) + 400
+      );
       const logged = (await fleet.logs("agent"))
         .split("\n")
         .filter(
@@ -285,7 +323,7 @@ const spec: Spec = {
       check(
         "(w5) a browser run in the workspace for 35 s had its crash handlers, they ended with it, and no session read a leftover naming one nor did the agent's log",
         running > 0 && after === 0 && !handlerTold && logged.length === 0,
-        `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}; ${handlerTold ? `told: ${handlerTold.slice(0, 400)}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? "no [leaks] line naming crashpad" : logged.join(" | ").slice(0, 400)}`
+        `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}${browsed ? "" : ` (no output reached BROWSER-DONE among ${outputs().length} background outputs)`}; ${handlerTold ? `the session was told: ${handlerTold}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? "no [leaks] line naming crashpad" : logged.join(" | ").slice(0, 400)}`
       );
     } finally {
       const probes = await Promise.all([
