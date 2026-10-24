@@ -11,8 +11,10 @@
  * - **GitHub** (github.ts): a project whose checkout's origin is on
  *   github.com, and that names a `github` connection that reads GitHub's
  *   API (core `readsGitHubApi`: a machine's gh, a code sign-in, a GitHub
- *   App or a token, held in the hub), has its repository polled every 60 s: pulls, issues and issue
- *   comments, each with its ETag and its high-water mark kept in
+ *   App or a token, held in the hub), has its repository polled every 60
+ *   s: pulls, issues, issue comments and issue events, each with its ETag,
+ *   and discussions with their comments through GraphQL, each resource's
+ *   high-water mark kept in
  *   `github_pollers`, so a restart neither re-delivers nor misses. With no
  *   connection named, its repository isn't polled, and its ingress view says
  *   so.

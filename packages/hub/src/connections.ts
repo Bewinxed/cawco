@@ -1968,14 +1968,16 @@ export const createConnections = (deps: ConnectionsDeps) => {
    * `https://github.com/settings/apps/new` for a personal account or
    * `https://github.com/organizations/ORGANIZATION/settings/apps/new` for an
    * organization account", docs.github.com). Whatever app it held is let go:
-   * this registers a new one. The steps run within the hour GitHub gives.
+   * this registers a new one, under the organization named, else the one
+   * its last sign-in named (a press on the row names none). The steps run
+   * within the hour GitHub gives.
    */
   const startManifest = (
     r: ConnectionRow,
     base: URL,
     organization: string | undefined
   ): { authorizationUrl: string } => {
-    const org = organization?.trim() ?? "";
+    const org = (organization ?? opened(r).org ?? "").trim();
     if (org && !GITHUB_LOGIN.test(org)) {
       return problem(
         "The organization is its login on GitHub, like the name in github.com/your-org."
@@ -1987,7 +1989,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (org) {
       page.searchParams.set("org", org);
     }
-    reseal(r.id, () => ({}));
+    reseal(r.id, () => (org ? { org } : {}));
     db.update(r.id, {
       signInState: state,
       signInRedirect: base.origin,
@@ -2104,7 +2106,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
         "GitHub handed over an app without a private key or a name. Sign in again from Connections."
       );
     }
-    reseal(r.id, () => ({
+    reseal(r.id, (sealed) => ({
+      ...(sealed.org ? { org: sealed.org } : {}),
       app: {
         service: "github",
         appId: String(made.id),
@@ -2665,6 +2668,39 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
+   * What a GitHub App connection's installation may do, as GitHub says now
+   * (`GET /app/installations/{id}`, its `permissions`), asked with the app's
+   * JWT: a tracker that files issues through it needs `issues: write`, which
+   * the manifest's read-only registration lacks until the person grants it
+   * on GitHub.
+   */
+  const githubAppPermissions = async (
+    name: string
+  ): Promise<{ permissions: Record<string, string>; slug: string }> => {
+    const r = row(name);
+    const { app } = opened(r);
+    if (!(
+      r.auth === "app" &&
+      app?.service === "github" &&
+      app.installationId
+    )) {
+      return problem(`${name} is no installed GitHub App.`);
+    }
+    const { data } = await new Octokit({
+      authStrategy: createAppAuth,
+      auth: { appId: app.appId, privateKey: app.privateKey },
+      baseUrl: GITHUB_API,
+      userAgent: "CawCo-hub",
+    }).rest.apps.getInstallation({
+      installation_id: Number(app.installationId),
+    });
+    return {
+      permissions: (data.permissions ?? {}) as Record<string, string>,
+      slug: app.slug ?? name,
+    };
+  };
+
+  /**
    * Linear clients signed in as a `linear` connection, one per request, for
    * the tracker sync: a personal API key's ("`Authorization: <API_KEY>`"),
    * or a Linear app's access token, refreshed first when near its end.
@@ -2753,6 +2789,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     toolNamed,
     listConnectionTools,
     githubClient,
+    githubAppPermissions,
     linearClient,
     refusedBy,
     lfsBasic,

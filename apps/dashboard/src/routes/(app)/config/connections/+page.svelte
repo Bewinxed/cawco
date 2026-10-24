@@ -822,12 +822,12 @@
       <p class="type-meta text-ink-muted" role="status">{words.ghLooking}</p>
     {:else}
       {#if gh.signIns.length > 0}
-        <ul aria-label={words.ghList} class="flex min-w-0 flex-col gap-space-2">
+        <ul aria-label={words.ghList} class="flex min-w-0 flex-col gap-space-4">
           {#each gh.signIns as one (ghKey(one))}
             <li
               data-slot="gh-account"
               aria-label={words.ghAccountOn(one.login, one.machine)}
-              class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-md border border-border-hairline p-space-2"
+              class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2"
             >
               <span class="flex min-w-0 grow basis-0 flex-col gap-space-1">
                 <span class="type-label wrap-anywhere text-ink-strong"

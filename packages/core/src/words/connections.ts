@@ -104,6 +104,9 @@ export const connectionsWords = {
   /** A GitHub App's old registration (an App ID, Installation ID and private key), refused: the hub registers it now. */
   githubAppRegisters: (name: string) =>
     `${name} is a GitHub App, which the hub registers for you: sign in to it from Connections.`,
+  /** A tracker bound through a GitHub App that may only read issues: what it takes on GitHub. */
+  appReadsIssuesOnly: (slug: string) =>
+    `The GitHub App ${slug} may only read issues, so it can't file this project's tasks. Give it Issues: read and write in its settings on GitHub, accept the change on its installation, then bind again.`,
   /** A GitHub App's way: the organization it is registered under, or none for your own account. */
   appOrganization: "Organization",
   appOrganizationHint:

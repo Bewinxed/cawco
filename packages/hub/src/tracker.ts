@@ -63,6 +63,7 @@
  *   the connection too. The next sync tries again.
  */
 import {
+  connectionsWords,
   type GithubProject,
   type GithubProjectsView,
   type IssueTracker,
@@ -137,7 +138,11 @@ const LINEAR_ISSUE_URL =
 export interface TrackersDeps {
   readonly connections: Pick<
     Connections,
-    "get" | "githubClient" | "linearClient" | "refusedBy"
+    | "get"
+    | "githubAppPermissions"
+    | "githubClient"
+    | "linearClient"
+    | "refusedBy"
   >;
   readonly db: {
     readonly project: (
@@ -1685,6 +1690,18 @@ export const createTrackers = (deps: TrackersDeps) => {
     target: TrackerTarget;
   }> => {
     try {
+      // A GitHub App that may only read issues would be refused on every
+      // sync: it is refused here, with what to grant on GitHub.
+      if (
+        draft.provider === "github" &&
+        deps.connections.get(draft.connection).auth === "app"
+      ) {
+        const { permissions, slug } =
+          await deps.connections.githubAppPermissions(draft.connection);
+        if (permissions.issues !== "write") {
+          throw new TrackerProblem(connectionsWords.appReadsIssuesOnly(slug));
+        }
+      }
       const target = await (await adapterOf(draft)).describe();
       return {
         target,

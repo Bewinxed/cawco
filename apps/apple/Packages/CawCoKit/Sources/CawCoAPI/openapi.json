@@ -42902,6 +42902,9 @@
                   },
                   "issueEvents": {
                     "$ref": "#/components/schemas/GitHubCursor"
+                  },
+                  "discussions": {
+                    "$ref": "#/components/schemas/GitHubCursor"
                   }
                 }
               },

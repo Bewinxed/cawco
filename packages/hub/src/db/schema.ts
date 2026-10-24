@@ -4769,6 +4769,8 @@ export interface ConnectionSecret {
   /** A `gh` connection's machine and account, whose gh the token (`key`) is read from. */
   gh?: { host: string; login: string; machineId: string };
   key?: string;
+  /** A GitHub App's organization, which its sign-in registers it under again when restarted from its row. */
+  org?: string;
   tokens?: OAuthTokens;
   verifier?: string;
 }
@@ -4931,7 +4933,8 @@ export interface GitHubCursor {
 }
 
 /** The resources a project's repository is polled for: issue events are where its labels come from. */
-export type GitHubResource = "pulls" | "issues" | "comments" | "issueEvents";
+export type GitHubResource =
+  "pulls" | "issues" | "comments" | "issueEvents" | "discussions";
 
 /**
  * A project's GitHub poller (ingress.ts, github.ts): the connection whose

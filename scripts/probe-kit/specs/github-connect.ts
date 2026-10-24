@@ -32,6 +32,8 @@
  *     "Installed", and the row names the installed app.
  *  A3 no App ID, Installation ID or private key field remains, and the hub
  *     refuses a GitHub App's old registration body in words.
+ *  A4 its sign-in started again from the row (no organization named)
+ *     registers under the organization the first one named.
  * Polling (P): a project's GitHub poller takes each of the three.
  * The page (U): Chromium and WebKit at 1440 and 390, the gh list inside the
  *  form with nothing spilling sideways; no console error on any page.
@@ -480,6 +482,25 @@ const legs = async (kit: Kit, github: ReturnType<typeof githubStub>) => {
     "P: a project's GitHub poller takes gh, a code and a GitHub App alike",
     Object.values(polled).every((code) => code === 200),
     JSON.stringify(polled)
+  );
+
+  // ── A4: a sign-in restarted from the row keeps its organization ─────
+  const again = await hub<{ authorizationUrl: string }>(
+    "POST",
+    "/api/connections/github-app/sign-in",
+    { origin: fleet.base }
+  );
+  const againPage = await (await fetch(again.body.authorizationUrl)).text();
+  const againAction = (FORM_ACTION.exec(againPage)?.[1] ?? "").replaceAll(
+    "&amp;",
+    "&"
+  );
+  check(
+    "A4: the app's sign-in started again from its row registers under the organization it named",
+    againAction.startsWith(
+      `${github.url}/organizations/probe-org/settings/apps/new?state=`
+    ),
+    againAction
   );
 
   // ── D2: a code, in the form ──────────────────────────────────────────

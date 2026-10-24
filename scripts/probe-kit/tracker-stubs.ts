@@ -27,7 +27,8 @@
  *   /app/installations/{id}/access_tokens` for a JWT signed with the app's
  *   key (RS256, `iss` its id), answered 201 with `token` and `expires_at`;
  *   `GET /app/installations/{id}` answers that JWT for the app's own
- *   installation alone.
+ *   installation alone, with its `permissions` (the manifest's, until the
+ *   probe grants others).
  * - GitHub's site, on the same origin (docs.github.com, registering a GitHub
  *   App from a manifest; authorizing OAuth apps):
  *   - the manifest form (`POST /settings/apps/new`, or an organization's)
@@ -219,6 +220,12 @@ export const githubStub = (options: {
   }[] = [];
   /** Each code the form handed back, until its conversion spends it. */
   const manifestCodes = new Set<string>();
+  /**
+   * What the installation may do, as `GET /app/installations/{id}` answers:
+   * the last manifest's permissions, until the person grants others on
+   * GitHub (`grant`).
+   */
+  let granted: Record<string, string> | null = null;
   let converted = 0;
   /** Each code sign-in's polls, and the token it hands out. */
   const device = {
@@ -746,6 +753,11 @@ export const githubStub = (options: {
             id: Number(options.app.installationId),
             account: { login: options.owner },
             app_slug: options.app.slug,
+            permissions: granted ??
+              manifests.at(-1)?.manifest.default_permissions ?? {
+                issues: "write",
+                metadata: "read",
+              },
           })
         : json(404, { message: "Not Found", status: "404" });
     }
@@ -837,6 +849,10 @@ export const githubStub = (options: {
     device,
     /** How many times the manifest's code was exchanged. */
     converted: () => converted,
+    /** The person grants the installation other permissions on GitHub, and accepts them. */
+    grant: (permissions: Record<string, string>) => {
+      granted = permissions;
+    },
     /** Someone opens an issue on GitHub. */
     open,
     /** Someone changes an issue on GitHub. */

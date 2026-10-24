@@ -82,7 +82,7 @@
  *  U3 the project's details show the tracker bound (its tasks linked as the
  *     hub counts them); Change opens the form
  *     on the binding as it stands; another project binds from its Tasks row.
- *  U5 a task's pane open, a fourth comment and a hand edit of its title
+ *  U5 a task's pane open, a further comment and a hand edit of its title
  *     land in one second: the pane shows both (the hub's frame names the
  *     project's tasks; their times are whole seconds), the page stands, the
  *     third comment on its own line still (a comment keys by its time and
@@ -103,6 +103,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { connectionsWords } from "../../../packages/core/src/words/connections";
 import { until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { type GitHubGrant, githubStub, linearStub } from "../tracker-stubs";
@@ -806,6 +807,17 @@ const legs = async (
     "/api/connections/github-app/targets"
   );
   const appProject = await project("Tracker GitHub App");
+  // Registered to read, as the manifest asks: refused before any sync, in
+  // words naming what to grant; granted Issues write on GitHub, it binds.
+  const readOnly = await bind(appProject, "github", "github-app", FULL);
+  check(
+    "A2: a GitHub App that may only read issues is refused at bind, saying what to grant on GitHub",
+    readOnly.status === 400 &&
+      String(readOnly.body) ===
+        connectionsWords.appReadsIssuesOnly("probe-app"),
+    JSON.stringify(readOnly)
+  );
+  github.grant({ issues: "write", metadata: "read" });
   await bind(appProject, "github", "github-app", FULL);
   await hub("POST", `/api/projects/${appProject}/tasks`, {
     title: "Ship the app build",
@@ -1242,32 +1254,53 @@ const legs = async (
       .slice(-count)
       .map((event) => ({ kind: event.kind, at: event.at }));
   await markThird();
-  // At a second's start, so a fourth note and a hand edit of the title
+  // At a second's start, so a further note and a hand edit of the title
   // commit in one second: the list shows no newer time for the edit, and
-  // only the hub's frame naming the project's tasks tells the pane.
-  await Bun.sleep(1000 - (Date.now() % 1000) + 20);
-  await hub("POST", `/api/projects/${plain}/tasks/${noted.id}/comments`, {
-    text: "Fourth note.",
-  });
-  const retitled = (await file(plain, noted.path)).replace(
-    "# Three notes",
-    "# Four notes"
-  );
-  await hub("PUT", `/api/projects/${plain}/folder/file`, {
-    path: noted.path,
-    content: retitled,
-    message: "Call it four",
-  });
-  const FOUR = "First note.|Second note.|Third note.|Fourth note.";
-  await paneShows(FOUR, "Four notes");
+  // only the hub's frame naming the project's tasks tells the pane. On a
+  // loaded machine the pair can straddle a second, which leaves the case
+  // untested rather than failed: it goes again, a note and a title more,
+  // until the pair shares its second.
+  const NEXT = [
+    ["Fourth note.", "Four notes"],
+    ["Fifth note.", "Five notes"],
+    ["Sixth note.", "Six notes"],
+    ["Seventh note.", "Seven notes"],
+    ["Eighth note.", "Eight notes"],
+    ["Ninth note.", "Nine notes"],
+  ] as const;
+  let notesNow: string[] = [...three];
+  let titleNow = "Three notes";
+  let sameSecond: { at: number; kind: string }[] = [];
+  for (const [note, heading] of NEXT) {
+    await Bun.sleep(1000 - (Date.now() % 1000) + 20);
+    await hub("POST", `/api/projects/${plain}/tasks/${noted.id}/comments`, {
+      text: note,
+    });
+    const retitled = (await file(plain, noted.path)).replace(
+      `# ${titleNow}`,
+      `# ${heading}`
+    );
+    await hub("PUT", `/api/projects/${plain}/folder/file`, {
+      path: noted.path,
+      content: retitled,
+      message: `Call it ${heading.toLowerCase()}`,
+    });
+    notesNow = [...notesNow, note];
+    titleNow = heading;
+    await paneShows(notesNow.join("|"), titleNow);
+    sameSecond = await lastOf(2);
+    if (sameSecond.length === 2 && sameSecond[0].at === sameSecond[1].at) {
+      break;
+    }
+  }
+  const FOUR = notesNow.join("|");
   await settle(notes, 300);
   const four = await saidNow();
-  const sameSecond = await lastOf(2);
   check(
     "U5: a note added and the title changed by hand in one second, the pane open: it shows both, the page stands, the third note on its own line still",
     three.join("|") === "First note.|Second note.|Third note." &&
       four.join("|") === FOUR &&
-      (await paneTitle()) === "Four notes" &&
+      (await paneTitle()) === titleNow &&
       (await thirdKept()) &&
       sameSecond.length === 2 &&
       sameSecond[0].at === sameSecond[1].at,
@@ -1302,7 +1335,7 @@ const legs = async (
     (said) => said.join("|") === FOUR,
     15_000
   ).catch(() => [] as string[]);
-  await paneShows(FOUR, "Four notes");
+  await paneShows(FOUR, titleNow);
   await settle(notes, 300);
   const again = await saidNow();
   check(

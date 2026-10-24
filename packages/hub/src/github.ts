@@ -4,13 +4,18 @@
  * that finds them.
  *
  * - **One shape both ways.** {@link normalizeGitHub} maps a polled object
- *   (`pull`, `issue`, `comment`, `issue_event`) and a webhook payload (`pull_request`,
- *   `issues`, `issue_comment`) to the same events under the same natural
- *   keys, so a poll and a webhook of one change are one row
+ *   (`pull`, `issue`, `comment`, `issue_event`, `discussion_node`) and a
+ *   webhook payload (`pull_request`, `issues`, `issue_comment`,
+ *   `discussion`, `discussion_comment`) to the same events under the same
+ *   natural keys, so a poll and a webhook of one change are one row
  *   (`inbound_events` is unique on source and key). Keys: `pr:<n>:opened`,
  *   `pr:<n>:merged`, `pr:<n>:closed`, `issue:<n>:opened`, `issue:<n>:closed`,
- *   `issue:<n>:labeled:<label>`, `comment:<id>`; source `github:<owner>/<repo>`.
- *   `actor` is always the author of the pull request, issue or comment.
+ *   `issue:<n>:labeled:<label>`, `comment:<id>`, `discussion:<n>:opened`,
+ *   `discussion-comment:<node id>`; source `github:<owner>/<repo>`. `actor`
+ *   is always the author of the pull request, issue, discussion or comment.
+ *   A discussion's comment is a `comment.created` with the discussion's
+ *   number: issues, pull requests and discussions share one repository's
+ *   numbers, so routing a comment onto its task by number holds for each.
  * - **Resources, not the events feed.** GitHub's events API "is not built to
  *   serve real-time use cases. Depending on the time of day, event latency
  *   can be anywhere from 30s to 6h" (docs.github.com/en/rest/activity/events).
@@ -25,6 +30,12 @@
  *   the edge of the window, which the store's key makes harmless. Issues
  *   and comments are asked `since` the mark, so the poll after a change asks
  *   a new URL (one 200 with nothing new); unchanged polls after it are 304s.
+ * - **Discussions through GraphQL.** REST lists no repository's
+ *   discussions; GraphQL's `repository.discussions` does, `orderBy: {field:
+ *   UPDATED_AT, direction: DESC}` (docs.github.com/en/graphql/guides/using-the-graphql-api-for-discussions),
+ *   each with its newest comments, so a comment (which moves its
+ *   discussion's `updatedAt`) is read with it. A POST has no ETag: each poll
+ *   asks once, one page unless the window runs past it.
  * - **Octokit reads it** (github.com/octokit/octokit.js), signed in as the
  *   poller's connection (connections.ts `githubClient`: a machine's gh, a code
  *   sign-in, a fine-grained token or a GitHub App installation): each resource's pages through
@@ -47,7 +58,10 @@ export type GitHubKind =
   | "issue_event"
   | "pull_request"
   | "issues"
-  | "issue_comment";
+  | "issue_comment"
+  | "discussion_node"
+  | "discussion"
+  | "discussion_comment";
 
 /** The resources a repository is polled for, in order. */
 export const GITHUB_RESOURCES: readonly GitHubResource[] = [
@@ -55,6 +69,7 @@ export const GITHUB_RESOURCES: readonly GitHubResource[] = [
   "issues",
   "comments",
   "issueEvents",
+  "discussions",
 ];
 
 /** The edge of the window read again each poll: late-visible changes are not missed. Our choice. */
@@ -124,6 +139,47 @@ const issueEvent = z.object({
 
 const repository = z.object({ full_name: z.string() });
 
+/** A discussion's comment as GraphQL answers it (`DiscussionComment`): `id` is its node ID. */
+const discussionComment = z.object({
+  id: z.string(),
+  url: z.string(),
+  body: z.string().nullish(),
+  author: user,
+  createdAt: z.string(),
+});
+
+/**
+ * A discussion as the poll's GraphQL query answers it (`Discussion`), with
+ * its repository's name, which the query knows, and its newest comments.
+ */
+const discussionNode = z.object({
+  repo: z.string(),
+  number: z.number().int(),
+  url: z.string(),
+  title: z.string(),
+  body: z.string().nullish(),
+  author: user,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  labels: z
+    .object({ nodes: z.array(z.object({ name: z.string() }).nullable()) })
+    .nullish(),
+  comments: z
+    .object({ nodes: z.array(discussionComment.nullable()) })
+    .nullish(),
+});
+
+/** A discussion as a webhook carries it (REST's shape). */
+const discussionHook = z.object({
+  number: z.number().int(),
+  html_url: z.string(),
+  title: z.string(),
+  body: z.string().nullish(),
+  user,
+  labels: z.array(label).nullish(),
+  created_at: z.string(),
+});
+
 const webhook = {
   pull_request: z.object({
     action: z.string(),
@@ -139,6 +195,23 @@ const webhook = {
   issue_comment: z.object({
     action: z.string(),
     comment,
+    repository,
+  }),
+  discussion: z.object({
+    action: z.string(),
+    discussion: discussionHook,
+    repository,
+  }),
+  discussion_comment: z.object({
+    action: z.string(),
+    comment: z.object({
+      node_id: z.string(),
+      html_url: z.string(),
+      body: z.string().nullish(),
+      user,
+      created_at: z.string(),
+    }),
+    discussion: z.object({ number: z.number().int() }),
     repository,
   }),
 };
@@ -277,6 +350,87 @@ const commentEvent = (one: z.infer<typeof comment>): InboundEvent[] => {
     : [];
 };
 
+/** A discussion's opening, as the poll and a webhook both carry it. */
+const discussionOpened = (
+  repo: string,
+  one: {
+    actor: string | null;
+    at: number;
+    body: string | null;
+    labels: string[];
+    number: number;
+    title: string;
+    url: string;
+  }
+): InboundEvent => ({
+  source: sourceOf(repo),
+  key: `discussion:${one.number}:opened`,
+  kind: "discussion.opened",
+  actor: one.actor,
+  labels: one.labels,
+  branch: null,
+  url: one.url,
+  title: one.title,
+  body: one.body,
+  number: one.number,
+  at: one.at,
+});
+
+/** A comment on a discussion: a `comment.created` with the discussion's number, keyed by the comment's node ID. */
+const discussionCommentEvent = (
+  repo: string,
+  number: number,
+  one: {
+    actor: string | null;
+    at: number;
+    body: string | null;
+    id: string;
+    url: string;
+  }
+): InboundEvent => ({
+  source: sourceOf(repo),
+  key: `discussion-comment:${one.id}`,
+  kind: "comment.created",
+  actor: one.actor,
+  labels: [],
+  branch: null,
+  url: one.url,
+  title: null,
+  body: one.body,
+  number,
+  at: one.at,
+});
+
+/** A polled discussion's events: its opening, and each of its newest comments. */
+const discussionEvents = (
+  one: z.infer<typeof discussionNode>
+): InboundEvent[] => [
+  discussionOpened(one.repo, {
+    actor: one.author?.login ?? null,
+    at: ms(one.createdAt),
+    body: one.body ?? null,
+    labels: (one.labels?.nodes ?? []).flatMap((each) =>
+      each ? [each.name] : []
+    ),
+    number: one.number,
+    title: one.title,
+    url: one.url,
+  }),
+  ...(one.comments?.nodes ?? []).flatMap((each) =>
+    each
+      ? [
+          discussionCommentEvent(one.repo, one.number, {
+            actor: each.author?.login ?? null,
+            at: ms(each.createdAt),
+            body: each.body ?? null,
+            id: each.id,
+            url: each.url,
+          }),
+        ]
+      : []
+  ),
+];
+
 const ISSUE_ACTIONS = new Set(["opened", "closed"]);
 
 /**
@@ -346,6 +500,44 @@ const READERS: Record<GitHubKind, (payload: unknown) => InboundEvent[]> = {
       ? commentEvent(parsed.data.comment)
       : [];
   },
+  discussion_node: (payload) => {
+    const parsed = discussionNode.safeParse(payload);
+    return parsed.success ? discussionEvents(parsed.data) : [];
+  },
+  discussion: (payload) => {
+    const parsed = webhook.discussion.safeParse(payload);
+    if (!(parsed.success && parsed.data.action === "created")) {
+      return [];
+    }
+    const { discussion: one, repository: repo } = parsed.data;
+    return [
+      discussionOpened(repo.full_name, {
+        actor: one.user?.login ?? null,
+        at: ms(one.created_at),
+        body: one.body ?? null,
+        labels: labelsOf(one.labels),
+        number: one.number,
+        title: one.title,
+        url: one.html_url,
+      }),
+    ];
+  },
+  discussion_comment: (payload) => {
+    const parsed = webhook.discussion_comment.safeParse(payload);
+    if (!(parsed.success && parsed.data.action === "created")) {
+      return [];
+    }
+    const { comment: one, discussion, repository: repo } = parsed.data;
+    return [
+      discussionCommentEvent(repo.full_name, discussion.number, {
+        actor: one.user?.login ?? null,
+        at: ms(one.created_at),
+        body: one.body ?? null,
+        id: one.node_id,
+        url: one.html_url,
+      }),
+    ];
+  },
 };
 
 /** `owner/repo` of a project whose normalised remote is on github.com, else nothing. */
@@ -400,6 +592,7 @@ const routeOf = (
         query: { ...list, since: after },
       };
     case "issueEvents":
+    case "discussions":
       break;
   }
   // Newest first, by when each happened; no `since`, so its URL (and ETag) holds.
@@ -414,16 +607,55 @@ const KIND_OF: Record<GitHubResource, GitHubKind> = {
   issues: "issue",
   comments: "comment",
   issueEvents: "issue_event",
+  discussions: "discussion_node",
 };
 
-/** When a listed item last moved: its `updated_at`, or an issue event's `created_at`. */
+/** When a listed item last moved: its `updated_at` (a discussion's `updatedAt`), or an issue event's `created_at`. */
 const movedAt = (item: unknown): number => {
-  const { updated_at: updated, created_at: created } = item as {
+  const {
+    updated_at: updated,
+    created_at: created,
+    updatedAt,
+  } = item as {
     created_at?: string;
     updated_at?: string;
+    updatedAt?: string;
   };
-  return Date.parse(updated ?? created ?? "");
+  return Date.parse(updated ?? updatedAt ?? created ?? "");
 };
+
+/**
+ * A page of the repository's discussions, newest updated first, each with
+ * its labels and its newest comments (docs.github.com/en/graphql/reference/objects#discussion).
+ */
+const DISCUSSIONS_QUERY = `query CawcoDiscussions($owner: String!, $name: String!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    discussions(first: ${PER_PAGE}, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      nodes {
+        number
+        url
+        title
+        body
+        author { login }
+        createdAt
+        updatedAt
+        labels(first: 20) { nodes { name } }
+        comments(last: 20) { nodes { id url body author { login } createdAt } }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}`;
+
+/** What {@link DISCUSSIONS_QUERY} answers. */
+interface DiscussionsPage {
+  repository: {
+    discussions: {
+      nodes: (Record<string, unknown> | null)[];
+      pageInfo: { endCursor: string | null; hasNextPage: boolean };
+    };
+  } | null;
+}
 
 /** An answer's headers as Octokit hands them over: lower-case names. */
 type Headers = Readonly<Record<string, string | number | undefined>>;
@@ -655,12 +887,80 @@ export const pollRepo = async (input: {
   };
 
   /**
+   * The repository's discussions, newest updated first, through GraphQL
+   * (REST lists none), page after page until the window's edge or
+   * {@link MAX_PAGES}, each request within {@link REQUEST_MS}, no redirect
+   * followed. Its cursor keeps only the newest time: a POST has no ETag. A
+   * repository with discussions off answers none.
+   */
+  const pollDiscussions = async (): Promise<Bounded<null>> => {
+    const cursor: GitHubCursor = input.cursors.discussions ?? {
+      etag: null,
+      notModified: 0,
+      polls: 0,
+      since: input.now,
+    };
+    const edge = cursor.since - OVERLAP_MS;
+    const [owner = "", name = ""] = input.repo.split("/");
+    let newest = edge;
+    let after: string | null = null;
+    for (let read = 1; read <= MAX_PAGES; read += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: each page names the next, so pages are read in turn
+      const asked = await readWithin(REQUEST_MS, async (signal) => {
+        try {
+          return (await octokit.graphql(DISCUSSIONS_QUERY, {
+            owner,
+            name,
+            after,
+            request: { redirect: "error", signal },
+          })) as DiscussionsPage;
+        } catch (error) {
+          const refused = refusedOf(error);
+          if (refused) {
+            throw refusal(refused, "discussions", input.connection, input.now);
+          }
+          const { errors } = error as { errors?: { message?: string }[] };
+          throw errors?.[0]?.message
+            ? new Stop(
+                `GitHub refused the discussions: ${errors[0].message.slice(0, 200)}`
+              )
+            : error;
+        }
+      });
+      if (asked.kind === "unanswered") {
+        return asked;
+      }
+      const page = asked.value.repository?.discussions;
+      const nodes = (page?.nodes ?? []).flatMap((node) =>
+        node ? [{ ...node, repo: input.repo }] : []
+      );
+      const taken = readPage("discussions", nodes, edge);
+      out.events.push(...taken.events);
+      newest = Math.max(newest, taken.newest);
+      if (taken.past || !page?.pageInfo.hasNextPage) {
+        break;
+      }
+      after = page.pageInfo.endCursor;
+    }
+    out.cursors.discussions = {
+      etag: null,
+      notModified: cursor.notModified,
+      polls: cursor.polls + 1,
+      since: Math.max(cursor.since, newest),
+    };
+    return { kind: "answered", value: null };
+  };
+
+  /**
    * One resource: its pages read, its events kept, its cursor moved; a
    * request not answered in time ends it there, its cursor where it was.
    */
   const pollResource = async (
     resource: GitHubResource
   ): Promise<Bounded<null>> => {
+    if (resource === "discussions") {
+      return await pollDiscussions();
+    }
     const cursor: GitHubCursor = input.cursors[resource] ?? {
       etag: null,
       notModified: 0,

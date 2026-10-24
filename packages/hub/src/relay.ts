@@ -95,7 +95,13 @@ const PING_WAIT_MS = 30_000;
 /** One GitHub API call. Our choice. */
 const GITHUB_MS = 30_000;
 /** The events a GitHub relay's webhook sends: what the poller reads, as webhooks. */
-const GITHUB_EVENTS = ["pull_request", "issues", "issue_comment"] as const;
+const GITHUB_EVENTS = [
+  "pull_request",
+  "issues",
+  "issue_comment",
+  "discussion",
+  "discussion_comment",
+] as const;
 const ID = /^\/hooks\/([A-Za-z0-9_-]{22})$/;
 const HEADER = /^[A-Za-z0-9-]{1,64}$/;
 const HEX = /^[0-9a-f]{64}$/;
@@ -363,7 +369,8 @@ export const createRelay = ({
 
   /**
    * A verified GitHub delivery: `ping` is the test delivery; `pull_request`,
-   * `issues` and `issue_comment` go through the poller's own normaliser, so
+   * `issues`, `issue_comment`, `discussion` and `discussion_comment` go
+   * through the poller's own normaliser, so
    * a webhook and a poll of one change share a key. Events of another
    * repository than the project's are not the project's, and land nowhere.
    */

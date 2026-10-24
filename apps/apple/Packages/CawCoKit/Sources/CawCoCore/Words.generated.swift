@@ -2560,6 +2560,11 @@ public enum Words {
             "\(name) is a GitHub App, which the hub registers for you: sign in to it from Connections."
         }
 
+        /// A tracker bound through a GitHub App that may only read issues: what it takes on GitHub.
+        public static func appReadsIssuesOnly(slug: String) -> String {
+            "The GitHub App \(slug) may only read issues, so it can't file this project's tasks. Give it Issues: read and write in its settings on GitHub, accept the change on its installation, then bind again."
+        }
+
         /// A GitHub App's way: the organization it is registered under, or none for your own account.
         public static let appOrganization = "Organization"
 

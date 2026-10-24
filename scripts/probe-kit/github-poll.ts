@@ -15,8 +15,14 @@
  * (p) one poll asks every list through Octokit (its User-Agent names
  *     octokit-rest.js, its Authorization is Octokit's `token <t>`), follows
  *     the pulls list's `link` to its second page, and reads both pulls;
+ * (p) the repository's discussions are asked once through GraphQL
+ *     (REST lists none), newest updated first: a discussion's opening and
+ *     its comment, the comment a `comment.created` with the discussion's
+ *     number;
  * (p) the next poll sends each list's ETag and takes GitHub's 304 for it:
- *     no events, each cursor's not-modified count one more.
+ *     no events from them, each cursor's not-modified count one more; the
+ *     discussions, which have no ETag, are asked again and their window's
+ *     edge read again, the same keys (the store keeps each once).
  */
 import { join } from "node:path";
 import type { Kit } from "./kit";
@@ -62,6 +68,41 @@ const pollStub = (now: number) => {
         authorization: request.headers.get("authorization") ?? "",
         ifNoneMatch,
       });
+      // GraphQL's `repository.discussions`: one discussion, one comment.
+      if (url.pathname === "/graphql" && request.method === "POST") {
+        return Response.json({
+          data: {
+            repository: {
+              discussions: {
+                nodes: [
+                  {
+                    number: 7,
+                    url: `https://github.com/${REPO}/discussions/7`,
+                    title: "Probe discussion",
+                    body: "Ideas?",
+                    author: { login: "probe-asker" },
+                    createdAt: at,
+                    updatedAt: at,
+                    labels: { nodes: [{ name: "idea" }] },
+                    comments: {
+                      nodes: [
+                        {
+                          id: "DC_kwProbe1",
+                          url: `https://github.com/${REPO}/discussions/7#discussioncomment-1`,
+                          body: "One.",
+                          author: { login: "probe-answerer" },
+                          createdAt: at,
+                        },
+                      ],
+                    },
+                  },
+                ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        });
+      }
       const list = url.pathname.slice(`/repos/${REPO}/`.length);
       const page = url.searchParams.get("page") ?? "1";
       const etag = `"probe-${list.replaceAll("/", "-")}-${page}"`;
@@ -114,11 +155,17 @@ export const githubPollLeg = async (kit: Kit): Promise<void> => {
   try {
     const first = await pollRepo({ ...asked, cursors: {} } as never);
     const firstSeen = [...stub.seen];
-    const keys = first.events.map((event) => event.key).sort();
+    const keys = first.events
+      .filter((event) => event.key.startsWith("pr:"))
+      .map((event) => event.key)
+      .sort();
+    const discussed = first.events.filter(
+      (event) => !event.key.startsWith("pr:")
+    );
     kit.check(
       "(p) the GitHub poller asks every list through Octokit, signed in as its connection, and follows the pulls list's link to its second page",
       first.problem === null &&
-        firstSeen.length === 5 &&
+        firstSeen.length === 6 &&
         firstSeen.every(
           (each) =>
             each.userAgent.startsWith("CawCo-hub octokit-rest.js/") &&
@@ -131,18 +178,45 @@ export const githubPollLeg = async (kit: Kit): Promise<void> => {
         keys.join(",") === "pr:1:opened,pr:2:opened",
       `problem ${first.problem} | events ${keys.join(",")} | asked ${JSON.stringify(firstSeen)}`
     );
+    const opened = discussed.find(
+      (event) => event.kind === "discussion.opened"
+    );
+    const answered = discussed.find(
+      (event) => event.kind === "comment.created"
+    );
+    kit.check(
+      "(p) the discussions are asked once through GraphQL: the discussion's opening and its comment, the comment a comment.created with the discussion's number",
+      firstSeen.filter((each) => each.path === "/graphql").length === 1 &&
+        discussed.length === 2 &&
+        opened?.key === "discussion:7:opened" &&
+        opened.actor === "probe-asker" &&
+        opened.labels.join() === "idea" &&
+        opened.number === 7 &&
+        answered?.key === "discussion-comment:DC_kwProbe1" &&
+        answered.actor === "probe-answerer" &&
+        answered.number === 7 &&
+        first.cursors.discussions?.polls === 1,
+      JSON.stringify({ discussed, cursor: first.cursors.discussions })
+    );
 
     const second = await pollRepo({
       ...asked,
       now: now + 60_000,
       cursors: first.cursors,
     } as never);
-    const secondSeen = stub.seen.slice(firstSeen.length);
-    const cursors = Object.values(second.cursors);
+    const secondSeen = stub.seen
+      .slice(firstSeen.length)
+      .filter((each) => each.path !== "/graphql");
+    const cursors = Object.entries(second.cursors)
+      .filter(([resource]) => resource !== "discussions")
+      .map(([, cursor]) => cursor);
+    const again = second.events.map((event) => event.key).sort();
     kit.check(
-      "(p) the next poll sends each list's ETag through Octokit and takes GitHub's 304: no events, each list's not-modified count one more",
+      "(p) the next poll sends each list's ETag through Octokit and takes GitHub's 304: no events from them, each list's not-modified count one more; the discussions asked again give the same keys",
       second.problem === null &&
-        second.events.length === 0 &&
+        again.join(",") ===
+          "discussion-comment:DC_kwProbe1,discussion:7:opened" &&
+        second.cursors.discussions?.polls === 2 &&
         secondSeen.length === 4 &&
         secondSeen.every(
           (each) =>
