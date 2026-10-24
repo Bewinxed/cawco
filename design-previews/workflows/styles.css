@@ -611,6 +611,22 @@
       color: var(--brand-ink);
       font: var(--type-meta);
     }
+
+    /* The phone's switch says each choice short, so every one fits whole at 390. */
+    .short {
+      display: none;
+    }
+
+    @media (width < 640px) {
+      .full,
+      .tag {
+        display: none;
+      }
+
+      .short {
+        display: inline;
+      }
+    }
   }
 
   /* Buttons: outline (the kit's default), primary, ghost, destructive; 36 / sm 30 / xs 24. */
@@ -921,30 +937,26 @@
     }
   }
 
-  /* An 18px tree mark: a tile on the project's hue, or a state glyph bare. */
+  /*
+   * An 18px tree mark: the glyph alone, never on a tile (the owner: icons are
+   * the Solar glyph with no circle, square or box around it). A root's glyph
+   * takes the project's hue; a step's takes its state's ink.
+   */
   .tmark {
     position: relative;
     display: block grid;
     place-items: center;
     inline-size: var(--c-row-mark);
     block-size: var(--c-row-mark);
-    border-radius: var(--radius-xs);
-    background: var(--mark-5);
-    color: var(--mark-glyph);
+    color: oklch(from var(--identity-ink) l c 205);
 
     .ic {
-      inline-size: var(--icon-sm);
-      block-size: var(--icon-sm);
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
     }
 
     &.bare {
-      background: none;
       color: var(--ink-muted);
-
-      .ic {
-        inline-size: var(--icon-md);
-        block-size: var(--icon-md);
-      }
     }
 
     &[data-dot]::after {
@@ -954,7 +966,6 @@
       inline-size: var(--status-dot-size);
       block-size: var(--status-dot-size);
       border-radius: var(--radius-pill);
-      box-shadow: 0 0 0 1.5px var(--surface-recess);
       content: "";
     }
 
@@ -1072,16 +1083,17 @@
     }
   }
 
+  /* The project's folder glyph alone, in the project's hue (identity is ink, never a tile). */
   .pmark {
     display: block grid;
     flex: none;
     place-items: center;
-    inline-size: 26px;
-    block-size: 26px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
     color: oklch(from var(--identity-ink) l c 205);
+
+    .ic {
+      inline-size: var(--icon-lg);
+      block-size: var(--icon-lg);
+    }
   }
 
   .acts {
@@ -1534,12 +1546,13 @@
       line-height: 1;
     }
 
+    /* Picked: ink, not coral, so Answer stays the one coral act on the screen. */
     &.on {
-      border-color: var(--brand-solid);
+      border-color: var(--border-control-strong);
 
       .key {
-        background: var(--chip-chosen-bg);
-        color: var(--chip-chosen-ink);
+        background: var(--ink-solid);
+        color: var(--on-ink);
       }
     }
   }

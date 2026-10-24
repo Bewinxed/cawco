@@ -11,7 +11,16 @@
  *   the page's ground dark;
  * - each named motion, on a held clock sought to 0, ½ and 1, moves its
  *   value continuously (½ strictly between the ends) and plays to its end;
- * - no console error and no page error.
+ * - no console error, no page error and no request answered 400 or worse;
+ *   the page names a tab icon that loads;
+ * - no glyph stands on a tile: the box round a glyph alone (no words of its
+ *   own) draws no fill, edge or shadow, buttons apart (the owner: icons are
+ *   the Solar glyph, no circle, square or box around it);
+ * - at most one coral control in each drawn screen, by Day and by Night: the
+ *   one act the person takes next;
+ * - every switch's choices stand whole inside it, at 1440 and at 390;
+ * - a create screen says nothing of a saved version (no “saved 2m ago”, no
+ *   Save as v4): it is a workflow not made yet.
  *
  *   bun scripts/probe-kit/run.ts web workflows-preview
  */
@@ -190,6 +199,197 @@ async function sweep(page: Page): Promise<string[]> {
   return [...new Set(found)];
 }
 
+/**
+ * Glyphs on a tile, read in the page: for each glyph outside a button, every
+ * box round it that holds no words of its own must draw no fill, edge or
+ * shadow. Answers what drew one.
+ */
+function tiles(): string[] {
+  const found = new Set<string>();
+  const paints = (el: Element): string => {
+    const s = getComputedStyle(el);
+    const clear = (c: string) =>
+      c === "transparent" ||
+      // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, so it lives inside the function
+      /\/ 0\)$|, 0\)$/.test(c);
+    if (!clear(s.backgroundColor) || s.backgroundImage !== "none") {
+      return "a fill";
+    }
+    if (s.boxShadow !== "none") {
+      return "a shadow";
+    }
+    const edged = ["Top", "Right", "Bottom", "Left"].some(
+      (side) =>
+        Number.parseFloat(
+          s.getPropertyValue(`border-${side.toLowerCase()}-width`)
+        ) > 0 &&
+        s.getPropertyValue(`border-${side.toLowerCase()}-style`) !== "none" &&
+        !clear(s.getPropertyValue(`border-${side.toLowerCase()}-color`))
+    );
+    return edged ? "an edge" : "";
+  };
+  for (const glyph of document.querySelectorAll("svg.ic")) {
+    if (glyph.closest('button, [role="button"]')) {
+      continue;
+    }
+    // A tile hugs its glyph: a box no more than two and a half glyphs across
+    // and down. A row's cell (a ledger's lead column) is the row's, not a tile.
+    const size = glyph.getBoundingClientRect();
+    const hugs = (box: Element) => {
+      const r = box.getBoundingClientRect();
+      return r.width <= size.width * 2.5 && r.height <= size.height * 2.5;
+    };
+    for (
+      let box = glyph.parentElement;
+      box &&
+      (box.textContent ?? "").trim() === "" &&
+      !box.matches("td, th, tr") &&
+      hugs(box);
+      box = box.parentElement
+    ) {
+      const what = paints(box);
+      if (what) {
+        found.add(
+          `${box.localName}.${[...box.classList].join(".")} draws ${what} round a glyph`
+        );
+      }
+    }
+  }
+  return [...found];
+}
+
+/**
+ * Coral controls in each drawn screen (a `.fit`): a control whose fill, first
+ * gradient stop or edge is the coral hue (OKLCH chroma over 0.1, hue 26 to
+ * 45: the action, the chosen keycap, brand-solid; crimson's 15 and spark's 95
+ * are not). Answers each screen's count and what it counted.
+ */
+function corals(): { count: number; frame: string; what: string[] }[] {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const ink = canvas.getContext("2d", { willReadFrequently: true });
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, so it lives inside the function
+  const COLOR = /(?:oklch|oklab|rgba?|color|lab|lch)\([^()]*\)/;
+  const coral = (css: string): boolean => {
+    if (!ink || css === "transparent") {
+      return false;
+    }
+    ink.clearRect(0, 0, 1, 1);
+    ink.fillStyle = "#000";
+    ink.fillStyle = css;
+    ink.fillRect(0, 0, 1, 1);
+    const [r8, g8, b8, a8] = ink.getImageData(0, 0, 1, 1).data;
+    if ((a8 ?? 0) < 128) {
+      return false;
+    }
+    const lin = (v: number) => {
+      const c = v / 255;
+      return c <= 0.040_45 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const [r, g, b] = [lin(r8 ?? 0), lin(g8 ?? 0), lin(b8 ?? 0)];
+    const l = Math.cbrt(
+      0.412_221_470_8 * r + 0.536_332_536_3 * g + 0.051_445_992_9 * b
+    );
+    const m = Math.cbrt(
+      0.211_903_498_2 * r + 0.680_699_545_1 * g + 0.107_396_956_6 * b
+    );
+    const s = Math.cbrt(
+      0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b
+    );
+    const A = 1.977_998_495_1 * l - 2.428_592_205 * m + 0.450_593_709_9 * s;
+    const B = 0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766 * s;
+    const chroma = Math.hypot(A, B);
+    const hue = ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360;
+    return chroma > 0.1 && hue >= 26 && hue <= 45;
+  };
+  const CONTROL = 'button, [role="button"], [role="menuitem"], .opt, .chip';
+  /** Drawn inside the screen: a box of some size, seen, within the frame. */
+  const shown = (el: Element, frame: DOMRect): boolean => {
+    const box = el.getBoundingClientRect();
+    return (
+      box.width > 0 &&
+      box.height > 0 &&
+      getComputedStyle(el).visibility === "visible" &&
+      box.right > frame.left &&
+      box.left < frame.right &&
+      box.bottom > frame.top &&
+      box.top < frame.bottom
+    );
+  };
+  /** Its fill, its fill's first gradient stop or its edge is coral. */
+  const paintsCoral = (el: Element): boolean => {
+    const s = getComputedStyle(el);
+    const stop = COLOR.exec(s.backgroundImage)?.[0] ?? "";
+    const edge =
+      Number.parseFloat(s.borderTopWidth) > 0 && s.borderTopStyle !== "none"
+        ? s.borderTopColor
+        : "transparent";
+    return (
+      coral(s.backgroundColor) || (stop !== "" && coral(stop)) || coral(edge)
+    );
+  };
+  return [...document.querySelectorAll("#stage .fit")].map((fit) => {
+    const frame = fit.getBoundingClientRect();
+    const hits = new Set<Element>();
+    for (const el of fit.querySelectorAll("*")) {
+      const control = el.closest(CONTROL);
+      if (control && shown(el, frame) && paintsCoral(el)) {
+        hits.add(control);
+      }
+    }
+    const what = [...hits].map(
+      (el) =>
+        `${el.localName}.${[...el.classList].join(".")} “${(el.textContent ?? "").trim().slice(0, 24) || el.getAttribute("aria-label")}”`
+    );
+    return {
+      count: hits.size,
+      frame:
+        fit.querySelector("[data-frame]")?.getAttribute("data-frame") ?? "",
+      what,
+    };
+  });
+}
+
+/** Every switch's choices whole inside it, and every switch inside the screen. */
+function switchesWhole(): string[] {
+  const found: string[] = [];
+  const width = document.documentElement.clientWidth;
+  for (const name of ["Option", "Job", "Theme"]) {
+    const seg = document.querySelector(`[data-seg="${name}"]`);
+    if (!seg) {
+      found.push(`no ${name} switch`);
+      continue;
+    }
+    const outer = seg.getBoundingClientRect();
+    if (outer.left < -0.5 || outer.right > width + 0.5) {
+      found.push(
+        `${name} stands past the screen (${Math.round(outer.left)}..${Math.round(outer.right)} of ${width})`
+      );
+    }
+    for (const item of seg.querySelectorAll(".seg-item")) {
+      const box = item.getBoundingClientRect();
+      if (box.left < outer.left - 0.5 || box.right > outer.right + 0.5) {
+        found.push(
+          `${name} cuts “${(item.textContent ?? "").trim()}” (${Math.round(box.left)}..${Math.round(box.right)} in ${Math.round(outer.left)}..${Math.round(outer.right)})`
+        );
+      }
+    }
+  }
+  return found;
+}
+
+/** Each drawn screen's coral controls held to one, in the page's theme now. */
+async function oneCoral(kit: Kit, page: Page, tag: string): Promise<void> {
+  const screens = await page.evaluate(corals);
+  const over = screens.filter((one) => one.count > 1);
+  kit.check(
+    `${tag}: one coral control at most in each of ${screens.length} drawn screens`,
+    screens.length >= 2 && over.length === 0,
+    over.map((one) => `${one.frame}: ${one.what.join(", ")}`).join(" | ")
+  );
+}
+
 async function onePage(
   kit: Kit,
   url: string,
@@ -205,10 +405,32 @@ async function onePage(
     }
   });
   page.on("pageerror", (error) => errors.push(String(error)));
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      errors.push(`${response.status()} ${response.url()}`);
+    }
+  });
   // A static page: no hydration to wait for, only its module's first draw and the faces.
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("#stage [data-frame]");
   await page.evaluate(() => document.fonts.ready);
+
+  const icon = await page.evaluate(async () => {
+    const href =
+      document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href;
+    if (!href) {
+      return "no icon link";
+    }
+    const answer = await fetch(href);
+    return `${answer.status} ${answer.headers.get("content-type")}`;
+  });
+  kit.check(`${tag}: the tab icon loads`, icon.startsWith("200 image/"), icon);
+  const cut = await page.evaluate(switchesWhole);
+  kit.check(
+    `${tag}: every switch's choices stand whole`,
+    cut.length === 0,
+    cut.join(" | ")
+  );
 
   for (const option of OPTIONS) {
     // biome-ignore lint/performance/noAwaitInLoops: the page walks one option and job at a time
@@ -239,6 +461,26 @@ async function onePage(
           drawn.frames >= 2,
         JSON.stringify({ opt, jb, drawn })
       );
+      const boxed = await page.evaluate(tiles);
+      kit.check(
+        `${tag} ${option} ${job}: no glyph on a tile (glyphs alone, buttons apart)`,
+        boxed.length === 0,
+        boxed.slice(0, 6).join(" | ")
+      );
+      await oneCoral(kit, page, `${tag} Day ${option} ${job}`);
+      if (job === "create") {
+        const words = await page.evaluate(
+          () => document.querySelector("#stage")?.textContent ?? ""
+        );
+        const edits = ["Save as v4", "saved 2m ago"].filter((w) =>
+          words.includes(w)
+        );
+        kit.check(
+          `${tag} ${option} create: a create footer, none of Edit's (no saved version, no Save as v4)`,
+          edits.length === 0,
+          edits.join(", ")
+        );
+      }
       const found = process.env.WF_QUICK ? [] : await sweep(page);
       kit.check(
         `${tag} ${option} ${job}: nothing spills, nothing covers text`,
@@ -258,6 +500,15 @@ async function onePage(
     ground.dark && ground.scheme === "dark",
     JSON.stringify(ground)
   );
+  for (const option of OPTIONS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one option and job at a time, by Night
+    await pick(page, "Option", option);
+    for (const job of JOBS) {
+      // biome-ignore lint/performance/noAwaitInLoops: one job at a time, by Night
+      await pick(page, "Job", job);
+      await oneCoral(kit, page, `${tag} Night ${option} ${job}`);
+    }
+  }
   await pick(page, "Theme", "light");
 
   // The switch's own glide, and the stage arriving.

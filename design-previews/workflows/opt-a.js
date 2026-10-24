@@ -97,6 +97,7 @@ const runSplit = () =>
   splitPane({
     title: "Release 2.4 · run 12",
     meta: "v3 · 3 of 5 steps · 4m · $0.41 · obelisk",
+    asking: true,
     acts: btn("Stop run", { size: "sm", icon: "stop" }),
     body: `${shapeView(PLAN, { lit: true, caption: "Run 12, lit by its work items", w: 150 })}${askTile()}
       <p class="meta">${glyph("done", "sm")} Checks so far: 2 of 3</p>`,

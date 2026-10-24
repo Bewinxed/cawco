@@ -23,7 +23,7 @@ const OPTIONS = { A, B, C, D };
 const JOBS = [
   { value: "create", label: "Create" },
   { value: "edit", label: "Edit" },
-  { value: "run", label: "Run and see runs" },
+  { value: "run", label: "Run and see runs", short: "Run" },
   { value: "evaluate", label: "Evaluate" },
   { value: "delete", label: "Delete" },
 ];
@@ -84,6 +84,9 @@ const TODAY = {
 };
 
 const state = { option: "B", job: "create" };
+
+/** Each option's name as the phone's switch says it, so all four fit at 390. */
+const SHORT = { A: "Brief", B: "Ledger", C: "Canvas", D: "Keep" };
 
 /* ------------------------------------------------- where it lives */
 
@@ -204,6 +207,7 @@ const switches = () => `<div class="pv-switches">
     Object.values(OPTIONS).map((o) => ({
       value: o.key,
       label: `${o.key} · ${o.name}`,
+      short: `${o.key} · ${SHORT[o.key]}`,
       tag: o.recommended ? "recommended" : "",
     })),
     state.option,

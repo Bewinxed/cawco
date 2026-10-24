@@ -205,7 +205,7 @@ export const seg = (items, chosen, name) =>
   `<div class="seg" role="group" aria-label="${name}" data-seg="${name}"><span class="seg-thumb" aria-hidden="true"></span>${items
     .map(
       (item) =>
-        `<button type="button" class="seg-item" data-value="${item.value}" aria-pressed="${item.value === chosen}">${item.icon ? ic(item.icon) : ""}<span>${item.label}</span>${item.tag ? `<span class="tag">${item.tag}</span>` : ""}</button>`
+        `<button type="button" class="seg-item" data-value="${item.value}" aria-pressed="${item.value === chosen}">${item.icon ? ic(item.icon) : ""}${item.short ? `<span class="full">${item.label}</span><span class="short">${item.short}</span>` : `<span>${item.label}</span>`}${item.tag ? `<span class="tag">${item.tag}</span>` : ""}</button>`
     )
     .join("")}</div>`;
 
@@ -306,10 +306,11 @@ export const splitPane = ({
   meta,
   acts = "",
   body,
+  asking = false,
 }) => `<aside class="split" aria-label="${esc(title)}">
   <header class="split-head"><div class="row1">${ic("workflow")}<h4 class="trunc">${title}</h4>${acts}${btn("", { v: "ghost", size: "sm", icon: "close" })}</div><p class="meta num">${meta}</p></header>
   <div class="split-body">${body}</div>
-  <div class="composer"><span>Message the orchestrator…</span>${btn("", { v: "primary", size: "sm", icon: "arrow" })}</div>
+  <div class="composer"><span>Message the orchestrator…</span>${btn("", { v: asking ? "secondary" : "primary", size: "sm", icon: "arrow" })}</div>
 </aside>`;
 
 /* ---------------------------------------------------------- the phone */

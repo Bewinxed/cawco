@@ -51,7 +51,7 @@ const callEditor = () => `<div class="well" style="padding-inline-start:52px">
   </dl>
 </div>`;
 
-const ledgerWell = ({ open = "", view = "ledger" } = {}) => `<div class="well">
+const ledgerWell = ({ open = "", view = "ledger", create = false } = {}) => `<div class="well">
   <div class="row-wrap"><span class="meta">Brief</span><span class="grow trunc">Release {{version}} from main. Post the notes once both checks pass.</span>${inputsLine()}</div>
   <div class="row" style="justify-content:space-between"><span class="label">Steps</span>${seg(
     [
@@ -66,12 +66,16 @@ const ledgerWell = ({ open = "", view = "ledger" } = {}) => `<div class="well">
       ? shapeView(PLAN, { caption: "Drawn from the rows", w: 150 })
       : `<div class="card steps" data-steps>${stepsHead()}${STEPS.map((s) => stepRow(s, { open: s.n === 3 ? open : "", sel: s.n === 3 && Boolean(open), sel5quiet: Boolean(open) })).join("")}${ghost()}</div>`
   }</div>
-  ${versionLine(`${btn("Run now", { size: "sm", icon: "play" })}${btn("Save as v4", { v: "primary", size: "sm" })}`)}
+  ${
+    create
+      ? `<div class="row-wrap" style="justify-content:space-between"><span class="meta">${ic("pen", "sm")} New · not saved yet · its first save is v1</span><span class="acts">${btn("Cancel", { v: "ghost", size: "sm" })}${btn("Create workflow", { v: "primary", size: "sm" })}</span></div>`
+      : versionLine(`${btn("Run now", { size: "sm", icon: "play" })}${btn("Save as v4", { v: "primary", size: "sm" })}`)
+  }
 </div>`;
 
 const proposal =
   () => `<div class="card"><div class="well" style="background:var(--surface-raised);border:0">
-  <div class="row">${ic("sparkles", "g-brand")}<span class="label grow">Drafted from your sentence: 5 steps</span>${btn("Dismiss", { v: "ghost", size: "sm" })}${btn("Use all 5", { v: "primary", size: "sm" })}</div>
+  <div class="row">${ic("sparkles", "g-brand")}<span class="label grow">Drafted from your sentence: 5 steps</span>${btn("Dismiss", { v: "ghost", size: "sm" })}${btn("Use all 5", { size: "sm" })}</div>
   <p class="meta">“release 2.4: notes and link check together, post to #releases, ask me the channel, smoke test if beta”. Nothing runs on a proposal; each row is yours to keep or drop.</p>
   <div class="steps">${STEPS.slice(0, 2)
     .map(
@@ -88,8 +92,8 @@ const createDesk = () =>
     pane: `${block({
       icon: "workflow",
       title: "New workflow",
-      acts: `${btn("Ask Caw to draft it", { v: "ghost", size: "sm", icon: "sparkles" })}${btn("Cancel", { v: "ghost", size: "sm" })}`,
-      body: `<div class="card">${ledgerWell()}</div>`,
+      acts: btn("Ask Caw to draft it", { v: "ghost", size: "sm", icon: "sparkles" }),
+      body: `<div class="card">${ledgerWell({ create: true })}</div>`,
     })}${proposal()}`,
   });
 
@@ -156,6 +160,7 @@ const runDesk = () =>
     split: splitPane({
       title: "Release 2.4 · run 12",
       meta: "v3 · 3 of 5 steps · 4m · $0.41 · obelisk",
+    asking: true,
       acts: btn("Stop run", { size: "sm", icon: "stop" }),
       body: `${runRows()}<div class="hr"></div><p class="meta">${glyph("done", "sm")} Checks so far: 2 of 3 · “The Slack post carries the version” scores when the run ends.</p>`,
     }),

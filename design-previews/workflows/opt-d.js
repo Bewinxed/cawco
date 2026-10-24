@@ -141,6 +141,7 @@ const runDesk = () =>
     split: splitPane({
       title: "Release 2.4 · run 12",
       meta: "v3 (kept from run 7) · 3 of 5 · 4m · $0.41",
+      asking: true,
       acts: btn("Stop run", { size: "sm", icon: "stop" }),
       body: `${driftLine()}${runTree({ drift: true, ask: askTile() })}`,
     }),
