@@ -187,6 +187,7 @@ typeOverrides:
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
     ThreadStatus: OpenEnums.ThreadStatus
+    ToolKindId: OpenEnums.ToolKindId
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState
     Tracker: OpenEnums.Tracker

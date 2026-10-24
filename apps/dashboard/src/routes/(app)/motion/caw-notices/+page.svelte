@@ -237,6 +237,13 @@
           asker: over.title,
           changes: [],
           fields: [],
+          sentence: {
+            act: over.summary,
+            bound: "",
+            changed: [],
+            family: "other",
+            rest: [],
+          },
           summary: over.summary,
         },
         raisedAt,

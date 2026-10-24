@@ -57548,6 +57548,10 @@
             "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
             "type": "string"
           },
+          "sentence": {
+            "$ref": "#/components/schemas/PermissionSentence",
+            "description": "The ask as one sentence, in parts, for the approval card."
+          },
           "summary": {
             "description": "What will happen and why, in one line: \"Change the fleet's CLAUDE.md\";\nfor a shell call, the session's own reason for it (\"Check whether the\ntwo commits are on origin/main\"), its command under it in `command`.",
             "type": "string"
@@ -57557,6 +57561,7 @@
           "asker",
           "changes",
           "fields",
+          "sentence",
           "summary"
         ]
       },
@@ -57625,6 +57630,123 @@
         "required": [
           "target",
           "title"
+        ]
+      },
+      "PermissionSentence": {
+        "description": "The ask as one sentence, in parts, for the approval card (dashboard\ntranscript/ApprovalCard.svelte): \"‹agent› on ‹session› needs to ‹reason›.\nAllow it to ‹act› ‹kind› ‹target›\", then each setting it moves, before\nand after, and what approving covers.",
+        "type": "object",
+        "properties": {
+          "act": {
+            "description": "The act as it follows \"Allow it to\", lower case: \"change\", \"run a command\", \"write\".",
+            "type": "string"
+          },
+          "bound": {
+            "description": "What approving covers, and what it does not widen (WORDS.md, Permission / approval).",
+            "type": "string"
+          },
+          "caution": {
+            "description": "A fact to read before approving, in the serious register: \"It throws away every uncommitted change. This cannot be undone.\"",
+            "type": "string"
+          },
+          "changed": {
+            "description": "Each setting the write moves, before and after, in the order the write names them.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionSetting"
+            }
+          },
+          "family": {
+            "$ref": "#/components/schemas/ToolKindId",
+            "description": "The tool family whose glyph marks the act (tool-presentation.ts `ToolKindId`)."
+          },
+          "kind": {
+            "description": "What kind of thing the act is on: \"MCP server\", \"skill\".",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why the session asks, in its own words: an admin write's `reason`, a shell call's `description`.",
+            "type": "string"
+          },
+          "rest": {
+            "description": "The input the sentence and the settings leave unsaid.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionField"
+            }
+          },
+          "target": {
+            "$ref": "#/components/schemas/PermissionTarget",
+            "description": "The thing itself."
+          }
+        },
+        "required": [
+          "act",
+          "bound",
+          "changed",
+          "family",
+          "rest"
+        ]
+      },
+      "PermissionSetting": {
+        "description": "One setting a write moves: what it held (absent for one it adds) and what it will hold.",
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "description": "What it holds now; absent when the setting is new.",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "after",
+          "key"
+        ]
+      },
+      "ToolKindId": {
+        "type": "string",
+        "enum": [
+          "bash",
+          "edit",
+          "glob",
+          "grep",
+          "js",
+          "mcp",
+          "memory",
+          "message",
+          "navigate",
+          "notebook",
+          "other",
+          "preview",
+          "question",
+          "read",
+          "screen",
+          "skill",
+          "task",
+          "todo",
+          "toolsearch",
+          "web",
+          "write"
+        ]
+      },
+      "PermissionTarget": {
+        "description": "A thing an ask names that the person can go and look at: a setting's page\non the dashboard (`/config/mcp/mobbin-web`), a page on the web. Without\n`href` it is words only (a file in a checkout, which no page shows).",
+        "type": "object",
+        "properties": {
+          "href": {
+            "description": "A dashboard path (`/config/...`) or an `https://` address.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ]
       },
       "PermissionUpdate": {

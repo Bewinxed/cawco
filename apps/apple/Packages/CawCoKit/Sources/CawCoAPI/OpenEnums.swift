@@ -7900,6 +7900,101 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ToolKindId`.
+    public enum ToolKindId: OpenEnum {
+        case bash
+        case edit
+        case glob
+        case grep
+        case js
+        case mcp
+        case memory
+        case message
+        case navigate
+        case notebook
+        case other
+        case preview
+        case question
+        case read
+        case screen
+        case skill
+        case task
+        case todo
+        case toolsearch
+        case web
+        case write
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "bash": self = .bash
+            case "edit": self = .edit
+            case "glob": self = .glob
+            case "grep": self = .grep
+            case "js": self = .js
+            case "mcp": self = .mcp
+            case "memory": self = .memory
+            case "message": self = .message
+            case "navigate": self = .navigate
+            case "notebook": self = .notebook
+            case "other": self = .other
+            case "preview": self = .preview
+            case "question": self = .question
+            case "read": self = .read
+            case "screen": self = .screen
+            case "skill": self = .skill
+            case "task": self = .task
+            case "todo": self = .todo
+            case "toolsearch": self = .toolsearch
+            case "web": self = .web
+            case "write": self = .write
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .bash: "bash"
+            case .edit: "edit"
+            case .glob: "glob"
+            case .grep: "grep"
+            case .js: "js"
+            case .mcp: "mcp"
+            case .memory: "memory"
+            case .message: "message"
+            case .navigate: "navigate"
+            case .notebook: "notebook"
+            case .other: "other"
+            case .preview: "preview"
+            case .question: "question"
+            case .read: "read"
+            case .screen: "screen"
+            case .skill: "skill"
+            case .task: "task"
+            case .todo: "todo"
+            case .toolsearch: "toolsearch"
+            case .web: "web"
+            case .write: "write"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.bash, .edit, .glob, .grep, .js, .mcp, .memory, .message, .navigate, .notebook, .other, .preview, .question, .read, .screen, .skill, .task, .todo, .toolsearch, .web, .write]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ToolPlatform`.
     public enum ToolPlatform: OpenEnum {
         case darwin

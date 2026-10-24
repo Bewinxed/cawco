@@ -10,6 +10,8 @@ import {
   faviconUrl,
   fileChanges,
   type Renderer,
+  TOOL_KINDS,
+  type ToolKind,
   type ToolKindId,
   type ToolStatus,
   toolKind,
@@ -129,7 +131,17 @@ export function familyId(toolName: string | undefined): FamilyId {
 }
 
 export function toolFamily(toolName: string | undefined): ToolFamily {
-  const kind = toolKind(toolName);
+  return familyOf(toolKind(toolName));
+}
+
+/** A family by its id (core `ToolKindId`): what an ask's sentence names, not a tool's call. */
+export function kindFamily(id: FamilyId): ToolFamily {
+  return familyOf(
+    TOOL_KINDS.find((kind) => kind.id === id) ?? toolKind(undefined)
+  );
+}
+
+function familyOf(kind: ToolKind): ToolFamily {
   return {
     id: kind.id,
     icon: glyph(kind.glyph),

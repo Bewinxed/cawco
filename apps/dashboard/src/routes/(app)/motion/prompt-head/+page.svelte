@@ -18,6 +18,15 @@
       command: "bun run lint:changed",
       fields: [],
       project: "cockpit",
+      sentence: {
+        act: "run",
+        bound:
+          "Approving covers this one command. It does not widen what the agent may run later.",
+        changed: [],
+        family: "bash",
+        reason: "Lint the files this change touched",
+        rest: [],
+      },
       summary: "Lint the files this change touched",
     },
     requestId: "bench-prompt-head-1",

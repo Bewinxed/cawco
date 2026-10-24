@@ -15,6 +15,7 @@ import { type MemoryScope, scopeWords } from "./fleet";
 import { BROWSER_ASK_TOOL } from "./frames";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
+import type { ToolKindId } from "./tool-presentation";
 import { UPSTREAM_POST_TOOL } from "./upstream-post";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
@@ -35,6 +36,52 @@ export interface PermissionChange {
 export interface PermissionField {
   key: string;
   value: string;
+}
+
+/**
+ * A thing an ask names that the person can go and look at: a setting's page
+ * on the dashboard (`/config/mcp/mobbin-web`), a page on the web. Without
+ * `href` it is words only (a file in a checkout, which no page shows).
+ */
+export interface PermissionTarget {
+  /** A dashboard path (`/config/...`) or an `https://` address. */
+  href?: string;
+  name: string;
+}
+
+/** One setting a write moves: what it held (absent for one it adds) and what it will hold. */
+export interface PermissionSetting {
+  after: string;
+  /** What it holds now; absent when the setting is new. */
+  before?: string;
+  key: string;
+}
+
+/**
+ * The ask as one sentence, in parts, for the approval card (dashboard
+ * transcript/ApprovalCard.svelte): "‹agent› on ‹session› needs to ‹reason›.
+ * Allow it to ‹act› ‹kind› ‹target›", then each setting it moves, before
+ * and after, and what approving covers.
+ */
+export interface PermissionSentence {
+  /** The act as it follows "Allow it to", lower case: "change", "run a command", "write". */
+  act: string;
+  /** What approving covers, and what it does not widen (WORDS.md, Permission / approval). */
+  bound: string;
+  /** A fact to read before approving, in the serious register: "It throws away every uncommitted change. This cannot be undone." */
+  caution?: string;
+  /** Each setting the write moves, before and after, in the order the write names them. */
+  changed: PermissionSetting[];
+  /** The tool family whose glyph marks the act (tool-presentation.ts `ToolKindId`). */
+  family: ToolKindId;
+  /** What kind of thing the act is on: "MCP server", "skill". */
+  kind?: string;
+  /** Why the session asks, in its own words: an admin write's `reason`, a shell call's `description`. */
+  reason?: string;
+  /** The input the sentence and the settings leave unsaid. */
+  rest: PermissionField[];
+  /** The thing itself. */
+  target?: PermissionTarget;
 }
 
 export interface PermissionPresentation {
@@ -60,6 +107,8 @@ export interface PermissionPresentation {
   post?: HeldPostNaming;
   /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
   project?: string;
+  /** The ask as one sentence, in parts, for the approval card. */
+  sentence: PermissionSentence;
   /**
    * What will happen and why, in one line: "Change the fleet's CLAUDE.md";
    * for a shell call, the session's own reason for it ("Check whether the
@@ -367,13 +416,90 @@ export function toolDisplayName(toolName: string): string {
   return `${server}: ${humanize(mcp[2])}`;
 }
 
-type Presented = Omit<PermissionPresentation, "asker">;
+/**
+ * What one tool's presenter says. Its sentence's parts are its own where it
+ * names them; {@link presentPermission} fills in the rest.
+ */
+type Presented = Omit<PermissionPresentation, "asker" | "sentence"> & {
+  sentence?: Partial<PermissionSentence>;
+};
 
-const only = (summary: string, fields: PermissionField[] = []): Presented => ({
+const only = (
+  summary: string,
+  fields: PermissionField[] = [],
+  sentence?: Partial<PermissionSentence>
+): Presented => ({
   summary,
   changes: [],
   fields,
+  ...(sentence ? { sentence } : {}),
 });
+
+const PATH_SEGMENTS = /\/+/;
+const encodePath = (path: string) =>
+  path.split(PATH_SEGMENTS).map(encodeURIComponent).join("/");
+
+/** Where the dashboard shows each thing an ask names (apps/dashboard routes/(app)). */
+export const askHref = {
+  connections: "/config/connections",
+  delegateType: (name: string) =>
+    `/config/delegate-types/${encodeURIComponent(name)}`,
+  mcp: (name: string) => `/config/mcp/${encodeURIComponent(name)}`,
+  memory: (path: string | null) =>
+    path === null ? "/config/memory" : `/config/memory/${encodePath(path)}`,
+  /** Skills, plugins and marketplaces share one page. */
+  skills: "/config/skills",
+} as const;
+
+const WEB_ADDRESS = /^https?:\/\/\S+$/i;
+
+/** A sentence's act on one thing named: "change" ‹kind› ‹target›. */
+const acting = (
+  act: string,
+  family: ToolKindId,
+  target?: PermissionTarget,
+  kind?: string
+): Partial<PermissionSentence> => ({
+  act,
+  family,
+  ...(kind ? { kind } : {}),
+  ...(target ? { target } : {}),
+});
+
+/** The fleet's CLAUDE.md set whole: created where there is none yet, else changed. */
+const fleetMemoryWrite = (
+  content: string,
+  context: PresentationContext
+): Presented => {
+  const now = context.memory(null);
+  const { change: made, detail } = hunkOf("CLAUDE.md", now ?? "", content);
+  return {
+    summary:
+      now === undefined
+        ? "Create the fleet's CLAUDE.md"
+        : "Change the fleet's CLAUDE.md",
+    detail,
+    changes: [made],
+    fields: [{ key: "loads in", value: "every session" }],
+    sentence: acting(
+      now === undefined ? "create" : "change",
+      "memory",
+      { name: "CLAUDE.md", href: askHref.memory(null) },
+      "the fleet's"
+    ),
+  };
+};
+
+/** A memory document as a sentence names it: its path, a link to its page. */
+const memoryDoc = (
+  act: string,
+  path: string | undefined
+): Partial<PermissionSentence> =>
+  acting(
+    act,
+    "memory",
+    path ? { name: path, href: askHref.memory(path) } : { name: "(no path)" }
+  );
 
 /**
  * `admin_memory_write`: the fleet's CLAUDE.md and its linked documents, with
@@ -386,20 +512,10 @@ function memoryWrite(
 ): Presented {
   const path = text(input.path);
   const content = typeof input.content === "string" ? input.content : "";
+  const doc = (act: string) => memoryDoc(act, path);
   switch (input.action) {
-    case "set": {
-      const now = context.memory(null);
-      const { change: made, detail } = hunkOf("CLAUDE.md", now ?? "", content);
-      return {
-        summary:
-          now === undefined
-            ? "Create the fleet's CLAUDE.md"
-            : "Change the fleet's CLAUDE.md",
-        detail,
-        changes: [made],
-        fields: [{ key: "loads in", value: "every session" }],
-      };
-    }
+    case "set":
+      return fleetMemoryWrite(content, context);
     case "set_doc": {
       const name = path ?? "(no path)";
       const now = path ? context.memory(path) : undefined;
@@ -409,6 +525,7 @@ function memoryWrite(
         summary: now === undefined ? `Create ${name}` : `Change ${name}`,
         detail,
         changes: [made],
+        sentence: doc(now === undefined ? "create" : "change"),
         // Named only when the write sets it; left out, the scope stays.
         fields:
           typeof scope === "object" && scope !== null
@@ -428,9 +545,11 @@ function memoryWrite(
       const name = path ?? "(no path)";
       const now = path ? context.memory(path) : undefined;
       if (now === undefined) {
-        return only(`Remove ${name}`, [
-          { key: "note", value: "The fleet keeps no document at this path." },
-        ]);
+        return only(
+          `Remove ${name}`,
+          [{ key: "note", value: "The fleet keeps no document at this path." }],
+          doc("remove")
+        );
       }
       const { change: made, detail } = hunkOf(name, now, "");
       return {
@@ -438,6 +557,7 @@ function memoryWrite(
         detail,
         changes: [made],
         fields: [],
+        sentence: doc("remove"),
       };
     }
     default:
@@ -591,15 +711,15 @@ const same = (a: unknown, b: unknown) =>
 
 /**
  * What a write changes, against what the fleet keeps now: each field of
- * `after` that differs, as "before → after" with names resolved; with
- * nothing kept yet, each field it sets. A field `after` leaves undefined
+ * `after` that differs, before and after, names resolved; with nothing kept
+ * yet, each field it sets, with no before. A field `after` leaves undefined
  * keeps its value and is not shown; one it sets null is cleared.
  */
 function changedFields(
   before: Record<string, unknown> | undefined,
   after: Record<string, unknown>,
   context: PresentationContext
-): PermissionField[] {
+): PermissionSetting[] {
   return Object.entries(after).flatMap(([key, value]) => {
     if (value === undefined) {
       return [];
@@ -607,7 +727,7 @@ function changedFields(
     if (!before) {
       return value === null || value === "" || same(value, [])
         ? []
-        : [{ key: fieldName(key), value: settingWords(key, value, context) }];
+        : [{ key: fieldName(key), after: settingWords(key, value, context) }];
     }
     const was = before[key];
     if (same(was, value)) {
@@ -615,15 +735,24 @@ function changedFields(
     }
     const from = settingWords(key, was, context);
     const to = settingWords(key, value, context);
+    // Hidden values (an env's, a header's) moved under the same keys.
     return [
-      {
-        key: fieldName(key),
-        // Hidden values (an env's, a header's) moved under the same keys.
-        value: from === to ? `${to}, its values change` : `${from} → ${to}`,
-      },
+      from === to
+        ? { key: fieldName(key), after: `${to}, its values change` }
+        : { key: fieldName(key), before: from, after: to },
     ];
   });
 }
+
+/** Settings as fields, each "before → after" in one value. */
+const settingFields = (settings: PermissionSetting[]): PermissionField[] =>
+  settings.map((setting) => ({
+    key: setting.key,
+    value:
+      setting.before === undefined
+        ? setting.after
+        : `${setting.before} → ${setting.after}`,
+  }));
 
 /** Every key either side names, each with the new side's value (null where it drops one): a whole replacement's `after`. */
 const replacing = (
@@ -637,7 +766,7 @@ const replacing = (
   );
 
 /** The line under a change's summary: which settings move, or that none does. */
-const changeDetail = (fields: PermissionField[]): string =>
+const changeDetail = (fields: PermissionSetting[]): string =>
   fields.length === 0
     ? "Nothing changes: the fleet already keeps it this way."
     : `Changes ${fields.map((field) => field.key).join(", ")}; nothing else.`;
@@ -664,17 +793,23 @@ function skillsWrite(
   const before = context.current("skills", name);
   const projectId =
     input.projectId === undefined ? before?.projectId : input.projectId;
+  const skill = (act: string) =>
+    acting(act, "skill", { name, href: askHref.skills }, "skill");
   switch (input.action) {
     case "install": {
       const source = text(input.source) ?? "(no source)";
       // The summary names the source.
       const facts = sourceFields(context.source, true);
       if (!before) {
-        return only(`Install skill ${name} from ${source}`, [
-          { key: "scope", value: bindingWords(projectId, context) },
-          loadsInField(projectId, projectId, context),
-          ...facts,
-        ]);
+        return only(
+          `Install skill ${name} from ${source}`,
+          [
+            { key: "scope", value: bindingWords(projectId, context) },
+            loadsInField(projectId, projectId, context),
+            ...facts,
+          ],
+          skill("install")
+        );
       }
       const changed = changedFields(
         before,
@@ -686,10 +821,11 @@ function skillsWrite(
         detail: changeDetail(changed),
         changes: [],
         fields: [
-          ...changed,
+          ...settingFields(changed),
           loadsInField(before.projectId, projectId, context),
           ...facts,
         ],
+        sentence: { ...skill("reinstall"), changed },
       };
     }
     case "enable":
@@ -705,18 +841,26 @@ function skillsWrite(
           ? changeDetail(changed)
           : "The fleet keeps no skill of this name.",
         changes: [],
-        fields: [...changed, loadsInField(projectId, projectId, context)],
+        fields: [
+          ...settingFields(changed),
+          loadsInField(projectId, projectId, context),
+        ],
+        sentence: { ...skill(String(input.action)), changed },
       };
     }
     case "remove":
-      return only(`Remove skill ${name}`, [
-        {
-          key: "loads in",
-          value: `no session (was: ${loadsIn(before?.projectId, context)})`,
-        },
-      ]);
+      return only(
+        `Remove skill ${name}`,
+        [
+          {
+            key: "loads in",
+            value: `no session (was: ${loadsIn(before?.projectId, context)})`,
+          },
+        ],
+        skill("remove")
+      );
     default:
-      return only(`Change skill ${name}`, fieldsOf(input));
+      return only(`Change skill ${name}`, fieldsOf(input), skill("change"));
   }
 }
 
@@ -726,13 +870,19 @@ function mcpServersWrite(
 ): Presented {
   const name = text(input.name) ?? "(unnamed)";
   const before = context.current("mcp_servers", name);
+  const server = (act: string) =>
+    acting(act, "mcp", { name, href: askHref.mcp(name) }, "MCP server");
   if (input.action === "remove") {
-    return only(`Remove MCP server ${name}`, [
-      {
-        key: "loads in",
-        value: `no session (was: ${loadsIn(before?.projectId, context)})`,
-      },
-    ]);
+    return only(
+      `Remove MCP server ${name}`,
+      [
+        {
+          key: "loads in",
+          value: `no session (was: ${loadsIn(before?.projectId, context)})`,
+        },
+      ],
+      server("remove")
+    );
   }
   const config = record(input.config) ?? {};
   // As the hub stores a put: `enabled` left out is on, `projectId` left out
@@ -747,12 +897,25 @@ function mcpServersWrite(
     // The summary carries where it answers; the command line is repeated
     // whole only when the summary had to cut it.
     const whole = target !== undefined && !target.endsWith("…");
-    return only(`Add MCP server ${name}${target ? ` (${target})` : ""}`, [
-      ...fieldsOf(config, whole ? ["url", "command", "args"] : ["url"]),
-      { key: "scope", value: bindingWords(projectId, context) },
-      ...(enabled === false ? [{ key: "enabled", value: "off" }] : []),
-      loadsInField(projectId, projectId, context),
-    ]);
+    return only(
+      `Add MCP server ${name}${target ? ` (${target})` : ""}`,
+      [
+        ...fieldsOf(config, whole ? ["url", "command", "args"] : ["url"]),
+        { key: "scope", value: bindingWords(projectId, context) },
+        ...(enabled === false ? [{ key: "enabled", value: "off" }] : []),
+        loadsInField(projectId, projectId, context),
+      ],
+      {
+        ...server("add"),
+        // What it runs or where it answers, each as a new setting.
+        changed: changedFields(undefined, config, context),
+        rest: [
+          { key: "scope", value: bindingWords(projectId, context) },
+          ...(enabled === false ? [{ key: "enabled", value: "off" }] : []),
+          loadsInField(projectId, projectId, context),
+        ],
+      }
+    );
   }
   const keptConfig = record(before.config);
   const changed = [
@@ -767,7 +930,11 @@ function mcpServersWrite(
     summary: `Change MCP server ${name}`,
     detail: changeDetail(changed),
     changes: [],
-    fields: [...changed, loadsInField(before.projectId, projectId, context)],
+    fields: [
+      ...settingFields(changed),
+      loadsInField(before.projectId, projectId, context),
+    ],
+    sentence: { ...server("change"), changed },
   };
 }
 
@@ -794,7 +961,8 @@ function hooksWrite(
           ? changeDetail(changed)
           : "The fleet keeps no hook of this id.",
         changes: [],
-        fields: changed,
+        fields: settingFields(changed),
+        sentence: { changed },
       };
     }
     case "remove":
@@ -827,7 +995,8 @@ function rulesWrite(
           ? changeDetail(changed)
           : "The fleet keeps no rule of this id.",
         changes: [],
-        fields: changed,
+        fields: settingFields(changed),
+        sentence: { changed },
       };
     }
     case "remove":
@@ -877,9 +1046,10 @@ function pluginsWrite(
           : "The fleet keeps no plugin of this id.",
         changes: [],
         fields: [
-          ...changed,
+          ...settingFields(changed),
           { key: "loads in", value: loadsIn(before?.projectId, context) },
         ],
+        sentence: { changed },
       };
     }
     case "refresh":
@@ -921,7 +1091,8 @@ function delegateTypesWrite(
     summary: `Change delegate type ${name}`,
     detail: changeDetail(changed),
     changes: [],
-    fields: changed,
+    fields: settingFields(changed),
+    sentence: { changed },
   };
 }
 
@@ -948,10 +1119,12 @@ function connectionsWrite(
     case "create":
       return only(
         `Add connection ${name}${text(input.service) ? ` (${text(input.service)}${text(input.account) ? ` as ${text(input.account)}` : ""})` : ""}`,
-        changedFields(
-          undefined,
-          given(input, ["name", "service", "account"]),
-          context
+        settingFields(
+          changedFields(
+            undefined,
+            given(input, ["name", "service", "account"]),
+            context
+          )
         )
       );
     case "update": {
@@ -966,7 +1139,8 @@ function connectionsWrite(
           ? changeDetail(changed)
           : "The hub keeps no connection of this name.",
         changes: [],
-        fields: changed,
+        fields: settingFields(changed),
+        sentence: { changed },
       };
     }
     case "sign_in":
@@ -997,7 +1171,11 @@ function previewsWrite(
     summary: "Change how previews are reached",
     detail: changeDetail(changed),
     changes: [],
-    fields: [...changed, { key: "affects", value: "every session's previews" }],
+    fields: [
+      ...settingFields(changed),
+      { key: "affects", value: "every session's previews" },
+    ],
+    sentence: { changed },
   };
 }
 
@@ -1021,6 +1199,10 @@ function adminWrite(
       ...(why ? [{ key: "why", value: why }] : []),
       ...presented.fields.filter((field) => field.key !== "reason"),
     ],
+    sentence: {
+      ...presented.sentence,
+      ...(why ? { reason: why.trim() } : {}),
+    },
   };
 }
 
@@ -1102,10 +1284,12 @@ function memoryProposal(input: Record<string, unknown>): Presented {
     summary =
       first.before === "" ? `Add ${first.path}` : `Change ${first.path}`;
   }
+  const why = text(input.why)?.trim();
   return {
     summary,
     detail: statWords(stat),
     changes: made.map((each) => each.change),
+    ...(why ? { sentence: { reason: why } } : {}),
     fields: [
       ...fieldsOf(input, ["files", "notes", "project"]),
       ...(notes.length > 0
@@ -1157,6 +1341,9 @@ function designProposal(input: Record<string, unknown>): Presented {
         : `Change ${plural(files.length, "design system file")}`,
     detail: statWords(stat),
     changes: made.map((each) => each.change),
+    ...(text(input.why)
+      ? { sentence: { reason: text(input.why)?.trim() } }
+      : {}),
     fields: fieldsOf(input, ["files", "project"]),
   };
 }
@@ -1383,6 +1570,22 @@ const replaced = (changes: PermissionChange[]): string => {
   return statWords({ added, removed, sections: [] });
 };
 
+/** A page fetched, its address a link where it is one. */
+const webFetch = (input: Record<string, unknown>): Presented => {
+  const url = text(input.url);
+  return only(
+    `Fetch ${url ?? "a web page"}`,
+    fieldsOf(input, ["url"]),
+    acting(
+      "fetch",
+      "web",
+      url
+        ? { name: url, ...(WEB_ADDRESS.test(url) ? { href: url } : {}) }
+        : { name: "a web page" }
+    )
+  );
+};
+
 /** The harnesses' own tools, by their lower-cased name. */
 function builtIn(
   toolName: string,
@@ -1400,6 +1603,7 @@ function builtIn(
         ...(changes.length > 0 ? { detail: replaced(changes) } : {}),
         changes,
         fields: fieldsOf(input, [...FILE_KEYS, ...EDIT_KEYS]),
+        sentence: acting("edit", "edit", { name: file }),
       };
     }
     case "write": {
@@ -1411,24 +1615,29 @@ function builtIn(
         detail: `${plural(made.added, "line")} written; whatever the file held is replaced`,
         changes: [made],
         fields: fieldsOf(input, [...FILE_KEYS, "content"]),
+        sentence: acting("write", "write", { name: file }),
       };
     }
     case "read":
-      return only(`Read ${path ?? "a file"}`, fieldsOf(input, FILE_KEYS));
-    case "notebookedit":
       return only(
-        `Edit notebook ${text(input.notebook_path) ?? path ?? "(no path)"}`,
-        fieldsOf(input, ["notebook_path", ...FILE_KEYS])
+        `Read ${path ?? "a file"}`,
+        fieldsOf(input, FILE_KEYS),
+        acting("read", "read", { name: path ?? "a file" })
       );
+    case "notebookedit": {
+      const notebook = text(input.notebook_path) ?? path ?? "(no path)";
+      return only(
+        `Edit notebook ${notebook}`,
+        fieldsOf(input, ["notebook_path", ...FILE_KEYS]),
+        acting("edit", "notebook", { name: notebook }, "notebook")
+      );
+    }
     // Claude Code's and pi's `bash`; OpenCode 2.0's `shell`.
     case "bash":
     case "shell":
       return shellCall(input);
     case "webfetch":
-      return only(
-        `Fetch ${text(input.url) ?? "a web page"}`,
-        fieldsOf(input, ["url"])
-      );
+      return webFetch(input);
     case "websearch":
       return only(
         `Search the web for “${text(input.query) ?? ""}”`,
@@ -1465,12 +1674,62 @@ function builtIn(
  */
 const shellCall = (input: Record<string, unknown>): Presented => {
   const whole = commandOf(input);
+  const reason = text(input.description)?.trim();
+  const caution = whole ? lossWords(whole) : undefined;
   return {
-    summary: text(input.description)?.trim() ?? "Run a command",
+    summary: reason ?? "Run a command",
     changes: [],
     ...(whole?.trim() ? { command: whole } : {}),
     fields: fieldsOf(input, ["command", "description"]),
+    sentence: {
+      act: "run",
+      family: "bash",
+      ...(reason ? { reason } : {}),
+      ...(caution ? { caution } : {}),
+    },
   };
+};
+
+/**
+ * What a shell command loses for good, each by the words a person knows it
+ * by: the git and file commands whose effect no undo, trash or reflog the
+ * person reaches brings back. Matched on the command's words, so it names
+ * only what it can see; a command that hides its act (a script, an alias)
+ * reads as any other.
+ */
+const LOSSES: { effect: string; pattern: RegExp }[] = [
+  {
+    pattern: /\bgit\s+(?:-C\s+\S+\s+)?reset\s+(?:\S+\s+)*--hard\b/,
+    effect: "throws away every uncommitted change",
+  },
+  {
+    pattern: /\bgit\s+(?:-C\s+\S+\s+)?clean\s+(?:\S+\s+)*-\w*f/,
+    effect: "deletes every untracked file",
+  },
+  {
+    pattern:
+      /\bgit\s+(?:-C\s+\S+\s+)?push\s+(?:\S+\s+)*(?:--force\b|--force-with-lease\b|-\w*f\b)/,
+    effect: "overwrites the remote branch's history",
+  },
+  {
+    pattern: /(?:^|[\s;&|(])rm\s+(?:\S+\s+)*-\w*[rR]\w*/,
+    effect: "deletes files and folders outright",
+  },
+];
+
+/** "It throws away every uncommitted change and deletes every untracked file. This cannot be undone." */
+const lossWords = (command: string): string | undefined => {
+  const effects = LOSSES.filter((loss) => loss.pattern.test(command)).map(
+    (loss) => loss.effect
+  );
+  if (effects.length === 0) {
+    return;
+  }
+  const said =
+    effects.length === 1
+      ? effects[0]
+      : `${effects.slice(0, -1).join(", ")} and ${effects.at(-1)}`;
+  return `It ${said}. This cannot be undone.`;
 };
 
 /** The shell command a permission is about, said whole under the summary. */
@@ -1488,51 +1747,120 @@ export function presentPermission(
   input: Record<string, unknown>,
   context: PresentationContext
 ): PermissionPresentation {
-  const who = {
-    asker: context.asker,
-    ...(context.project ? { project: context.project } : {}),
-  };
   const questions = questionsOf(toolName, input);
   if (questions) {
-    return {
-      ...who,
+    return assembled(context, toolName, input, {
       summary: questions.map((question) => question.question).join(" · "),
       changes: [],
       fields: [],
-    };
+      sentence: { family: "question" },
+    });
   }
   if (
     toolName === MEMORY_PROPOSAL_TOOL ||
     toolName === DELEGATE_TYPE_PROPOSAL_TOOL
   ) {
-    return { ...who, ...memoryProposal(input) };
+    return assembled(context, toolName, input, memoryProposal(input));
   }
   if (toolName === DESIGN_PROPOSAL_TOOL) {
-    return { ...who, ...designProposal(input) };
+    return assembled(context, toolName, input, designProposal(input));
   }
   if (toolName === PROJECT_SETTINGS_TOOL) {
-    return { ...who, ...projectSettings(input) };
+    return assembled(context, toolName, input, projectSettings(input));
   }
   if (toolName === UPSTREAM_POST_TOOL) {
-    return { ...who, ...upstreamPost(input) };
+    return assembled(context, toolName, input, upstreamPost(input));
   }
   // A browser ask reads as its reason, the page's origin under it.
   if (toolName === BROWSER_ASK_TOOL) {
-    return {
-      ...who,
+    return assembled(context, toolName, input, {
       summary: typeof input.reason === "string" ? input.reason : "",
       changes: [],
       fields:
         typeof input.origin === "string"
           ? [{ key: "origin", value: input.origin }]
           : [],
-    };
+      sentence: { family: "web" },
+    });
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   // An MCP tool is never a harness's own, whatever it is called.
   const presented =
     (admin ? adminWrite(admin[1], input, context) : undefined) ??
     (MCP_NAME.test(toolName) ? undefined : builtIn(toolName, input)) ??
-    only(toolDisplayName(toolName), fieldsOf(input));
-  return { ...who, ...presented };
+    only(toolDisplayName(toolName), fieldsOf(input), {
+      family: MCP_NAME.test(toolName) ? "mcp" : "other",
+    });
+  return assembled(context, toolName, input, presented);
+}
+
+/** The first letter of a line that opens a sentence lower-cased, an acronym's kept ("Change" → "change", "MCP" stays). */
+const continued = (line: string): string =>
+  line.length > 1 && line[1] === line[1]?.toLowerCase()
+    ? `${line.charAt(0).toLowerCase()}${line.slice(1)}`
+    : line;
+
+/** What approving covers, by what the call is (WORDS.md, Permission / approval). */
+const boundOf = (toolName: string, input: Record<string, unknown>): string => {
+  const tool = toolName.toLowerCase();
+  if (tool === "bash" || tool === "shell") {
+    return "Approving covers this one command. It does not widen what the agent may run later.";
+  }
+  if (["edit", "multiedit", "write", "notebookedit"].includes(tool)) {
+    return "Approving covers this one edit. It does not widen what the agent may change later.";
+  }
+  if (
+    toolName === MEMORY_PROPOSAL_TOOL ||
+    toolName === DELEGATE_TYPE_PROPOSAL_TOOL ||
+    toolName === DESIGN_PROPOSAL_TOOL
+  ) {
+    return "Approving writes the change shown and nothing else.";
+  }
+  if (toolName === UPSTREAM_POST_TOOL) {
+    const account = text(input.account);
+    return account
+      ? `Approving posts this once, as ${account}.`
+      : "Approving posts this once.";
+  }
+  if (toolName === PROJECT_SETTINGS_TOOL || CAWCO_ADMIN_WRITE.test(toolName)) {
+    return "Approving makes this one change. It does not let the agent change settings without asking.";
+  }
+  return "Approving covers this one call. It does not widen what the agent may do later.";
+};
+
+/**
+ * A presenter's words with who asked, and the sentence whole: its act and
+ * target where the presenter named them, else the summary as the act; the
+ * input it leaves unsaid, the reason and the settings taken out.
+ */
+function assembled(
+  context: PresentationContext,
+  toolName: string,
+  input: Record<string, unknown>,
+  presented: Presented
+): PermissionPresentation {
+  const { sentence: parts, ...rest } = presented;
+  const changed = parts?.changed ?? [];
+  const said = new Set(changed.map((setting) => setting.key));
+  const sentence: PermissionSentence = {
+    act: parts?.act ?? continued(presented.summary),
+    family: parts?.family ?? "other",
+    ...(parts?.kind ? { kind: parts.kind } : {}),
+    ...(parts?.target ? { target: parts.target } : {}),
+    ...(parts?.reason ? { reason: parts.reason } : {}),
+    ...(parts?.caution ? { caution: parts.caution } : {}),
+    changed,
+    rest:
+      parts?.rest ??
+      presented.fields.filter(
+        (field) => !(field.key === "why" || said.has(field.key))
+      ),
+    bound: parts?.bound ?? boundOf(toolName, input),
+  };
+  return {
+    asker: context.asker,
+    ...(context.project ? { project: context.project } : {}),
+    ...rest,
+    sentence,
+  };
 }
