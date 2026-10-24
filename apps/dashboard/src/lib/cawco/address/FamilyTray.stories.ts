@@ -1,8 +1,10 @@
 /**
  * The Family tray (Option A, recommended): one thing per tray, replaced in place, Caw on its top edge (design 6ddc57c4). Component Story Format 3, live: each story is
  * the one working tray, its buttons moving it as the person would and its
- * waiting states moving on as the hub would, with the story's control at
- * the frame's edge jumping it to any state, network and failure cause.
+ * waiting states moving on as the hub would. Each picture opens held still
+ * at Found it, the first step the person acts on (Join). The story's
+ * control stands folded under the design, jumping the tray to any state,
+ * network and failure cause.
  * Desk is the transcript-width page with Needs you's row (or Settings'
  * Set up); Phone is the same tray as the kit's bottom sheet at 390.
  */
