@@ -57249,6 +57249,13 @@
           },
           "report": {
             "$ref": "#/components/schemas/FleetSyncReport"
+          },
+          "rev": {
+            "description": "The fleet delta's rev the converge that wrote it reached: the fleet MCP\nchanges that delta carried are the sessions' to take now. Null for a\nreport read again unasked, which landed no delta. Absent from an agent\nolder than it.",
+            "type": [
+              "null",
+              "number"
+            ]
           }
         },
         "required": [

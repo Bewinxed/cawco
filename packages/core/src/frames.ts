@@ -60,6 +60,13 @@ export interface FleetReportFrame {
   instanceId?: undefined;
   kind: "fleet_report";
   report: FleetSyncReport;
+  /**
+   * The fleet delta's rev the converge that wrote it reached: the fleet MCP
+   * changes that delta carried are the sessions' to take now. Null for a
+   * report read again unasked, which landed no delta. Absent from an agent
+   * older than it.
+   */
+  rev?: number | null;
 }
 
 /** Where a page stands on the origin that serves it by id: a project's page on its project's origin, any page in the Decisions tab. */

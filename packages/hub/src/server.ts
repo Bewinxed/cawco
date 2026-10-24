@@ -9931,7 +9931,9 @@ export const createServer = (
       // once the machine's converge reports (`keepFleetReport`).
       const riding = mcpChanges.ride(machineId);
       if (riding.size > 0) {
-        fleetMcpRiding.set(machineId, riding);
+        const sent = fleetMcpRiding.get(machineId) ?? new Map();
+        sent.set(delta.rev, riding);
+        fleetMcpRiding.set(machineId, sent);
       }
       sendFrame(agent, {
         verb: "control",
@@ -9960,8 +9962,40 @@ export const createServer = (
       publishInstances(machineId);
     },
   });
-  /** The fleet MCP changes the last delta to each machine carried, by machine, until its converge reports (fleet-mcp-changes.ts). */
-  const fleetMcpRiding = new Map<string, RidingChanges>();
+  /**
+   * The fleet MCP changes each delta to a machine carried, by machine and the
+   * delta's rev, until a converge that reached that rev reports
+   * (fleet-mcp-changes.ts): two deltas in flight each keep their own, so a
+   * report of the first never hands the sessions the second's changes ahead
+   * of the files that hold them.
+   */
+  const fleetMcpRiding = new Map<string, Map<number, RidingChanges>>();
+  /**
+   * The changes a machine's fleet report lands: the ride of the rev its
+   * converge reached, and every earlier ride let go (what they carried that
+   * still waits rides the later one). A report read unasked lands none; an
+   * agent that names no rev lands the newest, as it always did.
+   */
+  const ridingReported = (
+    machineId: string,
+    rev: number | null | undefined
+  ): RidingChanges | undefined => {
+    const sent = fleetMcpRiding.get(machineId);
+    if (!sent || rev === null) {
+      return;
+    }
+    const reached = rev ?? Math.max(...sent.keys());
+    const riding = sent.get(reached);
+    for (const at of [...sent.keys()]) {
+      if (at <= reached) {
+        sent.delete(at);
+      }
+    }
+    if (sent.size === 0) {
+      fleetMcpRiding.delete(machineId);
+    }
+    return riding;
+  };
   /**
    * Controls a REST call is waiting on, by `requestId`. A dashboard's control is
    * answered over the socket it asked on; a route has nothing to hold the reply
@@ -33948,11 +33982,14 @@ export const createServer = (
               // a reading moved with no fleet change: kept, and the fleet MCP
               // changes its last delta carried go to the sessions there.
               if (kind === "fleet_report") {
-                const { report } = message.payload as FleetReportFrame;
+                const { report, rev } = message.payload as FleetReportFrame;
                 if (isFleetReport(report)) {
-                  const riding = fleetMcpRiding.get(message.machineId);
-                  fleetMcpRiding.delete(message.machineId);
-                  keepFleetReport(message.machineId, ws, report, riding);
+                  keepFleetReport(
+                    message.machineId,
+                    ws,
+                    report,
+                    ridingReported(message.machineId, rev)
+                  );
                 }
                 break;
               }

@@ -5879,6 +5879,7 @@ export class SessionSupervisor {
           payload: {
             kind: "fleet_report",
             report,
+            rev,
           } satisfies FleetReportFrame,
         });
       }
@@ -5928,7 +5929,11 @@ export class SessionSupervisor {
       this.emit({
         verb: "frames",
         machineId: "",
-        payload: { kind: "fleet_report", report } satisfies FleetReportFrame,
+        payload: {
+          kind: "fleet_report",
+          report,
+          rev: null,
+        } satisfies FleetReportFrame,
       });
     }).catch((error: unknown) =>
       warn(`the fleet report was not read again: ${errorText(error)}`)
