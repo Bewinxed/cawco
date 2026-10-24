@@ -376,12 +376,14 @@ const isQuestionMsg = (m: Message): boolean =>
 /**
  * A hand-off that spawned a session of its own. A plain `handoff` addresses a
  * session that already exists and stays a tool row; these two open a fleet
- * instance the card follows.
+ * instance the card follows. One the hub refused (it errored, and no session
+ * came of it) started nothing: it stays a tool row, its refusal its result.
  */
 const isDelegateMsg = (m: Message): boolean =>
   m.type === "tool.handoff" &&
   (m.metadata?.handoffKind === "delegate" ||
-    m.metadata?.handoffKind === "start");
+    m.metadata?.handoffKind === "start") &&
+  !(m.metadata?.toolStatus === "error" && !m.metadata?.delegateInstanceId);
 
 /**
  * Whether a read of a transcript holds a compaction: what a divider, and Caw

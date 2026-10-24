@@ -253,7 +253,6 @@
   );
   const activity = $derived(id ? cawco.activityOf(id) : "idle");
   const currentTool = $derived(id ? cawco.currentToolOf(id) : null);
-  const spawnFailed = $derived(!id && meta.toolStatus === "error");
 
   type Phase =
     | "spawning"
@@ -270,7 +269,7 @@
     if (elsewhere) {
       return "elsewhere";
     }
-    if (spawnFailed || rowStatus === "error") {
+    if (rowStatus === "error") {
       return "failed";
     }
     if (!id) {
@@ -348,10 +347,8 @@
   };
 
   const failure = $derived(
-    spawnFailed
-      ? headline(String(meta.toolResult ?? "The spawn failed."))
-      : (row?.lastError ??
-          (report?.failed ? (report.headline ?? headline(report.body)) : ""))
+    row?.lastError ??
+      (report?.failed ? (report.headline ?? headline(report.body)) : "")
   );
 
   /** Kept by the call that started it, so a card the reader opened stays open. */
