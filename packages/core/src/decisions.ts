@@ -419,6 +419,13 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
 const labelOf = (card: RecordCard, id: string): string =>
   card.options.find((option) => option.id === id)?.label ?? id;
 
+/** One period at a line's end, which a list in `log.md` drops where it joins it to the next. */
+const LAST_PERIOD = /\.$/;
+/** A sentence's own ending: one when it has none. */
+const ENDED = /[.!?…]$/;
+const sentence = (said: string): string =>
+  ENDED.test(said) ? said : `${said}.`;
+
 /** A chosen option in `log.md`: its label and line, then what it costs and what it builds, each when it says. */
 const chosenLines = (card: RecordCard, id: string): string[] => {
   const option = card.options.find((each) => each.id === id);
@@ -475,12 +482,14 @@ export const logOf = (
     if (others.length > 0) {
       lines.push(
         "",
-        `Turned down: ${others
-          .map(
-            (option) =>
-              `${option.label}${option.recommended ? " (recommended)" : ""}${option.line ? ` — ${option.line}` : ""}`
-          )
-          .join("; ")}.`
+        sentence(
+          `Turned down: ${others
+            .map(
+              (option) =>
+                `${option.label}${option.recommended ? " (recommended)" : ""}${option.line ? ` — ${option.line.replace(LAST_PERIOD, "")}` : ""}`
+            )
+            .join("; ")}`
+        )
       );
     }
     if (card.why) {

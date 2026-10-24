@@ -2160,9 +2160,9 @@ const buildsLeg = async (on: On) => {
         )
         .then((file) => file.content)
         .catch((error: unknown) => String(error));
-      const [, tray] = TRAY_OPTIONS;
+      const [board, tray] = TRAY_OPTIONS;
       kit.check(
-        "(m) decided, the record keeps each option's builds, and log.md says what the pick costs and builds",
+        "(m) decided, the record keeps each option's builds, and log.md says what the pick costs and builds, each line with its own ending and no doubled period",
         TRAY_OPTIONS.every(
           (option) =>
             decided.record?.cards[0]?.options.find(
@@ -2170,7 +2170,11 @@ const buildsLeg = async (on: On) => {
             )?.builds === option.builds
         ) &&
           log.includes(`- ${decisionsWords.costs(tray.cost)}`) &&
-          log.includes(`- ${decisionsWords.builds(tray.builds)}`),
+          log.includes(`- ${decisionsWords.builds(tray.builds)}`) &&
+          // Each line keeps its own ending: the option turned down closes
+          // its sentence with its line's one period, and nothing doubles one.
+          log.includes(`${board.label} — ${board.line}\n`) &&
+          !log.includes(".."),
         `${JSON.stringify(decided.record?.cards[0]?.options)} | ${log}`
       );
     } else {
