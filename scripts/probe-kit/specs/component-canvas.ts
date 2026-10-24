@@ -83,9 +83,12 @@
  *     pointer: framed with the overlay, the overlay's one target over the
  *     button pointed at, and the frame in view's label no fill of its own
  *     (in Interact it says the frame is in view, in `selected-bg`).
+ * 19. A request no page makes is no canvas's error: a component's `.riv`
+ *     asked for as `?import&amp;url` is answered with its error, and the
+ *     stage keeps none for the canvas, which draws.
  *
  *   bun scripts/probe-kit/run.ts component-canvas
- *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 alone
+ *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 and 19 alone
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -105,6 +108,7 @@ import {
   type DesignMap,
   type FrameRender,
   type RenderReport,
+  type StageError,
   unkeyedPath,
 } from "../../../packages/core/src/stage";
 import { shellWords } from "../../../packages/core/src/words/shell";
@@ -128,6 +132,8 @@ const freePort = async (): Promise<number> => {
 interface Stage {
   base: string;
   dir: string;
+  /** The problems the stage last told its daemon (its `errors` line), which each canvas's doc carries; null before its first. */
+  errors: () => StageError[] | null;
   port: number;
   stop: () => void;
 }
@@ -180,6 +186,15 @@ async function stageOf(framework: Framework, host: string): Promise<Stage> {
   return {
     base: `http://127.0.0.1:${port}`,
     dir,
+    errors: () => {
+      const said = words
+        .split("\n")
+        .filter((line) => line.startsWith('{"cawco":"errors"'))
+        .at(-1);
+      return said
+        ? (JSON.parse(said) as { errors: StageError[] }).errors
+        : null;
+    },
     port,
     stop: () => child.kill("SIGTERM"),
   };
@@ -1674,7 +1689,62 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
   }
 }
 
-/** `--leg comment-and-stray`: leg 18 alone, on the Svelte stage. */
+/**
+ * Leg 19: a request no page makes is no canvas's error (the orchestrator's
+ * curl of nightly 5450: a module address read straight out of a canvas
+ * page's HTML, its `&` still `&amp;`, put 21 standing "doesn't compile"
+ * errors on a canvas whose own imports compile). A canvas whose component
+ * imports a `.riv` by its address (`./mark.riv?url`, as the dashboard's Caw
+ * does) draws with no error the stage keeps for it; that file asked for as
+ * `?import&amp;url` (Vite reads the query as `amp;url` and parses the file
+ * as script) is answered with its error, and the stage still keeps none
+ * for the canvas (what the daemon carries into its doc, and artifact_read
+ * reports as its errors); loaded again, the canvas draws.
+ */
+async function strayRequest(kit: Kit, stage: Stage): Promise<void> {
+  const files = ["src/Mark.stories.js"];
+  const mine = () =>
+    (stage.errors() ?? []).filter(
+      (one) =>
+        one.file.includes("mark.riv") ||
+        one.sheets.some((sheet) => files.includes(sheet))
+    );
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  const errors = errorsOf(page);
+  await page.goto(canvasUrl(stage, files, { name: "Mark" }));
+  const first = framesOf(await reportOn(page));
+  const before = mine();
+  const consoleBefore = errors.length;
+  const answer = await fetch(`${stage.base}/src/mark.riv?import&amp;url`);
+  const answered = (await answer.text()).slice(0, 160);
+  await page.waitForTimeout(1500);
+  const after = mine();
+  await page.reload();
+  const again = framesOf(await reportOn(page));
+  const allDrawn = (frames: FrameRender[]) =>
+    frames.length > 0 && frames.every((one) => one.state === "drawn");
+  kit.check(
+    `19: a request no page makes is no canvas's error: the canvas of a component that imports a .riv by its address draws (${first.length} frames) with no error kept for it; asked for as ?import&amp;url the file is answered ${answer.status}, and the stage still keeps none for the canvas (${after.length} after, ${before.length} before); loaded again it draws (${again.length} frames)`,
+    allDrawn(first) &&
+      consoleBefore === 0 &&
+      before.length === 0 &&
+      answer.status >= 400 &&
+      after.length === 0 &&
+      allDrawn(again),
+    JSON.stringify({
+      answered,
+      kept: after.map(
+        (one) =>
+          `${one.kind} ${one.file}: ${one.message.slice(0, 120)} [${one.sheets.join(", ")}]`
+      ),
+      frames: [said(first), said(again)],
+      console: errors.slice(0, 4),
+    })
+  );
+  await page.close();
+}
+
+/** `--leg comment-and-stray`: legs 18 and 19 alone, on the Svelte stage. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -1687,6 +1757,7 @@ const spec: Spec = {
     try {
       if (ONLY_LEG === "comment-and-stray") {
         await commentMarksOne(kit, svelte);
+        await strayRequest(kit, svelte);
         return;
       }
       await svelteKit(kit, svelte);
@@ -1699,6 +1770,7 @@ const spec: Spec = {
       await daemonRender(kit, svelte);
       await endless(kit, svelte);
       await commentMarksOne(kit, svelte);
+      await strayRequest(kit, svelte);
     } finally {
       svelte.stop();
     }

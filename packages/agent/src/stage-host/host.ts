@@ -2583,6 +2583,25 @@ function cawcoStage() {
   };
 
   /**
+   * Whether module `id` (Vite's, its query kept) is one a canvas's page
+   * loads: the stage's own (a section's module, the entry, the runtime), a
+   * states file, or a module another module of the page's graph imports.
+   * Vite answers every request it is sent, and sends each request's error
+   * to every page (its `logError`), so a request no page made (an address
+   * typed or mangled by hand, `climb.riv?import&amp;url` read straight out
+   * of the page's HTML) makes a module no module imports: its error is the
+   * request's answer alone, never kept against a canvas whose own import
+   * of that file compiles. An error that names no module is kept.
+   */
+  const pageAsks = (id: string | undefined): boolean => {
+    if (!id || id.startsWith("\0") || STORY_FILE.test(id.split("?")[0] ?? "")) {
+      return true;
+    }
+    const mod = server?.environments.client.moduleGraph.getModuleById(id);
+    return !!mod && mod.importers.size > 0;
+  };
+
+  /**
    * A compile error Vite sends the pages, kept under its module. A section's
    * own load refusal comes with neither the section module's id nor a place
    * when its states file isn't written: that one its load keeps
@@ -2591,7 +2610,7 @@ function cawcoStage() {
    * its load fails.
    */
   const keepSent = (err: SentError) => {
-    if (err.pluginCode === SECTION_MISSING) {
+    if (err.pluginCode === SECTION_MISSING || !pageAsks(err.id)) {
       return;
     }
     // The module's id is Vite's absolute path; a plugin's `loc.file` may be
