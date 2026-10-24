@@ -346,7 +346,14 @@ globalThis.__cawcoCanvas = {
   client.close();
   console.log(`same child ${proc.pid} survived agent restart`);
 } else if (verb === "proof-migration-check") {
+  // The hub is up and writing beside this read, in its rollback-journal mode
+  // (hub db/index.ts sets no journal_mode): while a commit of its holds the
+  // file's PENDING or EXCLUSIVE lock, a reader's SHARED lock is refused, and
+  // with no busy handler the first statement's prepare fails at once with
+  // SQLITE_BUSY (nightly 6786381cb). busy_timeout waits out the hub's commit,
+  // 15 s at most, as scratch-fleet.ts's readers beside a running hub do.
   const db = new Database(required("CAWCO_DB_PATH"));
+  db.run("PRAGMA busy_timeout = 15000");
   if (
     db
       .query<{ value: string }, []>("SELECT value FROM binary_proof_history")
