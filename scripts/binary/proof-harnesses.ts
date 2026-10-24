@@ -76,45 +76,64 @@ const keepers = new KeeperPool();
 /** A line of a message the session runs as a tool call, as a model calls a tool its prompt names: `cawco tool <name> [json]`. */
 const TOOL_LINE = /^cawco tool (\S+)(?: (.+))?$/;
 
-/** The `State:` line of a process's /proc status file. */
-const PROCESS_STATE = /^State:\s*(\S+)/m;
+/** The command every session's process runs: what its exec'd argv[0] reads. */
+const SESSION_COMMAND = "sleep";
 
 /**
- * The environment of the session's process once it carries its instance id (a
- * child's environ is its keeper's until it execs), read every 50 ms for 10 s;
- * else one line saying what the process showed instead.
+ * The environment this agent process handed `spawnProc` for each session it
+ * started, by procId. A child's /proc environ is its keeper's until it execs,
+ * so the environment a session was given is what was handed over, not what
+ * /proc shows right after the spawn. A session this process adopted (it was
+ * started by an agent before a restart) has none here.
  */
-const environOnceSet = async (
+const spawnedEnv = new Map<string, Record<string, string>>();
+
+/**
+ * The environment of a session this agent process did not start, read once
+ * off its held process: only once that process is the exec'd
+ * {@link SESSION_COMMAND} (its argv[0] says so), for before its exec the
+ * environ is still its keeper's. Else one line saying what the process is.
+ */
+const heldEnvironment = async (
   pid: number
-): Promise<{ environ: string } | { line: string }> => {
-  const key = `${CAWCO_ENV.instanceId}=`;
-  for (let tries = 0; tries < 200; tries += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read waits on the process's exec
-    const environ = await Bun.file(`/proc/${pid}/environ`)
-      .text()
-      .catch(() => "");
-    if (environ.split("\0").some((pair) => pair.startsWith(key))) {
-      return { environ };
-    }
-    await Bun.sleep(50);
-  }
-  const status = await Bun.file(`/proc/${pid}/status`)
+): Promise<{ env: Record<string, string> } | { line: string }> => {
+  const cmdline = await Bun.file(`/proc/${pid}/cmdline`)
     .text()
-    .catch(() => "");
-  const state = PROCESS_STATE.exec(status)?.[1] ?? "gone";
+    .catch(() => undefined);
+  if (cmdline === undefined) {
+    return { line: `the session's process ${pid} is gone` };
+  }
+  const argv0 = cmdline.split("\0")[0] ?? "";
+  if (argv0.split("/").at(-1) !== SESSION_COMMAND) {
+    return {
+      line: `the session's process ${pid} runs ${JSON.stringify(argv0)}, not the exec'd ${SESSION_COMMAND}`,
+    };
+  }
+  const environ = await Bun.file(`/proc/${pid}/environ`)
+    .text()
+    .catch(() => undefined);
+  if (environ === undefined) {
+    return { line: `the session's process ${pid} is gone` };
+  }
   return {
-    line: `the session's process ${pid} never showed its environment (state ${state})`,
+    env: Object.fromEntries(
+      environ.split("\0").flatMap((pair) => {
+        const at = pair.indexOf("=");
+        return at > 0 ? [[pair.slice(0, at), pair.slice(at + 1)]] : [];
+      })
+    ),
   };
 };
 
 /**
  * The tool calls `text` names, run one by one as the session itself: the
- * agent's own binary's `cawco tool`, in the environment of the session's own
- * process as its keeper holds it (its id, its credential and its hub, as
- * `spawn` gave it), so a session the agent adopted after a restart acts with
- * the credential it was started with, as a real harness's process does. Each
- * call's output, or its error, is a line of the turn's answer; the turn ends
- * after the last one, as a model's ends after its tool calls.
+ * agent's own binary's `cawco tool`, in the session's own environment (its
+ * id, its credential and its hub): the one this agent handed `spawnProc`
+ * ({@link spawnedEnv}), or for a session adopted after a restart, its held
+ * process's ({@link heldEnvironment}), so it acts with the credential it was
+ * started with, as a real harness's process does. Each call's output, or its
+ * error, is a line of the turn's answer; the turn ends after the last one, as
+ * a model's ends after its tool calls.
  */
 const toolCalls = async (procId: string, text: string): Promise<string[]> => {
   const calls = text.split("\n").flatMap((line) => {
@@ -128,16 +147,14 @@ const toolCalls = async (procId: string, text: string): Promise<string[]> => {
   if (!proc) {
     return [`no keeper holds the session's process ${procId}`];
   }
-  const shown = await environOnceSet(proc.pid);
-  if ("line" in shown) {
-    return [shown.line];
+  let env = spawnedEnv.get(procId);
+  if (!env) {
+    const held = await heldEnvironment(proc.pid);
+    if ("line" in held) {
+      return [held.line];
+    }
+    ({ env } = held);
   }
-  const env = Object.fromEntries(
-    shown.environ.split("\0").flatMap((pair) => {
-      const at = pair.indexOf("=");
-      return at > 0 ? [[pair.slice(0, at), pair.slice(at + 1)]] : [];
-    })
-  );
   const said: string[] = [];
   for (const [, name, json] of calls) {
     // tool answer: words (what the session's model would read, put in its turn)
@@ -246,6 +263,7 @@ function session(
     },
     stop: async () => {
       await endProc(client, procId);
+      spawnedEnv.delete(procId);
       ctx.closed?.();
     },
     withdrawPermission: () => undefined,
@@ -374,22 +392,24 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
       const procId = procIdFor(held, ctx.instanceId);
       const client = await keepers.current();
       await keepers.replaceElsewhere(procId, client);
+      // A real session's env as the Claude harness gives it (claude.ts
+      // `sessionEnv`): the agent's own as a session gets it, the session's
+      // id, and its credential, so its shell's `cawco tool` acts as it. The
+      // keeper puts its own, as a session gets it, under.
+      const env = {
+        ...sessionEnvironment(process.env),
+        [CAWCO_ENV.instanceId]: ctx.instanceId,
+        ...(ctx.sessionCredential
+          ? { [CAWCO_ENV.sessionCredential]: ctx.sessionCredential }
+          : {}),
+      };
       await client.spawnProc(procId, {
-        command: "sleep",
+        command: SESSION_COMMAND,
         args: ["3000"],
         cwd: ctx.cwd,
-        // A real session's env as the Claude harness gives it (claude.ts
-        // `sessionEnv`): the agent's own as a session gets it, the session's
-        // id, and its credential, so its shell's `cawco tool` acts as it. The
-        // keeper puts its own, as a session gets it, under.
-        env: {
-          ...sessionEnvironment(process.env),
-          [CAWCO_ENV.instanceId]: ctx.instanceId,
-          ...(ctx.sessionCredential
-            ? { [CAWCO_ENV.sessionCredential]: ctx.sessionCredential }
-            : {}),
-        },
+        env,
       });
+      spawnedEnv.set(procId, env);
       return session(held, ctx.instanceId, ctx, client);
     },
     // The agent came back: the child is still there, on whichever keeper
