@@ -65,6 +65,14 @@ export const decisionsWords = {
   leftOpen: "Left open",
   /** The writer's mark on the option it recommended. */
   recommended: "Recommended",
+  /** A live card's why, as the writer's advice: the option it recommends by its label, then why (the Decision's `why`). */
+  advice: (label: string, why: string) => `Recommended: ${label}. ${why}`,
+  /** A live card's option, each part labelled: what picking it gets the person, what it costs them, what it means building (the Option's line, cost and builds). */
+  gets: (line: string) => `Gets: ${line}`,
+  costs: (cost: string) => `Costs: ${cost}`,
+  builds: (builds: string) => `Builds: ${builds}`,
+  /** The writer's mark on the option that stands today. */
+  current: "Current",
   /** A decided card's fold: the options turned down. */
   others: (count: number) =>
     `${count} other ${count === 1 ? "option" : "options"}`,

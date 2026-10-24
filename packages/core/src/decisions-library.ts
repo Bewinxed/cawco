@@ -211,6 +211,12 @@ export const decisionLibrary = <C>(
         .boolean()
         .optional()
         .describe("What stands today: its card shows it as Current."),
+      builds: z
+        .string()
+        .optional()
+        .describe(
+          'What picking it means building or changing, in one line: "A new tray component and an onboarding step", or "Nothing: today\'s behaviour".'
+        ),
     })
   );
   const Decision = define(
@@ -225,7 +231,9 @@ export const decisionLibrary = <C>(
       why: z
         .string()
         .optional()
-        .describe("Why you recommend the option you marked, in one sentence."),
+        .describe(
+          'Why you recommend the option you marked, in one sentence. The card names that option before it: "Recommended: Per machine. <why>".'
+        ),
       media: z
         .array(z.union([media, Dials.ref]))
         .optional()
@@ -290,8 +298,8 @@ export const decisionLibrary = <C>(
 /** One page, as the prompt shows it: two decisions, a diagram, an edge. */
 const EXAMPLE = `root = Decisions("Price the hosted plan", [shape, trial])
 shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
-seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.")
-machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.")
+seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.", true, "Nothing: today's billing.")
+machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.", false, "A machine count in billing and a new price page.")
 trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [path], ["shape"])
 week = Option("week", "A week", "People decide fast.", false, [], "Too short to finish a real project.")
 month = Option("month", "A month", "Thirty days, then pay.", true, [], "Revenue starts a month later.")
@@ -315,7 +323,7 @@ export const decisionPromptOptions = (): PromptOptions => ({
   editMode: true,
   examples: [EXAMPLE, EDIT],
   additionalRules: [
-    "Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets) and its cost; exactly one is recommended, and the Decision's why says why. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
+    "Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
     "Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.",
     "after names what a decision depends on, and a Section groups decisions; both draw the project's decision graph. Leave them out when the decisions stand alone.",
     "Plain words everywhere: no URLs or markup. Canvas and Preview name an artifact by its id; Image names a file.",

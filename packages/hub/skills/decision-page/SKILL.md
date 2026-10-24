@@ -12,8 +12,8 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 ## The card
 
 - **Question**: the choice in the person's plain words ("How dense is the task row?"), never a component, story or id.
-- **Options**: 2–5 real answers. Each Option's `line` is what it gets them and its `cost` what it costs them, one line each.
-- **One Recommended**: exactly one option `recommended`, and the Decision's `why` is the one sentence that says why it.
+- **Options**: 2–5 real answers. Each Option's `line` is what it gets them, its `cost` what it costs them, and its `builds` what picking it means building or changing ("A new tray component and an onboarding step", "Nothing: today's behaviour"), one line each; the card labels them Gets, Costs and Builds. `builds` is the work, never the time it takes.
+- **One Recommended**: exactly one option `recommended`, and the Decision's `why` is the one sentence that says why it. The card shows the why after that option's label ("Recommended: Per machine. …"), so the why never names the option again.
 - **Pick plus note**: the card gives both; it asks nothing else. Leave the Decision's `note` out and its button reads "Add a note". When the pick needs a particular note, give `note` a noun phrase the button finishes ("a reason for the rollback" reads "Add a reason for the rollback").
 - **The same facts for every option**: each line and each cost answers the same question in the same units, the Recommended option's cost included.
 - **A reason that can be checked**: the `why` names the fact that makes the Recommended option right (a number, a limit, what breaks), never only that it is better.
@@ -31,7 +31,7 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 
 ## Steps
 
-1. **List the open choices.** One Decision per choice the person must make and you can't settle from the brief, the code or the design system. Give each decision and option a lowercase id that will not change (`row-density`, `quiet`). Done when every open question has a card and each card has its question, its options with a get and a cost line each, and one recommended with its reason.
+1. **List the open choices.** One Decision per choice the person must make and you can't settle from the brief, the code or the design system. Give each decision and option a lowercase id that will not change (`row-density`, `quiet`). Done when every open question has a card and each card has its question, its options with a get, a cost and a builds line each, and one recommended with its reason.
 2. **Order them.** The choice others hang on comes first, and each later card names it in `after`. A card whose options change with an earlier answer stays off the page until that answer is in. Done when every card's `after` names only cards above it.
 3. **Make the media.** A design option's canvas as above, each frame `drawn` (component-canvas steps 4–5). A drawing is a canvas (`artifact_create`, `kind: "canvas"`, `mermaid` or `elements`); an animated mockup is a page artifact (`kind: "page"`, `html`); a running app is a preview; Preview shows any of them live. A picture is a file beside page.oui or a `generate_image` result by its absolute path. A Mermaid diagram goes in the program as text. Done when every Canvas and Preview has the id `artifact_create` answered.
 4. **Write the program.** Read LIBRARY.md whole, then write `root = Decisions(…)` first, each Decision after it, its Options and its media. Put decisions that belong together in a Section. Done when every id is set, every statement is reachable from root, and the table below passes.

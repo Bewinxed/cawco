@@ -1711,6 +1711,27 @@ public enum Words {
         /// The writer's mark on the option it recommended.
         public static let recommended = "Recommended"
 
+        /// A live card's why, as the writer's advice: the option it recommends by its label, then why (the Decision's `why`).
+        public static func advice(label: String, why: String) -> String {
+            "Recommended: \(label). \(why)"
+        }
+
+        /// A live card's option, each part labelled: what picking it gets the person, what it costs them, what it means building (the Option's line, cost and builds).
+        public static func gets(line: String) -> String {
+            "Gets: \(line)"
+        }
+
+        public static func costs(cost: String) -> String {
+            "Costs: \(cost)"
+        }
+
+        public static func builds(builds: String) -> String {
+            "Builds: \(builds)"
+        }
+
+        /// The writer's mark on the option that stands today.
+        public static let current = "Current"
+
         /// A decided card's fold: the options turned down.
         public static func others(count: Int) -> String {
             "\(count) other \(count == 1 ? "option" : "options")"

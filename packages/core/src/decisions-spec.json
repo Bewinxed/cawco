@@ -218,6 +218,9 @@
           },
           "current": {
             "type": "boolean"
+          },
+          "builds": {
+            "type": "string"
           }
         },
         "required": [

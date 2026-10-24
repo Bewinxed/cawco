@@ -5,7 +5,9 @@
   twice: `data-cawco-choice`, which the overlay's bridge picks on (a click
   on an option's `data-option` stores it, pick.ts), and `id="decision-<id>"`,
   which a pin's selector holds on to across revisions. Its head is its
-  question.
+  question; under it the writer's advice, its why after the option it
+  recommends by name ("Recommended: Per machine. A machine is…"; the owner:
+  "i don't know what the advisor's opinion are on these picks").
 
   A press picks, and the card stays open (the owner: "The done and continue
   are useless buttons that break the flow of how this form should work",
@@ -37,6 +39,7 @@
   keyboard … is instant, as every keyboard action is").
 -->
 <script lang="ts">
+  import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { getContext, setContext, tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { OptionGroup } from "#lib/components/ui/option-group/index.js";
@@ -73,6 +76,8 @@
       label?: unknown;
       line?: unknown;
       cost?: unknown;
+      builds?: unknown;
+      recommended?: unknown;
       media?: unknown[];
     };
   } | null;
@@ -89,10 +94,18 @@
         label: String(held?.label ?? optionId),
         line: !!held?.line,
         cost: !!held?.cost,
+        builds: !!held?.builds,
+        recommended: held?.recommended === true,
         media: Array.isArray(held?.media) && held.media.length > 0,
       };
     })
   );
+  /** The writer's advice: its why, after the option it recommends by name (the hub keeps only cards with exactly one); the why alone where it names none. */
+  const advice = $derived.by(() => {
+    const why = props.why ? String(props.why) : "";
+    const recommended = options.find((option) => option.recommended);
+    return why && recommended ? words.advice(recommended.label, why) : why;
+  });
   /** Each option's id in order: an option's keycap is its place. */
   const order = $derived(options.map((option) => option.id));
   setContext("decision-options", () => order);
@@ -100,8 +113,9 @@
   setContext("decision-id", () => id);
   /**
    * The rows every option of the card stands on (the chip, its line, its
-   * cost, its media): one track each that any option fills, shared across
-   * the columns, so every chip, line, cost and media starts on one line.
+   * cost, its builds, its media): one track each that any option fills,
+   * shared across the columns, so every chip, line, cost, builds and media
+   * starts on one line.
    */
   const rows = $derived.by(() => {
     let at = 1;
@@ -114,8 +128,9 @@
     };
     const line = next(options.some((option) => option.line));
     const cost = next(options.some((option) => option.cost));
+    const builds = next(options.some((option) => option.builds));
     const media = next(options.some((option) => option.media));
-    return { line, cost, media, span: at };
+    return { line, cost, builds, media, span: at };
   });
   setContext("decision-rows", () => rows);
 
@@ -393,12 +408,12 @@
     class="@container flex min-w-0 flex-col gap-space-5"
     data-slot="decision-body"
   >
-    {#if props.why}
+    {#if advice}
       <p
         class="type-body max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
         data-slot="why"
       >
-        {String(props.why)}
+        {advice}
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}

@@ -22,7 +22,7 @@ Arguments marked with ? are optional. Sub-components can be inline or referenced
 Decisions(title: string, children: (Section | Decision | Dials | any)[]) — The page: its title, Caw, the count picked, Send picks. The root.
 Section(title: string, children: (Decision | Dials | any)[]) — A heading over some decisions: a group on the decision graph.
 Decision(id: string, question: string, options: Option[], why?: string, media?: (any | Dials)[], after?: string[], multiple?: boolean, note?: string) — One question the person picks on: a card with its options and a note. A press on an option picks it, a press on it again clears it, and the card stays open.
-Option(id: string, label: string, line?: string, recommended?: boolean, media?: any[], cost?: string, current?: boolean) — One answer to a decision, in a few words.
+Option(id: string, label: string, line?: string, recommended?: boolean, media?: any[], cost?: string, current?: boolean, builds?: string) — One answer to a decision, in a few words.
 Image(file: string, alt: string, caption?: string) — A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result), shown at its own pixel size.
 Diagram(mermaid: string, caption?: string) — A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…).
 Canvas(artifact: string, caption?: string) — A drawing: a canvas artifact you made with artifact_create (kind canvas), shown at its own size.
@@ -50,8 +50,8 @@ Always write the root = Decisions(...) statement first so the UI shell appears i
 
 root = Decisions("Price the hosted plan", [shape, trial])
 shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
-seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.")
-machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.")
+seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.", true, "Nothing: today's billing.")
+machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.", false, "A machine count in billing and a new price page.")
 trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [path], ["shape"])
 week = Option("week", "A week", "People decide fast.", false, [], "Too short to finish a real project.")
 month = Option("month", "A month", "Thirty days, then pay.", true, [], "Revenue starts a month later.")
@@ -91,7 +91,7 @@ Before finishing, walk your output and verify:
 1. root = Decisions(...) is the FIRST line (for optimal streaming).
 2. Every referenced name is defined. Every defined name (other than root) is reachable from root.
 
-- Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets) and its cost; exactly one is recommended, and the Decision's why says why. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.
+- Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.
 - Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.
 - after names what a decision depends on, and a Section groups decisions; both draw the project's decision graph. Leave them out when the decisions stand alone.
 - Plain words everywhere: no URLs or markup. Canvas and Preview name an artifact by its id; Image names a file.

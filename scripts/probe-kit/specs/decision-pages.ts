@@ -68,6 +68,12 @@
  *     a label holding ✓ or ⌘ (Figtree lacks them, JetBrains Mono holds
  *     them) or ⎘ (neither face holds it) is refused, 422, naming its card,
  *     its string and the character, and the same program in words is kept.
+ * (m) Every card shows the advisor's view, each option's trade-off and what
+ *     picking it builds: the why reads "Recommended: <its label>. <why>";
+ *     options whose program gives `builds` draw a Builds line in their card
+ *     under the Costs line, on one row across the options, read in each
+ *     pick's description; the same card without `builds` draws none, its
+ *     cells the chip, line and cost rows alone.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -1915,13 +1921,224 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
     `(g) 320 ${theme}: a pick is named by its label alone (a radio of its card's group), its line, cost and Recommended its description`,
     named === 1 &&
       wide.aria.startsWith(`- radio "${FIT_LABEL}"`) &&
-      wide.description === `Closer to readers. Cost: ${FIT_COST} Recommended` &&
+      wide.description ===
+        `${decisionsWords.gets("Closer to readers.")} ${decisionsWords.costs(FIT_COST)} ${decisionsWords.recommended}` &&
       plain.aria.startsWith('- radio "The hub"') &&
       plain.description ===
-        "Nothing new to run. Cost: Readers far from the hub wait longer.",
+        `${decisionsWords.gets("Nothing new to run.")} ${decisionsWords.costs("Readers far from the hub wait longer.")}`,
     JSON.stringify({ named, wide, plain })
   );
   await phone.close();
+};
+
+/** One card whose options say what picking each means building, beside the same card without it (the owner, 10-23: "what needs to be built for each"). */
+const TRAY_WHY = "A tray keeps the board still while a machine joins.";
+const TRAY_OPTIONS = [
+  {
+    id: "board",
+    label: "On the board",
+    line: "Machines appear where they run.",
+    cost: "The board shifts as one joins.",
+    builds: "Nothing: today's behaviour.",
+    recommended: false,
+    current: true,
+  },
+  {
+    id: "tray",
+    label: "In a tray",
+    line: "One place for every new machine.",
+    cost: "One more surface to learn.",
+    builds: "A new tray component and an onboarding step.",
+    recommended: true,
+    current: false,
+  },
+] as const;
+/** The tray card as a page: each option's `builds` given, or none (the program as it was before `builds` came in). */
+const trayPage = (name: string, builds: boolean) => {
+  const options = TRAY_OPTIONS.map(
+    (option) =>
+      `${option.id} = Option("${option.id}", "${option.label}", "${option.line}", ${option.recommended}, [], "${option.cost}"${builds ? `, ${option.current}, "${option.builds}"` : ""})`
+  );
+  return `root = Decisions("Plan the tray", [${name}])
+${name} = Decision("${name}", "Where do new machines show up?", [board, tray], "${TRAY_WHY}")
+${options.join("\n")}`;
+};
+
+/** A card as drawn: its advice line, and each option's parts by their ids (line, cost, builds), with their boxes and the rows its cell spans. */
+const partsOf = (frame: Frame, card: string) =>
+  frame.evaluate((id) => {
+    const root = document.getElementById(`decision-${id}`);
+    const box = (el: Element | null) => {
+      const b = el?.getBoundingClientRect();
+      return b
+        ? {
+            top: Math.round(b.top),
+            bottom: Math.round(b.bottom),
+            left: Math.round(b.left),
+            right: Math.round(b.right),
+          }
+        : null;
+    };
+    const options = [
+      ...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? []),
+    ].map((chip) => {
+      const option = chip.dataset.option ?? "";
+      const part = (which: string) =>
+        document.getElementById(`option-${id}--${option}-${which}`);
+      const cell = chip.closest<HTMLElement>("[data-slot=option-cell]");
+      return {
+        option,
+        line: part("line")?.textContent?.trim() ?? null,
+        cost: part("cost")?.textContent?.trim() ?? null,
+        builds: part("builds")?.textContent?.trim() ?? null,
+        costBox: box(part("cost")),
+        buildsBox: box(part("builds")),
+        rows: cell ? getComputedStyle(cell).gridRowEnd : "",
+      };
+    });
+    return {
+      why: root?.querySelector("[data-slot=why]")?.textContent?.trim() ?? "",
+      card: box(root),
+      buildsLines: root?.querySelectorAll('[id$="-builds"]').length ?? 0,
+      options,
+    };
+  }, card);
+
+/**
+ * (m) The advisor's view and what each option builds (the owner, 10-23: "i
+ * don't know what the advisor's opinion are on these picks and what's the
+ * tradeoff and what needs to be built for each"). A card whose options carry
+ * `builds` draws each option's Builds line in its own card, under its Costs
+ * line, every builds line on one row across the options, and a pick's
+ * description reads its Gets, Costs and Builds; the why reads as the
+ * recommendation, naming the recommended option by its label. The same card
+ * without `builds` (the program as written before it came in) draws no
+ * builds line and its cells span the chip, line and cost rows alone, its
+ * Gets and Costs and its advice as the other's.
+ */
+const buildsLeg = async (on: On) => {
+  const { fleet, kit, writer } = on;
+  const desk = await kit.page("desk", { theme: "light" });
+  const recommended = TRAY_OPTIONS.find((option) => option.recommended);
+  const advice = decisionsWords.advice(recommended?.label ?? "", TRAY_WHY);
+  const gets = (option: (typeof TRAY_OPTIONS)[number]) =>
+    decisionsWords.gets(option.line);
+  const costs = (option: (typeof TRAY_OPTIONS)[number]) =>
+    decisionsWords.costs(option.cost);
+  for (const builds of [true, false]) {
+    const name = builds ? "builds" : "nobuilds";
+    const leg = builds ? "with builds" : "without builds";
+    const made = await fleet.api<{ id: string }>(
+      `/api/instances/${writer}/artifacts`,
+      {
+        kind: "page",
+        does: "pick",
+        ask: "Pick where new machines show up",
+        name,
+        program: trayPage(name, builds),
+      }
+    );
+    await desk.goto(`${on.base}/artifact/${made.id}`, {
+      waitUntil: "domcontentloaded",
+    });
+    const frame = await until(
+      `(m) the ${name} page's host frame`,
+      async () => {
+        for (const one of desk.frames()) {
+          if ((await countIn(one, `#decision-${name} [data-option]`)) === 2) {
+            return one;
+          }
+        }
+        return null;
+      },
+      Boolean,
+      60_000
+    ).catch(() => null);
+    if (!frame) {
+      kit.check(`(m) ${leg}: the page draws`, false, "no frame");
+      continue;
+    }
+    await settle(desk, 400);
+    const parts = await partsOf(frame, name);
+    const described = await Promise.all(
+      TRAY_OPTIONS.map((option) => pickRead(frame, option.id))
+    );
+    kit.check(
+      `(m) ${leg}: the why reads as the recommendation, naming the recommended option ("${advice}")`,
+      parts.why === advice,
+      JSON.stringify({ why: parts.why })
+    );
+    const each = TRAY_OPTIONS.map((option, at) => ({
+      option,
+      drawn: parts.options.find((one) => one.option === option.id),
+      description: described[at]?.description ?? "",
+    }));
+    if (builds) {
+      const inside = (
+        b: { left: number; right: number; top: number; bottom: number } | null
+      ) =>
+        !!b &&
+        !!parts.card &&
+        b.left >= parts.card.left &&
+        b.right <= parts.card.right &&
+        b.top >= parts.card.top &&
+        b.bottom <= parts.card.bottom;
+      kit.check(
+        `(m) ${leg}: each option's Builds line is in its card, under its Costs line, its Gets and Costs labelled, and the builds lines share a row`,
+        parts.buildsLines === 2 &&
+          each.every(
+            ({ option, drawn }) =>
+              !!drawn &&
+              drawn.builds === decisionsWords.builds(option.builds) &&
+              drawn.line === gets(option) &&
+              drawn.cost === costs(option) &&
+              inside(drawn.buildsBox) &&
+              !!drawn.costBox &&
+              !!drawn.buildsBox &&
+              drawn.buildsBox.top >= drawn.costBox.bottom
+          ) &&
+          new Set(parts.options.map((one) => one.buildsBox?.top)).size === 1,
+        JSON.stringify(parts)
+      );
+      kit.check(
+        `(m) ${leg}: a pick's description reads its Gets, Costs and Builds, then its badge`,
+        each.every(
+          ({ option, description }) =>
+            description ===
+            [
+              gets(option),
+              costs(option),
+              decisionsWords.builds(option.builds),
+              option.recommended
+                ? decisionsWords.recommended
+                : decisionsWords.current,
+            ].join(" ")
+        ),
+        JSON.stringify(each.map(({ description }) => description))
+      );
+    } else {
+      kit.check(
+        `(m) ${leg}: no builds line, each cell spans its chip, line and cost rows alone, its Gets and Costs as with builds, and its description as before builds came in`,
+        parts.buildsLines === 0 &&
+          each.every(
+            ({ option, drawn, description }) =>
+              !!drawn &&
+              drawn.builds === null &&
+              drawn.line === gets(option) &&
+              drawn.cost === costs(option) &&
+              drawn.rows === "span 3" &&
+              description ===
+                [
+                  gets(option),
+                  costs(option),
+                  ...(option.recommended ? [decisionsWords.recommended] : []),
+                ].join(" ")
+          ),
+        JSON.stringify({ parts, described: each.map((one) => one.description) })
+      );
+    }
+  }
+  await desk.close();
 };
 
 /** (d) Open as canvas: the flowchart becomes a canvas in the session's panel. */
@@ -2846,6 +3063,7 @@ const run = async (kit: Kit) => {
   for (const theme of ["light", "dark"] as const) {
     await fitLeg(on, theme);
   }
+  await buildsLeg(on);
   await openToDraw(on);
   await openAsCanvas(on);
   // Last: their pages take the panel's front and join the project's graph, which (c) counts.
