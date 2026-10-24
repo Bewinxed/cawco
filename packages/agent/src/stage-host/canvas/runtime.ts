@@ -2658,6 +2658,16 @@ export function boot(options: BootOptions): void {
     dispatchEvent(new CustomEvent("cawco:hmr"));
     later();
   });
+  // The pane's mode, as the overlay hears it (preview-overlay page.ts
+  // `mode`): in Comment mode the frame in view keeps no fill of its own on
+  // its label (chrome.ts), since the comment target's tint is the one mark.
+  window.addEventListener("cawco:mode", (event) => {
+    const mode = (event as CustomEvent<{ mode?: unknown }>).detail?.mode;
+    document.documentElement.toggleAttribute(
+      "data-cawco-commenting",
+      mode === "comment"
+    );
+  });
   window.addEventListener("cawco:story-select", (event) => {
     const story = (event as CustomEvent<{ story?: unknown }>).detail?.story;
     chosen = typeof story === "string" ? story : null;

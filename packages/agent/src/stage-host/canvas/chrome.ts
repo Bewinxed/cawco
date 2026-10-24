@@ -263,9 +263,10 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-frame-small { font: var(--type-meta); color: var(--ink-muted); overflow-wrap: anywhere; }
 .cawco-frame-label[data-cawco-unnamed] .cawco-frame-words { font: var(--type-meta); color: var(--ink-muted); }
 .cawco-frame-label[data-cawco-picked] { box-shadow: inset 0 0 0 1px var(--brand-solid); }
-/* The frame in view is said by its label row, in the selected pair. */
-.cawco-frame[data-cawco-current] > .cawco-frame-label { background: var(--selected-bg); }
-.cawco-frame[data-cawco-current] > .cawco-frame-label :is(.cawco-frame-words, .cawco-frame-small) { color: var(--selected-ink); }
+/* The frame in view is said by its label row, in the selected pair; in Comment mode (the overlay's cawco:mode event) it says nothing,
+   so the comment target's tint is the one mark on the page. */
+html:not([data-cawco-commenting]) .cawco-frame[data-cawco-current] > .cawco-frame-label { background: var(--selected-bg); }
+html:not([data-cawco-commenting]) .cawco-frame[data-cawco-current] > .cawco-frame-label :is(.cawco-frame-words, .cawco-frame-small) { color: var(--selected-ink); }
 /* The inspector's story, in DESIGN.md's selected marks, never the focus ring's shape: its label's words in the selected ink, and
    a 1px edge in the strong control edge (3:1) flush on the frame's own box, a hairline that moves nothing (a box-shadow, never
    the outline the ring is). */

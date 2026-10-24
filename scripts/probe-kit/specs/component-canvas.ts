@@ -79,6 +79,13 @@
  *     than finishing it, so the hover frame is drawn with its delta; the
  *     loop is landed before the rest snapshot too, so that delta is the
  *     hover's background alone, no opacity read mid-breath.
+ * 18. In Comment mode a canvas marks one thing, the element under the
+ *     pointer: framed with the overlay, the overlay's one target over the
+ *     button pointed at, and the frame in view's label no fill of its own
+ *     (in Interact it says the frame is in view, in `selected-bg`).
+ *
+ *   bun scripts/probe-kit/run.ts component-canvas
+ *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 alone
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -102,6 +109,7 @@ import {
 } from "../../../packages/core/src/stage";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { until } from "../../scratch-fleet";
+import { embedOrigin } from "../decision-embeds";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const FIXTURES = join(ROOT, "scripts/probe-kit/fixtures/component-canvas");
@@ -120,6 +128,7 @@ const freePort = async (): Promise<number> => {
 interface Stage {
   base: string;
   dir: string;
+  port: number;
   stop: () => void;
 }
 
@@ -171,6 +180,7 @@ async function stageOf(framework: Framework, host: string): Promise<Stage> {
   return {
     base: `http://127.0.0.1:${port}`,
     dir,
+    port,
     stop: () => child.kill("SIGTERM"),
   };
 }
@@ -1512,12 +1522,173 @@ async function floor(kit: Kit, stage: Stage): Promise<void> {
   await page.close();
 }
 
+/**
+ * Leg 18: in Comment mode a canvas marks one thing, the element under the
+ * pointer (the owner, nightly 5450: hovering an element in Comment "also lit
+ * the frame's caption pink"). The canvas served through an origin that
+ * gives it the overlay, framed by a host the overlay hears, as a panel
+ * frames it: at rest in Interact the frame in view says so on its label
+ * (`selected-bg`); in Comment, with the pointer on a button in that frame,
+ * the overlay draws one target, over the button, and the label holds no
+ * fill and its words their own ink; back in Interact the label's mark is
+ * back and no target stands.
+ */
+async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
+  let hostOrigin = "";
+  const embed = embedOrigin(stage.port, () => [hostOrigin]);
+  const canvas = canvasUrl(
+    { ...stage, base: `http://127.0.0.1:${embed.port}` },
+    KIT_FILES,
+    KIT_SPEC
+  );
+  const host = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Host</title></head><body style="margin:0"><iframe title="Preview" src="${canvas.replaceAll("&", "&amp;")}" style="display:block;border:0;inline-size:100vw;block-size:100vh"></iframe></body></html>`,
+        { headers: { "content-type": "text/html; charset=utf-8" } }
+      ),
+  });
+  hostOrigin = `http://127.0.0.1:${host.port}`;
+  const page = await kit.page("desk");
+  try {
+    await page.goto(hostOrigin);
+    const frame = await until(
+      "the canvas's frame",
+      () =>
+        Promise.resolve(
+          page.frames().find((one) => one.url().includes("/@cawco/canvas"))
+        ),
+      Boolean,
+      30_000
+    );
+    if (!frame) {
+      kit.check("18: the canvas loads in its host's frame", false);
+      return;
+    }
+    await frame.waitForFunction(
+      () =>
+        !!document.querySelector("cawco-overlay") &&
+        !!document.querySelector(
+          ".cawco-frame[data-cawco-current] .cawco-frame-body button"
+        ) &&
+        !!(window as unknown as { __cawcoCanvas?: { report: unknown } })
+          .__cawcoCanvas?.report,
+      null,
+      { timeout: 60_000 }
+    );
+    const tell = (message: Record<string, unknown>) =>
+      page.evaluate((sent) => {
+        const view = document.querySelector("iframe")?.contentWindow;
+        view?.postMessage({ type: "cawco:hello" }, "*");
+        view?.postMessage(sent, "*");
+      }, message);
+    // The frame in view settles once the canvas has fitted its view.
+    await page.waitForTimeout(1500);
+    /** What the canvas marks: the overlay's targets standing, and the frame in view (its key, its label, its button). */
+    const read = () =>
+      frame.evaluate(() => {
+        const rects = [
+          ...(document
+            .querySelector("cawco-overlay")
+            ?.shadowRoot?.querySelectorAll<HTMLElement>(".rect") ?? []),
+        ]
+          .filter((one) => !one.hidden)
+          .map((one) => {
+            const box = one.getBoundingClientRect();
+            return { x: box.x, y: box.y, w: box.width, h: box.height };
+          });
+        const current = document.querySelector<HTMLElement>(
+          ".cawco-frame[data-cawco-current]"
+        );
+        const label = current?.querySelector<HTMLElement>(
+          ":scope > .cawco-frame-label"
+        );
+        const words = label?.querySelector<HTMLElement>(".cawco-frame-words");
+        const button = current
+          ?.querySelector<HTMLElement>(".cawco-frame-body button")
+          ?.getBoundingClientRect();
+        return {
+          key: current?.dataset.cawcoKey ?? null,
+          commenting: document.documentElement.hasAttribute(
+            "data-cawco-commenting"
+          ),
+          rects,
+          button: button && {
+            x: button.x,
+            y: button.y,
+            w: button.width,
+            h: button.height,
+          },
+          fill: label ? getComputedStyle(label).backgroundColor : null,
+          ink: words ? getComputedStyle(words).color : null,
+        };
+      });
+    const resting = await read();
+    await tell({ type: "cawco:mode", mode: "comment" });
+    const { button } = resting;
+    if (button) {
+      // The iframe stands at the page's origin: its px are the page's.
+      await page.mouse.move(button.x + button.w / 2, button.y + button.h / 2, {
+        steps: 4,
+      });
+    }
+    await page.waitForTimeout(600);
+    const commenting = await read();
+    await tell({ type: "cawco:mode", mode: "interact" });
+    await page.waitForTimeout(400);
+    const back = await read();
+    const clear = (colour: string | null) =>
+      colour === "rgba(0, 0, 0, 0)" || colour === "transparent";
+    const [over] = commenting.rects;
+    const onButton =
+      !!over &&
+      !!button &&
+      Math.abs(over.x - button.x) <= 4 &&
+      Math.abs(over.y - button.y) <= 4 &&
+      Math.abs(over.w - button.w) <= 8 &&
+      Math.abs(over.h - button.h) <= 8;
+    kit.check(
+      `18: in Comment a canvas marks one thing, the button under the pointer: one target over it (${commenting.rects.length} standing), the frame in view's label no fill (${commenting.fill}) and its words out of the selected ink (${commenting.ink}, in view ${resting.ink}); at rest in Interact its label says it is in view (${resting.fill}), and back in Interact it does again (${back.fill}) with no target standing`,
+      !!resting.key &&
+        commenting.key === resting.key &&
+        back.key === resting.key &&
+        !clear(resting.fill) &&
+        resting.rects.length === 0 &&
+        commenting.commenting &&
+        commenting.rects.length === 1 &&
+        onButton &&
+        clear(commenting.fill) &&
+        commenting.ink !== resting.ink &&
+        back.ink === resting.ink &&
+        !back.commenting &&
+        back.fill === resting.fill &&
+        back.rects.length === 0,
+      JSON.stringify({ resting, commenting, back })
+    );
+  } finally {
+    await page.close();
+    host.stop(true);
+    embed.stop(true);
+  }
+}
+
+/** `--leg comment-and-stray`: leg 18 alone, on the Svelte stage. */
+const ONLY_LEG = process.argv.includes("--leg")
+  ? process.argv[process.argv.indexOf("--leg") + 1]
+  : undefined;
+
 const spec: Spec = {
   name: "component-canvas",
   run: async (kit) => {
     const host = await buildStageHost();
     const svelte = await stageOf("svelte", host);
     try {
+      if (ONLY_LEG === "comment-and-stray") {
+        await commentMarksOne(kit, svelte);
+        return;
+      }
       await svelteKit(kit, svelte);
       await views(kit, svelte);
       await lazy(kit, svelte);
@@ -1527,6 +1698,7 @@ const spec: Spec = {
       await floor(kit, svelte);
       await daemonRender(kit, svelte);
       await endless(kit, svelte);
+      await commentMarksOne(kit, svelte);
     } finally {
       svelte.stop();
     }

@@ -1019,6 +1019,10 @@ function mode(next: PreviewMode, again: string | null = null) {
   pinLeads = false;
   paint();
   post("cawco:peek", { id: null });
+  // A component canvas's page hears it too (stage-host canvas runtime.ts):
+  // in Comment mode its frame-in-view mark stands down, so the one target
+  // drawn is the element under the pointer.
+  dispatchEvent(new CustomEvent("cawco:mode", { detail: { mode: next } }));
 }
 
 interface Fiber {

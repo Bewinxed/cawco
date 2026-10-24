@@ -211,7 +211,7 @@ async function overlayAnswer(
  * stage behind it; with `overlaid`, the overlay too, on every page it relays
  * (a machine's preview proxy, agent preview.ts), framed by `parents()`.
  */
-function embedOrigin(
+export function embedOrigin(
   stage: number,
   overlaid: (() => readonly string[]) | null = null
 ) {
