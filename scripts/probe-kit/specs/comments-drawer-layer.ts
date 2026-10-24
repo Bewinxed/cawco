@@ -31,6 +31,10 @@
  *    answer grows the transcript); after the drawer's round, closed again,
  *    the composer is back with its draft.
  * 4. No console error and no page error on any leg.
+ * 5. A cold load at 390 on each engine ({@link coldLoad}): from the
+ *    preview frame's first box, one height and, once risen, no move over
+ *    150 frames; the composer's pill grown after the sheet stands, and
+ *    back, the page's box is the one it first had.
  *
  * Playwright raises no on-screen keyboard: the keyboard-up read stands the
  * dashboard's own foreseen keyboard in for it (the visible area shrunk, the
@@ -559,6 +563,139 @@ const leg = async (
   await page.close();
 };
 
+/** How many frames the cold load's frame box is read over, from the frame's first. */
+const COLD_FRAMES = 150;
+/** How much the pill is grown by after the sheet stands, px. */
+const PILL_GROWTH = 48;
+
+/**
+ * A cold load on a phone with the preview open, then the pill's content
+ * changed after the sheet stands (cockpit's Mac WebKit run of the live
+ * dashboard: on one cold load the frame stood at 317, 519 tall, and moved to
+ * 266, 570 a few steps on, no keyboard up). A fresh page (its own context:
+ * no cache, nothing stored) opens the session, whose preview is open on the
+ * hub; from the first frame its preview's frame has a box, that box is read
+ * on each of {@link COLD_FRAMES} frames, and must hold still. Then the
+ * composer's pill grows by {@link PILL_GROWTH}px (a block put in it, as a
+ * row of attachments or a restored draft's lines would) and goes back: the
+ * frame's box is the one it first had at each read.
+ */
+const coldLoad = async (kit: Kit, url: string, engine: Engine) => {
+  const label = `${engine} 390×844 cold load`;
+  // The preview open on the hub, so the fresh page loads with it.
+  const opener = await kit.page("phone", { engine, theme: "light" });
+  await open(opener, url, COMPOSER);
+  await opener.locator('[data-slot="artifact-open"]').last().waitFor();
+  await settle(opener, 1500);
+  if ((await opener.locator(FRAME).count()) === 0) {
+    await opener.locator('[data-slot="artifact-open"]').last().click();
+    await pageFrame(opener);
+    await settle(opener, 600);
+  }
+  await opener.close();
+
+  const page = await kit.page("phone", { engine, theme: "light" });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error" && !kitsOwnMessage(message.text())) {
+      errors.push(`console: ${message.text()}`);
+    }
+  });
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  // Every frame from the preview frame's first box on: its box, in the page.
+  await page.waitForFunction(
+    (at) => !!document.querySelector(at)?.getBoundingClientRect().height,
+    FRAME,
+    { timeout: 60_000 }
+  );
+  const timeline = await page.evaluate(
+    ([at, count]) =>
+      new Promise<{ h: number; y: number }[]>((done) => {
+        const seen: { h: number; y: number }[] = [];
+        const read = () => {
+          const r = document.querySelector(at)?.getBoundingClientRect();
+          seen.push(r ? { y: r.y, h: r.height } : { y: -1, h: -1 });
+          if (seen.length < count) {
+            requestAnimationFrame(read);
+          } else {
+            done(seen);
+          }
+        };
+        read();
+      }),
+    [FRAME, COLD_FRAMES] as const
+  );
+  await pageFrame(page);
+  await stillWithin(page, SHEET);
+  const [first] = timeline;
+  const last = timeline.at(-1);
+  // The sheet comes up from the screen's foot as it opens (vaul's own
+  // rise), its frame keeping its height: the box holds still once it has
+  // risen, and never takes another height.
+  const heights = new Set(timeline.map((one) => Math.round(one.h)));
+  const settled = timeline.slice(
+    timeline.findIndex((one) => last && Math.abs(one.y - last.y) <= 0.5)
+  );
+  const moved = settled.filter(
+    (one) => !last || Math.abs(one.y - last.y) > 0.5
+  );
+  kit.check(
+    `${label}: from its first frame the preview's frame keeps one height, and once it has risen it holds still over ${COLD_FRAMES} frames`,
+    !!first && heights.size === 1 && moved.length === 0,
+    JSON.stringify({
+      first,
+      last,
+      heights: [...heights],
+      moved: moved.slice(0, 5),
+    })
+  );
+  const frame = await pageFrame(page);
+  const before = await pageBox(page, frame);
+  const pillPath = '[data-slot="leaf"] > [data-slot="dock"] [data-slot="lift"]';
+  const grow = (px: number) =>
+    page.evaluate(
+      ([lift, height]) => {
+        const pill = document
+          .querySelector(lift)
+          ?.parentElement?.querySelector(':scope > [data-slot="composer"]');
+        document.querySelector("[data-probe-grow]")?.remove();
+        if (pill && height > 0) {
+          const block = document.createElement("div");
+          block.dataset.probeGrow = "";
+          block.style.blockSize = `${height}px`;
+          pill.prepend(block);
+        }
+        return pill?.getBoundingClientRect().height ?? null;
+      },
+      [pillPath, px] as const
+    );
+  const pillBefore = await grow(0);
+  const pillGrown = await grow(PILL_GROWTH);
+  await settle(page, 600);
+  await stillWithin(page, SHEET);
+  const grown = await pageBox(page, frame);
+  await grow(0);
+  await settle(page, 600);
+  await stillWithin(page, SHEET);
+  const back = await pageBox(page, frame);
+  kit.check(
+    `${label}: the pill grown by ${PILL_GROWTH}px after the sheet stands, and back, the page's box is the one it first had`,
+    pillBefore !== null &&
+      pillGrown !== null &&
+      pillGrown - pillBefore >= PILL_GROWTH - 1 &&
+      same(grown, before) &&
+      same(back, before),
+    JSON.stringify({ pillBefore, pillGrown, before, grown, back })
+  );
+  kit.check(
+    `${label}: no console error and no page error`,
+    errors.length === 0,
+    errors.slice(0, 6).join(" | ")
+  );
+  await page.close();
+};
+
 const probe = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -598,6 +735,10 @@ const probe = async (kit: Kit) => {
       view,
       `${engine} ${view === "phone" ? "390×844" : "680×900"}`
     );
+  }
+  for (const engine of ["chromium", "webkit"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
+    await coldLoad(kit, url, engine);
   }
 };
 

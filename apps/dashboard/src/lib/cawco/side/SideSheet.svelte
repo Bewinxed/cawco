@@ -104,7 +104,9 @@
    *   composer shows over its pill comes and goes under the sheet (the
    *   suggestions filling their row as a turn ends, a delegate's chip in the
    *   tray row), and counted, each moved the sheet and the page in it 90px
-   *   while the person read it (decision-pages (q)).
+   *   while the person read it (decision-pages (q)). Read once, as the sheet
+   *   first stands open, and kept while it is (`pillFixed`): a late change
+   *   in the pill itself moves no open sheet either.
    * - `lower`, where it opens in a desk's pane under 900px, and while an
    *   ask is up: its floor the composer's drawn top, 60% of the visible
    *   height or all the room above the composer. The composer's room under
@@ -181,6 +183,51 @@
       } = atRest);
     }
     return true;
+  }
+  /**
+   * A phone's open stop as its sheet first stood: the pill's room and the
+   * room above it, read from the first frame the sheet stands in with the
+   * pill drawn, and kept while the sheet is open. A pill that settled later
+   * moved an open sheet and the page in it: on a cold load the frame stood
+   * at 317 (519 tall) and jumped to 266 (570) a few steps on, with no
+   * keyboard up (cockpit's Mac WebKit run of the live dashboard at
+   * 390×844). Read again only as the visible area takes another size with
+   * no keyboard up (a rotation, a resized window), and as the sheet opens
+   * anew.
+   */
+  let pillFixed: {
+    abovePill: number;
+    pillRoom: number;
+    viewportHeight: number;
+    width: number;
+  } | null = null;
+  $effect(() => {
+    if (!open) {
+      pillFixed = null;
+    }
+  });
+  /** The pill's room and the room above it, kept as the sheet first stood on a phone (`pillFixed`), else read now. */
+  function placePill(
+    composer: HTMLElement | null | undefined,
+    composerTop: number,
+    floor: number,
+    safeTop: number
+  ) {
+    const kept =
+      covers.current &&
+      !keyboardUp() &&
+      pillFixed?.width === innerWidth &&
+      pillFixed.viewportHeight === viewportHeight;
+    if (kept && pillFixed) {
+      ({ abovePill, pillRoom } = pillFixed);
+      return;
+    }
+    const pillTop = composer ? drawnTop(composer, PILL) : composerTop;
+    abovePill = Math.min(pillTop, floor) - safeTop;
+    pillRoom = floor - Math.min(pillTop, floor);
+    if (open && covers.current && !keyboardUp() && Number.isFinite(pillTop)) {
+      pillFixed = { abovePill, pillRoom, viewportHeight, width: innerWidth };
+    }
   }
   /** vaul reads a px snap point with parseInt: every one is whole. */
   const px = (height: number) => `${Math.round(height)}px`;
@@ -554,9 +601,7 @@
       hostHeight = floor - safeTop;
       aboveComposer = composerTop - safeTop;
       composerRoom = floor - composerTop;
-      const pillTop = composer ? drawnTop(composer, PILL) : composerTop;
-      abovePill = Math.min(pillTop, floor) - safeTop;
-      pillRoom = floor - Math.min(pillTop, floor);
+      placePill(composer, composerTop, floor, safeTop);
       if (!keyboardUp()) {
         atRest = {
           hostHeight,
@@ -568,7 +613,10 @@
         };
       }
     };
-    measure();
+    // What a measure reads (an ask, the phone's line, the open prop, the
+    // kept pill) is read, not watched: this effect stands for the composer
+    // and the host alone, and its observers stay as they are.
+    untrack(measure);
     // A resize is read in the frame after it too (frameObserver): measured
     // in the observer's callback, the sheet's new height (its host's)
     // resized the pane in it inside that delivery, at a depth the delivery
