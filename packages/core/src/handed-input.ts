@@ -1,10 +1,14 @@
 /**
  * What a session hands another as files in its `$TMPDIR/inputs/`: one entry
- * of `delegate`'s and `handoff`'s `inputs`. A path string is a file on the caller's machine,
- * admitted and copied there (agent inputs.ts); every other entry names
+ * of `delegate`'s and `handoff`'s `inputs`. A path string is a file or a
+ * folder on the caller's machine, admitted file by file and copied there, a
+ * folder as its tree (agent inputs.ts); every other entry names
  * something the hub already holds, or carries its bytes, and the hub writes
  * it as a file itself (hub handed-inputs.ts `createHandedInputs`), refused in
  * words when the caller may not read it or it names nothing.
+ *
+ * An id an entry names is read as every tool reads one (hub handles.ts):
+ * whole, by its short id, or by a handle like `cockpit#5a167bde`.
  *
  * - `report`: a work item's report, by its item id or its session's;
  * - `artifact`: a page or decision page with its picks and notes, a preview
@@ -16,8 +20,9 @@
  * - `attachment`: a file or picture a session's messages carried, by its id
  *   or its name as Files lists it ("Picture 2"), the caller's own session's
  *   unless `session` names another of its tree;
- * - `assets`: the files an item's `outputs` put in its project's folder, by
- *   its item id or its session's;
+ * - `assets`: the files an item's `outputs` put in its project's folder, at
+ *   any depth and landing with their folders, by its item id or its
+ *   session's;
  * - `text`: words the caller writes, under `name`;
  * - `blob`: bytes the caller holds, base64, under `name`.
  */
@@ -71,7 +76,7 @@ export type HeldInput = Exclude<HandedInput, string>;
 
 /** Every entry's shape, in the words a refusal shows. */
 export const HANDED_SHAPES =
-  "an absolute path, or one of { report: id }, { artifact: id }, { pins: artifact id }, { find: ref }, { attachment: id or name, session?: id }, { assets: item id }, { text, name }, { blob: base64, name }";
+  "an absolute path to a file or folder, or one of { report: id }, { artifact: id }, { pins: artifact id }, { find: ref }, { attachment: id or name, session?: id }, { assets: item id }, { text, name }, { blob: base64, name }";
 
 /**
  * `value` as {@link HandedInput}s, or why it is none: each entry's place

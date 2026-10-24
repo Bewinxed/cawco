@@ -30,6 +30,7 @@ import {
   type HandedReceiver,
 } from "./artifacts/service";
 import type { WorkItemRow } from "./db";
+import { byHandle } from "./handles";
 import { mediaFilePath, storedFilePath } from "./media";
 import { FolderRefusal, readFolderBytes } from "./project-folder";
 
@@ -42,6 +43,7 @@ export interface HandedFile {
   bytes: Buffer | ((receiver: HandedReceiver) => Promise<Buffer>);
   /** What it is, for the receiver's opening line: "report of Fix the tray (1a2b3c4d)". */
   from: string;
+  /** Where it lands under `inputs/`: a file name, or an item's asset's path in its project's folder. */
   name: string;
 }
 
@@ -52,14 +54,15 @@ export interface HandedInputDeps {
   attachments: (instanceId: string) => Promise<SessionAttachment[]>;
   /** The turns around a `find` hit, as `find` answers them detailed (find-tool.ts): the hub's whole record. */
   find: (actor: InstanceRow, input: { around: string }) => Promise<unknown>;
-  /** Every file under a folder of a project's folder, by path from its root. */
+  /** Every file at any depth under a folder of a project's folder, by path from its root; none when it is not there. */
   folderFiles: (projectId: string, dir: string) => Promise<string[]>;
   instance: (id: string) => InstanceRow | undefined;
   /** The folder an item's outputs landed in (work-items.ts `outputsFolder`). */
   outputsFolder: (item: WorkItemRow) => string;
+  /** The work items the caller reads, newest first: those of its delegation tree and of its project. */
+  reachable: (caller: InstanceRow) => WorkItemRow[];
   /** The sessions of the caller's delegation tree (delegation-tree.ts `treeSessions`). */
   tree: (caller: InstanceRow) => Set<string>;
-  workItem: (id: string) => WorkItemRow | undefined;
   /** A text file of a workspace, by path from its clone's root, read inside its boundary; throws in the machine's words. */
   workspaceText: (workspaceId: string, path: string) => Promise<string>;
 }
@@ -95,31 +98,49 @@ const readOrNull = (path: string): Buffer | null => {
 };
 
 export const createHandedInputs = (deps: HandedInputDeps) => {
-  /** Whether `caller` reads what `item` did: one of its tree's, or of its project. */
-  const reaches = (caller: InstanceRow, item: WorkItemRow): boolean => {
-    if (item.projectId && item.projectId === caller.projectId) {
-      return true;
-    }
-    const tree = deps.tree(caller);
-    return tree.has(item.parentInstanceId) || tree.has(item.instanceId);
-  };
-
-  /** The item `id` names, by its own id or its session's; refused when none, or not the caller's to read. */
-  const itemOf = (
-    caller: InstanceRow,
-    id: string,
-    kind: string
-  ): WorkItemRow => {
-    const session = deps.instance(id);
-    const item =
-      deps.workItem(id) ??
-      (session?.workItemId ? deps.workItem(session.workItemId) : undefined);
-    if (!(item && reaches(caller, item))) {
+  /** `read` through the one way a tool reads an id (handles.ts), its refusal in the input's words. */
+  const handled = <T>(entry: string, read: () => T): T => {
+    try {
+      return read();
+    } catch (error) {
       throw new HandedInputRefusal(
-        `{ ${kind}: "${id}" } names no work item of your delegation tree or project; name one by its full work item id or its session's, as delegate_list shows them`
+        `${entry}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
       );
     }
-    return item;
+  };
+
+  /**
+   * The item `asked` names among those the caller reads ({@link
+   * HandedInputDeps.reachable}): by its own id or its session's, whole or
+   * by handle (handles.ts); refused when none or several are.
+   */
+  const itemOf = (
+    caller: InstanceRow,
+    asked: string,
+    kind: string
+  ): WorkItemRow => {
+    // Each item by its id and by its session's; a session's newest item stands for it.
+    const named = new Map<string, WorkItemRow>();
+    for (const item of deps.reachable(caller)) {
+      for (const key of [item.id, item.instanceId]) {
+        if (key && !named.has(key)) {
+          named.set(key, item);
+        }
+      }
+    }
+    return handled(`{ ${kind}: "${asked}" }`, () =>
+      byHandle(
+        asked,
+        [...named],
+        {
+          id: ([key]) => key,
+          said: ([key, item]) =>
+            `${item.title} (${key === item.id ? "item" : "session"} ${short(key)})`,
+        },
+        "work item"
+      )
+    )[1];
   };
 
   const report = (caller: InstanceRow, id: string): HandedFile[] => {
@@ -273,22 +294,30 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       : `its picture is at ${src.slice(0, 80)}, which the hub does not hold`;
   };
 
-  /** The session whose attachments `entry` reads: the caller's own, or `session` of its tree. */
+  /** The session whose attachments `entry` reads: the caller's own, or `session` of its tree, whole or by handle (handles.ts). */
   const attachmentHolder = (
     caller: InstanceRow,
     session: string | undefined,
     entry: string
   ): InstanceRow => {
-    const holder = session ? deps.instance(session) : caller;
-    if (!(
-      holder &&
-      (holder.id === caller.id || deps.tree(caller).has(holder.id))
-    )) {
-      throw new HandedInputRefusal(
-        `${entry}: session ${session} is not of your delegation tree; name your own (leave session out) or one of your delegates'`
-      );
+    if (!session) {
+      return caller;
     }
-    return holder;
+    const tree = [caller.id, ...deps.tree(caller)].flatMap(
+      (id) => deps.instance(id) ?? []
+    );
+    return handled(entry, () =>
+      byHandle(
+        session,
+        [...new Map(tree.map((row) => [row.id, row])).values()],
+        {
+          id: (row) => row.id,
+          said: (row) =>
+            `${row.title ?? row.derivedTitle ?? "untitled"} (${short(row.id)})`,
+        },
+        "session of your delegation tree"
+      )
+    );
   };
 
   /** `holder`'s attachment `named` names, by its id or its name as Files lists it, newest first. */
@@ -372,33 +401,39 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       );
     }
     const { projectId } = item;
-    const paths = await deps.folderFiles(projectId, folder);
+    const folderRead = async <T>(read: () => Promise<T>): Promise<T> => {
+      try {
+        return await read();
+      } catch (error) {
+        if (error instanceof FolderRefusal) {
+          throw new HandedInputRefusal(
+            `{ assets: "${id}" }: ${error.message}`,
+            { cause: error }
+          );
+        }
+        throw error;
+      }
+    };
+    const paths = await folderRead(() => deps.folderFiles(projectId, folder));
     if (paths.length === 0) {
       throw new HandedInputRefusal(
-        `{ assets: "${id}" }: ${folder}/ in its project's folder is empty; its outputs land there once it has finished`
+        `{ assets: "${id}" }: ${folder}/ in its project's folder holds no file at any depth; its outputs land there once it has finished`
       );
     }
+    // Each lands at its path in the project's folder, its folders kept:
+    // `inputs/assets/<item>/design-briefs/brief.md`.
     return Promise.all(
-      paths.map(async (path) => {
-        try {
-          const { bytes } = await readFolderBytes(projectId, path, ASSET_LIMIT);
-          return {
-            name: `assets-${inputFileName(path.slice(folder.length + 1))}`,
-            bytes: Buffer.from(bytes),
-            from: `${path} in the project's folder`,
-          };
-        } catch (error) {
-          if (error instanceof FolderRefusal) {
-            throw new HandedInputRefusal(
-              `{ assets: "${id}" }: ${error.message}`,
-              {
-                cause: error,
-              }
-            );
-          }
-          throw error;
-        }
-      })
+      paths.map(async (path) => ({
+        name: path,
+        bytes: Buffer.from(
+          (
+            await folderRead(() =>
+              readFolderBytes(projectId, path, ASSET_LIMIT)
+            )
+          ).bytes
+        ),
+        from: `${path} in the project's folder`,
+      }))
     );
   };
 

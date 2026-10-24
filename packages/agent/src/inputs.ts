@@ -1,18 +1,20 @@
 /**
  * A delegate's inputs (core `CONTROL_INPUTS_ADMIT`, `CONTROL_INPUTS_COPY`,
- * `CONTROL_INPUTS_READ`, `CONTROL_INPUTS_WRITE`): files its parent names by
- * path on its own machine, which no boundary lets the delegate read where
- * they are (a journal excerpt, a log, a transcript). Admitted on the
+ * `CONTROL_INPUTS_READ`, `CONTROL_INPUTS_WRITE`): files and folders its
+ * parent names by path on its own machine (a folder lands as its tree),
+ * which no boundary lets the delegate read where they are (a journal
+ * excerpt, a log, a transcript). Admitted on the
  * parent's machine, refused there in words when one may not leave it, and
  * written into the delegate's `$TMPDIR/inputs/` before the brief that names
  * them: copied there by this machine when the workspace is on it too, read
  * here and written by the workspace's machine when it is on another.
  */
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import {
   access,
   lstat,
   mkdir,
+  readdir,
   readFile,
   readlink,
   realpath,
@@ -44,9 +46,17 @@ const MIB = 1024 * 1024;
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 
-/** A name an input may land under in `inputs/`: one path component. */
+/**
+ * A name an input may land under in `inputs/`: a relative path of one or
+ * more components (an item's assets keep their folders), none empty, `.` or
+ * `..`.
+ */
 const nameProblem = (name: string): boolean =>
-  !name || name === "." || name === ".." || name.includes("/");
+  !name ||
+  name.includes("\\") ||
+  name
+    .split("/")
+    .some((component) => !component || component === "." || component === "..");
 
 /** One input that may go, before its bytes are read. */
 interface Admitted {
@@ -129,34 +139,27 @@ const unresolved = async (
   );
 };
 
-/**
- * Why `named` may not go as an input, or what it is when it may: a file
- * that exists, outside what every boundary hides but its project's folder
- * (workspace-policy.ts `inputDenial`), and, for a parent that runs in a
- * workspace, inside its own clone, scratch dir or project folder (`roots`):
- * it hands on only what it reads itself.
- */
-const admit = async (
+/** `named` resolved and gated ({@link gate}), with what it is; or why it may not go. */
+const resolved = async (
   named: string,
   reach: Reach
-): Promise<Admitted | string> => {
-  if (!isAbsolute(named)) {
-    return `${named} is not an absolute path; name each input by its absolute path on your machine`;
-  }
+): Promise<{ info: Stats; real: string } | string> => {
   const real = await realpath(named).catch(
     (error: NodeJS.ErrnoException) => error
   );
   if (typeof real !== "string") {
     return unresolved(named, real, reach);
   }
-  const denied = gate(named, real, reach);
-  if (denied) {
-    return denied;
-  }
-  const info = await stat(real);
-  if (!info.isFile()) {
-    return `${named} is ${info.isDirectory() ? "a folder; name the files in it" : "not a file"}`;
-  }
+  return gate(named, real, reach) ?? { real, info: await stat(real) };
+};
+
+/** A file `named` (at `real`) admitted under `name`, or why its permissions keep it. */
+const readableFile = async (
+  named: string,
+  real: string,
+  info: Stats,
+  name: string
+): Promise<Admitted | string> => {
   const unreadable = await access(real, constants.R_OK).then(
     () => false,
     (error: NodeJS.ErrnoException) => error.code === "EACCES"
@@ -165,7 +168,94 @@ const admit = async (
     return `${named} exists but its permissions don't let you read it; make it readable (chmod u+r), or copy it somewhere you can read and name the copy`;
   }
   // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
-  return { named, real, name: basename(named), mode: info.mode & 0o777 };
+  return { named, real, name, mode: info.mode & 0o777 };
+};
+
+/**
+ * Every file of folder `named` (at `real`), at any depth, landing at
+ * `<folder's name>/<its path in it>`: each judged as a file named alone is
+ * ({@link resolved}, so a link in it to what the boundary hides is refused
+ * as that file would be), a folder in it walked, a link in it to a folder
+ * refused. Stops past {@link INPUTS_COUNT_LIMIT} files; refused when it
+ * holds none.
+ */
+const admitFolder = async (
+  named: string,
+  real: string,
+  reach: Reach
+): Promise<Admitted[] | string> => {
+  const files: Admitted[] = [];
+  const walk = async (rel: string): Promise<string | undefined> => {
+    const entries = (
+      await readdir(join(real, rel), { withFileTypes: true })
+    ).toSorted((a, b) => (a.name < b.name ? -1 : Number(a.name > b.name)));
+    for (const entry of entries) {
+      const path = rel ? `${rel}/${entry.name}` : entry.name;
+      const why = entry.isDirectory()
+        ? // biome-ignore lint/performance/noAwaitInLoops: depth first in name order, the first refusal the answer
+          await walk(path)
+        : await inFolder(join(named, path), `${basename(named)}/${path}`);
+      if (why) {
+        return why;
+      }
+    }
+  };
+  const inFolder = async (
+    file: string,
+    name: string
+  ): Promise<string | undefined> => {
+    if (files.length >= INPUTS_COUNT_LIMIT) {
+      return `${named} holds more than ${INPUTS_COUNT_LIMIT} files, the most one delegation carries; name the files or a narrower folder`;
+    }
+    const one = await resolved(file, reach);
+    if (typeof one === "string") {
+      return one;
+    }
+    if (!one.info.isFile()) {
+      return `${file} is ${one.info.isDirectory() ? "a link to a folder; name the folder it leads to" : "not a file"}`;
+    }
+    const admitted = await readableFile(file, one.real, one.info, name);
+    if (typeof admitted === "string") {
+      return admitted;
+    }
+    files.push(admitted);
+  };
+  const why = await walk("");
+  if (why) {
+    return why;
+  }
+  return files.length > 0
+    ? files
+    : `${named} is a folder with no file in it at any depth`;
+};
+
+/**
+ * Why `named` may not go as an input, or the files it is when it may: a
+ * file, or a folder's files ({@link admitFolder}), that exist, outside what
+ * every boundary hides but its project's folder (workspace-policy.ts
+ * `inputDenial`), and, for a parent that runs in a workspace, inside its
+ * own clone, scratch dir or project folder (`roots`): it hands on only what
+ * it reads itself.
+ */
+const admit = async (
+  named: string,
+  reach: Reach
+): Promise<Admitted[] | string> => {
+  if (!isAbsolute(named)) {
+    return `${named} is not an absolute path; name each input by its absolute path on your machine`;
+  }
+  const one = await resolved(named, reach);
+  if (typeof one === "string") {
+    return one;
+  }
+  if (one.info.isDirectory()) {
+    return admitFolder(named, one.real, reach);
+  }
+  if (!one.info.isFile()) {
+    return `${named} is not a file or a folder`;
+  }
+  const file = await readableFile(named, one.real, one.info, basename(named));
+  return typeof file === "string" ? file : [file];
 };
 
 /**
@@ -187,7 +277,7 @@ const admitAll = async (
     throw new Error("inputs must be a list of absolute paths");
   }
   if (paths.length > INPUTS_COUNT_LIMIT) {
-    return `inputs names ${paths.length} files; it stops at ${INPUTS_COUNT_LIMIT}`;
+    return `inputs names ${paths.length} paths; it stops at ${INPUTS_COUNT_LIMIT}`;
   }
   if (!(project === null || typeof project === "string")) {
     throw new Error("an inputs' project is a project id or null");
@@ -204,27 +294,50 @@ const admitAll = async (
       ]
     : undefined;
   const reach = { opened, roots };
-  const admitted: Admitted[] = [];
-  const named = new Map<string, string>();
-  let total = 0;
+  const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
   for (const path of paths as string[]) {
     // biome-ignore lint/performance/noAwaitInLoops: one input at a time, the first refusal is the answer
-    const one = await admit(path, reach);
-    if (typeof one === "string") {
-      return one;
+    const files = await admit(path, reach);
+    const why = typeof files === "string" ? files : await counted(tally, files);
+    if (why) {
+      return why;
     }
-    const twin = named.get(one.name);
+  }
+  return tally.admitted;
+};
+
+/** What the inputs admitted so far come to: the files, each by where it lands, and their bytes. */
+interface Tally {
+  admitted: Admitted[];
+  bytes: number;
+  named: Map<string, string>;
+}
+
+/**
+ * `files` added to `tally` one by one (a folder's each counts), or why one
+ * may not go: two that would land under one name, more than {@link
+ * INPUTS_COUNT_LIMIT} files or {@link INPUTS_LIMIT_BYTES} together.
+ */
+const counted = async (
+  tally: Tally,
+  files: Admitted[]
+): Promise<string | undefined> => {
+  for (const one of files) {
+    const twin = tally.named.get(one.name);
     if (twin) {
       return `${twin} and ${one.named} would both land as ${one.name} in $TMPDIR/inputs/; copy one to another name`;
     }
-    named.set(one.name, one.named);
-    total += (await stat(one.real)).size;
-    if (total > INPUTS_LIMIT_BYTES) {
+    tally.named.set(one.name, one.named);
+    if (tally.named.size > INPUTS_COUNT_LIMIT) {
+      return `the inputs come to more than ${INPUTS_COUNT_LIMIT} files together, the most one delegation carries; name fewer files or a narrower folder`;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: the running total refuses at the first file past it
+    tally.bytes += (await stat(one.real)).size;
+    if (tally.bytes > INPUTS_LIMIT_BYTES) {
       return `the inputs come to more than ${INPUTS_LIMIT_BYTES / MIB} MiB together, the most one delegation carries; hand larger data on through git or a check with machine`;
     }
-    admitted.push(one);
+    tally.admitted.push(one);
   }
-  return admitted;
 };
 
 const namedOf = ({ name, named, mode }: Admitted): InputNamed => ({
@@ -315,12 +428,36 @@ export const writeInputs = async (
 };
 
 /**
+ * The folder `rel` (an input's folders, `.` for none) under `own`, the
+ * inputs folder's real path, made one folder at a time: what stands where a
+ * folder goes and is none (a file, a link) is taken away first, so no
+ * folder is made through a link.
+ */
+const ownFolder = async (own: string, rel: string): Promise<string> => {
+  let at = own;
+  for (const component of rel === "." ? [] : rel.split("/")) {
+    at = join(at, component);
+    // biome-ignore lint/performance/noAwaitInLoops: each folder stands inside the one before it
+    const found = await lstat(at).catch(() => undefined);
+    if (found?.isDirectory()) {
+      continue;
+    }
+    if (found) {
+      await rm(at, { force: true });
+    }
+    await mkdir(at, { mode: 0o700 });
+  }
+  return at;
+};
+
+/**
  * Each input written into the workspace's scratch dir under {@link
- * INPUTS_DIR}, replacing one of its name, and readable by its owner at
- * least. The workspace writes its scratch dir, so nothing there is followed:
- * a link at `inputs` is taken away, the folder's real path is checked before
- * each file, and each file is written to a new name and renamed over the old
- * one (state-file.ts).
+ * INPUTS_DIR}, at its name (a path when it keeps its folders), replacing
+ * one there, and readable by its owner at least. The workspace writes its
+ * scratch dir, so nothing there is followed: a link at `inputs` or at any
+ * folder under it is taken away, each file's folder's real path is checked
+ * before it is written, and each file is written to a new name and renamed
+ * over the old one (state-file.ts).
  */
 const writeInto = async (
   ref: unknown,
@@ -347,8 +484,14 @@ const writeInto = async (
         `${dir} is no longer workspace ${ref.id}'s own inputs folder, so nothing more was written there`
       );
     }
+    const folder = await ownFolder(own, dirname(file.name));
+    if ((await realpath(folder)) !== folder) {
+      throw new Error(
+        `${folder} is no longer inside workspace ${ref.id}'s own inputs folder, so nothing more was written there`
+      );
+    }
     await writeStateFile(
-      join(dir, file.name),
+      join(folder, basename(file.name)),
       await file.bytes(),
       // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
       { inPlace: true, mode: (file.mode & 0o777) | 0o600 }

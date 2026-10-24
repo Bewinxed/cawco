@@ -137,6 +137,7 @@ import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import {
+  type ArtifactNamed,
   type BuiltProgram,
   mergeProgram,
   PROGRAM_FILE,
@@ -1478,7 +1479,9 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     name: string,
     from: PageFrom,
-    keep: boolean
+    keep: boolean,
+    /** The artifact a program's Canvas or Preview names, whole (`whole`). */
+    artifact: ArtifactNamed
   ) => Promise<
     | { html: string; program?: BuiltProgram }
     | { refused: string; status: ArtifactRefusal["status"] }
@@ -3096,7 +3099,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): Promise<{ html: string; program?: BuiltProgram }> => {
     let page: Awaited<ReturnType<ArtifactServiceDeps["page"]>>;
     try {
-      page = await deps.page(instance, name, from, keep);
+      page = await deps.page(instance, name, from, keep, (asked) =>
+        whole(instance, asked)
+      );
     } catch (error) {
       throw error instanceof ProgramRefusal ? refusedProgram(error) : error;
     }

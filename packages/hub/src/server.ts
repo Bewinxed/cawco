@@ -616,6 +616,7 @@ import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { undoable } from "./db/trash";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
+  type ArtifactNamed,
   type BuiltProgram,
   buildProgram,
   type ImageRead,
@@ -12328,7 +12329,8 @@ export const createServer = (
   const buildArtifactPage = async (
     row: InstanceRow,
     name: string,
-    from: PageFrom
+    from: PageFrom,
+    artifact: ArtifactNamed
   ): Promise<BuiltArtifactPage> => {
     const folder = `decisions/${name}`;
     const program = await programFrom(row, folder, from);
@@ -12337,8 +12339,10 @@ export const createServer = (
     }
     if (program) {
       // A refusal of the program's is thrown, and answered by the service.
-      const built = await buildProgram(program.text, (file) =>
-        programImage(row, file, program)
+      const built = await buildProgram(
+        program.text,
+        (file) => programImage(row, file, program),
+        artifact
       );
       return { html: built.html, program: built };
     }
@@ -12365,9 +12369,10 @@ export const createServer = (
     row: InstanceRow,
     name: string,
     from: PageFrom,
-    keep: boolean
+    keep: boolean,
+    artifact: ArtifactNamed
   ): Promise<BuiltArtifactPage> => {
-    const built = await buildArtifactPage(row, name, from);
+    const built = await buildArtifactPage(row, name, from, artifact);
     if ("refused" in built || !keep) {
       return built;
     }
@@ -24450,27 +24455,40 @@ export const createServer = (
       return attachmentsOfPages(read.pages);
     },
     find: (actor, input) => findTool.call(actor, input, "detailed"),
-    folderFiles: (projectId, dir) => {
-      const walk = async (at: string): Promise<string[]> =>
-        (
-          await Promise.all(
-            (await folderFileNames(projectId, at)).map(async (name) => {
-              const path = `${at}/${name}`;
-              // A file is no folder to list (ENOTDIR): it is one of them.
-              const isFolder = await folderFileNames(projectId, path).then(
-                () => true,
-                () => false
-              );
-              return isFolder ? walk(path) : [path];
-            })
-          )
-        ).flat();
-      return walk(dir);
+    // The folder's own listing, every depth: each entry says whether it is a
+    // file or a folder. (Names read of a file are none, not a refusal: a walk
+    // that took a refusal for a file took every file for an empty folder.)
+    folderFiles: async (projectId, dir) => {
+      const listed = await listFolder(projectId, dir, true).catch(
+        (error: unknown) => {
+          if (error instanceof FolderRefusal && error.status === 404) {
+            return null;
+          }
+          throw error;
+        }
+      );
+      if (listed?.truncated) {
+        throw new FolderRefusal(
+          413,
+          `${dir}/ holds more entries than one listing reads; hand its files by path`
+        );
+      }
+      return (listed?.entries ?? []).flatMap((entry) =>
+        entry.kind === "file" ? [entry.path] : []
+      );
     },
     instance: (id) => db.getInstancesByIds([id])[0],
     outputsFolder,
+    reachable: (caller) =>
+      [
+        ...new Map(
+          [
+            ...db.workItemsOfParents([...treeSessions(db, caller)]),
+            ...(caller.projectId ? db.projectWorkItems(caller.projectId) : []),
+          ].map((item) => [item.id, item])
+        ).values(),
+      ].toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
     tree: (caller) => treeSessions(db, caller),
-    workItem: (id) => db.workItem(id),
     // Read inside the workspace's boundary, as its own sessions read it.
     workspaceText: async (workspaceId, path) => {
       const [workspace] = db.workspacesNamed(workspaceId);

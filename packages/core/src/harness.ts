@@ -2483,7 +2483,7 @@ export interface InputNamed {
   from: string;
   /** Its permission bits. */
   mode: number;
-  /** Its file name, as it lands in `$TMPDIR/inputs/`. */
+  /** Where it lands under `$TMPDIR/inputs/`: its file name, or a relative path when it keeps its folders (an item's assets). */
   name: string;
 }
 

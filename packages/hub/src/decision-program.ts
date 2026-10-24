@@ -26,11 +26,7 @@
  */
 
 import { type ProgramRead, readProgram } from "@cawco/core/decisions";
-import {
-  AFTER_REF,
-  ARTIFACT_ID,
-  DECISION_ID,
-} from "@cawco/core/decisions-library";
+import { AFTER_REF, DECISION_ID } from "@cawco/core/decisions-library";
 import spec from "@cawco/core/decisions-spec";
 import { named, SANS_FAMILY, undrawn } from "@cawco/core/house-faces";
 import {
@@ -327,23 +323,54 @@ const afterProblems = (
         ];
   });
 
-/** What its media name: an artifact's id for each Canvas and Preview, a file for each Image. */
-const mediaProblems = (read: ProgramRead): string[] => [
-  ...read.artifacts.flatMap(({ component, id }) =>
-    ARTIFACT_ID.test(id)
-      ? []
-      : [
-          `${component}("${id}") names no artifact: pass the id artifact_create answered.`,
-        ]
-  ),
-  ...read.images.flatMap((file) =>
+/**
+ * The artifact an id names, whole: the artifacts service's resolver
+ * (service.ts `whole`, handles.ts), throwing in words when it names none or
+ * several.
+ */
+export type ArtifactNamed = (asked: string) => string;
+
+/** What its Images name: a file each. */
+const mediaProblems = (read: ProgramRead): string[] =>
+  read.images.flatMap((file) =>
     file && !file.includes("..")
       ? []
       : [
           `Image("${file}"): name a file in your work folder, or an absolute path.`,
         ]
-  ),
-];
+  );
+
+/**
+ * `program` with each Canvas and Preview naming its artifact by its whole
+ * id, as `artifact` resolves the id written (a handle, a name), and why one
+ * names none. With no resolver (a check of the program alone) the ids
+ * stand as written.
+ */
+const wholeArtifacts = (
+  program: string,
+  read: ProgramRead,
+  artifact: ArtifactNamed | undefined
+): { problems: string[]; program: string } => {
+  const problems: string[] = [];
+  let whole = program;
+  for (const { component, id } of artifact ? read.artifacts : []) {
+    let full: string;
+    try {
+      full = (artifact as ArtifactNamed)(id);
+    } catch (error) {
+      problems.push(
+        `${component}("${id}"): ${error instanceof Error ? error.message : String(error)}`
+      );
+      continue;
+    }
+    if (full !== id) {
+      whole = whole
+        .replaceAll(JSON.stringify(id), JSON.stringify(full))
+        .replaceAll(`'${id}'`, `'${full}'`);
+    }
+  }
+  return { problems, program: whole };
+};
 
 /** Its ids, `after`s and media, as picks and the graph need them. */
 const idProblems = (read: ProgramRead): string[] => {
@@ -428,9 +455,13 @@ export const unclosedProblem = (text: string): string | null => {
 
 /**
  * `raw` as a decision page's program, or a {@link ProgramRefusal} with every
- * reason: its size and code first, then the parser's mistakes, then its ids.
+ * reason: its size and code first, then the parser's mistakes, then its ids,
+ * each Canvas's and Preview's resolved whole by `artifact` when given.
  */
-export const checkProgram = (raw: string): CheckedProgram => {
+export const checkProgram = (
+  raw: string,
+  artifact?: ArtifactNamed
+): CheckedProgram => {
   const program = `${raw.trim()}\n`;
   if (program.length > PROGRAM_MAX) {
     refuse([
@@ -495,13 +526,17 @@ export const checkProgram = (raw: string): CheckedProgram => {
     refuse(unsafe);
   }
   const read = readProgram(result.root);
-  const ids = idProblems(read);
+  const whole = wholeArtifacts(program, read, artifact);
+  const ids = [...idProblems(read), ...whole.problems];
   if (ids.length > 0) {
     refuse(ids);
   }
   return {
-    program,
-    read,
+    program: whole.program,
+    read:
+      whole.program === program
+        ? read
+        : readProgram(parser.parse(whole.program).root),
     dropped: [
       ...new Set(
         result.meta.errors
@@ -598,15 +633,17 @@ export type ImageRead = { bytes: Uint8Array } | { problem: string };
 const FILE_NAME = /[^A-Za-z0-9._-]+/g;
 
 /**
- * `raw` checked and built: each file its Images name read with `image`
+ * `raw` checked and built: each Canvas's and Preview's artifact resolved
+ * whole by `artifact`, each file its Images name read with `image`
  * (refused, every reason at once, when one can't be), and the host page
  * around the program naming each by its address beside the page.
  */
 export const buildProgram = async (
   raw: string,
-  image: (file: string) => Promise<ImageRead>
+  image: (file: string) => Promise<ImageRead>,
+  artifact: ArtifactNamed
 ): Promise<BuiltProgram> => {
-  const checked = checkProgram(raw);
+  const checked = checkProgram(raw, artifact);
   const names = [...new Set(checked.read.images)];
   const reads = await Promise.all(names.map(image));
   const problems = reads.flatMap((read, index) =>

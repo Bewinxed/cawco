@@ -35,6 +35,18 @@
  * 7. OpenCode and pi: a parent on each calls `delegate` as that harness
  *    offers it (OpenCode's Code Mode, pi's own tool) with a `{ text, name }`
  *    input; its leaf's brief names the file and its Bash reads the words.
+ * 8. The calls the hub refused on 2026-10-24, each accepted now, one leaf
+ *    each, its files in `$TMPDIR/inputs/` with their folders:
+ *    `{ report: <A's session's short id> }`; a folder path, landing as
+ *    `inputs/<folder>/…` at every depth; `{ assets: <A's item's short id> }`
+ *    of A's outputs, nested a folder down, landing at their project-folder
+ *    paths; and a decision page whose `Preview` names the preview by its
+ *    short id (`artifact_create`).
+ * 9. A call that must still be refused: the parent's own `delegate` tool
+ *    call with a path under `~/.ssh`. No work item comes of it; on the desk
+ *    the parent's transcript draws it as the plain tool row with its error
+ *    (`[data-slot="tools"] [data-slot="row"][data-err]`), never a delegate
+ *    card (`[data-delegate-tone]`), and the tray's failed count is unchanged.
  *
  * It delegates, so its fleet cuts workspaces: it runs on the host, outside
  * every boundary.
@@ -83,6 +95,23 @@ const CANVAS = `probe-canvas-${RUN}`;
 const PAGE_NAME = `probe-page-${RUN}`;
 const PREVIEW = `probe-preview-${RUN}`;
 const BOX = "probe-box";
+/** A's outputs: a folder whose files sit one level down and deeper (step 8). */
+const BRIEFS: Record<string, string> = {
+  "design-briefs/one.md": `brief-one-${crypto.randomUUID()}`,
+  "design-briefs/deep/two.md": `brief-two-${crypto.randomUUID()}`,
+};
+const WRITE_BRIEFS = [
+  "mkdir -p design-briefs/deep",
+  ...Object.entries(BRIEFS).map(
+    ([path, body]) => `printf %s ${body} > ${path}`
+  ),
+].join(" && ");
+/** Step 8's leaves: one per call the hub refused before, each finishing at once. */
+const TAG_SHORT = `PROBE-HANDED-SHORT-${RUN}`;
+/** Step 9: the parent's own delegate call the hub must still refuse. */
+const TAG_REFUSED = `PROBE-HANDED-REFUSED-${RUN}`;
+const REFUSED_TITLE = `Refused probe ${RUN}`;
+const DELEGATE = "mcp__cawco__delegate";
 const LAN_CODE = /lan:\d+/;
 const LAN_DIRECT_CODE = /lan-direct:\d+/;
 /** artifact_browse's answer: the address its browser loads. */
@@ -229,7 +258,7 @@ const otherLeg = (harness: Other): OtherLeg => ({
 });
 
 interface Progress {
-  a: { finished: boolean; made: boolean };
+  a: { finished: boolean; made: boolean; wrote: boolean };
   b: {
     finished: boolean;
     /** The hub's own port that serves no preview, on the pass's host: refused. */
@@ -241,11 +270,14 @@ interface Progress {
     tried: boolean;
   };
   others: Record<Other, OtherLeg>;
+  /** Step 9: the parent's delegate call, and the path it names. */
+  refused: { called: boolean; path: string };
 }
 
 /** Where each mocked session is. */
 const state: Progress = {
-  a: { made: false, finished: false },
+  a: { made: false, wrote: false, finished: false },
+  refused: { called: false, path: "" },
   b: {
     read: false,
     opened: false,
@@ -283,6 +315,13 @@ const leafA = (request: Seen): Reply => {
     });
     state.a.made = reply.tool?.name === CREATE;
     return reply;
+  }
+  if (!state.a.wrote) {
+    state.a.wrote = true;
+    return call("Bash", {
+      command: WRITE_BRIEFS,
+      description: "Write the briefs",
+    });
   }
   const headline = "Handed a canvas up.";
   const reply = found(request, FINISH, {
@@ -341,6 +380,30 @@ const leafB = (request: Seen): Reply => {
     summary: `${headline}\n\nls and curl printed them.`,
   });
   state.b.finished = reply.tool?.name === FINISH;
+  return reply;
+};
+
+/** Step 8's leaves: finish at once; the hub wrote their inputs before their brief. */
+const leafShort = (request: Seen): Reply =>
+  answerOf(request.body, (use) => use.name === FINISH)
+    ? say("ok")
+    : found(request, FINISH, { headline: "Done.", summary: "Done." });
+
+/** Step 9's parent: one delegate call naming a path under ~/.ssh, then words. */
+const refusedParent = (request: Seen, repo: string): Reply => {
+  if (state.refused.called) {
+    return say("The hub refused it.");
+  }
+  const reply = found(request, DELEGATE, {
+    title: REFUSED_TITLE,
+    prompt: "Read your input, then finish.",
+    harness: "claude",
+    model: MODEL.claude,
+    cwd: repo,
+    lands: "none",
+    inputs: [state.refused.path],
+  });
+  state.refused.called = reply.tool?.name === DELEGATE;
   return reply;
 };
 
@@ -746,6 +809,202 @@ const otherHarness = async (
   );
 };
 
+/** A leaf's file in its `$TMPDIR/inputs/`, by its path there, once written; "" when it never is. */
+const inputText = async (started: Started, path: string): Promise<string> => {
+  const file = join(started.workspaceTmp, "inputs", path);
+  const read = () => readFile(file, "utf8").catch(() => "");
+  return await until(`inputs/${path}`, read, Boolean, 60_000).catch(read);
+};
+
+/**
+ * Step 8: each call the hub refused on 2026-10-24, sent again as it was, is
+ * accepted, and its files land in the leaf's inputs with their folders.
+ */
+const refusedBefore = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  {
+    a,
+    parent,
+    previewId,
+    delegate,
+  }: {
+    a: Started;
+    delegate: (inputs: unknown[]) => Promise<Started>;
+    parent: string;
+    previewId: string;
+  }
+): Promise<void> => {
+  const tried = (inputs: unknown[]) =>
+    delegate(inputs).then(
+      (started) => ({ started, refused: "" }),
+      (error: unknown) => ({ started: undefined, refused: String(error) })
+    );
+
+  // A short session id.
+  const bySession = await tried([{ report: a.instanceId.slice(0, 8) }]);
+  const report = bySession.started
+    ? await inputText(
+        bySession.started,
+        `report-${a.workItemId.slice(0, 8)}.md`
+      )
+    : "";
+  check(
+    "8: { report: <session's 8-character short id> } is accepted and lands A's report",
+    report.includes(REPORT_TOKEN),
+    bySession.refused.slice(0, 300) || report.slice(0, 200) || "missing"
+  );
+
+  // A folder.
+  const folder = join(fleet.sandbox, "handed-folder");
+  await mkdir(join(folder, "deep"), { recursive: true });
+  const top = `folder-top-${crypto.randomUUID()}`;
+  const deep = `folder-deep-${crypto.randomUUID()}`;
+  await writeFile(join(folder, "top.md"), top);
+  await writeFile(join(folder, "deep", "inner.md"), deep);
+  const byFolder = await tried([folder]);
+  const folderFiles = byFolder.started
+    ? [
+        await inputText(byFolder.started, "handed-folder/top.md"),
+        await inputText(byFolder.started, "handed-folder/deep/inner.md"),
+      ]
+    : [];
+  check(
+    "8: a folder path is accepted and lands as inputs/<folder>/…, its subfolder kept",
+    folderFiles[0] === top && folderFiles[1] === deep,
+    byFolder.refused.slice(0, 300) || JSON.stringify(folderFiles)
+  );
+
+  // An item's assets, nested a folder down, by the item's short id.
+  const key = a.workItemId.slice(0, 8);
+  const byAssets = await tried([{ assets: key }]);
+  const assets = byAssets.started
+    ? await Promise.all(
+        Object.keys(BRIEFS).map((path) =>
+          inputText(byAssets.started as Started, `assets/${key}/${path}`)
+        )
+      )
+    : [];
+  check(
+    "8: { assets: <item's short id> } of nested outputs is accepted and lands every file at its folder path",
+    Object.values(BRIEFS).every((body, at) => assets[at] === body),
+    byAssets.refused.slice(0, 300) || JSON.stringify(assets)
+  );
+
+  // A decision page's Preview naming an artifact by its short id.
+  const page = await fleet
+    .api<{ id: string }>(`/api/instances/${parent}/artifacts`, {
+      kind: "page",
+      does: "pick",
+      ask: "Pick the page",
+      name: `probe-short-preview-${RUN}`,
+      program: `root = Decisions("Keep the page", [keep])
+keep = Decision("keep", "Keep the served page?", [yes, no], "It is the one served.")
+yes = Option("yes", "Keep it", "It shows the folder.", true, [live], "Nothing more.")
+no = Option("no", "Redo it", "A new page.", false, [], "Another round.")
+live = Preview("${previewId.slice(0, 8)}", "The served page")`,
+    })
+    .then(
+      (made) => made.id,
+      (error: unknown) => `refused: ${String(error)}`
+    );
+  check(
+    "8: a decision program's Preview naming an artifact by its short id is accepted",
+    !page.startsWith("refused"),
+    page.slice(0, 300)
+  );
+};
+
+/** The tray's failed count as drawn: its "N failed" chip's number, else 1 for a lone failure chip, else 0. */
+const trayFailed = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    const row = document.querySelector('[data-slot="tray"] [data-slot="row"]');
+    const counted = row
+      ?.querySelector('[data-delegate-tray-count] [data-slot="num"]')
+      ?.textContent?.trim();
+    if (counted) {
+      return Number(counted);
+    }
+    return (
+      row?.querySelectorAll('[data-delegate-tray-tone="failed"][data-end]')
+        .length ?? 0
+    );
+  });
+
+/**
+ * Step 9: the parent's own delegate call naming a path under `~/.ssh`. The
+ * hub refuses it; no work item comes of it; the transcript draws it as the
+ * plain tool row with its error, no delegate card; the tray's failed count
+ * stays as it was.
+ */
+const stillRefused = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string,
+  home: string
+): Promise<void> => {
+  const { check } = kit;
+  await mkdir(join(home, ".ssh"), { recursive: true });
+  state.refused.path = join(home, ".ssh", "id_probe");
+  await writeFile(state.refused.path, "not a key");
+  const base = await fleet.dashboard();
+  const page = await kit.page("desk");
+  await open(
+    page,
+    `${base}/session/${parent}`,
+    `[data-session-row="${parent}"]`,
+    120_000
+  );
+  const before = await trayFailed(page);
+  const cards = await page.locator("[data-delegate-tone]").count();
+  await fleet.send(parent, `${TAG_REFUSED}: delegate with a key as input.`);
+  const answered = await until(
+    "the parent's delegate call, answered",
+    () =>
+      fleet.seen
+        .filter((one) => one.all.includes(TAG_REFUSED))
+        .map((one) => answerOf(one.body, (use) => use.name === DELEGATE))
+        .find((one) => one?.answer !== undefined),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    "9: the parent's delegate call naming a path under ~/.ssh is refused",
+    (answered?.answer ?? "").includes(".ssh"),
+    (answered?.answer ?? "no answer").slice(0, 300)
+  );
+  const rows = fleet.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM work_items WHERE title = ?",
+    REFUSED_TITLE
+  )[0]?.n;
+  check(
+    "9: no work item comes of the refused call",
+    rows === 0,
+    `${rows} rows`
+  );
+  const errorRow = page.locator(
+    '[data-slot="tools"] [data-slot="row"][data-err]'
+  );
+  await errorRow
+    .first()
+    .waitFor({ state: "attached", timeout: 60_000 })
+    .catch(() => undefined);
+  const drawn = await errorRow.count();
+  const after = await page.locator("[data-delegate-tone]").count();
+  check(
+    "9: the transcript draws the refused call as the plain tool row with its error, no delegate card",
+    drawn > 0 && after === cards,
+    `${drawn} error rows; delegate cards ${cards} before, ${after} after`
+  );
+  const failedAfter = await trayFailed(page);
+  check(
+    "9: the tray's failed count is unchanged",
+    failedAfter === before,
+    `${before} before, ${failedAfter} after`
+  );
+  await page.close();
+};
+
 const spec: Spec = {
   name: "handed-inputs",
   host: "it delegates, so its fleet cuts workspaces",
@@ -764,6 +1023,12 @@ const spec: Spec = {
         if (request.all.includes(leg.tag)) {
           return otherParent(request, harness, leg, repo);
         }
+      }
+      if (request.all.includes(TAG_REFUSED)) {
+        return refusedParent(request, repo);
+      }
+      if (request.all.includes(TAG_SHORT)) {
+        return leafShort(request);
       }
       if (request.all.includes(TAG_B)) {
         return leafB(request);
@@ -800,7 +1065,7 @@ const spec: Spec = {
     const parent = await fleet.spawn("claude", "Parent", repo, {
       projectId: project.id,
     });
-    const delegate = (tag: string, inputs: unknown[]) =>
+    const delegate = (tag: string, inputs: unknown[], outputs?: string[]) =>
       fleet.api<Started>("/api/work-items", {
         parentInstanceId: parent,
         title: "Handed inputs probe",
@@ -810,10 +1075,11 @@ const spec: Spec = {
         cwd: repo,
         lands: "none",
         inputs,
+        ...(outputs ? { outputs } : {}),
       });
 
-    // 1. Leaf A hands a canvas up and reports.
-    const a = await delegate(TAG_A, []);
+    // 1. Leaf A hands a canvas up, writes its briefs and reports.
+    const a = await delegate(TAG_A, [], ["design-briefs/"]);
     const aEnded = await ended(fleet, a.workItemId);
     check(
       "1: leaf A finishes with its report",
@@ -961,6 +1227,17 @@ const spec: Spec = {
       // biome-ignore lint/performance/noAwaitInLoops: one harness's parent after the other, so the mock answers one leg at a time
       await otherHarness(kit, fleet, harness, repo, project.id);
     }
+
+    // 8. The calls refused before, accepted now.
+    await refusedBefore(kit, fleet, {
+      a,
+      parent,
+      previewId,
+      delegate: (inputs) => delegate(TAG_SHORT, inputs),
+    });
+
+    // 9. A call the hub must still refuse, as the parent's transcript draws it.
+    await stillRefused(kit, fleet, parent, home);
   },
 };
 

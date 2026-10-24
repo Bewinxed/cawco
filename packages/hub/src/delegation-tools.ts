@@ -198,17 +198,17 @@ const handoffShape = () => ({
 });
 
 /**
- * `inputs` of delegate and handoff (core handed-input.ts): a path, or what
- * the hub holds by name, each landing as a file in the receiver's
- * `$TMPDIR/inputs/`. Shown open; the hub checks each entry strictly
- * (work-items.ts `readInputs`).
+ * `inputs` of delegate and handoff (core handed-input.ts): a path to a file
+ * or a folder, or what the hub holds by name, landing in the receiver's
+ * `$TMPDIR/inputs/`, a folder and an item's assets as their trees. Shown
+ * open; the hub checks each entry strictly (work-items.ts `readInputs`).
  */
 const inputsParameter = () =>
   z
     .array(handedInputSchema(false))
     .optional()
     .describe(
-      'Files for its $TMPDIR/inputs/: a path, or by id what the hub holds (an artifact as its files and picture, a preview with a pass). attachment: an id or a name like "Picture 2"; blob: base64.'
+      'Files for its $TMPDIR/inputs/: a path to a file, or to a folder (copied as inputs/<folder>/…, every file counted). Or what the hub holds, named by full id, short id or handle like cockpit#5a167bde: report or assets (an item\'s outputs with their folders) by item or session; an artifact as its files and picture; attachment by id or a name like "Picture 2"; blob: base64.'
     );
 
 /** `handoff`'s call: the message, with the inputs of a session that may delegate. */

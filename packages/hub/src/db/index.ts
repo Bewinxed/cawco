@@ -1635,6 +1635,8 @@ export interface DbShape {
   ) => { projectId: string; path: string }[];
   /** A project's threads, newest first, each with its newest message. */
   readonly projectThreads: (projectId: string) => ThreadListRow[];
+  /** Every work item of the project, newest first (handed-inputs.ts names one by its handle). */
+  readonly projectWorkItems: (projectId: string) => WorkItemRow[];
   /** Drops the fleet MCP relay sessions unused since `before`; answers how many. */
   readonly pruneMcpSessions: (before: Date) => number;
   /** The iOS app's pushes (push.ts): the devices that registered, by their Cawrier pairing. */
@@ -8244,6 +8246,13 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(eq(workItems.projectId, projectId), isNotNull(workItems.taskId))
         )
+        .orderBy(desc(workItems.createdAt), desc(workItems.id))
+        .all(),
+    projectWorkItems: (projectId) =>
+      db
+        .select()
+        .from(workItems)
+        .where(eq(workItems.projectId, projectId))
         .orderBy(desc(workItems.createdAt), desc(workItems.id))
         .all(),
     queuedTaskStarts: (projectId) =>

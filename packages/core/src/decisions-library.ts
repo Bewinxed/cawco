@@ -52,9 +52,6 @@ export const DECISION_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 export const AFTER_REF =
   /^(?:([a-z0-9][a-z0-9-]{0,62})#)?([a-z0-9][a-z0-9-]{0,62})$/;
 
-/** An artifact's id, as artifact_create answers it. */
-export const ARTIFACT_ID = /^[0-9a-f-]{36}$/;
-
 /**
  * The library over `renderers`, one per component, by name: the host page's
  * Svelte components, or nothing (`null`) where only the schema and the
