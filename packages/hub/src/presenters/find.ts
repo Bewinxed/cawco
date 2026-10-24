@@ -12,6 +12,9 @@ const TASK_HIT = /:(tsk-\d+)$/;
 const WHOLE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
 /** A whole id in brackets, as find's `where` names a project or session. */
 const BRACKETED_ID = /\(([0-9a-f]{8})-[0-9a-f-]{27}\)/g;
+/** A whole id anywhere in words find quotes (a delivery header's `id=<uuid>` in a conversation's line). */
+const ID_IN_WORDS =
+  /\b([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
 /** A hit's id as its tools take it back: a full id's handle; a task's (`<project>:tsk-1`) its task id. */
 const idWords = (id: string): string => {
@@ -37,6 +40,10 @@ const refWords = (ref: string): string => {
 /** Where a hit is, its ids as handles. */
 const whereWords = (where: string): string =>
   where.replace(BRACKETED_ID, "($1)");
+
+/** The words a hit matched, each whole id in them its handle, as every other id find names. */
+const excerptWords = (excerpt: string): string =>
+  excerpt.replace(ID_IN_WORDS, "$1");
 
 /** `when`, as find writes it (`2026-10-22 06:03Z`), as how long ago. */
 const whenWords = (when: string | null | undefined, now: number): string =>
@@ -84,7 +91,7 @@ interface Around {
 }
 
 const hitLine = (hit: Hit, now: number): string =>
-  `- ${hit.kind} ${quote(hit.title, 120)}${hit.where ? ` · ${whereWords(hit.where)}` : ""} · ${whenWords(hit.when, now)}${hit.who ? ` · ${hit.who}` : ""}${hit.excerpt ? `: ${quote(hit.excerpt, 240)}` : ""} · ${hit.ref ? `around takes ${refWords(hit.ref)}` : `id ${idWords(hit.id)}`}`;
+  `- ${hit.kind} ${quote(hit.title, 120)}${hit.where ? ` · ${whereWords(hit.where)}` : ""} · ${whenWords(hit.when, now)}${hit.who ? ` · ${hit.who}` : ""}${hit.excerpt ? `: ${quote(excerptWords(hit.excerpt), 240)}` : ""} · ${hit.ref ? `around takes ${refWords(hit.ref)}` : `id ${idWords(hit.id)}`}`;
 
 const turnLine = (turn: Turn, now: number): string =>
   `- ${turn.here ? "▶ " : ""}${turn.who}${turn.when ? `, ${whenWords(turn.when, now)}` : ""}: ${quote(turn.text, 2000)}${turn.ref ? ` (${refWords(turn.ref)})` : ""}`;
