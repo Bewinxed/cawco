@@ -1,0 +1,108 @@
+<!doctype html>
+<!--
+  Renderer CHECK failure in ClipPathClipper::HasCompositeClipPathAnimation.
+
+  Open with V8's gc() exposed (a full V8 GC also collects Blink's heap):
+    google-chrome --user-data-dir=/tmp/clip-repro --js-flags=--expose-gc repro.html
+  The page runs by itself. With gc() missing it stops before step 4 and
+  says so: press "Collect garbage" in DevTools' Memory panel (the same as
+  CDP HeapProfiler.collectGarbage), then the page's Repaint button.
+
+  Expected: the status line ends "survived".
+  Actual: the tab crashes ("Aw, Snap!", error code 5 / SIGTRAP, exit code 133).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>clip-path + move animation, displaced, collected, repainted</title>
+    <style>
+      body {
+        margin: 24px;
+        font:
+          14px system-ui,
+          sans-serif;
+      }
+      #el {
+        width: 200px;
+        height: 100px;
+        background: #c33;
+      }
+    </style>
+  </head>
+  <body>
+    <p id="status">running…</p>
+    <div id="host"><div id="el"></div></div>
+    <script>
+      "use strict";
+      const status = document.getElementById("status");
+      const say = (words) => {
+        status.textContent = words;
+        console.log(words);
+      };
+      const frames = (n) =>
+        new Promise((done) => {
+          let left = n;
+          const step = () => {
+            left -= 1;
+            if (left <= 0) {
+              done();
+            } else {
+              requestAnimationFrame(step);
+            }
+          };
+          requestAnimationFrame(step);
+        });
+
+      async function run() {
+        const el = document.getElementById("el");
+        // 1. One effect that moves (translate) and cuts (clip-path). Chromium
+        //    runs it on the compositor and marks the element's clip-path
+        //    status kComposited.
+        el.animate(
+          [
+            { translate: "0 20px", clipPath: "inset(10px -8px -8px)" },
+            { translate: "0 0", clipPath: "inset(0px -8px -8px)" },
+          ],
+          { duration: 200 }
+        );
+        await frames(3);
+        // 2. A second animation of the same property (translate) on the same
+        //    element while the first runs: the first is taken off the
+        //    compositor whole, and the element keeps kComposited.
+        el.animate([{ translate: "0 -5px" }, { translate: "0 0" }], {
+          duration: 150,
+          composite: "add",
+        });
+        // Both play out on the main thread; no script holds either.
+        await frames(30);
+        // 3. A full GC collects the first animation. NativePaintWorkletData
+        //    holds it as a WeakMember, so its clip-path animation is now null
+        //    while the status still says kComposited.
+        if (typeof globalThis.gc === "function") {
+          globalThis.gc();
+          await repaint();
+          return;
+        }
+        say(
+          'gc() is not exposed: press "Collect garbage" in DevTools\' Memory panel, then Repaint (or run Chrome with --js-flags=--expose-gc).'
+        );
+        const button = document.createElement("button");
+        button.textContent = "Repaint";
+        button.addEventListener("click", repaint);
+        status.after(button);
+      }
+
+      // 4. Any paint-property update of the element runs pre-paint over it:
+      //    HasCompositeClipPathAnimation reads kComposited and
+      //    CHECK(GetClipPathAnimation(layout_object)) fails.
+      async function repaint() {
+        document.getElementById("el").style.width = "201px";
+        await frames(2);
+        document.getElementById("host").style.transform = "translateX(2px)";
+        await frames(2);
+        say("survived: the renderer did not crash");
+      }
+      run();
+    </script>
+  </body>
+</html>
