@@ -17,7 +17,9 @@
  * artifacts/service.ts `NOT_SERVED`).
  *
  * - (a1) After A's item ends, and after a sweep, its server still answers
- *   and its workspace is active, the sweep naming the artifact as its hold.
+ *   and its workspace is kept, and the agent's log says nothing of A's work
+ *   ended: the artifact keeps it (the sweep names A's awake session, the
+ *   first hold it reads, hub work-items.ts `holdOn`).
  * - (a2) The parent reads the server's climb in memory, naming A's item and
  *   the server, as A takes no word (the old leak-notice-workspace (w3)).
  * - (a3) The parent reads no leftover of A's.
@@ -27,13 +29,19 @@
  *
  * B: a delegate starts `sleep 600.0962` in the background, shows a preview
  * whose server CawCo's stage runs in its workspace (artifact_create's
- * `serve`), and rests in a wait, its item live. Its parent stops it.
+ * `serve`; the server answers on the stage's port and on a unix socket in
+ * its TMPDIR, as A's does), and rests in a wait, its item live. Its parent
+ * stops it.
  *
- * - (b1) Before the stop, B's preview serves its page.
+ * - (b1) Before the stop, B's preview serves its page, and its server
+ *   answers on its socket.
  * - (b2) After the stop, `sleep 600.0962` is gone (the stop ended what B
- *   left running, agent session.ts `#endWork`) and B's preview still
- *   serves its page: on the Mac, where a session's sweep takes all of its
- *   workspace's work, the stage's server was ended with it until 2026-10-24.
+ *   left running, agent session.ts `#endWork`), and the stage's server is
+ *   the same process and still answers on its socket: on the Mac, where a
+ *   session's sweep takes all of its workspace's work, the stage's server
+ *   was ended with it until 2026-10-24. (A stopped session's preview origin
+ *   closes with it, hub server.ts `endPreviews`, so the stage is reached
+ *   on its socket, not through the preview.)
  *
  *   bun scripts/probe-kit/run.ts ended-item-work
  */
@@ -62,6 +70,8 @@ const MARK_A = "endedProbeA";
 const SOCKET_A = "ended-a.sock";
 const PAGE_A = "ended probe page A";
 const TITLE_B = "Ended probe page B";
+/** The unix socket B's served server also answers on, in its TMPDIR. */
+const SOCKET_B = "ended-b.sock";
 const B_SLEEP = "600.0962";
 /** How long a climb takes to be told: 32 s to the threshold, then a minute of rising readings, and room. */
 const MEMORY_WAIT_MS = 240_000;
@@ -82,8 +92,8 @@ const SERVE_A = `cd "$TMPDIR" && bun -e ${quoted(
 /** A command that waits for A's server to answer, then says so, spelled apart. */
 const UP_A = `for i in $(seq 100); do bun -e ${quoted(`const r = await fetch("http://127.0.0.1:${PORT_A}/"); if (!r.ok) process.exit(1);`)} 2>/dev/null && echo "UP-""A:" && break; sleep 0.1; done`;
 /** What serves B's preview: a page on the `PORT` the stage gives it. */
-const SERVED_B = `bun -e ${quoted(
-  `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${TITLE_B}</title></head><body>${TITLE_B}</body></html>`)};Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch:()=>new Response(page,{headers:{"content-type":"text/html"}})});`
+const SERVED_B = `cd "$TMPDIR" && bun -e ${quoted(
+  `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${TITLE_B}</title></head><body>${TITLE_B}</body></html>`)};const fetch=()=>new Response(page,{headers:{"content-type":"text/html"}});Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch});Bun.serve({unix:${JSON.stringify(SOCKET_B)},fetch});`
 )}`;
 
 const steps: Partial<Record<"A" | "B", number>> = {};
@@ -197,13 +207,13 @@ const respond = (request: Seen): Reply => {
   return text("ok");
 };
 
-/** The pids of A's server: a `bun` whose command line names {@link MARK_A}. */
-const serverPids = async (): Promise<number[]> =>
+/** The pids of a `bun` whose command line names `mark`: A's server by {@link MARK_A}, B's by {@link TITLE_B}. */
+const serverPids = async (mark: string): Promise<number[]> =>
   (await commandLines())
     .filter(
       (line) =>
         (line.command.split(" ")[0] ?? "").endsWith("bun") &&
-        line.command.includes(MARK_A)
+        line.command.includes(mark)
     )
     .map((line) => line.pid);
 
@@ -213,13 +223,13 @@ const sleepPids = async (): Promise<number[]> =>
     .filter((line) => line.command.trim() === `sleep ${B_SLEEP}`)
     .map((line) => line.pid);
 
-/** What A's server answers on its socket in `dir`, from a process of the host's whose working directory it is (a socket's path is short only from there). */
-const answersIn = async (dir: string): Promise<string> => {
+/** What a server answers on its socket `socket` in `dir`, from a process of the host's whose working directory it is (a socket's path is short only from there). */
+const answersIn = async (dir: string, socket: string): Promise<string> => {
   const child = Bun.spawn(
     [
       process.execPath,
       "-e",
-      `const r = await fetch("http://ended/", { unix: ${JSON.stringify(SOCKET_A)} }); console.log(r.status, await r.text());`,
+      `const r = await fetch("http://ended/", { unix: ${JSON.stringify(socket)} }); console.log(r.status, await r.text());`,
     ],
     { cwd: dir, stdout: "pipe", stderr: "pipe" }
   );
@@ -310,6 +320,93 @@ interface Sweep {
   kept: { hold: string; workspaceId: string }[];
 }
 
+/** What the legs read of the fleet: its delegate start, an item's state, the parent, a workspace's row. */
+interface Scene {
+  delegate: (tag: "A" | "B", title: string) => Promise<Started>;
+  itemState: (
+    id: string
+  ) => { ended_at: number | null; state: string } | undefined;
+  parent: string;
+  workspaceOf: (id: string) => Workspace;
+}
+
+/** B: a preview CawCo's stage serves, its delegate stopped ((b1), (b2)). */
+const stoppedLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  { delegate, itemState, parent, workspaceOf }: Scene
+): Promise<void> => {
+  const { check } = kit;
+  const b = await delegate("B", "Show a served page");
+  const before = await until(
+    "B's preview serving",
+    () => serving(fleet, b.instanceId, TITLE_B),
+    (read) => read.ok,
+    ITEM_MS
+  ).catch((): { ok: boolean; last: string } => ({
+    ok: false,
+    last: "never served",
+  }));
+  const sleeping = await until(
+    "B's background sleep",
+    sleepPids,
+    (pids) => pids.length > 0,
+    60_000
+  ).catch(() => [] as number[]);
+  const wb = workspaceOf(b.workspaceId);
+  const staged = await serverPids(TITLE_B);
+  const stagedSaid = await answersIn(wb.tmp ?? "", SOCKET_B);
+  check(
+    "(b1) B's preview serves its page, its stage's server answers on its socket, and its background sleep runs",
+    before.ok &&
+      staged.length > 0 &&
+      stagedSaid.startsWith("200") &&
+      stagedSaid.includes(TITLE_B) &&
+      sleeping.length > 0,
+    `${before.last}; stage server ${staged.join(", ") || "not found"}: ${stagedSaid.slice(0, 120)}; sleep ${sleeping.join(", ") || "none"}`
+  );
+  await until(
+    "B resting in its wait",
+    () => steps.B ?? 0,
+    (step) => step >= 3,
+    60_000
+  ).catch(() => undefined);
+  const credential = await credentialOf(fleet, parent);
+  const stopped = await toolWords(
+    { base: fleet.base, id: parent, credential },
+    "stop_delegate",
+    { target: b.instanceId }
+  );
+  const bEnded = await until(
+    "B's item ended",
+    () => itemState(b.workItemId),
+    (row) => row !== undefined && !!row.ended_at,
+    120_000
+  ).catch(() => itemState(b.workItemId));
+  const sleepLeft = await until(
+    "B's background sleep ended",
+    sleepPids,
+    (pids) => pids.length === 0,
+    30_000
+  ).catch(() => [] as number[]);
+  // Past the stop's sweep: SIGTERM, its grace and the SIGKILL.
+  await Bun.sleep(10_000);
+  const stagedAfter = await serverPids(TITLE_B);
+  const stagedSaidAfter = await answersIn(wb.tmp ?? "", SOCKET_B);
+  check(
+    "(b2) B stopped, its background sleep is gone, and its stage's server is the same process and still answers",
+    stopped.status === 200 &&
+      !!bEnded?.ended_at &&
+      sleepLeft.length === 0 &&
+      (await sleepPids()).length === 0 &&
+      staged.length > 0 &&
+      staged.every((pid) => stagedAfter.includes(pid)) &&
+      stagedSaidAfter.startsWith("200") &&
+      stagedSaidAfter.includes(TITLE_B),
+    `stop ${stopped.status} ${stopped.text.slice(0, 200)}; ${bEnded?.state}; sleep ${(await sleepPids()).join(", ") || "gone"}; stage server before ${staged.join(", ") || "none"}, after ${stagedAfter.join(", ") || "none"}: ${stagedSaidAfter.slice(0, 120)}`
+  );
+};
+
 const spec: Spec = {
   name: "ended-item-work",
   host: "its delegates' commands run in workspace boundaries",
@@ -388,22 +485,28 @@ const spec: Spec = {
         (row) => row !== undefined && !!row.ended_at,
         ITEM_MS
       ).catch(() => itemState(a.workItemId));
-      const servers = await serverPids();
+      const servers = await serverPids(MARK_A);
       const swept = await fleet.api<Sweep>("/api/workspaces/retire", {});
-      const hold =
-        swept.kept.find((one) => one.workspaceId === wa.id)?.hold ?? "";
+      const hold = swept.kept.find((one) => one.workspaceId === wa.id)?.hold;
       // Past the settle's own end: SIGTERM, its grace and the SIGKILL.
       await Bun.sleep(10_000);
-      const answered = await answersIn(wa.tmp ?? "");
+      const answered = await answersIn(wa.tmp ?? "", SOCKET_A);
+      const endedEarly = (await fleet.logs("agent"))
+        .split("\n")
+        .find((line) =>
+          line.includes(`${a.instanceId}: finished, so what it left running`)
+        );
       check(
-        "(a1) after A's item ends and a sweep, its server still answers and its workspace stays active, the sweep naming the artifact that shows it",
+        "(a1) after A's item ends and a sweep, its server still answers, its workspace is kept, and nothing of A's work was ended",
         aEnded?.state === "done" &&
           servers.length > 0 &&
+          servers.every((pid) => isAlive(listedPid(pid))) &&
           answered.startsWith("200") &&
           answered.includes(PAGE_A) &&
           workspaceOf(wa.id).state === "active" &&
-          hold.includes("ended-a"),
-        `${aEnded?.state}; server ${servers.join(", ") || "not found"}; answered ${answered}; ${workspaceOf(wa.id).state}; hold ${hold || JSON.stringify(swept).slice(0, 300)}`
+          hold !== undefined &&
+          endedEarly === undefined,
+        `${aEnded?.state}; server ${servers.join(", ") || "not found"}; answered ${answered}; ${workspaceOf(wa.id).state}; hold ${hold ?? JSON.stringify(swept).slice(0, 300)}; ${endedEarly ?? "no agent line ending A's work"}`
       );
       const climbed = await until(
         "the parent told of A's server's climb",
@@ -461,62 +564,12 @@ const spec: Spec = {
         `${retired.state}; session ${fleet.instance(a.instanceId)?.status}`
       );
 
-      // B: a preview CawCo's stage serves, its delegate stopped.
-      const b = await delegate("B", "Show a served page");
-      const before = await until(
-        "B's preview serving",
-        () => serving(fleet, b.instanceId, TITLE_B),
-        (read) => read.ok,
-        ITEM_MS
-      ).catch((): { ok: boolean; last: string } => ({
-        ok: false,
-        last: "never served",
-      }));
-      const sleeping = await until(
-        "B's background sleep",
-        sleepPids,
-        (pids) => pids.length > 0,
-        60_000
-      ).catch(() => [] as number[]);
-      check(
-        "(b1) B's preview serves its page, and its background sleep runs",
-        before.ok && sleeping.length > 0,
-        `${before.last}; sleep ${sleeping.join(", ") || "none"}`
-      );
-      await until(
-        "B resting in its wait",
-        () => steps.B ?? 0,
-        (step) => step >= 3,
-        60_000
-      ).catch(() => undefined);
-      const credential = await credentialOf(fleet, parent);
-      const stopped = await toolWords(
-        { base: fleet.base, id: parent, credential },
-        "stop_delegate",
-        { target: b.instanceId }
-      );
-      const bEnded = await until(
-        "B's item ended",
-        () => itemState(b.workItemId),
-        (row) => row !== undefined && !!row.ended_at,
-        120_000
-      ).catch(() => itemState(b.workItemId));
-      const sleepLeft = await until(
-        "B's background sleep ended",
-        sleepPids,
-        (pids) => pids.length === 0,
-        30_000
-      ).catch(() => [] as number[]);
-      const after = await serving(fleet, b.instanceId, TITLE_B);
-      check(
-        "(b2) B stopped, its background sleep is gone and its preview, served by CawCo's stage, still serves its page",
-        stopped.status === 200 &&
-          !!bEnded?.ended_at &&
-          sleepLeft.length === 0 &&
-          (await sleepPids()).length === 0 &&
-          after.ok,
-        `stop ${stopped.status} ${stopped.text.slice(0, 200)}; ${bEnded?.state}; sleep ${(await sleepPids()).join(", ") || "gone"}; ${after.last}`
-      );
+      await stoppedLeg(kit, fleet, {
+        delegate,
+        itemState,
+        parent,
+        workspaceOf,
+      });
 
       const left = fleet.seen.find(
         (request) =>
@@ -529,7 +582,11 @@ const spec: Spec = {
         left?.slice(0, 600) ?? "none read"
       );
     } finally {
-      const probes = [...(await serverPids()), ...(await sleepPids())];
+      const probes = [
+        ...(await serverPids(MARK_A)),
+        ...(await serverPids(TITLE_B)),
+        ...(await sleepPids()),
+      ];
       for (const pid of probes) {
         signalPid(listedPid(pid), "SIGKILL");
       }
