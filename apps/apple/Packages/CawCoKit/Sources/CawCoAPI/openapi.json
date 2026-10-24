@@ -37793,9 +37793,29 @@
         ]
       },
       "Removed": {
-        "description": "What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing.",
+        "description": "What `artifact_delete` and the panel's Remove answer: the artifact removed, and what the session's panel shows now, or null for nothing.",
         "type": "object",
         "properties": {
+          "removed": {
+            "description": "The artifact the call named, as it was resolved before it went.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ArtifactKind"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "name"
+            ]
+          },
           "showing": {
             "type": "object",
             "properties": {
@@ -37815,7 +37835,10 @@
               "name"
             ]
           }
-        }
+        },
+        "required": [
+          "removed"
+        ]
       },
       "Revised": {
         "description": "What a decision page's revision (`statements`) answers: what it changed,\nnot the page. The person's picks are read with `artifact_read`.",

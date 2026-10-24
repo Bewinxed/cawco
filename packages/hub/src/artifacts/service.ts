@@ -1145,8 +1145,10 @@ const errorSection = (error: StageError): string => {
  */
 export type PanelHand = "person" | "agent";
 
-/** What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing. */
+/** What `artifact_delete` and the panel's Remove answer: the artifact removed, and what the session's panel shows now, or null for nothing. */
 export interface Removed {
+  /** The artifact the call named, as it was resolved before it went. */
+  removed: { id: string; kind: ArtifactKind; name: string };
   showing: { id: string; kind: ArtifactKind; name: string } | null;
 }
 
@@ -1848,16 +1850,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ]) {
       seen.set(row.id, row);
     }
-    return byHandle(
-      asked,
-      [...seen.values()],
-      {
-        id: (row) => row.id,
-        names: (row) => [row.name],
-        said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
-      },
-      "artifact"
-    ).id;
+    // A name that names none or several is a refusal of the call, never
+    // the hub's own fault.
+    try {
+      return byHandle(
+        asked,
+        [...seen.values()],
+        {
+          id: (row) => row.id,
+          names: (row) => [row.name],
+          said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
+        },
+        "artifact"
+      ).id;
+    } catch (error) {
+      // biome-ignore lint/style/useErrorCause: the cause rides ArtifactRefusal's third argument, after its status, which the rule does not read
+      throw new ArtifactRefusal(
+        404,
+        error instanceof Error ? error.message : String(error),
+        { cause: error }
+      );
+    }
   };
 
   /** The session's artifact `id`; refused when it is another session's or not there. */
@@ -6571,6 +6584,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<Removed> => {
       const instance = sessionOf(instanceId);
       const row = deletable(instance, id);
+      const removed = { id: row.id, kind: row.kind, name: row.name };
       const wasShown = deps.showing(instance.id) === row.id;
       const writerShown = row.instanceId !== instance.id && inPanel(row);
       // A project's page is its source in the project's folder: both go, the
@@ -6598,15 +6612,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         const shown = deps.showing(instance.id);
         const now = shown === undefined ? undefined : db.get(shown);
         return {
+          removed,
           showing: now ? { id: now.id, kind: now.kind, name: now.name } : null,
         };
       }
       const next = by === "person" ? nextNewest(instance) : undefined;
       if (next && (await deps.open(next)).ok) {
-        return { showing: { id: next.id, kind: next.kind, name: next.name } };
+        return {
+          removed,
+          showing: { id: next.id, kind: next.kind, name: next.name },
+        };
       }
       await deps.close(instance.id);
-      return { showing: null };
+      return { removed, showing: null };
     },
 
     /**

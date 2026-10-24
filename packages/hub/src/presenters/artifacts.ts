@@ -621,10 +621,12 @@ export const artifactPromotedWords = (promoted: Promoted): string =>
   `Committed to ${promoted.path} in the project's folder (commit ${promoted.commit.slice(0, 8)}).`;
 
 /** `artifact_delete`: what the panel shows now. */
-export const artifactRemovedWords = (removed: Removed): string =>
-  removed.showing
-    ? `Removed. Your panel shows ${named(removed.showing)} now.`
-    : "Removed. Your panel shows nothing now.";
+export const artifactRemovedWords = (removed: Removed): string => {
+  const what = `Removed ${removed.removed.name} (${removed.removed.kind} ${removed.removed.id}).`;
+  return removed.showing
+    ? `${what} Your panel shows ${named(removed.showing)} now.`
+    : `${what} Your panel shows nothing now.`;
+};
 
 /** One pin's thread, oldest first, each entry a line. */
 const threadLines = (thread: ThreadEntry[], now: number): string[] =>

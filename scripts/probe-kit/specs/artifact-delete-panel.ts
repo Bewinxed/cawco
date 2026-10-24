@@ -18,6 +18,12 @@
  * (c) The person has C in front (newest, over X and A) and Removes it: the
  *     panel shows the next newest, X, as closing a tab does.
  * (d) The agent updates A while X is in front: the panel still shows X.
+ * (e) The agent deletes three artifacts, one by its whole id, one by its
+ *     eight-character handle, one by its name: each answer names the
+ *     artifact it removed (its name and whole id) and is no refusal, and
+ *     the session's list is one shorter each time. A delete naming nothing
+ *     the session has, and one of an artifact already removed, is refused
+ *     naming what it asked (never a 500), and the list keeps its length.
  */
 import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
@@ -221,6 +227,54 @@ const run = async (kit: Kit) => {
     afterUpdate === x,
     `after ${label(withC, afterUpdate)}; update said ${updated.slice(0, 120)}`
   );
+
+  // (e)
+  const listed = async (): Promise<string[]> =>
+    (
+      await fleet.api<{ id: string }[]>(
+        `/api/instances/${encodeURIComponent(session)}/artifacts`
+      )
+    ).map((row) => row.id);
+  const ways: [string, string, (id: string, name: string) => string][] = [
+    ["its whole id", "delta", (id) => id],
+    ["its eight-character handle", "echo", (id) => id.slice(0, 8)],
+    ["its name", "foxtrot", (_id, name) => name],
+  ];
+  let gone = "";
+  for (const [way, name, written] of ways) {
+    // biome-ignore lint/performance/noAwaitInLoops: one artifact made and deleted at a time, the list read around each
+    const id = await make(name);
+    gone = written(id, name);
+    const before = await listed();
+    const said = await agent(DELETE, { id: written(id, name) });
+    const after = await listed();
+    kit.check(
+      `(e) artifact_delete by ${way} answers the artifact it removed (${name}, ${id}), and the list loses it alone`,
+      said.includes(id) &&
+        said.includes(name) &&
+        ANSWERED_SHOWING.test(said) &&
+        !after.includes(id) &&
+        after.length === before.length - 1,
+      `${said.slice(0, 300)} | listed ${before.length} before, ${after.length} after`
+    );
+  }
+  for (const [what, asked] of [
+    ["naming nothing the session has", "0badc0de"],
+    ["of one already removed, by its name", gone],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one miss at a time, the list read around each
+    const before = await listed();
+    const missed = await agent(DELETE, { id: asked });
+    const after = await listed();
+    kit.check(
+      `(e) artifact_delete ${what} removes nothing and is refused naming what it asked, never the hub's own fault`,
+      !ANSWERED_SHOWING.test(missed) &&
+        missed.includes(asked) &&
+        !missed.includes("internal-server-error") &&
+        after.length === before.length,
+      `${missed.slice(0, 300)} | listed ${before.length} before, ${after.length} after`
+    );
+  }
 };
 
 const spec: Spec = { name: "artifact-delete-panel", run };
