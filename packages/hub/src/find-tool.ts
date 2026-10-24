@@ -71,7 +71,7 @@ import {
   FindRefusal,
   type HeldMoment,
 } from "./find";
-import { HANDLE_MIN } from "./handles";
+import { byId, HANDLE_MIN, handleId, isHandle } from "./handles";
 import { boardTitle } from "./labels";
 import { tool } from "./mcp-tool";
 import { findWords } from "./presenters/find";
@@ -1018,20 +1018,25 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
-  /** The full id a hit's id or handle names: a session's or a thread's; as given when none or several begin with it. */
+  /**
+   * The full id a hit's id or handle names, as every tool reads one
+   * (handles.ts `byId`: a short id, a `name#` handle, a mention chip): a
+   * session's or a thread's; as given when none or several do.
+   */
   const wholeId = (asked: string): string => {
-    if (
-      asked.length >= 36 ||
-      asked.length < HANDLE_MIN ||
-      deps.instance(asked)
-    ) {
+    if (deps.instance(asked) || !isHandle(asked)) {
       return asked;
     }
-    const ids = [
-      ...deps.instancesByPrefix(asked).map((row) => row.id),
-      ...deps.threadsByPrefix(asked),
-    ];
-    return ids.length === 1 && ids[0] ? ids[0] : asked;
+    const prefix = handleId(asked);
+    const [one, ...more] = byId(
+      asked,
+      [
+        ...deps.instancesByPrefix(prefix).map((row) => row.id),
+        ...deps.threadsByPrefix(prefix),
+      ],
+      (id) => id
+    );
+    return one && more.length === 0 ? one : asked;
   };
 
   /** `around`: a hit's ref or id, read as turns. */

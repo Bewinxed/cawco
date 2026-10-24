@@ -43,6 +43,7 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateList, DelegateListQuery } from "./delegation-tree";
+import { byId, handleId, isHandle, mentioned } from "./handles";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -320,21 +321,14 @@ function roster(
 /**
  * The session a target names by one of its former ids (a session the hub
  * folded into its continuation, the hub's `instanceIdOf`): its id now, and
- * the id it was named by. By the full id,
- * or a short id of six or more characters that names only it. Undefined
- * when the target names no former id.
+ * the id it was named by. By id as every tool reads one (handles.ts
+ * `byId`), naming only it. Undefined when the target names no former id.
  */
 function formerOf(
   formerIds: Record<string, string>,
   target: string
 ): { now: string; former: string } | undefined {
-  const needle = needleOf(target);
-  const idPart = needle.includes("#")
-    ? (needle.split("#").pop() ?? "")
-    : needle;
-  const matches = Object.keys(formerIds).filter(
-    (id) => id === needle || (idPart.length >= 6 && id.startsWith(idPart))
-  );
+  const matches = byId(target, Object.keys(formerIds), (id) => id);
   const [former] = matches;
   return matches.length === 1 && former
     ? { now: formerIds[former], former }
@@ -344,24 +338,20 @@ function formerOf(
 /**
  * The session a target names when a continuation took its work item on
  * (its row's `continuedInto`, the hub's `retireContinued`), followed to the
- * last: the id its work goes on in now, and the id it was named by. By the
- * full id, or a short id of six or more characters that names only one of
- * `rows`. Undefined when the target names no continued session: the old
- * one never runs again, so nothing is handed to it.
+ * last: the id its work goes on in now, and the id it was named by. By id
+ * as every tool reads one (handles.ts `byId`) among `rows`, else by its
+ * whole id off the board. Undefined when the target names no continued
+ * session: the old one never runs again, so nothing is handed to it.
  */
 function continuedOf(
   rows: InstanceRow[],
   target: string,
-  byId: (id: string) => InstanceRow | undefined
+  rowById: (id: string) => InstanceRow | undefined
 ): { now: string; former: string; continued: true } | undefined {
-  const needle = needleOf(target);
-  const idPart = needle.includes("#")
-    ? (needle.split("#").pop() ?? "")
-    : needle;
-  const rowOf = (id: string) => rows.find((row) => row.id === id) ?? byId(id);
-  const short =
-    idPart.length >= 6 ? rows.filter((row) => row.id.startsWith(idPart)) : [];
-  const called = rowOf(needle) ?? (short.length === 1 ? short[0] : undefined);
+  const rowOf = (id: string) =>
+    rows.find((row) => row.id === id) ?? rowById(id);
+  const listed = byId(target, rows, (row) => row.id);
+  const called = listed.length === 1 ? listed[0] : rowById(handleId(target));
   if (!called?.continuedInto) {
     return undefined;
   }
@@ -415,44 +405,24 @@ const waitingAnswer = (
   return `Session ${source} holds work in flight that ending its process would lose (${waiting.why}${ran}), so its continuation waits for it. It goes on by itself in new session ${target} once that work ends, or at ${clockOf(waiting.until)} at the latest, ending it. Nothing to call again.`;
 };
 
-/** An `@` prefix on a target name, optional. */
-const AT_PREFIX = /^@/;
-
-/**
- * A mention as a composer's chip serialises it (find.ts, the options doc's
- * shared ground 9): the title in the person's words, then the handle the hub
- * resolves, in angle brackets: `@Orchestrate cockpit fleet <cockpit#5a167bde>`.
- * The handle alone names the target; the title is for the reader.
- */
-const CHIP = /<([^<>]+)>\s*$/;
-
-/** What a target names: a chip's handle, else the words given; lowercased, without `@`. */
-const needleOf = (target: string): string => {
-  const handle = CHIP.exec(target.trim())?.[1];
-  return (handle ?? target).trim().toLowerCase().replace(AT_PREFIX, "");
-};
-
 /** A thread's handle (`thread#1a2b3c4d`), as find and a chip carry it. */
 const THREAD_HANDLE = /^thread#([0-9a-f-]{6,36})$/;
 
 /** What an id is made of, its dashes aside. */
 const HEX = /^[0-9a-f]+$/;
 
-/** The one session a full id, or a short id of six or more characters, names. */
+/**
+ * The one session of `peers` the target names by id, as every tool reads
+ * one (handles.ts `byId`: its full id, a short id of six or more
+ * characters, a `name#` handle, a mention chip); undefined when it names
+ * none by id (it may be a name). Several are refused, each listed.
+ */
 function resolveById(peers: Peer[], target: string): Peer | undefined {
-  const needle = needleOf(target);
-  const byId = peers.find((peer) => peer.row.id === needle);
-  if (byId) {
-    return byId;
+  const found = byId(target, peers, (peer) => peer.row.id);
+  if (found.length > 1) {
+    throw ambiguous(target, found);
   }
-  const idPart = needle.includes("#")
-    ? (needle.split("#").pop() ?? "")
-    : needle;
-  if (idPart.length < 6) {
-    return;
-  }
-  const byShortId = peers.filter((peer) => peer.row.id.startsWith(idPart));
-  return byShortId.length === 1 ? byShortId[0] : undefined;
+  return found[0];
 }
 
 /**
@@ -460,7 +430,7 @@ function resolveById(peers: Peer[], target: string): Peer | undefined {
  * those it names exactly, else those whose name or title holds it.
  */
 function named(peers: Peer[], target: string): Peer[] {
-  const needle = needleOf(target);
+  const needle = mentioned(target);
   const exact = peers.filter(
     (peer) =>
       peer.name.toLowerCase() === needle || peer.title.toLowerCase() === needle
@@ -531,9 +501,9 @@ function resolveHandoff(
   own: InstanceRow | undefined
 ): Peer {
   const all = [...peers, ...asleep];
-  const byId = resolveById(all, target);
-  if (byId) {
-    return byId;
+  const identified = resolveById(all, target);
+  if (identified) {
+    return identified;
   }
   const candidates = named(all, target);
   const parent = candidates.find(
@@ -574,12 +544,12 @@ function threadOf(
   target: string,
   sessions: Peer[]
 ): { id: string; title: string } | undefined {
-  const needle = needleOf(target);
+  const needle = mentioned(target);
   const handle = THREAD_HANDLE.exec(needle)?.[1];
   const id = handle ?? needle;
   if (!handle) {
     const hex = id.replaceAll("-", "");
-    const sessionHas = sessions.some((peer) => peer.row.id.startsWith(id));
+    const sessionHas = byId(target, sessions, (peer) => peer.row.id).length > 0;
     if (sessionHas || hex.length < 6 || !HEX.test(hex)) {
       return;
     }
@@ -613,27 +583,22 @@ function beyondBoard(
   listed: Peer[],
   self: string
 ): InstanceRow[] {
-  const needle = needleOf(target);
-  const idPart = needle.includes("#")
-    ? (needle.split("#").pop() ?? "")
-    : needle;
   if (
-    !lookup ||
-    idPart.length < 6 ||
-    listed.some((peer) => peer.row.id.startsWith(idPart))
+    !(lookup && isHandle(target)) ||
+    byId(target, listed, (peer) => peer.row.id).length > 0
   ) {
     return [];
   }
-  return lookup(idPart).filter(
+  return lookup(handleId(target)).filter(
     (row) => row.id !== self && relaunchOf(row).kind !== "refused"
   );
 }
 
 /** Resolves what the model typed to one session; ambiguity is reported, not guessed. */
 function resolve(peers: Peer[], target: string): Peer {
-  const byId = resolveById(peers, target);
-  if (byId) {
-    return byId;
+  const identified = resolveById(peers, target);
+  if (identified) {
+    return identified;
   }
   const candidates = named(peers, target);
   if (candidates.length === 1) {
@@ -2078,7 +2043,7 @@ export const handoffActions = ({
     // its conversation gone. Only a name is looked up among the running.
     const { rows, hosts } = fleetInstances(fleet);
     const ended =
-      instanceById(needleOf(target)) ??
+      instanceById(handleId(target)) ??
       resolveById(
         rows
           .filter((row) => row.id !== instanceId)

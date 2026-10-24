@@ -667,6 +667,7 @@ import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { createHandedInputs } from "./handed-inputs";
+import { byId as handledIds } from "./handles";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
@@ -24406,10 +24407,9 @@ export const createServer = (
     },
     thread: (id) => db.thread(id),
     threadsByPrefix: (prefix) =>
-      db
-        .allThreads()
-        .filter((thread) => thread.id.startsWith(prefix))
-        .map((thread) => thread.id),
+      handledIds(prefix, db.allThreads(), (thread) => thread.id).map(
+        (thread) => thread.id
+      ),
     threadMessages: (threadId) =>
       db.threadMessages(threadId).map((message) => ({
         id: message.id,
@@ -24578,13 +24578,12 @@ export const createServer = (
       db.getInstancesByIds(db.find.idsByPrefix(prefix)),
     threads: {
       byId: (id) =>
-        db
-          .allThreads()
-          .filter(
-            (thread) =>
-              thread.id === id || (id.length >= 6 && thread.id.startsWith(id))
-          )
-          .map((thread) => ({ id: thread.id, title: thread.title })),
+        handledIds(id, db.allThreads(), (thread) => thread.id).map(
+          (thread) => ({
+            id: thread.id,
+            title: thread.title,
+          })
+        ),
       hand: (threadId, from, message) => caw.handed(threadId, from, message),
     },
     // What `GET /api/instances` and `GET /api/agents` answer, without the

@@ -47,6 +47,12 @@
  *    the parent's transcript draws it as the plain tool row with its error
  *    (`[data-slot="tools"] [data-slot="row"][data-err]`), never a delegate
  *    card (`[data-delegate-tone]`), and the tray's failed count is unchanged.
+ * 10. One id resolver (hub handles.ts `byId`): a working delegate per form
+ *    of naming it (its full id, six and eight characters of it, its handle
+ *    `<folder>#<id8>`, a mention chip `@Title <handle>`) is reached by the
+ *    parent's `handoff` (its words reach that leaf), `interrupt_delegate`,
+ *    `answer_delegate` and `stop_delegate` (each answer names it, the stop
+ *    cancels its item), and `find`'s `around` reads that session.
  *
  * It delegates, so its fleet cuts workspaces: it runs on the host, outside
  * every boundary.
@@ -56,7 +62,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import { toolWords } from "../../lib/tool-call";
+import { type ToolSession, toolRecord, toolWords } from "../../lib/tool-call";
 import {
   MACHINE,
   MODEL,
@@ -112,6 +118,15 @@ const TAG_SHORT = `PROBE-HANDED-SHORT-${RUN}`;
 const TAG_REFUSED = `PROBE-HANDED-REFUSED-${RUN}`;
 const REFUSED_TITLE = `Refused probe ${RUN}`;
 const DELEGATE = "mcp__cawco__delegate";
+/** Step 10: each form a target may name a session in, from its whole id and its folder. */
+const FORMS: Record<string, (id: string, folder: string) => string> = {
+  "its full id": (id) => id,
+  "six characters": (id) => id.slice(0, 6),
+  "eight characters": (id) => id.slice(0, 8),
+  "its handle": (id, folder) => `${folder}#${id.slice(0, 8)}`,
+  "a mention chip": (id, folder) => `@Forms leaf <${folder}#${id.slice(0, 8)}>`,
+};
+const TAG_FORM = `PROBE-HANDED-FORM-${RUN}`;
 const LAN_CODE = /lan:\d+/;
 const LAN_DIRECT_CODE = /lan-direct:\d+/;
 /** artifact_browse's answer: the address its browser loads. */
@@ -1005,6 +1020,84 @@ const stillRefused = async (
   await page.close();
 };
 
+/**
+ * Step 10 for one form: a working leaf, named `written(id, folder)`, is
+ * reached by handoff (its words reach it), interrupt, answer and stop (each
+ * answer names it; the stop cancels its item), and find's `around` reads it.
+ */
+const reachedAs = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  session: ToolSession,
+  form: string,
+  written: (id: string, folder: string) => string,
+  delegate: (tag: string) => Promise<Started>
+): Promise<void> => {
+  const tag = `${TAG_FORM} ${form}`;
+  const leaf = await delegate(tag);
+  const id8 = leaf.instanceId.slice(0, 8);
+  const cwd =
+    fleet.query<{ cwd: string }>(
+      "SELECT cwd FROM instances WHERE id = ?",
+      leaf.instanceId
+    )[0]?.cwd ?? "";
+  const target = written(leaf.instanceId, cwd.split("/").at(-1) ?? "");
+  await until(
+    `the ${form} leaf working`,
+    () => fleet.seen.find((one) => one.all.includes(tag)),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  const token = `forms-handoff-${crypto.randomUUID()}`;
+  const handed = await toolWords(session, "handoff", {
+    target,
+    message: token,
+  });
+  const reached = await until(
+    `the handoff named by ${form}, read by its leaf`,
+    () =>
+      fleet.seen.find(
+        (one) => one.all.includes(tag) && one.all.includes(token)
+      ),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    `10: handoff to ${form} (${target}) reaches that leaf`,
+    !handed.refused && !!reached,
+    `${handed.status} ${handed.text.slice(0, 200)}${reached ? "" : "; its leaf never read it"}`
+  );
+  const names = async (tool: string, args: Record<string, unknown>) => {
+    const answer = await toolWords(session, tool, { target, ...args });
+    check(
+      `10: ${tool} to ${form} (${target}) names that leaf`,
+      !answer.refused && answer.text.includes(id8),
+      `${answer.status} ${answer.text.slice(0, 200)}`
+    );
+  };
+  await names("interrupt_delegate", {});
+  await names("answer_delegate", { requestId: `probe-${id8}`, deny: true });
+  const around = await toolRecord<{ around?: { id?: string } }>(
+    session,
+    "find",
+    { around: target }
+  );
+  check(
+    `10: find's around ${form} (${target}) reads that session`,
+    !around.refused && around.record.around?.id === leaf.instanceId,
+    around.refused
+      ? around.text.slice(0, 200)
+      : JSON.stringify(around.record.around ?? null)
+  );
+  await names("stop_delegate", {});
+  const stopped = await ended(fleet, leaf.workItemId);
+  check(
+    `10: stop_delegate to ${form} cancels that leaf's item`,
+    stopped?.state === "cancelled",
+    stopped?.state ?? "still running"
+  );
+};
+
 const spec: Spec = {
   name: "handed-inputs",
   host: "it delegates, so its fleet cuts workspaces",
@@ -1023,6 +1116,10 @@ const spec: Spec = {
         if (request.all.includes(leg.tag)) {
           return otherParent(request, harness, leg, repo);
         }
+      }
+      if (request.all.includes(TAG_FORM)) {
+        // Working until it is stopped, so every tool finds it running.
+        return call("Bash", { command: "sleep 3", description: "Work" });
       }
       if (request.all.includes(TAG_REFUSED)) {
         return refusedParent(request, repo);
@@ -1238,6 +1335,19 @@ const spec: Spec = {
 
     // 9. A call the hub must still refuse, as the parent's transcript draws it.
     await stillRefused(kit, fleet, parent, home);
+
+    // 10. Every form of naming a session reaches the same one, through each tool.
+    const session = {
+      base: fleet.base,
+      id: parent,
+      credential: await credentialOf(fleet, parent),
+    };
+    for (const [form, written] of Object.entries(FORMS)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one leaf after another, each named one way
+      await reachedAs(kit, fleet, session, form, written, (tag) =>
+        delegate(tag, [])
+      );
+    }
   },
 };
 

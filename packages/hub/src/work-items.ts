@@ -155,6 +155,7 @@ import {
   projectShip,
 } from "./gate-file";
 import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
+import { byId } from "./handles";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
@@ -8270,22 +8271,21 @@ export const createWorkItems = ({
     },
 
     /**
-     * `stop_delegate` on a queued delegate: the one `target` names (its full
-     * id, or a prefix of eight or more characters) leaves the queue through
+     * `stop_delegate` on a queued delegate: the one `target` names (by id as
+     * every tool reads one, handles.ts `byId`) leaves the queue through
      * {@link unqueue}, its chip with it. Only its parent or its project's
      * lead may withdraw it; anyone else is refused as `stop_delegate`
      * refuses a session that is not theirs. Undefined when `target` names no
      * queued delegate, so the caller looks among sessions.
      */
     withdrawQueued(from: string, target: string): string | undefined {
-      const needle = target.trim().toLowerCase();
-      const named = (row: QueuedWorkItemRow): boolean =>
-        row.id === needle || (needle.length >= 8 && row.id.startsWith(needle));
-      const mine = queuedFor(from).filter(named);
+      const named = (rows: QueuedWorkItemRow[]) =>
+        byId(target, rows, (row) => row.id);
+      const mine = named(queuedFor(from));
       if (mine.length === 0) {
-        const theirs = db
-          .queuedWorkItems()
-          .some((row) => named(row) && !db.workItem(row.id));
+        const theirs = named(db.queuedWorkItems()).some(
+          (row) => !db.workItem(row.id)
+        );
         if (theirs) {
           throw new WorkItemRefusal(
             403,
