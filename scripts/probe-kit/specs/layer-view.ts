@@ -17,7 +17,8 @@
  *   after the start, that the delegate never wrote, reads as the person
  *   left it. On the Mac the copy holds the start.
  * - v5. A file both changed is a conflict with both versions, and the
- *   landing writes nothing; once shown, the delegate's version lands.
+ *   landing writes nothing; once shown, it is no conflict again until the
+ *   folder changes once more, and the delegate's version lands.
  * - v6. The landing puts every write and deletion into the folder; the
  *   change set is empty after it.
  * - v7. An untracked `.env` is read in the copy, and a write to it stays
@@ -26,7 +27,8 @@
  *   folder as landed.
  * - v9 (timings, said, with a sanity check): the layer's start; the
  *   old mechanism's start for the same repository (`git clone
- *   --dissociate`, then its checkout); a 100,000-file walk in the copy
+ *   --dissociate`, then its checkout), on a clone of this checkout made in
+ *   the scratch HOME; a 100,000-file walk in the copy
  *   against the same walk natively.
  *
  *   bun scripts/probe-kit/run.ts layer-view
@@ -160,18 +162,25 @@ const run = async (kit: Kit) => {
   );
 
   await writeFile(join(folder, "site.conf"), "listen 9090;\n");
-  const read = await readChanges(id, (await readLayer(id)) as Layer);
-  const conflict = read.conflicts.find((one) => one.path === "site.conf");
   const refused = await applyChanges(id, (await readLayer(id)) as Layer);
+  const conflict = refused.conflicts.find((one) => one.path === "site.conf");
+  const shown = await readChanges(id, (await readLayer(id)) as Layer);
   check(
-    "v5: a file both changed is a conflict with both versions, and nothing is written",
-    conflict?.yours.kind === "text" &&
+    "v5: a file both changed is a conflict with both versions, and the landing writes nothing",
+    refused.applied === 0 &&
+      conflict?.yours.kind === "text" &&
       conflict.yours.text === "listen 9090;\n" &&
       conflict.delegate.kind === "text" &&
       conflict.delegate.text === "listen 8080;\n" &&
       (await text(join(folder, "site.conf"))) === "listen 9090;\n" &&
       (await text(join(folder, "new.txt"))) === "(gone)",
-    JSON.stringify({ conflicts: read.conflicts, refused })
+    JSON.stringify(refused)
+  );
+  check(
+    "v5: once the landing has shown the conflict, it is no conflict again until the folder changes once more",
+    shown.conflicts.length === 0 &&
+      shown.changed.some((one) => one.path === "site.conf"),
+    JSON.stringify(shown)
   );
 
   const landed = await applyChanges(id, (await readLayer(id)) as Layer);
@@ -212,13 +221,17 @@ const run = async (kit: Kit) => {
     `left: ${left.join(", ")}`
   );
 
-  // v9: timings.
+  // v9: timings, on a repository of its own: the person's checkout, made
+  // from this one (which a host run checks out as a worktree).
+  const repo = join(home, "repo");
+  await rm(repo, { recursive: true, force: true });
+  await Bun.$`git clone -q ${ROOT} ${repo}`.quiet();
   const repoLayerId = crypto.randomUUID();
   const repoPath = linux
-    ? ROOT
-    : join(home, ".worktrees", `cockpit-${repoLayerId.slice(0, 8)}`);
+    ? repo
+    : join(home, ".worktrees", `repo-${repoLayerId.slice(0, 8)}`);
   const layerAt = performance.now();
-  const repoLayer = await makeLayer(repoLayerId, ROOT, repoPath);
+  const repoLayer = await makeLayer(repoLayerId, repo, repoPath);
   const statusAt = performance.now();
   const status = await inCopy(
     repoLayerId,
@@ -227,18 +240,19 @@ const run = async (kit: Kit) => {
   );
   const layerStart = ms(layerAt);
   note(
-    `v9: layer start of ${ROOT}: ${Math.round(statusAt - layerAt)} ms to the copy, ${layerStart} ms with its branch checked out (${status.out.trim()} status lines)`
+    `v9: layer start of a clone of ${ROOT}: ${Math.round(statusAt - layerAt)} ms to the copy, ${layerStart} ms with its branch checked out (${status.out.trim()} status lines)`
   );
   const clone = join(home, "old-clone");
   await rm(clone, { recursive: true, force: true });
   const cloneAt = performance.now();
-  await Bun.$`git clone -q --dissociate --no-checkout ${ROOT} ${clone} && git -C ${clone} checkout -q HEAD`.quiet();
+  await Bun.$`git clone -q --dissociate --no-checkout ${repo} ${clone} && git -C ${clone} checkout -q HEAD`.quiet();
   const cloneMs = ms(cloneAt);
   note(
     `v9: the old mechanism's start of the same repository (git clone --dissociate, its checkout): ${cloneMs} ms`
   );
   await removeLayer(repoLayerId, repoLayer);
   await rm(clone, { recursive: true, force: true });
+  await rm(repo, { recursive: true, force: true });
 
   const tree = join(home, "walk");
   await rm(tree, { recursive: true, force: true });
