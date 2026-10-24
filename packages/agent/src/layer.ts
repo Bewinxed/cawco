@@ -431,7 +431,6 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   while (Date.now() < deadline) {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
-      // biome-ignore lint/performance/noAwaitInLoops: once, as the view is up
       await openWorkDirs(layer);
       return record.pid;
     }
