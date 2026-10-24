@@ -59,6 +59,11 @@ function listen(page: Page): string[] {
     }
   });
   page.on("pageerror", (error) => said.push(`thrown: ${error.message}`));
+  page.on("response", (answer) => {
+    if (answer.status() >= 400) {
+      said.push(`${answer.status()}: ${answer.url()}`);
+    }
+  });
   return said;
 }
 
@@ -66,14 +71,20 @@ function listen(page: Page): string[] {
 async function stage(page: Page, url: string, opened: boolean): Promise<void> {
   await page.goto(url, { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
+  // The conversation at its tail, as it opens.
+  await page.waitForSelector('[data-slot="scroller"][data-tail]');
   if (opened) {
     await page.waitForSelector('[data-slot="plan"] [data-opened]');
+    // The layer's entrance and the ground's fade, landed.
     await page.evaluate(() =>
       Promise.all(
-        document
-          .querySelector('[data-slot="plan"]')
-          ?.getAnimations({ subtree: false })
-          .map((run) => run.finished) ?? []
+        ['[data-slot="plan"]', '[data-slot="layer-ground"]'].flatMap(
+          (sel) =>
+            document
+              .querySelector(sel)
+              ?.getAnimations({ subtree: false })
+              .map((run) => run.finished) ?? []
+        )
       )
     );
   } else {
@@ -105,6 +116,9 @@ interface Geometry {
   bodyScroll: number;
   cap: number;
   column: number;
+  fadeLen: number;
+  /** The column's top fade, now (`--fade-start`), and its full length. */
+  fadeStart: number;
   height: number;
   openRow: string | null;
   openTop: number;
@@ -141,7 +155,10 @@ function geometry(page: Page, openAt: string): Promise<Geometry> {
     const waitRow = layer.querySelector<HTMLElement>(
       '[data-waits] > [data-slot="row"] > [data-slot="text"]'
     );
+    const css = getComputedStyle(body);
     return {
+      fadeStart: Number.parseFloat(css.getPropertyValue("--fade-start")),
+      fadeLen: Number.parseFloat(css.getPropertyValue("--fade-len")),
       width: box.width,
       height: box.height,
       column: lift.getBoundingClientRect().width,
@@ -227,6 +244,128 @@ function overlaps(page: Page): Promise<string[]> {
   });
 }
 
+interface Edges {
+  /** Transcript lines crossing the layer's foot or the tray row's top. */
+  crossing: number;
+  footY: number;
+  groundOpacity: number;
+  groundSolidTop: number;
+  headFade: number;
+  headIn: number;
+  /** The strip over the layer's top, and the pane's head fade over it. */
+  overTop: number;
+  /** Of those, the ones some part of which shows (not under the ground). */
+  shown: string[];
+}
+
+/**
+ * Scrolls the transcript up (the reader leaving its tail) until one of its
+ * lines stands across `edge`: the layer's foot, or the tray row's top.
+ * Returns the line's box after the scroll.
+ */
+function straddle(page: Page, edge: "foot" | "tray"): Promise<string> {
+  return page.evaluate(async (which) => {
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-slot="scroller"]'
+    );
+    const at =
+      which === "foot"
+        ? document.querySelector('[data-slot="plan"]')?.getBoundingClientRect()
+            .bottom
+        : document
+            .querySelector('[data-slot="tray-slot"]')
+            ?.getBoundingClientRect().top;
+    if (!(scroller && at !== undefined)) {
+      return "no scroller or edge";
+    }
+    const lines: DOMRect[] = [];
+    const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      lines.push(...range.getClientRects());
+    }
+    // The nearest line above the edge, its middle brought onto the edge.
+    const [above] = lines
+      .filter((line) => line.top + line.height / 2 < at)
+      .sort((a, b) => b.top - a.top);
+    if (!above) {
+      return "no line above the edge";
+    }
+    scroller.scrollTop -= at - (above.top + above.height / 2);
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done))
+    );
+    return `scrolled to ${scroller.scrollTop.toFixed(1)}`;
+  }, edge);
+}
+
+/**
+ * The transcript at the layer's edges. Every line of it (each text line's
+ * box, Range client rects) that crosses the layer's foot or the tray row's
+ * top must show none of itself below the foot: the ground under an open
+ * layer (Composer `layer-ground`) stands solid, opaque, up to the foot. And
+ * the strip over the layer's top, at its full room, lies in the pane's head
+ * fade (HeadFade), where rows blur into the tab's sheet.
+ */
+function edges(page: Page): Promise<Edges> {
+  return page.evaluate(() => {
+    const layer = document.querySelector<HTMLElement>('[data-slot="plan"]');
+    const ground = document.querySelector<HTMLElement>(
+      '[data-slot="layer-ground"]'
+    );
+    const tray = document.querySelector<HTMLElement>('[data-slot="tray-slot"]');
+    const pane = document.querySelector<HTMLElement>('[data-slot="pane"]');
+    const head = document.querySelector<HTMLElement>('[data-slot="head-fade"]');
+    if (!(layer && ground && tray && pane && head)) {
+      throw new Error("no layer, ground, tray, pane or head fade");
+    }
+    const foot = layer.getBoundingClientRect().bottom;
+    const trayTop = tray.getBoundingClientRect().top;
+    const space8 = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--space-8")
+    );
+    const groundBox = ground.getBoundingClientRect();
+    const solidTop = groundBox.top + space8;
+    const opacity = Number(getComputedStyle(ground).opacity);
+    const lines: DOMRect[] = [];
+    const walker = document.createTreeWalker(
+      document.querySelector('[data-slot="scroller"]') ?? document.body,
+      NodeFilter.SHOW_TEXT
+    );
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      lines.push(...range.getClientRects());
+    }
+    const crosses = (line: DOMRect, y: number) =>
+      line.top < y - 0.5 && line.bottom > y + 0.5;
+    const crossing = lines.filter(
+      (line) => crosses(line, foot) || crosses(line, trayTop)
+    );
+    const shown = crossing
+      .filter(
+        (line) => opacity < 0.999 || solidTop > Math.max(foot, line.top) + 0.5
+      )
+      .map(
+        (line) =>
+          `line ${line.top.toFixed(1)}–${line.bottom.toFixed(1)} against the foot ${foot.toFixed(1)}, ground solid from ${solidTop.toFixed(1)} at ${opacity}`
+      );
+    const headLayer = head.querySelector<HTMLElement>('[data-slot="layer"]');
+    return {
+      crossing: crossing.length,
+      shown,
+      footY: foot,
+      groundOpacity: opacity,
+      groundSolidTop: solidTop,
+      overTop:
+        layer.getBoundingClientRect().top - pane.getBoundingClientRect().top,
+      headFade: head.getBoundingClientRect().height,
+      headIn: headLayer ? Number(getComputedStyle(headLayer).opacity) : 0,
+    };
+  });
+}
+
 /**
  * Each mark in the layer (PlanTree's tick, LiveDot and ringed dot, the
  * fold's tick and chevron, Close's cross) and the box it is drawn in: its
@@ -240,7 +379,7 @@ function marks(page: Page): Promise<{ read: number; boxed: string[] }> {
         '[data-slot="plan"] [data-slot="plan-mark"] > *, [data-slot="plan"] [data-slot="fold"] svg, [data-slot="plan-head"] svg'
       ),
     ];
-    const edges = (css: CSSStyleDeclaration) =>
+    const bordered = (css: CSSStyleDeclaration) =>
       ["top", "right", "bottom", "left"].filter(
         (side) =>
           Number.parseFloat(css.getPropertyValue(`border-${side}-width`)) > 0 &&
@@ -249,7 +388,7 @@ function marks(page: Page): Promise<{ read: number; boxed: string[] }> {
       );
     const drawing = (css: CSSStyleDeclaration): string[] => {
       const said: string[] = [];
-      const sides = edges(css);
+      const sides = bordered(css);
       if (sides.length > 0) {
         said.push(`bordered ${sides.join("/")}`);
       }
@@ -303,11 +442,23 @@ async function variantAt(
   const spilt = await spills(page);
   const over = await overlaps(page);
   const marked = await marks(page);
-  const peek = await page.evaluate(() =>
-    Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--space-5")
-    )
-  );
+  const edge = await edges(page);
+  // Off its tail, one line across the layer's foot, then one across the
+  // tray row's top: each read as it stands there.
+  const sliced: string[] = [];
+  let crossed = 0;
+  for (const edgeAt of ["foot", "tray"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one scroll at a time
+    const moved = await straddle(page, edgeAt);
+    const there = await edges(page);
+    crossed += there.crossing;
+    sliced.push(
+      ...there.shown.map((line) => `${edgeAt} (${moved}): ${line}`),
+      ...(there.crossing === 0
+        ? [`${edgeAt} (${moved}): no line across it`]
+        : [])
+    );
+  }
   const space2 = await page.evaluate(() =>
     Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue("--space-2")
@@ -336,11 +487,37 @@ async function variantAt(
     Math.abs(r.trayGap - space2) < 0.5,
     `${r.trayGap} against ${space2}`
   );
+  kit.note(
+    `${name}: ${edge.crossing} transcript lines cross the layer's foot (${edge.footY.toFixed(1)}) or the tray row's top; the ground is solid from ${edge.groundSolidTop.toFixed(1)} at opacity ${edge.groundOpacity}; ${edge.overTop.toFixed(1)}px of transcript over the layer, under a ${edge.headFade}px head fade at ${edge.headIn}`
+  );
+  kit.check(
+    `${name}: off its tail, a transcript line across the layer's foot or the tray row shows none of itself below the foot`,
+    crossed >= 2 && sliced.length === 0,
+    sliced.slice(0, 4).join("; ") || `${crossed} lines across the edges`
+  );
+  kit.check(
+    `${name}: no transcript line shows sliced under the layer's foot`,
+    edge.groundOpacity > 0.999 &&
+      edge.groundSolidTop <= edge.footY + 0.5 &&
+      edge.shown.length === 0,
+    edge.shown.slice(0, 4).join("; ") ||
+      `ground solid from ${edge.groundSolidTop} at ${edge.groundOpacity}, foot ${edge.footY}`
+  );
+  kit.check(
+    `${name}: the strip over the layer lies in the pane's head fade`,
+    edge.overTop <= edge.headFade + 0.5 && edge.headIn > 0.999,
+    `${edge.overTop} under a ${edge.headFade}px fade at ${edge.headIn}`
+  );
   if (variant === "2") {
     kit.check(
-      `${name}: it opens at the step under way, the row before it peeking`,
-      r.bodyScroll > 0 && Math.abs(r.openTop - peek) < 1,
-      `s5 at ${r.openTop}, peek ${peek}, scrolled ${r.bodyScroll}`
+      `${name}: it opens at the step under way, clear of the column's top fade, the row before it in the fade`,
+      r.bodyScroll > 0 &&
+        Math.abs(r.fadeStart - r.fadeLen) < 0.5 &&
+        r.openTop >= r.fadeStart - 0.5 &&
+        r.openTop - r.fadeStart < 1 &&
+        r.openRow !== null &&
+        r.openRow !== "s5",
+      `s5 at ${r.openTop}, the fade ${r.fadeStart} of ${r.fadeLen}, first in sight ${r.openRow}, scrolled ${r.bodyScroll}`
     );
   } else {
     kit.check(
@@ -519,6 +696,25 @@ async function shell(kit: Kit, base: string): Promise<void> {
     "plan-layer-preview: the shell switches variants in the phone's frame",
     size === "390×844" && page.url().includes("v=3"),
     `${size} ${page.url()}`
+  );
+  // Headless Chromium asks for no tab icon; a desk browser does, and
+  // answered a 404 for /favicon.ico. Both pages name the dashboard's own.
+  const icons = await page.evaluate(async () => {
+    const read = async (doc: Document) => {
+      const link = doc.querySelector<HTMLLinkElement>('link[rel="icon"]');
+      if (!link) {
+        return "no icon";
+      }
+      const answer = await fetch(link.href);
+      return `${answer.status} ${answer.headers.get("content-type")}`;
+    };
+    const inner = document.querySelector("iframe")?.contentDocument;
+    return [await read(document), inner ? await read(inner) : "no frame"];
+  });
+  kit.check(
+    "plan-layer-preview: both pages name a tab icon that is there",
+    icons.every((one) => one.startsWith("200 image/png")),
+    icons.join("; ")
   );
   kit.check(
     "plan-layer-preview: the shell says nothing wrong",

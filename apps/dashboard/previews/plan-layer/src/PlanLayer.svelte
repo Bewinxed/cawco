@@ -46,8 +46,8 @@
   };
 
   /**
-   * Where it opens: `openAt`'s row at the column's top, a step of the row
-   * before it showing under the edge fade, read through the scale the
+   * Where it opens: `openAt`'s row just under the column's top fade, the
+   * row before it showing in the fade, read through the scale the
    * surface's entrance holds it at as this runs.
    */
   const opens: Attachment<HTMLElement> = (body) => {
@@ -74,8 +74,11 @@
     if (!host) {
       return;
     }
-    const peek = Number.parseFloat(
-      getComputedStyle(body).getPropertyValue("--open-peek")
+    // Clear of the column's top fade (kit-edge-fade-block, `--fade-len`):
+    // the row it opens at reads at full ink, the row before it under the
+    // fade, the cue that more stands above.
+    const fade = Number.parseFloat(
+      getComputedStyle(body).getPropertyValue("--fade-len")
     );
     // The surface's entrance scales it while this reads (its `scale`, now):
     // a distance drawn inside it is that much of its distance in layout.
@@ -83,7 +86,8 @@
     const drawn =
       row.getBoundingClientRect().top - body.getBoundingClientRect().top;
     const top = drawn / scale - body.clientTop + body.scrollTop;
-    body.scrollTop = Math.max(0, top - peek);
+    // Whole pixels down: a row a fraction into the fade reads greyed.
+    body.scrollTop = Math.max(0, Math.floor(top - fade));
     body.dataset.opened = at;
   }
 
@@ -138,7 +142,7 @@
   </header>
   <div
     data-slot="body"
-    class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-3 pbe-space-4 px-space-4 flex flex-col gap-space-2 [--open-peek:var(--space-5)]"
+    class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-3 pbe-space-4 px-space-4 flex flex-col gap-space-2"
     style:--more-px="0"
     {@attach opens}
   >

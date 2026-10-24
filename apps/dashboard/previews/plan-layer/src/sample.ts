@@ -159,3 +159,79 @@ export const SPEC: (string | string[])[] = [
   "Editing the plan from the layer (§5.2, the person's own edits) is a task of its own. This one only draws what the hub already holds.",
   "Proof: composer-layers at Desk and Phone holds the transcript still while the layer opens and shuts; the build, lint and type-check pass.",
 ];
+
+/** The conversation the plan opens over, at its tail: what was said and done. */
+export const TRANSCRIPT: { kind: "said" | "done"; text: string }[] = [
+  {
+    kind: "said",
+    text: "The plan pane moved: it's a floating layer of the composer now, not the panel on the right. Check the plan still reads well there before we add anything to it.",
+  },
+  {
+    kind: "said",
+    text: "It does. PlanPane rises out of the tray row across the composer's width and stops a step under the dock's top; its column scrolls when the plan is longer than that. It shares the composer's one layer with the tray's shelf, so opening one shuts the other.",
+  },
+  {
+    kind: "done",
+    text: "Read apps/dashboard/src/lib/cawco/plan/PlanPane.svelte",
+  },
+  {
+    kind: "done",
+    text: "Read apps/dashboard/src/lib/cawco/transcript/composer-layer.svelte.ts",
+  },
+  {
+    kind: "said",
+    text: "Two things it doesn't do yet. It never shows a step that's waiting on you, though the hub keeps the wait, and the spec it carries is read-only, which is right for now.",
+  },
+  {
+    kind: "said",
+    text: "Then do the first one. And keep the plan's words as they are; I only want to see where it's waiting on me.",
+  },
+  {
+    kind: "said",
+    text: "Understood. I'll write the plan first so you can follow it in the layer, then work through it step by step. The wait gets drawn on its step, nothing else in the plan changes, and the step links to the card that asked.",
+  },
+  { kind: "done", text: "Wrote the plan: 12 steps" },
+  {
+    kind: "said",
+    text: "One of the steps is a question for you, about what the plan should show first when it opens. I'll ask it on a decision page when I reach it, and carry on with the steps that don't depend on it.",
+  },
+  { kind: "done", text: "Ran bun run check: 29 checks passed" },
+  {
+    kind: "said",
+    text: "Show Waiting on you on a plan's step when the session is waiting on my pick. Link it to the card.",
+  },
+  {
+    kind: "said",
+    text: "I'll start where the wait is kept. A plan step already carries waitsOn in core plan.ts: the decision page's artifact id and, when the session asked on one card, that card's id.",
+  },
+  { kind: "done", text: "Read packages/core/src/plan.ts" },
+  {
+    kind: "said",
+    text: "The hub sets the wait in two places: the session's own todo_write, as it asks, and artifact_create or artifact_update with does: pick, which puts a wait on the whole page on the current step. Both keep the wait across the session's later writes, by the step's id.",
+  },
+  { kind: "done", text: "Read packages/hub/src/plan-changes.ts" },
+  {
+    kind: "said",
+    text: "Nothing on the web reads it. stepsTree drops everything but the id, depth, status and words, so PlanTree has no wait to draw. I'll carry it through.",
+  },
+  {
+    kind: "done",
+    text: "Edited apps/dashboard/src/lib/cawco/plan/PlanTree.svelte",
+  },
+  {
+    kind: "said",
+    text: "Each row now holds its wait, and the link names the card from its page and card ids, or the page alone when the wait has no card.",
+  },
+  {
+    kind: "done",
+    text: "Edited apps/dashboard/src/lib/cawco/reference-things.svelte.ts",
+  },
+  {
+    kind: "said",
+    text: "I've carried the wait into each row and named the card it opens. Next I'm drawing Waiting on you on its step. Before I fold finished steps, I've asked you how the plan should read when it opens.",
+  },
+  {
+    kind: "done",
+    text: "Asked: When the plan opens over the conversation, what comes first?",
+  },
+];
