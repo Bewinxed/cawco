@@ -21,11 +21,15 @@
  * and downloads found no helper ("could not read Username").
  */
 
+import { readFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CAWCO_ENV } from "@cawco/core";
+import { cawcoDataDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { writeStateFile } from "@cawco/core/state-file";
 
 /**
  * Defined only in the published package's bundle (scripts/build-binary.ts),
@@ -69,14 +73,63 @@ const hubOrigin = (): string | undefined => {
   return url.origin;
 };
 
-/** The hub's own git origins, as its last register ack named them (core `RegisterAckPayload.gitOrigins`). */
-let ackOrigins: string[] = [];
+/**
+ * Where the hub's last register ack's git origins are kept, one file per hub:
+ * an agent started again knows them before its first ack. Without them its
+ * sessions' launch env named fewer origins than the OpenCode server it found
+ * running had started with, so it read that server as another's and replaced
+ * it, every restart, under every session the server held (agent-loop probe,
+ * 2026-10-24: "launch verification failed: started with … GIT_CONFIG_COUNT
+ * 15 …, launching with … GIT_CONFIG_COUNT 3").
+ */
+const originsFile = (): string | undefined => {
+  const origin = hubOrigin();
+  return origin
+    ? join(
+        cawcoDataDir(),
+        `hub-git-origins-${new URL(origin).host.replaceAll(":", "_")}.json`
+      )
+    : undefined;
+};
 
-/** The register ack's `gitOrigins`: what else the hub's git remote answers at. */
-export const setHubGitOrigins = (origins: unknown): void => {
-  ackOrigins = Array.isArray(origins)
-    ? origins.filter((one): one is string => typeof one === "string")
+/** What `text` names as origins: its strings, nothing else. */
+const originsOf = (said: unknown): string[] =>
+  Array.isArray(said)
+    ? said.filter((one): one is string => typeof one === "string")
     : [];
+
+/** The kept origins of the hub this agent reaches, read once as it starts; none when there are none. */
+const keptOrigins = (): string[] => {
+  const file = originsFile();
+  if (!file) {
+    return [];
+  }
+  try {
+    return originsOf(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    return [];
+  }
+};
+
+/** The hub's own git origins, as its last register ack named them (core `RegisterAckPayload.gitOrigins`). */
+let ackOrigins: string[] = keptOrigins();
+
+/** The register ack's `gitOrigins`: what else the hub's git remote answers at, kept for the next start. */
+export const setHubGitOrigins = (origins: unknown): void => {
+  const next = originsOf(origins);
+  const changed = JSON.stringify(next) !== JSON.stringify(ackOrigins);
+  ackOrigins = next;
+  const file = originsFile();
+  if (!(changed && file)) {
+    return;
+  }
+  mkdir(dirname(file), { recursive: true, mode: 0o700 })
+    .then(() => writeStateFile(file, JSON.stringify(next), { mode: 0o600 }))
+    .catch((error: unknown) =>
+      console.warn(
+        `[hub-git] the hub's git origins were not kept for the next start: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
 };
 
 /**

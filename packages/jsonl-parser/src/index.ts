@@ -19,6 +19,7 @@ export {
   type ReadResult,
 } from "./file.ts";
 export { parseMany, type ParseManyOptions } from "./pool.ts";
+export { setSectionMarker } from "./section.ts";
 export {
   completeLines,
   includesAny,

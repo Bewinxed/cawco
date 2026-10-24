@@ -15,6 +15,7 @@ import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { readTranscriptTail, type Checkpoint } from "./file.ts";
 import { parseMany } from "./pool.ts";
+import { section } from "./section.ts";
 import { typeFilter } from "./scan.ts";
 import {
   AUTHOR_RULES,
@@ -102,20 +103,48 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
 /**
- * How many of FTS5's segments on one level wait to be merged: its most, where
- * the default is 4 ("FTS5 begins to merge b-trees together once there exist M
- * or more b-trees with the same level, where M is the value of the
- * 'automerge' parameter. The maximum allowed value ... is 16",
- * https://www.sqlite.org/fts5.html#the_automerge_configuration_option).
- * Each sync's commit is a segment, and a merge writes its segments' postings
- * again and frees the old pages, which the next inserts reuse, and a rollback
+ * How many of FTS5's segments on one level are merged together: its most
+ * ("the minimum number of b-tree segments that will be merged together by a
+ * 'merge' command with a positive parameter … The default value … is 4. The
+ * minimum allowed value is 2, and the maximum 16",
+ * https://www.sqlite.org/fts5.html#the_usermerge_configuration_option).
+ * Each commit is a segment, and a merge writes its segments' postings again
+ * and frees the old pages, which the next inserts reuse, and a rollback
  * journal copies out every reused page first. Measured on the disk probe's
- * corpus, six ten-minute syncs: 16.4 MB written at 4, 14.9 MB at 16; the
- * first sync after a catch-up (which merges the catch-up's segments) 4.8 MB
- * at 4, 3.3 MB at 16. A search reads every segment: 27 ms a query at 4, 29
- * at 16.
+ * corpus with FTS5's automatic merge at the same number, six ten-minute
+ * syncs: 16.4 MB written at 4, 14.9 MB at 16; the first sync after a
+ * catch-up (which merges the catch-up's segments) 4.8 MB at 4, 3.3 MB at 16.
+ * A search reads every segment: 27 ms a query at 4, 29 at 16.
  */
-const FTS_AUTOMERGE = 16;
+const FTS_USERMERGE = 16;
+
+/**
+ * FTS5 merges nothing inside an insert: "Setting the 'automerge' parameter
+ * to 0 disables the automatic incremental merging of b-trees altogether"
+ * (#the_automerge_configuration_option), and the index merges itself in
+ * bounded steps between its commits instead ({@link MERGE_PAGES}). Merged
+ * inside an insert, one insert of a catch-up held an agent's loop 1.3 s
+ * ("search index: documents inserted, 1342 ms" and "1276 ms", agent-loop
+ * probe, 2026-10-24), first as a crisis merge, then as the automatic one.
+ */
+const FTS_AUTOMERGE = 0;
+
+/**
+ * How many segments on one level wait before an insert merges them all at
+ * once: "an INSERT, UPDATE or DELETE that triggers a crisis-merge may take a
+ * long time to complete"; "there is no maximum limit"
+ * (#the_crisismerge_configuration_option). The index's own steps keep each
+ * level under {@link FTS_USERMERGE}, so this is never reached. Our own call.
+ */
+const FTS_CRISISMERGE = 1024;
+
+/**
+ * Pages one merge step writes: "merges b-tree structures together until
+ * roughly N pages of merged data have been written"
+ * (#the_merge_command); a page is 4050 bytes by default (#the_pgsz_configuration_option).
+ * Our own call: about a megabyte, a few tens of ms.
+ */
+const MERGE_PAGES = 256;
 
 /**
  * How much a match weighs by whose words it is in: the person's own words
@@ -449,6 +478,16 @@ export interface SyncOptions {
  */
 const INSERT_CHUNK = 500;
 
+/**
+ * How long one write transaction inserts, measured as it runs, before it
+ * commits and the next begins. FTS5 holds a transaction's new terms until
+ * its COMMIT, which writes them and their segment out in one call that never
+ * yields: a 90 MB transcript's documents in one transaction held an agent's
+ * loop over a second at its COMMIT (agent-loop probe's profile, 2026-10-24).
+ * A transaction this long commits in a fraction of it. Our own call.
+ */
+const TRANSACTION_MS = 150;
+
 export interface SyncResult {
   filesScanned: number;
   filesFull: number;
@@ -495,13 +534,14 @@ export function matchQueries(text: string): { typing: string | null; whole: stri
 const FULL_PARSE_BATCH_BYTES = 128 * 1024 * 1024;
 
 /**
- * How many transcript bytes one write transaction takes on, at most. A sync
- * gathers every file's new documents and checkpoint and commits them
- * together: each commit writes the pages it touched (FTS5 writes a new
- * segment, its structure record and the B-tree pages above them), so one
- * commit per file per sync cost ten times what one per sync does with ten
- * live sessions. Only a catch-up reaches this bound; it keeps the journal,
- * and the documents held for it, to one bounded slice at a time.
+ * How many transcript bytes one write ({@link TranscriptIndex.#commit})
+ * gathers, at most. A sync gathers every file's new documents and checkpoint
+ * and writes them together: each commit writes the pages it touched (FTS5
+ * writes a new segment, its structure record and the B-tree pages above
+ * them), so one commit per file per sync cost ten times what one per sync
+ * does with ten live sessions. Only a catch-up reaches this bound; it keeps
+ * the documents held for a write to one bounded slice at a time, and the
+ * write commits each {@link TRANSACTION_MS} of inserting.
  */
 const WRITE_BATCH_BYTES = 32 * 1024 * 1024;
 
@@ -548,13 +588,17 @@ export class TranscriptIndex {
       this.#rebuild(path);
     }
     this.db.exec(SCHEMA);
-    const automerge = this.db
-      .query("SELECT v FROM docs_fts_config WHERE k = 'automerge'")
-      .get() as { v: number } | null;
-    if (automerge?.v !== FTS_AUTOMERGE) {
-      this.db
-        .query("INSERT INTO docs_fts(docs_fts, rank) VALUES ('automerge', ?)")
-        .run(FTS_AUTOMERGE);
+    for (const [key, value] of [
+      ["automerge", FTS_AUTOMERGE],
+      ["usermerge", FTS_USERMERGE],
+      ["crisismerge", FTS_CRISISMERGE],
+    ] as const) {
+      const held = this.db
+        .query("SELECT v FROM docs_fts_config WHERE k = ?")
+        .get(key) as { v: number } | null;
+      if (held?.v !== value) {
+        this.db.query("INSERT INTO docs_fts(docs_fts, rank) VALUES (?, ?)").run(key, value);
+      }
     }
     this.#reloadStrings();
     this.#reattribute();
@@ -749,13 +793,18 @@ export class TranscriptIndex {
   }
 
   /**
-   * Commits `writes`, then `docs` and the `meta` values that changed, as one
-   * transaction, answering how many documents were new; `ended`'s values
-   * ride along when the transaction is begun for the rest. Inserts take
-   * turns of the event loop, {@link INSERT_CHUNK} documents each: a catch-up
-   * of many files, or of one long one, is otherwise one unbroken block on the
-   * daemon's only thread. A transaction that would write nothing is not
-   * begun.
+   * Commits `writes`, then `docs` and the `meta` values that changed,
+   * answering how many documents were new; `ended`'s values ride along with
+   * the meta. Inserts take turns of the event loop, {@link INSERT_CHUNK}
+   * documents each, and a transaction that has inserted for
+   * {@link TRANSACTION_MS} commits, the loop takes a turn, and the next
+   * begins: no one write holds the daemon's only thread, however large the
+   * catch-up. A file's checkpoint is written after its last document, and
+   * the meta after every document, so a commit cut short leaves documents
+   * without their checkpoint, never a checkpoint without its documents: the
+   * next sync reads the file again, and `INSERT OR IGNORE` keeps each
+   * document once (`docs_key`). A transaction that would write nothing is
+   * not begun.
    */
   async #commit(
     writes: FileWrite[],
@@ -779,13 +828,28 @@ export class TranscriptIndex {
       "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     );
     let added = 0;
+    /** What the open transaction has spent inserting, ms. */
+    let spent = 0;
+    const turn = () => new Promise((resolve) => setImmediate(resolve));
+    /** One chunk inserted, timed; past {@link TRANSACTION_MS}, its transaction commits and the next begins. */
+    const insert = async (chunk: TranscriptDoc[]): Promise<void> => {
+      await turn();
+      const at = performance.now();
+      added += section("search index: documents inserted", () => this.#insertDocs(chunk));
+      spent += performance.now() - at;
+      if (spent >= TRANSACTION_MS) {
+        section("search index: commit", () => this.db.exec("COMMIT"));
+        spent = 0;
+        await this.#merge();
+        this.db.exec("BEGIN");
+      }
+    };
     this.db.exec("BEGIN");
     try {
       for (const write of writes) {
-        for (let at = 0; at === 0 || at < write.docs.length; at += INSERT_CHUNK) {
+        for (let at = 0; at < write.docs.length; at += INSERT_CHUNK) {
           // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the chunks are written one at a time on purpose.
-          await new Promise((resolve) => setImmediate(resolve));
-          added += this.#insertDocs(write.docs.slice(at, at + INSERT_CHUNK));
+          await insert(write.docs.slice(at, at + INSERT_CHUNK));
         }
         putCheckpoint.run(
           write.path,
@@ -796,19 +860,41 @@ export class TranscriptIndex {
       }
       for (let at = 0; at < docs.length; at += INSERT_CHUNK) {
         // biome-ignore lint/performance/noAwaitInLoops: the await is the yield, as above.
-        await new Promise((resolve) => setImmediate(resolve));
-        added += this.#insertDocs(docs.slice(at, at + INSERT_CHUNK));
+        await insert(docs.slice(at, at + INSERT_CHUNK));
       }
       for (const [key, value] of changed) {
         putMeta.run(key, value);
       }
-      this.db.exec("COMMIT");
+      section("search index: commit", () => this.db.exec("COMMIT"));
     } catch (error) {
       this.db.exec("ROLLBACK");
       this.#reloadStrings();
       throw error;
     }
+    await this.#merge();
     return added;
+  }
+
+  /**
+   * The index's segments merged, {@link MERGE_PAGES} at a time, each step its
+   * own transaction and a turn of the loop between, until a step finds
+   * nothing to merge: "If the difference between the two values
+   * [sqlite3_total_changes() before and after] is 2 or greater, then work was
+   * performed … less than 2 … the 'merge' command was a no-op"
+   * (https://www.sqlite.org/fts5.html#the_merge_command).
+   */
+  async #merge(): Promise<void> {
+    const changes = this.db.query("SELECT total_changes() AS n");
+    const merge = this.db.query("INSERT INTO docs_fts(docs_fts, rank) VALUES ('merge', ?)");
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: the await is the turn between steps
+      await new Promise((resolve) => setImmediate(resolve));
+      const before = (changes.get() as { n: number }).n;
+      section("search index: merge step", () => merge.run(MERGE_PAGES));
+      if ((changes.get() as { n: number }).n - before < 2) {
+        return;
+      }
+    }
   }
 
   /**

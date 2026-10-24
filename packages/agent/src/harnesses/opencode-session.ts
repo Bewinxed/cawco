@@ -98,6 +98,7 @@ import {
   type OpencodeClient,
 } from "./opencode-client";
 import {
+  forgetOpencodeCredential,
   readOpencodeCredentials,
   storeOpencodeCredential,
 } from "./opencode-credentials";
@@ -668,8 +669,6 @@ export interface OpencodeSessionOptions {
   isConfigGateHeld: (joinsTurn?: boolean) => boolean;
   /** A project's Caw: each of his shell and edit calls asks, and the hub's gate answers it ({@link leadAsks}). */
   lead: boolean;
-  /** The OpenCode session ids this agent runs, so a credential store keeps only theirs. */
-  liveSessions: () => ReadonlySet<string>;
   model: string | undefined;
   onRelease: () => void;
   permissionMode: string | undefined;
@@ -730,7 +729,6 @@ export class OpencodeSession implements HarnessSession {
   readonly #isConfigGateHeld: (joinsTurn?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
   readonly #prepareDispatch: () => Promise<void>;
-  readonly #liveSessions: () => ReadonlySet<string>;
   readonly #lifetime = new AbortController();
   /** The MCP servers that did not connect, by name, said for this start of the session. */
   readonly #mcpSaid = new Set<string>();
@@ -839,7 +837,6 @@ export class OpencodeSession implements HarnessSession {
     this.#onRelease = options.onRelease;
     this.#isConfigGateHeld = options.isConfigGateHeld;
     this.#readActivity = options.readActivity;
-    this.#liveSessions = options.liveSessions;
     // No prompt or command reaches the server before its location is ready:
     // a location whose plugin is missing or whose CawCo MCP server does not
     // connect fails the session with why, and every send it was handed fails
@@ -3293,16 +3290,12 @@ export class OpencodeSession implements HarnessSession {
     if (typeof credential !== "string" || !credential) {
       throw new Error("Session credential is missing.");
     }
-    await storeOpencodeCredential(
-      this.#opencodeSessionId(),
-      {
-        containerEnv: this.#ctx.containerEnv ?? {},
-        credential,
-        instanceId: this.instanceId,
-        workspace: this.#ctx.workspace ?? null,
-      },
-      this.#liveSessions()
-    );
+    await storeOpencodeCredential(this.#opencodeSessionId(), {
+      containerEnv: this.#ctx.containerEnv ?? {},
+      credential,
+      instanceId: this.instanceId,
+      workspace: this.#ctx.workspace ?? null,
+    });
     await acknowledgeSessionCredential(credential);
     return {
       installed: true,
@@ -3434,6 +3427,13 @@ export class OpencodeSession implements HarnessSession {
       .interrupt({ sessionID: this.#opencodeSessionId() })
       // biome-ignore lint/suspicious/noEmptyBlockStatements: stop() is tearing down regardless; the interrupt's own failure is not actionable
       .catch(() => {});
+    // Stopped, it holds its credential no longer; its next start installs one.
+    await forgetOpencodeCredential(this.#opencodeSessionId()).catch(
+      (error: unknown) =>
+        console.warn(
+          `[opencode] ${this.instanceId}: its stored credential was not let go: ${errorText(error)}`
+        )
+    );
   }
 
   // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this teardown is synchronous

@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { basename } from "node:path";
 import type { UsageTokens } from "@cawco/core";
 import { costForUsage, totalTokens } from "@cawco/core";
+import { scanRanges } from "@cawco/jsonl-parser/opencode";
 import type { ScannedRecord } from "./types";
 
 /**
@@ -128,12 +129,14 @@ const recordOf = (
  * seen: the next watermark. A message still streaming is read again once it
  * completes, since completing updates it. A 1.x database 2.0 has not
  * converted yet (no `session_v2`) holds no 2.0 rows: it is read once it is.
+ * Read a rowid range at a time, the loop taking a turn between ranges
+ * (jsonl-parser `scanRanges`): OpenCode keeps no index on `time_updated`.
  */
-export const scanOpencode = (
+export const scanOpencode = async (
   dbPath: string,
   since: number,
   onRecord: (record: ScannedRecord) => void
-): number => {
+): Promise<number> => {
   const db = new Database(dbPath, { readonly: true });
   try {
     if (
@@ -145,26 +148,28 @@ export const scanOpencode = (
     ) {
       return since;
     }
-    const rows = db
-      .query<MessageRow, [number]>(
-        `SELECT m.id, m.session_id, m.type, m.time_created, m.time_updated, m.data,
-                s.directory, s.model AS session_model, p.worktree
-         FROM session_message m
-         JOIN session_v2 s ON s.id = m.session_id
-         LEFT JOIN project p ON p.id = s.project_id
-         WHERE m.time_updated > ?1 AND m.type IN ('assistant', 'compaction')`
-      )
-      .iterate(since);
     let next = since;
-    for (const row of rows) {
-      next = Math.max(next, row.time_updated);
-      const data = parse<MessageData>(row.data);
-      const record =
-        data && settled(row, data) ? recordOf(row, data) : undefined;
-      if (record) {
-        onRecord(record);
+    await scanRanges<MessageRow>(
+      db,
+      "session_message",
+      `SELECT m.id, m.session_id, m.type, m.time_created, m.time_updated, m.data,
+              s.directory, s.model AS session_model, p.worktree
+       FROM session_message m
+       JOIN session_v2 s ON s.id = m.session_id
+       LEFT JOIN project p ON p.id = s.project_id
+       WHERE m.rowid > ?1 AND m.rowid <= ?2
+         AND m.time_updated > ?3 AND m.type IN ('assistant', 'compaction')`,
+      since,
+      (row) => {
+        next = Math.max(next, row.time_updated);
+        const data = parse<MessageData>(row.data);
+        const record =
+          data && settled(row, data) ? recordOf(row, data) : undefined;
+        if (record) {
+          onRecord(record);
+        }
       }
-    }
+    );
     return next;
   } finally {
     db.close();

@@ -116,15 +116,57 @@ function wordsOf(
 }
 
 /**
- * Read user and settled assistant messages from an OpenCode database into
- * normalized transcript documents. An answer still streaming is left for the
- * read after it completes, which updates it. A 1.x database 2.0 has not
- * converted yet (no `session_v2`) holds no 2.0 rows: it is read once it is.
+ * How many rowids one statement of a scan covers. OpenCode keeps no index on
+ * `time_updated`, so a scan for what moved reads every message; one
+ * statement over the whole table held its reader's thread as long as the
+ * table took to read (an agent's, every sync). Ranges of this many rowids
+ * read in a few milliseconds each, and the thread takes a turn between
+ * them. Our own call.
  */
-export function readOpenCodeDocs(
+const SCAN_RANGE = 2000;
+
+/**
+ * Every row `sql` answers over `table`, a rowid range at a time, handed to
+ * `each` in rowid order, with a turn of the event loop between ranges. `sql`
+ * takes the range as `?1` (exclusive) and `?2` (inclusive) on its own
+ * `rowid` term, and `since` as `?3`. The whole scan is one read
+ * transaction, so it reads one state of the database however long it takes:
+ * a watermark it answers misses nothing written after it.
+ */
+export async function scanRanges<R>(
+  db: Database,
+  table: string,
+  sql: string,
+  since: number,
+  each: (row: R) => void,
+): Promise<void> {
+  db.exec("BEGIN");
+  try {
+    const top =
+      (db.query(`SELECT max(rowid) AS top FROM ${table}`).get() as { top: number | null } | null)
+        ?.top ?? 0;
+    const read = db.query<R, [number, number, number]>(sql);
+    for (let from = 0; from < top; from += SCAN_RANGE) {
+      for (const row of read.all(from, from + SCAN_RANGE, since)) {
+        each(row);
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: the await is the turn between ranges
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  } finally {
+    db.exec("COMMIT");
+  }
+}
+
+/**
+ * Every user and assistant message in one OpenCode database updated after
+ * `options.since`, as documents, in id order, and the newest `time_updated`
+ * seen: the next watermark. Read a rowid range at a time ({@link scanRanges}).
+ */
+export async function readOpenCodeDocs(
   dbPath: string,
   options: ReadOpenCodeOptions = {},
-): OpenCodeReadResult {
+): Promise<OpenCodeReadResult> {
   const db = new Database(dbPath, { readonly: true });
   try {
     const since = options.since ?? 0;
@@ -135,47 +177,50 @@ export function readOpenCodeDocs(
     ) {
       return { docs: [], watermark: since };
     }
-    const rows = db
-      .prepare(
-        `SELECT m.id, m.session_id, m.type, m.time_created, m.time_updated, m.data, s.directory
-         FROM session_message m JOIN session_v2 s ON s.id = m.session_id
-         WHERE m.time_updated > ? AND m.type IN ('user', 'assistant') ORDER BY m.id`,
-      )
-      .all(since) as Row[];
     const docs: TranscriptDoc[] = [];
     let watermark = since;
-    for (const row of rows) {
-      watermark = Math.max(watermark, row.time_updated);
-      let message: MessageData;
-      try {
-        message = JSON.parse(row.data) as MessageData;
-      } catch {
-        continue;
-      }
-      const words = wordsOf(
-        row,
-        message,
-        options.reasoning !== false,
-        options.toolOutputChars ?? TOOL_OUTPUT_CHARS,
-      );
-      if (!words) {
-        continue;
-      }
-      docs.push({
-        harness: "opencode",
-        sessionId: row.session_id,
-        id: row.id,
-        role: row.type,
-        author: words.author,
-        timestamp: new Date(message.time?.created ?? row.time_created).toISOString(),
-        text: words.text,
-        ...(words.thinking ? { thinking: words.thinking } : {}),
-        tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
-        ...(words.output ? { output: words.output } : {}),
-        cwd: row.directory,
-        model: message.model?.id,
-      });
-    }
+    await scanRanges<Row>(
+      db,
+      "session_message",
+      `SELECT m.id, m.session_id, m.type, m.time_created, m.time_updated, m.data, s.directory
+       FROM session_message m JOIN session_v2 s ON s.id = m.session_id
+       WHERE m.rowid > ?1 AND m.rowid <= ?2
+         AND m.time_updated > ?3 AND m.type IN ('user', 'assistant')`,
+      since,
+      (row) => {
+        watermark = Math.max(watermark, row.time_updated);
+        let message: MessageData;
+        try {
+          message = JSON.parse(row.data) as MessageData;
+        } catch {
+          return;
+        }
+        const words = wordsOf(
+          row,
+          message,
+          options.reasoning !== false,
+          options.toolOutputChars ?? TOOL_OUTPUT_CHARS,
+        );
+        if (!words) {
+          return;
+        }
+        docs.push({
+          harness: "opencode",
+          sessionId: row.session_id,
+          id: row.id,
+          role: row.type,
+          author: words.author,
+          timestamp: new Date(message.time?.created ?? row.time_created).toISOString(),
+          text: words.text,
+          ...(words.thinking ? { thinking: words.thinking } : {}),
+          tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
+          ...(words.output ? { output: words.output } : {}),
+          cwd: row.directory,
+          model: message.model?.id,
+        });
+      },
+    );
+    docs.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     return { docs, watermark };
   } finally {
     db.close();

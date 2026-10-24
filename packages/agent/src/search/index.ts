@@ -21,7 +21,7 @@ import {
 import type { TranscriptDoc } from "@cawco/jsonl-parser";
 import { TranscriptIndex } from "@cawco/jsonl-parser/fts5";
 import { readOpenCodeDocs } from "@cawco/jsonl-parser/opencode";
-import { inFlight, syncSection } from "../loop-watch";
+import { inFlight } from "../loop-watch";
 
 /** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
 const WATERMARK = "opencode_watermark:";
@@ -170,12 +170,13 @@ export class TranscriptSearchService {
     const watermarks = new Map<string, number>();
     for (const dbPath of opencodeDatabases()) {
       const key = `${WATERMARK}${dbPath}`;
-      const read = syncSection("search: OpenCode messages read (SQLite)", () =>
-        readOpenCodeDocs(dbPath, {
-          since: this.#openCodeWatermarks.get(key) ?? 0,
-        })
-      );
-      docs.push(...read.docs);
+      // biome-ignore lint/performance/noAwaitInLoops: one database at a time, each a rowid range at a time
+      const read = await readOpenCodeDocs(dbPath, {
+        since: this.#openCodeWatermarks.get(key) ?? 0,
+      });
+      for (const doc of read.docs) {
+        docs.push(doc);
+      }
       meta[key] = String(read.watermark);
       watermarks.set(key, read.watermark);
     }

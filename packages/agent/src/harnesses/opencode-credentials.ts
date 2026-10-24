@@ -60,26 +60,40 @@ export const readOpencodeCredentials = async (): Promise<
 
 let writing: Promise<unknown> = Promise.resolve();
 
-/**
- * Records `held` as `sessionId`'s, keeping only the sessions in `live`: a
- * session this agent no longer runs has no use for its old one. Writes are
- * serialized and atomic, owner-only.
- */
-export const storeOpencodeCredential = (
-  sessionId: string,
-  held: HeldCredential,
-  live: ReadonlySet<string>
+/** `change` applied to the stored credentials, one write at a time, atomic and owner-only. */
+const rewrite = (
+  change: (stored: Record<string, HeldCredential>) => void
 ): Promise<void> => {
   const next = writing.then(async () => {
     const stored = await readOpencodeCredentials();
-    const kept = Object.fromEntries(
-      Object.entries(stored).filter(([id]) => live.has(id))
-    );
-    kept[sessionId] = held;
+    change(stored);
     const file = opencodeCredentialFile();
     await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
-    await writeStateFile(file, JSON.stringify(kept), { mode: 0o600 });
+    await writeStateFile(file, JSON.stringify(stored), { mode: 0o600 });
   });
   writing = next.catch(() => undefined);
   return next;
 };
+
+/**
+ * Records `held` as `sessionId`'s, beside every other session's. A session's
+ * entry leaves only when the session is stopped ({@link
+ * forgetOpencodeCredential}): it is read back when an agent takes the session
+ * over after a restart, and a store that kept only the sessions it knew of
+ * dropped the ones starting beside it, which then failed at the next restart
+ * ("This OpenCode session holds no session credential", 101 of 120 in the
+ * agent-loop probe, 2026-10-24).
+ */
+export const storeOpencodeCredential = (
+  sessionId: string,
+  held: HeldCredential
+): Promise<void> =>
+  rewrite((stored) => {
+    stored[sessionId] = held;
+  });
+
+/** The stopped session `sessionId`'s entry, gone: its next start installs a fresh one. */
+export const forgetOpencodeCredential = (sessionId: string): Promise<void> =>
+  rewrite((stored) => {
+    delete stored[sessionId];
+  });

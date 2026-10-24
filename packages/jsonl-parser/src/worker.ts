@@ -58,14 +58,60 @@ export async function runTask(task: WorkerTask): Promise<WorkerFileResult[]> {
 declare const self: { onmessage: ((event: MessageEvent) => void) | null } | undefined;
 declare function postMessage(message: unknown): void;
 
+/**
+ * Documents or records one message carries, at most. The reader takes a
+ * worker's message in on its own thread, every value in it at once: one
+ * message of a 90 MB transcript's documents held an agent's loop over a
+ * second (agent-loop probe, 2026-10-24). Our own call: a few milliseconds
+ * of taking in each.
+ */
+export const PART_ITEMS = 1000;
+
+/** What a worker sends: a part of a file's documents or records, a file's end, or the task's. */
+export type WorkerMessage =
+  | { kind: "part"; path: string; docs?: TranscriptDoc[]; records?: LocatedRecord[] }
+  | { kind: "file"; path: string; stats: ParseStats; error?: string }
+  | { kind: "done" };
+
 // This module is also imported on the main thread (pool.ts uses runTask as
 // the no-worker fallback), where registering a global onmessage handler
 // would pin the event loop open. Only self-register inside a real worker.
 import { isMainThread } from "node:worker_threads";
 
 if (!isMainThread && typeof self !== "undefined" && self !== null) {
+  /** The reader's word that it took the last message in: the next goes. */
+  let more: (() => void) | undefined;
+  const send = async (message: WorkerMessage): Promise<void> => {
+    const taken = new Promise<void>((resolve) => {
+      more = resolve;
+    });
+    postMessage(message);
+    await taken;
+  };
   self.onmessage = async (event: MessageEvent) => {
-    const results = await runTask(event.data as WorkerTask);
-    postMessage(results);
+    if (event.data === "more") {
+      more?.();
+      return;
+    }
+    // One file at a time, each sent in parts, each part once the reader took the last in.
+    for (const result of await runTask(event.data as WorkerTask)) {
+      const items = result.docs ?? result.records ?? [];
+      for (let at = 0; at < items.length; at += PART_ITEMS) {
+        const part = items.slice(at, at + PART_ITEMS);
+        // biome-ignore lint/performance/noAwaitInLoops: each part waits for the reader to take the last in
+        await send(
+          result.docs
+            ? { kind: "part", path: result.path, docs: part as TranscriptDoc[] }
+            : { kind: "part", path: result.path, records: part as LocatedRecord[] },
+        );
+      }
+      await send({
+        kind: "file",
+        path: result.path,
+        stats: result.stats,
+        ...(result.error === undefined ? {} : { error: result.error }),
+      });
+    }
+    postMessage({ kind: "done" } satisfies WorkerMessage);
   };
 }

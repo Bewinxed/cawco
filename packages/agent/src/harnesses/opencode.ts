@@ -5201,12 +5201,6 @@ export class OpencodeHarness implements Harness {
       readActivity: () =>
         this.#sessionBusy(sessionId, this.#sessionOwners.get(ctx.instanceId)),
       prepareDispatch: () => this.#prepareDispatch(session),
-      liveSessions: () =>
-        new Set(
-          [...this.#sessions.values(), session].flatMap((held) =>
-            held.sessionId ? [held.sessionId] : []
-          )
-        ),
     });
     this.#sessionOwners.set(ctx.instanceId, identity);
     // A session an earlier agent left mid-turn: the hub still waits on that

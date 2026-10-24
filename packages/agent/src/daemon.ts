@@ -155,6 +155,7 @@ import {
 } from "@cawco/core/upstream-post";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
+import { setSectionMarker } from "@cawco/jsonl-parser";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
@@ -3896,8 +3897,10 @@ export const startDaemon = (rediscover = false) =>
 export const runDaemon = (rediscover = false): void => {
   // No log line prints a session credential.
   redactConsole();
-  // A stall of its loop names what held it (loop-watch.ts).
+  // A stall of its loop names what held it (loop-watch.ts), the transcript
+  // index's steps among what it can name.
   watchLoop((line) => console.warn(line));
+  setSectionMarker(syncSection);
   // A broken law crashes the agent (core invariant.ts): sessiond keeps the
   // sessions' processes across its restart.
   lawPolicy("crash");

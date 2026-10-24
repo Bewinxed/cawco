@@ -15,7 +15,6 @@ import {
   listClaudeFiles,
   opencodeDatabases,
 } from "@cawco/core/paths";
-import { syncSection } from "../loop-watch";
 import { gauge } from "../memory";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
@@ -662,13 +661,13 @@ export class UsageScanner {
    * when it moved. A session that moved between servers has the same message
    * ids in both, and the seen set counts each once.
    */
-  #scanOpencode(fresh: boolean): void {
+  async #scanOpencode(fresh: boolean): Promise<void> {
     for (const dbPath of opencodeDatabases()) {
       const key = `opencode_max_time_updated:${dbPath}`;
       const since = fresh ? 0 : (this.#meta(key) ?? 0);
-      const latest = syncSection(
-        "usage: OpenCode messages scanned (SQLite)",
-        () => scanOpencode(dbPath, since, (rec) => this.#ingest(rec))
+      // biome-ignore lint/performance/noAwaitInLoops: one database at a time, each a rowid range at a time
+      const latest = await scanOpencode(dbPath, since, (rec) =>
+        this.#ingest(rec)
       );
       if (latest !== since) {
         this.#setMeta.run(key, latest);
@@ -701,8 +700,8 @@ export class UsageScanner {
         this.#scanFile(file.path, file.project, 0, info)
       );
     }
-    await this.#inTransaction(() => {
-      this.#scanOpencode(true);
+    await this.#inTransaction(async () => {
+      await this.#scanOpencode(true);
       this.#setMeta.run("last_full_rebuild", Date.now());
       this.#setMeta.run("rates", ratesFingerprint());
       this.#setMeta.run("version", SCANNER_VERSION);
@@ -737,7 +736,7 @@ export class UsageScanner {
         failure ??= error;
       }
     }
-    this.#scanOpencode(false);
+    await this.#scanOpencode(false);
     return failure;
   }
 

@@ -9,7 +9,14 @@
  */
 
 import { stat } from "node:fs/promises";
-import { runTask, type WorkerFileResult, type WorkerTask } from "./worker.ts";
+import type { TranscriptDoc } from "./text.ts";
+import type { LocatedRecord } from "./types.ts";
+import {
+  runTask,
+  type WorkerFileResult,
+  type WorkerMessage,
+  type WorkerTask,
+} from "./worker.ts";
 const STANDALONE = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
 
 export interface ParseManyOptions extends Omit<WorkerTask, "files"> {
@@ -70,9 +77,38 @@ export async function parseMany(
           // Running from source (Bun, .ts) or from dist (built .js).
           const workerFile = STANDALONE ? "./scripts/binary/transcript-worker.js" : import.meta.url.endsWith(".ts") ? "./worker.ts" : "./worker.js";
           const worker = new Worker(new URL(workerFile, import.meta.url));
+          // The shard's files, gathered from the worker's parts, each part
+          // taken in on a turn of its own (worker.ts `PART_ITEMS`).
+          const results: WorkerFileResult[] = [];
+          let docs: TranscriptDoc[] = [];
+          let records: LocatedRecord[] = [];
           worker.onmessage = (event: MessageEvent) => {
-            worker.terminate();
-            resolve(event.data as WorkerFileResult[]);
+            const message = event.data as WorkerMessage;
+            switch (message.kind) {
+              case "part":
+                docs = message.docs ? docs.concat(message.docs) : docs;
+                records = message.records ? records.concat(message.records) : records;
+                break;
+              case "file":
+                results.push({
+                  path: message.path,
+                  stats: message.stats,
+                  ...(message.error === undefined ? {} : { error: message.error }),
+                  ...(options.mode === "docs" ? { docs } : { records }),
+                });
+                docs = [];
+                records = [];
+                break;
+              case "done":
+                worker.terminate();
+                resolve(results);
+                return;
+              default: {
+                const unhandled: never = message;
+                throw new Error(`unhandled worker message: ${JSON.stringify(unhandled)}`);
+              }
+            }
+            setImmediate(() => worker.postMessage("more"));
           };
           worker.onerror = (event) => {
             worker.terminate();
