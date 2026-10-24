@@ -8,7 +8,7 @@
  *   --import-secrets PLACE     the release secrets from PLACE into the release env (release-signing.ts), then checks
  *
  * What a release needs on its host, beside a clone of the repository:
- * - git, curl, tar, gzip, unzip, ar (binutils), the arm64 binfmt entry (qemu-user-binfmt) that runs the published
+ * - git, curl, tar, gzip, zip, unzip, ar (binutils), the arm64 binfmt entry (qemu-user-binfmt) that runs the published
  *   linux-arm64 binary, podman with the user's subordinate ids (the container proofs, rootless), gh signed in with
  *   access to the release repository, and systemd's user manager with lingering (scripts/ship.sh's unit);
  * - rcodesign, pinned (release-tools.ts);
@@ -81,6 +81,7 @@ const COMMANDS: [string, string][] = [
   ["tar", "tar"],
   ["gzip", "gzip"],
   ["unzip", "unzip"],
+  ["zip", "zip"],
   ["ar", "binutils"],
   ["podman", "podman"],
   ["gh", "gh"],

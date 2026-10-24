@@ -15,9 +15,10 @@
  *   JIT entitlement, a Developer ID Application certificate of team
  *   FN5LJSPX2R, and a designated requirement that names the identifier and
  *   the team and no cdhash.
- * - {@link notarizeBundle}: has Apple notarize the signed bundle and staples
- *   the ticket to it (`notary-submit --staple`: "wait and automatically staple
- *   the file if notarization was successful"); a bundle's ticket is the file
+ * - {@link notarizeBundle}: has Apple notarize the signed bundle through the
+ *   Notary API (notary.ts: each request asked again when it got no answer,
+ *   never when Apple refused it) and staples the ticket to it (`rcodesign
+ *   staple`); a bundle's ticket is the file
  *   `Contents/CodeResources` (rcodesign stapling.rs: "Stapling a bundle (e.g.
  *   `MyApp.app`) is literally just writing a `Contents/CodeResources` file
  *   containing the raw ticket data"), which the archive then carries. Each
@@ -53,8 +54,10 @@ import {
   AGENT_BUNDLE_EXECUTABLE,
   AGENT_BUNDLE_ID,
 } from "../../packages/core/src/agent-bundle";
+import { NoAnswer, persist } from "../lib/outside-call";
 import { recordNotarization } from "../release-quota";
 import { rcodesignPath } from "../release-tools";
+import { notarize } from "./notary";
 
 /** A command run as one of the release's steps: its stdout when `capture`. */
 export type Run = (
@@ -68,7 +71,6 @@ export const APPLE_TEAM_ID = "FN5LJSPX2R";
 const ENTITLEMENTS = join(import.meta.dir, "agent.entitlements");
 /** "98 percent of software within 15 minutes" (Apple, customizing-the-notarization-workflow); past this the release fails. */
 const NOTARY_WAIT_S = 30 * 60;
-const SUBMISSION_ID = /submission ID: ([0-9a-f-]{36})/i;
 /** The designated requirement as `rcodesign print-signature-info` prints it. */
 const DESIGNATED = /designated\(3\): \d+: (.*)$/m;
 
@@ -155,10 +157,12 @@ export async function signBundle(
 }
 
 /**
- * Has Apple notarize `dir`/CawCo Agent.app, waits, and staples the ticket to
- * it, with the App Store Connect key in `apiKey` (rcodesign's
- * `encode-app-store-connect-api-key` JSON). Prints the wait on its own
- * `[release] …s notary-submit` line, NOTARIZED and STAPLED.
+ * Has Apple notarize `dir`/CawCo Agent.app (zipped, as the Notary API takes a
+ * bundle) through notary.ts, with the App Store Connect key in `apiKey`
+ * (rcodesign's `encode-app-store-connect-api-key` JSON), then staples the
+ * ticket to it with rcodesign. Prints the wait on its own `[release] …s
+ * notary-submit` line, Apple's log, NOTARIZED and STAPLED; keeps the log as
+ * `dir`/notary-TARGET.log.
  */
 export async function notarizeBundle(
   run: Run,
@@ -168,52 +172,49 @@ export async function notarizeBundle(
   apiKey: string
 ): Promise<void> {
   const app = join(dir, AGENT_BUNDLE);
-  const said = join(dir, `notary-${target}.log`);
-  await recordNotarization({ target, version });
+  const zip = join(dir, `notary-${target}.zip`);
+  await rm(zip, { force: true });
+  // The bundle under its own name at the zip's root, symlinks kept (rcodesign bundle_to_zip lays it out the same).
+  await run(["zip", "-qry", zip, AGENT_BUNDLE], dir);
+  const sha256 = new Bun.CryptoHasher("sha256")
+    .update(await Bun.file(zip).bytes())
+    .digest("hex");
   const started = performance.now();
-  // Streamed to the release's log and kept, so a failure can name its submission.
-  const submitted = await run([
-    "bash",
-    "-o",
-    "pipefail",
-    "-c",
-    'log=$1; shift; "$@" 2>&1 | tee "$log"',
-    "notary",
-    said,
-    rcodesignPath(),
-    "notary-submit",
-    "--api-key-file",
-    apiKey,
-    "--staple",
-    "--max-wait-seconds",
-    String(NOTARY_WAIT_S),
-    app,
-  ]).then(
-    () => true,
-    () => false
-  );
-  const text = await Bun.file(said)
-    .text()
-    .catch(() => "");
-  const id = SUBMISSION_ID.exec(text)?.[1];
+  const notarized = await notarize({
+    apiKeyFile: apiKey,
+    // Unique to this upload, so a submit that got no answer can be found by it.
+    name: `${AGENT_BUNDLE} ${target} ${version} ${sha256.slice(0, 16)}.zip`,
+    sha256,
+    zip,
+    waitS: NOTARY_WAIT_S,
+    record: () => recordNotarization({ target, version }),
+  }).finally(() => rm(zip, { force: true }));
+  await Bun.write(join(dir, `notary-${target}.log`), notarized.log);
+  for (const line of notarized.log.split("\n")) {
+    console.log(`notary log> ${line}`);
+  }
   console.log(
-    `[release] ${((performance.now() - started) / 1000).toFixed(1)}s notary-submit ${target}: ${submitted ? "Accepted, stapled" : "failed"}${id ? ` ${id}` : ""}`
+    `[release] ${((performance.now() - started) / 1000).toFixed(1)}s notary-submit ${target}: ${notarized.status} ${notarized.id}`
   );
-  if (!submitted) {
-    if (id) {
-      await run([
-        rcodesignPath(),
-        "notary-log",
-        "--api-key-file",
-        apiKey,
-        id,
-      ]).catch(() => undefined);
-    }
+  if (notarized.status !== "Accepted") {
+    const summary = notarized.log
+      ? (JSON.parse(notarized.log) as { statusSummary?: string }).statusSummary
+      : undefined;
     fail(
-      `notarization of ${target}${id ? ` (${id})` : ""} did not end Accepted and stapled: the release does not publish`
+      `Apple's notarization of ${target} (${notarized.id}) ended ${notarized.status}${summary ? `: ${summary}` : ""}; the release does not publish`
     );
   }
-  console.log(`NOTARIZED ${target}${id ? ` ${id}` : ""}`);
+  console.log(`NOTARIZED ${target} ${notarized.id}`);
+  // Accepted: Apple holds the ticket, so a staple that fails is its lookup
+  // getting no answer or the ticket not yet served: both cured by asking again.
+  await persist(`staple ${target}`, () =>
+    run([rcodesignPath(), "staple", app], dir).catch((error: unknown) => {
+      throw new NoAnswer(
+        `rcodesign staple ${target}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
+    })
+  );
   await stapled(app);
   console.log(`STAPLED ${app}`);
 }

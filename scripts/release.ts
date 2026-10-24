@@ -78,6 +78,7 @@ import {
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
+import { ask } from "./lib/outside-call";
 import {
   createDraft,
   deleteDraft,
@@ -693,11 +694,9 @@ const arm64Sysroot = async (run: Runner): Promise<string> => {
   ) {
     return arm64Root;
   }
-  const response = await fetch(ARM64_LIBC.url);
-  if (!response.ok) {
-    throw new Error(`${ARM64_LIBC.url} answered ${response.status}`);
-  }
-  const deb = new Uint8Array(await response.arrayBuffer());
+  const deb = (
+    await ask("the arm64 glibc package", ARM64_LIBC.url, {}, 5 * 60_000)
+  ).bytes;
   const sha256 = new Bun.CryptoHasher("sha256").update(deb).digest("hex");
   if (sha256 !== ARM64_LIBC.sha256) {
     throw new Error(
