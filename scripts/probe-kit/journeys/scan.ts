@@ -122,8 +122,14 @@ export function scan(): string[] {
   };
   const inner = (el: Element): Box => {
     const r = el.getBoundingClientRect();
-    const left = r.left + el.clientLeft;
-    const top = r.top + el.clientTop;
+    // The client sizes are the element's own, before any transform scales
+    // it; the box is read on the screen, so they are scaled as it is (a
+    // drawing scaled to fit its column: design-previews/workflows).
+    const own = el as HTMLElement;
+    const sx = own.offsetWidth > 0 ? r.width / own.offsetWidth : 1;
+    const sy = own.offsetHeight > 0 ? r.height / own.offsetHeight : 1;
+    const left = r.left + el.clientLeft * sx;
+    const top = r.top + el.clientTop * sy;
     const s = style(el);
     // A clip-path or a paint containment cuts at the border box.
     if (s.overflowX === "visible" && s.overflowY === "visible") {
@@ -132,8 +138,8 @@ export function scan(): string[] {
     return {
       left: s.overflowX === "visible" ? r.left : left,
       top: s.overflowY === "visible" ? r.top : top,
-      right: s.overflowX === "visible" ? r.right : left + el.clientWidth,
-      bottom: s.overflowY === "visible" ? r.bottom : top + el.clientHeight,
+      right: s.overflowX === "visible" ? r.right : left + el.clientWidth * sx,
+      bottom: s.overflowY === "visible" ? r.bottom : top + el.clientHeight * sy,
     };
   };
   const cut = (box: Box, by: Box): Box => ({
