@@ -28,7 +28,9 @@ import { type Engine, type Kit, ROOT, readMotion, type Spec } from "../kit";
 
 const DIR = join(ROOT, "design-previews", "pairing");
 const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
-const FINE = Array.from({ length: 21 }, (_, i) => i / 20);
+/** Reads a moment is sought to: every 2.5% of its clock (about 19ms of the 760ms shatter), so a part crossing words for a few frames is read there. */
+const STEPS = 40;
+const FINE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
 
 const MOMENTS = [
   "asking",
@@ -44,10 +46,17 @@ const MOMENTS = [
   "failed",
 ] as const;
 type Moment = (typeof MOMENTS)[number];
+/** `PAIRING_MOMENTS=denied,expired`: the motion legs of those moments alone (every moment by default). */
+const ONLY = MOMENTS.filter(
+  (m) =>
+    !process.env.PAIRING_MOMENTS ||
+    process.env.PAIRING_MOMENTS.split(",").includes(m)
+);
 
 interface Part {
   h: number;
   inCard: boolean;
+  inFlight: boolean;
   inTitle: boolean;
   inWords: boolean;
   opacity: number;
@@ -58,12 +67,22 @@ interface Part {
   ty: number;
   what: string;
 }
+interface Rect {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
 interface Geo {
   badge: { x: number; y: number; w: number; h: number } | null;
   card: { x: number; y: number; w: number; h: number };
   caw: { x: number; y: number; w: number; h: number };
   clusters: { x: number; y: number; w: number; h: number; o: number }[];
+  /** Each flying part (a flight, a shard, the falling badge) as far as it can be drawn: its box cut to every clip above it. */
+  flying: (Rect & { what: string })[];
   layout: string;
+  /** Each shown word box (opacity over 0.02), cut to every clip above it, and whether it stands whole inside the card. */
+  words: (Rect & { inside: boolean; leaving: boolean; what: string })[];
 }
 interface Read {
   geo: Geo[];
@@ -134,6 +153,7 @@ function readParts(): Read {
       h: el.classList.contains("card") ? r.height : 0,
       top: r.top,
       inCard: Boolean(el.closest(".card-wrap, .flight")),
+      inFlight: Boolean(el.closest(".flight")),
       inTitle: Boolean(el.closest(".title")),
       inWords: Boolean(el.closest(".morph-letters")),
     };
@@ -145,12 +165,106 @@ function readParts(): Read {
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   };
+  /** A rect cut to `clip`'s; null when nothing of it is left. */
+  const cut = (a: Rect, clip: Rect): Rect | null => {
+    const x = Math.max(a.x, clip.x);
+    const y = Math.max(a.y, clip.y);
+    const r = Math.min(a.x + a.w, clip.x + clip.w);
+    const b = Math.min(a.y + a.h, clip.y + clip.h);
+    return r > x && b > y ? { x, y, w: r - x, h: b - y } : null;
+  };
+  // biome-ignore lint/performance/useTopLevelRegex: serialised into the page, so it lives inside the function
+  const INSET = /^inset\(([^)]*)\)$/;
+  // biome-ignore lint/performance/useTopLevelRegex: serialised into the page, so it lives inside the function
+  const GAPS = /\s+/;
+  /** An element's own `clip-path: inset(…px)` as a rect; its box when it draws whole. A polygon (a shard's) is inside its box. */
+  const clipOf = (el: Element): Rect => {
+    const r = el.getBoundingClientRect();
+    const whole = { x: r.left, y: r.top, w: r.width, h: r.height };
+    const found = INSET.exec(getComputedStyle(el).clipPath);
+    if (!found) {
+      return whole;
+    }
+    const v = (found[1] ?? "").split(GAPS).map((t) => Number.parseFloat(t));
+    const [top = 0, right = top, bottom = top, left = right] = v;
+    return {
+      x: whole.x + left,
+      y: whole.y + top,
+      w: whole.w - left - right,
+      h: whole.h - top - bottom,
+    };
+  };
+  /** What of `el` can be drawn: its box cut to its own clip and every clipping box above it in the stage. */
+  const drawn = (el: Element): Rect | null => {
+    let at: Rect | null = clipOf(el);
+    for (
+      let up = el.parentElement;
+      up && at && !up.classList.contains("stage");
+      up = up.parentElement
+    ) {
+      const style = getComputedStyle(up);
+      if (style.overflow !== "visible" || style.clipPath !== "none") {
+        at = cut(at, clipOf(up));
+      }
+    }
+    return at;
+  };
+  /** How opaque `el` is drawn: its opacity and every one above it in the stage, nothing where it is hidden. */
+  const shown = (el: Element): number => {
+    let o = 1;
+    for (let up: Element | null = el; up; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (style.visibility === "hidden" || style.display === "none") {
+        return 0;
+      }
+      o *= Number(style.opacity);
+      if (up.classList.contains("stage")) {
+        break;
+      }
+    }
+    return o;
+  };
+  const WORDS =
+    ".title, .card .said, .card .link, .card .btn, .card .facts p, .card .readout .words, .card .tile";
   const geo = [...document.querySelectorAll<HTMLElement>(".stage")].map(
     (stage) => {
       const badge = stage.querySelector<HTMLElement>(".well .badge");
       const badgeShown =
         badge && getComputedStyle(badge).visibility !== "hidden";
+      const cardEl = stage.querySelector(".card") as Element;
+      const cardBox = cardEl.getBoundingClientRect();
+      const words = [...stage.querySelectorAll(WORDS)]
+        .filter(
+          (el) =>
+            !el.closest("[hidden]") &&
+            (el.textContent ?? "").trim() !== "" &&
+            shown(el) > 0.02
+        )
+        .flatMap((el) => {
+          const r = el.getBoundingClientRect();
+          const at = drawn(el);
+          if (!at) {
+            return [];
+          }
+          const inside =
+            !el.closest(".card") ||
+            (r.left >= cardBox.left - 0.5 &&
+              r.right <= cardBox.right + 0.5 &&
+              r.top >= cardBox.top - 0.5 &&
+              r.bottom <= cardBox.bottom + 0.5);
+          // Words of the scene the card is leaving fold away with it.
+          const leaving = Boolean(el.closest(".scene:not([data-on])"));
+          return [{ ...at, inside, leaving, what: describe(el) }];
+        });
+      const flying = [
+        ...stage.querySelectorAll(".flight > *, .debris > *"),
+      ].flatMap((el) => {
+        const at = shown(el) > 0.02 ? drawn(el) : null;
+        return at ? [{ ...at, what: describe(el) }] : [];
+      });
       return {
+        words,
+        flying,
         layout: stage.dataset.layout ?? "",
         caw: box(stage.querySelector(".caw")) as Geo["caw"],
         card: box(stage.querySelector(".card")) as Geo["card"],
@@ -196,19 +310,42 @@ function reversals(values: number[], eps: number): number[] {
 }
 
 /** Where a sequence stands still between two reads after leaving its start and before reaching its end. */
-function holds(values: number[], eps: number): number[] {
-  const [first] = values;
-  const lastV = values.at(-1) as number;
+/**
+ * Where a part stands still between two reads after leaving its start and
+ * before reaching its end: every property it moves unchanged from one read
+ * to the next while one of them is mid-way (a part rising beside the title
+ * holds its x while its y moves, and is not still).
+ */
+function holds(
+  reads: Record<(typeof PROPS)[number], number>[],
+  indices: number[]
+): number[] {
   const out: number[] = [];
-  for (let i = 1; i < values.length - 1; i += 1) {
-    const left = Math.abs(values[i] - first) > eps;
-    const notDone = Math.abs(values[i] - lastV) > eps;
-    if (left && notDone && Math.abs(values[i + 1] - values[i]) <= eps / 10) {
-      out.push(i);
+  const [first] = reads;
+  const lastRead = reads.at(-1);
+  if (!(first && lastRead)) {
+    return out;
+  }
+  for (let i = 1; i < reads.length - 1; i += 1) {
+    const now = reads[i] as (typeof reads)[number];
+    const next = reads[i + 1] as (typeof reads)[number];
+    const midway = PROPS.some(
+      (p) =>
+        Math.abs(now[p] - first[p]) > EPS[p] &&
+        Math.abs(now[p] - lastRead[p]) > EPS[p]
+    );
+    const still = PROPS.every((p) => Math.abs(next[p] - now[p]) <= EPS[p] / 10);
+    if (midway && still) {
+      out.push(indices[i] as number);
     }
   }
   return out;
 }
+
+/** Whether two boxes overlap by at least one whole pixel across and down. */
+const overlapsByPixel = (a: Rect, b: Rect) =>
+  Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) >= 1 &&
+  Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) >= 1;
 
 const intersects = (a: Geo["caw"], b: Geo["caw"]) =>
   Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) *
@@ -237,9 +374,10 @@ function serve() {
 async function openPreview(
   kit: Kit,
   url: string,
-  engine: Engine
+  engine: Engine,
+  view: "desk" | "phone" = "desk"
 ): Promise<{ page: Page; errors: string[] }> {
-  const page = await kit.page("desk", { engine, scale: 1 });
+  const page = await kit.page(view, { engine, scale: 1 });
   const errors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -320,21 +458,20 @@ async function motionLeg(
   await settled(page);
   const resting = await page.evaluate(readParts);
   const seen = read.at.map((a) => a.value);
-  const quarters = QUARTERS.map((f) => seen[Math.round(f * 20)]);
+  const quarters = QUARTERS.map((f) => seen[Math.round(f * STEPS)]);
+  const pct = (i: number) => `${((i / STEPS) * 100).toFixed(1)}%`;
   const keys = new Set(seen.flatMap((s) => Object.keys(s.parts)));
   const cardParts = new Set<string>();
   const titleParts = new Set<string>();
   const turns: string[] = [];
   const stills: string[] = [];
   const crackTurns: string[] = [];
+  const pathTurns: string[] = [];
   for (const key of keys) {
     const at0 = seen.find((s) => s.parts[key])?.parts[key] as Part;
     (at0.inCard && !at0.inWords ? cardParts : titleParts).add(key);
     for (const prop of PROPS) {
       const q = quarters
-        .map((s) => s.parts[key]?.[prop])
-        .filter((v): v is number => v !== undefined);
-      const fine = seen
         .map((s) => s.parts[key]?.[prop])
         .filter((v): v is number => v !== undefined);
       const back = reversals(q, EPS[prop]);
@@ -347,16 +484,28 @@ async function motionLeg(
           at0.what.includes("shard") &&
           (prop === "ty" || prop === "tx") &&
           against <= 2.5;
-        (crack ? crackTurns : turns).push(
+        // A swallowed part's path rises beside the title, so its x turns once at the title's side.
+        const aside = at0.inFlight && prop === "tx" && back.length === 1;
+        let list = turns;
+        if (crack) {
+          list = crackTurns;
+        } else if (aside) {
+          list = pathTurns;
+        }
+        list.push(
           `${at0.what} ${prop} ${q.map((v) => v.toFixed(2)).join("→")}`
         );
       }
-      const held = holds(fine, EPS[prop]);
-      if (held.length) {
-        stills.push(
-          `${at0.what} ${prop} at ${held.map((i) => `${i * 5}%`).join(",")}`
-        );
-      }
+    }
+    const present = seen
+      .map((r, i) => [r.parts[key], i] as const)
+      .filter((pair): pair is readonly [Part, number] => pair[0] !== undefined);
+    const held = holds(
+      present.map(([part]) => part),
+      present.map(([, i]) => i)
+    );
+    if (held.length) {
+      stills.push(`${at0.what} at ${held.map(pct).join(",")}`);
     }
   }
   // The end: each part rests where the clock's end drew it; what was taken away was invisible there.
@@ -396,6 +545,11 @@ async function motionLeg(
     turns.length === 0,
     turns.slice(0, 6).join("; ")
   );
+  if (pathTurns.length) {
+    kit.note(
+      `${tag}: ${pathTurns.length} swallowed parts turn once in x, at the title's side, on their way round the words`
+    );
+  }
   if (crackTurns.length) {
     kit.note(
       `${tag}: ${crackTurns.length} shard axes step out ≤2px for the crack before they fall (C4's crack beat)`
@@ -404,7 +558,7 @@ async function motionLeg(
   const designedHolds = stills.filter((s) => s.includes("shard"));
   const otherHolds = stills.filter((s) => !s.includes("shard"));
   kit.check(
-    `${tag}: nothing stands still mid-way (21 reads)`,
+    `${tag}: nothing stands still mid-way (${STEPS + 1} reads)`,
     otherHolds.length === 0,
     otherHolds.slice(0, 6).join("; ")
   );
@@ -444,17 +598,47 @@ async function motionLeg(
   for (const [i, s] of seen.entries()) {
     for (const g of s.geo) {
       if (intersects(g.caw, g.card) > 0) {
-        meets.push(`${g.layout} at ${i * 5}%`);
+        meets.push(`${g.layout} at ${pct(i)}`);
       }
       if (g.badge && m === "waiting") {
         for (const c of g.clusters) {
           if (c.o > 0.001 && intersects(c, g.badge) > 0.01) {
-            inBadge.push(`${g.layout} at ${i * 5}%`);
+            inBadge.push(`${g.layout} at ${pct(i)}`);
           }
         }
       }
     }
   }
+  // Nothing in flight overprints words: no flying part, as far as it is drawn, meets a shown word box.
+  const over: string[] = [];
+  const clipped: string[] = [];
+  for (const [i, s] of seen.entries()) {
+    for (const g of s.geo) {
+      for (const w of g.words) {
+        if (!(w.inside || w.leaving)) {
+          clipped.push(`${g.layout} ${w.what} at ${pct(i)}`);
+        }
+        for (const f of g.flying) {
+          // A whole pixel of overlap both ways: two clip edges that meet land on sub-pixel layout units (WebKit read 0.3px).
+          if (overlapsByPixel(f, w)) {
+            over.push(
+              `${g.layout} ${f.what} [${[f.x, f.y, f.w, f.h].map((v) => v.toFixed(1)).join(",")}] over ${w.what} [${[w.x, w.y, w.w, w.h].map((v) => v.toFixed(1)).join(",")}] at ${pct(i)}`
+            );
+          }
+        }
+      }
+    }
+  }
+  kit.check(
+    `${tag}: nothing in flight meets a word while the word shows (${seen.length} reads)`,
+    over.length === 0,
+    [...new Set(over)].slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${tag}: every word the card shows or brings in stands whole inside it`,
+    clipped.length === 0,
+    [...new Set(clipped)].slice(0, 6).join("; ")
+  );
   kit.check(
     `${tag}: Caw's box never meets the card's`,
     meets.length === 0,
@@ -635,6 +819,66 @@ async function capture(kit: Kit, page: Page) {
   kit.note(`captures in ${kit.out}`);
 }
 
+/** Each moment's Caw is a drawing of its own: the three network cases are one moment, Checking. */
+async function posesLeg(kit: Kit, page: Page, engine: Engine) {
+  const drawn = new Map<string, string[]>();
+  for (const m of MOMENTS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
+    await playIn(page, m, "approve");
+    await settled(page);
+    const srcs = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLImageElement>(".stage .caw")].map(
+        (img) => new URL(img.src).pathname.split("/").pop() ?? ""
+      )
+    );
+    const moment = m.startsWith("checking") ? "checking" : m;
+    drawn.set(moment, [...new Set([...(drawn.get(moment) ?? []), ...srcs])]);
+  }
+  const each = [...drawn.entries()];
+  const shared = each.filter(
+    ([m, srcs]) =>
+      srcs.length !== 1 ||
+      each.some(([other, o]) => other !== m && o[0] === srcs[0])
+  );
+  kit.check(
+    `${engine}: every moment's Caw is its own drawing (${each.map(([m, srcs]) => `${m} ${srcs.join("|")}`).join(", ")})`,
+    shared.length === 0,
+    shared.map(([m, srcs]) => `${m}: ${srcs.join("|")}`).join("; ")
+  );
+}
+
+/** At a 390 window the page itself never scrolls sideways, in any moment. */
+async function narrowLeg(kit: Kit, url: string, engine: Engine) {
+  const { page, errors } = await openPreview(kit, url, engine, "phone");
+  const wide: string[] = [];
+  for (const m of MOMENTS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
+    await playIn(page, m, "approve");
+    await settled(page);
+    const { scroll, client } = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    if (scroll !== client) {
+      wide.push(`${m}: scrollWidth ${scroll} against ${client}`);
+    }
+  }
+  const { scroll, client } = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  kit.check(
+    `${engine}: at a 390 window the page's scrollWidth is its clientWidth in every moment (${scroll} = ${client})`,
+    wide.length === 0 && scroll === client,
+    wide.join("; ")
+  );
+  kit.check(
+    `${engine} at 390: no console error`,
+    errors.length === 0,
+    errors.slice(0, 4).join(" | ")
+  );
+}
+
 const spec: Spec = {
   name: "pairing-preview",
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each engine's legs, then its traces, in order
@@ -652,7 +896,7 @@ const spec: Spec = {
           await capture(kit, page);
           continue;
         }
-        for (const m of MOMENTS) {
+        for (const m of ONLY) {
           const forks: ("approve" | "scan")[] =
             m === "approved" || m.startsWith("checking")
               ? ["approve", "scan"]
@@ -663,6 +907,8 @@ const spec: Spec = {
           }
           await overflowAt390(kit, page, engine, m);
         }
+        await posesLeg(kit, page, engine);
+        await narrowLeg(kit, url, engine);
         if (engine === "chromium") {
           for (const m of MOMENTS) {
             const forks: ("approve" | "scan")[] =

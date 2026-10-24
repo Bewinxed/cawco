@@ -34,8 +34,8 @@ const POSE = {
   approved: "approved",
   denied: "denied",
   expired: "expired",
-  nomatch: "denied",
-  failed: "denied",
+  nomatch: "nomatch",
+  failed: "failed",
 };
 
 const TITLE = {
@@ -127,6 +127,7 @@ const FROM = Object.fromEntries(MOMENTS.map(([m, , from]) => [m, from]));
 
 const root = document.documentElement;
 const token = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+const NUMBER = /-?[\d.]+/g;
 const TIMES = /calc\(\s*([\d.]+)(ms|s)\s*\*\s*([\d.]+)\s*\)/;
 const PLAIN = /([\d.]+)(ms|s)/;
 /** A duration token in ms ("260ms", "1.2s", "calc(500ms * 4)"). */
@@ -215,7 +216,11 @@ function build(viewport) {
     tiles: [],
     readout: $(".readout"),
     dot: $(".readout .dot"),
-    words: new MorphText($(".readout .words"), { wrap: true }),
+    // The readout's words wrap at the readout's own width, whatever the words before were.
+    words: new MorphText($(".readout .words"), {
+      wrap: true,
+      measure: (host) => host.parentElement.clientWidth,
+    }),
     wire: $(".wire"),
     strokes: [],
     facts: $(".facts"),
@@ -302,6 +307,22 @@ function build(viewport) {
     path.setAttribute("d", d);
     svg.append(path);
     S.wire.append(svg);
+    // Each stroke's svg is cut to the stroke's own ink, so its box is the
+    // stroke's: what flies, and what a flight keeps clear of the words.
+    const b = path.getBBox();
+    const bleed = 1.5;
+    const pct = (v) => `${((v / 96) * 100).toFixed(3)}%`;
+    svg.setAttribute(
+      "viewBox",
+      `${b.x - bleed} ${b.y - bleed} ${b.width + 2 * bleed} ${b.height + 2 * bleed}`
+    );
+    Object.assign(svg.style, {
+      inset: "auto",
+      insetInlineStart: pct(b.x - bleed),
+      insetBlockStart: pct(b.y - bleed),
+      inlineSize: pct(b.width + 2 * bleed),
+      blockSize: pct(b.height + 2 * bleed),
+    });
     S.strokes.push(svg);
   }
 
@@ -366,19 +387,39 @@ function fillOutcome(S, m) {
  */
 function measureHeights(S) {
   const of = (kind) => S.scenes[kind].offsetHeight + 2;
+  const card = S.card.getBoundingClientRect();
+  /** The boxes of a scene's words, in the card's coordinates: what a flight must clear before they show. */
+  const words = (selector) =>
+    [...S.card.querySelectorAll(selector)]
+      .filter((el) => !el.closest("[hidden]") && el.getClientRects().length)
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          x: r.left - card.left,
+          y: r.top - card.top,
+          w: r.width,
+          h: r.height,
+        };
+      });
   const heights = { code: 0, device: {}, outcome: {} };
+  const texts = { device: {}, outcome: {} };
   heights.code = of("code");
   for (const net of Object.keys(NETWORK)) {
     fillDevice(S, net, { recordIn: true, placeIn: false });
     const pending = of("device");
+    texts.device[net] = words(".scene-device .facts p, .scene-device .btn");
     fillDevice(S, net, { recordIn: true, placeIn: true });
     heights.device[net] = { pending, in: of("device") };
   }
   for (const m of Object.keys(OUTCOME)) {
     fillOutcome(S, m);
     heights.outcome[m] = of("outcome");
+    texts.outcome[m] = words(
+      ".scene-outcome .said, .scene-outcome .link, .scene-outcome .btn"
+    );
   }
   S.heights = heights;
+  S.texts = texts;
 }
 
 function heightFor(S, m, { placeIn = true } = {}) {
@@ -807,20 +848,14 @@ function plan(S, m) {
     ];
   }
   if (swallowDevice) {
-    const scale = S.wire.getBoundingClientRect().width / 96;
-    parts = S.strokes.map((svg) => {
-      const b = svg.querySelector("path").getBBox();
-      return {
-        el: svg,
-        centre: (at) => ({
-          x: at.x + (b.x + b.width / 2) * scale,
-          y: at.y + (b.y + b.height / 2) * scale,
-        }),
-      };
-    });
+    parts = S.strokes.map((el) => ({ el }));
   }
   const boxes = parts.map((p) => boxIn(p.el, S.stage));
+  // Where the readout's foot stands in the card (its scene stands at the card's top, inside its 1px edge).
+  const readoutFoot = S.readout.offsetTop + S.readout.offsetHeight + 1;
   const caw = parts.length ? boxIn(S.caw, S.stage) : null;
+  const title = parts.length ? boxIn(S.titleEl, S.stage) : null;
+  const cardAt = parts.length ? boxIn(S.card, S.stage) : null;
   let shards = null;
   if (shattering && !flat) {
     const code = kindWas === "code";
@@ -872,6 +907,7 @@ function plan(S, m) {
 
   let shatterRuns = null;
   let flights = [];
+  let arrive = delay240;
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each moment's resting state, then what leaves by flight or shatter
   const write = () => {
@@ -921,7 +957,12 @@ function plan(S, m) {
     }
     if (parts.length) {
       S.caw.src = "./caw/swallowing.png";
-      flights = drawFlights(S, parts, boxes, caw);
+      flights = drawFlights(S, parts, boxes, { caw, title });
+      // The scene that arrives as the swallow ends shows its words once every part is past them.
+      const words = (
+        swallowCode ? S.texts.device[m.split("-")[1]] : S.texts.outcome[m]
+      ).map((w) => ({ ...w, x: w.x + cardAt.x, y: w.y + cardAt.y }));
+      arrive = Math.max(delay240, clearOf(flights, words));
     }
     if (shards) {
       shatterRuns = shatter(S, shards.subject, shards.box, {
@@ -973,9 +1014,11 @@ function plan(S, m) {
       });
       fadeIn(S, S.recess);
       fadeIn(S, S.badge);
+      // The readout's words show once the opening card has room for them whole.
       part(S, S.readout, [{ opacity: 0 }, { opacity: 1 }], {
         duration: D.morph,
         easing: E.out,
+        delay: roomAt(was.height, S.heights.code, readoutFoot),
       });
     } else if (m === "waiting") {
       // C1: the code grows in, centre out, none crossing the badge.
@@ -1029,13 +1072,13 @@ function plan(S, m) {
       });
       fly(S, flights, "checking");
       fold(S, was.height, { delay: delay240 });
-      fadeIn(S, S.scenes.device, { delay: delay240 });
+      fadeIn(S, S.scenes.device, { delay: arrive });
     } else if (m === "approved" && fork === "approve") {
       // C3: the device streams into Caw's beak; the card folds behind it.
       fly(S, flights, "approved");
       fadeOut(S, S.scenes.device);
       fold(S, was.height, { delay: delay240 });
-      fadeIn(S, S.scenes.outcome, { delay: delay240, from: 1 });
+      fadeIn(S, S.scenes.outcome, { delay: arrive, from: 1 });
     } else if (m === "approved") {
       // The fork's Approve: a plain fold.
       fadeOut(S, S.scenes.device);
@@ -1050,16 +1093,88 @@ function plan(S, m) {
         delay: FALL.startAfterCrack,
       });
       fold(S, was.height, { delay: delay240 });
-      fadeIn(S, S.scenes.outcome, { delay: delay240, from: 1 });
+      // The words arrive top down on the card's new face, and the glass is
+      // gone above its edge: what still falls never crosses them.
+      const face = S.heights.outcome[m] - 2;
+      const timing = { delay: delay240, duration: D.pop, easing: E.out };
+      part(
+        S,
+        S.scenes.outcome,
+        [
+          { opacity: 0, clipPath: `inset(0px 0px ${face}px 0px)` },
+          { opacity: 1, clipPath: "inset(0px 0px 0px 0px)" },
+        ],
+        timing
+      );
+      part(
+        S,
+        S.debris,
+        [
+          { clipPath: "inset(0px 0px 0px 0px)" },
+          { clipPath: `inset(${face}px 0px 0px 0px)` },
+        ],
+        timing
+      );
     }
   };
 
   return { jobs: jobs.filter(Boolean), write, animate };
 }
 
-/** The copies that fly, drawn where their parts stood, each aimed at the beak. */
-function drawFlights(S, parts, boxes, caw) {
+/**
+ * When a card folding open from `from` to `to` px on the house fold
+ * (--dur-panel, --ease-drawer) first stands `needed` px tall: ms from its
+ * start, read off the curve every 2ms.
+ */
+function roomAt(from, to, needed) {
+  if (from >= needed) {
+    return 0;
+  }
+  const ease = curveOf(E.drawer);
+  for (let t = 0; t <= D.panel; t += 2) {
+    if (from + (to - from) * ease(t / D.panel) >= needed) {
+      return t;
+    }
+  }
+  return D.panel;
+}
+
+/** A CSS `cubic-bezier(…)` curve as a function of time's fraction. */
+function curveOf(css) {
+  const [x1, y1, x2, y2] = css.match(NUMBER).map(Number);
+  const at = (t, a, b) =>
+    3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
+  return (x) => {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 30; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (at(mid, x1, x2) < x) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    return at((lo + hi) / 2, y1, y2);
+  };
+}
+
+/** How far a flight has shrunk at its path's fraction `f`: from 1 to 0.15. */
+const shrinkAt = (f) => 1 - 0.85 * f;
+
+/** Room a flying part keeps from the words it passes, px. Our call. */
+const CLEAR = 6;
+
+/**
+ * The copies that fly, drawn where their parts stood, each on its path to
+ * the beak. Nothing in flight crosses words: the path rises beside the
+ * title, on the side its part starts nearer, and turns in to the beak above
+ * it. Each path is a polyline in the stage's coordinates, with the part's
+ * scale at each point.
+ */
+function drawFlights(S, parts, boxes, { caw, title }) {
   const beak = { x: caw.x + caw.w * BEAK[0], y: caw.y + caw.h * BEAK[1] };
+  const middle = title.x + title.w / 2;
   return parts.map(({ el, centre }, i) => {
     const at = boxes[i];
     const copy = el.cloneNode(true);
@@ -1075,42 +1190,122 @@ function drawFlights(S, parts, boxes, caw) {
     const c = centre ? centre(at) : { x: at.x + at.w / 2, y: at.y + at.h / 2 };
     copy.style.transformOrigin = `${c.x - at.x}px ${c.y - at.y}px`;
     S.flight.append(copy);
-    return {
-      copy,
-      dx: beak.x - c.x,
-      dy: beak.y - c.y,
-      d: Math.hypot(beak.x - c.x, beak.y - c.y),
-    };
+    const half = Math.max(at.w, at.h) / 2;
+    const left = c.x < middle;
+    // Two passes: the waypoints' room depends on the part's size there, which depends on where on the path they fall.
+    let scales = [1, 1];
+    let path = [];
+    for (let pass = 0; pass < 2; pass += 1) {
+      const room = (s) => half * s + CLEAR;
+      const sideX = left
+        ? title.x - room(scales[0])
+        : title.x + title.w + room(scales[0]);
+      const below = { x: sideX, y: title.y + title.h + room(scales[0]) };
+      const above = {
+        x: sideX,
+        y: Math.max(beak.y, title.y - room(scales[1])),
+      };
+      const points = [c, below, above, beak];
+      const lengths = points
+        .slice(1)
+        .map((p, k) => Math.hypot(p.x - points[k].x, p.y - points[k].y));
+      const total = lengths.reduce((a, b) => a + b, 0) || 1;
+      let run = 0;
+      path = points.map((p, k) => {
+        run += k === 0 ? 0 : lengths[k - 1];
+        return { x: p.x, y: p.y, f: run / total };
+      });
+      // A margin on the estimate: the next pass's waypoints sit nearer, so the part is a little larger there.
+      scales = [
+        Math.min(1, shrinkAt(path[1].f) + 0.05),
+        Math.min(1, shrinkAt(path[2].f) + 0.05),
+      ];
+    }
+    return { copy, c, half, path, d: Math.hypot(beak.x - c.x, beak.y - c.y) };
   });
 }
 
-/**
- * The swallow (C3's stroke motion): each copy flies into Caw's beak,
- * nearest the beak first over 0–4 staggers, shrinking to 0.15 and fading
- * over its last 40%. Caw takes `after` once the last lands.
- */
-function fly(S, flights, after) {
+/** Each flight's delay: nearest the beak first, over 0–4 staggers. */
+function delaysOf(flights) {
   const near = Math.min(...flights.map((f) => f.d));
   const far = Math.max(...flights.map((f) => f.d));
-  const runs = flights.map(({ copy, dx, dy, d }) =>
-    part(
-      S,
-      copy,
-      [
-        { transform: "none", opacity: 1 },
-        { opacity: 1, offset: 0.6 },
-        {
-          transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(0.15)`,
-          opacity: 0,
-        },
-      ],
-      {
-        duration: D.panel,
-        easing: E["in-out"],
-        delay: far > near ? ((d - near) / (far - near)) * 4 * D.stagger : 0,
-      }
-    )
+  return flights.map(({ d }) =>
+    far > near ? ((d - near) / (far - near)) * 4 * D.stagger : 0
   );
+}
+
+/** Where a flight stands at the path's fraction `f`: its centre and its scale. */
+function along(path, f) {
+  let k = 1;
+  while (k < path.length - 1 && path[k].f < f) {
+    k += 1;
+  }
+  const a = path[k - 1];
+  const b = path[k];
+  const t = b.f > a.f ? (f - a.f) / (b.f - a.f) : 1;
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, s: shrinkAt(f) };
+}
+
+/**
+ * The first moment, ms from the play's start, after which no flight meets
+ * any of `words` (boxes in the stage's coordinates): the words that arrive
+ * as the swallow ends show only once the parts are past them.
+ */
+function clearOf(flights, words) {
+  const ease = curveOf(E["in-out"]);
+  // The curve read once per 2ms step, for every flight.
+  const steps = [];
+  for (let t = 0; t <= D.panel; t += 2) {
+    steps.push([t, ease(t / D.panel)]);
+  }
+  const delays = delaysOf(flights);
+  let clear = 0;
+  flights.forEach(({ path, half }, i) => {
+    for (const [t, f] of steps) {
+      const at = along(path, f);
+      const r = half * at.s;
+      const meets = words.some(
+        (w) =>
+          at.x + r > w.x &&
+          at.x - r < w.x + w.w &&
+          at.y + r > w.y &&
+          at.y - r < w.y + w.h
+      );
+      if (meets) {
+        clear = Math.max(clear, delays[i] + t + 2);
+      }
+    }
+  });
+  return Math.ceil(clear);
+}
+
+/**
+ * The swallow (C3's stroke motion, on the path round the words): each copy
+ * flies into Caw's beak, nearest the beak first over 0–4 staggers,
+ * shrinking to 0.15 and fading over its last 40%. Caw takes `after` once
+ * the last lands.
+ */
+function fly(S, flights, after) {
+  const delays = delaysOf(flights);
+  const runs = flights.map(({ copy, c, path }, i) => {
+    const frames = path.map((p) => ({
+      offset: p.f,
+      transform:
+        p.f === 0
+          ? "none"
+          : `translate(${(p.x - c.x).toFixed(1)}px, ${(p.y - c.y).toFixed(1)}px) scale(${shrinkAt(p.f).toFixed(3)})`,
+    }));
+    frames[0].opacity = 1;
+    frames.at(-1).opacity = 0;
+    // Opaque until 60% of the way, then fading into the beak.
+    const fadeFrom = { offset: 0.6, opacity: 1 };
+    const keyframes = [...frames, fadeFrom].sort((a, b) => a.offset - b.offset);
+    return part(S, copy, keyframes, {
+      duration: D.panel,
+      easing: E["in-out"],
+      delay: delays[i],
+    });
+  });
   Promise.all(runs.map((r) => r.finished)).then(
     () => {
       if (S.runs.includes(runs[0])) {

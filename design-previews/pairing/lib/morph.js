@@ -303,20 +303,29 @@ function brokenAt(host, width, text) {
 }
 
 /**
- * A MorphText on `host` (a block when `wrap`). `set(text, { delay })`
- * morphs to `text` from what is drawn; `put(text)` lands it with no morph.
- * Answers the swap's animations, all on one start, duration and curve.
+ * A MorphText on `host`. `wrap`: its words wrap, and each side of a swap is
+ * broken where it wraps at `measure(host)`, the width the words lay out in
+ * (the house's block host; here an inline host names its line box's width,
+ * since the host's own box is only as wide as the words it holds).
+ * `set(text, { delay })` morphs to `text` from what is drawn; `put(text)`
+ * lands it with no morph. Answers the swap's animations, all on one start,
+ * duration and curve.
  */
 export class MorphText {
   #host;
   #wrap;
+  #measure;
   #text;
   #step = 0;
   #morph = null;
 
-  constructor(host, { wrap = false } = {}) {
+  constructor(
+    host,
+    { wrap = false, measure = (el) => el.getBoundingClientRect().width } = {}
+  ) {
     this.#host = host;
     this.#wrap = wrap;
+    this.#measure = measure;
     this.#text = host.textContent;
   }
 
@@ -346,8 +355,9 @@ export class MorphText {
     const host = this.#host;
     const was = this.#text;
     const box = host.getBoundingClientRect();
-    const from = this.#wrap ? brokenAt(host, box.width, was) : was;
-    const to = this.#wrap ? brokenAt(host, box.width, text) : text;
+    const width = this.#wrap ? this.#measure(host) : box.width;
+    const from = this.#wrap ? brokenAt(host, width, was) : was;
+    const to = this.#wrap ? brokenAt(host, width, text) : text;
     let morph = null;
     let step = 0;
     return {

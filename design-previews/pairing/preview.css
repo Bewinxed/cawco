@@ -230,13 +230,19 @@
     }
   }
 
+  /* The frames stand at their real widths. Where the window is narrower
+     than a frame (the 544 Desk frame at 390), the row scrolls sideways in
+     itself and the page never does; `safe` keeps an overflowing frame's start
+     on screen instead of centring it off the left edge. */
   .frames {
     display: block flex;
     flex-wrap: wrap;
     align-items: start;
-    justify-content: center;
+    justify-content: safe center;
     gap: var(--space-8);
     padding: var(--space-8) var(--space-6);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
   }
 
   .frame {
