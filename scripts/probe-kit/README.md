@@ -73,7 +73,12 @@ write before any frame and sets its `playbackRate` to 0, `Element.animate`
 is wrapped so a Web Animation starts at 0, and once every run has started
 they are paused, sought and played on. A spec never waits frames for a run to
 begin or polls `getAnimations()` for one to end: on a slow frame the whole
-motion is over before the poll sees it.
+motion is over before the poll sees it. Each caught run's Animation and its
+`finished` promise are kept as the clock catches it, before any seek, so a
+run that fills nothing (a CSS transition, a `fill: backwards` run shorter
+than the moment) is followed to its end though it leaves `getAnimations()`
+once sought past it, and a run the page cancels after it finished is read by
+the promise that settled, never the new one that would not.
 
 A read begins on a still surface: before the action, `readMotion` waits
 until nothing inside `within` has run for two frames (`stillWithin`), so the

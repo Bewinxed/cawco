@@ -10,7 +10,7 @@
  *   (what is taken away at the end is invisible there);
  * - the parts each moment moves, counted from the runs it started (≤ 43 in
  *   the card and the flight layer; the title's MorphText letters apart);
- * - Chromium, at 1×: no main-thread task over 16.7ms while a moment plays
+ * - Chromium, at 1×: no frame takes the main thread over 16.7ms while a moment plays
  *   (a DevTools trace);
  * - boxes: Caw's box never meets the card's at any read; no cluster stands
  *   in the badge's square at any read of the code's arrival; Caw's centre x
@@ -20,6 +20,7 @@
  *
  *   bun scripts/probe-kit/run.ts pairing-preview
  */
+import { cpus, loadavg } from "node:os";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
 import { traceMain } from "../frames";
@@ -45,13 +46,11 @@ const MOMENTS = [
 type Moment = (typeof MOMENTS)[number];
 
 interface Part {
-  band: number;
   h: number;
   inCard: boolean;
   inTitle: boolean;
   inWords: boolean;
   opacity: number;
-  ring: string;
   rot: number;
   sx: number;
   top: number;
@@ -133,12 +132,6 @@ function readParts(): Read {
       sx: Math.hypot(m.a, m.b),
       rot: (Math.atan2(m.b, m.a) * 180) / Math.PI,
       h: el.classList.contains("card") ? r.height : 0,
-      band: el.classList.contains("card")
-        ? Number(cs.getPropertyValue("--band"))
-        : 0,
-      ring: el.classList.contains("card")
-        ? cs.getPropertyValue("--ring").trim()
-        : "",
       top: r.top,
       inCard: Boolean(el.closest(".card-wrap, .flight")),
       inTitle: Boolean(el.closest(".title")),
@@ -174,7 +167,7 @@ function readParts(): Read {
   return { parts, geo };
 }
 
-const PROPS = ["opacity", "tx", "ty", "sx", "rot", "h", "band"] as const;
+const PROPS = ["opacity", "tx", "ty", "sx", "rot", "h"] as const;
 const EPS: Record<(typeof PROPS)[number], number> = {
   opacity: 0.005,
   tx: 0.3,
@@ -182,7 +175,6 @@ const EPS: Record<(typeof PROPS)[number], number> = {
   sx: 0.003,
   rot: 0.3,
   h: 0.3,
-  band: 0.005,
 };
 
 /** Where a sequence turns back: each reversal bigger than eps. */
@@ -373,10 +365,7 @@ async function motionLeg(
   for (const [key, part] of Object.entries(end.parts)) {
     const now = resting.parts[key];
     if (now) {
-      if (now.ring !== part.ring) {
-        jumps.push(`${part.what} --ring ${part.ring} → ${now.ring}`);
-      }
-      for (const prop of ["opacity", "tx", "ty", "sx", "h", "band"] as const) {
+      for (const prop of ["opacity", "tx", "ty", "sx", "h"] as const) {
         if (Math.abs(now[prop] - part[prop]) > EPS[prop] * 2) {
           jumps.push(
             `${part.what} ${prop} ${part[prop].toFixed(2)} → ${now[prop].toFixed(2)}`
@@ -429,20 +418,10 @@ async function motionLeg(
     jumps.length === 0,
     jumps.slice(0, 6).join("; ")
   );
-  // Chromium drops a CSS transition from getAnimations() once it is past its end (it fills nothing), so a band or ring
-  // transition shorter than the moment cannot be followed there by the kit; its end is read as --band and the height above.
-  const followed = read.runs.filter(
-    (r) =>
-      !(
-        read.by === "clock" &&
-        r.type === "CSSTransition" &&
-        r.missed?.includes("holds no run")
-      )
-  );
   kit.check(
-    `${tag}: every run played to its end once let go (${followed.length} of ${read.runs.length} runs followed, by ${read.by})`,
-    followed.every((r) => r.ended),
-    followed
+    `${tag}: every run played to its end once let go (${read.runs.length} runs, by ${read.by})`,
+    read.runs.every((r) => r.ended),
+    read.runs
       .filter((r) => !r.ended)
       .map((r) => `${r.target} ${r.name}: ${r.missed}`)
       .slice(0, 4)
@@ -593,8 +572,13 @@ async function frameCost(
     main.marks.find((mk) => mk.name === "pairing:done")?.at ??
     Number.POSITIVE_INFINITY;
   const tasks = main.tasks.filter((t) => t.end >= from && t.at <= to);
-  const longest = tasks.reduce((a, t) => (t.wall > a.wall ? t : a), tasks[0]);
-  const over = tasks.filter((t) => t.wall > 16.7);
+  // A frame's cost is the main thread's own time in it (the trace's thread
+  // clock, `tdur`): on a shared host the wall clock also counts the turns
+  // other processes take (load average 94 on 48 cores during one run, where
+  // a 34.9ms wall task took 4.1ms of the thread). Both are said.
+  const longest = tasks.reduce((a, t) => (t.cpu > a.cpu ? t : a), tasks[0]);
+  const longestWall = Math.max(...tasks.map((t) => t.wall));
+  const over = tasks.filter((t) => t.cpu > 16.7);
   if (over.length) {
     kit.note(
       `chromium ${m} (${fork}): ${over.length} task(s) over 16.7ms: ${over
@@ -614,8 +598,8 @@ async function frameCost(
     );
   }
   kit.check(
-    `chromium ${m}${m === "approved" || m.startsWith("checking") ? ` (${fork})` : ""}: no main-thread task over 16.7ms while it plays (longest ${longest.wall.toFixed(1)}ms, ${longest.ran}; ${tasks.length} tasks)`,
-    longest.wall <= 16.7
+    `chromium ${m}${m === "approved" || m.startsWith("checking") ? ` (${fork})` : ""}: no frame takes the main thread over 16.7ms while it plays (longest ${longest.cpu.toFixed(1)}ms of thread time, ${longest.ran}; longest wall ${longestWall.toFixed(1)}ms; ${tasks.length} tasks; load ${loadavg()[0].toFixed(0)} on ${cpus().length} cores)`,
+    longest.cpu <= 16.7
   );
 }
 

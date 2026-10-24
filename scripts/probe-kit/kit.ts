@@ -2143,6 +2143,13 @@ async function clockRead<T>(
   const at: MotionRead<T>["at"] = [];
   const { read } = options;
   try {
+    // The page's own Animation for each caught run, and its `finished`
+    // promise, kept now, at the start of the clock, before any seek: a run
+    // sought past its end that fills nothing (a CSS transition, a `fill:
+    // backwards` run shorter than the moment) leaves `getAnimations()`, and a
+    // run the page cancels once it finished hands out a new `finished` that
+    // never settles. Kept here, every run is followed to the clock's end.
+    await page.evaluate(keepCaught, within);
     if (read) {
       for (const fraction of options.fractions ?? []) {
         // biome-ignore lint/performance/noAwaitInLoops: one fraction of the clock at a time
@@ -2150,10 +2157,6 @@ async function clockRead<T>(
         at.push({ fraction, value: await read() });
       }
     }
-    // The page's own Animation for each caught run, kept while it is still
-    // held (a run that finishes leaves `getAnimations()`), so each one's own
-    // `finished` says whether it played to its end, whatever another did.
-    await page.evaluate(keepCaught, within);
   } finally {
     // A read that threw leaves no run held for the next read to find.
     await clock.release();
@@ -2275,10 +2278,13 @@ declare global {
 }
 
 /**
- * Keeps, in the page, each run the DevTools clock holds paused inside
- * `within` (its Animation, its element and name as the read names them),
- * so once let go each one's own `finished` is read: a finished run leaves
- * `getAnimations()`. Run with `page.evaluate` before the clock lets go.
+ * Keeps, in the page, each run the DevTools clock caught inside `within`
+ * (its Animation, its `finished` promise as it stands, its element and name
+ * as the read names them), so once let go each one's own `finished` is read.
+ * Run with `page.evaluate` as the clock catches them, before any seek: a run
+ * sought past its end that fills nothing leaves `getAnimations()`, and a run
+ * cancelled after it finished answers `finished` with a new promise that
+ * never settles, where the one kept here has settled already.
  */
 function keepCaught(within: string): void {
   const describe = (el: Element | null | undefined) => {
@@ -2300,14 +2306,14 @@ function keepCaught(within: string): void {
     return run instanceof CSSTransition ? run.transitionProperty : run.id;
   };
   /**
-   * How `run`, let go, comes out: ended once its `finished` resolves, however
-   * long the page's frames take; not, once it is cancelled, or once it still
-   * stands paused three frames after it was let go (the read failed to let
-   * it go, and it would never end).
+   * How `run`, let go, comes out: ended once the `finished` kept as it was
+   * caught resolves, however long the page's frames take; not, once it is
+   * cancelled before its end, or once it still stands paused three frames
+   * after it was let go (the read failed to let it go, and it would never end).
    */
-  const outcome = (run: Animation) =>
+  const outcome = (run: Animation, finished: Promise<Animation>) =>
     new Promise<{ ended: boolean; why?: string }>((done) => {
-      run.finished.then(
+      finished.then(
         () => done({ ended: true }),
         () => done({ ended: false, why: "cancelled before its end" })
       );
@@ -2328,27 +2334,37 @@ function keepCaught(within: string): void {
       };
       requestAnimationFrame(look);
     });
+  // Every run in play inside `within`: held by the clock, or still running
+  // where its pause has yet to land. A run already finished or idle is none of
+  // the action's (stillWithin waited for the surface to stand still first).
   const kept = window
     .kitRuns()
     .filter(
       (run) =>
-        run.playState === "paused" &&
+        (run.playState === "paused" || run.playState === "running") &&
         (run.timeline === null || run.timeline instanceof DocumentTimeline) &&
         Number.isFinite(run.effect?.getComputedTiming().endTime) &&
         window.kitInside((run.effect as KeyframeEffect | null)?.target, within)
     )
-    .map((run) => ({
-      run,
-      name: nameOf(run),
-      target: describe((run.effect as KeyframeEffect | null)?.target),
-    }));
+    .map((run) => {
+      const { finished } = run;
+      // A run cancelled before its end rejects this promise; nobody else may
+      // be listening, so its rejection is handled here.
+      finished.catch(() => undefined);
+      return {
+        run,
+        finished,
+        name: nameOf(run),
+        target: describe((run.effect as KeyframeEffect | null)?.target),
+      };
+    });
   window.kitCaught = {
     finished: () =>
       Promise.all(
-        kept.map(async ({ run, name, target }) => ({
+        kept.map(async ({ run, finished, name, target }) => ({
           name,
           target,
-          ...(await outcome(run)),
+          ...(await outcome(run, finished)),
         }))
       ),
   };
@@ -2498,14 +2514,20 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
     };
   };
   /**
-   * How `run`, let go, comes out: ended once its `finished` resolves, however
-   * long the page's frames take; not, once it is cancelled, or once it still
-   * stands paused three frames after it was let go (the read failed to let
-   * it go, and it would never end).
+   * Each caught run's `finished` promise as it stood when it was caught: a
+   * run the page cancels once it has finished answers `finished` with a new
+   * promise that never settles, where this one has settled already.
+   */
+  const promised = new WeakMap<Animation, Promise<Animation>>();
+  /**
+   * How `run`, let go, comes out: ended once the `finished` kept as it was
+   * caught resolves, however long the page's frames take; not, once it is
+   * cancelled before its end, or once it still stands paused three frames
+   * after it was let go (the read failed to let it go, and it would never end).
    */
   const outcome = (run: Animation) =>
     new Promise<{ ended: boolean; why?: string }>((done) => {
-      run.finished.then(
+      (promised.get(run) ?? run.finished).then(
         () => done({ ended: true }),
         () => done({ ended: false, why: "cancelled before its end" })
       );
@@ -2558,6 +2580,12 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
       caught = [...held].filter(
         (run) => run.playState === "running" && run.startTime !== null
       );
+      for (const run of caught) {
+        const { finished } = run;
+        // Cancelled before its end, nobody else may be listening.
+        finished.catch(() => undefined);
+        promised.set(run, finished);
+      }
       return caught.map((run) => {
         const heldAt =
           run.currentTime === null ? null : Number(run.currentTime);
