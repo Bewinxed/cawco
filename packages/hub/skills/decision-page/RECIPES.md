@@ -12,11 +12,11 @@ Every card is one question of the interview (SKILL.md, The card): an `<article c
     <button class="dp-opt" type="button" data-option="you"><b>You</b><span>Gets: Every brief in your words.</span><span class="dp-cost">Costs: Nothing moves while you are away.</span><span class="dp-builds">Builds: Nothing new.</span></button>
     <button class="dp-opt" type="button" data-option="caw"><span class="dp-tag">Recommended</span><b>Caw, woken by events</b><span>Gets: The board moves while you are away.</span><span class="dp-cost">Costs: You review its briefs after the fact.</span><span class="dp-builds">Builds: Event wake-ups for Caw, board tools only.</span></button>
   </div>
-  <label class="dp-note">Note<textarea data-dp-note="lead" rows="1" placeholder="Anything to add"></textarea></label>
+  <label class="dp-note">Note<textarea id="decision-lead-note" data-dp-note="lead" data-cawco-unkept rows="1" placeholder="Anything to add"></textarea></label>
 </article>
 ```
 
-A second click on the picked option clears it.
+A second click on the picked option clears it. The note's field carries `id="decision-<id>-note"` and `data-cawco-unkept`: every field on a page has an id or a name, and the note reaches the session with its card, never as a field kept on its own.
 
 ## Several picks
 

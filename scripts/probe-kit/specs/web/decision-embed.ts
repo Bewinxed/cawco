@@ -96,7 +96,9 @@
  *    frame; the page names the house icon, which answers 200 with an image;
  *    every form field on it and in its canvases has an id or a name (Chrome's
  *    "A form field element should have an id or name attribute": each
- *    card's note and its measuring twin). A page whose Preview names an
+ *    card's note and its measuring twin), and so has every field of the
+ *    kit's HTML page as the hub builds it, its note's kept out of the
+ *    page's answers (`data-cawco-unkept`). A page whose Preview names an
  *    artifact the hub no longer has says so in one line in its well, with
  *    no frame, no console error and no failed request.
  * 14. Every option's media at its real size and whole (the owner: "the
@@ -130,9 +132,10 @@
  *   bun scripts/probe-kit/run.ts web decision-embed --leg loads-clean   # 13 alone
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { buildDecisionPage } from "../../../../packages/hub/src/decision-page";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
   APP,
@@ -1184,6 +1187,40 @@ async function loadsClean(
     unnamed.slice(0, 6).join("\n    ")
   );
   await page.close();
+
+  // The kit's own page.html, as the hub builds a hand-written HTML page from it.
+  const built = await buildDecisionPage(
+    readFileSync(
+      join(ROOT, "packages/hub/skills/decision-page/kit/page.html"),
+      "utf8"
+    ),
+    {
+      image: () => Promise.resolve(undefined),
+      mockup: () => Promise.resolve(undefined),
+    }
+  );
+  const kitPage = await kit.page("desk", { theme: "light" });
+  if ("html" in built) {
+    await kitPage.setContent(built.html, { waitUntil: "load" });
+  }
+  const kitFields = await kitPage.evaluate(() =>
+    [...document.querySelectorAll("input, select, textarea")].map((one) => ({
+      id: one.id,
+      unkept: one.hasAttribute("data-cawco-unkept"),
+    }))
+  );
+  const kitUnnamed = await kitPage.evaluate(unnamedFields);
+  kit.check(
+    `1440px light, the kit's HTML page: every one of its ${kitFields.length} form fields has an id or a name (${kitUnnamed.length} without), its note's the card's (${kitFields.map((one) => one.id).join(", ")}), kept out of the page's answers`,
+    "html" in built &&
+      kitFields.length > 0 &&
+      kitUnnamed.length === 0 &&
+      kitFields.every((one) => one.unkept),
+    "problem" in built
+      ? built.problem
+      : [JSON.stringify(kitFields), ...kitUnnamed].join("\n    ")
+  );
+  await kitPage.close();
 
   const gone = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
   const goneFaults = faultsOf(gone);
