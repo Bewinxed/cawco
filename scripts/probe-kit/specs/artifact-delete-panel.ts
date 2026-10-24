@@ -24,6 +24,11 @@
  *     the session's list is one shorter each time. A delete naming nothing
  *     the session has, and one of an artifact already removed, is refused
  *     naming what it asked (never a 500), and the list keeps its length.
+ * (f) The session's own `mcp__cawco__artifact_delete` by an eight-character
+ *     id, read as the words an agent reads: "Removed <name> (<kind> <whole
+ *     id>)." once, the list one shorter. The same call again (what a second
+ *     session deleting the same artifacts seconds later sends) is refused
+ *     naming the id, never a 500, and removes nothing.
  */
 import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
@@ -89,14 +94,21 @@ const run = async (kit: Kit) => {
   const at = `${fleet.base}/api/instances/${encodeURIComponent(session)}`;
 
   let sent = 0;
-  /** The agent's own tool call, through the mock model: its answer as the session read it. */
-  const agent = async (tool: string, input: object): Promise<string> => {
+  /**
+   * The agent's own tool call, through the mock model: its answer as the
+   * session read it, the hub's record unless `words` (what an agent reads).
+   */
+  const agent = async (
+    tool: string,
+    input: object,
+    words = false
+  ): Promise<string> => {
     sent += 1;
     const marker = String(sent);
     asks.set(marker, {
       name: tool,
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
-      input: { response_format: "detailed", ...input },
+      input: words ? input : { response_format: "detailed", ...input },
     });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     return (await until(
@@ -275,6 +287,34 @@ const run = async (kit: Kit) => {
       `${missed.slice(0, 300)} | listed ${before.length} before, ${after.length} after`
     );
   }
+
+  // (f) The canvas-tree session's call, as it made it: its own
+  // mcp__cawco__artifact_delete by an eight-character id, read as words.
+  const golf = await make("golf");
+  const short = golf.slice(0, 8);
+  const beforeGolf = await listed();
+  const removedGolf = await agent(DELETE, { id: short }, true);
+  const afterGolf = await listed();
+  kit.check(
+    "(f) the session's own artifact_delete by an eight-character id answers its removal once, by name and whole id, and the list loses it alone",
+    removedGolf.startsWith(`Removed golf (page ${golf}).`) &&
+      removedGolf.split("Removed ").length === 2 &&
+      !afterGolf.includes(golf) &&
+      afterGolf.length === beforeGolf.length - 1,
+    `${removedGolf.slice(0, 300)} | listed ${beforeGolf.length} before, ${afterGolf.length} after`
+  );
+  // The same call again, as a second session deleting the same artifacts
+  // seconds later made it (23cb5219's deletes before f4665d25's, 07:56Z).
+  const again = await agent(DELETE, { id: short }, true);
+  const afterAgain = await listed();
+  kit.check(
+    "(f) the same call again is refused naming the id, never a 500, and removes nothing",
+    !again.startsWith("Removed") &&
+      again.includes(short) &&
+      !again.includes("internal-server-error") &&
+      afterAgain.length === afterGolf.length,
+    `${again.slice(0, 300)} | listed ${afterGolf.length} before, ${afterAgain.length} after`
+  );
 };
 
 const spec: Spec = { name: "artifact-delete-panel", run };
