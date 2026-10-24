@@ -78,7 +78,7 @@ import {
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
-import { ask } from "./lib/outside-call";
+import { ask, NoAnswer, persist } from "./lib/outside-call";
 import {
   createDraft,
   deleteDraft,
@@ -430,7 +430,14 @@ const releaseSteps = (
   ];
   return [
     step("fetch", [], 2, () =>
-      run(["git", "fetch", "--quiet", "--tags", "origin"])
+      fetchOrigin(async () => {
+        if (stopped) {
+          await stopped;
+        }
+        if (abandoned) {
+          throw abandoned;
+        }
+      })
     ),
     ...tree("build"),
     // The check reads its own tree, beside the builds; it gates notarization
@@ -1102,9 +1109,35 @@ if (dirty.exitCode !== 0 || dirty.stdout.toString().trim()) {
     `the checkout it runs from (${repo}) must be clean, and it holds:\n${dirty.stdout.toString().trimEnd() || dirty.stderr.toString().trim()}`
   );
 }
-if (git("fetch", "--quiet", "--tags", "origin").exitCode !== 0) {
-  refuse("git fetch origin failed");
-}
+/**
+ * `git fetch --quiet --tags origin` here, asked again on any failure (each
+ * attempt after `before`): git's exit says only that it failed (128 for a
+ * dropped connection and a refusal alike), and a refusal fails the same way
+ * every time, so asking again costs only the bounded wait. Git's own retry
+ * does not cover a drop: "Maximum number of times to retry after receiving
+ * HTTP 429 (Too Many Requests) responses" (git-scm.com/docs/git-config
+ * `http.maxRetries`). The last failure quotes git's stderr.
+ */
+const fetchOrigin = (before: () => Promise<void> = async () => undefined) =>
+  persist("git fetch origin", async () => {
+    await before();
+    const child = Bun.spawn(["git", "fetch", "--quiet", "--tags", "origin"], {
+      cwd: repo,
+      stdout: "ignore",
+      stderr: "pipe",
+      env: { ...process.env },
+    });
+    const [stderr, status] = await Promise.all([
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (status !== 0) {
+      throw new NoAnswer(`git fetch exited ${status}: ${stderr.trim()}`);
+    }
+  });
+await fetchOrigin().catch((error: unknown) =>
+  refuse(error instanceof Error ? error.message : String(error))
+);
 const resolved = git("rev-parse", "--verify", `${commitInput}^{commit}`);
 if (resolved.exitCode !== 0) {
   refuse(`${commitInput} is not a commit here`);
