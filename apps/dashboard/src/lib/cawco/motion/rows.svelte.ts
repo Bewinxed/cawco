@@ -40,6 +40,11 @@
  * the first child of the table's box, which is the element that styles the
  * table and is `position: relative`.
  */
+import {
+  deliverWithRoot,
+  type FrameObserver,
+  frameObserver,
+} from "#lib/cawco/frame-observer.js";
 import { watchRendered } from "#lib/utils/rendered.js";
 import {
   dur,
@@ -533,6 +538,8 @@ interface Move {
   animation?: Animation;
   /** Drops the slide's start while a style still holds the element. */
   hold?: () => void;
+  /** Its element's own `translate` as the slide began, under the hold and the slide. */
+  own: string;
   /** How much of the way it has come at a progress of its timing (`paced`). */
   share?: (progress: number) => number;
   x: number;
@@ -1061,6 +1068,78 @@ export const BLEED = 64;
 const OPEN = `${-BLEED}px`;
 /** A box's clip, read for where its bottom edge is drawn: above (hiding) or below its foot. */
 const CLIP_BOTTOM = /^inset\(\S+ \S+ (-?[\d.]+)px/;
+const CUBIC = /^cubic-bezier\(([^)]+)\)$/;
+
+/** A keyframe's curve at `t` (0 to 1): `linear`, or a `cubic-bezier()` (the curves the runs here are made on). */
+function curveAt(easing: string, t: number): number {
+  const points = CUBIC.exec(easing.trim())?.[1].split(",").map(Number);
+  if (points?.length !== 4) {
+    return t;
+  }
+  const [x1, y1, x2, y2] = points;
+  const at = (a: number, b: number, s: number) =>
+    3 * a * s * (1 - s) ** 2 + 3 * b * s ** 2 * (1 - s) + s ** 3;
+  // The curve's own s where its x is t, by halving: x rises with s.
+  let lo = 0;
+  let hi = 1;
+  for (let step = 0; step < 24; step += 1) {
+    const mid = (lo + hi) / 2;
+    if (at(x1, x2, mid) < t) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return at(y1, y2, (lo + hi) / 2);
+}
+
+/**
+ * Where a run made here (an edge, a width) stands now, in px, read off its
+ * own keyframes at its clock's progress: no style or layout is read for it.
+ * Read off the page instead, in the frame's callbacks after the update that
+ * changed the rows, its clip laid the page out there (decision-pages (o):
+ * 20–28ms of layout a reply's frame at 4x). `pick` reads a keyframe's value;
+ * null where no keyframe carries one.
+ */
+function drawnBy(
+  animation: Animation,
+  pick: (frame: ComputedKeyframe) => number | null
+): number | null {
+  const effect = animation.effect as KeyframeEffect | null;
+  const frames = effect?.getKeyframes() ?? [];
+  const timed = effect?.getComputedTiming().progress;
+  const progress = timed ?? (animation.playState === "finished" ? 1 : 0);
+  for (let i = 0; i + 1 < frames.length; i += 1) {
+    const [a, b] = [frames[i], frames[i + 1]];
+    if (progress <= b.computedOffset || i + 2 === frames.length) {
+      const from = pick(a);
+      const to = pick(b);
+      if (from === null || to === null) {
+        return null;
+      }
+      const span = b.computedOffset - a.computedOffset;
+      const t = span > 0 ? (progress - a.computedOffset) / span : 1;
+      return (
+        from + (to - from) * curveAt(a.easing, Math.min(1, Math.max(0, t)))
+      );
+    }
+  }
+  return frames[0] ? pick(frames[0]) : null;
+}
+
+/** A keyframe's px value of `property`; null where it has none. */
+const pxOf =
+  (property: "height" | "width") =>
+  (frame: ComputedKeyframe): number | null => {
+    const value = frame[property];
+    return typeof value === "string" ? Number.parseFloat(value) : null;
+  };
+/** A keyframe's clip's bottom inset, px; 0 where it clips nothing there. */
+const clipOf = (frame: ComputedKeyframe): number => {
+  const value = frame.clipPath;
+  const clip = typeof value === "string" ? CLIP_BOTTOM.exec(value) : null;
+  return clip ? Number.parseFloat(clip[1]) : 0;
+};
 
 /**
  * A shrinking box, as the change found it: its bottom margin, and whether it
@@ -1328,19 +1407,46 @@ class Reflow {
     }
   }
 
+  get node(): HTMLElement {
+    return this.#node;
+  }
+
+  /** Where each box in flight is drawn, from `release` for the change's `plan`. */
+  #drawn: Map<HTMLElement, { carry?: Carry; h?: number; w?: number }> | null =
+    null;
+
   /**
-   * In three passes over the DOM: every decision first, reading only; then
-   * every style it needs, read in one go; then every write. Read and written
-   * a row at a time, each row's write laid the page out again for the next
+   * A change's first step, in the frame's callbacks before it lays the
+   * change out (`heard`): where each box in flight is drawn, read off its
+   * own run, and every such run dropped, so the frame lays each box out at
+   * its own size for `plan` to read.
+   */
+  release() {
+    if (this.#skipped || this.#placed === null) {
+      return;
+    }
+    this.#drawn = this.#releaseEdges();
+  }
+
+  /**
+   * The change, read on the layout the frame has just done (the shared size
+   * observer's delivery, `inside`): every decision first, reading only, and
+   * every style the writes need, in one go; it answers the writes, which the
+   * delivery runs once every site there has read. Read in the frame's
+   * callbacks instead, after the update that changed the rows, its places
+   * laid the page out there (decision-pages (o): `offsetParent` 2x 8–18ms
+   * and a clip's style 20–28ms, a reply's frame at 4x). Read and written a
+   * row at a time, each row's write laid the page out again for the next
    * row's read, ten layouts in the update that opened a tree.
    */
-  change() {
+  plan(): (() => void) | undefined {
     const placed = this.#placedBefore();
     if (!placed) {
       return;
     }
     const still = !motionOk.current;
-    const drawn = this.#releaseEdges();
+    const drawn = this.#drawn ?? new Map();
+    this.#drawn = null;
     const now = placesIn(this.#node);
     const scrolled = this.#anchor(now);
     this.#view = null;
@@ -1375,16 +1481,14 @@ class Reflow {
         departures.push([element, was, { x: held.x, y: held.y + scrolled }]);
       }
     }
-    // Writes that the reads after them must see: holds dropped.
-    for (const element of [
-      ...plan.stops,
-      ...plan.slides.map((s) => s.element),
-    ]) {
-      this.#stop(element);
-    }
-    // Every style the writes need, in one pass.
+    // Every style the writes need, in one pass. An element under a slide or
+    // its hold has its own `translate` as the slide began (`Move.own`):
+    // read with its hold dropped instead, the drop laid the page out under
+    // the read.
     const own = plan.slides.map(
-      (slide) => getComputedStyle(slide.element).translate
+      (slide) =>
+        this.#moves.get(slide.element)?.own ??
+        getComputedStyle(slide.element).translate
     );
     const shrinks = plan.edges.map((edge) =>
       edge.to < edge.from && !edge.carry
@@ -1398,6 +1502,45 @@ class Reflow {
         margin: Number.parseFloat(styles.marginRight),
       };
     });
+    return () =>
+      this.#write(plan, {
+        arrivals,
+        departures,
+        now,
+        own,
+        shrinks,
+        spans,
+        still,
+      });
+  }
+
+  /** A change's writes (`plan`), in the delivery once every site there has read. */
+  #write(
+    plan: Plan,
+    {
+      arrivals,
+      departures,
+      now,
+      own,
+      shrinks,
+      spans,
+      still,
+    }: {
+      arrivals: [HTMLElement, number][];
+      departures: [HTMLElement, Placed, { x: number; y: number }][];
+      now: Map<HTMLElement, Placed>;
+      own: string[];
+      shrinks: (Shrink | null)[];
+      spans: { margin: number; placed: boolean }[];
+      still: boolean;
+    }
+  ) {
+    for (const element of [
+      ...plan.stops,
+      ...plan.slides.map((s) => s.element),
+    ]) {
+      this.#stop(element);
+    }
     plan.slides.forEach((slide, i) => {
       this.#slide(slide.element, slide.x, slide.y, own[i]);
     });
@@ -1504,8 +1647,9 @@ class Reflow {
   }
 
   /**
-   * Where each box mid-tween is drawn; its tween is dropped so it reads at
-   * its natural size. Every box is read before any tween is dropped.
+   * Where each box mid-tween is drawn, read off its own run (`drawnBy`); its
+   * tween is dropped so the frame lays it out at its natural size. Every box
+   * is read before any tween is dropped.
    */
   #releaseEdges() {
     const drawn = new Map<
@@ -1520,14 +1664,13 @@ class Reflow {
       // already out of the flow) was taken for drawn 81px above its own top,
       // and the fold "grew" it from there, clipping its parent row away
       // until it had closed. One that moves by its height is drawn as tall
-      // as it is.
-      const clip = CLIP_BOTTOM.exec(getComputedStyle(element).clipPath);
-      const hidden = clip ? Number.parseFloat(clip[1]) : 0;
+      // as its run holds it.
+      const hidden = drawnBy(animation, clipOf) ?? 0;
       const sizes = edgeSizes.get(animation);
       const start = animation.startTime;
       const whole = sizes?.clip
         ? sizes.to
-        : element.getBoundingClientRect().height;
+        : (drawnBy(animation, pxOf("height")) ?? sizes?.to ?? 0);
       drawn.set(element, {
         h: whole - hidden,
         // In flight on its batch's clock: carried if it is bound the same way.
@@ -1542,10 +1685,11 @@ class Reflow {
             : undefined,
       });
     }
-    for (const element of this.#spans.keys()) {
+    for (const [element, animation] of this.#spans) {
+      const w = drawnBy(animation, pxOf("width"));
       drawn.set(element, {
         ...drawn.get(element),
-        w: element.getBoundingClientRect().width,
+        ...(w === null ? {} : { w }),
       });
     }
     for (const animation of [
@@ -1636,7 +1780,7 @@ class Reflow {
     // the element's own, so a chip's scale and a control's centring are left
     // alone; Chrome runs it on the compositor all the same.
     element.style.translate = offsetTranslate(own, x, y);
-    const move: Move = { x, y };
+    const move: Move = { x, y, own };
     this.#moves.set(element, move);
     move.hold = atTravel((at, pace) => {
       move.hold = undefined;
@@ -1731,23 +1875,26 @@ export function reread(containers: HTMLElement[]): void {
  */
 const changed = new Map<Reflow, number>();
 /**
- * Once a frame, in its callbacks: every container that heard a change since
- * the last frame reads where its rows are then, before the frame lays the
- * page out and paints. Read in the microtask behind each update, a list's
- * places were read right after that update wrote them: a streaming session
- * rewrites a row's words with every message, and each one laid the page out
- * on the spot (`offsetParent` alone 487–500ms a 20s two-pane stream). A
- * frame's callbacks run before it paints, so nothing is drawn where it
- * jumped to, and a frame's worth of changes is one reading.
+ * Once a frame: every container that heard a change since the last frame
+ * lets go of its boxes in flight in the frame's callbacks (`release`), and
+ * reads where its rows are on the layout that frame does, in the shared size
+ * observer's delivery (`plan`), before it paints. Read in the microtask
+ * behind each update, a list's places were read right after that update
+ * wrote them: a streaming session rewrites a row's words with every message,
+ * and each one laid the page out on the spot (`offsetParent` alone
+ * 487–500ms a 20s two-pane stream). Read in the frame's callbacks, they laid
+ * the page out there, ahead of the frame's own layout. A frame's worth of
+ * changes is one reading, and nothing is drawn where it jumped to.
  *
- * Not the turn after the frame's layout (a ResizeObserver's): a change's
- * edges and arrivals start there resized the boxes another observer
- * measures (virtua's rows, holding a tool group's list), which that frame
- * can no longer deliver, and the page raised "ResizeObserver loop completed
- * with undelivered notifications" (virtua-tail). A list changed from a
- * frame's own callbacks would be read the frame after; nothing changes one
- * there (their frame callbacks write styles this does not hear, or stand
- * outside every list).
+ * Its writes in the delivery (edges, arrivals) resize boxes another observer
+ * measures (virtua's rows, holding a tool group's list), after the frame
+ * delivered their depth: with nothing shallower delivered, the page raised
+ * "ResizeObserver loop completed with undelivered notifications"
+ * (virtua-tail). The root reports in that delivery (`deliverWithRoot`), so
+ * every box the writes resize is deeper and delivered again in the frame.
+ * A list changed from a frame's own callbacks would be read the frame after;
+ * nothing changes one there (their frame callbacks write styles this does
+ * not hear, or stand outside every list).
  */
 function heard(state: Reflow, depth: number): void {
   if (state.skipped || state.resting) {
@@ -1762,15 +1909,77 @@ function heard(state: Reflow, depth: number): void {
       for (const settle of settles) {
         settle();
       }
-      for (const [each] of order) {
+      const sizes = reflowSizes();
+      for (const [each, at] of order) {
         if (!each.resting) {
-          each.change();
+          each.release();
+          due.set(each, at);
+          // Observed again, it reports in this frame's delivery, where
+          // its change is read (`plan`).
+          sizes.observe(each.node);
         }
+      }
+      if (due.size > 0) {
+        deliverWithRoot();
       }
     });
   }
   changed.set(state, depth);
 }
+
+/**
+ * The containers whose change is read in the next delivery (`plan`), by
+ * their nesting: placed from the innermost out, all read before any writes.
+ */
+const due = new Map<Reflow, number>();
+/** Each container's width as its last report gave it: a new one is read again whole (`reread`). */
+const widths = new WeakMap<Element, number>();
+let sizesOfReflows: FrameObserver | undefined;
+/**
+ * Every `reflow` container's size observer. A container that changed width
+ * (a window, the rail's width) has every place new, and none of it a change
+ * to animate: read again on the layout the resize made. Its height alone is
+ * its rows' own doing, which the change that made it places. A container
+ * with a change due reads it there (`plan`), on the frame's own layout, and
+ * its writes run with every site's.
+ */
+const reflowSizes = (): FrameObserver => {
+  sizesOfReflows ??= frameObserver(() => undefined, {
+    inside: (entries) => {
+      const reported = new Set<Element>();
+      for (const entry of entries) {
+        reported.add(entry.target);
+        const state = states.get(entry.target as HTMLElement);
+        const { width } = entry.contentRect;
+        if (state && widths.get(entry.target) !== width) {
+          widths.set(entry.target, width);
+          if (!due.has(state)) {
+            state.reread();
+          }
+        }
+      }
+      const order = [...due]
+        .filter(([state]) => reported.has(state.node))
+        .sort((a, b) => b[1] - a[1]);
+      const writes: (() => void)[] = [];
+      for (const [state] of order) {
+        due.delete(state);
+        const write = state.plan();
+        if (write) {
+          writes.push(write);
+        }
+      }
+      return writes.length > 0
+        ? () => {
+            for (const write of writes) {
+              write();
+            }
+          }
+        : undefined;
+    },
+  });
+  return sizesOfReflows;
+};
 
 /** Writes that the next change must read rows after (`beforeReflow`). */
 const settling = new Set<() => void>();
@@ -1866,20 +2075,9 @@ export function reflow({ on = [] }: { on?: readonly string[] } = {}) {
       }
     });
     watcher.observe(node, sizingChanges(on));
-    // The container's width changed (a window, the rail's width): every place
-    // is new, and none of it is a change to animate. Its height alone is its
-    // rows' own doing, which the change that made it has placed already:
-    // read again, every place in the list was laid out a second time in the
-    // frame a tree opened.
-    let across = -1;
-    // biome-ignore lint/style/noRestrictedGlobals: reads only: every row's place, read again on the layout the resize made, so the next change animates from where the rows stand
-    const sizes = new ResizeObserver(([entry]) => {
-      const { width } = entry.contentRect;
-      if (width !== across) {
-        across = width;
-        state.reread();
-      }
-    });
+    // Its width read again, and its changes read, on the frame's own layout
+    // (`reflowSizes`).
+    const sizes = reflowSizes();
     sizes.observe(node);
     const readAgain = () => state.reread();
     node.addEventListener(REFLOW_REREAD, readAgain);
@@ -1889,7 +2087,8 @@ export function reflow({ on = [] }: { on?: readonly string[] } = {}) {
       node.removeEventListener(REFLOW_REREAD, readAgain);
       node.removeEventListener("scroll", scrolled);
       watcher.disconnect();
-      sizes.disconnect();
+      sizes.unobserve(node);
+      due.delete(state);
       watching.stop();
     };
   };

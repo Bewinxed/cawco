@@ -85,9 +85,10 @@
  *     (a helper's computed position read as it attached, the rendered check
  *     as it mounted, a folder tab's first measure, a session row's trailing
  *     width: `MOUNT_SITES`; the tabs' places measured ahead of the frame's
- *     layout) and no frame runs past 250ms; on WebKit and
- *     Firefox, which have no CPU throttle and no trace here, the frames are
- *     read and said.
+ *     layout) and no frame runs past 250ms, each long frame saying what
+ *     its script forced and the write before it; on WebKit and Firefox,
+ *     which have no CPU throttle and no trace here, the frames are read and
+ *     said. On every engine the page raises no ResizeObserver loop.
  * (n) Interact and Draw, ten presses over the page's ink and comments, the
  *     first the moment a fresh loop of ink is drawn, while its picture is
  *     made: each reaches the page's mode under 300ms, no frame in the desk
@@ -1856,28 +1857,28 @@ const switchLeg = async (on: On, frame: Frame) => {
   await mode(desk, frame, "V");
 };
 
+/** What `watchTurn` keeps on the page. */
+interface TurnState {
+  frames: number[];
+  /** "ResizeObserver loop completed with undelivered notifications", each time the page raised it. */
+  loops: number;
+  on: boolean;
+  rows: number[];
+  stop: () => void;
+}
+
 /**
  * A turn's frames in one document: every frame's start (the engine's own
- * frame clock, `requestAnimationFrame`), and when the transcript's rows
- * changed (marked `turn-rows` for a trace to find).
+ * frame clock, `requestAnimationFrame`), when the transcript's rows changed
+ * (marked `turn-rows` for a trace to find), and each ResizeObserver loop the
+ * page raised (a box resized after its frame delivered it, held back).
  */
 const watchTurn = () => {
-  const w = window as unknown as {
-    __turn?: {
-      frames: number[];
-      on: boolean;
-      rows: number[];
-      stop: () => void;
-    };
-  };
+  const w = window as unknown as { __turn?: TurnState };
   const own = window.requestAnimationFrame.bind(window);
-  const state: {
-    frames: number[];
-    on: boolean;
-    rows: number[];
-    stop: () => void;
-  } = {
+  const state: TurnState = {
     frames: [],
+    loops: 0,
     on: true,
     rows: [],
     stop: () => undefined,
@@ -1900,22 +1901,25 @@ const watchTurn = () => {
   if (listing) {
     seen.observe(listing, { childList: true, subtree: true });
   }
+  const raised = (event: ErrorEvent) => {
+    if (event.message.includes("ResizeObserver loop")) {
+      state.loops += 1;
+    }
+  };
+  window.addEventListener("error", raised);
   state.stop = () => {
     state.on = false;
     seen.disconnect();
+    window.removeEventListener("error", raised);
   };
   performance.mark("turn-start");
   return performance.now();
 };
 
 const readTurn = () => {
-  const state = (
-    window as unknown as {
-      __turn: { frames: number[]; rows: number[]; stop: () => void };
-    }
-  ).__turn;
+  const state = (window as unknown as { __turn: TurnState }).__turn;
   state.stop();
-  return { frames: state.frames, rows: state.rows };
+  return { frames: state.frames, loops: state.loops, rows: state.rows };
 };
 
 /** A reply window's frames: how many, how many over 16.7ms and 33ms (on headless Chromium's 16.67ms grid, past 17.2 and 33.4), the longest. */
@@ -1980,15 +1984,21 @@ const PAINTS = new Set([
   "RasterTask",
 ]);
 
+interface TraceFrame {
+  columnNumber: number;
+  functionName: string;
+  lineNumber: number;
+  url: string;
+}
+
 interface TraceEvent {
   args?: {
     beginData?: {
-      stackTrace?: {
-        columnNumber: number;
-        functionName: string;
-        lineNumber: number;
-        url: string;
-      }[];
+      stackTrace?: TraceFrame[];
+    };
+    /** An invalidation's (`InvalidateLayout`, `ScheduleStyleRecalculation`): the script that made it. */
+    data?: {
+      stackTrace?: TraceFrame[];
     };
   };
   dur?: number;
@@ -2047,25 +2057,48 @@ const forcedBy = (event: TraceEvent) =>
  * Every layout script forced in a window, by its call's place and what the
  * call says there, and each of `MOUNT_SITES` among them.
  */
-const forcedSites = async (events: TraceEvent[]) => {
+/** A stack's own top frame (a page script's), as `file:column "what it says there"`, and the text round it. */
+const placeOf = async (stack: TraceFrame[]) => {
+  const top = stack.find((frame) => frame.url.startsWith("http")) ?? stack[0];
+  const source = await lineOf(top.url, top.lineNumber);
+  const column = top.columnNumber - 1;
+  const at = source.slice(Math.max(0, column - 80), column + 160);
+  const file = top.url.split("/").pop();
+  return {
+    at,
+    column: top.columnNumber,
+    file,
+    said: `${file}:${top.columnNumber} "${at.slice(70, 110).replace(SPACES_RUN, " ")}"`,
+  };
+};
+
+/** The script's write that left the layout or style dirty for a forced read: the last invalidation with a stack before it, on its thread. */
+const madeBy = (writes: TraceEvent[], forced: TraceEvent) => {
+  let last: TraceEvent | undefined;
+  for (const write of writes) {
+    if (write.tid === forced.tid && write.ts < forced.ts) {
+      last = write;
+    }
+  }
+  return last?.args?.data?.stackTrace;
+};
+
+const forcedSites = async (events: TraceEvent[], writes: TraceEvent[] = []) => {
   const sites = new Map<string, { count: number; ms: number }>();
   const mount: string[] = [];
   for (const event of events.filter(forcedBy)) {
     const stack = event.args?.beginData?.stackTrace ?? [];
-    const top = stack.find((frame) => frame.url.startsWith("http")) ?? stack[0];
-    const source = await lineOf(top.url, top.lineNumber);
-    const column = top.columnNumber - 1;
-    const at = source.slice(Math.max(0, column - 80), column + 160);
-    const file = top.url.split("/").pop();
+    const { at, column, file, said } = await placeOf(stack);
     const site = MOUNT_SITES.find(([, token]) => token.test(at))?.[0];
     if (site) {
-      mount.push(`${event.name} ${site} (${file}:${top.columnNumber})`);
+      mount.push(`${event.name} ${site} (${file}:${column})`);
     } else if (TAB_PLACES.test(at) && !(await delivered(stack))) {
       mount.push(
-        `${event.name} tabs measured ahead of the frame's layout (${file}:${top.columnNumber})`
+        `${event.name} tabs measured ahead of the frame's layout (${file}:${column})`
       );
     }
-    const key = `${event.name} ${file}:${top.columnNumber} "${at.slice(70, 110).replace(SPACES_RUN, " ")}"`;
+    const writer = madeBy(writes, event);
+    const key = `${event.name} ${said}${writer ? ` after ${(await placeOf(writer)).said}` : ""}`;
     const held = sites.get(key) ?? { count: 0, ms: 0 };
     held.count += 1;
     held.ms += (event.dur ?? 0) / 1000;
@@ -2079,6 +2112,11 @@ const forcedSites = async (events: TraceEvent[]) => {
   };
 };
 const SPACES_RUN = /\s+/g;
+/** The trace's invalidations: a write that leaves layout or style to be done again. */
+const INVALIDATIONS = new Set([
+  "InvalidateLayout",
+  "ScheduleStyleRecalculation",
+]);
 
 /** What one frame spent its time on: script (its outermost tasks), the layout and style it forced, the frame's own, painting. */
 const frameSpent = (events: TraceEvent[], span: number) => {
@@ -2122,6 +2160,15 @@ const readTrace = async (
     (event) =>
       event.pid === pid && event.ts >= lo && event.ts <= hi && event.ph === "X"
   );
+  // The script's writes that invalidate layout or style, each with its stack.
+  const writes = traced.filter(
+    (event) =>
+      event.pid === pid &&
+      event.ts >= lo &&
+      event.ts <= hi &&
+      INVALIDATIONS.has(event.name) &&
+      (event.args?.data?.stackTrace?.length ?? 0) > 0
+  );
   const longFrames: string[] = [];
   for (let at = 1; at < frames.length; at += 1) {
     const span = frames[at] - frames[at - 1];
@@ -2131,7 +2178,7 @@ const readTrace = async (
       const inFrame = inWindow.filter((event) => event.ts >= a && event.ts < b);
       // What the frame's script forced, and from where: the first read
       // after a write pays for the layout every write before it asked for.
-      const { sites } = await forcedSites(inFrame);
+      const { sites } = await forcedSites(inFrame, writes);
       longFrames.push(
         `${frameSpent(inFrame, span)}${sites.length > 0 ? ` [forced from ${sites.slice(0, 5).join("; ")}]` : ""}`
       );
@@ -2185,7 +2232,7 @@ const turnOnce = async (
   };
   const frames = framesIn(got.frames, window.from, window.to);
   if (!cdp) {
-    return { frames, rows: rows.length, trace: null };
+    return { frames, loops: got.loops, rows: rows.length, trace: null };
   }
   const done = new Promise((resolve) =>
     cdp.once("Tracing.tracingComplete", resolve)
@@ -2196,6 +2243,7 @@ const turnOnce = async (
   await cdp.detach();
   return {
     frames,
+    loops: got.loops,
     rows: rows.length,
     trace: await readTrace(traced, got.frames, t0, window),
   };
@@ -2239,18 +2287,21 @@ const turnLeg = async (on: On, frame: Frame) => {
     await settle(page, 2000);
     const read = await turnOnce(page, trigger, chromium);
     const { frames: f, trace: t } = read;
-    const said = `${read.rows} row changes; ${f.n} frames, ${f.over16} over 16.7ms, ${f.over33} over 33ms, longest ${f.longest}ms`;
+    const said = `${read.rows} row changes; ${f.n} frames, ${f.over16} over 16.7ms, ${f.over33} over 33ms, longest ${f.longest}ms; ${read.loops} ResizeObserver loops`;
     if (!t) {
       // No CPU throttle and no trace outside Chromium: the frames alone.
       kit.check(
-        `(o) ${engine} ${label}: a reply's frames, unthrottled (${said})`,
-        read.rows > 0 && f.n > 0
+        `(o) ${engine} ${label}: a reply's frames, unthrottled, and no ResizeObserver loop (${said})`,
+        read.rows > 0 && f.n > 0 && read.loops === 0
       );
       continue;
     }
     kit.check(
-      `(o) ${engine} ${label} at 4x CPU throttle: no layout forced from a mount's sites, and no frame past ${TURN_FRAME_MS}ms (${said}; Layout ${t.layout}ms, UpdateLayoutTree ${t.style}ms, forced in script ${t.forced}ms; long frames: ${t.longFrames.join(" | ") || "none"}; forced from: ${t.sites.slice(0, 6).join(" | ")})`,
-      read.rows > 0 && t.mount.length === 0 && f.longest <= TURN_FRAME_MS,
+      `(o) ${engine} ${label} at 4x CPU throttle: no layout forced from a mount's sites, no frame past ${TURN_FRAME_MS}ms, and no ResizeObserver loop (${said}; Layout ${t.layout}ms, UpdateLayoutTree ${t.style}ms, forced in script ${t.forced}ms; long frames: ${t.longFrames.join(" | ") || "none"}; forced from: ${t.sites.slice(0, 6).join(" | ")})`,
+      read.rows > 0 &&
+        t.mount.length === 0 &&
+        f.longest <= TURN_FRAME_MS &&
+        read.loops === 0,
       [...t.mount, ...t.sites].join("\n    ")
     );
   }
