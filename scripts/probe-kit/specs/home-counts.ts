@@ -31,7 +31,11 @@
  *     SIGNAL_REPEAT_MS, so the hub fails the row ("something … keeps ending
  *     it") and the page draws the Badge's `fail` variant;
  *  c. on the narrowest rail (Shell's RAIL_MIN, 216px) with three-digit
- *     counts, both labels stand whole beside their counts;
+ *     counts, the head gives way as DESIGN.md's Truncate Inside Rule and
+ *     WorkTabs say: past the tight steps each label ends in its ellipsis,
+ *     inside its own text span and never on the tab's hit, the counts stand
+ *     whole inside their tabs, and the head never overflows (the tabs end
+ *     before the Delegates switch, which stands inside the head);
  *  d. while nothing has finished, Finished draws no count (DESIGN.md, The
  *     Earned Count Rule); a sixth top-level session asked something short
  *     then finishes, and (b)'s Finished reads are of its count, 1.
@@ -44,7 +48,7 @@ import { signal } from "../../../packages/core/src/signal";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { box } from "../geom";
 import { capture, contrast, peakContrast, type Rgb } from "../ink";
-import { type Kit, open, type Spec, settle, THEMES } from "../kit";
+import { type Kit, open, type Spec, settle, stillWithin, THEMES } from "../kit";
 
 /** A prompt the mock answers for minutes: its session stays working. */
 const WORK = "WORK";
@@ -488,38 +492,87 @@ const spec: Spec = {
         }
       }, RAIL_MIN);
       await settle(page);
+      // The head as it stands, its tabs' and counts' moves to the new rail
+      // played out: a count read mid-move stands where it is passing.
+      const moving = await stillWithin(
+        page,
+        'section[aria-label="Sessions"] [data-slot="head"]',
+        { ms: 5000 }
+      );
       const fit = await page.evaluate(() =>
         [
           ...document.querySelectorAll(
             'section[aria-label="Sessions"] [data-slot="head"]'
           ),
         ].map((head) => {
-          const labels = [
-            ...head.querySelectorAll(
-              '[data-slot="tab-item-label"] > [data-slot="text"]:not([data-text])'
-            ),
-          ].map((el) => ({
-            text: el.textContent ?? "",
-            clipped: el.scrollWidth > el.clientWidth,
-          }));
+          const rectOf = (el: Element | null | undefined) =>
+            el?.getBoundingClientRect() ?? null;
+          const tabs = [...head.querySelectorAll('[data-slot="ff-tab"]')].map(
+            (tab) => {
+              const text = tab.querySelector(
+                '[data-slot="tab-item-label"] > [data-slot="text"]:not([data-text])'
+              );
+              const hitEl = tab.querySelector('[data-slot="hit"]');
+              const count = tab.querySelector('[data-slot="count"]');
+              const style = text ? getComputedStyle(text) : null;
+              const tabBox = rectOf(tab);
+              const countBox = rectOf(count);
+              return {
+                text: text?.textContent ?? "",
+                // The label's own span clips it, with its ellipsis.
+                clipped: !!text && text.scrollWidth > text.clientWidth,
+                ellipsis:
+                  style?.textOverflow === "ellipsis" &&
+                  style.overflowX !== "visible" &&
+                  style.whiteSpace === "nowrap",
+                // The hit never clips: its box holds what it draws.
+                hitWhole: !!hitEl && hitEl.scrollWidth <= hitEl.clientWidth,
+                count: count?.textContent?.trim() ?? "",
+                countSize: count
+                  ? `${count.scrollWidth}/${count.clientWidth} at ${countBox?.left.toFixed(2)}-${countBox?.right.toFixed(2)} in ${tabBox?.left.toFixed(2)}-${tabBox?.right.toFixed(2)}`
+                  : "none",
+                countWhole:
+                  !!count &&
+                  !!countBox &&
+                  !!tabBox &&
+                  count.scrollWidth <= count.clientWidth &&
+                  countBox.left >= tabBox.left - 0.5 &&
+                  countBox.right <= tabBox.right + 0.5,
+              };
+            }
+          );
           const list = head.querySelector('[data-slot="ff-tabs-list"]');
           const delegates = head.querySelector("button[aria-label=Delegates]");
-          const listEnd = list?.getBoundingClientRect().right ?? 0;
-          const switchStart = delegates?.getBoundingClientRect().left ?? 0;
+          const headBox = rectOf(head);
+          const switchBox = rectOf(delegates);
           return {
-            width: Math.round(head.getBoundingClientRect().width),
-            labels,
-            clear: switchStart - listEnd,
+            width: Math.round(headBox?.width ?? 0),
+            tabs,
+            clear: (switchBox?.left ?? 0) - (rectOf(list)?.right ?? 0),
+            overflow: head.scrollWidth - head.clientWidth,
+            switchInside:
+              !!switchBox &&
+              !!headBox &&
+              switchBox.right <= headBox.right + 0.5,
           };
         })
       );
       for (const head of fit) {
         kit.check(
-          `(c) ${theme}: a ${head.width}px head at the narrowest rail stands both labels whole beside 100 and 100`,
-          head.labels.length === 2 &&
-            head.labels.every((label) => !label.clipped) &&
-            head.clear >= 0,
-          `labels ${JSON.stringify(head.labels)}, the tabs end ${r2(head.clear)}px before the Delegates switch`
+          `(c) ${theme}: a ${head.width}px head at the narrowest rail gives way inside its labels: each label whole or ending in its ellipsis in its own text span (never on the tab's hit), the counts 100 and 100 whole in their tabs, the head not overflowing`,
+          head.tabs.length === 2 &&
+            head.tabs.every(
+              (tab) =>
+                (!tab.clipped || tab.ellipsis) &&
+                tab.hitWhole &&
+                tab.count === "100" &&
+                tab.countWhole
+            ) &&
+            head.clear >= 0 &&
+            head.overflow <= 0 &&
+            head.switchInside &&
+            moving.length === 0,
+          `still moving: ${moving.join(", ") || "nothing"}; tabs ${JSON.stringify(head.tabs)}, the tabs end ${r2(head.clear)}px before the Delegates switch, the head overflows by ${head.overflow}px, the switch inside it: ${head.switchInside}`
         );
       }
     }
