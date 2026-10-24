@@ -223,13 +223,14 @@ import {
   CONTROL_SLEEP,
   CONTROL_TRANSCRIPT_TURNS,
   CONTROL_WORK_IN_FLIGHT,
+  CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_MIGRATE,
   CONTROL_WORKSPACE_WORK_END,
   type CommandQueue,
   type CommandQueueFrame,
@@ -1462,13 +1463,14 @@ const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
+  CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_MIGRATE,
   CONTROL_WORKSPACE_WORK_END,
 ]);
 /**
@@ -23716,8 +23718,6 @@ export const createServer = (
     }
   };
   const workItems = createWorkItems({
-    beforeCut: (projectId, machineId, cwd) =>
-      placeRepos.beforeCut(projectId, machineId, cwd),
     // Undecided while the machine is away or has not read its custody since
     // it came back, and while it holds the session's process alive: neither
     // proves the session gone.
@@ -33974,15 +33974,6 @@ export const createServer = (
                   `[hub] reading ${message.machineId}'s project remotes failed: ${error instanceof Error ? error.message : String(error)}`
                 )
               );
-              // Workspaces from before clones become clones as their agent
-              // starts; a spawn that gets there first converts its own.
-              workItems
-                .convertWorktrees(message.machineId)
-                .catch((error: unknown) =>
-                  console.warn(
-                    `[hub] converting ${message.machineId}'s worktree workspaces failed: ${error instanceof Error ? error.message : String(error)}`
-                  )
-                );
               reconcilePreviews(
                 message.machineId,
                 ws.remoteAddress,

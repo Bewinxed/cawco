@@ -232,20 +232,58 @@ export const withWorktreeLine = (
     `You work in your own git worktree (your current directory). Paths under ${cwd} in this brief mean the same path in your worktree.${base ? ` ${landLine(base)}` : ""} The stash list is shared by every worktree of the repo.`
   );
 
+/** Where a work item's workspace keeps the folder it was made from (agent layer.ts), as its session's opening says it. */
+export interface WorkspacePlace {
+  /** A repository's root, or any other folder. */
+  kind: "repo" | "folder";
+  /** Where the session works: the folder itself (a Linux view of it), or its clone. */
+  path: string;
+  /** The folder the workspace was made from. */
+  repoRoot: string;
+}
+
+/** What a session's commands may reach inside its workspace's boundary. */
+const BOUNDARY_WORDS =
+  "Your shell commands run inside this workspace's boundary: they can write only this copy, $TMPDIR (the workspace's own scratch dir: temp files go there, not /tmp) and the workspaces' own package cache (bun, npm, uv and XDG_CACHE_HOME point there; the host's caches are read-only); a write anywhere else, under ~ or /tmp included, fails as a read-only file system; they read nothing in the home dir outside this copy, the toolchains and the user's git config, and none of the credentials CawCo, the harnesses and the machine's tools keep; they see and signal only this workspace's processes; they cannot reach the service manager; any public host is reachable, none of the owner's machines is, and `cawco tools` and `cawco tool` reach the hub's tools. Nothing in here makes namespaces (podman, a probe whose scratch fleet delegates): such a probe runs only as a check your parent marked `host`, outside the boundary on a fresh checkout of your last commit, and you cannot add one.";
+
+/** Where the session's copy is, in its opening's words. */
+const copyWords = ({ path, repoRoot }: WorkspacePlace): string =>
+  path === repoRoot
+    ? `You work in your own private view of ${repoRoot} (your current directory, at its real path): you see the folder live, every file as it is there until you write it, and everything you write stays yours until it lands; nothing you do writes the folder itself.`
+    : `You work in your own copy of ${repoRoot} (your current directory, ${path}): the folder as it was when you started, with what it held untracked (its .env, its installed dependencies). Paths under ${repoRoot} in this brief mean the same path in your copy.`;
+
 /**
- * The opening of a work item's session, in its workspace's shared clone of
- * `repoRoot` cut from `base` and inside its boundary, with the line that says
- * so right after any hand-off marker.
+ * How a folder workspace lands: its change set goes into the folder after
+ * `finish_item`, once a conflict scan and the folder's checks pass (hub
+ * work-items.ts `landFolder`); the services it touched are its report's to
+ * name, and its parent's to restart.
+ */
+const folderLandLine = (
+  folder: string,
+  { lands, outputs }: WorkspaceLanding
+): string =>
+  lands === "none"
+    ? `Nothing of yours is written into ${folder}: finish_item hands your report to your parent.${outputsLine(outputs)}`
+    : `After finish_item, the files you changed are read against ${folder} as it is then: a file changed there too since you started comes back to you with both versions; otherwise the folder's checks (its project's gate.md) run on your changes, and the agent on this machine writes them into ${folder}. A service that must restart to take them (nginx, a systemd unit) is not yours to restart: name each in your finish_item summary, and your parent restarts it.${outputsLine(outputs)} Your finish_item summary is the proof of the work: quote the real output of each command that proves it.`;
+
+/**
+ * The opening of a work item's session in its workspace's private copy of
+ * the folder it was made from (agent layer.ts) and inside its boundary,
+ * with the line that says so right after any hand-off marker: a
+ * repository's on its own branch cut from `base`, landing as `landing`
+ * says; any other folder's landing by its change set.
  */
 export const withWorkspaceLine = (
   text: string,
-  repoRoot: string,
+  place: WorkspacePlace,
   base: string,
   landing: WorkspaceLanding = { lands: "main" }
 ): string =>
   afterMarker(
     text,
-    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base, landing)} Your shell commands run inside this workspace's boundary: they can write only this clone, $TMPDIR (the workspace's own scratch dir: temp files go there, not /tmp) and the workspaces' own package cache (bun, npm, uv and XDG_CACHE_HOME point there; the host's caches are read-only); a write anywhere else, under ~ or /tmp included, fails as a read-only file system; they read nothing in the home dir outside this clone, the toolchains and the user's git config, and none of the credentials CawCo, the harnesses and the machine's tools keep; they see and signal only this workspace's processes; they cannot reach the service manager; any public host is reachable, none of the owner's machines is, and \`cawco tools\` and \`cawco tool\` reach the hub's tools. Nothing in here makes namespaces (podman, a probe whose scratch fleet delegates): such a probe runs only as a check your parent marked \`host\`, outside the boundary on a fresh checkout of your last commit, and you cannot add one.`
+    place.kind === "repo"
+      ? `${copyWords(place)} You are on its own branch; its stash is its own. ${hubLandLine(base, landing)} ${BOUNDARY_WORDS}`
+      : `${copyWords(place)} ${folderLandLine(place.repoRoot, landing)} ${BOUNDARY_WORDS}`
   );
 
 /**
