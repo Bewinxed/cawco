@@ -44,11 +44,20 @@
  *   computer can say it instead, at 390, 680 and 1440, with no console
  *   error.
  *
- * Runs inside a workspace: it delegates nothing. About 15 minutes.
+ * - (consent) nothing reports before the person's yes: a Chromium tab the
+ *   browser already grants says nothing of its computer until Allow, which
+ *   calls the browser's prompt in the press; the yes and the no (Skip) are
+ *   kept. On the computer whose agent can read its desktop (a headless KWin
+ *   of the run's own), the agent reads nothing before the yes; Allow turns
+ *   its report on, and the presence menu's switch turns it off at once.
+ *
+ * Runs inside a workspace: it delegates nothing. About 18 minutes.
  *
  *   bun scripts/probe-kit/run.ts presence-input
+ *   bun scripts/probe-kit/run.ts presence-input --consent   (the consent, Chrome idle and WebKit legs alone)
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { presenceLine } from "../../../packages/core/src/injected";
@@ -1227,7 +1236,7 @@ const chromeIdleLegs = async (
 ): Promise<void> => {
   const page = await kit.page("desk", {
     engine: "chromium",
-    init: [notificationsGranted, blurred],
+    init: [notificationsGranted, blurred, saidYes],
   });
   try {
     await page.context().setExtraHTTPHeaders(ELSEWHERE);
@@ -1374,8 +1383,8 @@ const webkitLegs = async (kit: Kit, base: string): Promise<void> => {
       const words = await deskRowOf(page, base);
       const box = await deskBox(page);
       kit.check(
-        `(chrome idle) WebKit ${name}: the onboarding step says plainly this browser can't tell CawCo, and points to this computer's CawCo agent switch; nothing to allow; the row inside the screen, nothing sideways or cut`,
-        words.includes(presenceWords.unavailable(null, false)) &&
+        `(chrome idle) WebKit ${name}: the consent step says plainly this browser can't tell CawCo and only presses in the CawCo tab count here; nothing to allow; the row inside the screen, nothing sideways or cut`,
+        words.includes(presenceWords.unavailable(false)) &&
           !words.includes(presenceWords.allow) &&
           box !== null &&
           box.left >= 0 &&
@@ -1397,10 +1406,10 @@ const webkitLegs = async (kit: Kit, base: string): Promise<void> => {
           .innerText()
           .catch(() => "");
         kit.check(
-          "(chrome idle) WebKit: the presence menu shows this browser's report as not available here, and where this computer can say it instead",
+          "(chrome idle) WebKit: the presence menu shows this device's report as not available here, with the same words",
           state === "unavailable" &&
             said.includes(presenceWords.atComputerState("unavailable")) &&
-            instead.includes(presenceWords.unavailable(null, false)),
+            instead.includes(presenceWords.unavailable(false)),
           `state ${state}; "${said}"; "${instead}"`
         );
         await page.keyboard.press("Escape");
@@ -1416,10 +1425,332 @@ const webkitLegs = async (kit: Kit, base: string): Promise<void> => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// (consent)
+
+/** In the page: the person said yes to this browser's report before (the consent step's word, kept). */
+const saidYes = () => {
+  localStorage.setItem("cawco-desk-report", "on");
+};
+
+/** In the page: each call to Idle Detection's requestPermission, and whether a press's user activation stood at it. */
+const recordIdleAsks = () => {
+  const page = window as unknown as {
+    IdleDetector?: { requestPermission: () => Promise<PermissionState> };
+    __idleAsks?: { active: boolean | null }[];
+  };
+  const Detector = page.IdleDetector;
+  if (!Detector) {
+    return;
+  }
+  const asked: { active: boolean | null }[] = [];
+  const answer = Detector.requestPermission.bind(Detector);
+  Object.defineProperty(Detector, "requestPermission", {
+    configurable: true,
+    value: () => {
+      asked.push({
+        active:
+          (navigator as Navigator & { userActivation?: { isActive: boolean } })
+            .userActivation?.isActive ?? null,
+      });
+      return answer();
+    },
+  });
+  page.__idleAsks = asked;
+};
+
+/** The browser's word on Idle Detection for the page's origin, in its own context. */
+const idleSetting = async (
+  page: Page,
+  base: string,
+  setting: "granted" | "denied" | "prompt"
+) => {
+  const cdp = await page.context().newCDPSession(page);
+  const { targetInfo } = await cdp.send("Target.getTargetInfo");
+  await cdp.send("Browser.setPermission", {
+    origin: new URL(base).origin,
+    permission: { name: "idle-detection" },
+    setting,
+    browserContextId: targetInfo.browserContextId,
+  });
+  await cdp.send("Emulation.setIdleOverride", {
+    isUserActive: true,
+    isScreenUnlocked: true,
+  });
+};
+
+/** What a tab has said of its computer, as the hub keeps it. */
+const deskOf = (fleet: KitFleet, clientId: string) =>
+  fleet.query<{ desk_input_at: number | null; machine: string | null }>(
+    "SELECT desk_input_at, machine FROM presence_clients WHERE client_id = ?",
+    clientId
+  )[0];
+
+/**
+ * (consent) Nothing reports before the person's yes. In Chromium, a tab
+ * whose browser already grants Idle Detection says nothing of its computer
+ * until Allow; Allow calls the browser's prompt inside the press and the
+ * report starts; the yes is kept across a reload, and a Skip (the no) is
+ * kept too, nothing reported after it. On the computer whose agent can read
+ * its desktop, the agent reads nothing before the yes; Allow there turns
+ * the agent's report on, and the presence menu's switch turns it off at
+ * once.
+ */
+const consentLegs = async (
+  kit: Kit,
+  fleet: KitFleet,
+  base: string,
+  kwin: boolean
+): Promise<void> => {
+  // Chromium, the browser's permission already granted: still nothing.
+  const page = await kit.page("desk", {
+    engine: "chromium",
+    init: [notificationsGranted, recordIdleAsks],
+  });
+  try {
+    await page.context().setExtraHTTPHeaders(ELSEWHERE);
+    await idleSetting(page, base, "granted");
+    const words = await deskRowOf(page, base);
+    const id = await presenceIdOf(page);
+    await Bun.sleep(35_000);
+    const before = deskOf(fleet, id);
+    kit.check(
+      "(consent) Chromium, Idle Detection already granted by the browser, no yes in CawCo: the step asks, saying why, what the person gets and what is read; the tab says nothing of its computer",
+      words.includes(
+        presenceWords.lead({ agent: null, idle: true, notify: false })
+      ) &&
+        words.includes(presenceWords.allow) &&
+        before !== undefined &&
+        before.machine === null &&
+        before.desk_input_at === null,
+      `row "${words}"; kept ${JSON.stringify(before)}`
+    );
+    await page
+      .locator('[data-slot="row"][data-kind="desk"] [data-allow]')
+      .click();
+    const asks = await page.evaluate(
+      () =>
+        (window as unknown as { __idleAsks?: { active: boolean | null }[] })
+          .__idleAsks ?? []
+    );
+    const after = await until(
+      "(consent) the report after the yes",
+      () => deskOf(fleet, id),
+      (said) => said?.machine === "active" && said.desk_input_at !== null,
+      40_000
+    ).catch(() => deskOf(fleet, id));
+    kit.check(
+      "(consent) Allow: the browser's prompt is called once, inside the press, and the tab's report starts",
+      asks.length === 1 &&
+        asks[0]?.active === true &&
+        after?.machine === "active" &&
+        after.desk_input_at !== null,
+      `asks ${JSON.stringify(asks)}; kept ${JSON.stringify(after)}`
+    );
+    await page.reload();
+    await settle(page, 2000);
+    const row = await page
+      .locator('[data-slot="row"][data-kind="desk"]')
+      .count();
+    kit.check(
+      "(consent) the yes is kept: after a reload, no step, and the report goes on",
+      row === 0,
+      `${row} row(s)`
+    );
+  } finally {
+    await page.context().close();
+  }
+
+  // The no: Skip, kept; nothing reported after it.
+  const declining = await kit.page("desk", {
+    engine: "chromium",
+    init: [notificationsGranted],
+  });
+  try {
+    await declining.context().setExtraHTTPHeaders(ELSEWHERE);
+    await idleSetting(declining, base, "granted");
+    await deskRowOf(declining, base);
+    await declining
+      .locator('[data-slot="row"][data-kind="desk"] [data-skip]')
+      .click();
+    await declining.reload();
+    await settle(declining, 2000);
+    const id = await presenceIdOf(declining);
+    await Bun.sleep(35_000);
+    const rows = await declining
+      .locator('[data-slot="row"][data-kind="desk"]')
+      .count();
+    const quietRow = deskOf(fleet, id);
+    kit.check(
+      "(consent) Skip is a no, kept: after a reload, no step, and the tab says nothing of its computer, though the browser grants it",
+      rows === 0 &&
+        quietRow?.machine === null &&
+        quietRow.desk_input_at === null,
+      `${rows} row(s); kept ${JSON.stringify(quietRow)}`
+    );
+  } finally {
+    await declining.context().close();
+  }
+
+  if (!kwin) {
+    kit.note(
+      "(consent) no kwin_wayland on this machine: the agent consent leg is not run"
+    );
+    return;
+  }
+  // The agent's computer: nothing read before the yes.
+  const short = MACHINE.slice(0, 8);
+  const listed = (await personOf(fleet)).devices.find(
+    (device) => device.id === MACHINE
+  );
+  const agentBefore = (await fleet.logs("agent"))
+    .split("\n")
+    .filter((line) => line.includes(presenceLogWords.reading("")));
+  kit.check(
+    "(consent) the agent's computer before the yes: listed, off, no state word, and its agent has read nothing of the desktop",
+    listed?.counts === false &&
+      listed.state === null &&
+      agentBefore.length === 0,
+    `${JSON.stringify(listed)}; agent: ${agentBefore.join(" | ")}`
+  );
+  const here = await kit.page("desk", {
+    engine: "chromium",
+    init: [notificationsGranted, recordIdleAsks],
+  });
+  try {
+    const words = await deskRowOf(here, base);
+    const agentMark = await fleet.logMark("agent");
+    await here
+      .locator('[data-slot="row"][data-kind="desk"] [data-allow]')
+      .click();
+    const reading = await until(
+      "(consent) the agent reading after the yes",
+      async () => (await agentMark.since()).split("\n"),
+      (lines) =>
+        lines.some((line) => line.includes(presenceLogWords.reading(""))),
+      40_000
+    ).catch(() => [] as string[]);
+    const on = await personWhen(
+      fleet,
+      "(consent) the machine's state word",
+      (person) =>
+        person.devices.some(
+          (device) => device.id === MACHINE && device.state !== null
+        ),
+      40_000
+    );
+    const asks = await here.evaluate(
+      () => (window as unknown as { __idleAsks?: unknown[] }).__idleAsks ?? []
+    );
+    kit.check(
+      "(consent) on the agent's computer the step asks for its agent's report; Allow turns it on, the agent starts reading, and the browser is asked nothing",
+      words.includes(
+        presenceWords.lead({
+          agent: listed?.name ?? "?",
+          idle: false,
+          notify: false,
+        })
+      ) &&
+        reading.some((line) => line.includes(presenceLogWords.reading(""))) &&
+        on.devices.some(
+          (device) => device.id === MACHINE && device.counts && device.state
+        ) &&
+        asks.length === 0,
+      `row "${words}"; agent ${reading.filter((line) => line.includes(presenceLogWords.reading(""))).join(" | ")}; ${JSON.stringify(on.devices)}; asks ${asks.length}`
+    );
+    // Off from the presence menu: at once on the hub, and the agent stops.
+    await here.locator("[data-presence]:visible").first().click();
+    const item = here.locator('[data-slot="at-computer"]');
+    await item.waitFor({ state: "visible", timeout: 10_000 });
+    const stateBefore = await item.getAttribute("data-desk");
+    const offMark = await fleet.logMark("agent");
+    await item.click();
+    const off = await personWhen(
+      fleet,
+      "(consent) off on the hub",
+      (person) =>
+        person.devices.some(
+          (device) => device.id === MACHINE && !device.counts && !device.state
+        ),
+      5000
+    );
+    const stopped = await until(
+      "(consent) the agent stops reading",
+      async () => (await offMark.since()).split("\n"),
+      (lines) => lines.some((line) => line.includes(presenceLogWords.notRead)),
+      40_000
+    ).catch(() => [] as string[]);
+    const hubLines = (await fleet.logs("hub"))
+      .split("\n")
+      .filter((line) => line.includes(`machine ${short}:`));
+    kit.check(
+      "(consent) the presence menu lists this device's report on with its switch; off: the hub keeps nothing of it at once, and the agent stops reading",
+      stateBefore === "on" &&
+        off.devices.some(
+          (device) => device.id === MACHINE && !device.counts && !device.state
+        ) &&
+        stopped.some((line) => line.includes(presenceLogWords.notRead)),
+      `menu ${stateBefore}; ${JSON.stringify(off.devices)}; agent ${stopped.filter((line) => line.includes(presenceLogWords.notRead)).join(" | ")}; hub ${hubLines.join(" | ")}`
+    );
+    await here.keyboard.press("Escape");
+  } finally {
+    await here.context().close();
+  }
+};
+
+/** `--consent`: the consent, Chrome idle and WebKit legs alone, a few minutes. */
+const CONSENT_ONLY = process.argv.includes("--consent");
+
+/** A headless KWin of the run's own, so the agent has a desktop it could read, and never the one it runs on. */
+const startKwin = async (fleet: KitFleet) => {
+  if (!Bun.which("kwin_wayland")) {
+    return;
+  }
+  // Short, for the socket's path: a Unix socket's is at most 107 bytes.
+  const xdg = await mkdtemp(join(tmpdir(), "kwin-"));
+  const kwin = Bun.spawn(
+    [
+      "kwin_wayland",
+      "--virtual",
+      "--socket",
+      "wayland-presence",
+      "--no-lockscreen",
+      "--no-global-shortcuts",
+      "--no-kactivities",
+    ],
+    {
+      env: {
+        ...process.env,
+        XDG_RUNTIME_DIR: xdg,
+        QT_QPA_PLATFORM: "offscreen",
+      },
+      stdout: "ignore",
+      stderr: Bun.file(join(fleet.sandbox, "kwin.log")),
+    }
+  );
+  await until(
+    "the headless KWin's socket",
+    () => Bun.file(join(xdg, "wayland-presence.lock")).exists(),
+    Boolean,
+    30_000
+  );
+  fleet.env.WAYLAND_DISPLAY = join(xdg, "wayland-presence");
+  fleet.env.XDG_SESSION_TYPE = "wayland";
+  return {
+    stop: async () => {
+      kwin.kill();
+      await rm(xdg, { recursive: true, force: true });
+    },
+  };
+};
+
 const run = async (kit: Kit) => {
-  replayLegs(kit);
+  if (!CONSENT_ONLY) {
+    replayLegs(kit);
+  }
   const fleet = await kit.fleet(respond);
   const phone = standInPhone(fleet);
+  const kwin = await startKwin(fleet);
   try {
     fleet.launch("sessiond");
     await fleet.sessiondUp();
@@ -1434,7 +1765,7 @@ const run = async (kit: Kit) => {
     await mkdir(cwd, { recursive: true });
     await writeFile(join(cwd, "README.md"), "presence input probe\n");
     const sessions: string[] = [];
-    for (const name of ["One", "Two", "Three"]) {
+    for (const name of CONSENT_ONLY ? ["One"] : ["One", "Two", "Three"]) {
       // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each up before the next
       const id = await fleet.spawn("claude", `Presence ${name}`, cwd);
       await handOff(fleet, id, `PROBE-START-${name}: say ok.`);
@@ -1444,19 +1775,24 @@ const run = async (kit: Kit) => {
     }
     const [s1, s2, s3] = sessions as [string, string, string];
     const base = await fleet.dashboard();
-    await clockLegs(kit, fleet, base);
-    const { a, b } = await twoTabLegs(kit, fleet, base, s1, s2);
-    await awayLeg(kit, fleet, a, b);
-    await recapLegs(kit, fleet, a, s1);
-    await restartLeg(kit, fleet, a, s1);
-    await phoneLegs(kit, fleet, phone, base, a, s1, s2, s3);
-    await b.context().close();
-    await a.context().close();
-    await elsewhereLegs(kit, fleet, base, s1, s3);
+    if (!CONSENT_ONLY) {
+      await clockLegs(kit, fleet, base);
+      const { a, b } = await twoTabLegs(kit, fleet, base, s1, s2);
+      await awayLeg(kit, fleet, a, b);
+      await recapLegs(kit, fleet, a, s1);
+      await restartLeg(kit, fleet, a, s1);
+      await phoneLegs(kit, fleet, phone, base, a, s1, s2, s3);
+      await b.context().close();
+      await a.context().close();
+      await elsewhereLegs(kit, fleet, base, s1, s3);
+    }
+    await setClock(fleet, MINUTE);
+    await consentLegs(kit, fleet, base, kwin !== undefined);
     await chromeIdleLegs(kit, fleet, base, s1);
     await webkitLegs(kit, base);
   } finally {
     await phone.stop();
+    await kwin?.stop();
   }
 };
 

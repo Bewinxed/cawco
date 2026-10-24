@@ -752,7 +752,9 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   kit.check(
     "(onboarding) Chromium, Idle Detection at prompt: the row names “Your device use” and notifications, with Skip and Allow",
     asked.includes(presenceWords.title(true)) &&
-      asked.includes(presenceWords.lead({ idle: true, notify: true })) &&
+      asked.includes(
+        presenceWords.lead({ agent: null, idle: true, notify: true })
+      ) &&
       asked.includes(presenceWords.deviceUse) &&
       asked.includes(presenceWords.meta) &&
       (await row.getByRole("button", { name: "Allow" }).count()) === 1 &&
@@ -920,7 +922,7 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     const menu = await menuLines(quiet);
     kit.check(
       `(onboarding) ${one.name}: no Idle Detection to grant, so the row says so plainly and where this computer can say it instead, asks nothing, and the menu offers no set-up and no warning`,
-      words.includes(presenceWords.unavailable(null, false)) &&
+      words.includes(presenceWords.unavailable(false)) &&
         !words.includes(presenceWords.allow) &&
         menu.setUp === 0 &&
         menu.refusal === "",
@@ -934,10 +936,12 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     engine: "webkit",
     init: [notificationStandIn],
   });
+  // On a computer no agent reads: here, the agent's report is what is asked.
+  await safari.context().setExtraHTTPHeaders(ELSEWHERE);
   const { words: shown } = await deskRow(safari, base, 10_000);
   kit.check(
     "(onboarding) WebKit, notifications to answer: the row says device use is not available here, asks for notifications alone, and names no device use",
-    shown.includes(presenceWords.unavailable(null, true)) &&
+    shown.includes(presenceWords.unavailable(true)) &&
       !shown.includes(presenceWords.deviceUse),
     shown || "no row"
   );
@@ -945,9 +949,10 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
 };
 
 /**
- * (onboarding) A browser on the computer whose agent reads its desktop:
- * the hub ties it to that machine by the address it asks from, so Idle
- * Detection adds nothing and is never asked for.
+ * (onboarding) A browser on the computer whose agent can read its desktop:
+ * the hub ties it to that machine by the address it asks from, and the
+ * consent step asks for that agent's report, never the browser's; nothing
+ * is read before the yes.
  */
 const agentHereLeg = async (
   kit: Kit,
@@ -956,7 +961,7 @@ const agentHereLeg = async (
 ): Promise<void> => {
   if (!kwin) {
     kit.note(
-      "(onboarding) no kwin_wayland on this machine: no agent reads the desktop, so the agent-here leg is not run"
+      "(onboarding) no kwin_wayland on this machine: no agent can read the desktop, so the agent-here leg is not run"
     );
     return;
   }
@@ -965,15 +970,24 @@ const agentHereLeg = async (
     engine: "chromium",
     init: [notificationsGranted, notificationStandIn, recordIdleAsks],
   });
-  const { words } = await deskRow(page, base, 8000);
+  const { words } = await deskRow(page, base, 15_000);
   const tie = await tieOf(page);
   const menu = await menuLines(page);
   kit.check(
-    "(onboarding) Chromium on the machine whose agent reads its desktop: the hub ties it there, and nothing is asked (no row, no set-up, no warning)",
+    "(onboarding) Chromium on the machine whose agent can read its desktop: the hub ties it there, the step asks for that agent's report (not the browser's), and the agent reads nothing before the yes",
     tie.thisMachine === MACHINE &&
-      tie.device?.state !== null &&
       tie.device !== null &&
-      words === "" &&
+      tie.device.state === null &&
+      words.includes(
+        presenceWords.lead({
+          agent:
+            (await personOf(fleet)).devices.find(
+              (device) => device.id === MACHINE
+            )?.name ?? "?",
+          idle: false,
+          notify: false,
+        })
+      ) &&
       menu.setUp === 0 &&
       menu.refusal === "",
     `tie ${JSON.stringify(tie)}; row "${words}"; menu ${JSON.stringify(menu)}`
@@ -1286,9 +1300,21 @@ const machineLeg = async (
     return;
   }
   const short = MACHINE.slice(0, 8);
+  const before = await personOf(fleet);
+  const listed = before.devices.find((device) => device.id === MACHINE);
+  const quiet = (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) => line.includes(`machine ${short}: active`));
+  kit.check(
+    "(machine) before the person's yes, the presence menu lists the machine off with no state word, and the hub has heard nothing of its desktop",
+    listed?.counts === false && listed.state === null && quiet.length === 0,
+    `${JSON.stringify(listed)}; ${quiet.join(" | ")}`
+  );
+  const mark = await fleet.logMark("hub");
+  await fleet.api(`/api/person/devices/${MACHINE}`, { counts: true });
   const lines = await until(
     "(machine) the agent's desktop in use, then idle",
-    async () => (await fleet.logs("hub")).split("\n"),
+    async () => (await mark.since()).split("\n"),
     (all) =>
       all.some((line) =>
         line.includes(`machine ${short}: active (ext-idle-notify-v1`)
@@ -1296,26 +1322,19 @@ const machineLeg = async (
       all.some((line) =>
         line.includes(`machine ${short}: idle (ext-idle-notify-v1`)
       ),
-    120_000
+    150_000
   ).catch(() => [] as string[]);
   const said = lines.filter((line) => line.includes(`machine ${short}:`));
-  kit.check(
-    "(machine) the agent reads its desktop from KWin's ext-idle-notify-v1 and the hub hears it in use, then idle",
-    said.some((line) => line.includes(": active (ext-idle-notify-v1")) &&
-      said.some((line) => line.includes(": idle (ext-idle-notify-v1")),
-    said.join(" | ")
+  const counted = (await personOf(fleet)).devices.find(
+    (device) => device.id === MACHINE
   );
-  const before = await personOf(fleet);
-  const listed = before.devices.find((device) => device.id === MACHINE);
-  await fleet.api(`/api/person/devices/${MACHINE}`, { counts: true });
-  const after = await personOf(fleet);
-  const counted = after.devices.find((device) => device.id === MACHINE);
   kit.check(
-    "(machine) the presence menu lists the machine off until the person opts it in, then on with its state word",
-    listed?.counts === false &&
+    "(machine) the yes: the agent reads its desktop from KWin's ext-idle-notify-v1 and the hub hears it in use, then idle; the menu lists it on with its state word",
+    said.some((line) => line.includes(": active (ext-idle-notify-v1")) &&
+      said.some((line) => line.includes(": idle (ext-idle-notify-v1")) &&
       counted?.counts === true &&
       counted.state === "idle",
-    JSON.stringify({ before: listed, after: counted })
+    `${said.join(" | ")}; ${JSON.stringify(counted)}`
   );
   // Back off: the hold legs read only the desk tab and the probe's devices.
   await fleet.api(`/api/person/devices/${MACHINE}`, { counts: false });

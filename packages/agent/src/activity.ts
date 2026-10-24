@@ -1,10 +1,11 @@
 /**
  * THIS MACHINE'S DESKTOP, AS THE PERSON USES IT: in use, idle, locked or
  * asleep, and how long since the last keyboard or pointer input. It rides
- * every heartbeat (`activity`) and a beat of its own when the state changes;
- * the hub counts it toward whether the person is here once they opt the
- * machine in (hub notifications.ts). Only the state word and the idle time
- * leave the machine.
+ * every heartbeat (`activity`) and a beat of its own when the state changes,
+ * and only once the person said yes to this machine's report: until then,
+ * and from the moment they turn it off, nothing is read (the hub's
+ * `reportActivity` on each beat's answer, daemon.ts). Only the state word
+ * and the idle time leave the machine, never what the person does.
  *
  * Each is read from the platform's own source, nothing of ours in between:
  *
@@ -47,7 +48,11 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { MachineActivity, MachineState } from "@cawco/core";
+import {
+  type MachineActivity,
+  type MachineState,
+  presenceLogWords,
+} from "@cawco/core";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
 import { resolveBin, toolEnv } from "./tools";
@@ -193,6 +198,8 @@ class Compositor extends Display {
 
 /** What reads the idle time: since when the person has been idle, or undefined while they are not. */
 interface IdleSource {
+  /** Lets go of what it holds open (a compositor connection), when it holds any. */
+  readonly close?: () => void;
   readonly name: string;
   /** The idle time now, ms; undefined when it could not be read. */
   readonly read: () => Promise<number | undefined>;
@@ -304,6 +311,10 @@ const waylandIdle = async (): Promise<IdleSource | undefined> => {
     });
     return {
       name: `ext-idle-notify-v1 v${notifier.version}${input ? " (input idle)" : ""}`,
+      close: () => {
+        compositor.close().catch(() => undefined);
+        socket.destroy();
+      },
       read: () => {
         if (lost !== undefined) {
           return Promise.resolve(undefined);
@@ -458,10 +469,10 @@ kill "$monitor" 2>/dev/null`;
 export const hearSleep = (
   onSleep: (going: boolean) => void,
   listening: () => void
-): void => {
+): (() => void) => {
   const gdbus = resolveBin("gdbus");
   if (!gdbus) {
-    return;
+    return () => undefined;
   }
   const child = spawn(
     "/bin/sh",
@@ -501,6 +512,8 @@ export const hearSleep = (
     }
   });
   child.on("error", () => undefined);
+  // Closing the tether's stdin ends it and the listener with it.
+  return () => child.stdin.end();
 };
 
 const PREPARE_FOR_SLEEP = /PrepareForSleep \((true|false),\)/;
@@ -561,7 +574,7 @@ $.NSRunLoop.currentRunLoop.run;`;
 const hearMacSleep = (
   onSleep: (going: boolean) => void,
   listening: () => void
-): void => {
+): (() => void) => {
   const child = spawn(
     "/usr/bin/osascript",
     ["-l", "JavaScript", "-e", MAC_SLEEP],
@@ -584,6 +597,8 @@ const hearMacSleep = (
     }
   });
   child.on("error", () => undefined);
+  // Its stdin closing ends the script.
+  return () => child.stdin.end();
 };
 
 /** macOS: whether the console user's screen is locked, as `ioreg` lists IOConsoleUsers. */
@@ -633,11 +648,28 @@ export interface Activity {
   readonly onChange: (
     listener: (activity: MachineActivity) => void
   ) => () => void;
+  /** Stops reading: every source let go, nothing read or said after. */
+  readonly stop: () => void;
 }
 
 /**
+ * This machine has a desktop its agent could read (a Mac, or a Linux
+ * graphical session), said on every beat whether or not it reads it, so
+ * the presence menu can offer its switch. It reads nothing of the desktop.
+ */
+export const desktopReadable = (): boolean =>
+  process.platform === "darwin" ||
+  (process.platform === "linux" &&
+    (process.env.WAYLAND_DISPLAY !== undefined ||
+      process.env.DISPLAY !== undefined ||
+      process.env.XDG_SESSION_TYPE === "wayland" ||
+      process.env.XDG_SESSION_TYPE === "x11"));
+
+/**
  * Starts reading this machine's desktop every {@link LOOK_MS}, from the
- * sources its platform has (see the module's head). Once per agent.
+ * sources its platform has (see the module's head), once the person said
+ * yes to this machine's report (the hub's `reportActivity`); `stop` lets
+ * every source go when they turn it off.
  */
 export const watchActivity = async (): Promise<Activity> => {
   const listeners = new Set<(activity: MachineActivity) => void>();
@@ -645,7 +677,11 @@ export const watchActivity = async (): Promise<Activity> => {
   const none: Activity = {
     now: () => undefined,
     onChange: () => () => undefined,
+    stop: () => undefined,
   };
+  /** What the reading holds open, let go of on `stop`. */
+  const held: (() => void)[] = [];
+  let stopped = false;
 
   /** The platform's idle source, found again when the one in hand stops answering. */
   let find: () => Promise<IdleSource | undefined> = () =>
@@ -659,14 +695,16 @@ export const watchActivity = async (): Promise<Activity> => {
     find = macIdle;
     lock = macLocked;
     lockName = "ioreg IOConsoleUsers";
-    hearMacSleep(
-      (going) => {
-        asleep = going;
-        look().catch(() => undefined);
-      },
-      () => {
-        sleepName = "NSWorkspace sleep";
-      }
+    held.push(
+      hearMacSleep(
+        (going) => {
+          asleep = going;
+          look().catch(() => undefined);
+        },
+        () => {
+          sleepName = "NSWorkspace sleep";
+        }
+      )
     );
   } else if (process.platform === "linux") {
     const wayland =
@@ -680,14 +718,16 @@ export const watchActivity = async (): Promise<Activity> => {
       lock = () => lockedHint(session);
       lockName = `logind LockedHint (${session})`;
     }
-    hearSleep(
-      (going) => {
-        asleep = going;
-        look().catch(() => undefined);
-      },
-      () => {
-        sleepName = "logind PrepareForSleep";
-      }
+    held.push(
+      hearSleep(
+        (going) => {
+          asleep = going;
+          look().catch(() => undefined);
+        },
+        () => {
+          sleepName = "logind PrepareForSleep";
+        }
+      )
     );
   }
 
@@ -696,15 +736,21 @@ export const watchActivity = async (): Promise<Activity> => {
     console.warn(
       `[activity] this machine's desktop is not read: no idle source answered (${process.platform}${process.env.XDG_SESSION_TYPE ? `, ${process.env.XDG_SESSION_TYPE}` : ""}${process.env.XDG_CURRENT_DESKTOP ? `, ${process.env.XDG_CURRENT_DESKTOP}` : ""})`
     );
+    for (const release of held) {
+      release();
+    }
     return none;
   }
   const sourceOf = (reading: IdleSource): string =>
     [reading.name, lock ? lockName : undefined, sleepName]
       .filter(Boolean)
       .join(" + ");
-  console.info(`[activity] reading this machine's desktop: ${sourceOf(idle)}`);
+  console.info(presenceLogWords.reading(sourceOf(idle)));
 
   const look = async (): Promise<void> => {
+    if (stopped) {
+      return;
+    }
     const [idleMs, locked] = await Promise.all([
       idle ? idle.read() : Promise.resolve(undefined),
       lock ? lock() : Promise.resolve(false),
@@ -735,16 +781,27 @@ export const watchActivity = async (): Promise<Activity> => {
     }
   };
 
-  setInterval(() => {
+  const looking = setInterval(() => {
     look().catch(() => undefined);
-  }, LOOK_MS).unref();
+  }, LOOK_MS);
+  looking.unref();
   await look();
 
   return {
-    now: () => last,
+    now: () => (stopped ? undefined : last),
     onChange: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    stop: () => {
+      stopped = true;
+      clearInterval(looking);
+      listeners.clear();
+      idle?.close?.();
+      for (const release of held) {
+        release();
+      }
+      console.info(presenceLogWords.notRead);
     },
   };
 };

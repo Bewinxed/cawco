@@ -1,10 +1,11 @@
 /**
  * Whether the person is here: the presence dot on the rail's avatar and its
- * menu (Appear away, the away clock, the machines that count), and the onboarding row in
- * Needs you that lets this browser say when the person is at this computer
- * (Chromium's Idle Detection, "Your device use" in its site settings) and
- * show what needs them as a desktop notification. State words only:
- * nothing says what the person did.
+ * menu (Appear away, the away clock, this device's report, the machines
+ * that count), and the consent step in Needs you that lets this computer
+ * say when the person is at it (its CawCo agent, or Chromium's Idle
+ * Detection, "Your device use" in its site settings) and show what needs
+ * them as a desktop notification. Nothing reports before the person's yes.
+ * State words only: nothing says what the person did.
  */
 export const presenceWords = {
   /** The dot's word and the menu's head while the person is here. */
@@ -38,7 +39,7 @@ export const presenceWords = {
   },
   /** The menu's group for this browser, and its one item while something is still to allow. */
   thisBrowser: "This browser",
-  /** The menu's switch: this browser says when you're at this computer (Idle Detection). */
+  /** The menu's switch: this device says when you're at this computer (its CawCo agent, or this browser's Idle Detection). */
   atComputer: "Say when I'm at this computer",
   /** That switch's state word: on, off, blocked in the browser, or no Idle Detection here. */
   atComputerState: (state: "on" | "off" | "blocked" | "unavailable") =>
@@ -46,40 +47,48 @@ export const presenceWords = {
   setUp: "Set up this browser",
   /** The trigger's name, with the dot's word after it. */
   you: (state: string) => `You · ${state}`,
-  /** The onboarding row's title, a noun true before and after, by what this browser can do. */
-  title: (idle: boolean) =>
-    idle ? "Your presence at this computer" : "Desk alerts in this browser",
+  /** The onboarding row's title, a noun true before and after: your presence when it asks for it, else desk alerts alone. */
+  title: (activity: boolean) =>
+    activity ? "Your presence at this computer" : "Desk alerts in this browser",
   /**
-   * The row's notice: the site settings it asks for, by the names the
-   * browser shows them ("Your device use" is Chromium's name for Idle
-   * Detection), what it shares, and what changes for the person.
+   * Why CawCo asks to know you're at this computer, and what you get: the
+   * consent step's first words, before anything is read.
    */
-  lead: (ask: { idle: boolean; notify: boolean }) => {
-    if (ask.idle && ask.notify) {
-      return "Allow “Your device use” and notifications for this site. CawCo reads only whether this computer is in use, idle or locked, and what needs you shows here instead of on your phone.";
+  why: "With your yes, CawCo knows when you're at this computer, even on another tab or app: agents stay quiet while you're away, what needs you goes to your phone once you leave, and while you're on another tab it comes here as a desktop notification.",
+  /** What is read, and what never is. */
+  reads:
+    "CawCo reads only whether keys or the pointer moved and whether the screen is locked, never what you do.",
+  /**
+   * The consent step's notice, by what says it on this computer: its CawCo
+   * agent (by the machine's name), or this browser's “Your device use”
+   * (Chromium's name for Idle Detection); then notifications, when they are
+   * still to ask. Nothing is on before Allow.
+   */
+  lead: (ask: { agent: string | null; idle: boolean; notify: boolean }) => {
+    const notify = ask.notify
+      ? " Allow also lets this site show notifications."
+      : "";
+    if (ask.agent) {
+      return `${presenceWords.why} ${presenceWords.reads} The CawCo agent on ${ask.agent} reads it once you allow it, and you can turn it off in your presence menu.${notify}`;
     }
     if (ask.idle) {
-      return "Allow “Your device use” for this site. CawCo reads only whether this computer is in use, idle or locked.";
+      return `${presenceWords.why} ${presenceWords.reads} This browser reads it once you allow “Your device use”, and you can turn it off in your presence menu.${notify}`;
     }
     return "Allow notifications for this site, and what needs you shows here instead of on your phone while you're at this computer.";
   },
   /**
-   * The row's notice in a browser with no Idle Detection (Safari, Firefox,
-   * Brave): it says so, and where this computer can say it instead, its
-   * CawCo agent's switch in the presence menu, by the machine's name when
-   * the hub ties this browser to one. Notifications still to ask come after.
+   * The step in a browser with no Idle Detection (Safari, Firefox, Brave)
+   * on a computer with no CawCo agent: it says this browser can't, and that
+   * only presses in the CawCo tab count here. Notifications still to ask
+   * come after.
    */
-  unavailable: (machine: string | null, notify: boolean) =>
-    `This browser can't tell CawCo when you're at this computer. ${
-      machine
-        ? `Turn on ${machine} under “Machines that count” in your presence menu, and its CawCo agent tells CawCo instead.`
-        : "Run the CawCo agent on this computer, then turn it on under “Machines that count” in your presence menu."
-    }${notify ? " Allow notifications for this site, and what needs you shows here instead of on your phone while you're at this computer." : ""}`,
+  unavailable: (notify: boolean) =>
+    `This browser can't tell CawCo whether you're at this computer, so here only your presses in the CawCo tab count. The CawCo agent on this computer could tell CawCo instead, once you allow it.${notify ? " Allow notifications for this site, and what needs you shows here instead of on your phone while you're at this computer." : ""}`,
   meta: "Onboarding · this browser",
-  /** Its tick, once the browser allowed it. */
-  done: (idle: boolean) =>
-    idle
-      ? "This browser tells CawCo when you're here."
+  /** Its tick, once allowed. */
+  done: (activity: boolean) =>
+    activity
+      ? "CawCo knows when you're at this computer now."
       : "What needs you shows here while you're at this computer.",
   allow: "Allow",
   allowing: "Allowing…",

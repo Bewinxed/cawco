@@ -206,10 +206,10 @@
           : tailnetWords.lead;
       case "desk":
         if (item.done) {
-          return presenceWords.done(item.idle);
+          return presenceWords.done(item.agent !== null || item.idle);
         }
         return item.unavailable
-          ? presenceWords.unavailable(item.machine, item.notify)
+          ? presenceWords.unavailable(item.notify)
           : presenceWords.lead(item);
       case "relay":
         return "";
@@ -1348,7 +1348,7 @@
             size="sm"
             variant="secondary"
           />
-          {#if item.idle || item.notify}
+          {#if item.agent !== null || item.idle || item.notify}
             <Button
               data-allow
               disabled={person.pending === "allow"}

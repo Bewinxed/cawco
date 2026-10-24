@@ -166,7 +166,7 @@ import {
   claudeSignins,
   onSigninsChanged,
 } from "./accounts";
-import { type Activity, watchActivity } from "./activity";
+import { type Activity, desktopReadable, watchActivity } from "./activity";
 import { recordAgentState } from "./agent-state";
 import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
@@ -424,12 +424,51 @@ const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 
 /**
- * This machine's desktop as the person uses it (activity.ts), read once the
- * daemon starts: on every beat, and a beat of its own on each change, on
- * whichever connection is up.
+ * This machine's desktop as the person uses it (activity.ts), read only
+ * while the person has said yes to this machine's report (the hub's
+ * `reportActivity` on each beat's answer): on every beat, and a beat of its
+ * own on each change, on whichever connection is up. Nothing is read before
+ * the yes, and the reading stops the moment it is turned off.
  */
 let machineActivity: Activity | undefined;
+/** The reading on its way to starting, so one yes starts one reader. */
+let activityStarting: Promise<void> | undefined;
 const activityHeard = new Set<(activity: MachineActivity) => void>();
+
+/** The hub's word on this machine's report: on starts the reading, off stops it. */
+const reportActivity = (on: boolean): void => {
+  if (!on) {
+    activityStarting = undefined;
+    machineActivity?.stop();
+    machineActivity = undefined;
+    return;
+  }
+  if (machineActivity || activityStarting) {
+    return;
+  }
+  const starting = watchActivity()
+    .then((activity) => {
+      if (activityStarting !== starting) {
+        // Turned off while it started.
+        activity.stop();
+        return;
+      }
+      activityStarting = undefined;
+      machineActivity = activity;
+      activity.onChange((now) => {
+        for (const tell of activityHeard) {
+          tell(now);
+        }
+      });
+    })
+    .catch((error: unknown) => {
+      activityStarting = undefined;
+      console.warn(
+        `[activity] this machine's desktop is not read: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  activityStarting = starting;
+};
 /** The beat's `activity`, while the desktop is read. */
 const activityNow = (): { activity?: MachineActivity } => {
   const activity = machineActivity?.now();
@@ -2969,6 +3008,7 @@ const attach = (
         takeSessionLimits(beat?.sessionLimits);
         takeUpstream(beat?.upstream);
         followHub(beat?.tailnetHttps);
+        reportActivity(beat?.reportActivity === true);
         supervisor.acknowledged(beat);
         return;
       }
@@ -3066,6 +3106,7 @@ const attach = (
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),
             ...activityNow(),
+            activityReadable: desktopReadable(),
           } satisfies HeartbeatPayload;
           // A connection waiting to be admitted says nothing more until it is
           // (`send`).
@@ -3341,21 +3382,6 @@ export const startDaemon = (rediscover = false) =>
     // left working is live here, the OS does not idle-sleep this machine
     // (awake.ts).
     keepAwakeWhileWorking(() => supervisor.turnsRunning());
-    // How the person uses this machine, toward whether they are here.
-    watchActivity()
-      .then((activity) => {
-        machineActivity = activity;
-        activity.onChange((now) => {
-          for (const tell of activityHeard) {
-            tell(now);
-          }
-        });
-      })
-      .catch((error: unknown) =>
-        console.warn(
-          `[activity] this machine's desktop is not read: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
     // A sign-in moves what a workspace's policy denies: every boundary is
     // checked for a narrowed access at once (boundary.ts `recheckNarrowed`).
     onSigninsChanged(accountsChangedHere);

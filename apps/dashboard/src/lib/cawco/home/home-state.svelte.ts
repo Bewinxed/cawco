@@ -67,7 +67,7 @@ import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { notices } from "../notices.svelte";
-import { asksHere, deskAsks, machineHere, person } from "../person.svelte";
+import { asksHere, deskAsks, person } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -400,26 +400,27 @@ export interface TailnetItem {
 }
 
 /**
- * This browser telling CawCo when the person is at this computer (Chromium's
- * Idle Detection) and showing what needs them as a desktop notification
- * (presence.ts), while either is still to ask (person.svelte.ts `deskAsks`) and
- * the row wasn't put away with Skip: its notice names the site settings it
- * asks for and what changes, Allow asks the browser for them. Once allowed
- * the row ticks (`done`) for a moment, then leaves. `idle` and `notify`:
- * what it asks for.
+ * The consent step: this computer telling CawCo when the person is at it
+ * (its CawCo agent's report, else Chromium's Idle Detection) and showing
+ * what needs them as a desktop notification (presence.ts), while either is
+ * still to ask (person.svelte.ts `deskAsks`) and the row wasn't put away
+ * with Skip, which is a no, remembered. Its notice says why and what the
+ * person gets, what is read and what never is; Allow is the yes: it turns
+ * the agent's report on, or asks the browser. Nothing reports before it.
+ * Once allowed the row ticks (`done`) for a moment, then leaves.
  */
 export interface DeskItem {
+  /** This computer's CawCo agent, by its machine's name, whose report Allow turns on; null when the browser asks, or none can. */
+  agent: string | null;
   done: boolean;
   idle: boolean;
   key: string;
   kind: "desk";
-  /** The machine this browser's computer can count by instead, when the hub ties it to one. */
-  machine: string | null;
   notify: boolean;
   place: string;
   raisedAt: undefined;
   title: string;
-  /** No Idle Detection here (Safari, Firefox, Brave): the row says so, and where this computer can say it instead. */
+  /** No agent here and no Idle Detection (Safari, Firefox, Brave): the row says this browser can't. */
   unavailable: boolean;
 }
 
@@ -1305,9 +1306,11 @@ class Home {
               idle: ask.idle,
               notify: ask.notify,
               unavailable: ask.unavailable,
-              machine: machineHere(),
+              agent: ask.agent,
               done: person.ticked,
-              title: presenceWords.title(ask.idle || ask.unavailable),
+              title: presenceWords.title(
+                ask.agent !== null || ask.idle || ask.unavailable
+              ),
               place: "Onboarding",
               raisedAt: undefined,
             },

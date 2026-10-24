@@ -478,8 +478,10 @@ export const createNotifications = ({
   const listeners: ClearListener[] = [];
   /** Counts clears: an outlet compares it to what it last told a device. */
   let clears = 0;
-  /** Each machine's desktop, as its agent last said it, by machine id. */
+  /** Each machine's desktop, as its agent last said it, by machine id: only a machine whose report the person turned on. */
   const machines = new Map<string, MachineWord>();
+  /** The machines whose agent could read their desktop (`activityReadable`), on or off. */
+  const readable = new Set<string>();
   /** Clients whose lapse was said: a lapsed client stays, unknown, its last input counting. */
   const lapsed = new Set<string>();
   /** The person's last send from a device that names none and beats on no chat it sent to, on the hub's clock. */
@@ -693,7 +695,7 @@ export const createNotifications = ({
     const names = new Map(
       db.listAgents().map((agent) => [agent.machineId, agent.hostname])
     );
-    return [...new Set([...machines.keys(), ...counted])]
+    return [...new Set([...readable, ...machines.keys(), ...counted])]
       .flatMap((id) => {
         const name = names.get(id);
         if (!name) {
@@ -1047,6 +1049,13 @@ export const createNotifications = ({
      * them away at once.
      */
     machine(machineId: string, activity: MachineActivity): void {
+      // Before the person's yes to this machine's report, and from the
+      // moment it is off, nothing of its desktop is kept, logged or used:
+      // its agent reads none then (`reportActivity`), and a word that
+      // crossed the switch is dropped here.
+      if (!db.presence.counted().has(machineId)) {
+        return;
+      }
       const now = Date.now();
       const before = machines.get(machineId);
       keepMachine(machineId, {
@@ -1058,7 +1067,7 @@ export const createNotifications = ({
       });
       if (before?.state !== activity.state) {
         console.log(
-          `[presence] machine ${machineId.slice(0, 8)}: ${activity.state} (${activity.source}, idle ${Math.round(activity.idleMs / 1000)}s)${db.presence.counted().has(machineId) ? "" : ", not counted: not opted in"}`
+          `[presence] machine ${machineId.slice(0, 8)}: ${activity.state} (${activity.source}, idle ${Math.round(activity.idleMs / 1000)}s)`
         );
       }
       reroll();
@@ -1108,9 +1117,39 @@ export const createNotifications = ({
       return viewOf(told, Date.now());
     },
 
-    /** Whether a machine's desktop counts toward the person: the person's opt-in. */
+    /**
+     * Whether a machine's agent could read its desktop (its beat's
+     * `activityReadable`): the presence menu offers its switch. Nothing of
+     * the desktop itself.
+     */
+    readable(machineId: string, can: boolean): void {
+      if (readable.has(machineId) === can) {
+        return;
+      }
+      if (can) {
+        readable.add(machineId);
+      } else {
+        readable.delete(machineId);
+      }
+      reroll();
+    },
+
+    /** Whether this machine's agent reads its desktop now: the person said yes to its report. */
+    reports: (machineId: string): boolean =>
+      db.presence.counted().has(machineId),
+
+    /**
+     * The person's yes or no to a machine's report: its agent reads its
+     * desktop from the next beat's answer, or stops; off, nothing it said
+     * is kept or used from this moment.
+     */
     counts(machineId: string, on: boolean): PersonView {
       db.presence.setCounts(machineId, on);
+      if (!on) {
+        // Off at once: what it said is no longer kept or used.
+        machines.delete(machineId);
+        db.presence.dropClient(machineId);
+      }
       console.log(
         `[presence] machine ${machineId.slice(0, 8)}: ${on ? "counts" : "does not count"} toward the person`
       );

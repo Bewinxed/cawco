@@ -32898,7 +32898,11 @@ export const createServer = (
               // A delta it did not acknowledge goes again (fleet-sync.ts).
               fleetSyncs.heartbeat(message.machineId);
               // The machine's desktop, toward whether the person is here.
-              const { activity } = message.payload as HeartbeatPayload;
+              const { activity, activityReadable } =
+                message.payload as HeartbeatPayload;
+              if (activityReadable !== undefined) {
+                notifications.readable(message.machineId, activityReadable);
+              }
               if (activity) {
                 notifications.machine(message.machineId, activity);
               }
@@ -33166,6 +33170,8 @@ export const createServer = (
                   upstream: upstreamRules(db),
                   // Its loopback carries over https while this hub serves it.
                   ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
+                  // Its desktop is read only once the person said yes to it.
+                  reportActivity: notifications.reports(message.machineId),
                 } satisfies HeartbeatAckPayload,
               });
               break;

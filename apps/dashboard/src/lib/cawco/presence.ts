@@ -42,8 +42,10 @@ import { lastInputAt, onInput } from "./reload.svelte";
 const CLIENT_KEY = "cawco-presence-client";
 /**
  * This browser's word on reporting whether the person is at this computer,
- * kept in localStorage: `off` once they turned it off (the presence menu)
- * or put the offer away; Idle Detection runs only without it.
+ * kept in localStorage: `on` once they said yes (the consent step, the
+ * presence menu), `off` once they said no or turned it off; unset, not
+ * asked yet. Idle Detection runs only on `on`: nothing is read before the
+ * yes, whatever the browser's permission.
  */
 const DESK_KEY = "cawco-desk-report";
 /** Idle Detection's least threshold (the spec's 60 s). */
@@ -309,8 +311,11 @@ export async function deskPermissions(): Promise<DeskPermissions> {
   }
 }
 
-/** This browser reports whether the person is at this computer: not turned off here. */
-export const deskReportOn = (): boolean => stored("local", DESK_KEY) !== "off";
+/** This browser reports whether the person is at this computer: they said yes here. */
+export const deskReportOn = (): boolean => stored("local", DESK_KEY) === "on";
+
+/** The person answered this browser's report, yes or no. */
+export const deskAnswered = (): boolean => stored("local", DESK_KEY) !== null;
 
 /** Whether Idle Detection runs in this tab now. */
 export const deskReporting = (): boolean => detector !== undefined;
@@ -400,9 +405,11 @@ export function declineDesk(): void {
 
 /** What a press asks this browser for. */
 export interface DeskAsk {
+  /** The CawCo agent on this computer, by its machine's name, whose report the yes turns on; null when none is here. */
+  readonly agent: string | null;
   readonly idle: boolean;
   readonly notify: boolean;
-  /** No Idle Detection here: the row says so and where this computer can say it instead; nothing is asked for it. */
+  /** No Idle Detection here and no agent: the row says so; nothing is asked for it. */
   readonly unavailable: boolean;
 }
 

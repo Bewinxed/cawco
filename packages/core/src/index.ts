@@ -556,10 +556,17 @@ export interface HeartbeatPayload {
   /**
    * The machine's activity as its desktop reads it (agent activity.ts): in
    * use, idle, locked or asleep, and how long since its last input. On
-   * every 15s beat and on a beat of its own when it changes; absent where
-   * the machine has no desktop source (no GUI session, no logind).
+   * every 15s beat and on a beat of its own when it changes, only while the
+   * person has said yes to this machine's report (`reportActivity`);
+   * absent before, and where the machine has no desktop source.
    */
   activity?: import("./notifications").MachineActivity;
+  /**
+   * This machine has a desktop its agent could read (a Mac, a Linux
+   * graphical session), said whether or not it reads it, so the presence
+   * menu offers its switch. Nothing of the desktop itself.
+   */
+  activityReadable?: boolean;
   at: number;
   /** The machine's binary update state, live on every beat. */
   binaryUpdate?: import("./binary-updates").BinaryUpdateState;
@@ -654,6 +661,14 @@ export interface HeartbeatAckPayload {
    */
   liveWorkspaces: string[];
   ok: true;
+  /**
+   * The person said yes to this machine's activity report (the presence
+   * menu, its onboarding step): its agent reads its desktop and says it on
+   * its beats while this is true, and reads nothing while it is absent or
+   * false. Off stops the reading at the next beat's answer; the hub uses
+   * none of it from the moment it is turned off.
+   */
+  reportActivity?: boolean;
   /**
    * The fleet's session limits as the hub holds them now ({@link SessionLimits}),
    * on every beat: the machine replaces what it held, and the next process
