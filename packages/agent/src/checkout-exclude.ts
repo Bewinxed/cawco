@@ -41,9 +41,9 @@ export const gitIn = async (
 };
 
 /** Where CawCo's own lines in a clone's `info/exclude` begin and end: it rewrites what lies between. */
-const BLOCK_START =
+export const BLOCK_START =
   "# cawco: the stand-ins it made for the workspace's denied paths";
-const BLOCK_END = "# cawco: end of stand-ins";
+export const BLOCK_END = "# cawco: end of stand-ins";
 
 const LEADING_SLASH = /^\//;
 

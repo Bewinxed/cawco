@@ -111,6 +111,7 @@ import {
   SessionAddressRefused,
 } from "../harness";
 import { KeeperPool } from "../keepers";
+import { overlaySync } from "../layer";
 import { syncSection } from "../loop-watch";
 import { isMachineAgent } from "../machine-agent";
 import { fleetMcpMoved, MCP_CONNECT_MS } from "../mcp-status";
@@ -5301,6 +5302,15 @@ export class OpencodeHarness implements Harness {
       identity: ServerIdentity;
     }
   ): Promise<OpencodeSession> {
+    // A Linux view of a folder (layer.ts) is a mount namespace its processes
+    // enter: OpenCode's server serves every session of its account from one
+    // process on the host, outside it, where its file tools would write the
+    // person's folder itself. Such a session does not start.
+    if (ctx.workspace && overlaySync(ctx.workspace)) {
+      throw new Error(
+        `This session didn't start: OpenCode serves every session of its account from one server on this machine, outside the view of ${ctx.cwd} that workspace ${ctx.workspace} works in, so its file tools would write your folder itself. Delegate this work to Claude Code or pi on this machine, or to OpenCode on a Mac.`
+      );
+    }
     // The account a session runs on is the server it runs in: the account's
     // own, with that account's credential; on no account, the machine's.
     const account = spec.accountDir?.accountId;

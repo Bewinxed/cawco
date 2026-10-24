@@ -2057,16 +2057,18 @@ export type GitChanges =
   { repo: false } | { repo: true; status: string; log: string };
 
 /**
- * Makes a delegation workspace: a clone of its own (`git clone
- * --dissociate`: every object in its own store, none borrowed) of the
- * repository at `cwd`, at `~/.worktrees/<repo>-<id8>` on a new branch
- * `ws/<id8>` cut from the repository's default branch (what `origin` names as
- * its HEAD, fetched as the clone is cut), its `origin` the
- * repository's own remote — and the workspace's boundary, which every shell
- * command of its work items runs inside. A repository with no `origin` gets
- * the hub's remote of `projectId` as its `origin` first, with its default
- * branch pushed there (Projects spec §5.1: "A project with no outside remote
- * gets the hub as its remote"). The boundary starts reading the user layer
+ * Makes a delegation workspace of any folder `cwd` (agent layer.ts): its
+ * private copy of the folder (a live view of it with private writes at its
+ * real path on Linux, an APFS clone at `~/.worktrees/<name>-<id8>` on macOS),
+ * and the workspace's boundary, which every shell command of its work items
+ * runs inside. A repository's root ({@link WorkspaceKind} `repo`) starts on a
+ * new branch `ws/<id8>` at its default branch as `origin` has it now
+ * (fetched into the copy, never into the person's checkout), and its
+ * `origin` is the repository's own remote; a repository with no `origin`
+ * gets the hub's remote of `projectId` in the copy, with its default branch
+ * pushed there (Projects spec §5.1: "A project with no outside remote gets
+ * the hub as its remote"). Any other folder (`folder`) starts as it is, and
+ * lands by its change set ({@link CONTROL_WORKSPACE_APPLY}). The boundary starts reading the user layer
  * of `account`, the Claude account the workspace's first session launches
  * on, and that session's spill folder, `first` ({@link WorkspaceFirstSession}),
  * so that session's spawn hands it over to no new generation: the boundary
@@ -2074,9 +2076,9 @@ export type GitChanges =
  * ({@link WorkspaceCut}): a retired workspace cut again at the same path for
  * its delegate to go on.
  * Args `[cwd, workspaceId, projectId | null, account | null, at | null, first | null]`;
- * answers {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
- * in a git repository is refused, so is one with no `origin` and no project,
- * and so is a machine that cannot hold the boundary.
+ * answers {@link WorkspaceCheckout}. Machine-scoped; a git worktree (its
+ * repository outside it) is refused, so is a repository with no `origin` and
+ * no project, and so is a machine that cannot hold the boundary.
  */
 export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 
@@ -2270,14 +2272,16 @@ export const WORKSPACE_CREATE_TIMEOUT_MS =
 
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {
-  /** The repository's default branch, which the clone was cut from and lands on. */
+  /** The repository's default branch, which the copy starts from and lands on; empty for a folder. */
   base: string;
   /** The boundary's anchor: the process its commands join. */
   boundaryPid: number;
+  /** `ws/<id8>` in a repository; empty for a folder. */
   branch: string;
-  /** The clone's root, where every work item of the workspace runs. */
+  kind: WorkspaceKind;
+  /** Where every work item of the workspace runs: the folder itself (Linux), or its clone (macOS). */
   path: string;
-  /** The repository the clone was cut from. */
+  /** The folder the workspace was made from: a repository's root, or any folder. */
   repoRoot: string;
   /** A cut again from a carry holding an uncommitted diff: whether it was laid on top ({@link CarryRestored}). */
   restored?: CarryRestored;
@@ -2296,6 +2300,60 @@ export interface WorkspaceCheckout {
  */
 export type CarryRestored =
   { applied: string } | { refused: string; why: string };
+
+/**
+ * What a workspace was made from: a repository's root, which lands by git
+ * (rebase onto its base, the merge checks, push), or any other folder, which
+ * lands by its change set ({@link CONTROL_WORKSPACE_APPLY}).
+ */
+export type WorkspaceKind = "repo" | "folder";
+
+/** One path of a folder workspace's change set, relative to its folder. */
+export interface ChangedPath {
+  change: "write" | "delete";
+  path: string;
+}
+
+/** One version of a file a conflict shows: its text, or what it is when it is no text. */
+export type ChangeVersion =
+  | { kind: "text"; text: string }
+  | { kind: "binary" | "large"; bytes: number }
+  | { kind: "link"; target: string }
+  | { kind: "folder" | "gone" };
+
+/**
+ * A path the delegate changed that its folder changed too since the
+ * delegate's start: both versions, the person's (`yours`, the folder as it
+ * is now) and the delegate's, with no base to merge from.
+ */
+export interface WorkspaceConflict {
+  delegate: ChangeVersion;
+  path: string;
+  yours: ChangeVersion;
+}
+
+/** A folder workspace's change set against its folder as it is now ({@link CONTROL_WORKSPACE_CHANGES}). */
+export interface WorkspaceChanges {
+  changed: ChangedPath[];
+  conflicts: WorkspaceConflict[];
+  folder: string;
+}
+
+/**
+ * A folder workspace's change set and its conflicts with the folder as it
+ * is now, read on its machine (agent layer.ts `readChanges`). Args
+ * `[WorkspaceRef]`; answers {@link WorkspaceChanges}.
+ */
+export const CONTROL_WORKSPACE_CHANGES = "workspaceChanges";
+
+/**
+ * Lands a folder workspace's change set in its folder, by its machine's
+ * agent outside every wall, once the folder's checks passed: the conflict
+ * scan again first (any conflict refuses the whole set, nothing written),
+ * then each written path by temp-and-rename, then the deletions. Args
+ * `[WorkspaceRef]`; answers `{ applied, conflicts }`.
+ */
+export const CONTROL_WORKSPACE_APPLY = "workspaceApply";
 
 /** A workspace as the machine that holds it is told about it. */
 export interface WorkspaceRef {
@@ -2595,16 +2653,6 @@ export type InputsAdmitted = { files: InputNamed[] } | { refused: string };
 
 /** What {@link CONTROL_INPUTS_READ} answers: the files, or why they may not go. */
 export type InputsRead = { files: InputFile[] } | { refused: string };
-
-/**
- * At an agent's start, its machine's workspaces that still have a clone
- * (active and held): each one still a git worktree from before workspaces
- * were clones becomes a clone in place — same path, branch, HEAD, index and
- * working files — and the repository it was cut from forgets the worktree.
- * A workspace whose folder is gone, or whose `.git` is a link, is skipped
- * and named in the machine's log. Args `[WorkspaceRef[]]`.
- */
-export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
 
 /**
  * Runs a shell command on a machine, in a directory, killed with its process

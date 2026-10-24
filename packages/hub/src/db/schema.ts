@@ -78,6 +78,7 @@ import type {
   ToolStatus,
   WorkspaceCut,
   WorkspaceHolding,
+  WorkspaceKind,
 } from "@cawco/core";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -1123,11 +1124,22 @@ export const workspaceCreates = sqliteTable("workspace_creates", {
 export const workspaces = sqliteTable("workspaces", {
   id: text("id").primaryKey(),
   machineId: text("machine_id").notNull(),
-  /** The repository the clone was cut from. */
+  /** The folder the workspace was made from: a repository's root, or any folder (agent layer.ts). */
   repoRoot: text("repo_root").$type<MachinePath>().notNull(),
-  /** The clone's root, where every work item of the workspace runs. */
+  /**
+   * Where every work item of the workspace runs: the folder itself, seen
+   * through the workspace's own view of it (Linux), or its clone (macOS, and
+   * every workspace cut before layers).
+   */
   path: text("path").$type<MachinePath>().notNull(),
+  /** `ws/<id8>` in a repository; empty for a folder. */
   branch: text("branch").notNull(),
+  /**
+   * What it was made from: a repository's root, which lands by git, or any
+   * other folder, which lands by its change set (core `WorkspaceKind`).
+   * Every workspace made before folders was a repository's.
+   */
+  kind: text("kind").$type<WorkspaceKind>().notNull().default("repo"),
   /**
    * The repository's default branch the clone was cut from, which its work
    * lands on. Every workspace cut before this was recorded was cut from

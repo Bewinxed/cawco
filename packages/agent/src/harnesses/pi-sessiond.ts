@@ -30,6 +30,7 @@ import {
   type TurnExtras,
 } from "../harness";
 import { KeeperPool } from "../keepers";
+import { enterSpawn } from "../layer";
 import type { McpGate } from "../mcp-gate";
 import { procIdFor } from "../proc-id";
 import type { SessiondAwareContext } from "../session";
@@ -553,30 +554,34 @@ export async function spawnPi(
     typeof __CAWCO_RELEASE__ === "boolean" ? "pi-host.js" : "pi-host.ts"
   );
   await piKeepers.replaceElsewhere(procIdFor("pi", ctx.instanceId), client);
-  await client.spawnProc(procIdFor("pi", ctx.instanceId), {
-    command: process.execPath,
-    args: standalone ? ["pi-host"] : [host],
-    cwd: ctx.cwd,
-    // Session credentials arrive solely via the request-scoped stdin control.
-    // The host reaches CawCo's tools through this agent's gateway, so it is
-    // told this agent's port: the keeper's own environment may name another.
-    env: {
-      [CAWCO_ENV.mcpPort]: String(mcpGatewayPort()),
-      ...(process.env[CAWCO_ENV.hubUrl]
-        ? { [CAWCO_ENV.hubUrl]: process.env[CAWCO_ENV.hubUrl] as string }
-        : {}),
-      // Its shells' git reaches the hub's remote as this session (git-credential.ts).
-      ...sessionGitEnv(),
-      // Its container runtimes through its own doors (session-containers.ts).
-      ...ctx.containerEnv,
-      // In a workspace, the outputs its bash saves land in the session's own
-      // folder, which the boundary reads (`PiHarness.spill`); each command
-      // runs with the workspace's scratch as its `TMPDIR` all the same.
-      ...(ctx.boundary && ctx.workspace
-        ? { TMPDIR: workspaceSpillDir(ctx.workspace, ctx.instanceId) }
-        : {}),
-    },
-  });
+  // In a Linux view of its folder, the host runs inside it (layer.ts).
+  await client.spawnProc(
+    procIdFor("pi", ctx.instanceId),
+    enterSpawn(ctx.workspace, {
+      command: process.execPath,
+      args: standalone ? ["pi-host"] : [host],
+      cwd: ctx.cwd,
+      // Session credentials arrive solely via the request-scoped stdin control.
+      // The host reaches CawCo's tools through this agent's gateway, so it is
+      // told this agent's port: the keeper's own environment may name another.
+      env: {
+        [CAWCO_ENV.mcpPort]: String(mcpGatewayPort()),
+        ...(process.env[CAWCO_ENV.hubUrl]
+          ? { [CAWCO_ENV.hubUrl]: process.env[CAWCO_ENV.hubUrl] as string }
+          : {}),
+        // Its shells' git reaches the hub's remote as this session (git-credential.ts).
+        ...sessionGitEnv(),
+        // Its container runtimes through its own doors (session-containers.ts).
+        ...ctx.containerEnv,
+        // In a workspace, the outputs its bash saves land in the session's own
+        // folder, which the boundary reads (`PiHarness.spill`); each command
+        // runs with the workspace's scratch as its `TMPDIR` all the same.
+        ...(ctx.boundary && ctx.workspace
+          ? { TMPDIR: workspaceSpillDir(ctx.workspace, ctx.instanceId) }
+          : {}),
+      },
+    })
+  );
   const proc = (await client.list()).procs.find(
     (one) => one.procId === procIdFor("pi", ctx.instanceId)
   );

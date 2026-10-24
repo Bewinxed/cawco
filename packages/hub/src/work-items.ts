@@ -37,6 +37,8 @@
 
 import type {
   BriefTarget,
+  ChangedPath,
+  ChangeVersion,
   CheckoutMove,
   CommandResult,
   DeclaredStep,
@@ -61,8 +63,10 @@ import type {
   WorkItemSummary,
   WorkspaceArchive,
   WorkspaceArchived,
+  WorkspaceChanges,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceConflict,
   WorkspaceCut,
   WorkspaceFirstSession,
   WorkspaceHolding,
@@ -78,13 +82,14 @@ import {
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
+  CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_MIGRATE,
   CONTROL_WORKSPACE_WORK_END,
   handoffMarker,
   holdingWords,
@@ -124,6 +129,7 @@ import {
 import {
   excludedPaths,
   IGNORED_STATUS,
+  personUntrackedIn,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
@@ -828,17 +834,6 @@ export interface WorkItemDeps {
    */
   readonly awaitsSend: (instanceId: string) => boolean;
   /**
-   * Before a workspace of `projectId` is cut from `cwd` on `machineId`: the
-   * project's place that holds `cwd` made a git repository when it is a
-   * plain folder (place-repo.ts `beforeCut`). Throws, in the machine's
-   * words, when it cannot be one.
-   */
-  readonly beforeCut: (
-    projectId: string,
-    machineId: string,
-    cwd: string
-  ) => Promise<void>;
-  /**
    * Its machine's own word that the session is between turns (server.ts
    * `sessionIdle`): what a hub that started reads for a turn whose end it
    * never heard. False while the machine is away or does not answer.
@@ -1229,6 +1224,16 @@ export interface ItemPlacement {
  * which no machine call may treat as a clone (an archive deletes one), so
  * naming one throws.
  */
+/**
+ * Whether the workspace works in a copy of its own (a clone on macOS, and
+ * every workspace made before layers), which the fleet may place a
+ * project's skills and memory into as one of its places: not a Linux view
+ * of the folder itself (agent layer.ts), whose path is the person's folder,
+ * written by nothing of CawCo's until its change set lands.
+ */
+const ownCopy = (workspace: WorkspaceRow): boolean =>
+  workspace.path !== workspace.repoRoot;
+
 const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
   if (workspace.host) {
     throw new Error(
@@ -2039,6 +2044,56 @@ const dirtyText = (files: string, where: string): string =>
   `Not landed: the workspace has changes that are not committed, new files included. The hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or move scratch to $TMPDIR, then call finish_item again.${fenced(files)}`;
 
 /** The text that hands failed merge checks back to the session. */
+/** The paths a folder landing changed, as its report lists them. */
+const changedList = (changed: readonly ChangedPath[]): string =>
+  fenced(
+    changed
+      .map(
+        (each) =>
+          `${each.change === "delete" ? "deleted" : "written"} ${each.path}`
+      )
+      .join("\n")
+  );
+
+/** One version of a conflicting file, as the conflict's text shows it. */
+const versionWords = (version: ChangeVersion): string => {
+  switch (version.kind) {
+    case "text":
+      return fenced(version.text);
+    case "binary":
+      return ` binary, ${version.bytes} bytes`;
+    case "large":
+      return ` ${version.bytes} bytes, too large to show here`;
+    case "link":
+      return ` a link to ${version.target}`;
+    case "folder":
+      return " a folder";
+    case "gone":
+      return " deleted";
+    default: {
+      const unhandled: never = version;
+      return String(unhandled);
+    }
+  }
+};
+
+/**
+ * A folder landing's conflicts as the delegate and the owner read them:
+ * each path both changed, the version in the folder now and the delegate's,
+ * with no base to merge from. Nothing was written.
+ */
+const conflictText = (
+  conflicts: readonly WorkspaceConflict[],
+  folder: string
+): string =>
+  [
+    `Not landed: ${conflicts.length === 1 ? "a file" : `${conflicts.length} files`} you changed ${conflicts.length === 1 ? "was" : "were"} changed in ${folder} too since you started, so nothing was written there. Each is below as the folder has it now and as you left it; there is no common version to merge from. Write the version that should land (yours, the folder's, or both merged) and call finish_item again: the folder's version as it stands is what your next landing is read against.`,
+    ...conflicts.map(
+      (each) =>
+        `### ${each.path}\n\nIn ${folder} now:${versionWords(each.yours)}\n\nYours:${versionWords(each.delegate)}`
+    ),
+  ].join("\n\n");
+
 const gateFailedText = (run: GateRun, where: string): string => {
   const { head, lines } = failedRun(run);
   return `Not landed: the merge checks ran on ${where}, and ${head}. Fix it, commit, and call finish_item again.\n\n${lines}`;
@@ -2198,7 +2253,6 @@ const TRAY_HOLD_MS = 6000;
 export const createWorkItems = ({
   placeTaken,
   awaitsSend,
-  beforeCut,
   call,
   command,
   custodyPending,
@@ -4297,6 +4351,15 @@ export const createWorkItems = ({
         const { dirty, stashes, ahead } = workspace.holding;
         return { workspaceId: id, changed: dirty + stashes, ahead };
       }
+      // A folder's unlanded work is its change set (agent layer.ts).
+      if (workspace.kind === "folder") {
+        const changes = (await call(
+          workspace.machineId,
+          CONTROL_WORKSPACE_CHANGES,
+          [refOf(workspace)]
+        )) as WorkspaceChanges;
+        return { workspaceId: id, changed: changes.changed.length, ahead: 0 };
+      }
       const skip = handedOver(workspace).map(
         (path) => ` ${quote(`:(exclude,literal)${path}`)}`
       );
@@ -4411,18 +4474,27 @@ export const createWorkItems = ({
 
   /**
    * Whether a workspace is retired and may be cut again: archived, not a
-   * gate workspace, and its machine said where its clone's HEAD was as it
+   * gate workspace, and a folder's (whose work is in its folder once it
+   * landed, so it is made again from the folder as it is), or one whose
+   * machine said where its clone's HEAD was as it
    * deleted it ({@link closeWorkspace}): on a branch of its remote, or, its
    * items landing none, in its carry (`head.carry`). A discard's carry is let
    * go of, and its row keeps no head. One with no such word (a clone already
    * gone, a folder that was no clone, a retirement before the hub kept it)
    * is not: any other commit could leave its commits behind.
    */
-  const recuttable = (workspace: WorkspaceRow): boolean =>
-    workspace.state === "archived" &&
-    workspace.head !== null &&
-    (workspace.carry === null || workspace.head.carry !== undefined) &&
-    !workspace.checksFor;
+  const recuttable = (workspace: WorkspaceRow): boolean => {
+    if (workspace.state !== "archived" || workspace.checksFor) {
+      return false;
+    }
+    if (workspace.kind === "folder") {
+      return workspace.carry === null;
+    }
+    return (
+      workspace.head !== null &&
+      (workspace.carry === null || workspace.head.carry !== undefined)
+    );
+  };
 
   /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
   const archivedWords = (workspace: WorkspaceRow): string => {
@@ -4464,6 +4536,38 @@ export const createWorkItems = ({
    * `onCut` runs in the step that files it active, before anything else
    * can settle it: what wakes its session there.
    */
+  /** What a workspace made again records: active, its new boundary, and for a repository's the commit it was cut again at, for its delegate to be told. */
+  const recutRecord = (
+    checkout: WorkspaceCheckout,
+    head: WorkspaceRow["head"]
+  ): Partial<WorkspaceRow> => ({
+    state: "active",
+    boundaryPid: checkout.boundaryPid,
+    base: checkout.base,
+    tmp: checkout.tmp,
+    // A folder's is made again from the folder as it is: no commit to tell.
+    ...(head
+      ? {
+          movedUntold: {
+            kind: "recut" as const,
+            ...head,
+            ...(checkout.restored ? { restored: checkout.restored } : {}),
+          },
+        }
+      : {}),
+    // Its commits are in the clone again: a carry of its next end is its own.
+    carry: null,
+  });
+
+  /** The log line of a workspace made again. */
+  const recutLine = (
+    workspace: WorkspaceRow,
+    head: WorkspaceRow["head"]
+  ): string =>
+    head
+      ? `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
+      : `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: made again of ${workspace.repoRoot} as it is now, for its delegate to go on`;
+
   const recut = (
     workspace: WorkspaceRow,
     onCut?: () => void
@@ -4478,7 +4582,7 @@ export const createWorkItems = ({
         : pending;
     }
     const { head } = workspace;
-    if (!head) {
+    if (!head && workspace.kind !== "folder") {
       return Promise.reject(
         new Error(
           `workspace ${handle(workspace.id)}: ${archivedWords(workspace)}`
@@ -4517,7 +4621,7 @@ export const createWorkItems = ({
           `workspace ${handle(workspace.id)} was cut again at ${path}, not at its own path ${workspace.path}`
         );
       }
-      if (projectId && db.project(projectId)) {
+      if (projectId && db.project(projectId) && ownCopy(workspace)) {
         const { place } = db.addPlace({
           projectId,
           machineId: workspace.machineId,
@@ -4528,24 +4632,11 @@ export const createWorkItems = ({
         await placeTaken(workspace.machineId, place.id);
       }
       const again =
-        db.updateWorkspace(workspace.id, {
-          state: "active",
-          boundaryPid: checkout.boundaryPid,
-          base: checkout.base,
-          tmp: checkout.tmp,
-          movedUntold: {
-            kind: "recut",
-            ...head,
-            ...(checkout.restored ? { restored: checkout.restored } : {}),
-          },
-          // Its commits are in the clone again: a carry of its next end is its own.
-          carry: null,
-        }) ?? workspace;
+        db.updateWorkspace(workspace.id, recutRecord(checkout, head)) ??
+        workspace;
       onCut?.();
       workspaceChanged?.(again);
-      console.log(
-        `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
-      );
+      console.log(recutLine(workspace, head));
       return again;
     })().finally(() => recutting.delete(workspace.id));
     recutting.set(workspace.id, work);
@@ -4711,11 +4802,9 @@ export const createWorkItems = ({
   };
 
   /**
-   * A new workspace: the project's place made a git repository first when it
-   * is a plain folder ({@link WorkItemDeps.beforeCut}), then its machine cuts
-   * the clone and starts its boundary, and the hub files it. A place that
-   * cannot be made one refuses the workspace in the machine's words, before
-   * anything is cut. `checksFor` makes it the gate workspace of that one;
+   * A new workspace: its machine makes its private copy of the folder `cwd`
+   * is in, any folder (agent layer.ts), and starts its boundary, and the hub
+   * files it. `checksFor` makes it the gate workspace of that one;
    * `account` is the Claude account its first session launches on
    * ({@link ItemPlacement}), whose user layer the boundary reads from its
    * first start; `first` is that session ({@link WorkspaceFirstSession}),
@@ -4737,9 +4826,6 @@ export const createWorkItems = ({
       first?: WorkspaceFirstSession;
     } = {}
   ): Promise<WorkspaceRow> => {
-    if (projectId) {
-      await beforeCut(projectId, machineId, cwd);
-    }
     const id = crypto.randomUUID();
     db.beginWorkspaceCreate(id, machineId);
     opening.add(id);
@@ -4761,6 +4847,7 @@ export const createWorkItems = ({
         path: cutPath(machineId, checkout.path),
         branch: checkout.branch,
         base: checkout.base,
+        kind: checkout.kind,
         boundaryPid: checkout.boundaryPid,
         tmp: checkout.tmp,
         state: "active",
@@ -5127,7 +5214,8 @@ export const createWorkItems = ({
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
     const told =
-      item.lands === "main" && !item.outputs?.length
+      (item.lands === "main" && !item.outputs?.length) ||
+      workspace.kind === "folder"
         ? brief
         : withLandingLine(brief, workspace.base, landingOf(item));
     const sent = send(messageOf(session.id, session.machineId, parent, told));
@@ -5785,9 +5873,10 @@ export const createWorkItems = ({
     if (projectId) {
       recordRepository(projectId, workspace);
     }
-    // While it lives, the clone is one of the parent's project's places;
-    // archiving the workspace removes it.
-    if (parent.projectId) {
+    // While it lives, the copy is one of the parent's project's places;
+    // archiving the workspace removes it. A view of the folder itself is no
+    // place of its own ({@link ownCopy}).
+    if (parent.projectId && ownCopy(workspace)) {
       projectStands(parent.projectId);
       const { place } = db.addPlace({
         projectId: parent.projectId,
@@ -6038,7 +6127,7 @@ export const createWorkItems = ({
               )
             : withWorkspaceLine(
                 content,
-                workspace.repoRoot,
+                workspace,
                 workspace.base,
                 landingOf(item)
               )
@@ -6556,6 +6645,15 @@ export const createWorkItems = ({
     if (isHeld(workspace)) {
       return true;
     }
+    // A folder's work since is its change set not yet in its folder.
+    if (workspace.kind === "folder") {
+      const changes = (await call(
+        workspace.machineId,
+        CONTROL_WORKSPACE_CHANGES,
+        [refOf(workspace)]
+      )) as WorkspaceChanges;
+      return changes.changed.length > 0;
+    }
     const read = await command(
       workspace.machineId,
       workspace.path,
@@ -6644,7 +6742,12 @@ export const createWorkItems = ({
     item: WorkItemRow
   ): Promise<string | undefined> => {
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    if (workspace?.state !== "active" || workspace.host) {
+    // A folder's changes are its change set, which is what lands.
+    if (
+      workspace?.state !== "active" ||
+      workspace.host ||
+      workspace.kind === "folder"
+    ) {
       return;
     }
     const run = runIn(workspace, item);
@@ -6678,7 +6781,14 @@ export const createWorkItems = ({
             "its tracked .gitignore files",
             "git ls-files -z -- ':(glob)**/.gitignore'"
           ),
-          rules
+          rules,
+          // The person's own untracked files its copy started with: theirs.
+          personUntrackedIn(
+            await read(
+              "its own excludes",
+              'cat "$(git rev-parse --git-path info/exclude)" 2>/dev/null; true'
+            )
+          )
         )
       : [];
     if (!(status || stashes || excluded.length > 0)) {
@@ -6756,8 +6866,15 @@ export const createWorkItems = ({
       projectId,
       { checksFor: workspace.id }
     );
-    db.addPlace({ projectId, machineId, path: opened.path, kind: "workspace" });
-    placesChanged(machineId, projectId);
+    if (ownCopy(opened)) {
+      db.addPlace({
+        projectId,
+        machineId,
+        path: opened.path,
+        kind: "workspace",
+      });
+      placesChanged(machineId, projectId);
+    }
     return opened;
   };
 
@@ -7142,6 +7259,10 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string> => {
+    // A folder has no commits: its landing line names every path it changed.
+    if (workspace.kind === "folder") {
+      return "";
+    }
     const git = (cmd: string) => runIn(workspace, item)(cmd, GIT_TIMEOUT_MS);
     const since = Math.floor(item.createdAt.getTime() / 1000);
     const kept = (await git(keptCommits(since))).stdout
@@ -7645,10 +7766,92 @@ export const createWorkItems = ({
         });
       case "branch":
       case "pr":
-        return landOnBranch(workspace, item, summary, earlier);
       case "main":
-        return landOnBase(workspace, item, gate);
+        // A folder lands by its change set into the folder itself; a
+        // repository by git, on its base or a branch of its own.
+        if (workspace.kind === "folder") {
+          return landFolder(workspace, item, gate);
+        }
+        return item.lands === "main"
+          ? landOnBase(workspace, item, gate)
+          : landOnBranch(workspace, item, summary, earlier);
     }
+  };
+
+  /**
+   * Lands a finished folder item's change set in its folder (agent
+   * layer.ts): the change set read against the folder as it is now, any
+   * path changed there too since the delegate's start a conflict that lands
+   * nothing and goes back to the delegate with both versions; then the
+   * folder's checks (its project's gate.md, as a repository's merge checks
+   * are), run in the workspace's view of the folder; then the change set put
+   * into the folder by the agent on its machine, outside every wall, which
+   * scans for conflicts once more first. The services its work touched are
+   * the delegate's report's to name, and its parent's to restart.
+   */
+  const landFolder = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    gate: Gate
+  ): Promise<Landed> => {
+    const ref = refOf(workspace);
+    const read = (await call(workspace.machineId, CONTROL_WORKSPACE_CHANGES, [
+      ref,
+    ])) as WorkspaceChanges;
+    const ran: GateRun = { declared: gate.declared, outcomes: [] };
+    if (read.conflicts.length > 0) {
+      return { kind: "retry", text: conflictText(read.conflicts, read.folder) };
+    }
+    if (read.changed.length === 0) {
+      return {
+        kind: "done",
+        gate: ran,
+        line: `Nothing to land: ${read.folder} already holds every change in this workspace.`,
+      };
+    }
+    landingAt(item, "gating");
+    const how: GateHow = {
+      inTurn: false,
+      say: (words, step) =>
+        landingWait(
+          item.id,
+          words
+            ? `running the folder's checks: ${stepWaitWords(words, step)}`
+            : "running the folder's checks"
+        ),
+    };
+    how.say(null);
+    const checked = await gateOnce(
+      workspace,
+      item,
+      gate,
+      `while it ran the folder's checks on its changes to ${read.folder}`,
+      how
+    );
+    landingWait(item.id, null);
+    if (runFailed(checked)) {
+      return {
+        kind: "retry",
+        text: gateFailedText(
+          checked,
+          `your changes over ${read.folder} as it is now`
+        ),
+      };
+    }
+    const applied = (await call(workspace.machineId, CONTROL_WORKSPACE_APPLY, [
+      ref,
+    ])) as { applied: number; conflicts: WorkspaceConflict[] };
+    if (applied.conflicts.length > 0) {
+      return {
+        kind: "retry",
+        text: conflictText(applied.conflicts, read.folder),
+      };
+    }
+    return {
+      kind: "done",
+      gate: checked,
+      line: `Landed: ${applied.applied} ${applied.applied === 1 ? "path" : "paths"} of this workspace's changes are in ${read.folder} on ${machineName(workspace.machineId)}.${changedList(read.changed)}`,
+    };
   };
 
   /**
@@ -9489,22 +9692,6 @@ export const createWorkItems = ({
       return inWorkspaceTurn(workspace.id, () =>
         archiveNow(workspace.id, true)
       );
-    },
-
-    /**
-     * An agent has started: its machine's workspaces that still have a clone
-     * (active and held) go to it, and each one still a git worktree from
-     * before workspaces were clones becomes a clone in place. The machine
-     * logs each workspace it converts, skips or cannot convert.
-     */
-    async convertWorktrees(machineId: string): Promise<void> {
-      const refs = [
-        ...db.activeWorkspacesOn(machineId),
-        ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
-      ].map(refOf);
-      if (refs.length > 0) {
-        await call(machineId, CONTROL_WORKSPACE_MIGRATE, [refs]);
-      }
     },
 
     /**

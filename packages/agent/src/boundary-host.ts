@@ -263,14 +263,23 @@ const lstatOf = (path: string): Stats | undefined => {
 };
 
 /**
+ * Whether the folder this boundary holds is a plain folder, not a
+ * repository's copy: a place (`CAWCO_PLACE`), or a delegate's copy of a
+ * folder that is no repository (`CAWCO_FOLDER`, agent layer.ts).
+ */
+const plainFolder =
+  process.env.CAWCO_PLACE === "1" || process.env.CAWCO_FOLDER === "1";
+
+/**
  * Why the folder this boundary holds is no longer there to hold, when it is
- * not: a delegate's clone whose `.git` is no repository (`isGitDirSync`), or
- * a place that is no folder. Nothing is ever made at a clone's
- * path but by its create: a clone deleted under a running sandbox stays
- * gone, rather than refilled with stand-ins (`standIn`) into a husk.
+ * not: a delegate's copy of a repository whose `.git` is no repository
+ * (`isGitDirSync`), or a plain folder ({@link plainFolder}) that is no
+ * folder. Nothing is ever made at a copy's path but by its create: one
+ * deleted under a running sandbox stays gone, rather than refilled with
+ * stand-ins (`standIn`) into a husk.
  */
 const goneReason = (): string | undefined => {
-  if (process.env.CAWCO_PLACE === "1") {
+  if (plainFolder) {
     return lstatOf(clone)?.isDirectory()
       ? undefined
       : `${clone} is not a folder`;
@@ -932,8 +941,7 @@ const watchClone = (): void => {
       });
     }
   };
-  const place = process.env.CAWCO_PLACE === "1";
-  for (const dir of place ? [clone] : [clone, join(clone, ".git")]) {
+  for (const dir of plainFolder ? [clone] : [clone, join(clone, ".git")]) {
     try {
       // Every change in the folder or its `.git` is looked at: a look is
       // three stats, and the folder going is one of them.

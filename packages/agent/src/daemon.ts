@@ -60,13 +60,14 @@ import {
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_TRANSCRIPT_TURNS,
+  CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_MIGRATE,
   CONTROL_WORKSPACE_WORK_END,
   type HarnessKind,
   invariant,
@@ -220,7 +221,6 @@ import {
 } from "./browser/shield";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
-import { convertWorktrees } from "./clone";
 import { readConfig, writeConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
@@ -402,13 +402,14 @@ import { onToolsMoved, probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import {
   archiveWorkspace,
-  clearInterruptedCuts,
-  clearUnmarkedHusks,
+  clearUnmadeLayers,
   createWorkspace,
   discardWorkspace,
+  workspaceApply,
   workspaceAt,
   workspaceBoundary,
   workspaceBundle,
+  workspaceChanges,
 } from "./workspace";
 import { workspaceNeeds } from "./workspace-needs";
 import { cloneHolding, workspaceRefs } from "./workspace-records";
@@ -2994,10 +2995,6 @@ const attach = (
           Partial<HeartbeatAckPayload> | undefined;
         supervisor.keepAwake(beat?.keepAwake);
         liveWorkItems(beat?.liveWorkspaces);
-        // Once the hub has said which workspaces are live: the clones cuts of
-        // an earlier build left behind are cleared (workspace.ts). Once per
-        // agent; it never throws.
-        clearUnmarkedHusks(beat?.liveWorkspaces);
         takeSessionLimits(beat?.sessionLimits);
         takeUpstream(beat?.upstream);
         followHub(beat?.tailnetHttps);
@@ -3249,10 +3246,10 @@ export const startDaemon = (rediscover = false) =>
         )
       )
     );
-    // Before any cut: each its last process left under way is cleared when
-    // its path holds only what that cut wrote (workspace.ts). Begun, not
-    // awaited: every cut waits for it, nothing else does.
-    clearInterruptedCuts();
+    // Before any create: each layer its last process left unmade is cleared
+    // (workspace.ts). Begun, not awaited: every create waits for it, nothing
+    // else does.
+    clearUnmadeLayers();
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each
@@ -3799,6 +3796,18 @@ export const startDaemon = (rediscover = false) =>
       CONTROL_WORKSPACE_BUNDLE,
       workspaceBundle
     );
+    // A folder workspace's landing: its change set read, then put into its
+    // folder by this agent, outside every wall.
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_CHANGES, (ref) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : workspaceChanges(ref)
+    );
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_APPLY, (ref) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : workspaceApply(ref)
+    );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_AT,
       (ref, base, at, from) =>
@@ -3823,10 +3832,6 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(CONTROL_INPUTS_COPY, copyInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_READ, readInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_WRITE, writeInputs);
-    supervisor.registerDaemonFunction(
-      CONTROL_WORKSPACE_MIGRATE,
-      convertWorktrees
-    );
     // A project move's steps (move.ts). Each runs as this process's child, so
     // none starts behind a raised fence; the hub runs it again after a restart.
     const unfenced =

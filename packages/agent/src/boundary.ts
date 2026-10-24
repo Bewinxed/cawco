@@ -204,7 +204,6 @@ import { closeWorkspaceBrowsers, ensureGateToken } from "./browser/gate";
 import { colimaHome } from "./browser/media-forwarding";
 import { runtimeSockets } from "./browser/runtime";
 import { bunNodeShim } from "./bun-node-shim";
-import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import {
@@ -218,6 +217,14 @@ import {
 } from "./hub-git";
 import { hubPreviewsPath } from "./hub-previews";
 import { type HeldProc, KeeperPool } from "./keepers";
+import {
+  ensureView,
+  folderSync,
+  layerOf,
+  overlaySync,
+  ownModules,
+  viewArgv,
+} from "./layer";
 import { logRelay } from "./log-relay";
 import {
   boundaryProcId,
@@ -1744,8 +1751,10 @@ const rearmOne = async (id: string): Promise<boolean> => {
   await rm(gateOf(id), { force: true });
   const ref = { id, path: held.path };
   // A person's own folder gets no stand-ins, and nothing is listed in its
-  // exclude.
-  if (!isPlace(id) && process.platform === "linux") {
+  // exclude; nor does the folder a Linux view overlays (layer.ts), whose
+  // stand-ins are in its upper.
+  const own = !(isPlace(id) || overlaySync(id));
+  if (own && process.platform === "linux") {
     // Before anything is armed: each mount point a running sandbox left
     // where a file stands in holds that file's stand-in now, in place; one
     // where a dir stands in goes with its boundary, once nothing runs in it
@@ -1760,7 +1769,7 @@ const rearmOne = async (id: string): Promise<boolean> => {
   }
   // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
   // an earlier build wrote there go, and a user's own files show again.
-  if (!isPlace(id)) {
+  if (own) {
     await listStandIns(ref, false).catch(
       said("its clone's stand-ins could not be listed in its info/exclude")
     );
@@ -2648,41 +2657,74 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
 };
 
 /**
- * The folder a boundary holds, ready for it: a delegate's clone (refused
- * when it is none), or a place, whatever folder it is over, a plain one
- * too, which stays as the person keeps it: never made
- * into a clone. One that is not there is refused, and its boundaries closed
- * ({@link refuseGone}).
+ * The folder a boundary holds, ready for it: a place, whatever folder it is
+ * over, which stays as the person keeps it; or a delegate's layer of its
+ * folder (layer.ts): a folder there, and on Linux its view running, which
+ * the srt host then enters ({@link viewOfBoundary}). A delegate's copy that
+ * held a repository and whose `.git` is no repository any more (a deleted
+ * clone a sandbox refilled with stand-ins, `stand-ins.ts`) has no boundary:
+ * one would stand in there again; retirement takes it away. One that is not
+ * there is refused, and its boundaries closed ({@link refuseGone}).
  */
 const placeReady = async (ref: WorkspaceRef): Promise<void> => {
+  const place = await stat(ref.path).catch(() => undefined);
+  if (!place?.isDirectory()) {
+    await refuseGone(ref, `${ref.path} is not a folder`);
+    return;
+  }
   if (isPlace(ref.id)) {
-    const place = await stat(ref.path).catch(() => undefined);
-    if (!place?.isDirectory()) {
-      await refuseGone(ref, `${ref.path} is not a folder`);
-    }
     return;
   }
-  const git = await stat(join(ref.path, ".git")).catch(() => undefined);
-  if (!git) {
-    await refuseGone(ref, `${ref.path} is not a git checkout`);
+  const layer = await layerOf(ref.id, ref.path);
+  if (!layer) {
+    await refuseGone(ref, `${ref.path} holds no layer of a folder`);
     return;
   }
-  // A workspace from before clones — a spawn racing the agent's start-up
-  // pass over them — becomes one first: a worktree's commits would land in
-  // the repository it was cut from, which the boundary keeps read-only.
-  if (!git.isDirectory()) {
-    await cloneInPlace(ref.path);
+  if (layer.form === "overlay") {
+    await ensureView(ref.id, layer);
     return;
   }
-  // A `.git` that is no repository (a deleted clone a sandbox refilled with
-  // stand-ins, `stand-ins.ts`) has no boundary: one would stand in there
-  // again. Retirement takes it away (workspace.ts `holding`).
-  if (!(await isGitDir(join(ref.path, ".git")))) {
+  const git = await lstat(join(ref.path, ".git")).catch(() => undefined);
+  if (
+    layer.kind === "repo" &&
+    !(git && (await isGitDir(join(ref.path, ".git"))))
+  ) {
     await refuseGone(
       ref,
       `${ref.path} is not a git clone any more: its .git is no repository`
     );
   }
+  if (layer.modules === "linked") {
+    ownModules(ref.id).catch((error: unknown) =>
+      console.warn(
+        `[workspace] ${ref.id}: its own clone of node_modules was not made, so it reads its folder's through the link: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+  }
+};
+
+/**
+ * The view a Linux boundary's srt host runs in (layer.ts): its spec entered
+ * into the workspace's view namespace, so srt's binds of the folder are the
+ * view's overlay. Nothing for a place, a copy, or on macOS.
+ */
+const viewOfBoundary = async (
+  ref: WorkspaceRef,
+  spec: ProcSpec
+): Promise<ProcSpec> => {
+  if (process.platform !== "linux" || isPlace(ref.id)) {
+    return spec;
+  }
+  const layer = await layerOf(ref.id, ref.path);
+  if (layer?.form !== "overlay") {
+    return spec;
+  }
+  const pid = await ensureView(ref.id, layer);
+  const [command, ...args] = viewArgv(pid, spec.cwd ?? "/", [
+    spec.command,
+    ...spec.args,
+  ]);
+  return { ...spec, command: command as string, args };
 };
 
 const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
@@ -3754,6 +3796,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         ...(place
           ? { CAWCO_SANDBOX_CWD: policy.scratch, [PLACE_ENV]: "1" }
           : {}),
+        // A delegate's copy of a folder that is no repository: the host
+        // holds it as a folder, never asking it for a `.git` (layer.ts).
+        ...(folderSync(id) ? { CAWCO_FOLDER: "1" } : {}),
       },
     },
   };
@@ -6936,9 +6981,9 @@ const RESTART_WAIT_TENTHS = WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 100;
  * look before every command: the running sandbox's mount table must still
  * hold every bind its host guards ({@link guardedOf}). When it does not, it
  * asks the host to start a new sandbox (SIGUSR1), and runs the command
- * through that one (REPORT.md §5d). CawCo never writes a live clone's
- * config: it writes `branch.*` only before the boundary starts
- * (`cloneInPlace`).
+ * through that one (REPORT.md §5d). CawCo never writes a live copy's
+ * config: it writes it only before the boundary starts (workspace.ts
+ * `ownGitConfig`).
  */
 const mountCheck = (id: string, gen: string, pid: string): string =>
   `place=${shellQuote(placeOf(id, gen))}
@@ -7600,13 +7645,9 @@ const copyApart = async (file: string, copy: string): Promise<void> => {
  * boundary starts with no sandbox of the workspace running (its first start,
  * a start after a reboot, a replacement once the one before is stopped),
  * never beside an older generation still running in the clone at a handover
- * ({@link launch}); and as a clone is cut, right after `git clone` made it
- * and before any other git runs in it (clone.ts `prepareClone`, whose fetch
- * starts a background repack that deletes loose objects), so a cut cut short
- * before its boundary
- * leaves no husk sharing the source's objects. On macOS only there, where
- * git's local clone links the source's objects too and each copy is an APFS
- * clone ({@link copyApart}).
+ * ({@link launch}). A Linux view of a folder never runs it: its folder is
+ * the person's, and the overlay copies a file up before any write reaches
+ * it (layer.ts). On macOS each copy is an APFS clone ({@link copyApart}).
  */
 export const ownInodes = async (path: string): Promise<number> => {
   const linked = await linkedFiles(path);
@@ -7887,9 +7928,11 @@ const launch = async (
   gen: string
 ): Promise<Held> => {
   const linux = process.platform === "linux";
-  // A place is a person's own folder: nothing of the boundary's is
-  // written into it (no copied inodes, no stand-ins, no exclude lines).
-  const own = !isPlace(ref.id);
+  // A place is a person's own folder, and so is the folder a Linux view
+  // overlays (layer.ts): nothing of the boundary's is written into it from
+  // here (no copied inodes, no stand-ins, no exclude lines). The srt host
+  // makes the view's stand-ins inside it, into its upper.
+  const own = !(isPlace(ref.id) || overlaySync(ref.id));
   const procId = boundaryProcId(ref.id, gen);
   if (linux) {
     // Only with no sandbox of the workspace running: a handover starts this
@@ -7927,7 +7970,7 @@ const launch = async (
   if (made.exitCode !== 0) {
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
-  await client.spawnProc(procId, plan.spec);
+  await client.spawnProc(procId, await viewOfBoundary(ref, plan.spec));
   const readyAt = await ready(client, procId, READY, "the boundary").catch(
     (error: Error) => {
       throw refusal(ref.id, error.message);
@@ -7954,7 +7997,7 @@ const launch = async (
     path: ref.path,
     form: plan.form,
   };
-  if (linux && (await hasLeftDirs(ref.path))) {
+  if (linux && own && (await hasLeftDirs(ref.path))) {
     // Its host left a mount point where a dir stands in: an older boundary
     // beside it held one there ({@link stubbed}).
     restartWhenIdle(ref);
@@ -8224,8 +8267,11 @@ export const closeBoundary = (ref: WorkspaceRef): Promise<void> =>
 const closeAll = async (ref: WorkspaceRef): Promise<void> => {
   const inners = await stopNow(ref);
   // A place, a person's own folder, has no stand-ins: an empty dir there at a
-  // deny path is theirs.
-  if (process.platform === "linux" && !isPlace(ref.id)) {
+  // deny path is theirs. A Linux view's go with its upper (layer.ts).
+  if (
+    process.platform === "linux" &&
+    !(isPlace(ref.id) || overlaySync(ref.id))
+  ) {
     if (await sandboxesGone(inners)) {
       // Only once no sandbox holds a mount on them: each goes if it is still
       // exactly as it was made (`stand-ins.ts`).

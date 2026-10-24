@@ -85,6 +85,13 @@ import {
   workspaceProjectOf,
 } from "./host-lfs";
 import {
+  copyFileOf,
+  copyPathSync,
+  inCopySync,
+  overlaySync,
+  viewRunning,
+} from "./layer";
+import {
   type DeclaredLfs,
   declaredPins,
   hubGitEnv,
@@ -202,7 +209,7 @@ exit 0;
  * deleted clone would leave a file there that nobody's work made.
  */
 const noClone = async (ref: WorkspaceRef): Promise<string | undefined> =>
-  (await noRepositoryAt(ref.path))
+  (await noRepositoryAt(copyPathSync(ref.id, ref.path)))
     ? `${ref.path} is not a git clone any more: its .git is no repository`
     : undefined;
 
@@ -380,9 +387,10 @@ export const runOnHost = (
   env: Record<string, string>
 ): Promise<HostRun> =>
   new Promise((resolve) => {
-    const [file = "git", ...rest] = safeGitArgv([...args]);
+    const run = inCopySync(ref.id, ref.path, safeGitArgv([...args]));
+    const [file = "git", ...rest] = run.argv;
     const child = spawn(file, rest, {
-      cwd: ref.path,
+      cwd: run.cwd,
       env: {
         ...env,
         ...SAFE_GIT_ENV,
@@ -438,16 +446,21 @@ export const runOnHost = (
     });
   });
 
-/** The clone's `origin` remote-tracking refs, each with the commit it is at. */
-const remoteRefs = (clone: string): Map<string, string> => {
-  const listed = Bun.spawnSync(
+/** The copy's `origin` remote-tracking refs, each with the commit it is at. */
+const remoteRefs = (ref: WorkspaceRef): Map<string, string> => {
+  const run = inCopySync(
+    ref.id,
+    ref.path,
     safeGitArgv([
       "for-each-ref",
       "--format=%(objectname) %(refname)",
       "refs/remotes/origin/",
-    ]),
-    { cwd: clone, env: { ...process.env, ...SAFE_GIT_ENV } }
+    ])
   );
+  const listed = Bun.spawnSync(run.argv, {
+    cwd: run.cwd,
+    env: { ...process.env, ...SAFE_GIT_ENV },
+  });
   return new Map(
     listed.stdout
       .toString()
@@ -639,17 +652,19 @@ const holdPush = async (
         )
       );
     }
-    const read = Bun.spawnSync(
-      safeGitArgv(["rev-parse", "--verify", "--quiet", `${src}^{commit}`]),
-      {
-        cwd: ref.path,
-        env: {
-          ...process.env,
-          ...SAFE_GIT_ENV,
-          GIT_DIR: join(ref.path, ".git"),
-        },
-      }
+    const run = inCopySync(
+      ref.id,
+      ref.path,
+      safeGitArgv(["rev-parse", "--verify", "--quiet", `${src}^{commit}`])
     );
+    const read = Bun.spawnSync(run.argv, {
+      cwd: run.cwd,
+      env: {
+        ...process.env,
+        ...SAFE_GIT_ENV,
+        GIT_DIR: join(ref.path, ".git"),
+      },
+    });
     const sha = read.stdout.toString().trim();
     if (read.exitCode !== 0 || !sha) {
       return oneLine(askRefusal(what, `${src} is no commit of this clone`));
@@ -878,7 +893,7 @@ type DoorTarget =
   { kind: "hub" } | { kind: "host"; origin: boolean; push: PushRule };
 
 const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
-  const origin = originOf(ref.path);
+  const origin = originOf(ref.id, ref.path);
   if (origin !== "" && url === origin) {
     if (isHubRemote(origin)) {
       return { kind: "hub" };
@@ -1218,8 +1233,10 @@ const sameDir = (a: string, b: string): boolean => {
  * boundary, and is never refused.
  */
 const configProblem = async (ref: WorkspaceRef): Promise<string | undefined> =>
-  (await cloneHolding(ref.path))
-    ? await repositoryConfigProblem(join(ref.path, ".git"))
+  overlaySync(ref.id) || (await cloneHolding(ref.path))
+    ? await repositoryConfigProblem(
+        join(copyPathSync(ref.id, ref.path), ".git")
+      )
     : undefined;
 
 /**
@@ -1322,6 +1339,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     gitDir: string,
     rest: Buffer
   ): Promise<void> => {
+    await viewRunning(ref.id);
     const gone = await noClone(ref);
     if (gone) {
       throw new Error(`git did not run in ${ref.path}: ${gone}`);
@@ -1339,7 +1357,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     // git-lfs held to the clone's origin's LFS, or its project's declared
     // one (host-lfs.ts): read before the door answers, so a run whose
     // endpoint the hub could not say does not start.
-    const lfs = await doorLfsOf(ref, originOf(ref.path));
+    const lfs = await doorLfsOf(ref, originOf(ref.id, ref.path));
     // Read before the door answers too: what fails after `ok` reaches git
     // only as a connection cut short.
     let env: Record<string, string> = {};
@@ -1356,7 +1374,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
         pipeHubHelper(ref, socket, channel, url, rest, lfs);
         return;
       case "host": {
-        const before = remoteRefs(ref.path);
+        const before = remoteRefs(ref);
         serveHelper(
           socket,
           channel,
@@ -1371,7 +1389,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
             // connection: their large files come here before it closes.
             await fetchLfs(
               ref,
-              movedRefs(before, remoteRefs(ref.path)),
+              movedRefs(before, remoteRefs(ref)),
               env,
               lfs
             ).catch((error: unknown) =>
@@ -1408,16 +1426,17 @@ const pipeHubHelper = (
 ): void => {
   const env = hubGitEnv(url, [], lfs.declared);
   const scheme = new URL(url).protocol === "https:" ? "https" : "http";
-  const child = spawn(
-    "git",
-    safeGitArgv([`remote-${scheme}`, "origin", url]).slice(1),
-    {
-      cwd: ref.path,
-      env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
-      stdio: ["pipe", "pipe", "pipe"],
-    }
+  const run = inCopySync(
+    ref.id,
+    ref.path,
+    safeGitArgv([`remote-${scheme}`, "origin", url])
   );
-  const before = remoteRefs(ref.path);
+  const child = spawn(run.argv[0] as string, run.argv.slice(1), {
+    cwd: run.cwd,
+    env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const before = remoteRefs(ref);
   let stderr = "";
   child.stderr.on("data", (chunk: Buffer) => {
     stderr = (stderr + chunk.toString()).slice(-4000);
@@ -1430,7 +1449,7 @@ const pipeHubHelper = (
     }
     // git waits on the helper as it disconnects, after it has written the
     // refs it fetched: the door closes once their large files are here.
-    const moved = code === 0 ? movedRefs(before, remoteRefs(ref.path)) : [];
+    const moved = code === 0 ? movedRefs(before, remoteRefs(ref)) : [];
     fetchLfs(ref, moved, env, lfs)
       .catch((error: unknown) =>
         console.warn(
@@ -1550,13 +1569,13 @@ export const closeGitDoor = async (id: string): Promise<void> => {
 const shellWord = (word: string): string =>
   `'${word.replaceAll("'", "'\\''")}'`;
 
-/** The clone's `origin` URL as its own config names it; empty when it names none. */
-const originOf = (clone: string): string =>
+/** Workspace `id`'s copy's `origin` URL as its own config names it (its copy at `clone`); empty when it names none. */
+const originOf = (id: string, clone: string): string =>
   Bun.spawnSync(
     safeGitArgv([
       "config",
       "--file",
-      join(clone, ".git", "config"),
+      copyFileOf(id, join(clone, ".git", "config")),
       "--get",
       "remote.origin.url",
     ]),
@@ -1590,7 +1609,7 @@ export const gitDoorEnv = (
   if (origins.length === 0) {
     return {};
   }
-  const origin = originOf(clone);
+  const origin = originOf(id, clone);
   const hubOrigin = isHubRemote(origin);
   const outsideOrigin = !hubOrigin && isNetworkRemote(origin);
   return {
