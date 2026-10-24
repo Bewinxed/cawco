@@ -63,6 +63,7 @@
   import Who from "../turn/Who.svelte";
   import CommentComposer from "./CommentComposer.svelte";
   import PinMark, { markState } from "./PinMark.svelte";
+  import { cutOnWords } from "./thread-cut";
 
   let {
     pin,
@@ -141,6 +142,7 @@
     );
     holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;
     placed = holder.scrollTop;
+    cutOnWords(holder);
   };
   // The thread opens at its newest entry's first line, so a long reply reads
   // from its start (the owner's pick "At the reply's first line"), and
@@ -203,7 +205,8 @@
   // Unscrolled, the room stays at its newest entry's first line as its
   // entries take their height (their words are set once they have loaded,
   // after the room stands) and as the room itself takes its height (the
-  // card's cap, a squeeze).
+  // card's cap, a squeeze); scrolled or not, its foot is cut on a line of
+  // its words again (thread-cut.ts), which moves nothing it watches.
   $effect(() => {
     const holder = roomEl;
     const list = holder?.querySelector('[data-slot="thread"]');
@@ -214,6 +217,8 @@
     const watch = new ResizeObserver(() => {
       if (atPlace) {
         settle(holder);
+      } else {
+        cutOnWords(holder);
       }
     });
     watch.observe(list);
@@ -506,9 +511,11 @@
 {/snippet}
 <!-- What the comment holds, the one part that scrolls: the head stands over
      it and the reply under it, never a scroll away; the house edge fade says
-     there is more above or below. -->
+     there is more above or below, its foot cut on a line of the words
+     (thread-cut.ts), its spacer as tall as the cut so the last words scroll
+     clear of it. -->
 <div
-  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
+  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0 after:h-(--fade-inset-end) after:shrink-0"
   data-whole={squeezed || undefined}
   data-pin-room
   onscroll={readAt}

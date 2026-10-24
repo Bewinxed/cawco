@@ -4490,6 +4490,9 @@ const movedBy = (one: SizingBox | null, two: SizingBox | null) =>
  *   replies scroll to their middle, the card itself not scrolling;
  * - the long reply opened at its first line, at the top of the room its
  *   replies scroll in;
+ * - the room's foot drawn across a line of the reply's words under the
+ *   house fade, as it opened and with its own edge held just under a
+ *   heading and in the gap under a line of words (thread-cut.ts);
  * - and nothing on the page spilling sideways, the sweep's total zero.
  */
 const sizingChecks = async (on: On) => {
@@ -4516,7 +4519,14 @@ const sizingChecks = async (on: On) => {
           tag
         );
         if (seen) {
-          spillsAll += await sizingHold(on, screen, tag, want.sheet, seen);
+          spillsAll += await sizingHold(
+            on,
+            screen,
+            tag,
+            want.sheet,
+            seen,
+            made.number
+          );
         } else {
           on.kit.check(`${tag}: the page and its thread`, false, "not shown");
         }
@@ -5185,13 +5195,134 @@ const sizingPlace = async (
 
 type SizingRead = Awaited<ReturnType<typeof sizingRead>>;
 
+/**
+ * Where pin `n`'s open thread is cut at its room's foot, as a person sees
+ * it: the room's foot as drawn (its box's foot less its mask's inset), the
+ * line of the reply's words drawn across it (a heading's, a bold line's or
+ * a speaker line's words are no such line), and the house fade's length
+ * there. Read as the card opened, then with the room held so its own foot
+ * falls just under a heading ("heading") and in the gap under a line of
+ * words ("gap"), each the lowest such place in the room; its height given
+ * back after. In the page.
+ */
+const cutRead = (screen: Page, number: number) =>
+  screen.evaluate(async (n) => {
+    const card = document.querySelector<HTMLElement>(
+      `[data-slot="pin-card"][data-pin-card="${n}"]`
+    );
+    const room = card?.querySelector<HTMLElement>("[data-pin-room]");
+    const list = room?.querySelector('[data-slot="thread"]');
+    if (!(room && list)) {
+      return null;
+    }
+    const frames = () =>
+      new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done()))
+      );
+    const heading = (el: Element) => {
+      if (el.closest("h1, h2, h3, h4, h5, h6")) {
+        return true;
+      }
+      const block = el.closest("p, li");
+      const only = block?.children.length === 1 ? block.children[0] : null;
+      return (
+        !!(block && only) &&
+        (only.localName === "strong" || only.localName === "b") &&
+        block.textContent?.trim() === only.textContent?.trim()
+      );
+    };
+    /** Every line of words in the thread, by its box on screen, in reading order. */
+    const lines = () => {
+      const found: {
+        bottom: number;
+        heading: boolean;
+        text: string;
+        top: number;
+      }[] = [];
+      const walk = document.createTreeWalker(list, NodeFilter.SHOW_TEXT);
+      const range = document.createRange();
+      for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+        const at = node.parentElement;
+        const text = node.textContent?.trim() ?? "";
+        if (!(at && text)) {
+          continue;
+        }
+        range.selectNodeContents(node);
+        for (const box of range.getClientRects()) {
+          if (box.width > 0 && box.height > 0) {
+            found.push({
+              top: box.top,
+              bottom: box.bottom,
+              heading: heading(at),
+              text: (at.closest("p, li")?.textContent ?? text)
+                .trim()
+                .slice(0, 40),
+            });
+          }
+        }
+      }
+      return found.sort((one, two) => one.top - two.top);
+    };
+    const read = () => {
+      const style = getComputedStyle(room);
+      const inset =
+        Number.parseFloat(style.getPropertyValue("--fade-inset-end")) || 0;
+      const foot =
+        room.getBoundingClientRect().top +
+        room.clientTop +
+        room.clientHeight -
+        inset;
+      const crossed = lines().find(
+        (line) => !line.heading && line.top < foot - 2 && line.bottom > foot + 2
+      );
+      return {
+        room: room.clientHeight,
+        inset,
+        fade: Number.parseFloat(style.getPropertyValue("--fade-end")) || 0,
+        crosses: crossed?.text ?? null,
+      };
+    };
+    const opened = read();
+    // The lowest gap of each kind in the room, from its top, px.
+    const top = room.getBoundingClientRect().top + room.clientTop;
+    const shown = room.clientHeight;
+    const gaps: { gap?: number; heading?: number } = {};
+    const all = lines();
+    for (const [i, line] of all.entries()) {
+      const next = all.slice(i + 1).find((one) => one.top > line.bottom);
+      const at = line.bottom + 3 - top;
+      if (next && next.top - line.bottom >= 8 && at > 0 && at < shown) {
+        gaps[line.heading ? "heading" : "gap"] = at;
+      }
+    }
+    const held = async (at: number | undefined) => {
+      if (at === undefined) {
+        return null;
+      }
+      room.style.flex = "none";
+      room.style.height = `${at}px`;
+      await frames();
+      const seen = read();
+      room.style.flex = "";
+      room.style.height = "";
+      await frames();
+      return { at, ...seen };
+    };
+    return {
+      opened,
+      heading: await held(gaps.heading),
+      gap: await held(gaps.gap),
+    };
+  }, number);
+
 /** One window's checks on its open thread; the number of sideways spills it found. */
 const sizingHold = async (
   on: On,
   screen: Page,
   tag: string,
   sheet: boolean,
-  seen: { pill: SizingBox | null; read: SizingRead }
+  seen: { pill: SizingBox | null; read: SizingRead },
+  number: number
 ) => {
   const { read } = seen;
   await sizingPlace(on, screen, tag, sheet, seen);
@@ -5213,6 +5344,23 @@ const sizingHold = async (
     read.opensAt !== null && Math.abs(read.opensAt) <= 1,
     JSON.stringify(read.room)
   );
+  // The fade at the room's foot lies over words: the foot as drawn crosses a
+  // line of the reply's, as it opened and with its own edge held in the gap
+  // under a heading and under a line of words, where the cut moves up.
+  const cut = await cutRead(screen, number);
+  on.kit.check(
+    `${tag}: the room's foot is drawn across a line of the reply's words (${JSON.stringify(cut?.opened.crosses ?? null)}, cut ${cut?.opened.inset ?? "unread"}px above its edge) under the house fade (${cut?.opened.fade ?? 0}px)`,
+    !!cut?.opened.crosses && cut.opened.fade > 0,
+    JSON.stringify(cut?.opened)
+  );
+  for (const kind of ["heading", "gap"] as const) {
+    const held = cut?.[kind];
+    on.kit.check(
+      `${tag}: its own edge held ${kind === "heading" ? "just under a heading" : "in the gap under a line of words"} (${held?.at.toFixed(1) ?? "no such place"}px down), the room is cut ${held?.inset ?? 0}px higher, across ${JSON.stringify(held?.crosses ?? null)}, under the fade (${held?.fade ?? 0}px)`,
+      !!held?.crosses && held.inset > 0 && held.fade > 0,
+      JSON.stringify(held)
+    );
+  }
   const spills = await screen.evaluate(sideSpills);
   on.kit.check(
     `${tag}: nothing on the page spills sideways (${spills.length})`,
