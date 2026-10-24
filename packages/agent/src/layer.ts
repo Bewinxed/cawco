@@ -631,9 +631,9 @@ const kindOf = async (folder: string): Promise<WorkspaceKind> => {
 
 /**
  * Workspace `id`'s layer of `folder`, made: on Linux its view's dirs and
- * record, nothing copied (the view is mounted as it is first entered); on
- * macOS the clone at `path` and its base. Recorded before anything is made,
- * and again once whole.
+ * record, nothing copied, and its view mounted; on macOS the clone at
+ * `path` and its base. Recorded unmade before anything is made; the create
+ * marks it made once all of it is whole ({@link markMade}).
  */
 export const makeLayer = async (
   id: string,
@@ -660,9 +660,7 @@ export const makeLayer = async (
     };
     await writeLayer(id, layer);
     await ensureView(id, layer);
-    const made = { ...layer, made: true };
-    await writeLayer(id, made);
-    return made;
+    return layer;
   }
   const base = join(layerDir(id), "base");
   const layer: Layer = {
@@ -678,7 +676,6 @@ export const makeLayer = async (
   const linked = await cloneFolder(folder, path, base);
   const made: Layer = {
     ...layer,
-    made: true,
     ...(linked ? { modules: "linked" as const } : {}),
   };
   await writeLayer(id, made);
@@ -690,6 +687,17 @@ export const makeLayer = async (
     );
   }
   return made;
+};
+
+/**
+ * Workspace `id`'s layer whole: its create finished (workspace.ts
+ * `createWorkspace`), so it is never cleared as one cut short.
+ */
+export const markMade = async (id: string): Promise<void> => {
+  const layer = await readLayer(id);
+  if (layer && !layer.made) {
+    await writeLayer(id, { ...layer, made: true });
+  }
 };
 
 /**

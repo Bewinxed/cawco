@@ -102,9 +102,9 @@ const run = async (kit: Kit) => {
   const layer = await makeLayer(id, folder, path);
   const startMs = ms(startAt);
   check(
-    `v1: a folder that is no repository gets a ${linux ? "view at its own path" : "clone"} in ${startMs} ms`,
+    `v1: a folder that is no repository gets a ${linux ? "view at its own path" : "clone"} in ${startMs} ms, recorded unmade until its create is whole`,
     layer.kind === "folder" &&
-      layer.made &&
+      !layer.made &&
       (linux
         ? layer.path === folder && layer.form === "overlay"
         : layer.form === "copy"),

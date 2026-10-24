@@ -111,6 +111,7 @@ import {
   layerDir,
   layerOf,
   makeLayer,
+  markMade,
   readChanges,
   readLayer,
   removeLayer,
@@ -930,6 +931,7 @@ export const createWorkspace = async (
     await placeFirst(id, path, { account, first, projectId });
     const boundary = await ensureBoundary(workspace);
     const restored = repo ? await applyCarried(workspace, carried) : undefined;
+    await markMade(id);
     console.info(
       `[workspace] ${id}: made of ${folder} (${layer.kind}, ${layer.form}) at ${path} in ${Date.now() - layer.started} ms`
     );
