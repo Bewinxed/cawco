@@ -33,6 +33,10 @@
      house grip's 1.5px. */
   --c-handle-arc-gap: calc(var(--radius-panel) * 0.122);
   --c-handle-stroke: var(--c-corner-grip-stroke);
+  /* Reached and held, the stroke doubles to 3px so the run reads at a glance against the panel's 1px edge
+     beside it, and takes the strong ink: (round 29 review: "a 1px hairline along a 565px edge" that "barely
+     separates from the panel's own border"). Its body keeps its place; it only thickens. */
+  --c-handle-stroke-held: calc(2 * var(--c-corner-grip-stroke));
   --c-handle-inset: calc(1px + var(--c-handle-arc-gap) + var(--c-handle-stroke) / 2);
   --c-handle-sweep: 65.6deg;
   /* How far past the pointer the reach runs, and the hit areas: an 8px band on each resizable edge, a 24px
@@ -47,6 +51,8 @@
   --c-tucked-tab: 36px;
   /* Regions (section E): the doorway tab's height. */
   --c-doorway-tab-h: 28px;
+  /* The narrowest a state may draw where a machine must fit its view at the touch floor's zoom of 1. */
+  --c-node-w-floor: 96px;
   /* The slab's ground: one step down from the well by day (--surface-recess-deep). At night the well is
      already neutral-1, the deepest step (recess-deep is the same neutral-1, 1.0:1, the slab gone), so the slab
      takes the recess there, the one step the night has (1.09:1) (my call). Its edges' inks are held to 3:1 on
@@ -57,9 +63,6 @@
   --c-graph-edge-ink: light-dark(var(--border-contrast), var(--border-row-outline));
   --c-graph-edge-chosen: light-dark(var(--brand-ink-strong), var(--brand-solid));
   --c-graph-label-bg: light-dark(var(--surface-recess), var(--surface-recess-deep));
-  /* A length's figure in its kind's hue on the chosen row's selection pill: by day the opacity and unfold hues
-     stand 3.98:1 there, under text's 4.5:1, so it takes 30% of the strong ink (5.45:1 at worst). */
-  --prop-figure-on-pill-mix: 70%;
   /* Edges (section F): the elbow's radius, the open chevron's legs, the playback dash. */
   --c-edge-elbow-r: var(--radius-sm);
   --c-edge-head-leg: 7px;
@@ -167,9 +170,22 @@ button { font: inherit; color: inherit; }
 .panel { z-index: calc(var(--layer-dock) + 1); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border: 0; border-radius: var(--radius-panel); padding: calc(var(--space-2) + 1px); background: none; box-shadow: none; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
 .bar-end { display: flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; flex: none; }
-.gview { position: relative; display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
-.graph { position: relative; flex: 0 1 auto; min-block-size: 0; block-size: var(--graph-h, 520px); overflow: auto; overscroll-behavior: contain; cursor: grab; border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
+/* The well: the graph's view between two bands of its own, one at its top and one at its foot, where the
+   doorways stand (section E). A door in its band covers nothing of the graph; the view scrolls between them,
+   its ends faded by the house edge fade so what scrolls on reads as going on. */
+.gview { position: relative; display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; padding-block: var(--c-doorway-tab-h); border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
+.graph { position: relative; flex: 0 1 auto; min-block-size: 0; block-size: var(--graph-h, 520px); overflow: auto; overscroll-behavior: contain; cursor: grab; }
 .graph.panning { cursor: grabbing; }
+/* A band stands only while it holds a door (data-top, data-foot on the well, app.js); empty, the view takes its
+   room, so the well's own height never changes. */
+.gview:not([data-top]) .graph { margin-block-start: calc(-1 * var(--c-doorway-tab-h)); }
+.gview:not([data-foot]) .graph { margin-block-end: calc(-1 * var(--c-doorway-tab-h)); }
+.gview:not([data-top], [data-foot]) .graph { block-size: calc(var(--graph-h, 520px) + 2 * var(--c-doorway-tab-h)); }
+.gview:is([data-top]:not([data-foot]), [data-foot]:not([data-top])) .graph { block-size: calc(var(--graph-h, 520px) + var(--c-doorway-tab-h)); }
+/* The house edge fade at an end with more to scroll past it (data-fade, app.js). */
+.graph[data-fade="top"] { mask-image: linear-gradient(transparent, #000 var(--c-edge-fade-len-phone)); }
+.graph[data-fade="foot"] { mask-image: linear-gradient(#000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.graph[data-fade="top foot"] { mask-image: linear-gradient(transparent, #000 var(--c-edge-fade-len-phone), #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
 .zoomer { position: relative; margin: 0 auto; }
 .world { position: absolute; inset-inline-start: 0; inset-block-start: 0; transform-origin: 0 0; }
 
@@ -212,15 +228,13 @@ button { font: inherit; color: inherit; }
    Show tab's shape), its name in meta and a chevron pointing out, along the edge at the region's own place. It
    comes in over --dur-fade as its region leaves the view and goes over --dur-exit as it returns, sliding 4px
    from the edge. */
-.doors { position: absolute; inset: 1px; pointer-events: none; overflow: hidden; border-radius: calc(var(--radius-panel) - var(--space-2) - 1px); }
+.doors { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
 .door { all: unset; box-sizing: border-box; position: absolute; display: inline-flex; align-items: center; gap: var(--space-1); block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; opacity: 0; translate: var(--door-out); pointer-events: none; transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door[data-on] { opacity: 1; translate: 0 0; pointer-events: auto; transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .door svg { flex: none; inline-size: var(--icon-sm); block-size: var(--icon-sm); rotate: var(--door-turn, 0deg); }
-.door[data-edge="bottom"] { inset-block-end: 0; border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; --door-out: 0 4px; }
-.door[data-edge="top"] { inset-block-start: 0; border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); --door-out: 0 -4px; }
-.door[data-edge="right"] { inset-inline-end: 0; border-inline-end: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); --door-out: 4px 0; }
-.door[data-edge="left"] { inset-inline-start: 0; border-inline-start: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; --door-out: -4px 0; padding-inline: var(--space-1) var(--space-2); }
+.door[data-band="bottom"] { inset-block-end: 0; border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; --door-out: 0 4px; }
+.door[data-band="top"] { inset-block-start: 0; border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); --door-out: 0 -4px; }
 @media (hover: hover) { .door:hover { background: var(--surface-hover); color: var(--ink-strong); } }
 .door:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 @media (prefers-reduced-motion: reduce) { .door, .door[data-on] { translate: 0 0; } }
@@ -256,19 +270,24 @@ button { font: inherit; color: inherit; }
 .world[data-instant] :is(.node, .var) { transition: none; }
 .var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
-/* The zoom group: 24px items 2px in (The Concentric Rule). Its figure is a press: Fit all (⇧1). */
-.zoom { display: flex; align-items: center; gap: var(--space-row); padding: calc(var(--radius-sm) - var(--radius-xs) - 1px); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); }
+/* The zoom group: its parts stand bare in a row (the house icon rule: the glyph, never a box round it). Its
+   figure is a press: Fit all (⇧1). */
+.zoom { display: flex; align-items: center; gap: var(--space-row); }
 .zoom-fit { all: unset; box-sizing: border-box; display: grid; place-items: center; min-inline-size: 5ch; block-size: var(--c-btn-h-xs); padding-inline: var(--space-1); border-radius: var(--radius-xs); cursor: pointer; transition: var(--transition-control); }
 @media (hover: hover) { .zoom-fit:hover { background: var(--surface-hover); } }
 .zoom-fit:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .icon-btn { all: unset; box-sizing: border-box; display: grid; place-items: center; inline-size: var(--c-btn-h-xs); block-size: var(--c-btn-h-xs); border-radius: var(--radius-xs); color: var(--ink-row); cursor: pointer; transition: var(--transition-control); }
 .icon-btn svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
-/* Outline and Hide: the kit's sm icon button (30px, the input's radius, the button outline), --icon-md. */
-.hide-btn { inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); color: var(--ink-row); }
+/* Outline and Hide: the kit's sm ghost icon button, a 30px hit area round a bare --icon-md glyph. */
+.hide-btn { inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); color: var(--ink-row); }
 .hide-btn svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
-@media (hover: hover) { .icon-btn:hover { background: var(--surface-hover); } }
+/* An icon is the Solar glyph alone, never a box or a circle (the owner's rule): its hit area keeps its size;
+   under the pointer and while its menu is open the glyph takes the strong ink; a press scales it (The Press
+   Rule). */
+@media (hover: hover) { .icon-btn:hover { color: var(--ink-strong); } }
+.icon-btn:active { scale: var(--press-scale); }
 .icon-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
-.icon-btn[aria-expanded="true"] { background: var(--surface-pressed); }
+.icon-btn[aria-expanded="true"] { color: var(--ink-strong); }
 
 .graphs { display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
 .gsec { display: flex; flex-direction: column; min-block-size: 0; }
@@ -297,7 +316,8 @@ html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2
    One arc per surface, iPadOS 26's corner handle (round 28's measured geometry), in the corner that faces the
    open field: the panel's bottom-leading, the dock's top-trailing. Nothing else is drawn on any edge. It is one
    object at three lengths: the arc's body never moves; each leg runs on from it along its edge. Pointing at an
-   edge, that edge's leg reaches to --c-handle-reach past the pointer and follows it (ink to the muted ink);
+   edge, that edge's leg reaches to --c-handle-reach past the pointer and follows it, thickened to 3px in the
+   strong ink;
    held, it sweeps the whole edge in coral (The Coral Is Where You Act Rule); let go, it retracts. Each leg's
    last 32px fade by the house rim taper (1 − (1 − x)^6, app.js), the stroke whole to its tip.
    The clock: CSS transitions on four registered values per arc (each leg's reach in px, and its sweep 0 to 1,
@@ -307,24 +327,28 @@ html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2
 @property --sweep-a { syntax: "<number>"; inherits: false; initial-value: 0; }
 @property --sweep-b { syntax: "<number>"; inherits: false; initial-value: 0; }
 .arc { position: absolute; z-index: 5; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; color: var(--border-row-outline); transition: --reach-a var(--dur-exit) var(--ease-out), --reach-b var(--dur-exit) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-exit) var(--ease-out); }
-.arc path { fill: none; stroke-width: var(--c-handle-stroke); stroke-linecap: round; stroke-linejoin: round; }
+.arc path { fill: none; stroke-width: var(--c-handle-stroke); stroke-linecap: round; stroke-linejoin: round; transition: stroke-width var(--dur-exit) var(--ease-out); }
+.arc:is([data-state="reach"], [data-state="follow"], [data-state="settle"], [data-state="sweep"]) path { stroke-width: var(--c-handle-stroke-held); }
+.arc[data-state="reach"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="follow"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="sweep"] path { transition: stroke-width var(--dur-pop) var(--ease-out); }
 .arc .arc-body { stroke: currentColor; }
 .arc stop { stop-color: currentColor; }
 .arc > g { transition: opacity var(--dur-exit) var(--ease-out); }
 #arcP { inset-inline-start: 0; inset-block-end: 0; }
 #arcD { inset-inline-end: -1px; inset-block-start: -1px; }
 /* Approach: the reach grows over --dur-control on ease-out, then follows the pointer on the hover ghost's glide. */
-.arc[data-state="reach"] { color: var(--ink-muted); transition: --reach-a var(--dur-control) var(--ease-out), --reach-b var(--dur-control) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
-.arc[data-state="follow"] { color: var(--ink-muted); transition: --reach-a var(--dur-ghost) var(--ease-in-out), --reach-b var(--dur-ghost) var(--ease-in-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.arc[data-state="reach"] { color: var(--ink-strong); transition: --reach-a var(--dur-control) var(--ease-out), --reach-b var(--dur-control) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.arc[data-state="follow"] { color: var(--ink-strong); transition: --reach-a var(--dur-ghost) var(--ease-in-out), --reach-b var(--dur-ghost) var(--ease-in-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
 /* Held: the sweep to the whole edge, the ink to coral, over --dur-pop on ease-out. */
 .arc[data-state="sweep"] { color: var(--brand-solid); transition: --reach-a var(--dur-pop) var(--ease-out), --reach-b var(--dur-pop) var(--ease-out), --sweep-a var(--dur-pop) var(--ease-out), --sweep-b var(--dur-pop) var(--ease-out), color var(--dur-pop) var(--ease-out); }
 /* Let go with the pointer still on it: back to the reach over --dur-exit. */
-.arc[data-state="settle"] { color: var(--ink-muted); }
+.arc[data-state="settle"] { color: var(--ink-strong); }
 @media (prefers-reduced-motion: reduce) {
   /* The run appears and goes by opacity alone over --dur-control; its length jumps (after the fade, going). */
   .arc[data-state] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s, --reach-b 0s, --sweep-a 0s, --sweep-b 0s; }
   .arc[data-state=""] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s linear var(--dur-control), --reach-b 0s linear var(--dur-control), --sweep-a 0s linear var(--dur-control), --sweep-b 0s linear var(--dur-control); }
-  .arc .arc-leg { transition: opacity var(--dur-control) var(--ease-out); }
+  .arc .arc-leg, .arc[data-state] .arc-leg { transition: opacity var(--dur-control) var(--ease-out), stroke-width var(--dur-control) var(--ease-out); }
   .arc[data-state=""] .arc-leg { opacity: 0; }
 }
 /* Stacked graphs have no foot edge: the corner moves the width alone. */
@@ -373,16 +397,17 @@ html[data-sliding], html[data-sliding] * { cursor: grabbing !important; user-sel
    becomes the tile's on the same clock. Show runs the same transitions back, the content in over the second
    half. Transitions, so a Show caught mid-Hide turns back from where the box is drawn. A keyboard toggle is
    instant (data-instant). */
-.panel-shell { all: unset; box-sizing: border-box; position: absolute; z-index: -1; inset: 0; border: 1px solid var(--border-control); border-radius: var(--radius-panel); background: var(--surface-raised); box-shadow: var(--shadow-overlay-hung); pointer-events: none; cursor: pointer; transition: inset-block-start var(--dur-panel) var(--ease-drawer), inset-block-end var(--dur-panel) var(--ease-drawer), inset-inline-start var(--dur-panel) var(--ease-drawer), inset-inline-end var(--dur-panel) var(--ease-drawer), border-radius var(--dur-panel) var(--ease-drawer), border-inline-end-width var(--dur-panel) var(--ease-drawer), box-shadow var(--dur-panel) var(--ease-drawer), background-color var(--dur-control) var(--ease-out); }
+.panel-shell { all: unset; box-sizing: border-box; position: absolute; z-index: -1; inset: 0; border: 1px solid var(--border-control); border-radius: var(--radius-panel); background: var(--surface-raised); box-shadow: var(--shadow-overlay-hung); pointer-events: none; cursor: pointer; transition: inset-block-start var(--dur-panel) var(--ease-drawer), inset-block-end var(--dur-panel) var(--ease-drawer), inset-inline-start var(--dur-panel) var(--ease-drawer), inset-inline-end var(--dur-panel) var(--ease-drawer), border-radius var(--dur-panel) var(--ease-drawer), border-inline-end-width var(--dur-panel) var(--ease-drawer), box-shadow var(--dur-panel) var(--ease-drawer), background-color var(--dur-panel) var(--ease-drawer), border-color var(--dur-panel) var(--ease-drawer); }
 .tab-glyph { position: absolute; inset-block-start: -1px; inset-inline-start: -1px; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); color: var(--ink-muted); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
 .tab-glyph svg { inline-size: var(--icon-lg); block-size: var(--icon-lg); }
 html[data-layout="desk"] .panel > :not(.panel-shell, .arc) { transition: opacity calc(var(--dur-panel) / 2) var(--ease-out) calc(var(--dur-panel) / 2); }
 html[data-layout="desk"] .panel[data-open="false"] { pointer-events: none; }
 html[data-layout="desk"] .panel[data-open="false"] > :not(.panel-shell, .arc) { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
 html[data-layout="desk"] .panel[data-open="false"] .arc > g { opacity: 0; }
-html[data-layout="desk"] .panel[data-open="false"] .panel-shell { inset-block-start: var(--tab-y, var(--space-2)); inset-block-end: calc(100% - var(--tab-y, var(--space-2)) - var(--c-tucked-tab)); inset-inline-start: calc(100% + var(--tab-out, var(--space-5)) - var(--c-tucked-tab)); inset-inline-end: calc(-1 * var(--tab-out, var(--space-5))); border-radius: var(--radius-lg) 0 0 var(--radius-lg); border-inline-end-width: 0; box-shadow: var(--shadow-tile); pointer-events: auto; }
+html[data-layout="desk"] .panel[data-open="false"] .panel-shell { inset-block-start: var(--tab-y, var(--space-2)); inset-block-end: calc(100% - var(--tab-y, var(--space-2)) - var(--c-tucked-tab)); inset-inline-start: calc(100% + var(--tab-out, var(--space-5)) - var(--c-tucked-tab)); inset-inline-end: calc(-1 * var(--tab-out, var(--space-5))); border-radius: var(--radius-lg) 0 0 var(--radius-lg); border-inline-end-width: 0; border-color: transparent; background-color: transparent; box-shadow: none; pointer-events: auto; }
 html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; transition: opacity calc(var(--dur-panel) - var(--dur-exit)) var(--ease-out) var(--dur-exit); }
-@media (hover: hover) { html[data-layout="desk"] .panel[data-open="false"] .panel-shell:hover { background: var(--surface-hover); } }
+@media (hover: hover) { html[data-layout="desk"] .panel[data-open="false"] .panel-shell:hover .tab-glyph { color: var(--ink-strong); } }
+html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyph { scale: var(--press-scale); }
 .panel-shell:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .panel[data-instant], .panel[data-instant] * { transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
@@ -391,10 +416,10 @@ html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; tran
 }
 
 /* The side sheet's Show: the same tucked tab, at the screen's trailing edge. */
-.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: 0; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); padding: 0; border: 1px solid var(--border-control); border-inline-end: 0; border-radius: var(--radius-lg) 0 0 var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-tile); color: var(--ink-muted); cursor: pointer; transition: var(--transition-control); }
+.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: 0; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); padding: 0; border: 0; border-radius: var(--radius-lg); background: none; color: var(--ink-muted); cursor: pointer; transition: var(--transition-control); }
 .show svg { inline-size: var(--icon-lg); block-size: var(--icon-lg); }
 .show[hidden] { display: none; }
-@media (hover: hover) { .show:hover { background: var(--surface-hover); } }
+@media (hover: hover) { .show:hover { color: var(--ink-strong); } }
 .show:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 
 /* ---- The dock: the kept move's clips over time, an editor ---- */
@@ -414,13 +439,15 @@ html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; tran
 .tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
 .ruler-row { position: sticky; inset-block-start: 0; z-index: 3; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
 .ruler-row .ruler { grid-column: 2; }
-.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); background: var(--surface-raised); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
+.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
 .tbtn svg { grid-area: 1 / 1; inline-size: var(--icon-md); block-size: var(--icon-md); transition: opacity var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out), filter var(--dur-control) var(--ease-out); }
 .tbtn .i-play { translate: 1px 0; }
 .tbtn .i-pause, .tbtn[data-playing] .i-play { opacity: 0; scale: var(--pop-scale); filter: blur(var(--c-recall-cross-blur)); }
 .tbtn[data-playing] .i-pause { opacity: 1; scale: 1; filter: none; }
-.tbtn[aria-pressed="true"] { background: var(--surface-pressed); }
-@media (hover: hover) { .tbtn:not([aria-pressed="true"]):hover { background: var(--surface-hover); } }
+/* Loop off is the muted glyph, on the strong one: a toggle said by its glyph's ink, with no box. */
+#loop[aria-pressed="false"] { color: var(--ink-muted); }
+.tbtn[aria-pressed="true"] { color: var(--ink-strong); }
+@media (hover: hover) { .tbtn:hover { color: var(--ink-strong); } }
 .tbtn:active { scale: var(--press-scale); }
 /* The time: a Measured figure, "320 / 320 ms". */
 .readout { min-inline-size: 13ch; text-align: end; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-muted); white-space: nowrap; }
@@ -445,8 +472,10 @@ html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; tran
 .clip[data-prop="size"] { --kind: var(--prop-size); }
 .clip[data-prop="colour"] { --kind: var(--prop-colour); }
 .clip[data-prop="unfold"] { --kind: var(--prop-unfold); }
-/* The chosen clip stands on the selection pill; the hover ghost glides under the row a pointer is on. */
-.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--selected-bg); }
+/* The chosen clip wears the card's selection frame (highlight.svelte.ts: "1px brand-solid over the recess at
+   the card's own radius"), not the apricot wash: a full row of coral would stand against the page's own coral
+   button, and coral is the act's. The hover ghost glides under the row a pointer is on. */
+.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--surface-recess); box-shadow: inset 0 0 0 1px var(--brand-solid); }
 .row-ghost { position: absolute; z-index: 0; inset-inline: calc(-1 * var(--space-2)); inset-block-start: 0; block-size: var(--ghost-h, 0px); translate: 0 var(--ghost-y, 0px); border-radius: var(--radius-sm); background: var(--surface-hover); opacity: 0; pointer-events: none; transition: translate var(--dur-ghost) var(--ease-in-out), block-size var(--dur-ghost) var(--ease-in-out), opacity var(--dur-control) var(--ease-out); }
 .row-ghost[data-on] { opacity: 1; }
 .row-ghost[data-fresh] { transition: opacity var(--dur-control) var(--ease-out); }
@@ -473,7 +502,6 @@ html[data-kinds="hue"] .lead { color: var(--kind); }
 .fig { display: inline-flex; align-items: baseline; gap: var(--space-1); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; font-feature-settings: "liga" 0, "calt" 0; color: var(--ink-row); white-space: nowrap; }
 .fig .unit { font: var(--type-meta); color: var(--ink-muted); }
 html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
-html[data-kinds="hue"] .clip[data-chosen] .fact-dur > .fig { color: light-dark(color-mix(in oklab, var(--kind) var(--prop-figure-on-pill-mix), var(--ink-strong)), var(--kind)); }
 /* The person's own edit: the figure on the selection pair, theirs alone. */
 .fact.changed { background: var(--selected-bg); }
 .fact.changed :is(.fig, .unit, .curve-glyph, .word, .arrow) { color: var(--selected-ink) !important; }
@@ -498,6 +526,8 @@ html[data-kinds="hue"] .clip[data-chosen] .fact-dur > .fig { color: light-dark(c
 .bar { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --bar-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--bar-fill); box-shadow: inset 0 0 0 1px var(--bar-edge); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
 html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill); --bar-edge: var(--border-row-outline); }
 .bar[data-zone] { cursor: ew-resize; }
+/* A bar's touch layer: its lane's height grown to the touch floor, transparent; shown on touch and phones. */
+.bar-hit { display: none; position: absolute; inset-inline: 0; inset-block: calc((var(--c-pill-h) - var(--c-touch-floor)) / 2); }
 .bar::before, .bar::after { content: ""; position: absolute; inset-block: var(--space-2); inline-size: var(--c-block-drop-line); border-radius: var(--radius-pill); background: var(--bar-edge); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
 .bar::before { inset-inline-start: var(--space-1); }
 .bar::after { inset-inline-end: var(--space-1); }
@@ -584,11 +614,16 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill); --tail-edge: va
 .fld .unit { font: var(--type-meta); color: var(--ink-muted); }
 html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size: var(--text-field-floor); }
 .arrow { font: var(--type-meta); color: var(--ink-muted); }
-/* The curve's segmented control: the four house curves as their glyphs, then Spring and Custom. */
-.pop .t-tabs { flex: 1 1 auto; inline-size: 100%; }
-.pop .t-tab { flex: 1 1 auto; padding-inline: var(--space-2); }
-.pop .t-tab.glyph-seg { display: grid; place-items: center; }
-.pop .t-tab svg { inline-size: 16px; block-size: 10px; overflow: visible; }
+/* The curve: past four short segments the list (designer's 2C, the inspector's variant control): the house
+   curves as their glyphs and words, Spring, Custom, a radio group in two columns; the chosen one on the fill
+   step in the strong ink. */
+.curve-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-row); }
+.curve-opt { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-inline-size: 0; min-block-size: var(--c-btn-h-sm); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-muted); cursor: pointer; transition: background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.curve-opt span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.curve-opt svg { flex: none; inline-size: 16px; block-size: 10px; overflow: visible; }
+.curve-opt[aria-checked="true"] { background: var(--surface-fill); color: var(--ink-strong); }
+@media (hover: hover) { .curve-opt:not([aria-checked="true"]):hover { background: var(--surface-hover); color: var(--ink-strong); } }
+.curve-opt:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 /* The chosen curve drawn large (DialKit's easing editor): the curve, its two handles to drag, and a live dot
    that plays the clip's length on the curve after every change. */
 .ceditor { position: relative; flex: none; inline-size: var(--c-curve-editor-w); block-size: var(--c-curve-editor-h); border-radius: var(--radius-sm); background: var(--surface-recess); touch-action: none; }
@@ -597,6 +632,7 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 .ceditor .curve { fill: none; stroke: var(--ink-strong); stroke-width: var(--c-graph-edge); stroke-linecap: round; }
 .ceditor .arm { stroke: var(--border-contrast); stroke-width: 1; }
 .ceditor .knob { fill: var(--surface-lift); stroke: var(--ink-row); stroke-width: var(--c-graph-edge); cursor: grab; }
+.ceditor .knob-hit { display: none; fill: transparent; cursor: grab; }
 .ceditor .knob:focus-visible { outline: none; stroke: var(--focus-ring); stroke-width: var(--focus-ring-width); }
 .ceditor .live { fill: var(--ink-strong); }
 .curve-side { display: flex; flex-direction: column; gap: var(--space-2); flex: 1 1 auto; min-inline-size: 0; font: var(--type-meta); color: var(--ink-muted); }
@@ -695,10 +731,22 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 }
 
 /* Touch: every target is at least the touch floor; hover-only marks never stick. */
-html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .fact, .door, .region-head) { position: relative; touch-action: manipulation; }
-html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .fact, .door, .region-head)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
-html:is([data-input="touch"], [data-input="touch-hover"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
-html:is([data-input="touch"], [data-input="touch-hover"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+/* Touch and phones: every target is at least the touch floor (44px). Where a part can grow to it in place it
+   does (a variant chip, a slab's name, a fact, a field, the slider); a glyph or a word in a tight row keeps its
+   size and grows a transparent layer to the floor instead; a bar's layer stands across its lane. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .sheet-title) { position: relative; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show) { touch-action: manipulation; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .pop input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar { touch-action: none; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-hit { display: block; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .edge .hit { stroke-width: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ceditor .knob-hit { display: inline; }
 html:is([data-input="touch"], [data-input="touch-hover"]) :is(.node, .var) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 html:is([data-input="touch"], [data-input="touch-hover"]) .graph { touch-action: pan-x pan-y; cursor: auto; }
 html:is([data-input="touch"], [data-input="touch-hover"]) .lane { touch-action: pan-y; }
@@ -728,7 +776,10 @@ html[data-layout="drawer"] .tools { inset-inline: 0; inset-block-end: 0; block-s
 html[data-layout="drawer"] .page { inset: 0 0 var(--dock-room, 0px) 0; padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--c-screen-margin) var(--space-5); transition: inset-block-end var(--dur-panel) var(--ease-drawer); }
 html[data-layout="drawer"][data-drawer-drag] :is(.tools, .page) { transition: none; }
 html[data-layout="drawer"] .sheet-head { cursor: grab; touch-action: none; }
-html[data-layout="drawer"] :is(#sheetHide, .show) { display: none; }
+html[data-layout="drawer"] .show { display: none; }
+#sheetHide svg { transition: rotate var(--dur-panel) var(--ease-drawer); }
+#sheetHide[data-folded] svg { rotate: 180deg; }
+@media (prefers-reduced-motion: reduce) { #sheetHide svg { transition: none; } }
 @media (prefers-reduced-motion: reduce) { html[data-layout="drawer"] :is(.tools, .page) { transition: none; } }
 
 /* The side sheet: from the trailing edge at half the pane. Hide folds it to the tucked tab. */
