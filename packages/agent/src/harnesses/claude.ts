@@ -1110,6 +1110,15 @@ const spooledOutput = async (
   return "";
 };
 
+/**
+ * CawCo's own note to a session, which it reads with its next turn and
+ * which starts none: a `system` send with `shouldQuery: false`. Another
+ * session's quiet send (a report, a hand-off, a delegate's ask) is not one:
+ * it wakes the session it is for.
+ */
+const quietNote = (message: SentMessage): boolean =>
+  message.shouldQuery === false && message.origin.kind === "system";
+
 /** A main-loop frame only a running turn sends: the model answering. */
 const runsTurn = (message: SDKMessage): boolean =>
   (message.type === "stream_event" || message.type === "assistant") &&
@@ -2181,6 +2190,10 @@ class ClaudeSession implements HarnessSession {
    * then loses it ({@link holding}).
    */
   readonly #unread = new Set<string>();
+  /** Quiet notes handed to the CLI at rest, until it says it has stored them ({@link quietNote}). */
+  readonly #notes = new Set<string>();
+  /** The empty results the CLI owes for notes it stored, which are no turn's end. */
+  #noteResults = 0;
   /**
    * The wake-ups the session has scheduled for itself (a cron, a loop's next
    * tick), as the CLI listed them when its last turn ended: its `Stop` hook
@@ -2667,8 +2680,33 @@ class ClaudeSession implements HarnessSession {
           this.#lastRequestAt = Date.now();
         }
         let started = false;
-        if ((message as { type: string }).type === "command_lifecycle") {
-          const lifecycle = message as unknown as CommandLifecycle;
+        const lifecycle =
+          (message as { type: string }).type === "command_lifecycle"
+            ? (message as unknown as CommandLifecycle)
+            : undefined;
+        // A quiet note's own lifecycle and its empty result: stored, read
+        // with the next turn, and no turn of its own ({@link quietNote}).
+        if (lifecycle && this.#notes.has(lifecycle.command_uuid)) {
+          console.info(
+            `[claude] ${this.instanceId}: note ${lifecycle.command_uuid} ${lifecycle.state}`
+          );
+          if (lifecycle.state !== "queued") {
+            this.#notes.delete(lifecycle.command_uuid);
+            this.#noteResults += 1;
+          }
+          this.#delivery.get(lifecycle.command_uuid)?.resolve();
+          this.#delivery.delete(lifecycle.command_uuid);
+          const said = toNeutral(message);
+          if (said) {
+            ctx.frame(said);
+          }
+          continue;
+        }
+        if (message.type === "result" && !turn.busy && this.#noteResults > 0) {
+          this.#noteResults -= 1;
+          continue;
+        }
+        if (lifecycle) {
           const uuid = lifecycle.command_uuid;
           if (lifecycle.state === "queued") {
             // Read at the running call's end, which returns its own result:
@@ -3452,11 +3490,17 @@ class ClaudeSession implements HarnessSession {
     // finished: the CLI stores it unread and answers with an empty result
     // (measured, agent SDK 0.3.284: `num_turns 0`, `duration_api_ms 0`), so a
     // hand-off, report or rule reply landing then was never read.
+    //
+    // But CawCo's own quiet note (a `system` send with `shouldQuery: false`:
+    // a take-over's word, a fork's or a plan's note) to a session at rest is
+    // exactly that: stored now, read with the next turn, and starting none
+    // ({@link quietNote}).
+    const note = quietNote(message) && !this.#turn.busy;
     // Into a running turn, the person's words reach the model now when every
     // call it runs moves aside for them ({@link SEND_NOW}); anything else
     // is read at those calls' own end, never by cutting the turn.
-    const waits = this.#waitsForCalls(message);
-    if (this.#calls.size > 0) {
+    const waits = note ? undefined : this.#waitsForCalls(message);
+    if (!note && this.#calls.size > 0) {
       console.info(
         `[claude] ${this.instanceId}: send ${message.uuid} ${waits ? `waits for the running call's own end: ${waits}` : `reaches the turn now: ${[...this.#calls.values()].join(", ")} move aside for it`}`
       );
@@ -3464,13 +3508,18 @@ class ClaudeSession implements HarnessSession {
     const outgoing = withExtras(
       {
         ...(message as unknown as SDKUserMessage),
-        shouldQuery: undefined,
-        ...(waits ? {} : SEND_NOW),
+        shouldQuery: note ? false : undefined,
+        ...(note || waits ? {} : SEND_NOW),
       },
       extras.attachments,
       extras.images
     );
     this.#delivery.set(message.uuid, Promise.withResolvers<void>());
+    if (note) {
+      this.#notes.add(message.uuid);
+      this.#input.push(outgoing);
+      return;
+    }
     this.#unread.add(message.uuid);
     // Into a running turn the CLI queues it and says `started` when it is
     // read (measured 2.1.280).

@@ -269,6 +269,7 @@ import {
   isLoopbackSource,
   joinProviders,
   type LastErrorKind,
+  LEAK_ENDED,
   LEAK_FOUND,
   type LeakFound,
   LIMIT_REACHED,
@@ -1289,6 +1290,14 @@ const LEAK_ORIGIN = "leak";
 const CONTAINERS_ORIGIN = "containers";
 /** The leaks told so far, by session and leak, most recent last: one an agent says again (after a restart) is told once. */
 const LEAKS_KEPT = 4096;
+
+/**
+ * The uuid of the notice sent for leak `leak` of session `instanceId`,
+ * whoever it was told to: what its end is found by ({@link LEAK_ENDED}), and
+ * a leak told again after a restart is the same send, handed over once.
+ */
+const leakSend = (instanceId: string, leak: string): string =>
+  uuidOf(`${instanceId}\u0000leak\u0000${leak}`);
 
 /**
  * A leak's line in the person's transcript (core words/notices.ts), from
@@ -3332,8 +3341,10 @@ export const createServer = (
   /**
    * Says something to a session, as the hub: `name` is the notice's kind,
    * `line` what the person's transcript says of it in one line (core
-   * words/notices.ts; its kind's line when unset), `quiet` a note its next
-   * turn reads, which starts none. The agent reads `text` alone.
+   * words/notices.ts; its kind's line when unset), `live` whether what it
+   * tells of still runs (a leak's processes), `uuid` its send's own when it
+   * must be found again (a leak's, to end it), `quiet` a note its next turn
+   * reads, which starts none. The agent reads `text` alone.
    */
   const tellSession = (
     instanceId: string,
@@ -3341,8 +3352,16 @@ export const createServer = (
     {
       name,
       line,
+      live,
+      uuid = crypto.randomUUID(),
       quiet = false,
-    }: { line?: string; name: string; quiet?: boolean }
+    }: {
+      line?: string;
+      live?: "running" | "ended";
+      name: string;
+      quiet?: boolean;
+      uuid?: string;
+    }
   ) => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
@@ -3356,10 +3375,15 @@ export const createServer = (
         instanceId: row.id,
         message: {
           type: "user",
-          uuid: crypto.randomUUID(),
+          uuid,
           message: { role: "user", content: text },
           parent_tool_use_id: null,
-          origin: { kind: "system", name, ...(line ? { line } : {}) },
+          origin: {
+            kind: "system",
+            name,
+            ...(line ? { line } : {}),
+            ...(live ? { live } : {}),
+          },
           ...(quiet ? { shouldQuery: false } : {}),
         },
       },
@@ -5726,6 +5750,22 @@ export const createServer = (
     turnsWritten.add(instanceId);
     db.openTurn(instanceId, Date.now());
     push.turnBegan(instanceId);
+  };
+
+  /**
+   * Whether the sends a harness says it read are all CawCo's quiet notes (a
+   * `system` send with `shouldQuery: false`, mode `note`): a session at
+   * rest stores them and starts no turn (agent claude.ts `quietNote`).
+   */
+  const notesOnly = (ids: readonly string[]): boolean => {
+    const rows = db.sendsFor([...ids]);
+    return (
+      rows.length === ids.length &&
+      rows.length > 0 &&
+      rows.every(
+        (row) => row.mode === "note" && row.body.origin?.kind === "system"
+      )
+    );
   };
 
   /** The session's turn ended with its result: nothing of it is left to hand back. */
@@ -26367,7 +26407,12 @@ export const createServer = (
           item.workspaceId.slice(0, 8),
           said.content
         ),
-        { name: LEAK_ORIGIN, line: leakLine(said.leak, item.title) }
+        {
+          name: LEAK_ORIGIN,
+          line: leakLine(said.leak, item.title),
+          live: "running",
+          uuid: leakSend(row.id, said.uuid),
+        }
       );
       return;
     }
@@ -26375,6 +26420,35 @@ export const createServer = (
     tellSession(row.id, said.content, {
       name: LEAK_ORIGIN,
       line: leakLine(said.leak, null),
+      live: "running",
+      uuid: leakSend(row.id, said.uuid),
+    });
+  };
+
+  /**
+   * A leak its machine told of has ended (core `LEAK_ENDED`): the notice
+   * sent for it, to the session or to the one that delegated it, says so on
+   * its record ({@link leakSend}), its row "· ended" live and read back.
+   * Nothing is said to any session. One from a machine that does not run
+   * the session, or of a leak no notice was sent for, is nobody's.
+   */
+  const endLeak = (
+    machineId: string,
+    instanceId: string,
+    said: { uuid?: unknown }
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row || row.machineId !== machineId || typeof said.uuid !== "string") {
+      return;
+    }
+    const record = db.sendRecord(leakSend(row.id, said.uuid));
+    const origin = record?.body.origin;
+    if (!(record && origin?.kind === "system" && origin.live === "running")) {
+      return;
+    }
+    console.info(`[leak] ${row.id}: ${said.uuid} ended`);
+    changeSend(record, {
+      body: { ...record.body, origin: { ...origin, live: "ended" } },
     });
   };
 
@@ -33804,6 +33878,18 @@ export const createServer = (
                   );
                   break;
                 }
+                // A leak told before has ended: its notice says so.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === LEAK_ENDED
+                ) {
+                  endLeak(
+                    message.machineId,
+                    message.instanceId,
+                    frame.message as { uuid?: unknown }
+                  );
+                  break;
+                }
                 // A line its machine said about the session (a limit its
                 // keeper held it to, its process on an old Claude Code): kept
                 // on its row and said in its transcript, before the ingest
@@ -34074,8 +34160,10 @@ export const createServer = (
                 };
                 const signal = peekSendSignal(frame);
                 if (signal) {
-                  // Its harness taking up a send is its turn starting.
-                  if (signal.kind === "read") {
+                  // Its harness taking up a send is its turn starting, but
+                  // for CawCo's quiet notes alone, which it stores at rest
+                  // and reads with its next turn ({@link notesOnly}).
+                  if (signal.kind === "read" && !notesOnly(signal.read)) {
                     turnUnderWay(message.instanceId);
                   }
                   takeSendSignal(message.instanceId, signal);

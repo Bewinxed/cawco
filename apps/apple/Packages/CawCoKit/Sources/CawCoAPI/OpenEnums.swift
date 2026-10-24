@@ -5068,6 +5068,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/NeutralOriginLive`.
+    public enum NeutralOriginLive: OpenEnum {
+        case ended
+        case running
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "ended": self = .ended
+            case "running": self = .running
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .ended: "ended"
+            case .running: "running"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.ended, .running]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/NeutralStatus`.
     public enum NeutralStatus: OpenEnum {
         case compacting

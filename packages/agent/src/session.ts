@@ -94,6 +94,7 @@ import {
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
   isGitUrl,
+  LEAK_ENDED,
   LEAK_FOUND,
   type LeakFound,
   LIMIT_REACHED,
@@ -905,6 +906,7 @@ export class SessionSupervisor {
       sandboxOf,
       tell: (instanceIds, id, content, found) =>
         this.#leakFound(instanceIds, id, content, found),
+      ended: (instanceIds, id) => this.#leakEnded(instanceIds, id),
     });
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
@@ -4410,6 +4412,27 @@ export class SessionSupervisor {
           session_id: "",
           content,
           leak: found,
+        } as unknown as NeutralMessage,
+      });
+    }
+  }
+
+  /**
+   * A leak told before has ended (leak-watch.ts): each session it was told
+   * to gets the agent's frame ({@link LEAK_ENDED}), by the leak's id, and the
+   * hub marks the notice it sent ended. Owed as {@link #leakFound}'s are.
+   */
+  #leakEnded(instanceIds: string[], id: string): void {
+    for (const instanceId of instanceIds) {
+      this.#sayGone({
+        kind: "frame",
+        instanceId,
+        harness: this.#placed.get(instanceId)?.harness ?? "claude",
+        message: {
+          type: "system",
+          subtype: LEAK_ENDED,
+          uuid: id,
+          session_id: "",
         } as unknown as NeutralMessage,
       });
     }

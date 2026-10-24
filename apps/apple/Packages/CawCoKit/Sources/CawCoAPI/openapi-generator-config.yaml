@@ -124,6 +124,7 @@ typeOverrides:
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
     MoveStage: OpenEnums.MoveStage
     MoveStep: OpenEnums.MoveStep
+    NeutralOriginLive: OpenEnums.NeutralOriginLive
     NeutralStatus: OpenEnums.NeutralStatus
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework

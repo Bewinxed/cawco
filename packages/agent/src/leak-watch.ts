@@ -232,6 +232,14 @@ interface Watching {
   cpu: Map<string, { at: number; used: number }>;
   /** When each leftover was first seen left behind, by process. */
   left: Map<string, number>;
+  /**
+   * The leaks told and not yet ended, by id: the sessions told and the
+   * processes it names; a memory leak's one process is `climbing`.
+   */
+  open: Map<
+    string,
+    { climbing?: string; instanceIds: string[]; keys: string[] }
+  >;
   /** Leftovers already told. */
   told: Set<string>;
   /** Each child's processes as last read, by the child's own process, where it has no cgroup. */
@@ -296,6 +304,8 @@ const membersOf = async (
 interface Told {
   found: LeakFound;
   id: string;
+  /** The processes it names, each by {@link keyOf}. */
+  keys: string[];
   words: string;
 }
 
@@ -336,6 +346,7 @@ const climbed = async (
   return {
     id: `leak-memory-${key}-${height}`,
     found: { kind: "memory", command, resident: gib(resident) },
+    keys: [key],
     words: leakWords.memory(
       command,
       pid,
@@ -453,6 +464,7 @@ const leftovers = async (
   return {
     id: `leak-left-${due.map(keyOf).join(",")}`,
     found: { kind: "left", count: due.length },
+    keys: due.map(keyOf),
     words: leakWords.left(
       due.length,
       named.join(", "),
@@ -485,6 +497,8 @@ const forget = (watching: Watching, alive: ReadonlySet<string>): void => {
 
 /** How the watch reaches the agent: who a child's leaks are told to, a boundary's sandbox, and the telling. */
 interface LeakOptions {
+  /** A leak told before has ended ({@link endedLeaks}): its sessions and its id. */
+  ended: (instanceIds: string[], id: string) => void;
   sandboxOf: (
     workspace: string,
     pid: number,
@@ -589,6 +603,11 @@ const lookAtChild = async (
         found.words,
         found.found
       );
+      watching.open.set(found.id, {
+        instanceIds: child.target.instanceIds,
+        keys: found.keys,
+        ...(found.found.kind === "memory" ? { climbing: found.keys[0] } : {}),
+      });
     }
   }
   const cpu = await cpuSince(root, members, watching);
@@ -596,6 +615,38 @@ const lookAtChild = async (
     return;
   }
   return `\`${await commandOf(cpu.busiest)}\` in session ${child.target.instanceIds.map((id) => id.slice(0, 8)).join(", ")} (${Math.round(cpu.share * 100)}% of a core)`;
+};
+
+/**
+ * The leaks told that have ended since, each said to `ended` once and
+ * forgotten: every process it named gone from `alive`, or the one a memory
+ * leak names fallen back under `limit` at its last reading (it is told
+ * again should it climb past it again).
+ */
+const endedLeaks = (
+  watching: Watching,
+  alive: ReadonlySet<string>,
+  limit: number,
+  ended: LeakOptions["ended"]
+): void => {
+  for (const [id, leak] of watching.open) {
+    const climb = leak.climbing
+      ? watching.climbs.get(leak.climbing)
+      : undefined;
+    const fell =
+      climb !== undefined && (climb.readings.at(-1) ?? limit) < limit;
+    if (!(fell || leak.keys.every((key) => !alive.has(key)))) {
+      continue;
+    }
+    if (climb && fell) {
+      climb.told = 0;
+    }
+    watching.open.delete(id);
+    console.info(
+      `[leaks] ${id} ended (${fell ? "its memory fell back" : "its processes are gone"}), told ${leak.instanceIds.join(", ")}`
+    );
+    ended(leak.instanceIds, id);
+  }
 };
 
 /** The keeper children working at the watch's last reading, in words: what awake.ts holds idle sleep off for. */
@@ -616,6 +667,7 @@ export const watchLeaks = (options: LeakOptions): void => {
     climbs: new Map(),
     cpu: new Map(),
     left: new Map(),
+    open: new Map(),
     trees: new Map(),
     told: new Set(),
   };
@@ -629,11 +681,13 @@ export const watchLeaks = (options: LeakOptions): void => {
         target: options.targetOf(child.procId, child.pid),
       }))
       .filter((child) => child.target.instanceIds.length > 0);
-    if (children.length === 0) {
+    if (children.length === 0 && watching.open.size === 0) {
       forget(watching, new Set());
       working = [];
       return;
     }
+    // Read while a leak told is open, sessions or none: a leftover outlives
+    // the session that left it.
     const lineage = await processLineage();
     const byParent = new Map<number, ProcessLineage[]>();
     for (const row of lineage) {
@@ -652,7 +706,9 @@ export const watchLeaks = (options: LeakOptions): void => {
       }
     }
     working = now;
-    forget(watching, new Set(lineage.map(keyOf)));
+    const alive = new Set(lineage.map(keyOf));
+    endedLeaks(watching, alive, limit, options.ended);
+    forget(watching, alive);
   };
   const again = (): void => {
     setTimeout(() => {

@@ -10,24 +10,33 @@
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model), with no workspace: it runs inside one.
  *
+ * - (c1) A page cannot speak for anyone but the person: a dashboard send
+ *   naming a `system` origin is refused, and no record is made of it (hub
+ *   stream.ts).
+ * - Every kind but a leak, each as the hub writes it, is owed to the
+ *   session while the hub is down and handed over through the hub's own
+ *   release as it comes back (`releaseOwed`, the path a send to a machine
+ *   that is away takes): a carry-on after the limit and a wake about its work
+ *   item (two quiet notices in a row), a hand-off from another session, a
+ *   delegate's report, a delegate's ask, a rule, an artifact's responses
+ *   notice and a peer's words with no marker.
+ * - (q1) A quiet notice (`shouldQuery: false`) owed to another session at
+ *   rest starts no turn: no request carries it for 20 s, and its session's
+ *   turn stays closed; the person's next message's request carries it, and
+ *   its transcript has it right before that message, no answer between.
  * - A real leak: the session's command leaves `sleep 600.0971` in a session
  *   of its own and ends; the agent's leak watch finds it and the hub tells
- *   the session (agent leak-watch.ts, hub server.ts `tellLeak`).
- * - Every other kind, each as the hub writes it, through the one send path
- *   (`deliverSend`), all quiet so the turn that reads them reads them
- *   together: a carry-on after the limit and a wake about its work item (two
- *   notices in a row), a hand-off from another session, a delegate's
- *   report, a delegate's ask, a rule, an artifact's responses notice and a
- *   peer's words with no marker; then the person's own words, which start
- *   the turn.
+ *   the session (agent leak-watch.ts, hub server.ts `tellLeak`). The pages
+ *   are open as it arrives: its row reads "· still running"; the spec ends
+ *   the process, the leak watch says so (core `LEAK_ENDED`), and the row
+ *   reads "· ended", live and after a reload.
  *
- * On Chromium and WebKit at 1440 and 390, with the pages open while they
- * arrive and again after a reload:
+ * On Chromium and WebKit at 1440 and 390, the pages open from the leak on
+ * and again after a reload:
  * - none of them is drawn in the person's message shape (`[data-you]`);
- * - each is drawn as its kind: the leak as a notice row of one, saying "1
- *   process left running"; the carry-on and the wake as one notice row of
- *   two; the hand-off, report, ask, rule and plain peer as peer rows; the
- *   artifact notice as its line;
+ * - each is drawn as its kind: the leak as a notice row of one; the carry-on
+ *   and the wake as one notice row of two; the hand-off, report, ask, rule
+ *   and plain peer as peer rows; the artifact notice as its line;
  * - the person's two messages are drawn in the person's shape;
  * - opened, the leak's row shows the text the agent read, naming the
  *   process;
@@ -68,7 +77,9 @@ import {
 /** Only these sessions' words carry it. */
 const MARK = "PROBE-NOTICES";
 const LEFT_TAG = "PROBE-NOTICES-LEFT";
-const SLOW = "PROBE-NOTICES-SLOW";
+const QUIET = "PROBE-NOTICES-QUIET";
+/** How long a quiet notice to a session at rest is watched for a turn it must not start. */
+const QUIET_WATCH_MS = 20_000;
 const LEFTOVER = "600.0971";
 /** A `sleep` left in a session of its own, its streams its own, and a command that ends 15 s on. */
 const LEAVE = `setsid sleep ${LEFTOVER} < /dev/null > /dev/null 2>&1 & sleep 15; echo LEFT-DONE`;
@@ -82,6 +93,15 @@ const PAGES: readonly { engine: Engine; view: View }[] = [
   { engine: "webkit", view: "phone" },
 ];
 const READY = "[data-transcript-shown] [data-you]";
+/** The leak's line while its process runs, and once it has ended. */
+const RUNNING_LINE = noticeLine({
+  line: noticeWords.leftRunning(1, null),
+  live: "running",
+});
+const ENDED_LINE = noticeLine({
+  line: noticeWords.leftRunning(1, null),
+  live: "ended",
+});
 /** The artifact the crafted responses notice names. */
 const ARTIFACT = "art-probe-notices";
 
@@ -97,13 +117,6 @@ const respond = (request: Seen): Reply => {
   }
   if (request.afterTool) {
     return text("Left it.");
-  }
-  // A turn long enough that what is sent while it runs is read together after it.
-  if (request.last.includes(SLOW)) {
-    return {
-      everyMs: 250,
-      words: Array.from({ length: 24 }, () => "thinking "),
-    };
   }
   if (request.last.includes(LEFT_TAG) && !left) {
     left = true;
@@ -209,17 +222,18 @@ const errorsOf = (page: Page): string[] => {
   return said;
 };
 
-/** A send to `id` from `origin`, as the hub's own are made, through the one send path; its uuid. */
-const sendAs = async (
+/** A dashboard send to `id` naming `origin`, as a page could write one; its uuid and its command's id. */
+const postAs = async (
   fleet: KitFleet,
   id: string,
   content: string,
   origin: NeutralOrigin
-): Promise<string> => {
+): Promise<{ commandId: string; uuid: string }> => {
   const uuid = crypto.randomUUID();
+  const commandId = crypto.randomUUID();
   await fleet.post({
     type: "command",
-    commandId: crypto.randomUUID(),
+    commandId,
     kind: "send",
     machineId: MACHINE,
     sessionId: id,
@@ -231,10 +245,50 @@ const sendAs = async (
         message: { role: "user", content },
         parent_tool_use_id: null,
         origin,
-        shouldQuery: false,
       },
     },
   });
+  return { commandId, uuid };
+};
+
+/**
+ * A send owed to `id` as the hub keeps one it could not hand over yet (its
+ * machine away): its record pending, the envelope to hand it with. Written
+ * while the hub is down; its uuid.
+ */
+const owe = (
+  fleet: KitFleet,
+  id: string,
+  at: number,
+  {
+    content,
+    origin,
+    quiet,
+  }: { content: string; origin: NeutralOrigin; quiet: boolean }
+): string => {
+  const uuid = crypto.randomUUID();
+  const message = {
+    type: "user",
+    uuid,
+    message: { role: "user", content },
+    parent_tool_use_id: null,
+    origin,
+    ...(quiet ? { shouldQuery: false } : {}),
+  };
+  fleet.write(
+    "INSERT INTO sent_messages (uuid, instance_id, accepted_at, body, mode, state, held, owed) VALUES (?, ?, ?, ?, ?, 'pending', 0, ?)",
+    uuid,
+    id,
+    at,
+    JSON.stringify(message),
+    quiet ? "note" : "turn",
+    JSON.stringify({
+      verb: "send",
+      machineId: MACHINE,
+      instanceId: id,
+      payload: { instanceId: id, message },
+    })
+  );
   return uuid;
 };
 
@@ -256,6 +310,8 @@ const blocksOf = async (fleet: KitFleet, id: string): Promise<Block[]> =>
 /** What each crafted send is, and how it must be drawn. */
 interface Sent {
   content: string;
+  /** Sent as the hub's quiet notes are (`shouldQuery: false`). */
+  quiet: boolean;
   shape: Shape;
   what: string;
 }
@@ -281,6 +337,7 @@ const craftedFor = (
       sent: {
         what: "a carry-on after the limit",
         shape: "notice",
+        quiet: true,
         content: `${MARK} The usage limit that stopped your last turn no longer applies. Carry on from where you stopped.`,
       },
     },
@@ -289,6 +346,7 @@ const craftedFor = (
       sent: {
         what: "a wake about its work item",
         shape: "notice",
+        quiet: true,
         content: `${MARK} Your work item is still open: continue it.`,
       },
     },
@@ -297,6 +355,7 @@ const craftedFor = (
       sent: {
         what: "a hand-off from another session",
         shape: "peer",
+        quiet: true,
         content: `${handoffMarker("Sender", sender)}${MARK} handed over.`,
       },
     },
@@ -305,6 +364,7 @@ const craftedFor = (
       sent: {
         what: "a delegate's report",
         shape: "peer",
+        quiet: true,
         content: `${reportMarker(label, false, false, "Probe headline")}From Sender.\n\n${MARK} the report.`,
       },
     },
@@ -313,6 +373,7 @@ const craftedFor = (
       sent: {
         what: "a delegate's ask",
         shape: "peer",
+        quiet: true,
         content: delegateAskText({
           label,
           body: `${MARK} may I run it?`,
@@ -327,6 +388,7 @@ const craftedFor = (
       sent: {
         what: "a rule",
         shape: "peer",
+        quiet: false,
         content: `${ruleMarker("Probe rule")}${MARK} the rule's reply.`,
       },
     },
@@ -335,8 +397,9 @@ const craftedFor = (
       sent: {
         what: "an artifact's responses notice",
         shape: "artifact",
+        quiet: true,
         content: artifactResponsesNotice({
-          id: "art-probe-notices",
+          id: ARTIFACT,
           kind: "page",
           name: "Probe page",
           since: 0,
@@ -348,6 +411,7 @@ const craftedFor = (
       sent: {
         what: "a peer's words with no marker",
         shape: "peer",
+        quiet: true,
         content: `${MARK} words from another session.`,
       },
     },
@@ -421,6 +485,8 @@ const drawnRows = (page: Page, what: string, want: Want): Promise<Read> =>
     () => readRows(page),
     (r) =>
       r.by[want.mine]?.shape === "you" &&
+      // The top of a long transcript is read in on scrolling up to it.
+      r.by[want.hello] !== undefined &&
       want.ids.every(
         ({ id, sent }) => sent.shape === "artifact" || r.by[id] !== undefined
       ) &&
@@ -461,10 +527,10 @@ const judge = async (
   );
   const leakRow = leak ? rows.by[leak.id] : undefined;
   kit.check(
-    `${what}: the leak is one notice row saying ${JSON.stringify(noticeWords.leftRunning(1, null))}`,
+    `${what}: the leak is one notice row saying ${JSON.stringify(ENDED_LINE)}`,
     leakRow?.shape === "notice" &&
       leakRow.count === 1 &&
-      leakRow.line === noticeWords.leftRunning(1, null),
+      leakRow.line === ENDED_LINE,
     JSON.stringify(leakRow ?? null)
   );
   const first = rows.by[ids[0]?.id ?? ""];
@@ -501,7 +567,8 @@ const judge = async (
   );
 };
 
-const run = async (kit: Kit) => {
+/** A real hub, agent and sessiond, signed in. */
+const standUp = async (kit: Kit): Promise<KitFleet> => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -511,17 +578,263 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
+  return fleet;
+};
+
+/** The person's `words` to `id`, its turn answered and closed; its uuid. */
+const turn = async (
+  fleet: KitFleet,
+  id: string,
+  words: string
+): Promise<string> => {
+  const uuid = await fleet.send(id, words);
+  await until(
+    `${words}: answered`,
+    () => fleet.instance(id)?.turn_open_at,
+    (turnAt) =>
+      turnAt === null && fleet.seen.some((r) => r.last.includes(words)),
+    120_000
+  );
+  return uuid;
+};
+
+/** (c1) A page naming a `system` origin is refused: no record, and the hub says why. */
+const refusedLeg = async (kit: Kit, fleet: KitFleet, id: string) => {
+  const { commandId, uuid } = await postAs(
+    fleet,
+    id,
+    `${MARK} pretending to be CawCo`,
+    {
+      kind: "system",
+      name: "leak",
+    }
+  );
+  const said = await until(
+    "the hub's word on the page's send",
+    async () =>
+      (await fleet.logs("hub"))
+        .split("\n")
+        .find((line) => line.includes(commandId) && line.includes("refused")),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  kit.check(
+    "(c1) a page's send naming CawCo as its sender is refused: the hub keeps no record of it and says why",
+    !!said && fleet.sendRow(uuid) === undefined,
+    `${said ?? "no refusal logged"}; record ${JSON.stringify(fleet.sendRow(uuid) ?? null)}`
+  );
+};
+
+/**
+ * Every kind but a leak owed to `one`, and a quiet notice owed to `quiet`,
+ * written while the hub is down; handed over as it comes back.
+ */
+const oweWhileDown = async (
+  fleet: KitFleet,
+  sender: string,
+  one: string,
+  quiet: string
+): Promise<{
+  ids: { id: string; sent: Sent }[];
+  note: { id: string; content: string };
+}> => {
+  await fleet.stop("hub");
+  const at = Date.now();
+  const ids = craftedFor(sender).map(({ origin, sent }, n) => ({
+    sent,
+    id: owe(fleet, one, at + n, { ...sent, origin }),
+  }));
+  const content = `${MARK} ${QUIET} the session's work item is still open.`;
+  const note = {
+    content,
+    id: owe(fleet, quiet, at + ids.length, {
+      content,
+      origin: { kind: "system", name: "work-item" },
+      quiet: true,
+    }),
+  };
+  fleet.launch("hub");
+  await fleet.hubUp();
+  return { ids, note };
+};
+
+/** (q1) The quiet notice owed to `quiet` starts no turn; the next message's turn reads it. */
+const quietLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  quiet: string,
+  note: { id: string; content: string }
+) => {
+  await until(
+    "the quiet notice handed to its session",
+    () => fleet.sendRow(note.id),
+    (row) => !!row && row.owed === null,
+    120_000
+  );
+  const handed = Date.now();
+  await Bun.sleep(QUIET_WATCH_MS);
+  const early = fleet.seen.filter(
+    (r) => r.at >= handed && r.all.includes(note.content)
+  );
+  const turnAt = fleet.instance(quiet)?.turn_open_at;
+  kit.check(
+    `(q1) a quiet notice to a session at rest starts no turn: no request carries it for ${QUIET_WATCH_MS / 1000} s, and its turn stays closed`,
+    early.length === 0 && turnAt === null,
+    `${early.length} request(s) carried it; turn_open_at ${turnAt}`
+  );
+  const next = `${MARK} ${QUIET}: the next message`;
+  await turn(fleet, quiet, next);
+  const carried = fleet.seen.find((r) => r.last.includes(next));
+  const blocks = await blocksOf(fleet, quiet);
+  const at = blocks.findIndex((b) => b.id === note.id);
+  const nextAt = blocks.findIndex(
+    (b) => b.type === "user" && b.content.includes(next)
+  );
+  const between = blocks
+    .slice(at + 1, nextAt)
+    .filter((b) => b.type === "assistant" && b.content.trim());
+  kit.check(
+    "(q1) the person's next message's turn reads it: its request carries the notice, and the transcript has it before that message as a notice, no answer between",
+    !!carried?.all.includes(note.content) &&
+      at >= 0 &&
+      nextAt > at &&
+      between.length === 0 &&
+      blocks[at]?.type === "ui.system_note",
+    JSON.stringify({
+      carried: !!carried?.all.includes(note.content),
+      at,
+      nextAt,
+      between: between.map((b) => b.content.slice(0, 80)),
+      note: blocks[at] && { type: blocks[at].type, ...blocks[at].metadata },
+      state: fleet.sendRow(note.id)?.state,
+    })
+  );
+};
+
+/** What each page's notice row for `id` says, read as it stands. */
+const lineOn = async (page: Page, id: string): Promise<string | undefined> =>
+  (await readRows(page)).by[id]?.line;
+
+/**
+ * A real leftover, told by the agent's leak watch and the hub, its row
+ * "· still running" on every page as it arrives; then ended, and "· ended"
+ * on every page. Answers its notice as the transcript serves it.
+ */
+const leakLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  one: string,
+  pages: { label: string; page: Page }[]
+): Promise<Block | undefined> => {
+  await fleet.send(one, `${MARK} ${LEFT_TAG}: leave a process behind.`);
+  const leakRead = await until(
+    "the session told of its leftover",
+    () =>
+      fleet.seen.find(
+        (r) =>
+          r.last.includes(leakWords.leftBehind) &&
+          r.last.includes(`sleep ${LEFTOVER}`)
+      ),
+    Boolean,
+    LEFT_WAIT_MS
+  ).catch(() => undefined);
+  const leak = await until(
+    "the leak's notice in its transcript",
+    async () =>
+      (await blocksOf(fleet, one)).find((b) => b.metadata?.notice === "leak"),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  kit.check(
+    "the hub tells the session of the process it left, as a notice whose line says what happened and that it still runs, and the agent reads the text it was sent",
+    !!leak &&
+      leak.type === "ui.system_note" &&
+      leak.metadata?.noteTitle === RUNNING_LINE &&
+      !!leakRead?.last.includes(leak.content),
+    JSON.stringify({
+      block: leak && { ...leak, content: leak.content.slice(0, 300) },
+      read: leakRead?.last.slice(0, 300) ?? null,
+    })
+  );
+  if (!leak) {
+    return;
+  }
+  for (const { page, label } of pages) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const line = await until(
+      `${label}: the leak's row arrived`,
+      () => lineOn(page, leak.id),
+      (now) => now === RUNNING_LINE,
+      30_000
+    ).catch(() => lineOn(page, leak.id));
+    kit.check(
+      `${label} live: the leak's row arrives saying ${JSON.stringify(RUNNING_LINE)}`,
+      line === RUNNING_LINE,
+      JSON.stringify(line ?? null)
+    );
+  }
+  const leftovers = (await commandLines()).filter((line) =>
+    line.command.startsWith(`sleep ${LEFTOVER}`)
+  );
+  for (const { pid } of leftovers) {
+    signalPid(listedPid(pid), "SIGKILL");
+  }
+  const ended = await until(
+    "the leak's notice ended on its record",
+    () =>
+      fleet.query<{ body: string }>(
+        "SELECT body FROM sent_messages WHERE uuid = ?",
+        leak.id
+      )[0]?.body,
+    (body) => !!body?.includes('"live":"ended"'),
+    60_000
+  ).catch(() => undefined);
+  kit.check(
+    "once the leftover is gone, the leak watch says so and the hub marks its notice ended on its record",
+    leftovers.length > 0 && !!ended,
+    `${leftovers.length} leftover(s) ended; record body ${ended?.slice(0, 300) ?? "not ended"}`
+  );
+  for (const { page, label } of pages) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const line = await until(
+      `${label}: the leak's row ended`,
+      () => lineOn(page, leak.id),
+      (now) => now === ENDED_LINE,
+      30_000
+    ).catch(() => lineOn(page, leak.id));
+    kit.check(
+      `${label} live: the leak's row now says ${JSON.stringify(ENDED_LINE)}, in place`,
+      line === ENDED_LINE,
+      JSON.stringify(line ?? null)
+    );
+  }
+  return (await blocksOf(fleet, one)).find((b) => b.id === leak.id) ?? leak;
+};
+
+const run = async (kit: Kit) => {
+  const fleet = await standUp(kit);
   try {
     const sender = await fleet.spawn("claude", "Sender", fleet.repo);
     const one = await fleet.spawn("claude", "Notices", fleet.repo);
-    const hello = await fleet.send(one, `${MARK}: hello`);
+    const quiet = await fleet.spawn("claude", "Quiet", fleet.repo);
+    const hello = await turn(fleet, one, `${MARK}: hello`);
+    await turn(fleet, quiet, `${MARK} ${QUIET}: hello`);
+    await refusedLeg(kit, fleet, one);
+
+    const { ids, note } = await oweWhileDown(fleet, sender, one, quiet);
     await until(
-      "the first turn answered",
-      () => fleet.instance(one)?.turn_open_at,
-      (turnAt) =>
-        turnAt === null && fleet.seen.some((r) => r.all.includes(MARK)),
+      "every owed send read",
+      () => ids.map(({ id }) => fleet.sendRow(id)?.state),
+      (states) => states.every((state) => state === "read"),
       120_000
-    );
+    ).catch(() => undefined);
+    await until(
+      "its turn answered",
+      () => fleet.instance(one)?.turn_open_at,
+      (turnAt) => turnAt === null,
+      120_000
+    ).catch(() => undefined);
+    await quietLeg(kit, fleet, quiet, note);
 
     const base = await fleet.dashboard();
     const pages: { errors: string[]; label: string; page: Page }[] = [];
@@ -532,68 +845,8 @@ const run = async (kit: Kit) => {
       await open(page, `${base}/session/${one}`, READY);
       pages.push({ page, errors, label: `${engine} ${view}` });
     }
-
-    // A real leftover, told by the agent's leak watch and the hub.
-    await fleet.send(one, `${MARK} ${LEFT_TAG}: leave a process behind.`);
-    const leakRead = await until(
-      "the session told of its leftover",
-      () =>
-        fleet.seen.find(
-          (r) =>
-            r.last.includes(leakWords.leftBehind) &&
-            r.last.includes(`sleep ${LEFTOVER}`)
-        ),
-      Boolean,
-      LEFT_WAIT_MS
-    ).catch(() => undefined);
-    const leak = await until(
-      "the leak's notice in its transcript",
-      async () =>
-        (await blocksOf(fleet, one)).find((b) => b.metadata?.notice === "leak"),
-      Boolean,
-      60_000
-    ).catch(() => undefined);
-    await until(
-      "the leak's turn answered",
-      () => fleet.instance(one)?.turn_open_at,
-      (turnAt) => turnAt === null,
-      120_000
-    ).catch(() => undefined);
-    kit.check(
-      "the hub tells the session of the process it left, as a notice whose line says what happened, and the agent reads the text it was sent",
-      !!leak &&
-        leak.type === "ui.system_note" &&
-        leak.metadata?.noteTitle === noticeWords.leftRunning(1, null) &&
-        !!leakRead?.last.includes(leak.content),
-      JSON.stringify({
-        block: leak && { ...leak, content: leak.content.slice(0, 300) },
-        read: leakRead?.last.slice(0, 300) ?? null,
-      })
-    );
-
-    // Every other kind, sent while a turn runs, so the turn after it reads
-    // them together, the person's own words last.
-    await fleet.send(one, `${MARK} ${SLOW}: think a while.`);
-    await until(
-      "the long turn running",
-      () => fleet.instance(one)?.turn_open_at,
-      (turnAt) => turnAt !== null && turnAt !== undefined,
-      60_000
-    );
-    const ids: { id: string; sent: Sent }[] = [];
-    for (const { origin, sent } of craftedFor(sender)) {
-      // biome-ignore lint/performance/noAwaitInLoops: in order, as the hub sends them
-      ids.push({ id: await sendAs(fleet, one, sent.content, origin), sent });
-    }
-    const mine = await fleet.send(one, `${MARK}: and mine`);
-    await until(
-      "the person's turn after them answered",
-      () => fleet.instance(one)?.turn_open_at,
-      (turnAt) =>
-        turnAt === null &&
-        fleet.seen.some((r) => r.last.includes(`${MARK}: and mine`)),
-      120_000
-    ).catch(() => undefined);
+    const leak = await leakLeg(kit, fleet, one, pages);
+    const mine = await turn(fleet, one, `${MARK}: and mine`);
     const read = fleet.seen.map((r) => r.all).join("\n");
     const unread = ids.filter(({ sent }) => !read.includes(sent.content));
     kit.check(

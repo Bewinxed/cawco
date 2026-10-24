@@ -401,6 +401,16 @@ export const LIMIT_REACHED = "limit_reached";
 export const LEAK_FOUND = "leak_found";
 
 /**
+ * A leak the agent told of has ended: every process it named is gone, or
+ * the process climbing in memory fell back under the machine's threshold
+ * (agent leak-watch.ts). The agent's frame to the hub (`uuid` names the
+ * leak, as its {@link LEAK_FOUND} did), and the hub sets the notice it sent
+ * for it to `ended` on its record, so its row says so, live and read back
+ * (hub server.ts `endLeak`). Nothing is said to the session.
+ */
+export const LEAK_ENDED = "leak_ended";
+
+/**
  * What a {@link LEAK_FOUND} frame found, as the facts its row's line is
  * made of (the frame's `leak`; core words/notices.ts): how many processes
  * were left running, or which process climbs in memory and how high.
@@ -896,9 +906,16 @@ export type NeutralOrigin =
    * to nobody. `line` is what the person's transcript says of it in one line
    * (core words/notices.ts), written where it is made; the agent never reads
    * it. A transcript draws a `system` send as CawCo's, never as the person's
-   * message ({@link CAWCO_NOTICE}).
+   * message ({@link CAWCO_NOTICE}). `live`, on a notice of something that
+   * runs on (a leak's processes): whether it still does, which the hub sets
+   * again on the send's record as it ends ({@link LEAK_ENDED}).
    */
-  | { kind: "system"; name?: string; line?: string };
+  | {
+      kind: "system";
+      line?: string;
+      live?: "running" | "ended";
+      name?: string;
+    };
 
 export interface NeutralAssistantMessage {
   /**

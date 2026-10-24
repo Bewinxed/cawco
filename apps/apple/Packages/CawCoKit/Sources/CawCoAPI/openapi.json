@@ -54745,10 +54745,13 @@
                       "system"
                     ]
                   },
-                  "name": {
+                  "line": {
                     "type": "string"
                   },
-                  "line": {
+                  "live": {
+                    "$ref": "#/components/schemas/NeutralOriginLive"
+                  },
+                  "name": {
                     "type": "string"
                   }
                 },
@@ -57003,10 +57006,13 @@
                   "system"
                 ]
               },
-              "name": {
+              "line": {
                 "type": "string"
               },
-              "line": {
+              "live": {
+                "$ref": "#/components/schemas/NeutralOriginLive"
+              },
+              "name": {
                 "type": "string"
               }
             },
@@ -59899,6 +59905,13 @@
         "enum": [
           "clone",
           "lfs"
+        ]
+      },
+      "NeutralOriginLive": {
+        "type": "string",
+        "enum": [
+          "ended",
+          "running"
         ]
       },
       "PageAnchorScheme": {

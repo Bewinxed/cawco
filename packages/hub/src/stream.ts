@@ -76,6 +76,10 @@ const SWEEP_INTERVAL_MS = 60_000;
  */
 const RING_IDLE_MS = 15 * 60_000;
 
+/** What a page is told of a send it said was from someone other than the person. */
+const refusedOriginWords =
+  "This page sends your own messages only, so CawCo didn't send this one. Send it as yourself.";
+
 /** The control method each command kind is allowed to become — and only that one. */
 const CONTROL_METHOD: Readonly<
   Record<Exclude<CommandKind, "send" | "send.withdraw">, string>
@@ -484,6 +488,20 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         fail(socket, commandId, "a send command carries no message");
         return;
       }
+      // A page is the person's: what it sends is their words, whatever it
+      // says it is from. Who else speaks (CawCo, another session) is the
+      // hub's to say where it makes the send, never a client's (core
+      // transcript-rules.ts `sendRow` draws a send by its origin).
+      const origin = isRecord(payload.message.origin)
+        ? payload.message.origin
+        : undefined;
+      if (origin && origin.kind !== "human") {
+        console.warn(
+          `[hub] dashboard send ${commandId} for ${sessionId} refused: it named the origin ${JSON.stringify(origin)}`
+        );
+        fail(socket, commandId, refusedOriginWords);
+        return;
+      }
       // A send the hub refuses outright (a Claude conversation gone, which
       // keeps no record) is answered `failed` with why: unanswered, the client
       // reads silence, keeps the send and offers it again on every connection.
@@ -494,9 +512,11 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
           instanceId: sessionId,
           // The envelope's session is authoritative: the payload's own copy is
           // normalised onto it so the two can never disagree on the wire.
+          // and the person is who a page speaks for.
           payload: {
             ...payload,
             instanceId: sessionId,
+            message: { ...payload.message, origin: { kind: "human" } },
           } as unknown as SendPayload,
         });
       } catch (error) {

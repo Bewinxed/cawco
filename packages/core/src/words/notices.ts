@@ -39,6 +39,10 @@ export const noticeWords = {
   fallback: "Note from CawCo",
   /** A routine's run, woken by its schedule or event. */
   routine: "Woke for a routine",
+  /** What a notice of something that runs on says after its line while it does ({@link noticeLine}). */
+  running: "· still running",
+  /** And once it has ended. */
+  ended: "· ended",
   /** What the agent was sent, as the row opens to it. */
   sent: "Sent to the agent",
   /** A run of notices with no turn between them: the newest one's line, and how many more the row holds. */
@@ -66,11 +70,8 @@ export const noticeWords = {
   containersUntracked: "Containers it starts won't stop with it",
 };
 
-/** The line a notice's row says: the one written where it was made, else its kind's. */
-export const noticeLine = (origin: {
-  line?: string;
-  name?: string;
-}): string => {
+/** What a notice is about, without its live state: the line written where it was made, else its kind's. */
+const lineOf = (origin: { line?: string; name?: string }): string => {
   if (origin.line) {
     return origin.line;
   }
@@ -79,4 +80,21 @@ export const noticeLine = (origin: {
     return noticeWords.routine;
   }
   return BY_KIND[name] ?? noticeWords.fallback;
+};
+
+/**
+ * The line a notice's row says: what it is about, and, for something that
+ * runs on (a leak's processes), whether it still does: "1 process left
+ * running · still running", then "· ended" once the hub has heard so.
+ */
+export const noticeLine = (origin: {
+  line?: string;
+  live?: "running" | "ended";
+  name?: string;
+}): string => {
+  const line = lineOf(origin);
+  if (!origin.live) {
+    return line;
+  }
+  return `${line} ${origin.live === "ended" ? noticeWords.ended : noticeWords.running}`;
 };
