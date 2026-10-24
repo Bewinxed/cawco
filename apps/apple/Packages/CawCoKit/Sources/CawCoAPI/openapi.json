@@ -36594,7 +36594,7 @@
           },
           "kind": {
             "$ref": "#/components/schemas/ErrorSaidKind",
-            "description": "What a canvas's section can't draw for, as the stage host keeps it until\nit clears: the canvas page's own failure kinds (stage-host canvas\nruntime.ts `SectionFailure`). `missing`: the states file isn't there,\ncleared once it is written. `compile`: a module the stage couldn't\ncompile, cleared once it compiles again. `page`: its code threw in the\npage."
+            "description": "What a canvas's section can't draw for, as the stage host keeps it until\nit clears: the canvas page's own failure kinds (stage-host canvas\nruntime.ts `SectionFailure`). `missing`: the states file isn't there,\ncleared once it is written. `compile`: a module the stage couldn't\ncompile, cleared once it compiles again. `page`: its module didn't load\nin the page (an import that names an export its module lacks, a throw as\nit ran), as the page posted it ({@link PostedReport} `unloaded`), cleared\nonce a page loads it or its section module is served again."
           },
           "line": {
             "type": [

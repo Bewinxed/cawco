@@ -40,6 +40,7 @@ import {
   existsSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   watch,
   writeFileSync,
@@ -67,6 +68,7 @@ import {
   HEALTH_PATH,
   MODULES_PATH,
   type PageError,
+  type PostedReport,
   RENDERED_PATH,
   REPORT_PATH,
   type RenderReport,
@@ -75,6 +77,7 @@ import {
   SECTION_WRITTEN,
   type SectionPlan,
   type SectionRender,
+  type SectionUnloaded,
   type SheetImport,
   type SheetOnPage,
   type SheetRead,
@@ -325,6 +328,90 @@ function projectPackage(
       throw new Error(`${name} is not installed under ${root}`);
     }
   }
+}
+
+/** A package's name from an import of it or of its subpath: `@cawco/icons/marks` is `@cawco/icons`. */
+const packageName = (specifier: string): string =>
+  specifier
+    .split("/")
+    .slice(0, specifier.startsWith("@") ? 2 : 1)
+    .join("/");
+
+/**
+ * Whether package `name`, found from the toolchain root up as Node finds
+ * it, is linked: its real path lies under no `node_modules` (a workspace's
+ * own package, `workspace:*`), where an installed one's, bun's shared
+ * store's included, lies under one.
+ */
+function linkedPackage(name: string): boolean {
+  for (let dir = root; ; dir = dirname(dir)) {
+    const at = join(dir, "node_modules", name);
+    if (existsSync(at)) {
+      return !realpathSync(at).split(sep).includes("node_modules");
+    }
+    if (dirname(dir) === dir) {
+      return false;
+    }
+  }
+}
+
+/** The linked workspace packages among the toolchain root's own dependencies. */
+function workspacePackages(): string[] {
+  const manifest = resolve(root, "package.json");
+  if (!existsSync(manifest)) {
+    return [];
+  }
+  const json = JSON.parse(readFileSync(manifest, "utf8")) as Record<
+    string,
+    Record<string, string> | undefined
+  >;
+  return Object.keys({
+    ...json.dependencies,
+    ...json.devDependencies,
+    ...json.peerDependencies,
+  }).filter(linkedPackage);
+}
+
+/** An environment's options as the stage reads their dependency optimizer's (Vite's `configEnvironment`). */
+interface EnvironmentOptions {
+  optimizeDeps?: { exclude?: string[]; include?: string[] };
+}
+
+/**
+ * Every linked workspace package served from its source, never
+ * pre-bundled, whatever the project's config forces: Vite builds a
+ * pre-bundle once and keeps it while "Package manager lockfile content …
+ * Relevant fields in your `vite.config.js` … `NODE_ENV` value" stay the
+ * same (vite.dev/guide/dep-pre-bundling#file-system-cache), so a linked
+ * package's source change never reached it: "When making changes to the
+ * linked dep, restart the dev server with the `--force` command line
+ * option" (same page). The dashboard forces `@cawco/icons` in ("Use this
+ * option to force a linked package to be pre-bundled",
+ * vite.dev/config/dep-optimization-options), and a canvas whose component
+ * imported the icon a merge had added died on load: "does not provide an
+ * export named 'IconTodoDone'". Each is dropped from `include` (a linked
+ * package's own entry or subpath; `dep > cjs-dep`, a CommonJS package
+ * inside one, stays) and named in `exclude`. Served as source, an edit to
+ * one is a module Vite's watcher and HMR see like any other of the
+ * project's. Vite 8.3.4 resolves `include` without reading `exclude`
+ * (`addManuallyIncludedOptimizeDeps`), so the drop is what keeps one out.
+ */
+function fromSource(_name: string, options: EnvironmentOptions): void {
+  const deps = options.optimizeDeps;
+  const forced = (deps?.include ?? []).filter(
+    (entry) => !entry.includes(">") && linkedPackage(packageName(entry))
+  );
+  const linked = [
+    ...new Set([...workspacePackages(), ...forced.map(packageName)]),
+  ];
+  if (linked.length === 0) {
+    return;
+  }
+  options.optimizeDeps = {
+    ...deps,
+    include: deps?.include?.filter((entry) => !forced.includes(entry)),
+    exclude: [...new Set([...(deps?.exclude ?? []), ...linked])],
+  };
 }
 
 /** The project's dev server, once it stands: what resolves a story's imports and sends its pages HMR words. */
@@ -811,7 +898,8 @@ const frameId = (frame: FrameRender): string =>
  * saw from the map's counts.
  */
 function keepReport(body: unknown): void {
-  const report = body as Partial<RenderReport> | null;
+  const report = body as Partial<PostedReport> | null;
+  keepUnloaded(report?.unloaded ?? [], report?.sections ?? []);
   for (const section of report?.sections ?? []) {
     if (typeof section?.file === "string" && storyFile(section.file)) {
       // A frame this page did not show (a phone's, one at a time) keeps what an earlier draw of the same content saw.
@@ -885,10 +973,30 @@ function sourced(error: PageError): PageError {
 }
 const FILE_URL = /^file:\/\//;
 
+/** The state of each frame of states file `abs` no current draw holds: failed with the browser's words when a page couldn't load its section, else unseen. */
+function unloadedState(abs: string): {
+  error?: PageError;
+  state: "failed" | "unseen";
+} {
+  const unloaded = stageErrors.get(abs);
+  return unloaded?.kind === "page"
+    ? {
+        state: "failed",
+        error: {
+          message: unloaded.message,
+          file: unloaded.file,
+          line: unloaded.line,
+          column: unloaded.column,
+        },
+      }
+    : { state: "unseen" };
+}
+
 /**
  * The canvas of `files` as the stage knows it: each section's newest
  * report, its frames `unseen` when the file or a component it mounts
- * changed since it was drawn (or no browser ever drew it).
+ * changed since it was drawn (or no browser ever drew it), `failed` with the
+ * page's error when a page couldn't load its section.
  */
 async function reportOf(files: string[]): Promise<RenderReport> {
   const sections: SectionRender[] = [];
@@ -928,7 +1036,8 @@ async function reportOf(files: string[]): Promise<RenderReport> {
       sections.push(kept.section);
       continue;
     }
-    const stale = kept?.section.frames ?? [];
+    const failed = unloadedState(abs);
+    const stale = failed.error ? [] : (kept?.section.frames ?? []);
     sections.push({
       file,
       title: read.meta.title ?? file,
@@ -951,7 +1060,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
               interaction: "rest" as const,
               scheme: "light" as const,
               width: one.form?.width ?? 0,
-              state: "unseen" as const,
+              ...failed,
               box: { x: 0, y: 0, w: 0, h: 0 },
               text: "",
               parts: [],
@@ -2325,7 +2434,8 @@ const UNWRITTEN_SHEET: SheetRead = {
  * Every section's problem the stage keeps, by the file it is of (absolute):
  * a states file that isn't written (`missing`, keyed by itself), or a module
  * that doesn't compile (`compile`, keyed by that module; one a section's
- * own load refused, by its states file). Told to the daemon on each change,
+ * own load refused, by its states file), or a section a page couldn't load
+ * (`page`, keyed by its states file: {@link keepUnloaded}). Told to the daemon on each change,
  * which carries it into each canvas's doc (`meta.stage.errors`): the panel
  * and the agent's read say it from there.
  */
@@ -2371,6 +2481,66 @@ function keepMissing(files: string[]): void {
   if (changed) {
     tellErrors();
   }
+}
+
+/**
+ * Each section a page couldn't load (`unloaded`: an import naming an export
+ * its module lacks, a throw as its module ran), kept as its states file's
+ * `page` problem in the browser's words, placed in the source where the
+ * page's stack names a place; and each a page posted drawn lets its go.
+ * Vite never hears of these: it served every module, and the browser
+ * refused them as it linked or ran them. The stage's own word on a section
+ * (missing, a compile error) stands over a page's.
+ */
+function keepUnloaded(
+  unloaded: SectionUnloaded[],
+  drawn: SectionRender[]
+): void {
+  let changed = false;
+  for (const one of unloaded) {
+    const file = storyFile(one.file);
+    const kept = file ? stageErrors.get(resolve(root, file)) : undefined;
+    if (!file || (kept && kept.kind !== "page")) {
+      continue;
+    }
+    const next = pageProblem(file, one.error);
+    if (JSON.stringify(kept) !== JSON.stringify(next)) {
+      stageErrors.set(resolve(root, file), next);
+      changed = true;
+    }
+  }
+  for (const section of drawn) {
+    const file = storyFile(section.file);
+    const abs = file ? resolve(root, file) : null;
+    if (abs && stageErrors.get(abs)?.kind === "page") {
+      stageErrors.delete(abs);
+      changed = true;
+    }
+  }
+  if (changed) {
+    tellErrors();
+  }
+}
+
+/** States file `file`'s (from the toolchain root) section as a page couldn't load it: the page's error, placed in the source and framed where its stack names a place. */
+function pageProblem(file: string, said: PageError): StageError {
+  const error = sourced(said);
+  return {
+    kind: "page",
+    file: error.file ?? file,
+    line: error.line,
+    column: error.column,
+    message: error.message,
+    frame:
+      error.file && error.line !== null
+        ? codeFrame(
+            resolve(root, error.file),
+            error.line,
+            Math.max(0, (error.column ?? 1) - 1)
+          )
+        : null,
+    sheets: [file],
+  };
 }
 
 /**
@@ -2638,6 +2808,8 @@ function cawcoStage() {
 
   return {
     name: "cawco:stage",
+    // After every other plugin's: the project's own optimizer options as they stand.
+    configEnvironment: { order: "post" as const, handler: fromSource },
     resolveId(id: string) {
       return id.startsWith(VIRTUAL) || id.startsWith(VIRTUAL_STAGE)
         ? `\0${id}`

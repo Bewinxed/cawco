@@ -231,6 +231,22 @@ export interface RenderReport {
   unnamed: string[];
 }
 
+/** A section whose module the page could not load, with the browser's own error for it. */
+export interface SectionUnloaded {
+  error: PageError;
+  /** Its states file, from the toolchain root. */
+  file: string;
+}
+
+/**
+ * What a canvas page posts to {@link RENDERED_PATH}: its report, and each
+ * section whose module didn't load in the page, which posts no section of
+ * its own. The stage keeps each as that section's `page` problem.
+ */
+export interface PostedReport extends RenderReport {
+  unloaded: SectionUnloaded[];
+}
+
 /**
  * The stage's answer at {@link REPORT_PATH}: the report, and every problem
  * the stage host keeps as of answering (a states file the ask named and
@@ -472,8 +488,10 @@ export type StageStatus = "starting" | "waking" | "live" | "error" | "asleep";
  * it clears: the canvas page's own failure kinds (stage-host canvas
  * runtime.ts `SectionFailure`). `missing`: the states file isn't there,
  * cleared once it is written. `compile`: a module the stage couldn't
- * compile, cleared once it compiles again. `page`: its code threw in the
- * page.
+ * compile, cleared once it compiles again. `page`: its module didn't load
+ * in the page (an import that names an export its module lacks, a throw as
+ * it ran), as the page posted it ({@link PostedReport} `unloaded`), cleared
+ * once a page loads it or its section module is served again.
  */
 export type StageErrorKind = "missing" | "compile" | "page";
 

@@ -30,6 +30,7 @@ import {
   type Interaction,
   type MoveRender,
   type PageError,
+  type PostedReport,
   type RenderReport,
   type Scheme,
   SECTION_MISSING,
@@ -207,8 +208,8 @@ interface Probe {
 
 export interface Section {
   el: HTMLElement;
-  /** Its module didn't load, and it says why where its frames would stand. */
-  failed: boolean;
+  /** Why its module didn't load, which it says where its frames would stand; null while it hasn't failed. */
+  failure: SectionFailure | null;
   file: string;
   frames: Map<string, Frame>;
   grid: HTMLElement;
@@ -866,7 +867,7 @@ export function boot(options: BootOptions): void {
       grid,
       name,
       standIns: [],
-      failed: false,
+      failure: null,
       frames: new Map(),
       interactions: new Map(),
       loaded: false,
@@ -1045,8 +1046,9 @@ export function boot(options: BootOptions): void {
     failed.append(line, details);
     section.head.after(failed);
     section.standIns = [failed];
-    section.failed = true;
+    section.failure = failure;
     sayShape();
+    later();
   }
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
@@ -1499,7 +1501,7 @@ export function boot(options: BootOptions): void {
     section.loading ??= (async () => {
       const since = performance.now();
       try {
-        section.mod = await options.load(section.file, section.failed);
+        section.mod = await options.load(section.file, !!section.failure);
       } catch (error) {
         heard(error);
         failedSection(section, await loadFailure(error, since));
@@ -1515,7 +1517,7 @@ export function boot(options: BootOptions): void {
   function showSection(section: Section): void {
     const mod = section.mod as SectionModule;
     section.loaded = true;
-    section.failed = false;
+    section.failure = null;
     const had = new Set(section.frames.values());
     const going = holdStandIns(section);
     section.name = sectionName(
@@ -1568,7 +1570,7 @@ export function boot(options: BootOptions): void {
   function unnamedInEmbed(): void {
     unnamedLine?.remove();
     unnamedLine = null;
-    if (sections.some((one) => !one.loaded || one.failed)) {
+    if (sections.some((one) => !one.loaded || one.failure)) {
       return;
     }
     const have = new Set(
@@ -2101,10 +2103,19 @@ export function boot(options: BootOptions): void {
     }
     try {
       if (!(card || embed)) {
+        // A section whose module the page couldn't load posts no section: its error goes as the stage's, which knows only what it served.
+        const posted: PostedReport = {
+          ...report,
+          unloaded: sections.flatMap((section) =>
+            section.failure?.kind === "page"
+              ? [{ file: section.file, error: section.failure.error }]
+              : []
+          ),
+        };
         await fetch(new URL("rendered", location.href), {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(report),
+          body: JSON.stringify(posted),
         });
       }
     } catch {

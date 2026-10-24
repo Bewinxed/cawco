@@ -2,6 +2,10 @@
   "name": "canvas-probe-svelte",
   "private": true,
   "type": "module",
+  "workspaces": ["packages/*"],
+  "dependencies": {
+    "@probe/marks": "workspace:*"
+  },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7",
     "@tailwindcss/vite": "^4",

@@ -6,6 +6,7 @@
  */
 import {
   type AnimationRead,
+  MODULES_PATH,
   type PageError,
   type PartUse,
   type StyleDelta,
@@ -285,11 +286,14 @@ export function pageError(
   base: string
 ): PageError {
   // Its first line: a framework's own trail ("in <unknown>") is not the message.
+  // A module it names at the stage's key, or at an HMR stamp ("The requested module '/@cawco/m/<key>/src/x.ts?t=…' does not provide …"), is named by its own address.
   const message = (
     error instanceof Error ? error.message : String(error ?? "error")
   )
     .split("\n")[0]
-    ?.trim()
+    ?.replace(KEYED_PREFIX, "")
+    .replace(HMR_STAMP, "")
+    .trim()
     .slice(0, 300) as string;
   const stack = error instanceof Error ? (error.stack ?? "") : "";
   for (const line of stack.split("\n")) {
@@ -319,4 +323,8 @@ export function pageError(
   return { message, file: null, line: null, column: null };
 }
 const STACK_PLACE = /(https?:\/\/[^\s)]+?):(\d+):(\d+)\)?\s*$/;
+/** A keyed module's prefix in a message: `/@cawco/m/<key>`, before the module's own address. */
+const KEYED_PREFIX = new RegExp(`${MODULES_PATH}[^/\\s'"]+`, "g");
+/** Vite's HMR stamp on a quoted module address: `?t=<ms>` closing it. */
+const HMR_STAMP = /\?t=\d+(?=['"])/g;
 const LEADING_SLASH = /^\//;

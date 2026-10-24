@@ -1,0 +1,9 @@
+{
+  "name": "@probe/marks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  }
+}

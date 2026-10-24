@@ -87,9 +87,18 @@
  *     asked for as `?import&amp;url` is answered with its error, the stage
  *     keeps none for the canvas and sends none to its open page (no
  *     `[vite] Internal Server Error` in its console), and the canvas draws.
+ * 20. A linked workspace package (`@probe/marks`, which the fixture's own
+ *     config forces into Vite's pre-bundle as the dashboard forces
+ *     `@cawco/icons`) is served from its source, never pre-bundled:
+ *     a. an export it gains after the stage started reaches a states file
+ *        that imports it, drawn with no restart and no cache cleared;
+ *     b. a states file importing an export it never had is the stage's
+ *        error (kind `page`), naming the module and the export, and its
+ *        frames are `failed` with that error, never `unseen`.
  *
  *   bun scripts/probe-kit/run.ts component-canvas
  *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 and 19 alone
+ *   bun scripts/probe-kit/run.ts component-canvas --leg workspace-package  # 20 alone
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -108,7 +117,10 @@ import {
   type CanvasSpec,
   type DesignMap,
   type FrameRender,
+  MODULES_PATH,
+  REPORT_PATH,
   type RenderReport,
+  type ReportAnswer,
   type StageError,
   unkeyedPath,
 } from "../../../packages/core/src/stage";
@@ -144,7 +156,15 @@ async function stageOf(framework: Framework, host: string): Promise<Stage> {
   const dir = join(SCRATCH, framework);
   mkdirSync(dir, { recursive: true });
   cpSync(join(FIXTURES, framework), dir, { recursive: true });
-  if (!existsSync(join(dir, "node_modules"))) {
+  // Installed once, and again when the fixture names a package its install lacks (a workspace package added since).
+  const manifest = JSON.parse(
+    readFileSync(join(dir, "package.json"), "utf8")
+  ) as Record<string, Record<string, string> | undefined>;
+  const named = Object.keys({
+    ...manifest.dependencies,
+    ...manifest.devDependencies,
+  });
+  if (!named.every((name) => existsSync(join(dir, "node_modules", name)))) {
     const install = Bun.spawnSync(["bun", "install"], { cwd: dir });
     if (install.exitCode !== 0) {
       throw new Error(
@@ -1748,10 +1768,123 @@ async function strayRequest(kit: Kit, stage: Stage): Promise<void> {
   await page.close();
 }
 
-/** `--leg comment-and-stray`: legs 18 and 19 alone, on the Svelte stage. */
+/** `--leg comment-and-stray`: legs 18 and 19 alone; `--leg workspace-package`: leg 20 alone; on the Svelte stage. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
+
+/** The stage's answer for `files`, as the daemon reads it for `artifact_read`: the kept report and every problem the stage holds. */
+const stageAnswer = async (
+  stage: Stage,
+  files: string[]
+): Promise<ReportAnswer> =>
+  (await (
+    await fetch(
+      `${stage.base}${REPORT_PATH}?${files.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`
+    )
+  ).json()) as ReportAnswer;
+
+/** Leg 20: a linked workspace package's source, as a canvas imports it. */
+async function workspacePackage(kit: Kit, stage: Stage): Promise<void> {
+  const source = join(stage.dir, "packages/marks/src/index.js");
+  const plain = readFileSync(source, "utf8");
+  const gained = "src/Gained.stories.js";
+  writeFileSync(
+    source,
+    `${plain}\n/** Words the package gained after the stage started. */\nexport const gainedWords = "Gained since the start";\n`
+  );
+  writeFileSync(
+    join(stage.dir, gained),
+    `import { gainedWords } from "@probe/marks";
+import Badge from "./Badge.svelte";
+
+export default { title: "Kit/Gained", component: Badge };
+
+/** A mark in words its workspace package gained after the stage started. */
+export const Gained = { args: { text: gainedWords } };
+`
+  );
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  await page.goto(canvasUrl(stage, [gained], { name: "Gained" }));
+  // A section that never loads posts no section: its frames are read from the stage either way.
+  await page
+    .waitForFunction(
+      () =>
+        (
+          window as unknown as {
+            __cawcoCanvas?: { report: RenderReport | null };
+          }
+        ).__cawcoCanvas?.report?.sections.length,
+      null,
+      { timeout: 15_000 }
+    )
+    .catch(() => undefined);
+  await page.close();
+  const drewGained = await until(
+    "the stage's report of the gained export",
+    () => stageAnswer(stage, [gained]),
+    (now) =>
+      framesOf(now).length > 0 &&
+      framesOf(now).every((one) => one.state !== "unseen"),
+    10_000
+  ).catch(() => stageAnswer(stage, [gained]));
+  const bundled = join(stage.dir, ".cawco/stage/cache/deps/@probe_marks.js");
+  const gainedFrames = framesOf(drewGained);
+  // The stage's errors are every section's: this one's are those filed under its states file.
+  const gainedErrors = drewGained.errors.filter((one) =>
+    one.sheets.includes(gained)
+  );
+  kit.check(
+    "20a: an export a linked workspace package gained after the stage started reaches the states file importing it, drawn with no restart and no cache cleared; the package is never pre-bundled",
+    gainedFrames.length > 0 &&
+      gainedFrames.every(
+        (one) =>
+          one.state === "drawn" && one.text.includes("Gained since the start")
+      ) &&
+      gainedErrors.length === 0 &&
+      !existsSync(bundled),
+    `frames ${gainedFrames.map((one) => `${one.story}/${one.interaction}:${one.state} "${one.text}"`).join("; ")}; its errors ${JSON.stringify(gainedErrors)}; pre-bundle ${existsSync(bundled) ? "written" : "none"}`
+  );
+  writeFileSync(source, plain);
+
+  const unexported = "src/Unexported.stories.js";
+  writeFileSync(
+    join(stage.dir, unexported),
+    `import { goneWords } from "@probe/marks";
+import Badge from "./Badge.svelte";
+
+export default { title: "Kit/Unexported", component: Badge };
+
+/** A mark in words its workspace package never exported. */
+export const Gone = { args: { text: goneWords } };
+`
+  );
+  const broken = await kit.page("desk", { init: [BRIDGE] });
+  await broken.goto(canvasUrl(stage, [unexported], { name: "Unexported" }));
+  const fault = (now: ReportAnswer) =>
+    now.errors.find((one) => one.sheets.includes(unexported));
+  const answer = await until(
+    "the stage's error for the missing export",
+    () => stageAnswer(stage, [unexported]),
+    (one) => !!fault(one),
+    15_000
+  ).catch(() => stageAnswer(stage, [unexported]));
+  await broken.close();
+  const error = fault(answer);
+  const frames = framesOf(answer);
+  kit.check(
+    "20b: a states file importing an export its workspace package never had is the stage's page error, naming the module and the export, and its frames are failed with it, never unseen",
+    error?.kind === "page" &&
+      error.message.includes("goneWords") &&
+      error.message.includes("'/packages/marks/src/index.js'") &&
+      !error.message.includes(MODULES_PATH) &&
+      frames.length > 0 &&
+      frames.every(
+        (one) => one.state === "failed" && one.error?.message === error.message
+      ),
+    `error ${JSON.stringify(error)}; frames ${frames.map((one) => `${one.story}:${one.state} ${one.error?.message ?? ""}`).join("; ")}`
+  );
+}
 
 const spec: Spec = {
   name: "component-canvas",
@@ -1762,6 +1895,10 @@ const spec: Spec = {
       if (ONLY_LEG === "comment-and-stray") {
         await commentMarksOne(kit, svelte);
         await strayRequest(kit, svelte);
+        return;
+      }
+      if (ONLY_LEG === "workspace-package") {
+        await workspacePackage(kit, svelte);
         return;
       }
       await svelteKit(kit, svelte);
@@ -1775,6 +1912,7 @@ const spec: Spec = {
       await endless(kit, svelte);
       await commentMarksOne(kit, svelte);
       await strayRequest(kit, svelte);
+      await workspacePackage(kit, svelte);
     } finally {
       svelte.stop();
     }
