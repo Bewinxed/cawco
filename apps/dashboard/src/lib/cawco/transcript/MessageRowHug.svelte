@@ -6,7 +6,9 @@
    * last line, where they cannot reach the words. A well with no room
    * beside it (full width) carries the strip under it at its end, in room
    * of its own. A run's messages stop joining: each is its own slab,
-   * --space-1 apart, each with its own strip. A failed send's well is full
+   * --space-1 apart, each with its own strip, and each later one's clock at
+   * the row's end level with its first line, where the first message's
+   * stands on the "You" line. A failed send's well is full
    * width with its recovery at rest and no strip. On a touch screen a ⋯
    * handle stands at the well's outer bottom corner at rest. A selected
    * message wears the selection pill in the well's own contour.
@@ -61,11 +63,7 @@
   });
   const beside = (id: string) =>
     (wells[id] ?? 0) > 0 &&
-    (wells[id] ?? 0) +
-      gap +
-      stripW +
-      (clocks[id] ? gap + (clocks[id] ?? 0) : 0) <=
-      (rows[id] ?? 0);
+    (wells[id] ?? 0) + gap + stripW + (clocks[id] ?? 0) <= (rows[id] ?? 0);
 </script>
 
 <div
@@ -129,7 +127,10 @@
           <div
             class="absolute end-0 top-space-2"
             {@attach frameSize<HTMLElement>((node) => {
-              clocks[part.id] = node.offsetWidth;
+              // The room the clock's words take and a gap before them; its
+              // speaker line's own box is wider than the words, and empty.
+              const time = node.querySelector("time");
+              clocks[part.id] = time ? time.offsetWidth + gap : 0;
             })}
           >
             <Who grouped name="You" timestamp={part.at} you />
