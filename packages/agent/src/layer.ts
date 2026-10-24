@@ -431,11 +431,11 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   while (Date.now() < deadline) {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
+      // biome-ignore lint/performance/noAwaitInLoops: once, as the view is up
       await openWorkDirs(layer);
       return record.pid;
     }
     if (holder.exitCode !== null) {
-      // biome-ignore lint/performance/noAwaitInLoops: read once, as the holder's start failed
       const said = (await new Response(holder.stderr).text()).trim();
       throw new Error(
         `workspace ${id}'s view of ${layer.folder} did not start: bwrap exited ${holder.exitCode}${said ? `: ${said}` : ""}`
