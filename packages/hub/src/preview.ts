@@ -44,6 +44,7 @@ import {
   type HubReach,
   PREVIEW_PING_HEADER,
   PREVIEW_REACH_PATH,
+  type PreviewPingDown,
 } from "@cawco/core/preview-reach";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
@@ -523,32 +524,29 @@ const hubsOwn = (pathname: string): boolean =>
 
 const HOP = "hub listener";
 
+/** What every answer to the dashboard's probe carries: readable to any page, never kept, marked the hub's own. */
+const PING_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-expose-headers": PREVIEW_PING_HEADER,
+  "cache-control": "no-store",
+  [PREVIEW_PING_HEADER]: "1",
+} as const;
+
 /** The dashboard's probe: answered to any page, with no credentials, so the pane learns the origin is reachable. */
 const ping = (): Response =>
   new Response("ok", {
-    headers: {
-      "access-control-allow-origin": "*",
-      "access-control-expose-headers": PREVIEW_PING_HEADER,
-      "cache-control": "no-store",
-      "content-type": "text/plain",
-      [PREVIEW_PING_HEADER]: "1",
-    },
+    headers: { ...PING_HEADERS, "content-type": "text/plain" },
   });
 
-/** The probe's answer when what serves the page doesn't answer the hub: 502, and why in the hub's words, which the pane says. */
-const pingFailed = (why: string): Response =>
-  Response.json(
-    { why },
-    {
-      status: 502,
-      headers: {
-        "access-control-allow-origin": "*",
-        "access-control-expose-headers": PREVIEW_PING_HEADER,
-        "cache-control": "no-store",
-        [PREVIEW_PING_HEADER]: "1",
-      },
-    }
-  );
+/**
+ * The probe's answer when what serves the page doesn't answer the hub: why
+ * in the hub's words, which the pane says (core `PreviewPingDown`). A 200:
+ * the origin answered, and a browser logs every error status a page's fetch
+ * meets in its console, so a pane holding a preview that is down would fill
+ * the person's console at each of its probes.
+ */
+const pingDown = (why: string): Response =>
+  Response.json({ why } satisfies PreviewPingDown, { headers: PING_HEADERS });
 
 /** How long the machine's listener has to answer the ping's relay. Our call: under the pane's own 10 s for the whole probe. */
 const PING_RELAY_MS = 5000;
@@ -567,8 +565,8 @@ const codeOf = (error: unknown): string => {
  * page answers the hub. A page the hub serves, or no preview at all (the
  * frame's own load says it is closed), is the hub's answer alone; a
  * machine's preview is reached (started when no listener serves it) and its
- * listener asked for its own ping, so a listener that is gone answers 502
- * with why, and is forgotten as a request's is ({@link relay}).
+ * listener asked for its own ping, so a listener that is gone answers why
+ * ({@link pingDown}), and is forgotten as a request's is ({@link relay}).
  */
 async function pingSession(
   instanceId: string,
@@ -583,7 +581,7 @@ async function pingSession(
   }
   const reached = await deps.reach(instanceId);
   if (!reached.ok) {
-    return reached.down === "closed" ? ping() : pingFailed(reached.error);
+    return reached.down === "closed" ? ping() : pingDown(reached.error);
   }
   const at = reached.upstream;
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
@@ -594,7 +592,7 @@ async function pingSession(
       `its machine's listener at ${address}:${at.port} didn't answer the ping: ${cause}`
     );
     deps.unreachable(instanceId, at);
-    return pingFailed(`its machine's listener didn't answer the hub (${code})`);
+    return pingDown(`its machine's listener didn't answer the hub (${code})`);
   };
   try {
     const read = await readWithin(PING_RELAY_MS, (signal) =>

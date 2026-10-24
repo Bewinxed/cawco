@@ -216,8 +216,8 @@
 
   /**
    * How often an embed's origin is asked whether it serves yet, and for how
-   * long an answer that it doesn't (a status: its server still starting)
-   * is waited out: once a second for 30 seconds. Our call: long enough for a
+   * long an answer that it doesn't (the hub's word that it is down, or a
+   * status: its server still starting) is waited out: once a second for 30 seconds. Our call: long enough for a
    * dev server's cold start, short enough that a dead one is said. Any other
    * failure is this browser's side or the hub's, said at once (core
    * preview-reach.ts).
@@ -288,20 +288,26 @@
       slow = true;
     }, grace());
     const at = new URL(embed);
+    /** The hub asked whether it reaches `origin`, and how its previews are reached heard with it. */
+    const hubReach = (origin: string) =>
+      askHubReach(
+        `${PREVIEW_REACH_PATH}?origin=${encodeURIComponent(origin)}`,
+        (heard) => {
+          ways = heard;
+        }
+      );
     /** The origin asked once a second until it serves (null) or says why it won't, within {@link START_MS}. */
     const reached = async () => {
       const deadline = Date.now() + START_MS;
       for (;;) {
         // biome-ignore lint/performance/noAwaitInLoops: one ask a second until the origin serves, never several at once
-        const why = await probePreview(at.origin, (origin) =>
-          askHubReach(
-            `${PREVIEW_REACH_PATH}?origin=${encodeURIComponent(origin)}`,
-            (heard) => {
-              ways = heard;
-            }
-          )
-        );
-        if (gone || !why || why.cause !== "status" || Date.now() >= deadline) {
+        const why = await probePreview(at.origin, hubReach);
+        if (
+          gone ||
+          !why ||
+          !(why.cause === "down" || why.cause === "status") ||
+          Date.now() >= deadline
+        ) {
           return why;
         }
         await new Promise((resolve) => setTimeout(resolve, PING_MS));
@@ -315,6 +321,14 @@
         await turn.granted;
       }
       const why = gone ? null : await reached();
+      if (gone) {
+        return;
+      }
+      if (why && !ways) {
+        // An answered probe never asked the hub, whose answer names how its
+        // previews are reached: asked once, for the words' fix.
+        await hubReach(at.origin);
+      }
       if (gone) {
         return;
       }

@@ -12,16 +12,20 @@
  *    `no-cors` and second `cors` asks aborted as connection refused): the pane says it
  *    can't be reached, and why ("… The hub reaches …"); then it shows the
  *    page by itself, within `FIRST_BACK_MS`.
- * 2. A port preview whose machine's agent is stopped: the hub's ping
- *    answers 502 with its own words, and the pane says them ("… answered
- *    502: …"), with no "Previews need" advice (the origin answered) and one
- *    next step, its own "Trying again on its own." (the hub's words carry
- *    the cause alone, core `machineFaultWords` `next: false`). The
- *    agent back, the pane shows the page by itself, within `AGENT_BACK_MS`.
+ * 2. A shown port preview whose server is gone, its machine's agent
+ *    stopped, on Chromium and on WebKit: the hub's ping answers 200 with
+ *    its own words that it is down (core `PreviewPingDown`), and the pane
+ *    says them ("… answered: …"), with no "Previews need" advice (the
+ *    origin answered) and one next step, its own "Trying again on its own."
+ *    (the hub's words carry the cause alone, core `machineFaultWords`
+ *    `next: false`). The page's console holds no error the while (owner's
+ *    Caw thread, 2026-10-24: a 502 of every probe logged there), and its
+ *    probes back off (PreviewPane `PROBE_FIRST_MS` doubling). The agent
+ *    back, the pane shows the page by itself, within `AGENT_BACK_MS`.
  * 3. The agent frozen (SIGSTOP), so the hub still knows its listener and
  *    the listener doesn't answer (the owner's hub logged ECONNRESET from
- *    one): the hub's relayed ping fails, and the pane says "answered 502:
- *    its machine's listener didn't answer the hub (…)". The agent running
+ *    one): the hub's relayed ping fails, and the pane says "answered: its
+ *    machine's listener didn't answer the hub (…)". The agent running
  *    again, the pane shows the page by itself.
  * 4. Every cause the shared classifier names (core preview-reach.ts), each
  *    by Playwright's own mechanism on the ping alone, said in its exact
@@ -31,7 +35,8 @@
  *    in the browser as a shield does: a `route.abort("blockedbyclient")`
  *    goes through Playwright's driver first, and under a loaded run took
  *    longer than any instant refusal), no answer (a route that never
- *    answers), the hub's 502 with its words (a route answering it), a 200
+ *    answers), the hub's word that it is down (a route answering it), a
+ *    proxy's 502 (a route answering it without the hub's words), a 200
  *    without its CORS header (the ping sent on to a server that answers so:
  *    Playwright's `route.fulfill` adds the header to a CORS request's
  *    answer itself). The Preview, sampled every 100 ms in its frame from its first
@@ -50,7 +55,7 @@ import {
 } from "../../../packages/core/src/preview-reach";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec } from "../kit";
+import { type Engine, type Kit, kitsOwnMessage, open, type Spec } from "../kit";
 
 /** The pane probes again 2 s after a failure (PreviewPane `PROBE_FIRST_MS`); slack for the probe and the frame's load. */
 const FIRST_BACK_MS = 6000;
@@ -104,7 +109,7 @@ const paneNow = (page: Page, id: string) =>
 const PANE_NEXT = ` ${previewWords.tryingAgain}`;
 /** A cause's sentence on the pane's card: its words, then the pane's next step. */
 const paneSays = (words: string) => `${words}${PANE_NEXT}`;
-/** The hub's words a 502 of its own carries (hub preview.ts `pingFailed`). */
+/** The hub's words its answer that a preview is down carries (hub preview.ts `pingDown`). */
 const HUB_WHY = "its machine's listener didn't answer the hub (ECONNRESET)";
 /** A probe's limit (core preview-reach.ts `PROBE_ANSWER_MS`), and slack for the hub's own reach. */
 const TIMEOUT_SAID_MS = 25_000;
@@ -154,15 +159,28 @@ const CAUSES: Cause[] = [
     previewMs: TIMEOUT_SAID_MS,
   },
   {
-    name: "the hub's 502",
+    name: "the hub's word that it is down",
     handle: (route) =>
       route.fulfill({
-        status: 502,
+        status: 200,
         contentType: "application/json",
         headers: { "access-control-allow-origin": "*" },
         body: JSON.stringify({ why: HUB_WHY }),
       }),
-    found: { cause: "status", status: 502, why: HUB_WHY },
+    found: { cause: "down", why: HUB_WHY },
+    paneMs: 15_000,
+    previewMs: STATUS_SAID_MS,
+  },
+  {
+    name: "a proxy's 502",
+    handle: (route) =>
+      route.fulfill({
+        status: 502,
+        contentType: "text/html",
+        headers: { "access-control-allow-origin": "*" },
+        body: "<h1>502 Bad Gateway</h1>",
+      }),
+    found: { cause: "status", status: 502 },
     paneMs: 15_000,
     previewMs: STATUS_SAID_MS,
   },
@@ -557,6 +575,116 @@ const hubAway = async (legs: Legs) => {
   await picture.context().close();
 };
 
+/** Where leg 2 runs: the desk's two engines. */
+const GONE_ENGINES: readonly Engine[] = ["chromium", "webkit"];
+/** Probes read while the preview is down, for its backoff: three waits (2, 4 and 8 s, PreviewPane `PROBE_FIRST_MS` doubling). */
+const PROBES_READ = 4;
+/** Slack for those 14 s of waits and each probe's answer. */
+const PROBES_READ_MS = 30_000;
+/** The pane's first wait after a failed probe (PreviewPane `PROBE_FIRST_MS`), less a timer's slack. */
+const FIRST_WAIT_MS = 1800;
+/** Each wait at least this much longer than the one before: PreviewPane doubles it, and a probe's own answer rides on each. */
+const BACKOFF_GROWTH = 1.5;
+
+/**
+ * Leg 2 on `engine`: the agent stopped, so the shown preview's server is
+ * gone; the pane says the hub's words, its console holds no error while it
+ * probes, the probes back off, and the agent back, the page is shown.
+ */
+const serverGone = async (leg: {
+  base: string;
+  engine: Engine;
+  fleet: Awaited<ReturnType<Kit["fleet"]>>;
+  kit: Kit;
+  ported: string;
+}) => {
+  const { base, engine, fleet, kit, ported } = leg;
+  const { port } = await fleet.api<{ port: number }>(
+    `/api/instances/${ported}/preview-address`,
+    {}
+  );
+  const host = `${new URL(base).hostname}:${port}`;
+  await fleet.stop("agent");
+  const away = await kit.page("desk", { engine });
+  const errors: string[] = [];
+  away.on("console", (message) => {
+    if (message.type() === "error" && !kitsOwnMessage(message.text())) {
+      errors.push(`${message.text()} at ${message.location().url || "?"}`);
+    }
+  });
+  away.on("pageerror", (error) => errors.push(`uncaught: ${error.message}`));
+  const probes: number[] = [];
+  away.on("request", (request) => {
+    const at = new URL(request.url());
+    if (at.pathname === "/__cawco/ping" && at.port === String(port)) {
+      probes.push(Date.now());
+    }
+  });
+  await tabAt(away, ported);
+  await open(
+    away,
+    `${base}/session/${ported}`,
+    `[data-slot="pane"][data-pane="${ported}"] [data-slot="down"]`
+  );
+  const hubSaid = await paneNow(away, ported);
+  kit.check(
+    `2 ${engine}: the server gone: the pane says the hub's own words that it is down, and no Previews need advice`,
+    hubSaid.line.startsWith(`${host} answered: `) &&
+      !hubSaid.down.includes("Previews need"),
+    hubSaid.down
+  );
+  const nextSteps = hubSaid.line.match(NEXT_STEP)?.length ?? 0;
+  kit.check(
+    `2 ${engine}: its line says one next step, the pane's own: the hub's words carry the cause alone`,
+    nextSteps === 1 && hubSaid.line.endsWith(previewWords.tryingAgain),
+    `${nextSteps} next steps: ${hubSaid.line}`
+  );
+  await until(
+    `${PROBES_READ} probes of the preview that is down`,
+    () => Promise.resolve(probes.length),
+    (count) => count >= PROBES_READ,
+    PROBES_READ_MS
+  ).catch(() => undefined);
+  const waits = probes
+    .slice(1, PROBES_READ)
+    .map((at, n) => at - (probes[n] ?? at));
+  kit.check(
+    `2 ${engine}: the probes back off: the first wait about ${FIRST_WAIT_MS / 1000} s or more, each next one at least ${BACKOFF_GROWTH}× the last`,
+    waits.length === PROBES_READ - 1 &&
+      (waits[0] ?? 0) >= FIRST_WAIT_MS &&
+      waits.every(
+        (wait, n) => n === 0 || wait >= (waits[n - 1] ?? 0) * BACKOFF_GROWTH
+      ),
+    `${probes.length} probes; waits ${waits.map((wait) => `${wait} ms`).join(", ") || "none"}`
+  );
+  kit.check(
+    `2 ${engine}: while it is down, the page's console holds no error`,
+    errors.length === 0,
+    errors.length === 0
+      ? `none over ${probes.length} probes`
+      : errors.slice(0, 4).join(" | ")
+  );
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const agentAt = Date.now();
+  const served = await until(
+    "the page shown once the agent is back",
+    () => paneNow(away, ported),
+    (now) => now.ready && !now.down,
+    AGENT_BACK_MS
+  ).then(
+    () => Date.now() - agentAt,
+    () => null
+  );
+  const last = await paneNow(away, ported);
+  kit.check(
+    `2 ${engine}: the server back: the pane shows the page by itself, within ${AGENT_BACK_MS / 1000} s, no press`,
+    served !== null,
+    `shown ${served ?? "never"} ms after the agent was up; the pane now: ${last.down || "the page"}`
+  );
+  await away.context().close();
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   fleet.launch("sessiond");
@@ -619,7 +747,7 @@ const run = async (kit: Kit) => {
   );
   await desk.close();
 
-  // 2. A port preview, its machine's agent stopped.
+  // 2. A port preview whose server is gone: its machine's agent stopped.
   const app = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -636,46 +764,10 @@ const run = async (kit: Kit) => {
     name: "agent-away",
     port: app.port,
   });
-  await fleet.stop("agent");
-  const away = await kit.page("desk");
-  await tabAt(away, ported);
-  await open(
-    away,
-    `${base}/session/${ported}`,
-    `[data-slot="pane"][data-pane="${ported}"] [data-slot="down"]`
-  );
-  const hubSaid = await paneNow(away, ported);
-  kit.check(
-    "2: the agent stopped: the pane says the hub's own words for its 502, and no Previews need advice",
-    hubSaid.down.includes("answered 502:") &&
-      !hubSaid.down.includes("Previews need"),
-    hubSaid.down
-  );
-  const nextSteps = hubSaid.line.match(NEXT_STEP)?.length ?? 0;
-  kit.check(
-    "2: its line says one next step, the pane's own: the hub's 502 carries the cause alone",
-    nextSteps === 1 && hubSaid.line.endsWith(previewWords.tryingAgain),
-    `${nextSteps} next steps: ${hubSaid.line}`
-  );
-  fleet.launch("agent");
-  await fleet.agentUp();
-  const agentAt = Date.now();
-  const served = await until(
-    "the page shown once the agent is back",
-    () => paneNow(away, ported),
-    (now) => now.ready && !now.down,
-    AGENT_BACK_MS
-  ).then(
-    () => Date.now() - agentAt,
-    () => null
-  );
-  const last = await paneNow(away, ported);
-  kit.check(
-    `2: the agent back: the pane shows the page by itself, within ${AGENT_BACK_MS / 1000} s, no press`,
-    served !== null,
-    `shown ${served ?? "never"} ms after the agent was up; the pane now: ${last.down || "the page"}`
-  );
-  await away.close();
+  for (const engine of GONE_ENGINES) {
+    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time, the agent stopped and back for each
+    await serverGone({ base, engine, fleet, kit, ported });
+  }
 
   // 3. The agent frozen: still the machine the hub knows, its listener
   // silent, as one that resets its connections is.
@@ -693,10 +785,8 @@ const run = async (kit: Kit) => {
     async () => (await paneNow(frozen, ported)).down || "the page"
   );
   kit.check(
-    "3: the machine's listener silent: the pane says the hub's 502 and that its listener didn't answer the hub",
-    silent.includes(
-      "answered 502: its machine's listener didn't answer the hub"
-    ),
+    "3: the machine's listener silent: the pane says the hub's words that its listener didn't answer the hub",
+    silent.includes("answered: its machine's listener didn't answer the hub"),
     silent
   );
   fleet.freeze("agent", false);

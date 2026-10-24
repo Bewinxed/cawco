@@ -13,7 +13,8 @@
  * occurred" (https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS/Errors).
  * So the cause is built from what can be known: whether the browser says it
  * is offline, whether an answer came within the limit, how fast the request
- * failed, the status and the hub's own words when an answer came, whether a
+ * failed, the hub's own words that what serves the page is down or another
+ * answerer's status when an answer came, whether a
  * `no-cors` request is answered where the `cors` one wasn't (MDN, same page:
  * the opaque answer's "status is `0`, its headers are empty"), and whether
  * the hub itself reaches the same origin now ({@link PREVIEW_REACH_PATH}).
@@ -45,6 +46,18 @@ export const PAGE_SILENT_MS = 3000;
  */
 export const PREVIEW_PING_HEADER = "x-cawco-ping";
 
+/**
+ * The hub's answer to {@link PREVIEW_PING_PATH} when its listener for the
+ * origin stands but what serves the page doesn't answer it (its machine
+ * offline, its machine's listener silent, its workspace not running): a 200
+ * like the answer that it serves, so a probe of a preview that is down logs
+ * nothing in the person's console, with why in the hub's words. Every other
+ * 200 says it serves.
+ */
+export interface PreviewPingDown {
+  why: string;
+}
+
 /** The hub's own try of the origin's ping, now: answered by CawCo's listener, or why not. */
 export type HubReach = { reached: true } | { reached: false; why: string };
 
@@ -72,7 +85,8 @@ export interface PreviewWays {
  * it again under a whole fleet's load: CDP's `Network.setBlockedURLs`, the
  * browser's own block list, failed 20 pings in 0.7 ms median, 1.6 ms the
  * slowest. A probe judges by its fastest ask, as the first one settles on a
- * main thread a booting page holds up.
+ * main thread a booting page holds up, and asks its last once that thread
+ * runs a task on time ({@link quiet}).
  */
 export const INSTANT_REFUSAL_MS = 10;
 
@@ -91,8 +105,10 @@ export type PreviewUnreached =
   | { cause: "timeout"; seconds: number; hub: HubReach | null }
   /** Answered to a `no-cors` request, but not readable to a `cors` one: no CORS header. */
   | { cause: "unreadable" }
-  /** Answered with a status; `why` the hub's own words when it sent them. */
-  | { cause: "status"; status: number; why: string | null };
+  /** The hub answered, and what serves the page doesn't answer it ({@link PreviewPingDown}): `why` its words. */
+  | { cause: "down"; why: string }
+  /** Answered with an error status, which the hub never sends: something in front of it answered. */
+  | { cause: "status"; status: number };
 
 const TRAILING_STOP = /\.$/;
 
@@ -108,6 +124,39 @@ const TRAILING_STOP = /\.$/;
  */
 const offline = (hub: HubReach | null): boolean =>
   hub === null && navigator.onLine === false;
+
+/** The page's next task, posted on a channel: a timer's would be clamped to 4 ms once nested ("the timeout is at least 4ms", HTML's timer initialization steps). */
+const nextTask = (): Promise<void> =>
+  new Promise((done) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      done();
+    };
+    channel.port2.postMessage(null);
+  });
+
+/** Our call: how long a probe waits for its page's main thread to run a task on time before it asks anyway. */
+const QUIET_MOST_MS = 3000;
+
+/**
+ * Settles once the page's main thread runs a posted task within half of
+ * {@link INSTANT_REFUSAL_MS} of its posting, or after {@link QUIET_MOST_MS}:
+ * an ask timed then measures the browser, not a booting page's long tasks
+ * (preview-reach spec: a pane asking while the dashboard booted timed every
+ * ask of a block list's refusal above 10 ms, which fails one in 0.2 ms).
+ */
+const quiet = async (): Promise<void> => {
+  const most = performance.now() + QUIET_MOST_MS;
+  while (performance.now() < most) {
+    const posted = performance.now();
+    // biome-ignore lint/performance/noAwaitInLoops: one task at a time, each timed alone
+    await nextTask();
+    if (performance.now() - posted < INSTANT_REFUSAL_MS / 2) {
+      return;
+    }
+  }
+};
 
 /**
  * Probes `origin`'s ping as the frame would load it: null when it answers
@@ -153,7 +202,9 @@ export async function probePreview(
     return { cause: "offline" };
   }
   // A failure is settled on the page's main thread, which a page still
-  // booting holds up: its fastest ask says how fast the browser refused it.
+  // booting holds up: its fastest ask says how fast the browser refused it,
+  // and the last is asked once that thread runs a task on time.
+  await quiet();
   const last = await ask("cors");
   if (last.read?.kind === "answered") {
     return answeredWith(last.read.value);
@@ -163,20 +214,21 @@ export async function probePreview(
     : { cause: "failed", hub };
 }
 
-/** An answer the browser could read: null when ok, else its status and the hub's own words when it sent them. */
+/** An answer the browser could read: null when it serves, the hub's words when it says what serves the page is down ({@link PreviewPingDown}), else its status. */
 const answeredWith = async (
   answer: Response
 ): Promise<PreviewUnreached | null> => {
-  if (answer.ok) {
-    return null;
+  if (!answer.ok) {
+    await answer.body?.cancel();
+    return { cause: "status", status: answer.status };
   }
   const why = await answer
     .json()
-    .then((body: { why?: unknown } | null) =>
+    .then((body: Partial<PreviewPingDown> | null) =>
       typeof body?.why === "string" ? body.why.replace(TRAILING_STOP, "") : null
     )
     .catch(() => null);
-  return { cause: "status", status: answer.status, why };
+  return why === null ? null : { cause: "down", why };
 };
 
 /** The hub's answer at `url` (a {@link PREVIEW_REACH_PATH} or {@link PREVIEW_REACH_API} with `?origin=`), or null when the hub can't be asked. */
@@ -247,10 +299,10 @@ export const previewUnreachedWords = (
       return `This browser is offline, so it can't reach ${host}. Connect this device to a network.`;
     case "unreadable":
       return `${host} answered without the Access-Control-Allow-Origin header the hub's own answer carries, so something in front of it, a proxy or a CDN rule, changed the answer. Let ${host}${PREVIEW_PING_PATH} through to the hub unchanged.`;
+    case "down":
+      return `${host} answered: ${failed.why}.`;
     case "status":
-      return failed.why
-        ? `${host} answered ${failed.status}: ${failed.why}.`
-        : `${host} answered ${failed.status}, which isn't the hub's own answer, so something in front of it answered instead. ${need}.`;
+      return `${host} answered ${failed.status}, which isn't the hub's own answer, so something in front of it answered instead. ${need}.`;
     case "refused":
     case "failed":
     case "timeout":

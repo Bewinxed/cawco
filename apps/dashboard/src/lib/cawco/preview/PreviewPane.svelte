@@ -429,11 +429,12 @@
 
   /**
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
-   * which answers any page with no credentials, and answers 502 with the
-   * hub's words when the session's machine listener doesn't answer the hub),
-   * before the frame loads. Unreached, the pane says what failed by its own
-   * cause (core preview-reach.ts: offline, refused at once, no answer in
-   * time, answered without its CORS header, a status, and whether the hub
+   * which answers any page with no credentials, and with the hub's words,
+   * still a 200, when the session's machine listener doesn't answer the hub:
+   * core `PreviewPingDown`), before the frame loads. Unreached, the pane says
+   * what failed by its own cause (core preview-reach.ts: offline, refused at
+   * once, no answer in time, answered without its CORS header, the hub's
+   * word that it is down, another answerer's status, and whether the hub
    * itself reaches the origin), the fix, and probes again by itself
    * (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once when its tab
    * is back in view) until one answers: never a fallback. Once reached, the
