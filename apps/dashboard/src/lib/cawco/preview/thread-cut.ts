@@ -12,8 +12,15 @@
  * The cut is drawn by the room's mask alone (`--fade-inset-end`, the house
  * fade's own inset, edge-fade.css): the room's box, the reply under it and
  * the words in it stay where they stand, so nothing moves when it is set
- * and no observer of their sizes is woken by it. The room's spacer (its
- * `::after`, as tall as the cut) lets the last words scroll clear of it.
+ * and no observer of their sizes is woken by it. The words the cut hides
+ * take no press and no selection: the room's band (its `::after`, as tall
+ * as the cut, stuck to the room's foot and adding nothing to its scroll)
+ * stands over them, and the scrollbar keeps its whole track beside it.
+ *
+ * The room is cut again whenever its scroll comes to rest (`scrollend`),
+ * so the person's own scroll leaves the cut on words too, only the mask's
+ * inset changing; at the thread's end nothing runs past the edge, so
+ * nothing is cut and the last words stand on the reply.
  */
 
 /** A heading, a speaker line among them (Who's `h2`). */
@@ -81,16 +88,19 @@ const crosses = (line: Line, at: number) => {
  * How far above `room`'s own edge its thread is cut, px: none where the
  * words end inside the room or its edge already crosses a line of them,
  * else the least that puts the cut inside a line above (none if that is
- * more than `MOST` of the room).
+ * more than `MOST` of the room). Measured on screen, where the lines' boxes
+ * are, and given in the room's own px: a card still scaling in (its open
+ * from the pill) cuts where it will once it stands at its size.
  */
 export const threadCut = (room: HTMLElement): number => {
   const list = room.querySelector('[data-slot="thread"]');
-  if (!list) {
+  const box = room.getBoundingClientRect();
+  if (!(list && room.offsetHeight > 0 && box.height > 0)) {
     return 0;
   }
-  const edge =
-    room.getBoundingClientRect().top + room.clientTop + room.clientHeight;
-  if (list.getBoundingClientRect().bottom <= edge + 1) {
+  const scale = box.height / room.offsetHeight;
+  const edge = box.top + (room.clientTop + room.clientHeight) * scale;
+  if (list.getBoundingClientRect().bottom <= edge + scale) {
     return 0;
   }
   const lines = linesIn(list);
@@ -104,7 +114,7 @@ export const threadCut = (room: HTMLElement): number => {
       at = Math.max(at, Math.min(edge, line.bottom - hold));
     }
   }
-  const cut = edge - at;
+  const cut = (edge - at) / scale;
   return cut <= room.clientHeight * MOST ? cut : 0;
 };
 

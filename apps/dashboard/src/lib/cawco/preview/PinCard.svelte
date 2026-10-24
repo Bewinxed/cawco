@@ -512,13 +512,14 @@
 <!-- What the comment holds, the one part that scrolls: the head stands over
      it and the reply under it, never a scroll away; the house edge fade says
      there is more above or below, its foot cut on a line of the words
-     (thread-cut.ts), its spacer as tall as the cut so the last words scroll
-     clear of it. -->
+     (thread-cut.ts) as it opens, resizes and comes to rest, its band over
+     the words the cut hides. -->
 <div
-  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0 after:h-(--fade-inset-end) after:shrink-0"
+  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0 after:sticky after:bottom-0 after:h-(--fade-inset-end) after:-mt-(--fade-inset-end) after:shrink-0"
   data-whole={squeezed || undefined}
   data-pin-room
   onscroll={readAt}
+  onscrollend={(event) => cutOnWords(event.currentTarget)}
   bind:this={roomEl}
 >
   <!-- The transcript's turns: a run of one speaker's entries is one turn
