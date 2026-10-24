@@ -232,6 +232,7 @@ function build(viewport) {
     moment: null,
     network: "public",
     pingRun: null,
+    pingTail: null,
     timers: [],
     runs: [],
   };
@@ -431,15 +432,18 @@ function finishPing(S) {
     flying.cancel();
   } else {
     flying.effect.updateTiming({ iterations: currentIteration + 1 });
+    S.pingTail = flying;
   }
   S.pingRun = null;
 }
 
-function stopPing(S) {
+/** The ping's loop stops; `tail`: the ring still in flight goes too (a jump to a moment, not a play into one). */
+function stopPing(S, { tail = false } = {}) {
   S.pingRun?.cancel();
   S.pingRun = null;
-  for (const ring of S.ping.getAnimations()) {
-    ring.cancel();
+  if (tail) {
+    S.pingTail?.cancel();
+    S.pingTail = null;
   }
 }
 
@@ -494,7 +498,7 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   S.flight.replaceChildren();
   clearTimers(S);
   if (!keepPing) {
-    stopPing(S);
+    stopPing(S, { tail: still });
   }
   const kind = kindOf(m);
   S.moment = m;
