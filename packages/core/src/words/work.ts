@@ -111,6 +111,8 @@ export const workWords = {
     "its harness process died, so what it left running was ended",
   /** Beside a process of that line that had ended before the agent came to it. */
   leftRunningGoneFirst: "it had ended already",
+  /** The keeper's log line once a child of its ended, before the processes it names (sessiond server.ts `#sweep`). */
+  leftRunningSwept: "it ended, so what it left running is told to end",
   /**
    * A command a crash cut (hub server.ts, core `CutCommand`): the command,
    * as it was asked, and what it had printed by then; `output` undefined

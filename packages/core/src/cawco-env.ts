@@ -53,6 +53,14 @@ export const CAWCO_ENV = {
    * it and every client dials it, so both ends must read the same variable.
    */
   sessiondEndpoint: "CAWCO_SESSIOND_ENDPOINT",
+  /**
+   * Set by sessiond in each child it starts, a value of that child's own,
+   * and inherited by everything the child starts: when the child ends, every
+   * process still carrying it is ended with it, wherever it went (sessiond
+   * server.ts `#readTree`). Read by sessiond alone, from other processes'
+   * environments.
+   */
+  sessiondTree: "CAWCO_SESSIOND_TREE",
   /** Where the links the hub hands out point. */
   dashboardUrl: "CAWCO_DASHBOARD_URL",
   /**

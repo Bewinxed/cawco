@@ -45,6 +45,12 @@
  * - x2. The same for OpenCode, its server killed: the command is gone and
  *   named, and the turn handed back when the agent takes the session up
  *   again names it interrupted, its output not kept.
+ * - m1. A process a Claude delegate's harness starts outside any shell call
+ *   (an MCP server's helper, `setsid` and orphaned when its launcher exits,
+ *   so neither its parent nor its process group is the harness's) is
+ *   running 5 s before the harness is killed alone (SIGKILL): within
+ *   seconds it is gone, ended and named in its keeper's log (sessiond
+ *   server.ts `#sweep`, found by the tree mark it inherited).
  * - u1. A delegate's process is killed while its agent is down, and the
  *   agent comes back with its sessiond frozen: while the machine's custody
  *   is undecided the item stays live and its parent hears nothing.
@@ -56,11 +62,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workWords } from "../../../packages/core/src/index";
+import { configDirClaudeJson } from "../../../packages/core/src/paths";
 import {
   commandLines,
   processLineage,
 } from "../../../packages/core/src/process-identity";
-import { type Pid, signal } from "../../../packages/core/src/signal";
+import { listedPid, type Pid, signal } from "../../../packages/core/src/signal";
 import { toolWords } from "../../lib/tool-call";
 import {
   delay,
@@ -81,6 +88,7 @@ const TAGS = {
   orphan: "PROBE-ORPHAN",
   piCut: "PROBE-PICUT",
   openCut: "PROBE-OCCUT",
+  mcpOrphan: "PROBE-MCPORPHAN",
 } as const;
 
 /** The commands whose CLI or server is killed under them: each its own `sleep`, found by its argument. */
@@ -245,6 +253,11 @@ const respond = (request: Seen): Reply => {
   }
   if (brief.includes(TAGS.custody)) {
     return custodyReply(request, brief);
+  }
+  if (brief.includes(TAGS.mcpOrphan)) {
+    // No shell call: a turn that streams for two minutes keeps its process
+    // up until the leg kills it.
+    return { everyMs: 500, words: Array.from({ length: 240 }, () => "wait ") };
   }
   const left = leftReply(request, brief);
   if (left) {
@@ -895,6 +908,133 @@ const ancestryOf = async (command: string): Promise<string> => {
   return chain.join(" < ") || "nothing";
 };
 
+/** What a session's harness reads, off its process's environment: its Claude config dir. */
+const configDirOf = async (
+  fleet: KitFleet,
+  id: string
+): Promise<string | undefined> => {
+  const environ = await Bun.file(
+    `/proc/${await fleet.sessionPid(id)}/environ`
+  ).text();
+  return environ
+    .split("\0")
+    .find((line) => line.startsWith("CLAUDE_CONFIG_DIR="))
+    ?.slice("CLAUDE_CONFIG_DIR=".length);
+};
+
+/** m1. */
+const mcpOrphanLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const marker = `probe-mcp-orphan-${crypto.randomUUID().slice(0, 8)}`;
+  const flag = join(fleet.sandbox, `${marker}.flag`);
+  const launcher = join(fleet.sandbox, `${marker}.sh`);
+  // The server's launcher, as an MCP server's wrapper does it: its helper
+  // in a session of its own, then it exits. Only the session started while
+  // the flag stands gets one.
+  await writeFile(
+    launcher,
+    `#!/bin/sh
+[ -e '${flag}' ] || exit 0
+rm -f '${flag}'
+perl -MPOSIX -e 'POSIX::setsid(); sleep 3604' ${marker} </dev/null >/dev/null 2>&1 &
+exit 0
+`,
+    { mode: 0o755 }
+  );
+  // A user-scope MCP server, as Claude Code reads it from its config dir's
+  // `.claude.json` (every session of the account loads it).
+  const claudeJson = configDirClaudeJson(await configDirOf(fleet, parent));
+  const config = JSON.parse(
+    await Bun.file(claudeJson)
+      .text()
+      .catch(() => "{}")
+  ) as { mcpServers?: Record<string, unknown> };
+  config.mcpServers = {
+    ...config.mcpServers,
+    "probe-orphan": { type: "stdio", command: "/bin/sh", args: [launcher] },
+  };
+  await writeFile(claudeJson, JSON.stringify(config, null, 2));
+  await writeFile(flag, "");
+  const started = await delegate(
+    fleet,
+    parent,
+    "MCP orphan delegate",
+    `${TAGS.mcpOrphan}: its MCP server leaves a helper.`
+  );
+  const orphan = await until(
+    `${marker} running`,
+    async () =>
+      (await commandLines()).find((one) => one.command.includes(marker))?.pid,
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const harness = await fleet.sessionPid(started.instanceId);
+  const lineage = await processLineage();
+  const row = lineage.find((one) => one.pid === orphan);
+  const harnessGroup = lineage.find((one) => one.pid === harness)?.pgid;
+  await delay(5000);
+  const mark = await fleet.logMark("sessiond");
+  signal(
+    await heldPid(fleet, (procId) => procId === started.instanceId),
+    "SIGKILL"
+  );
+  const gone = await until(
+    `${marker} ended`,
+    async () =>
+      !(await commandLines()).some((one) => one.command.includes(marker)),
+    Boolean,
+    20_000
+  ).catch(() => false);
+  const said = await until(
+    "sessiond's line on what it ended",
+    async () => {
+      const log = await mark.since();
+      return log.includes(marker) ? log : undefined;
+    },
+    Boolean,
+    20_000
+  ).catch(async () => await mark.since());
+  const line =
+    said.split("\n").find((one) => one.includes(workWords.leftRunningSwept)) ??
+    "";
+  kit.check(
+    "m1: a helper the harness started outside any shell call, orphaned out of its process group, is ended within seconds of the harness's kill and named in its keeper's log",
+    row !== undefined &&
+      row.ppid !== harness &&
+      row.pgid !== harnessGroup &&
+      gone === true &&
+      line.includes(marker),
+    `orphan ${orphan ?? "never seen"} (ppid ${row?.ppid}, pgid ${row?.pgid}; harness ${harness}, its group ${harnessGroup}); gone ${gone}; ${line || "no such line in sessiond's log"}`
+  );
+  const after = JSON.parse(await Bun.file(claudeJson).text()) as {
+    mcpServers?: Record<string, unknown>;
+  };
+  await writeFile(
+    claudeJson,
+    JSON.stringify(
+      {
+        ...after,
+        mcpServers: Object.fromEntries(
+          Object.entries(after.mcpServers ?? {}).filter(
+            ([name]) => name !== "probe-orphan"
+          )
+        ),
+      },
+      null,
+      2
+    )
+  );
+  const stray = (await commandLines()).filter((one) =>
+    one.command.includes(marker)
+  );
+  for (const left of stray) {
+    signal(listedPid(left.pid), "SIGKILL");
+  }
+};
+
 /** The pid of a fleet process sessiond holds whose proc id `match` takes. */
 const heldPid = async (
   fleet: KitFleet,
@@ -1049,6 +1189,7 @@ const spec: Spec = {
       // OpenCode's server under.
       kill: killHeld((procId) => procId.startsWith("opencode-server")),
     });
+    await mcpOrphanLeg(kit, fleet, parent);
     await custodyLeg(kit, fleet, parent);
   },
 };

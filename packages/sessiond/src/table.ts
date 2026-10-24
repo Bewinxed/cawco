@@ -27,7 +27,7 @@
  * 35 minutes. The worker reads the kernel directly, never through a process.
  */
 import { standalone } from "@cawco/core/runtime";
-import type { TableAnswer } from "./table-worker";
+import type { TableAnswer, TableAsk } from "./table-worker";
 
 /**
  * One process as the operating system lists it. `started` is its start time
@@ -35,10 +35,14 @@ import type { TableAnswer } from "./table-worker";
  * still the same process and not another that was since given its number.
  */
 export interface Listed {
+  /** Its command line, in a marked reading, for a process that carries a tree mark. */
+  command?: string;
   pgid: number;
   pid: number;
   ppid: number;
   started: string;
+  /** The child whose tree it is, by the mark its environment carries (`CAWCO_SESSIOND_TREE`), in a marked reading. */
+  tree?: string;
 }
 
 const SPACES = /\s+/;
@@ -79,10 +83,8 @@ const tableWorker = (): Worker => {
       return;
     }
     waiting?.resolve(
-      answer.rows.map(({ pid, ppid, pgid, started: at }) => ({
-        pid,
-        ppid,
-        pgid,
+      answer.rows.map(({ started: at, ...row }) => ({
+        ...row,
         // As this daemon always held it: the columns split on runs of spaces
         // and joined by one (`Thu Oct 1 20:26:18 2026`).
         started: at.split(SPACES).join(" "),
@@ -105,17 +107,18 @@ const tableWorker = (): Worker => {
   return started;
 };
 
-const readOnce = (): Promise<Listed[]> =>
+const readOnce = (marked: boolean): Promise<Listed[]> =>
   new Promise((resolve, reject) => {
     answering = { resolve, reject };
-    tableWorker().postMessage(null);
+    tableWorker().postMessage({ marked } satisfies TableAsk);
   });
 
 let inFlight: Promise<Listed[]> | undefined;
-let queued: Promise<Listed[]> | undefined;
+/** The reading that starts once the one in flight ends, marked when any ask sharing it wants the marks. */
+let queued: { marked: boolean; reading: Promise<Listed[]> } | undefined;
 
-const startReading = (): Promise<Listed[]> => {
-  const reading = readOnce().finally(() => {
+const startReading = (marked: boolean): Promise<Listed[]> => {
+  const reading = readOnce(marked).finally(() => {
     if (inFlight === reading) {
       inFlight = undefined;
     }
@@ -130,15 +133,26 @@ const nothing = (): void => undefined;
  * Every process on the machine, read from the kernel (core's process reader:
  * one `kern.proc.all` sysctl on macOS, `/proc` on Linux), as `ps -A -o
  * pid=,ppid=,pgid=,lstart=` listed it. Neither system has a call that lists a
- * process's descendants, so the whole table is read.
+ * process's descendants, so the whole table is read. `marked`, each
+ * process's environment is read too, for the child whose tree mark it
+ * carries ({@link Listed.tree}): asked where a child's tree is ended or
+ * signalled, never on the survey's clock.
  */
-export const processTable = (): Promise<Listed[]> => {
+export const processTable = (marked = false): Promise<Listed[]> => {
   if (!inFlight) {
-    return startReading();
+    return startReading(marked);
   }
-  queued ??= inFlight.then(nothing, nothing).then(() => {
-    queued = undefined;
-    return startReading();
-  });
-  return queued;
+  if (queued) {
+    queued.marked ||= marked;
+    return queued.reading;
+  }
+  const next: { marked: boolean; reading: Promise<Listed[]> } = {
+    marked,
+    reading: inFlight.then(nothing, nothing).then((): Promise<Listed[]> => {
+      queued = undefined;
+      return startReading(next.marked);
+    }),
+  };
+  queued = next;
+  return next.reading;
 };

@@ -35,6 +35,7 @@ import {
   type SessionLimits,
   SessionRing,
 } from "@cawco/core";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
@@ -60,6 +61,7 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "@cawco/core/signal";
+import { workWords } from "@cawco/core/words/work";
 import {
   type ChildGroup,
   type Children,
@@ -128,8 +130,10 @@ export const SWEEP_GRACE_MS = 2000;
  * How often every live child's tree is read, so a child that dies unasked
  * (the kernel's OOM killer, a crash) still has its tree on record. Our
  * choice: one `ps` for the whole machine every half minute costs nothing
- * anyone can measure, and a process started and orphaned inside one interval
- * is the only one a sweep can miss.
+ * anyone can measure. A process started and orphaned inside one interval,
+ * out of the child's process group, is not in that record: the reading at
+ * the child's end finds it by its tree mark ({@link SessiondServer}
+ * `#readTree`).
  */
 export const SURVEY_INTERVAL_MS = 30_000;
 
@@ -203,13 +207,18 @@ const stillIn = async (
  * it. A session gets it as a session does: its socket, and the embedded pi's
  * package dir its entry set, are CawCo's own and reach no child (core
  * `sessionEnvironment`). A harness server, which runs many sessions, gets no
- * `CAWCO_*` at all (`serverEnvironment`).
+ * `CAWCO_*` at all (`serverEnvironment`). Either gets its tree mark
+ * ({@link Proc.mark}), last, so no spec names another's.
  */
-const childEnvironment = (spec: ProcSpec): Record<string, string> => ({
+const childEnvironment = (
+  spec: ProcSpec,
+  mark: string
+): Record<string, string> => ({
   ...(spec.inherit === "server"
     ? serverEnvironment(process.env)
     : sessionEnvironment(process.env)),
   ...spec.env,
+  [CAWCO_ENV.sessiondTree]: mark,
 });
 
 /** A live (or recently dead) child, plus the ring nobody else may reach. */
@@ -234,6 +243,15 @@ interface Proc {
   group?: string;
   /** Cuts stdout into lines. Framing only. */
   lines: LineSplitter;
+  /**
+   * Its tree mark: a value of its own in its environment
+   * (`CAWCO_SESSIOND_TREE`), which everything it starts inherits and keeps
+   * wherever it goes, a new session or process group and a new parent
+   * included ({@link SessiondServer} `#survey`).
+   */
+  mark: string;
+  /** The command lines of its tree's processes that carry its mark, by pid, as the last marked reading that found any read them: what its sweep names. */
+  named: Map<number, string>;
   /** The child's pid, read once its spawn made it: a child with none never becomes a proc. */
   pid: Pid;
   procId: string;
@@ -821,6 +839,7 @@ export class SessiondServer {
     }
 
     let child: ChildProcessWithoutNullStreams;
+    const mark = randomUUID();
     // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
     const args = spec.args ?? [];
     // With a cgroup of its own, the child starts in a shell that joins it and
@@ -838,7 +857,7 @@ export class SessiondServer {
         cwd: spec.cwd,
         // The spec is built entirely agent-side and handed over opaque (§3.2):
         // sessiond does not read, validate or enrich a single entry of it.
-        env: childEnvironment(spec),
+        env: childEnvironment(spec, mark),
         stdio: ["pipe", "pipe", "pipe"],
         // Its own process group, which it leads: what it starts stays findable
         // under its pid after it has exited ({@link #survey}).
@@ -861,6 +880,8 @@ export class SessiondServer {
       procId,
       child,
       pid,
+      mark,
+      named: new Map(),
       tree: new Map(),
       ring: new SessionRing<string>(SESSIOND_RING_LINES),
       sizes: [],
@@ -1007,15 +1028,24 @@ export class SessiondServer {
 
   /**
    * Everything `proc` started that is running now, itself included while it
-   * lives: its descendants by parentage, the process group it leads, and what
-   * an earlier reading found that is still the same process, with the
-   * descendants of those. Recorded on the proc, so the next reading still
-   * knows them after the child has exited and they have been reparented.
+   * lives: its descendants by parentage, the process group it leads, what
+   * an earlier reading found that is still the same process, every process
+   * that carries its tree mark ({@link Proc.mark}) in a marked reading, and
+   * the descendants of all those. Recorded on the proc, so the next reading
+   * still knows them after the child has exited and they have been
+   * reparented.
    *
    * Parentage alone misses what was reparented before the reading, and the
    * group alone misses what left it: a shell the child ran with job control,
-   * a browser its driver launched detached. Read together, at each moment the
-   * child is asked to end, they are the tree.
+   * a browser its driver launched detached. Both together still miss a
+   * process that left the group and was orphaned since the last reading: an
+   * MCP server's helper started with `setsid` whose launcher exited, under
+   * init by the time the child dies. Its environment still carries the
+   * child's mark, and every reading taken where the tree is ended or
+   * signalled is marked ({@link #readTree}). macOS withholds the
+   * environment of Apple's platform binaries (`/bin/sleep`, `/bin/bash`), so
+   * there the mark finds only the rest (node, a browser, any tool installed
+   * apart from the system).
    *
    * Every live child is read on a clock as well ({@link SURVEY_INTERVAL_MS}):
    * one the kernel kills for memory is asked nothing first, and what it had
@@ -1056,21 +1086,30 @@ export class SessiondServer {
       // The child's own pid is the child only while it lives: afterwards the
       // number is the system's to hand out again.
       const own =
-        row.pid === root
+        row.tree === proc.mark ||
+        (row.pid === root
           ? proc.alive
-          : row.pgid === root || proc.tree.get(row.pid) === row.started;
+          : row.pgid === root || proc.tree.get(row.pid) === row.started);
       if (own) {
         take(row);
       }
     }
     const kept = await stillIn(proc, running);
     proc.tree = kept;
+    const named = table.flatMap((row) =>
+      row.command !== undefined && row.tree === proc.mark
+        ? [[row.pid, row.command] as const]
+        : []
+    );
+    if (named.length > 0) {
+      proc.named = new Map(named);
+    }
     return [...kept.keys()].map(listedPid);
   }
 
-  /** {@link #survey} on a fresh reading of the process table. */
+  /** {@link #survey} on a fresh reading of the process table, marked: what carries the child's mark is its own. */
   async #readTree(proc: Proc): Promise<Pid[]> {
-    return this.#survey(proc, await processTable());
+    return this.#survey(proc, await processTable(true));
   }
 
   /** A signal for the child reaches everything it started. */
@@ -1127,6 +1166,16 @@ export class SessiondServer {
     for (const pid of left) {
       signalPid(pid, "SIGTERM");
     }
+    console.info(
+      `[sessiond] ${proc.procId} (${proc.pid}): ${workWords.leftRunningSwept}: ${left
+        .map((pid) => {
+          const command = proc.named.get(pid);
+          return command
+            ? `pid ${pid} (${command.slice(0, 120)})`
+            : `pid ${pid}`;
+        })
+        .join(", ")}`
+    );
     const timer = setTimeout(() => {
       this.#sweeps.delete(timer);
       this.#kill(proc).catch((error: unknown) => {
@@ -1302,7 +1351,7 @@ export class SessiondServer {
     }
     const alive = [...this.#procs.values()].filter((proc) => proc.alive);
     if (alive.length > 0) {
-      const table = await processTable().catch((error: unknown) => {
+      const table = await processTable(true).catch((error: unknown) => {
         console.error(
           `[sessiond] drain: the process table could not be read before the children were told to end: ${reasonOf(error)}`
         );
@@ -1333,7 +1382,7 @@ export class SessiondServer {
     if (this.#procs.size === 0) {
       return;
     }
-    const table = await processTable().catch((error: unknown) => {
+    const table = await processTable(true).catch((error: unknown) => {
       console.error(
         `[sessiond] drain: the process table could not be read for the final kill; what the children started may outlive them: ${reasonOf(error)}`
       );
