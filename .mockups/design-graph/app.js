@@ -751,13 +751,13 @@ function drawDoors(c) {
   box.replaceChildren();
   for (const m of c.machines) {
     const d = document.createElement("button"); d.type = "button"; d.className = "door"; d.dataset.machine = m.id; d.tabIndex = -1;
-    d.setAttribute("aria-label", "Go to " + m.name); d.innerHTML = "<span>" + esc(m.name) + "</span>" + icon(ICON.chevron);
+    d.setAttribute("aria-label", "Go to " + m.name); d.innerHTML = '<span class="door-face"><span class="door-name">' + esc(m.name) + "</span>" + icon(ICON.chevron) + "</span>";
     d.onclick = (e) => { e.stopPropagation(); fitRegion(c.id, m.id, "pan"); };
     box.append(d);
   }
   for (const edge of ["top", "bottom"]) {
     const d = document.createElement("button"); d.type = "button"; d.className = "door more"; d.dataset.more = edge; d.tabIndex = -1;
-    d.innerHTML = "<span></span>" + icon(ICON.chevron);
+    d.innerHTML = '<span class="door-face"><span class="door-name"></span>' + icon(ICON.chevron) + "</span>";
     d.onclick = (e) => { e.stopPropagation(); openOutline(c.id, d); };
     box.append(d);
   }
@@ -797,7 +797,7 @@ function viewChanged(cid) {
     list.sort((a, b) => a.at - b.at);
     const shown = list.length > 4 ? list.slice(0, 3) : list, rest = list.length - shown.length;
     for (const x of list.slice(shown.length)) delete x.d.dataset.on;
-    if (rest) { moreDoor.querySelector("span").textContent = rest + " more"; moreDoor.setAttribute("aria-label", rest + " more machines, open the Outline"); moreDoor.style.setProperty("--door-turn", DOOR_TURN[band]); shown.push({ d: moreDoor, at: Infinity }); } else delete moreDoor.dataset.on;
+    if (rest) { moreDoor.querySelector(".door-name").textContent = rest + " more"; moreDoor.setAttribute("aria-label", rest + " more machines, open the Outline"); moreDoor.style.setProperty("--door-turn", DOOR_TURN[band]); shown.push({ d: moreDoor, at: Infinity }); } else delete moreDoor.dataset.on;
     // Laid along the band in order, each its own width apart by --space-1, inside it by --space-2; where their
     // run is longer than the band, each names its region in an equal share, its words cut at the end.
     const span = W;
@@ -1119,7 +1119,7 @@ function buildDock(opts = {}) {
   // the move is called; the edits stand before them when there are any.
   let html = '<header class="dock-head"><h2 class="dock-title">' + esc(title) + "</h2>";
   html += '<div class="edits">';
-  if (edited) html += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original">Original</button><button class="t-tab" role="tab" data-view="edited">Edited</button></div><span class="badge edits-count"><span class="num">' + n + "</span>" + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
+  if (edited) html += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original"><span class="t-label">Original</span></button><button class="t-tab" role="tab" data-view="edited"><span class="t-label">Edited</span></button></div><span class="badge edits-count"><span class="num">' + n + "</span>" + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
   html += '</div><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button></div><span class="readout" id="readout"></span></header>';
   html += '<div class="tl" id="tl"><div class="end-area" id="endArea"></div>';
   html += '<div class="tl-row ruler-row"><div class="ruler" id="ruler"></div></div>';
@@ -2022,6 +2022,8 @@ function drawDials(cid = tab) {
   }
 }
 
+// A segment's words: cut inside it where its groove has no room, the whole name in its title.
+function labelTab(b, name) { b.replaceChildren(); const l = document.createElement("span"); l.className = "t-label"; l.textContent = name; b.append(l); b.title = name; }
 // ---- Each component's page, graph section and tab ----
 // The zoom group: out, the zoom's figure (a press is Fit all, ⇧1), in; then the Outline. Built for the
 // toolbar (the shown graph's) and for each section's head (every graph on screen).
@@ -2043,7 +2045,7 @@ for (const c of review) {
   for (const z of sec.querySelectorAll("[data-z]")) z.onclick = () => zoomAct(c.id, z);
   $("graphs").append(sec);
   const b = document.createElement("button");
-  b.className = "t-tab"; b.setAttribute("role", "tab"); b.dataset.tab = c.id; b.textContent = c.name;
+  b.className = "t-tab"; b.setAttribute("role", "tab"); b.dataset.tab = c.id; labelTab(b, c.name);
   b.onclick = () => { if (tab === c.id) return; stopPlay(); tab = c.id; peek = null; time = null; closePop(true); render(true); };
   $("tabs").append(b);
 }

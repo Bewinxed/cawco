@@ -22,6 +22,13 @@ function install() {
   K.box = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
   // Contrast between two CSS colours (WCAG 2), each resolved on a 1px canvas.
   { const cv = document.createElement("canvas").getContext("2d", { willReadFrequently: true }); const rgba = (c) => { cv.clearRect(0, 0, 1, 1); cv.fillStyle = "#000"; cv.fillStyle = c; cv.fillRect(0, 0, 1, 1); return [...cv.getImageData(0, 0, 1, 1).data]; }; const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }, L = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); K.ratio = (a, b) => { const x = L(rgba(a)), y = L(rgba(b)); return Math.round(((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)) * 100) / 100; }; K.over = (...cs) => { cv.clearRect(0, 0, 1, 1); for (const c of cs) { cv.fillStyle = "#000"; cv.fillStyle = c; cv.fillRect(0, 0, 1, 1); } const d = cv.getImageData(0, 0, 1, 1).data; return "rgb(" + d[0] + ", " + d[1] + ", " + d[2] + ")"; }; }
+  // A door's drawn box: its face's border box less the positive part of its clip-path inset (inset(t r b l)).
+  K.drawn = (face) => {
+    const r = face.getBoundingClientRect(), m = getComputedStyle(face).clipPath.match(/inset\(([^)]*)\)/);
+    let [t, rt, b, l] = [0, 0, 0, 0];
+    if (m) { const v = m[1].split(" round ")[0].trim().split(/\s+/).map(parseFloat); [t, rt, b, l] = [v[0], v[1] ?? v[0], v[2] ?? v[0], v[3] ?? v[1] ?? v[0]]; }
+    return { left: r.left + Math.max(0, l), right: r.right - Math.max(0, rt), top: r.top + Math.max(0, t), bottom: r.bottom - Math.max(0, b) };
+  };
   // The real hit area: from the element's centre out along each axis, half a pixel at a time, while
   // elementFromPoint still lands on it (or inside it).
   K.hitSpan = (el) => {
@@ -245,14 +252,16 @@ async function deskMotion(browser, scheme) {
   ok(V, "Show: the tab's box grows back to the panel's (0 tab, ½ between, 1 the panel); contents in over the second half", near(show[0].shell.w, 36, 0.5) && show[1].shell.w > 40 && boxNear(show[2].shell, panelBox, 1) && show[0].toolbar === 0 && show[2].toolbar === 1, JSON.stringify(show.map((s) => [r1(s.shell.x), r1(s.shell.w), s.toolbar])));
   await C.thaw(); await page.waitForTimeout(400);
   // A Show caught mid-Hide turns back from where the box is drawn.
-  await page.click("#hide"); await page.waitForTimeout(120);
-  const mid = await ev(() => __k.box(document.getElementById("shell")).w);
+  // The clock held at half way through the Hide, so the press lands mid-flight on every engine and machine.
   await C.freeze();
+  await page.click("#hide"); await frame(page);
+  await C.seek(0.5);
+  const mid = await ev(() => __k.box(document.getElementById("shell")).w);
   const sb = await ev(() => __k.box(document.getElementById("shell")));
   await page.mouse.click(sb.x + sb.w / 2, sb.y + Math.min(sb.h / 2, 18)); await frame(page);
   await C.seek(0);
   const turn = await ev(() => __k.box(document.getElementById("shell")).w);
-  ok(V, "a Show caught mid-Hide turns back from where the box stands (no jump to the panel or the tab)", turn <= mid + 1 && turn > 37 && turn < panelBox.w - 10, "drawn " + r1(mid) + " at 120ms, then " + r1(turn) + " where the Show began");
+  ok(V, "a Show caught mid-Hide turns back from where the box stands (no jump to the panel or the tab)", turn <= mid + 1 && turn > 37 && turn < panelBox.w - 10, "drawn " + r1(mid) + " at half the Hide, then " + r1(turn) + " where the Show began");
   await C.thaw(); await page.waitForTimeout(500);
   // A keyboard toggle is instant.
   await page.mouse.click(700, 120); await page.keyboard.press("h"); await frame(page);
@@ -276,9 +285,9 @@ async function deskMotion(browser, scheme) {
   // The door's own fade, scrubbed: a region leaving the view brings its door in over --dur-fade, 4px from the edge.
   await C.freeze();
   await ev(() => { const g = document.querySelector(".gsec[data-current] .graph"); g.scrollTop = g.scrollHeight; g.dispatchEvent(new Event("scroll")); }); await frame(page);
-  const enters = (a) => (a.name === "opacity" || a.name === "translate") && Math.round(a.source.duration) === 200;
-  for (const f of [0, 0.5, 1]) { await C.seek(f, enters); doorsSeek.push(await ev(() => { const d = document.querySelector(".gsec[data-current] .door[data-on]"); if (!d) return null; const cs = getComputedStyle(d); return { o: +cs.opacity, t: cs.translate, edge: d.dataset.edge }; })); }
-  ok(V, "a door comes in over --dur-fade (200ms): opacity 0 → ½ → 1, sliding 4px in from its edge", !!doorsSeek[0] && doorsSeek[0].o < 0.01 && /-?3\.99|-?4px/.test(doorsSeek[0].t) && doorsSeek[1].o > 0 && doorsSeek[1].o < 1 && doorsSeek[2].o === 1 && (doorsSeek[2].t === "none" || /^0px/.test(doorsSeek[2].t)) && C.list().some(enters), JSON.stringify(doorsSeek));
+  const enters = (a) => (a.name === "opacity" || a.name === "translate" || a.name === "clip-path") && Math.round(a.source.duration) === 200;
+  for (const f of [0, 0.5, 1]) { await C.seek(f, enters); doorsSeek.push(await ev(() => { const d = document.querySelector(".gsec[data-current] .door[data-on] .door-face"); if (!d) return null; const cs = getComputedStyle(d); return { o: +cs.opacity, t: cs.translate, clip: cs.clipPath }; })); }
+  ok(V, "a door's face comes in over --dur-fade (200ms): opacity 0 → ½ → 1, sliding 4px in from its edge, its clip on the same clock", !!doorsSeek[0] && doorsSeek[0].o < 0.01 && /-?3\.99|-?4px/.test(doorsSeek[0].t) && doorsSeek[1].o > 0 && doorsSeek[1].o < 1 && doorsSeek[2].o === 1 && (doorsSeek[2].t === "none" || /^0px/.test(doorsSeek[2].t)) && C.list().some(enters), JSON.stringify(doorsSeek));
   await C.thaw(); await page.waitForTimeout(300);
   // Pinned names: a slab running on under the view's top names itself there.
   const pin = await ev(() => { const g = document.querySelector(".gsec[data-current] .graph"), gb = g.getBoundingClientRect(); const r = [...g.querySelectorAll(".region")].find((x) => { const b = x.getBoundingClientRect(); return b.top < gb.top && b.bottom > gb.top + 60; }); if (!r) return { none: true }; const h = r.querySelector(".region-head").getBoundingClientRect(); return { m: r.dataset.machine, pinned: r.querySelector(".region-head").hasAttribute("data-pinned"), top: h.top - gb.top }; });
@@ -390,6 +399,51 @@ async function reviewFixes(browser, engine) {
     const { page, ev } = await openPage(browser, 1440, 900);
     const sw = await ev(() => { const t = document.querySelector('#kinds [data-kinds="hue"]'), note = document.getElementById(t.getAttribute("aria-describedby")); return { badge: t.querySelector(".badge.proposal")?.textContent, note: note && note.textContent, visible: !!note && note.getBoundingClientRect().height > 0 }; });
     ok(V, "the hue option carries a Proposed badge and a line saying picking it adds its six colours to the tokens", sw.badge === "Proposed" && /proposed/.test(sw.note) && /design tokens/.test(sw.note) && sw.visible, JSON.stringify(sw));
+    await page.close();
+  }
+  // Third pass, (a): a door's drawing never leaves the well, at any frame of its slide in or out (sampled every
+  // frame by requestAnimationFrame), while its touch layer still reaches past its band.
+  for (const [w, h] of [[1440, 900], [390, 844]]) {
+    const V = w + "-" + engine + "-door-slide";
+    const { page, ev } = await openPage(browser, w, h);
+    const res = await ev(() => new Promise((done) => {
+      const g = document.querySelector(".gsec[data-current] .graph"), well = g.parentNode, frames = [], worst = { out: 0, raw: 0, seen: 0 };
+      const sample = () => {
+        const wb = well.getBoundingClientRect();
+        for (const f of well.querySelectorAll(".door-face")) { if (+getComputedStyle(f).opacity === 0) continue; worst.seen++; const d = __k.drawn(f), q = f.getBoundingClientRect(); worst.raw = Math.max(worst.raw, wb.top - q.top, q.bottom - wb.bottom); const out = Math.max(wb.left - d.left, d.right - wb.right, wb.top - d.top, d.bottom - wb.bottom, 0); if (out > worst.out) { worst.out = out; worst.door = f.textContent; worst.t = getComputedStyle(f).translate; } }
+        frames.push(1);
+      };
+      // Doors come (scrolled to the foot), go (back to the top), and come again, each sampled to its end.
+      const steps = [() => { g.scrollTop = g.scrollHeight; }, () => { g.scrollTop = 0; }, () => { g.scrollTop = g.scrollHeight; }];
+      let i = 0, t0 = performance.now();
+      const tick = (now) => { sample(); if (now - t0 > 320) { if (i === steps.length) { done({ frames: frames.length, worst }); return; } steps[i++](); g.dispatchEvent(new Event("scroll")); t0 = now; } requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    }));
+    const hit = await ev(() => { const d = document.querySelector(".gsec[data-current] .door[data-on]"); if (!d) return null; const pb = getComputedStyle(d, "::before"); return { door: Math.round(d.getBoundingClientRect().height), layer: pb.content !== "none" ? Math.round(parseFloat(pb.height)) : null }; });
+    ok(V, "no frame of a door's slide in or out draws past the well (" + res.frames + " frames, " + res.worst.seen + " face samples; the face itself rode up to " + Math.round(res.worst.raw * 100) / 100 + "px out, its drawing at most " + Math.round(res.worst.out * 100) / 100 + "px)", res.frames >= 12 && res.worst.seen > 20 && res.worst.raw > 1 && res.worst.out <= 0.5, JSON.stringify(res));
+    if (w === 390) ok(V, "its touch layer is still 44px over its 28px door", !!hit && hit.door === 28 && hit.layer === 44, JSON.stringify(hit));
+    await page.close();
+  }
+  // Third pass, (b): at 320px every segment's words stay inside its tab and its tab inside its groove; a long
+  // component name is cut at its end, the whole name in the tab's title.
+  {
+    const V = "320-" + engine + "-tabs";
+    const { page, ev } = await openPage(browser, 320, 700);
+    const LONG = "Create routine form for the cockpit triage board and its weekly milestone check";
+    const res = await ev((LONG) => {
+      labelTab(document.querySelector("#tabs .t-tab"), LONG);
+      const out = [], inside = (a, b) => a.left >= b.left - 0.5 && a.right <= b.right + 0.5 && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5;
+      for (const groove of document.querySelectorAll(".t-tabs")) {
+        const gb = groove.getBoundingClientRect();
+        if (gb.width < 1 || gb.height < 1) continue;
+        if (gb.left < -0.5 || gb.right > innerWidth + 0.5) out.push(groove.id + " groove " + Math.round(gb.left) + "–" + Math.round(gb.right));
+        for (const t of groove.querySelectorAll(".t-tab")) { const tb = t.getBoundingClientRect(), l = t.querySelector(".t-label"); if (!inside(tb, gb)) out.push(groove.id + ": tab " + t.textContent.slice(0, 16)); if (!l) { out.push(groove.id + ": no label " + t.textContent); continue; } if (!inside(l.getBoundingClientRect(), tb)) out.push(groove.id + ": label " + l.textContent.slice(0, 16)); }
+      }
+      const first = document.querySelector("#tabs .t-tab"), l = first.querySelector(".t-label");
+      return { out, cut: l.scrollWidth > l.clientWidth + 0.5, ellipsis: getComputedStyle(l).textOverflow, title: first.title, grooves: [...document.querySelectorAll(".t-tabs")].filter((g) => g.getBoundingClientRect().width > 0).map((g) => g.id) };
+    }, LONG);
+    ok(V, "every tab's words stay inside its tab, every tab inside its groove, every groove on the screen (" + res.grooves.join(", ") + ")", res.out.length === 0, res.out.join(", "));
+    ok(V, "a long component name is cut at its end inside its tab, the whole name in its title", res.cut && res.ellipsis === "ellipsis" && res.title === LONG, JSON.stringify(res));
     await page.close();
   }
   // Critique fixes (impeccable P2s): a band stands only while it holds a door, the view taking an empty one's

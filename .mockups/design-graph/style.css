@@ -125,7 +125,6 @@ button { font: inherit; color: inherit; }
 .review-bar { inline-size: min(100%, 600px); display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); margin-block-end: var(--space-5); }
 .review-label { font: var(--type-meta); color: var(--ink-muted); }
 /* The hue option is a proposal: its kit badge in the segment, and one line saying what picking it adds. */
-.review-bar .t-tab { display: inline-flex; align-items: center; gap: var(--space-2); }
 .review-bar .badge.proposal { block-size: var(--c-badge-h); padding-inline: var(--space-2); font: var(--type-meta); line-height: 1; color: var(--ink-muted); background: var(--surface-recess); }
 .review-note { flex-basis: 100%; margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 .pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
@@ -235,15 +234,23 @@ button { font: inherit; color: inherit; }
    from the edge. */
 /* It clips nothing, so a door's 44px touch layer reaches past its 28px band. */
 .doors { position: absolute; inset: 0; pointer-events: none; border-radius: inherit; }
-.door { all: unset; box-sizing: border-box; position: absolute; display: inline-flex; align-items: center; gap: var(--space-1); block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; opacity: 0; translate: var(--door-out); pointer-events: none; transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
-.door[data-on] { opacity: 1; translate: 0 0; pointer-events: auto; transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
-.door span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The door is the press: still, transparent, its 44px touch layer standing where it stands. Its face is the
+   drawing: it slides 4px in from the well's edge while a clip on the same clock keeps every frame inside the
+   door's own box, so nothing of it draws past the well (the second review: "clip the drawing, not its touch
+   layer"). Its shadow is kept on the three inner sides; the edge side's is the well's edge. */
+.door { all: unset; box-sizing: border-box; position: absolute; display: flex; block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; pointer-events: none; }
+.door[data-on] { pointer-events: auto; }
+.door-face { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-1); flex: 1 1 auto; min-inline-size: 0; padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); opacity: 0; translate: var(--door-out); clip-path: var(--door-clip-out); transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), clip-path var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.door[data-on] .door-face { opacity: 1; translate: 0 0; clip-path: var(--door-clip-in); transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), clip-path var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.door-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .door svg { flex: none; inline-size: var(--icon-sm); block-size: var(--icon-sm); rotate: var(--door-turn, 0deg); }
-.door[data-band="bottom"] { inset-block-end: 0; border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; --door-out: 0 4px; }
-.door[data-band="top"] { inset-block-start: 0; border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); --door-out: 0 -4px; }
-@media (hover: hover) { .door:hover { background: var(--surface-hover); color: var(--ink-strong); } }
+.door[data-band="bottom"] { inset-block-end: 0; --door-out: 0 4px; --door-clip-out: inset(-8px -8px 4px -8px); --door-clip-in: inset(-8px -8px 0 -8px); }
+.door[data-band="bottom"] .door-face { border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.door[data-band="top"] { inset-block-start: 0; --door-out: 0 -4px; --door-clip-out: inset(4px -8px -8px -8px); --door-clip-in: inset(0 -8px -8px -8px); }
+.door[data-band="top"] .door-face { border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+@media (hover: hover) { .door:hover .door-face { background: var(--surface-hover); color: var(--ink-strong); } }
 .door:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
-@media (prefers-reduced-motion: reduce) { .door, .door[data-on] { translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .door .door-face, .door[data-on] .door-face { translate: 0 0; clip-path: var(--door-clip-in); } }
 
 /* A state: three tiers and one meaning for coral (clarity §1). */
 .node { position: absolute; inline-size: var(--node-w, 168px); display: flex; flex-direction: column; gap: var(--space-row); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); cursor: pointer; transition: var(--transition-control); }
@@ -699,8 +706,12 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 
 /* The kit's Segmented control (DESIGN.md, Segmented controls and tabs): a recess-deep groove holding a lifted
    thumb that glides with position and size together over --dur-pop on --ease-in-out. */
-.t-tabs { position: relative; display: inline-flex; align-items: center; padding: var(--c-segmented-pad); border-radius: var(--radius-md); background: var(--surface-recess-deep); min-inline-size: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; }
-.t-tab { position: relative; z-index: 1; flex: none; appearance: none; border: 0; background: transparent; block-size: var(--c-btn-h-sm); padding: 0 var(--c-segment-pad-x); border-radius: var(--radius-well); font: var(--type-label); line-height: 1; color: var(--ink-muted); cursor: pointer; transition: color var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.t-tabs { position: relative; display: inline-flex; align-items: center; padding: var(--c-segmented-pad); border-radius: var(--radius-md); background: var(--surface-recess-deep); min-inline-size: 0; max-inline-size: 100%; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; }
+.t-tab { position: relative; z-index: 1; flex: 0 1 auto; min-inline-size: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); appearance: none; border: 0; background: transparent; block-size: var(--c-btn-h-sm); padding: 0 var(--c-segment-pad-x); border-radius: var(--radius-well); font: var(--type-label); line-height: 1; color: var(--ink-muted); cursor: pointer; transition: color var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+/* A segment's words cut at their end inside it, whatever the width down to 320px, the full name in its title
+   (the tab keeps its own touch layer: the label clips, the tab doesn't). */
+.t-label { display: block; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-tab > .badge { flex: none; }
 .t-tab[aria-selected="true"] { color: var(--ink-strong); }
 @media (hover: hover) { .t-tab:not([aria-selected="true"]):hover { color: var(--ink-strong); } }
 .t-tab:not([aria-selected="true"]):active { background: var(--press-fill); }
