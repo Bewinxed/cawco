@@ -5934,6 +5934,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
+     * Whether session `instanceId`'s panel may hold artifact `id` (a whole
+     * id) ({@link sees}): its doc socket, its comments and its Send
+     * (preview-routes.ts) admit exactly these. False for a session or an
+     * artifact the hub doesn't hold.
+     */
+    panelSees: (instanceId: string, id: string): boolean => {
+      const instance = deps.instance(instanceId);
+      const row = db.get(id);
+      return !!(instance && row && sees(instance, row));
+    },
+
+    /**
      * A decision page's program and what its media show now, for the page
      * the hub serves (preview.ts `servePage`): the hash its overlay carries,
      * and each artifact its Canvas and Preview pieces name, null once the hub

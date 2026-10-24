@@ -99,6 +99,14 @@
  *     server preview publishes and draws both (the canvas's box in its doc,
  *     the dev server live on its embed origin); a page naming the canvas of
  *     a session outside the tree is refused, 422, with today's words.
+ * (q) A delegate's page in its parent's panel is the parent's to read,
+ *     comment on and send (one rule, the hub's `sees`): its Comments rail
+ *     reads, a comment from the rail is in the delegate's comment_read, the
+ *     delegate's reply draws in the rail, and the page's own Send and the
+ *     dashboard's Send on the parent's session each reach the page (the
+ *     delegate's artifact_read holds the picks, the delegate is told); a
+ *     session outside the tree is refused the Send and the doc socket with
+ *     today's words.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -108,8 +116,11 @@ import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { HOUSE_FACES } from "../../../packages/core/src/house-faces";
+import { markerTag } from "../../../packages/core/src/injected";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
+import { commentWords } from "../../../packages/core/src/words/comments";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
+import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { pageReach } from "../decision-embeds";
 import {
@@ -3505,6 +3516,275 @@ const treeMediaLeg = async (on: On) => {
   );
 };
 
+/** A delegate's page of two cards, for its parent's panel to pick and send. */
+const DELEGATE_PLAN = `root = Decisions("Pick the delegate's plan", [shape, pace])
+shape = Decision("shape", "Which shape does the plan take?", [lean, broad], "The delegate weighed both.")
+lean = Option("lean", "Lean", "One screen first.", true, [], "Less to show at once.")
+broad = Option("broad", "Broad", "Every screen at once.", false, [], "A longer wait.")
+pace = Decision("pace", "How fast does it ship?", [soon, later], "The delegate weighed both.")
+soon = Option("soon", "This week", "Out by Friday.", true, [], "Fewer checks.")
+later = Option("later", "Next month", "Out in four weeks.", false, [], "The wait.")`;
+
+/** The person's words on the delegate's page, from the parent's rail. */
+const RAIL_WORDS = "From the parent's panel: say more about the lean shape.";
+/** The delegate's answer to them. */
+const DELEGATE_REPLY = "The delegate: lean means the board alone.";
+/** The head of the notice that tells a session its artifact `id` has new responses (core injected.ts `artifactResponsesNotice`): its marker, cut before its other fields. */
+const noticeOf = (id: string) =>
+  markerTag("artifact-responses", { id }).slice(0, -"]\n".length);
+/** The refusal a panel of a session outside the tree hears. */
+const NO_SUCH_ARTIFACT = "This session has no such artifact.";
+
+/**
+ * (q) A delegate's page in its parent's panel is the parent's to read,
+ * comment on and send: the delegate (spawned with `parent`) publishes a
+ * page, the parent's `artifact_show` puts it in the parent's panel, and its
+ * Comments rail reads; a comment written from the rail is in the delegate's
+ * comment_read, and the delegate's reply draws in the parent's rail. A pick
+ * sent by the page's own Send, and a pick sent by the dashboard's Send on the
+ * parent's session (the panel head's, Needs you's), each reach the page:
+ * the delegate's artifact_read holds them and the delegate is told its page
+ * has new responses. A session of the project outside the tree is refused
+ * the page's doc socket and its Send, with today's words.
+ */
+const panelOfTreeLeg = async (on: On) => {
+  const { base, fleet, kit, projectId, writer } = on;
+  const dir = join(fleet.sandbox, "launch-site");
+  const delegate = await fleet.spawn("claude", "Plan delegate", dir, {
+    projectId,
+    parent: { instanceId: writer },
+  });
+  const outsider = await fleet.spawn("claude", "Plan outsider", dir, {
+    projectId,
+  });
+  const made = await fleet.api<{ id: string }>(
+    `/api/instances/${delegate}/artifacts`,
+    {
+      kind: "page",
+      does: "pick",
+      ask: "Pick the delegate's plan",
+      name: "delegate-plan",
+      program: DELEGATE_PLAN,
+    }
+  );
+  const shown = await kit.page("desk", { theme: "light" });
+  shown.on("pageerror", (error) => on.said.push(`(q): ${String(error)}`));
+  await open(shown, `${base}/session/${writer}`, '[data-slot="pane"]');
+  await fleet.api(`/api/instances/${writer}/artifacts/${made.id}/show`, {});
+  const frame = await until(
+    "the delegate's page in the parent's panel",
+    async () => {
+      const at = await frameAt(shown, FRAME);
+      return (await countIn(at, "#decision-shape")) > 0 ? at : null;
+    },
+    Boolean,
+    60_000
+  ).catch(() => null);
+  if (!frame) {
+    kit.check(
+      "(q) the delegate's page draws in the parent's panel",
+      false,
+      "no frame"
+    );
+    await shown.close();
+    return;
+  }
+
+  // The rail, from the head's Comments: read, never refused.
+  await shown.locator(`${PANE} button[data-slot="comments"]`).first().click();
+  const rail = shown.locator('[data-slot="comment-rail"]');
+  const railState = (): Promise<{ read: boolean; failed: string | null }> =>
+    rail
+      .evaluate((list) => ({
+        read: !!list.querySelector('[data-slot="pin-list-read"]'),
+        failed:
+          list.querySelector("[data-pin-list-failed]")?.textContent?.trim() ??
+          null,
+      }))
+      .catch(() => ({ read: false, failed: "no rail" }));
+  const railRead = await until(
+    "the parent's rail read",
+    railState,
+    (seen) => seen.read || seen.failed !== null,
+    20_000
+  ).catch(railState);
+  kit.check(
+    "(q) the Comments rail in the parent's panel reads the delegate's page",
+    railRead.read && railRead.failed === null,
+    JSON.stringify(railRead)
+  );
+
+  // A comment on the whole page, from the rail's own button.
+  await rail.getByRole("button", { name: commentWords.onWholePage }).click();
+  const composer = shown.locator('[data-slot="pin-composer"]');
+  await composer.waitFor({ timeout: 10_000 }).catch(() => undefined);
+  await composer.getByRole("combobox").fill(RAIL_WORDS);
+  await shown.keyboard.press("Enter");
+  await composer
+    .waitFor({ state: "detached", timeout: 8000 })
+    .catch(() => undefined);
+  const delegatePins = async () =>
+    (
+      await fleet.api<CommentRead>(
+        `/api/instances/${delegate}/artifacts/comments?artifact=${made.id}&filter=all`
+      )
+    ).artifacts.find((one) => one.id === made.id)?.pins ?? [];
+  const pinned = await until(
+    "the rail's comment in the delegate's comment_read",
+    async () =>
+      (await delegatePins()).find((pin) => pin.thread[0]?.text === RAIL_WORDS),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  kit.check(
+    "(q) a comment written from the parent's rail is in the delegate's comment_read",
+    !!pinned,
+    JSON.stringify(
+      (await delegatePins()).map((pin) => pin.thread.map((one) => one.text))
+    ).slice(0, 400)
+  );
+  if (pinned) {
+    const replied = await fetch(
+      `${fleet.base}/api/instances/${delegate}/artifacts/comments/${pinned.id}/reply`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: DELEGATE_REPLY }),
+      }
+    );
+    const backLine = () =>
+      rail
+        .locator('[data-line="back"]')
+        .allTextContents()
+        .then((lines) => lines.join(" | "));
+    const drawn = await until(
+      "the delegate's reply in the parent's rail",
+      backLine,
+      (lines) => lines.includes(DELEGATE_REPLY),
+      20_000
+    ).catch(backLine);
+    kit.check(
+      "(q) the delegate's reply draws in the parent's rail",
+      replied.ok && drawn.includes(DELEGATE_REPLY),
+      `${replied.status}: ${drawn.slice(0, 300)}`
+    );
+  }
+
+  const delegateRead = () =>
+    fleet.api<{ state: Doc["state"] }>(
+      `/api/instances/${delegate}/artifacts/${made.id}`
+    );
+  const notices = () =>
+    fleet
+      .query<{ body: string }>(
+        "SELECT body FROM sent_messages WHERE instance_id = ?",
+        delegate
+      )
+      .filter((each) => each.body.includes(noticeOf(made.id))).length;
+
+  // A pick sent by the page's own Send, pressed in the parent's panel, the
+  // rail shut first: in a pane under 640px it is the well's foot sheet,
+  // which stands over the page's foot.
+  await shown.locator(`${PANE} button[data-slot="comments"]`).first().click();
+  await rail
+    .waitFor({ state: "detached", timeout: 5000 })
+    .catch(() => undefined);
+  await mode(shown, frame, "V");
+  await pressIn(frame, '[data-option="lean"] >> nth=0');
+  await until(
+    "the lean pick on the hub",
+    delegateRead,
+    (read) => (read.state.shape?.options ?? []).includes("lean"),
+    10_000
+  ).catch(() => null);
+  await pressIn(frame, "[data-send]");
+  const footSent = await until(
+    "the delegate told of the page's own Send",
+    async () => notices(),
+    (count) => count >= 1,
+    20_000
+  ).catch(notices);
+  const afterFoot = await delegateRead();
+  kit.check(
+    "(q) the page's own Send in the parent's panel reaches the page: the delegate's artifact_read holds the pick and the delegate is told",
+    footSent >= 1 &&
+      JSON.stringify(afterFoot.state.shape?.options) === '["lean"]',
+    JSON.stringify({ footSent, state: afterFoot.state })
+  );
+
+  // A pick sent by the dashboard's Send on the parent's session.
+  await pressIn(frame, '[data-option="soon"] >> nth=0');
+  await until(
+    "the soon pick on the hub",
+    delegateRead,
+    (read) => (read.state.pace?.options ?? []).includes("soon"),
+    10_000
+  ).catch(() => null);
+  const postSend = (instance: string) =>
+    shown.evaluate(
+      async ([who, id]) => {
+        const response = await fetch(
+          `/api/instances/${who}/artifacts/${id}/send`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ control: "panel-head" }),
+          }
+        );
+        return { status: response.status, text: await response.text() };
+      },
+      [instance, made.id] as const
+    );
+  const panelSend = await postSend(writer);
+  const panelTold = await until(
+    "the delegate told of the parent's Send",
+    async () => notices(),
+    (count) => count >= 2,
+    20_000
+  ).catch(notices);
+  const afterPanel = await delegateRead();
+  kit.check(
+    "(q) the dashboard's Send on the parent's session reaches the page: 200, the delegate's artifact_read holds both picks and the delegate is told again",
+    panelSend.status === 200 &&
+      panelTold >= 2 &&
+      JSON.stringify(afterPanel.state.shape?.options) === '["lean"]' &&
+      JSON.stringify(afterPanel.state.pace?.options) === '["soon"]',
+    JSON.stringify({
+      panelSend: { ...panelSend, text: panelSend.text.slice(0, 200) },
+      panelTold,
+      state: afterPanel.state,
+    })
+  );
+
+  // A session outside the tree: its Send and its doc socket refused.
+  const outsiderSend = await postSend(outsider);
+  const outsiderSocket = await readWithin(10_000, () =>
+    shown.evaluate(
+      ([who, id]) =>
+        new Promise<{ code: number; reason: string }>((resolve) => {
+          const socket = new WebSocket(
+            `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/artifact/${who}/${id}`
+          );
+          socket.addEventListener("close", (event) =>
+            resolve({ code: event.code, reason: event.reason })
+          );
+        }),
+      [outsider, made.id] as const
+    )
+  );
+  const closed =
+    outsiderSocket.kind === "answered" ? outsiderSocket.value : null;
+  kit.check(
+    "(q) a session outside the tree is refused the page's Send (404) and its doc socket (4404), with today's words",
+    outsiderSend.status === 404 &&
+      outsiderSend.text === NO_SUCH_ARTIFACT &&
+      closed?.code === 4404 &&
+      closed.reason === NO_SUCH_ARTIFACT,
+    JSON.stringify({ outsiderSend, outsiderSocket })
+  );
+  await shown.close();
+};
+
 /** What the crash leg's fresh dev server says. */
 const FRESH_SITE = "The fresh site";
 
@@ -4208,6 +4488,7 @@ const run = async (kit: Kit) => {
   await glyphLeg(on);
   await burstLeg(on);
   await treeMediaLeg(on);
+  await panelOfTreeLeg(on);
   kit.check(
     "the pages said no error",
     on.said.length === 0,

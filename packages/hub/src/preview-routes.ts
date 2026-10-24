@@ -22,6 +22,9 @@ import {
 } from "./preview";
 import { mintTicket, presentedPasses } from "./preview-access";
 
+/** A panel asked for an artifact its session doesn't see. */
+const NO_SUCH_ARTIFACT = "This session has no such artifact.";
+
 export const previewRoutes = (deps: {
   /** The paired device a request comes from (hub-auth.ts); null on a trusted hub, which pairs none. */
   deviceOf: (request: Request) => string | null;
@@ -29,6 +32,8 @@ export const previewRoutes = (deps: {
   hasInstance: (id: string) => boolean;
   /** Whether the hub keeps project `id`. */
   hasProject: (id: string) => boolean;
+  /** Whether session `instanceId`'s panel may hold artifact `artifactId`: its own, one it made, or its delegation tree's (artifacts/service.ts `panelSees`). */
+  panelSees: (instanceId: string, artifactId: string) => boolean;
   listener: PreviewListenerDeps;
   listeners: PreviewListeners;
   passes: PreviewPassesDb;
@@ -131,22 +136,24 @@ export const previewRoutes = (deps: {
           return refused(error);
         }
       })
-      // The dashboard's Send of a page's picks (the panel head's, a Needs you row's: `control` names it), as the page's own send would.
+      // The dashboard's Send of a page's picks (the panel head's, a Needs you
+      // row's: `control` names it) from any panel that holds it, sent as the
+      // page's own send would: to the session that holds the page.
       .post(
         "/api/instances/:id/artifacts/:artifact/send",
-        ({ params, request }) =>
-          deps.listener.ownerOf(params.artifact) === params.id
-            ? deps.listener.send(request, params.id, params.artifact)
-            : new Response("This session has no such artifact.", {
-                status: 404,
-              })
+        ({ params, request }) => {
+          const owner = deps.listener.ownerOf(params.artifact);
+          return owner && deps.panelSees(params.id, params.artifact)
+            ? deps.listener.send(request, owner, params.artifact)
+            : new Response(NO_SUCH_ARTIFACT, { status: 404 });
+        }
       )
       // The pane's link to the artifact's document (artifact-doc.ts).
       .ws("/ws/artifact/:instance/:artifact", {
         open(ws) {
           const { instance, artifact } = ws.params;
-          if (deps.listener.ownerOf(artifact) !== instance) {
-            ws.close(4404, "This session has no such artifact.");
+          if (!deps.panelSees(instance, artifact)) {
+            ws.close(4404, NO_SUCH_ARTIFACT);
             return;
           }
           const pane = {

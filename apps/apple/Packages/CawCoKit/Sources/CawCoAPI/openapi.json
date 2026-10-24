@@ -31962,13 +31962,13 @@
             "$ref": "#/components/schemas/HubAuthFrame"
           },
           {
+            "$ref": "#/components/schemas/StageFrame"
+          },
+          {
             "$ref": "#/components/schemas/BrowserFrame"
           },
           {
             "$ref": "#/components/schemas/BrowserHandedBackFrame"
-          },
-          {
-            "$ref": "#/components/schemas/StageFrame"
           },
           {
             "$ref": "#/components/schemas/StageCloneFrame"
@@ -32134,9 +32134,9 @@
           "propertyName": "kind",
           "mapping": {
             "hub_auth": "#/components/schemas/HubAuthFrame",
+            "stage": "#/components/schemas/StageFrame",
             "browsers": "#/components/schemas/BrowserFrame",
             "browser_handback": "#/components/schemas/BrowserHandedBackFrame",
-            "stage": "#/components/schemas/StageFrame",
             "stage-clone": "#/components/schemas/StageCloneFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
@@ -43396,6 +43396,9 @@
           "byKind": {
             "type": "object",
             "properties": {
+              "active": {
+                "type": "number"
+              },
               "waiting": {
                 "type": "number"
               },
@@ -43403,9 +43406,6 @@
                 "type": "number"
               },
               "todo": {
-                "type": "number"
-              },
-              "active": {
                 "type": "number"
               },
               "you": {
@@ -56513,6 +56513,45 @@
           "waiting"
         ]
       },
+      "StageFrame": {
+        "description": "The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stage"
+            ]
+          },
+          "port": {
+            "description": "The port it serves on, in the workspace's network: a sheet's stage's or a preview's server's.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StageState"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "port",
+          "state",
+          "workspace"
+        ]
+      },
+      "StageState": {
+        "description": "A stage as the hub keeps it in each of its artifacts' docs (`meta.stage`),\nas the daemon states it: a sheet's, with the toolchain it runs, or a\nworkspace preview's server's.",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/SheetStageState"
+          },
+          {
+            "$ref": "#/components/schemas/ServerStageState"
+          }
+        ]
+      },
       "BrowserFrame": {
         "description": "Daemon-originated: the machine's runtime and every browser on it, whole, on each change.",
         "type": "object",
@@ -56615,45 +56654,6 @@
           "machineId",
           "origin",
           "why"
-        ]
-      },
-      "StageFrame": {
-        "description": "The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "stage"
-            ]
-          },
-          "port": {
-            "description": "The port it serves on, in the workspace's network: a sheet's stage's or a preview's server's.",
-            "type": "number"
-          },
-          "state": {
-            "$ref": "#/components/schemas/StageState"
-          },
-          "workspace": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "port",
-          "state",
-          "workspace"
-        ]
-      },
-      "StageState": {
-        "description": "A stage as the hub keeps it in each of its artifacts' docs (`meta.stage`),\nas the daemon states it: a sheet's, with the toolchain it runs, or a\nworkspace preview's server's.",
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/SheetStageState"
-          },
-          {
-            "$ref": "#/components/schemas/ServerStageState"
-          }
         ]
       },
       "StageCloneFrame": {

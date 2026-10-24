@@ -27311,6 +27311,8 @@ export const createServer = (
           },
           hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
           hasProject: (id) => db.project(id) !== undefined,
+          panelSees: (instanceId, artifactId) =>
+            artifacts.panelSees(instanceId, artifactId),
           listener: artifactListener,
           listeners: previewListeners,
           passes: db.previewPasses,
