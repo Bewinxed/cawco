@@ -23,11 +23,12 @@
  *    record)", leaf 3b8e7144's probe run kf-2 among them, cut off with exit
  *    137. The command finishes with its own exit code, 7, in the boundary it
  *    started in (`FG-STATUS-7`, not the executor's "boundary stopped" line);
- *    the agent's log says it cannot compare the grant and keeps the boundary
- *    while its work runs (agent boundary.ts `compareGrant`), and stops
- *    nothing as narrowed. Once the command has ended, F resting with nothing
- *    in its boundary, the boundary is handed over to one that starts with
- *    this build's record. F is not H: a boundary with no record is kept for
+ *    the agent records that it cannot compare the grant and keeps the
+ *    boundary while its command runs (agent boundary.ts `compareGrant`,
+ *    `BoundaryDecision`), and stops nothing as narrowed. Once the command
+ *    has ended, F resting with nothing in its boundary, the boundary is
+ *    handed over, as the agent records, to one that starts with this
+ *    build's record. F is not H: a boundary with no record is kept for
  *    as long as anything runs in it, and H's loop never ends, so legs 4 to 6,
  *    which narrow a boundary with a record, run on H's own.
  *
@@ -42,7 +43,7 @@
  * 2. In H's second turn, the loop's pid is alive and is the loop, in the pid
  *    namespace its first turn ran in.
  * 3. H's live boundary is the one it had: kept as it is while its work runs,
- *    said in the agent's log, never handed over. An older generation beside
+ *    as the agent records, never handed over. An older generation beside
  *    it closes only as `closeIdle` closes one, with nothing running in it.
  * 4. The policy then narrows with no word to H (the project's folder on the
  *    hub, which it read, is renamed aside by hand, which no event says):
@@ -70,6 +71,10 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  type BoundaryDecision,
+  DECISION_FILE,
+} from "../../../packages/agent/src/boundary";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -90,8 +95,6 @@ const FG_TAG = "PROBE-FG-F:";
 const FG_ACCOUNT = "acct-probe-older-form-fg";
 /** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
 const CUT_OFF = "boundary stopped while this command ran";
-/** How the agent says it keeps a boundary whose grant it cannot compare (boundary.ts `ensure`, `compareGrant`). */
-const UNKNOWN_GRANT_LINE = "grant cannot be compared with this build's policy";
 /**
  * How the agent says it stopped a boundary as narrowed (boundary.ts
  * `replaceNarrowed`, `recheckNow`). The parent of 3aa74a224 said it of a
@@ -101,11 +104,6 @@ const UNKNOWN_GRANT_LINE = "grant cannot be compared with this build's policy";
  */
 const STOPPED_NARROWED =
   /is stopped now, as its access narrowed|its narrowed boundaries are stopped now/;
-/** How the agent says it handed boundary `pid` over once nothing ran in it (boundary.ts `handOver`, `restartStubbed`). */
-const handedOver = (pid: string): RegExp =>
-  new RegExp(
-    `its boundary ${pid} (?:\\(form [^)]*\\) is handed over to|held an srt mount point .* is replaced by) (\\d+)`
-  );
 /** How long after F's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;
 const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/;
@@ -119,9 +117,6 @@ const ACCOUNT_ADDED = "acct-probe-older-form";
 /** How the agent says a fleet sync found a narrowed access (boundary.ts `recheckNow`). */
 const SYNCED = "its access narrowed (the fleet's config was synced)";
 const START_LINE = "[workspace] boundary hooks written for ";
-const KEPT_LINE = "is kept as it is while its work";
-/** The boundary the kept line names (boundary.ts `replaceOlder`). */
-const KEPT_PID = /its boundary (\d+) \(form [^)]*\) is kept as it is/;
 /** How `closeIdle` says it closed an older generation with nothing in it, or found it gone. */
 const OLDER_CLOSED =
   /\) (has nothing left running in it and is closed|is gone)$/;
@@ -277,6 +272,25 @@ const heldOf = async (
       () => "{}"
     )
   ) as { gen?: string; pid?: number };
+
+/**
+ * What the agent last decided of workspace `id`'s boundary across a restart
+ * that left it of an older form, as it records it (agent boundary.ts
+ * `BoundaryDecision`); none before it decided.
+ */
+const decisionOf = async (
+  home: string,
+  id: string
+): Promise<BoundaryDecision | undefined> =>
+  JSON.parse(
+    await readFile(join(stateOf(home, id), DECISION_FILE), "utf8").catch(
+      () => "null"
+    )
+  ) ?? undefined;
+
+/** A decision in a check's words. */
+const decisionSaid = (decision: BoundaryDecision | undefined): string =>
+  decision ? JSON.stringify(decision) : "no decision recorded";
 
 /** The policy workspace `id`'s current boundary started with, as its generation keeps it (agent boundary.ts `grantedOf`); none on record. */
 const grantedNow = async (
@@ -461,7 +475,7 @@ const run = async (kit: Kit) => {
       secondNs === firstNs,
     `turn ran: ${Boolean(second)}; alive: ${alive ?? "no"} (started as ${loopPid ?? "unread"}); pid namespace ${secondNs ?? "unread"}, first turn's ${firstNs ?? "unread"}`
   );
-  await keptAsItWas(kit, fleet, h.workspaceId, had);
+  await keptAsItWas(kit, fleet, home, h.workspaceId, had);
   await narrowedStops(kit, fleet, home, {
     clone,
     id: h.workspaceId,
@@ -525,12 +539,21 @@ const foregroundAcross = async (
     await olderFormRestart(fleet, home, id, FG_ACCOUNT);
   }
   const restarted = Date.now() - restartAt;
+  // What the agent decided of the boundary while the command ran, read at
+  // each look for its result: once the command ends the decision to keep it
+  // gives way to its handover.
+  let keptWhile: BoundaryDecision | undefined;
   const result = await until(
     "F's foreground command's result",
-    () =>
-      fleet.seen.find(
+    async () => {
+      const decided = await decisionOf(home, id);
+      if (decided?.decision === "kept" && decided.pid === ran.pid) {
+        keptWhile = decided;
+      }
+      return fleet.seen.find(
         (one) => FG_STATUS.test(one.last) || one.last.includes(CUT_OFF)
-      ),
+      );
+    },
     Boolean,
     (FG_SECONDS + 120) * 1000
   ).catch(() => undefined);
@@ -549,54 +572,49 @@ const foregroundAcross = async (
       !said.includes(CUT_OFF),
     `started: ${started}; ${result ? `its result: ${said.slice(0, 400)}` : "no result"}; ${stopped()}`
   );
-  const unknownSaid = lines.find(
-    (line) =>
-      line.includes(`its boundary ${ran.pid}'s `) &&
-      line.includes(UNKNOWN_GRANT_LINE)
-  );
   kit.check(
-    "0: the agent's log says it cannot compare the boundary's grant and keeps it while its work runs, and stops nothing as narrowed",
+    "0: the agent records that it cannot compare the boundary's grant and keeps it while its command runs, and stops nothing as narrowed",
     ran.pid !== undefined &&
-      unknownSaid !== undefined &&
+      keptWhile !== undefined &&
+      keptWhile.reasons.grant !== null &&
+      keptWhile.reasons.commands.length > 0 &&
       !lines.some((line) => STOPPED_NARROWED.test(line)),
-    `${unknownSaid ?? `no line says boundary ${ran.pid ?? "unread"}'s grant cannot be compared`}; ${stopped()}`
+    `${decisionSaid(keptWhile)}; ${stopped()}`
   );
 
   // F rests now, nothing left in its boundary: the agent's look hands it
-  // over, said in its log, to one that starts with this build's record.
+  // over, as it records, to one that starts with this build's record.
   const ended = Date.now();
-  // A pid unread names no boundary, so no line matches it.
-  const over = handedOver(String(ran.pid ?? "unread"));
+  const lookAtF = async () => ({
+    decided: await decisionOf(home, id),
+    granted: await grantedNow(home, id),
+    now: await heldOf(home, id),
+  });
   const handed = await until(
     "F's boundary handed over",
-    async () => {
-      const now = await heldOf(home, id);
-      const granted = await grantedNow(home, id);
-      const line = (await linesOf()).find((one) => over.test(one));
-      return { granted, line, now };
-    },
-    ({ granted, line, now }) =>
-      line !== undefined &&
+    lookAtF,
+    ({ decided, granted, now }) =>
+      decided !== undefined &&
+      decided.decision !== "kept" &&
+      decided.pid === ran.pid &&
       now.pid !== undefined &&
       now.pid !== ran.pid &&
       granted?.allowRead !== undefined,
     HANDOVER_BOUND_MS
-  ).catch(async () => ({
-    granted: await grantedNow(home, id),
-    line: (await linesOf()).find((one) => over.test(one)),
-    now: await heldOf(home, id),
-  }));
+  ).catch(lookAtF);
   const took = Date.now() - ended;
   const all = await linesOf();
   kit.note(`0: the agent's lines for F's workspace:\n${all.join("\n")}`);
   kit.check(
-    `0: once F's command has ended, its boundary is handed over within ${HANDOVER_BOUND_MS / 1000} s to one started with this build's record, and nothing is stopped as narrowed`,
-    handed.line !== undefined &&
-      over.exec(handed.line)?.[1] === String(handed.now.pid) &&
+    `0: once F's command has ended, its boundary is handed over within ${HANDOVER_BOUND_MS / 1000} s to one started with this build's record, as the agent records, and nothing is stopped as narrowed`,
+    handed.decided !== undefined &&
+      handed.decided.decision !== "kept" &&
+      handed.decided.pid === ran.pid &&
+      handed.decided.to?.pid === handed.now.pid &&
       handed.now.pid !== ran.pid &&
       handed.granted?.allowRead !== undefined &&
       !all.some((line) => STOPPED_NARROWED.test(line)),
-    `ran in ${ran.pid ?? "unread"}; now ${handed.now.pid ?? "unread"}, ${took} ms after the command's result; ${handed.line ?? "no line says it was handed over"}; the new boundary's record ${handed.granted?.allowRead ? "is there" : "is not"}; ${all.find((line) => STOPPED_NARROWED.test(line)) ?? "nothing stopped as narrowed"}`
+    `ran in ${ran.pid ?? "unread"}; now ${handed.now.pid ?? "unread"}, ${took} ms after the command's result; ${decisionSaid(handed.decided)}; the new boundary's record ${handed.granted?.allowRead ? "is there" : "is not"}; ${all.find((line) => STOPPED_NARROWED.test(line)) ?? "nothing stopped as narrowed"}`
   );
 };
 
@@ -810,7 +828,7 @@ const deletedStops = async (
 };
 
 /**
- * 3: workspace `id`'s live boundary, the one the agent's log says it keeps
+ * 3: workspace `id`'s live boundary, the one the agent records it keeps
  * while its work runs, is one it `had` before the restart and still runs.
  * An older generation still beside it before the restart (one handed over
  * before the loop started; host runs of 2026-10-19 had one on main and on
@@ -821,6 +839,7 @@ const deletedStops = async (
 const keptAsItWas = async (
   kit: Kit,
   fleet: Fleet,
+  home: string,
   id: string,
   had: readonly string[]
 ): Promise<void> => {
@@ -829,16 +848,19 @@ const keptAsItWas = async (
     .split("\n")
     .filter((line) => line.includes(id));
   kit.note(`3: the agent's lines for H's workspace:\n${lines.join("\n")}`);
-  // The last: the line round 1's restart said for the boundary H runs in.
-  const kept = lines.findLast((line) => line.includes(KEPT_LINE));
-  const live = KEPT_PID.exec(kept ?? "")?.[1];
+  // What round 1's restart decided of the boundary H runs in.
+  const decided = await decisionOf(home, id);
+  const live =
+    decided?.decision === "kept" && decided.reasons.processes.length > 0
+      ? String(decided.pid)
+      : undefined;
   const pidOf = (entry: string) => entry.slice(entry.lastIndexOf("@") + 1);
   const ownedLive = (list: readonly string[]) =>
     list.some((entry) => pidOf(entry) === live);
   kit.check(
-    "3: H's live boundary, of an older form since the restart, is kept as it is while its work runs, said in the agent's log, never handed over",
+    "3: H's live boundary, of an older form since the restart, is kept as it is while its work runs, as the agent records, never handed over",
     live !== undefined && ownedLive(had) && ownedLive(now) && now.length === 1,
-    `before: ${had.join(",") || "none"}; now: ${now.join(",") || "none"}; ${kept ?? "no kept line"}`
+    `before: ${had.join(",") || "none"}; now: ${now.join(",") || "none"}; ${decisionSaid(decided)}`
   );
   const closed = had.filter((entry) => !now.includes(entry));
   const unsaid = closed.filter(

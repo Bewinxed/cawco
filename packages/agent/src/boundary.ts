@@ -2470,7 +2470,7 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     held.form !== (await formOf(ref)) ||
     holder.epoch !== client.epoch
   ) {
-    return replaceOlder(client, ref, held, owed);
+    return replaceOlder(client, ref, held, owed, unknown);
   }
   forgetStale(ref.id);
   // Written again each time: one an earlier agent started may have no hook
@@ -2481,18 +2481,104 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
 /** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
 const saidUnknown = new Map<string, number>();
 
+/** The file in a workspace's state dir that holds {@link BoundaryDecision}. */
+export const DECISION_FILE = "boundary-decision.json";
+
+/**
+ * What the agent last decided of a workspace's boundary that is not of this
+ * build's form, on a retiring keeper, or whose grant it cannot compare
+ * ({@link replaceOlder}): kept as it is, handed over to a new one started
+ * beside it ({@link handOver}), or replaced by a new one once nothing ran in
+ * it ({@link restartIfIdle}), and why. Written whole where the agent says the
+ * same in its log, from the same values: the log line is for people, this
+ * record for what checks the agent (proofs, probe specs). It speaks of the
+ * boundary `gen` names; once `boundary.json` names another, it is history.
+ */
+export interface BoundaryDecision {
+  /** The agent that decided, by pid. */
+  readonly agent: number;
+  /** When it decided, in ms since the epoch. */
+  readonly at: number;
+  readonly decision: "kept" | "handed-over" | "replaced";
+  /** The form of the boundary decided on ({@link formOf}); null when it has none. */
+  readonly form: string | null;
+  /** The generation of the boundary decided on. */
+  readonly gen: string;
+  /** Its srt host (Linux) or runner (macOS). */
+  readonly pid: number;
+  readonly reasons: {
+    /** Its work's commands running, by executor pid ({@link commandsIn}). */
+    readonly commands: readonly number[];
+    /** Why its grant cannot be compared with this build's policy ({@link unknownGrant}); null when it can. */
+    readonly grant: string | null;
+    /** Kept until this build's session keeper is the machine's ({@link ownKeeperOwed}). */
+    readonly keeperOwed: boolean;
+    /** It holds an srt mount point where a dir stands in ({@link stubbed}): replaced whole once nothing runs in it. */
+    readonly leftDirs: boolean;
+    /** The ports its work listens on ({@link workPorts}). */
+    readonly listening: readonly number[];
+    /** Every process of its work, by pid ({@link workProcesses}). */
+    readonly processes: readonly number[];
+  };
+  /** The boundary that took its place; null while it is kept. */
+  readonly to: {
+    readonly form: string | null;
+    readonly gen: string;
+    readonly pid: number;
+  } | null;
+}
+
+/**
+ * Records `decision` of workspace `id`'s boundary `held` ({@link
+ * BoundaryDecision}), whole or not at all: `reasons` names what holds, the
+ * rest none, and `to` the boundary that took its place.
+ */
+const recordDecision = (
+  id: string,
+  decision: BoundaryDecision["decision"],
+  held: Pick<Held, "form" | "gen" | "pid">,
+  reasons: Partial<BoundaryDecision["reasons"]>,
+  to?: Pick<Held, "form" | "gen" | "pid">
+): Promise<void> => {
+  const record: BoundaryDecision = {
+    agent: process.pid,
+    at: Date.now(),
+    decision,
+    form: held.form ?? null,
+    gen: held.gen,
+    pid: held.pid,
+    reasons: {
+      commands: [],
+      grant: null,
+      keeperOwed: false,
+      leftDirs: false,
+      listening: [],
+      processes: [],
+      ...reasons,
+    },
+    to: to ? { form: to.form ?? null, gen: to.gen, pid: to.pid } : null,
+  };
+  return writeWhole(
+    join(stateDir(id), DECISION_FILE),
+    `${JSON.stringify(record)}\n`,
+    0o644
+  );
+};
+
 /**
  * {@link ensure} for workspace `ref`'s running boundary `held`, of an older
  * form, on a retiring keeper, or whose grant is not comparable ({@link
- * compareGrant}): handed over to one of this build's form on the current
- * keeper, or, until it can be, armed as it is.
+ * compareGrant}, `grant` saying why): handed over to one of this build's form
+ * on the current keeper, or, until it can be, armed as it is. Each decision
+ * is said in the log and recorded ({@link recordDecision}).
  */
 
 const replaceOlder = async (
   client: SessiondClient,
   ref: WorkspaceRef,
   held: Held,
-  owed: boolean
+  owed: boolean,
+  grant: string | undefined
 ): Promise<Boundary> => {
   if (owed) {
     // The keeper the endpoint names now retires as soon as this build's
@@ -2503,6 +2589,10 @@ const replaceOlder = async (
       console.info(
         `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is handed over once this build's session keeper is the machine's`
       );
+      await recordDecision(ref.id, "kept", held, {
+        grant: grant ?? null,
+        keeperOwed: true,
+      });
     }
     replaceSoon(ref);
     return armHook(ref.id, held);
@@ -2511,6 +2601,12 @@ const replaceOlder = async (
     // A boundary started beside it would bind the same mount point and
     // keep it; this one is replaced whole once nothing runs in it.
     forgetStale(ref.id);
+    if (!stubbed.has(ref.id)) {
+      await recordDecision(ref.id, "kept", held, {
+        grant: grant ?? null,
+        leftDirs: true,
+      });
+    }
     restartWhenIdle(ref);
     return armHook(ref.id, held);
   }
@@ -2532,7 +2628,7 @@ const replaceOlder = async (
   const found = await workLeft(ref.id, held);
   const tried = found
     ? { kept: found }
-    : await handOverWhenIdle(client, ref, held);
+    : await handOverWhenIdle(client, ref, held, grant);
   if ("fresh" in tried) {
     forgetStale(ref.id);
     return tried.fresh;
@@ -2543,6 +2639,12 @@ const replaceOlder = async (
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work.words}, and handed over once that ends`
     );
+    await recordDecision(ref.id, "kept", held, {
+      commands: work.commands,
+      grant: grant ?? null,
+      listening: work.ports,
+      processes: work.processes,
+    });
   }
   keptRunning.set(ref.id, { said: work.words, commands: work.commands });
   return armHook(ref.id, held);
@@ -3722,29 +3824,40 @@ const executors = (
 /**
  * Whether anything still runs in boundary generation `old` of workspace
  * `id`: a command its executor marked there and still waits on ({@link
- * commandsIn}), whatever it listens on, or a process a command left. On
- * Linux a process left is anything
- * that descends from its sandbox's init and was not there when its runner
- * was ready ({@link inTree}), a server a command left behind with
- * `setsid -f` or a double fork among them, in the sandbox's pid namespace or
- * one nested in it. On macOS it is anything but its runner that answers to
- * that generation's name ({@link answering}), a `setsid` or double-forked
- * process among them, whatever it runs.
+ * commandsIn}), whatever it listens on, or a process of its work ({@link
+ * workProcesses}).
  */
 const busyOld = async (
   seen: Seen[],
   id: string,
   old: Retiring
-): Promise<boolean> => {
-  if ((await commandsIn(seen, id, old.gen)).length > 0) {
-    return true;
-  }
+): Promise<boolean> =>
+  (await commandsIn(seen, id, old.gen)).length > 0 ||
+  (await workProcesses(seen, id, old)).length > 0;
+
+/**
+ * The processes of the work in boundary generation `old` of workspace `id`,
+ * by pid, a command's and what a command left. On Linux each is anything
+ * that descends from its sandbox's init and was not there when its runner
+ * was ready ({@link inTree}), a server a command left behind with
+ * `setsid -f` or a double fork among them, in the sandbox's pid namespace or
+ * one nested in it. On macOS each is anything but its runner that answers to
+ * that generation's name ({@link answering}), a `setsid` or double-forked
+ * process among them, whatever it runs.
+ */
+const workProcesses = async (
+  seen: Seen[],
+  id: string,
+  old: Retiring
+): Promise<number[]> => {
   if (process.platform === "linux") {
     const place = await readPlace(id, old.gen);
     const idle = new Set(place?.idle);
-    return inTree(seen, place?.inner).some((one) => !idle.has(one.pid));
+    return inTree(seen, place?.inner)
+      .filter((one) => !idle.has(one.pid))
+      .map((one) => one.pid);
   }
-  return answering(inBoundaries(seen), membershipName(id, old.gen)).some(
+  return answering(inBoundaries(seen), membershipName(id, old.gen)).filter(
     (pid) => pid !== old.pid
   );
 };
@@ -3836,16 +3949,19 @@ export const workspacesWithCommands = async (): Promise<string[]> => {
  * reading and the handover; each command that arrived meanwhile waits at the
  * gate and runs through the new one. Answers the new boundary, or the work
  * that keeps this one: a command running, a listener, a process a command
- * left.
+ * left. `grant` is why its grant is not comparable, if that is why.
  */
 const handOverWhenIdle = (
   client: SessiondClient,
   ref: WorkspaceRef,
-  held: Held
+  held: Held,
+  grant: string | undefined
 ): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
   behindGate(ref.id, async () => {
     const work = await workLeft(ref.id, held);
-    return work ? { kept: work } : { fresh: await handOver(client, ref, held) };
+    return work
+      ? { kept: work }
+      : { fresh: await handOver(client, ref, held, grant) };
   });
 
 /**
@@ -3971,24 +4087,27 @@ interface Work {
   readonly commands: readonly number[];
   /** The ports its work listens on ({@link workPorts}). */
   readonly ports: readonly number[];
-  /** Both in words ("runs a command (executor 6824)", "listens on 5222", "runs"). */
+  /** Every process of its work, by pid ({@link workProcesses}). */
+  readonly processes: readonly number[];
+  /** Its commands and ports in words ("runs a command (executor 6824)", "listens on 5222", "runs"). */
   readonly words: string;
 }
 
 /**
  * What the work of workspace `id`'s running boundary `held` still runs;
- * nothing once nothing does. Its work is every process in it its runner did
- * not start with ({@link busyOld}), what a command left behind with `&`,
- * `nohup`, `setsid` or a double fork among them, whatever its session or
- * process group: on Linux each descends from the sandbox's init, on macOS
- * each answers to its generation's name.
+ * nothing once nothing does ({@link busyOld}). Its work is every process in
+ * it its runner did not start with ({@link workProcesses}), what a command
+ * left behind with `&`, `nohup`, `setsid` or a double fork among them,
+ * whatever its session or process group: on Linux each descends from the
+ * sandbox's init, on macOS each answers to its generation's name.
  */
 const workLeft = async (id: string, held: Held): Promise<Work | undefined> => {
   const seen = await snapshot();
-  if (!(await busyOld(seen, id, held))) {
+  const commands = await commandsIn(seen, id, held.gen);
+  const processes = await workProcesses(seen, id, held);
+  if (commands.length === 0 && processes.length === 0) {
     return;
   }
-  const commands = await commandsIn(seen, id, held.gen);
   const place =
     process.platform === "linux" ? await readPlace(id, held.gen) : undefined;
   const ports = place ? await workPorts(seen, place) : [];
@@ -4003,6 +4122,7 @@ const workLeft = async (id: string, held: Held): Promise<Work | undefined> => {
   return {
     commands,
     ports,
+    processes,
     words: words.length > 0 ? words.join(" and ") : "runs",
   };
 };
@@ -5067,12 +5187,15 @@ const readRetiring = async (id: string): Promise<Retiring[]> => {
  * holds ({@link handOverWhenIdle}): an executor on its way in waits and then
  * runs through the new one. The older one is recorded before the new one
  * replaces its record, so no agent loses it, and runs on untouched with every
- * process in it; it closes once nothing runs in it ({@link closeIdle}).
+ * process in it; it closes once nothing runs in it ({@link closeIdle}). Said
+ * in the log and recorded ({@link recordDecision}), with `grant`, why its
+ * grant was not comparable, if that is why.
  */
 const handOver = async (
   client: SessiondClient,
   ref: WorkspaceRef,
-  old: Held
+  old: Held,
+  grant: string | undefined
 ): Promise<Boundary> => {
   const record = retiringFileOf(ref.id, old);
   const retiring: Retiring = old;
@@ -5083,6 +5206,13 @@ const handOver = async (
   });
   console.info(
     `[workspace] ${ref.id}: its boundary ${old.pid} (form ${old.form ?? "none"}) is handed over to ${fresh.pid}; it closes once nothing runs in it`
+  );
+  await recordDecision(
+    ref.id,
+    "handed-over",
+    old,
+    { grant: grant ?? null },
+    fresh
   );
   closeWhenIdle(ref.id);
   return fresh;
@@ -5310,6 +5440,7 @@ const restartIfIdle = (
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
     );
+    await recordDecision(ref.id, "replaced", held, { leftDirs: true }, fresh);
     return { fresh };
   });
 
@@ -5810,6 +5941,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     );
     await endMembers(id);
     await rm(join(stateDir(id), "boundary.json"), { force: true });
+    await rm(join(stateDir(id), DECISION_FILE), { force: true });
     await closeToolDoor(id);
     await closeGitDoor(id);
     await closeGithubDoor(id);
@@ -7226,7 +7358,7 @@ const cleanGeneration = async (
 const start = async (
   client: SessiondClient,
   ref: WorkspaceRef
-): Promise<Boundary> => {
+): Promise<Held> => {
   const gen = randomBytes(4).toString("hex");
   await makeDirs(ref.id);
   await mkdir(join(stateDir(ref.id), "boundaries"), { recursive: true });
@@ -7262,7 +7394,7 @@ const launch = async (
   client: SessiondClient,
   ref: WorkspaceRef,
   gen: string
-): Promise<Boundary> => {
+): Promise<Held> => {
   const linux = process.platform === "linux";
   // A place is a person's own folder: nothing of the boundary's is
   // written into it (no copied inodes, no stand-ins, no exclude lines).
@@ -7574,6 +7706,7 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
     );
   }
   await rm(join(stateDir(ref.id), "boundary.json"), { force: true });
+  await rm(join(stateDir(ref.id), DECISION_FILE), { force: true });
   if (users.left.length === 0) {
     await signalHeld((procId) => isJudgeOf(procId, ref.id));
   }

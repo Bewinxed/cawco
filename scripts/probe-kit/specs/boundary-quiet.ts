@@ -47,7 +47,7 @@
  * 7. W, its item live through the quiet time: its boundary is the one it had
  *    before the restart, never closed. The wait's end wakes it, and its first
  *    command reaches its server; the form its boundary lost is not taken
- *    there (the agent says it keeps it as it is while its work listens), so
+ *    there (the agent records it keeps it as it is while its work listens), so
  *    the server stays in the network its commands run in. A message after
  *    the quiet time: its command reaches the server again. After each
  *    command W rests in a wait for its parent's next word, so its item stays
@@ -69,7 +69,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { QUIET_CLOSE_MS } from "../../../packages/agent/src/boundary";
+import {
+  type BoundaryDecision,
+  DECISION_FILE,
+  QUIET_CLOSE_MS,
+} from "../../../packages/agent/src/boundary";
 import { isBoundaryOf, isJudgeOf } from "../../../packages/agent/src/proc-id";
 import { readWithin } from "../../../packages/core/src/bounded";
 import {
@@ -103,7 +107,6 @@ const WAIT_OVER = `Your wait is over: ${W_REASON}.`;
 const PARENT_WAIT = { minutes: 60, reason: "its parent's word on the server" };
 /** How soon W's boundary closes once its item ends: the quiet time, a sweep's minute and slack. */
 const W_CLOSE_MS = 13 * 60_000;
-const KEPT_LINE = `is kept as it is while its work listens on ${PORT.W}`;
 /** A sweep's minute and the slack of a close, past the quiet time. */
 const CLOSE_SLACK_MS = 3 * 60_000;
 const ACCOUNT_ADDED = "acct-probe-older-form";
@@ -609,6 +612,18 @@ const spillsOf = async (home: string, id: string): Promise<string[]> =>
     ).catch(() => "[]")
   ) as string[];
 
+/** What the agent last decided of workspace `id`'s boundary of an older form, as it records it (agent boundary.ts `BoundaryDecision`); none before it decided. */
+const decisionOf = async (
+  home: string,
+  id: string
+): Promise<BoundaryDecision | undefined> =>
+  JSON.parse(
+    await readFile(
+      join(home, ".cawco", "workspaces", id, DECISION_FILE),
+      "utf8"
+    ).catch(() => "null")
+  ) ?? undefined;
+
 /** Gives workspace `id` an older form: an account added to its policy, as a session on another account would. */
 const reForm = async (home: string, id: string): Promise<void> => {
   const file = join(home, ".cawco", "workspaces", id, "accounts.json");
@@ -744,6 +759,7 @@ const quietCloses = async (
 const waiterHolds = async (
   kit: Kit,
   fleet: Fleet,
+  home: string,
   w: Delegated,
   had: readonly string[]
 ): Promise<void> => {
@@ -784,16 +800,18 @@ const waiterHolds = async (
     `reached: ${Boolean(reached)}`
   );
   const last = await boundariesOf(fleet, w.workspaceId);
-  const said = (await fleet.logs("agent"))
-    .split("\n")
-    .filter((line) => line.includes(w.workspaceId));
-  const keptAt = said.findIndex((line) => line.includes(KEPT_LINE));
+  const decided = await decisionOf(home, w.workspaceId);
   const unchanged = JSON.stringify(last) === JSON.stringify(had);
+  const keptOne = had.some(
+    (entry) => entry.slice(entry.lastIndexOf("@") + 1) === String(decided?.pid)
+  );
   kit.check(
-    "7: W's boundary, of an older form since the restart, is kept as it is while its server listens: said in the agent's log, never handed over",
-    keptAt >= 0 && unchanged,
-    // What the agent said of W from the kept line on, when its boundary moved.
-    `${said[keptAt] ?? "no kept line"}; boundary ${last.join(",") || "none"}${unchanged ? "" : `; since: ${said.slice(keptAt + 1).join(" | ") || "nothing"}`}`
+    "7: W's boundary, of an older form since the restart, is kept as it is while its server listens, as the agent records, never handed over",
+    decided?.decision === "kept" &&
+      decided.reasons.listening.includes(PORT.W as number) &&
+      keptOne &&
+      unchanged,
+    `${decided ? JSON.stringify(decided) : "no decision recorded"}; boundary ${last.join(",") || "none"}`
   );
 };
 
@@ -966,7 +984,7 @@ const run = async (kit: Kit) => {
     `3: footprint with ${IDLE} idle workspaces, P and W: before ${before.words}; after the closes ${after.words}`
   );
 
-  await waiterHolds(kit, fleet, w, waiterHad);
+  await waiterHolds(kit, fleet, home, w, waiterHad);
   const waiterEnded = await waiterFinishes(kit, fleet, w);
 
   const [i0, i1, ...rest] = idle as [Delegated, Delegated, ...Delegated[]];

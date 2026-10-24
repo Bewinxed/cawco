@@ -500,7 +500,7 @@ for w in "$HOME"/.cawco/workspaces/*/; do
   [ -d "$w" ] || continue
   echo "== workspace $w"
   ls -la "$w" "$w/boundaries" "$w"/boundaries/* 2>&1
-  for f in "${w}boundary.json" "$w"retiring-*.json; do
+  for f in "${w}boundary.json" "${w}boundary-decision.json" "$w"retiring-*.json; do
     [ -f "$f" ] && { echo "-- $f"; cat "$f"; echo; }
   done
 done
@@ -2452,6 +2452,17 @@ export WS_REPO=/home/cawco/proof-repo WS_ORIGIN=/home/cawco/proof-origin.git
 ws_state() { echo "/home/cawco/.cawco/workspaces/$(cat "$rigdir/ws-id")"; }
 ws_json() { as_user "$joinerc" sh -c 'cat "$1" 2> /dev/null || true' sh "$(ws_state)/$1" | json "$2"; }
 ws_gen() { ws_json boundary.json 'd => d.gen'; }
+# What the agent last decided of the boundary across an update, as it records it beside boundary.json (boundary.ts
+# `BoundaryDecision`, boundary-decision.json): its decision, the generation decided on and the one that took its place,
+# and why (the ports its work listens on, its commands by executor pid, a keeper still owed, a grant not comparable).
+# Its log line says the same for people; a proof reads this. $1 a JS predicate on the record, printed true or false.
+ws_decision() { ws_json boundary-decision.json "$1"; }
+# The record says generation $1 is kept as it is while its work listens on the listener's port (a hook call in flight
+# then is among its commands, the served server's port among its ports): kept in $rigdir/ws-kept.json as first read.
+ws_kept_listening() {
+  [[ "$(ws_decision "d => d.decision === 'kept' && d.gen === '$1' && d.reasons.listening.includes($WS_LISTENER_PORT)")" == true ]] || return 1
+  ws_json boundary-decision.json 'd => JSON.stringify(d)' > "$rigdir/ws-kept.json"
+}
 # Runs one command through the workspace's executor, from its clone, as a harness's shell tool does.
 ws_exec() { as_user "$joinerc" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$rigdir/ws-clone")" "$(ws_state)/exec" "$1"; }
 # A boundary generation's sandbox, as its srt host names it: `OUTER INNER IDLE...`.
@@ -2654,13 +2665,16 @@ ws_hook_calls_stop() {
 }
 # Every call the hook was handed was answered by a live judge and ran, and calls fell in the window between the new
 # build's agent starting and its deciding the workspace's boundary, whose work listens on a port, stays as it is
-# rather than being handed over: the agent's first journal line and its "is kept as it is while its work … listens on"
-# line for this workspace (boundary.ts replaceOlder; a hook call running then is named first, "runs a command (…) and").
+# rather than being handed over: the first journal entry of the agent that decided, by its pid, and the decision's time,
+# both from the agent's record as workspace_across_update first read it ($rigdir/ws-kept.json, ws_kept_listening).
 ws_hook_calls_answered() {
-  local window from to inside
-  window=$(as_user "$joinerc" journalctl --user --no-pager -o json -u cawco-agent.service | jsonl "d => { const said = (e) => typeof e.MESSAGE === 'string' ? e.MESSAGE : ''; const h = d.filter(e => said(e).includes('$(cat "$rigdir/ws-id"): its boundary ') && / is kept as it is while its work .*listens on .*$WS_LISTENER_PORT/.test(said(e))).at(-1); if (!h) return; const first = d.find(e => e._PID === h._PID); const ms = (e) => Math.floor(Number(e.__REALTIME_TIMESTAMP) / 1000); return ms(first) + ' ' + ms(h); }")
-  read -r from to <<< "$window"
-  [[ ${from:-} =~ ^[0-9]+$ && ${to:-} =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: the agent's journal does not say it keeps the workspace's boundary while its listener runs"; return 1; }
+  local agent from to inside
+  [[ -s "$rigdir/ws-kept.json" ]] || { echo "ASSERTION FAILED: the agent recorded no keeping of the workspace's boundary while its listener runs"; return 1; }
+  agent=$(json 'd => d.agent' < "$rigdir/ws-kept.json")
+  to=$(json 'd => d.at' < "$rigdir/ws-kept.json")
+  [[ $agent =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: the agent's record names no agent: $(cat "$rigdir/ws-kept.json")"; return 1; }
+  from=$(as_user "$joinerc" journalctl --user --no-pager -o json -u cawco-agent.service "_PID=$agent" | jsonl 'd => d.length > 0 ? Math.floor(Number(d[0].__REALTIME_TIMESTAMP) / 1000) : undefined')
+  [[ ${from:-} =~ ^[0-9]+$ && ${to:-} =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: no journal entry of the agent $agent that decided, or no time on its record: $(cat "$rigdir/ws-kept.json")"; return 1; }
   inside=$(awk -v from="$from" -v to="$to" '$1 ~ /^[0-9]+$/ && $1 >= from && $1 <= to' "$rigdir/ws-hook-calls.txt" | wc -l)
   echo "the new build's agent started at $from ms and kept the boundary as it is at $to ms; $inside calls went through the hook between them"
   (( inside >= 1 )) || { echo "ASSERTION FAILED: no call went through the hook between the agent's start and its keeping the boundary"; return 1; }
@@ -2793,11 +2807,11 @@ workspace_across_update() {
   as_user "$joinerc" kill -0 "$job"
   [[ "$(ns_of "$job")" == "$old_ns" ]]
   # The new build's agent finds the boundary of the older build's form with its work listening on the port, and keeps
-  # it as it is: handing it over would put every next command in a new network where nothing listens. (The preview's
-  # served server listens in it too once the stage starts it again, so the ports it names may be both. A hook call the
-  # loop above has in flight at that moment is named first: "runs a command (executor N) and listens on …".)
-  wait_until 180 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -q "'"$id"': its boundary .* is kept as it is while its work .*listens on .*'"$WS_LISTENER_PORT"'"' || { echo "ASSERTION FAILED: the new build's agent did not say it keeps the boundary while its listener runs"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
-  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its boundary .* is kept as it is while its work .*listens on .*$WS_LISTENER_PORT" | tail -n 1
+  # it as it is: handing it over would put every next command in a new network where nothing listens. Read from its
+  # record (ws_kept_listening). (The preview's served server listens in it too once the stage starts it again, so the
+  # ports may be both; a hook call the loop above has in flight at that moment is among its commands.)
+  wait_until 180 'ws_kept_listening "'"$gen"'"' || { echo "ASSERTION FAILED: the new build's agent did not record keeping generation $gen while its listener runs; its record: $(ws_json boundary-decision.json 'd => JSON.stringify(d)')"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
+  echo "the agent's record: $(cat "$rigdir/ws-kept.json")"
   # Through all of it, no call the hook was handed was refused.
   ws_hook_calls_answered
   # The generation is the one it had, its srt host still held, nothing retiring beside it, and the next command runs in
@@ -2870,7 +2884,8 @@ workspace_across_update() {
   wait_until 60 '[[ -n "$(ws_gen)" && "$(ws_gen)" != "'"$gen"'" ]]' || { echo "ASSERTION FAILED: the boundary was not handed over once its listener stopped"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
   new=$(ws_gen)
   echo "generation $gen is handed over to $new"
-  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its boundary .* is handed over to"
+  wait_until 30 '[[ "$(ws_decision "d => d.decision === '"'handed-over'"' && d.gen === '"'$gen'"' && d.to?.gen === '"'$new'"'")" == true ]]' || { echo "ASSERTION FAILED: the agent did not record handing generation $gen over to $new; its record: $(ws_json boundary-decision.json 'd => JSON.stringify(d)')"; return 1; }
+  echo "the agent's record: $(ws_json boundary-decision.json 'd => JSON.stringify(d)')"
   as_user "$joinerc" test -s "$(ws_state)/boundaries/$new/srt.json"
   wait_until 60 '[[ "$(holder_of "$joinerc" "boundary-'"$id"'-'"$new"'")" == "$(endpoint_of $NEXT)" ]]'
   wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
@@ -2993,7 +3008,7 @@ workspace_archive_ends_all() {
   [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_decision ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
 export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from

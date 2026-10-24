@@ -70,7 +70,6 @@
     "signed release": 1
   },
   "scripts/probe-kit/specs/boundary-handover.ts": {
-    "its boundary": 2,
     "its older boundary": 1,
     "Start it again": 2
   },
