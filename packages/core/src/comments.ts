@@ -666,10 +666,12 @@ export interface ArtifactChanges {
  * label alone. The anchor is what the person's look is kept by.
  */
 export interface ChangedItem {
+  /** Its words now, whole (up to {@link CHANGE_WORDS_MOST}); `label` when it has none past its label. */
+  after?: string;
   anchor: string;
   /** Whether the agent answered its pin in the revision that changed it (a reply in its thread since the revision before). */
   answered?: boolean;
-  /** Its words when the person last looked; none when it was put in. */
+  /** Its words, whole (up to {@link CHANGE_WORDS_MOST}), when the person last looked; none when it was put in. */
   before?: string;
   /** What it is, by name ("Headline", "Button": core pin-name.ts `elementName`). */
   element?: string;
@@ -703,6 +705,9 @@ export interface ActivityLine {
   moved?: { after: string; before: string };
   revision: number;
 }
+
+/** Characters a change keeps of an element's words before and after: a paragraph's, never a page's. Our call. */
+export const CHANGE_WORDS_MOST = 600;
 
 /** Lines one pin's thread keeps of what changed for it, newest last. Our call. */
 export const ACTIVITY_LIMIT = 30;
@@ -821,7 +826,7 @@ export function activityLines(
         answered: !!item.answered,
         at,
         element: item.element ?? item.label,
-        after: item.label,
+        after: item.after ?? item.label,
         revision: item.revision ?? 0,
         ...(item.before === undefined ? {} : { before: item.before }),
         ...(item.moved ? { moved: item.moved } : {}),
@@ -1820,7 +1825,7 @@ export const attachedLine = (
 
 /** A delivery's line for what an update changed under a comment the agent didn't answer: its element, before and after. */
 export const askedAgainLine = (item: ChangedItem): string =>
-  `- Your update changed ${item.element ?? "it"}${item.before === undefined ? "" : ` from ${JSON.stringify(item.before)}`} to ${JSON.stringify(item.label)}${item.moved ? ", and moved it" : ""}.`;
+  `- Your update changed ${item.element ?? "it"}${item.before === undefined ? "" : ` from ${JSON.stringify(item.before)}`} to ${JSON.stringify(item.after ?? item.label)}${item.moved ? ", and moved it" : ""}.`;
 
 /** A delivery's line for the person's words in a pin's thread: what a probe reads them by. */
 export const wroteLine = (text: string): string =>

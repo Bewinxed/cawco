@@ -90,6 +90,9 @@ export const commentWords = {
   /** A change line's move: what it came after, then and now. */
   moved: (before: string, after: string) =>
     `moved from after ${before || "the start"} to after ${after || "the start"}`,
+  /** A change line whose words run past its lines: opened in place, and folded again. */
+  more: "More",
+  less: "Less",
   /** A change line's thing put in: no before. */
   added: "added",
   noneToCheck: "All looked at",

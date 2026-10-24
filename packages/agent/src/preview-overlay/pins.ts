@@ -4,8 +4,9 @@
  * tail corner: `--c-pin` tall, as wide as its number needs, three corners
  * round and the fourth, the tail, a 2px corner standing on the point the
  * person pressed; a point in the middle of a line of words stands at that
- * line's end instead, at its foot, so the pill covers no word of it or of
- * the line above. It stands up-right of that point, up-left where the page's
+ * line's end instead, at its foot (before its first word where the line
+ * runs to the page's edge), so the pill covers no word of it or of the line
+ * above. It stands up-right of that point, up-left where the page's
  * edge leaves no room on the right, below where none is left above. Its
  * fill says where it stands: hollow while the session hasn't heard it (no
  * number yet while it is being written), filled once sent, recessed when
@@ -99,6 +100,8 @@ const TAIL_R = 2;
 const LINE_READ_MOST = 4000;
 /** The room a pill needs past its line's end to stand there, px: a three-figure pill and its rings. Our call. */
 const PILL_ROOM = 40;
+/** The room a pill needs before its line's start, px: a one- or two-figure pill and its ring, in a page's margin. Our call. */
+const PILL_ROOM_START = 24;
 /** Room round a mark's crop, px. Our call. */
 export const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
@@ -243,6 +246,8 @@ interface Standing {
   /** On the page as a whole: drawn at the viewport's top-right, fixed to it. */
   page: boolean;
   shown: boolean;
+  /** The pill stands up-left of its point (a mid-line press moved to its line's start): its tail on the point's right. */
+  start?: boolean;
 }
 
 /** The corner a pill's tail is, standing on its point; none for a pin on the page as a whole. */
@@ -489,8 +494,16 @@ export function startPins(deps: PinsDeps): Pins {
       box.x + spot.x * box.w,
       box.y + spot.y * box.h,
     ];
-    const at = lineEnd(el, pressed) ?? pressed;
-    return { at, box, el, page: false, shown: showsAt(el, at) };
+    const line = lineEnd(el, pressed);
+    const at = line?.at ?? pressed;
+    return {
+      at,
+      box,
+      el,
+      page: false,
+      shown: showsAt(el, at),
+      ...(line?.start ? { start: true } : {}),
+    };
   };
 
   /**
@@ -498,15 +511,18 @@ export function startPins(deps: PinsDeps): Pins {
    * line's end, at its foot: the pill stands up-right of its point, so on
    * the press itself it would stand over the words of the line above and
    * of its own. At the line's end it stands in the line's own band past its
-   * last word, covering none. Null where the point is on no line of words
-   * (a picture, the padding, past a line's end), or the line ends too near
-   * the page's edge for a pill. A long element's lines are not read: past
-   * {@link LINE_READ_MOST} characters the press stands where it was.
+   * last word, covering none. Where the line runs to the page's edge and
+   * leaves no room past it, it stands before the line's first word instead
+   * (`start`: up-left of the point, in the margin the line starts after).
+   * Null where the point is on no line of words (a picture, the padding,
+   * past a line's end), or neither side of the line has a pill's room. A
+   * long element's lines are not read: past {@link LINE_READ_MOST}
+   * characters the press stands where it was.
    */
   const lineEnd = (
     el: Element,
     [px, py]: [number, number]
-  ): [number, number] | null => {
+  ): { at: [number, number]; start: boolean } | null => {
     if (
       el.ownerDocument !== document ||
       (el.textContent?.length ?? 0) > LINE_READ_MOST
@@ -524,12 +540,19 @@ export function startPins(deps: PinsDeps): Pins {
       return null;
     }
     const right = Math.max(...fragments.map((r) => r.right));
+    const left = Math.min(...fragments.map((r) => r.left));
     const bottom = Math.max(...fragments.map((r) => r.bottom));
     const room = document.documentElement.clientWidth - RING;
-    if (x >= right || right + PILL_ROOM > room) {
+    if (x >= right) {
       return null;
     }
-    return [right + scrollX + 1, bottom + scrollY];
+    if (right + PILL_ROOM <= room) {
+      return { at: [right + scrollX + 1, bottom + scrollY], start: false };
+    }
+    if (left - PILL_ROOM_START >= 0) {
+      return { at: [left + scrollX - 1, bottom + scrollY], start: true };
+    }
+    return null;
   };
 
   /** Where pin `pin` stands in the page now, or null when it is not on it. */
@@ -674,7 +697,7 @@ export function startPins(deps: PinsDeps): Pins {
     const [px, py] = where.at;
     const edge = RING;
     const right = scrollX + document.documentElement.clientWidth - edge;
-    const left = px + w <= right ? px : px - w;
+    const left = px + w <= right && !where.start ? px : px - w;
     const above = py - h >= edge;
     const top = above ? py - h : py;
     const fromRight = left !== px;

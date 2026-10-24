@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import type { CanvasElement, CanvasEntry } from "@cawco/core/canvas";
 import {
   ANCHOR_IDENTITIES,
+  CHANGE_WORDS_MOST,
   CHANGES_LIMIT,
   type ChangedItem,
   generatedId,
@@ -244,6 +245,18 @@ function wordsOf(node: Node): string {
     .trim();
   return words;
 }
+
+/**
+ * A changed element's words whole, as a change line reads them before and
+ * after (core `ChangedItem.before`, `after`): every word it says, up to core
+ * `CHANGE_WORDS_MOST`; empty for one that says nothing.
+ */
+const wholeWordsOf = (node: Node): string => {
+  const words = wordsOf(node);
+  return words.length > CHANGE_WORDS_MOST
+    ? `${words.slice(0, CHANGE_WORDS_MOST - 1).trimEnd()}…`
+    : words;
+};
 
 /** A changed element's label: its first words, else what it is. */
 const labelOf = (node: Node): string => {
@@ -529,8 +542,9 @@ export function htmlChanges(
       kind: "element",
       anchor: selectorOf(node),
       label: labelOf(node),
+      after: wholeWordsOf(node) || labelOf(node),
       element: nameOf(node),
-      ...(old ? { before: labelOf(old) } : {}),
+      ...(old ? { before: wholeWordsOf(old) || labelOf(old) } : {}),
       ...(move ? { moved: move } : {}),
     };
   });

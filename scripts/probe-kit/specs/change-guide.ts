@@ -4,8 +4,10 @@
  * with C's chip in the transcript and a pinging ring in place of the green
  * fill; DESIGN.md, Changed since you looked), on a scratch fleet (real hub,
  * agent and sessiond; Claude Code against the mock model, which calls the
- * tools each PROBE-CALL names) and the built dashboard, at 390 and 1440, in
- * Chromium and WebKit. Each leg makes its own page:
+ * tools each PROBE-CALL names) and the built dashboard, at 390, 680 and
+ * 1440, in Chromium and WebKit. Each leg makes its own page; at 680 it is
+ * loaded with the panel shut first, and a press on the turn's artifact card
+ * mounts the pane with the page drawn.
  *
  * 1. The person pins two elements: the headline (its pill on the
  *    headline's top-right corner) and a paragraph, in the middle of its
@@ -27,7 +29,8 @@
  *    - a second revision carries what he hasn't looked at forward under
  *      its own revision, beside what it changed;
  *    - a To check row pressed opens its thread, whose change line says
- *      before → after, the card standing clear of the element's box (on a
+ *      before → after (a "before" past 200 characters folds to three lines
+ *      with More, which opens it in place to every word), the card standing clear of the element's box (on a
  *      phone, the foot sheet clear of it), and the row leaves To check;
  *    - the agent's turn carries a chip for each spot it changed and for the
  *      comment it answered; the paragraph's chip opens the panel scrolled
@@ -74,10 +77,9 @@ const SPACES = /\s+/;
 
 const HEADLINE =
   "A self-hosted control plane that puts every AI coding agent on every machine on one board";
-/** The headline as a change line says it before: its first words, cut at the hub's label length (page-changes.ts `LABEL_CHARS`). */
-const HEADLINE_BEFORE = `${HEADLINE.slice(0, 59).trimEnd()}…`;
+/** The paragraph's words as first written: past 200 characters, so its change line's "before" runs past the line's three lines. */
 const COPY =
-  "Claude Code, OpenCode and pi sessions across every machine you own, on one board you can steer from your desk or your phone, every ask of theirs waiting in one place.";
+  "Claude Code, OpenCode and pi sessions across every machine you own, on one board you can steer from your desk or your phone, every ask of theirs waiting in one place, every answer they need from you a press away, wherever you are.";
 
 /** The page as each revision has it: first, the agent's answer, a later change no one asked for. */
 const page = (leg: string, revision: 1 | 2 | 3) => {
@@ -201,8 +203,12 @@ const setUp = async (kit: Kit): Promise<Fleet> => {
 
 /** The frame that shows leg `leg`'s page now; null while none does. */
 const shownFrame = async (screen: Page, leg: string): Promise<Frame | null> => {
+  // No frame on the page is none shown: never waited for.
+  if ((await screen.locator(FRAME).count()) === 0) {
+    return null;
+  }
   const frame = await (
-    await screen.locator(FRAME).elementHandle()
+    await screen.locator(FRAME).first().elementHandle({ timeout: 2000 })
   )?.contentFrame();
   const on = await frame
     ?.evaluate(
@@ -236,13 +242,14 @@ const legFrame = async (
   if (soon) {
     return soon;
   }
-  await screen
+  const pressed = await screen
     .locator(
       `[data-slot="preview-tool"][data-artifact="${artifact}"] [data-slot="artifact-open"]`
     )
     .last()
-    .click()
-    .catch(() => undefined);
+    .click({ timeout: 10_000 })
+    .then(() => "pressed")
+    .catch((error: Error) => error.message.slice(0, 400));
   const opened = await until(
     `${what}, opened from its turn`,
     () => shownFrame(screen, leg),
@@ -250,16 +257,26 @@ const legFrame = async (
     60_000
   ).catch(() => null);
   if (!opened) {
-    const there = await screen.evaluate(() => ({
-      frames: [...document.querySelectorAll("iframe")].map(
-        (one) => `${one.title} ${one.getBoundingClientRect().width}`
-      ),
-      tools: document.querySelectorAll('[data-slot="preview-tool"]').length,
-      pane: !!document.querySelector(
-        ':is([data-slot="preview-pane"], [data-side-card="preview"])'
-      ),
-      url: location.href,
-    }));
+    const there = await screen.evaluate(
+      (press) => ({
+        frames: [...document.querySelectorAll("iframe")].map(
+          (one) => `${one.title} ${one.getBoundingClientRect().width}`
+        ),
+        tools: document.querySelectorAll('[data-slot="preview-tool"]').length,
+        pane: !!document.querySelector(
+          ':is([data-slot="preview-pane"], [data-side-card="preview"])'
+        ),
+        host: document
+          .querySelector('[data-slot="preview-sheet-host"]')
+          ?.getAttribute("style"),
+        sheet: !!document.querySelector("[data-preview-sheet]"),
+        composer: !!document.querySelector('[data-slot="composer"]'),
+        width: innerWidth,
+        pressed: press,
+        url: location.href,
+      }),
+      pressed
+    );
     throw new Error(`${what}: no frame shows it (${JSON.stringify(there)})`);
   }
   return opened;
@@ -622,8 +639,10 @@ interface Leg {
 
 const LEGS: Leg[] = [
   { engine: "chromium", view: "desk" },
+  { engine: "chromium", view: "narrowDesk" },
   { engine: "chromium", view: "phone" },
   { engine: "webkit", view: "desk" },
+  { engine: "webkit", view: "narrowDesk" },
   { engine: "webkit", view: "phone" },
 ];
 
@@ -647,7 +666,8 @@ interface On {
 /** The leg's page and its hero, with the two comments made: the headline's at its top-right corner, the paragraph's mid-line. */
 const madeLeg = async (kit: Kit, fleet: Fleet, leg: Leg): Promise<On> => {
   const name = `${leg.engine} ${VIEWS[leg.view].width}`;
-  const key = `${leg.engine}-${leg.view}`;
+  // An artifact's name is lower case (artifact_create's `name`).
+  const key = `${leg.engine}-${leg.view}`.toLowerCase();
   const screen = await kit.page(leg.view, { engine: leg.engine });
   await screen.addInitScript(HOLD_PINGS);
   const said: string[] = [];
@@ -667,6 +687,9 @@ const madeLeg = async (kit: Kit, fleet: Fleet, leg: Leg): Promise<On> => {
     html: page(key, 1),
   });
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  if (!id) {
+    throw new Error(`the hero was not made: ${made.slice(0, 600)}`);
+  }
   const frame = await legFrame(screen, key, "the hero in the panel", id);
   await settle(screen, 400);
   const headline = await pinOn(
@@ -752,7 +775,7 @@ const landedChecks = async (on: On) => {
   const itemAt = (anchor: string) => items.find((it) => it.anchor === anchor);
   on.check(
     "the hub keeps each change with its before and its comment: the headline (before, its first words) answering pin 1, the button tied to pin 1's answer, the paragraph under pin 2 with no answer",
-    itemAt("#headline")?.before === HEADLINE_BEFORE &&
+    itemAt("#headline")?.before === HEADLINE &&
       itemAt("#headline")?.pin === headline &&
       itemAt("#headline")?.answered === true &&
       itemAt("#cta")?.pin === headline &&
@@ -884,36 +907,48 @@ const shownOf = async (on: On, selector: string): Promise<Box | null> => {
 };
 
 /**
- * The desk's window drawn as narrow as 680 with the thread open: the change
- * lines still wrap inside their width, nothing of the thread or the rail
- * spills sideways, and the card still stands clear of the headline.
+ * The desk's window drawn as narrow as 680 with the thread open: the panel
+ * becomes the sheet (a pane under 900px), and the change lines, the thread
+ * and the rail hold, nothing spilling sideways or past the window. The
+ * thread's place at 680 is the 680 leg's own (its card clear of the
+ * headline).
  */
-const narrowHolds = async (on: On, card: ReturnType<Page["locator"]>) => {
+const narrowHolds = async (on: On) => {
   const was = on.screen.viewportSize();
   await on.screen.setViewportSize({ width: 680, height: 900 });
   await settle(on.screen, 800);
-  const spills = await on.screen.evaluate(() =>
-    [
-      ...document.querySelectorAll(
-        '[data-slot="change-line"], [data-slot="pin-card"], [data-slot="comment-rail"]'
-      ),
-    ]
-      .filter(
-        (el) =>
-          el.scrollWidth > el.clientWidth + 1 ||
-          el.getBoundingClientRect().right > innerWidth + 0.5
-      )
-      .map((el) => el.getAttribute("data-slot"))
-  );
-  const box = await card.boundingBox().catch(() => null);
-  const headline = await shownOf(on, "#headline");
-  const cardBox = box
-    ? { x: box.x, y: box.y, w: box.width, h: box.height }
-    : null;
+  // Read once the layout has settled at the new width: a card the old split drew leaves as the sheet takes over.
+  const spillsNow = () =>
+    on.screen.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          '[data-slot="change-line"], [data-slot="pin-card"], [data-slot="comment-rail"]'
+        ),
+      ]
+        .filter(
+          (el) =>
+            el.scrollWidth > el.clientWidth + 1 ||
+            el.getBoundingClientRect().right > innerWidth + 0.5
+        )
+        .map(
+          (el) =>
+            `${el.getAttribute("data-slot")} ${Math.round(el.getBoundingClientRect().right)}/${el.scrollWidth}>${el.clientWidth}`
+        )
+    );
+  let spills = await spillsNow();
+  await until(
+    "the layout settled at 680",
+    async () => {
+      spills = await spillsNow();
+      return spills;
+    },
+    (now) => now.length === 0,
+    5000
+  ).catch(() => undefined);
   on.check(
-    "at 680 the thread's change lines, the thread and the rail hold: nothing spills sideways or past the window, and the card stands clear of the headline",
-    spills.length === 0 && !(cardBox && headline && meets(cardBox, headline)),
-    `spills ${JSON.stringify(spills)}; card ${JSON.stringify(cardBox)}; headline ${JSON.stringify(headline)}`
+    "drawn down to 680, the change lines, the thread and the rail hold: nothing spills sideways or past the window",
+    spills.length === 0,
+    `spills ${JSON.stringify(spills)}`
   );
   if (was) {
     await on.screen.setViewportSize(was);
@@ -953,7 +988,7 @@ const rowChecks = async (on: On) => {
   };
   on.check(
     "pin 1's thread says what changed under the reply: ↻ Headline, its words before → after, with its revision",
-    lineSaid.before === HEADLINE_BEFORE &&
+    lineSaid.before === HEADLINE &&
       lineSaid.after === "One board for every agent" &&
       !!lineSaid.revision?.includes(commentWords.revision(on.revision)),
     JSON.stringify(lineSaid)
@@ -981,7 +1016,7 @@ const rowChecks = async (on: On) => {
     `card ${JSON.stringify(cardBox)}; headline shown ${JSON.stringify(headline)}`
   );
   if (on.leg.view === "desk") {
-    await narrowHolds(on, card);
+    await narrowHolds(on);
   }
   // On a phone the rail stands aside while a thread stands: the thread closed, the rail is back.
   await card
@@ -1088,6 +1123,56 @@ const chipChecks = async (on: On) => {
     opened && !!shown,
     `card ${opened}; paragraph shown ${JSON.stringify(shown)}`
   );
+  await wholeBeforeChecks(on);
+};
+
+/**
+ * The paragraph's "before" ran past 200 characters: its change line in pin
+ * 2's thread stands in three lines with More at its foot, and More opens it
+ * in place to every word of it, none clipped.
+ */
+const wholeBeforeChecks = async (on: On) => {
+  const line = on.screen
+    .locator(
+      '[data-slot="pin-card"][data-pin-card="2"] [data-slot="change-line"]'
+    )
+    .filter({ hasText: "One real session, live" })
+    .first();
+  const words = line.locator('[data-slot="change-words"]');
+  const folded = await words
+    .evaluate((el) => el.scrollHeight > el.clientHeight + 1)
+    .catch(() => null);
+  if (folded) {
+    await line
+      .locator('[data-slot="change-more"]')
+      .click({ timeout: 5000 })
+      .catch(() => undefined);
+    await settle(on.screen, 300);
+  }
+  const whole = await words
+    .evaluate((el) => ({
+      clipped: el.scrollHeight > el.clientHeight + 1,
+      before:
+        el.querySelector('[data-slot="change-before"]')?.textContent ?? null,
+      h:
+        el.querySelector('[data-slot="change-before"]')?.getBoundingClientRect()
+          .height ?? 0,
+    }))
+    .catch(() => null);
+  const more = await line
+    .locator('[data-slot="change-more"]')
+    .getAttribute("aria-expanded", { timeout: 1000 })
+    .catch(() => null);
+  on.check(
+    `the paragraph's ${COPY.length}-character "before" is reachable whole: where it runs past its line's three lines, ${commentWords.more} opens it in place; every word stands in the line, none clipped`,
+    COPY.length >= 200 &&
+      folded !== null &&
+      (!folded || more === "true") &&
+      whole?.before === COPY &&
+      whole.clipped === false &&
+      whole.h > 0,
+    `folded ${folded}; ${commentWords.more} ${more}; ${JSON.stringify(whole)}`
+  );
 };
 
 /** Ask again on pin 2's thread: the comment goes to the session again, whole. */
@@ -1116,9 +1201,60 @@ const askAgainChecks = async (on: On) => {
   );
 };
 
+/**
+ * Loaded at this width with the panel shut, the turn's artifact card opens
+ * it: the pane mounts with the page drawn (the press, nothing else).
+ */
+const cardOpensChecks = async (on: On) => {
+  await on.screen
+    .locator(':is([data-slot="preview-pane"], [data-side-card="preview"])')
+    .getByRole("button", { name: "Close", exact: true })
+    .first()
+    .click()
+    .catch(() => undefined);
+  await until(
+    "the panel shut",
+    async () => !(await shownFrame(on.screen, on.key)),
+    Boolean,
+    10_000
+  ).catch(() => undefined);
+  await open(on.screen, on.url, COMPOSER);
+  const shut = !(await shownFrame(on.screen, on.key));
+  await on.screen
+    .locator(
+      `[data-slot="preview-tool"][data-artifact="${on.id}"] [data-slot="artifact-open"]`
+    )
+    .last()
+    .click({ timeout: 10_000 })
+    .catch(() => undefined);
+  const drawn = await until(
+    "the pane opened by the card",
+    () => shownFrame(on.screen, on.key),
+    Boolean,
+    30_000
+  ).catch(() => null);
+  const box = drawn
+    ? await on.screen
+        .locator(FRAME)
+        .boundingBox()
+        .catch(() => null)
+    : null;
+  on.check(
+    "loaded at this width with the panel shut, a press on the turn's artifact card mounts the pane with the page drawn",
+    shut && !!drawn && (box?.width ?? 0) > 0 && (box?.height ?? 0) > 0,
+    `shut before ${shut}; frame ${JSON.stringify(box)}`
+  );
+  if (drawn) {
+    on.frame = drawn;
+  }
+};
+
 const legChecks = async (kit: Kit, fleet: Fleet, leg: Leg) => {
   const on = await madeLeg(kit, fleet, leg);
   try {
+    if (leg.view === "narrowDesk") {
+      await cardOpensChecks(on);
+    }
     await madeChecks(on);
     await landedChecks(on);
     await cameBackChecks(on);

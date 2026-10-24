@@ -801,9 +801,17 @@
       picking = null;
     }
   });
-  /** To the page, on its own origin alone. */
-  function post(message: object) {
-    if (paneOrigin) {
+  /**
+   * The origin whose page last said it is ready in the frame. While the
+   * frame still holds another origin's page (the panel moving to another
+   * artifact, served on its own origin), nothing is posted into it: the
+   * engine refuses a post whose target origin is not the page's, and logs
+   * it. The new page's ready says everything again.
+   */
+  let readyFrom = "";
+  /** To the page, on its own origin alone, once that origin's page said it is ready (`hello`, the answer to it, goes at once). */
+  function post(message: object, hello = false) {
+    if (paneOrigin && (hello || readyFrom === paneOrigin)) {
       iframe?.contentWindow?.postMessage(message, paneOrigin);
     }
   }
@@ -1650,20 +1658,23 @@
   /** Tells the page which artifact it is, where its doc is synced, and the dashboard's theme. */
   function announce() {
     connected = false;
-    post({
-      type: "cawco:hello",
-      theme: theme.resolved,
-      ...(artifact
-        ? {
-            artifact: {
-              id: artifact.id,
-              kind: artifact.kind,
-              name: artifact.name,
-            },
-            sync: artifactSyncPath(artifact.id),
-          }
-        : {}),
-    });
+    post(
+      {
+        type: "cawco:hello",
+        theme: theme.resolved,
+        ...(artifact
+          ? {
+              artifact: {
+                id: artifact.id,
+                kind: artifact.kind,
+                name: artifact.name,
+              },
+              sync: artifactSyncPath(artifact.id),
+            }
+          : {}),
+      },
+      true
+    );
   }
   // The dashboard's theme turning tells the page: a page artifact draws in it
   // (the overlay), never in the OS's; a preview is its own app and keeps its
@@ -2055,7 +2066,7 @@
   /** A changed thing as a line: what it is, its words then and now, its move, its revision, how often. */
   const lineOf = (item: ChangedItem): ChangeLine => ({
     element: item.element ?? item.label,
-    after: item.label,
+    after: item.after ?? item.label,
     anchor: item.anchor,
     ...(item.before === undefined ? {} : { before: item.before }),
     ...(item.moved ? { moved: item.moved } : {}),
@@ -2857,6 +2868,7 @@
           preview.title = previewTitle(message.title) ?? "";
         }
         if (message.type === "cawco:ready") {
+          readyFrom = event.origin;
           connected = true;
           refusedEntries = 0;
           // It was let in: a later turn-away is a pass lost since, which a new entry answers.

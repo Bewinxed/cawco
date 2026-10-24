@@ -23,8 +23,16 @@
    * changed with no answer says so first and offers Ask again, which
    * delivers the comment to the session again. A line that `step`s is a
    * press that brings its spot out on the page.
+   *
+   * A line's words (its before and after, whole as the hub keeps them) stand
+   * in three lines at most; one whose words run past them says so with More
+   * at its foot, which opens the line in place to every word, and Less
+   * folds it again. Nothing it says is out of reach.
    */
   import { commentWords } from "@cawco/core";
+  import type { Attachment } from "svelte/attachments";
+  import { SvelteSet } from "svelte/reactivity";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconRefresh } from "#lib/icons.js";
 
@@ -49,10 +57,37 @@
     /** In a thread card, or under a rail row, on its words' column. */
     inset?: "card" | "rail";
   } = $props();
+
+  /** The lines opened to every word, by place. */
+  const opened = new SvelteSet<number>();
+  /** The lines whose words run past their three lines, by place. */
+  const clipped = new SvelteSet<number>();
+  /** Line `at`'s words: whether they run past the lines they stand in, read as they lay out and in the next frame after any change. */
+  const measured =
+    (at: number): Attachment<HTMLElement> =>
+    (node) => {
+      const read = () => {
+        if (node.scrollHeight > node.clientHeight + 1) {
+          clipped.add(at);
+        } else if (!opened.has(at)) {
+          clipped.delete(at);
+        }
+      };
+      read();
+      const watch = frameObserver(read);
+      watch.observe(node);
+      return () => watch.disconnect();
+    };
 </script>
 
-{#snippet said(line: ChangeLine)}
-  <span class="min-w-0 flex-1 text-pretty wrap-anywhere" data-box>
+{#snippet said(line: ChangeLine, at: number)}
+  <span
+    class="min-w-0 flex-1 text-pretty wrap-anywhere not-data-open:line-clamp-3"
+    data-box
+    data-open={opened.has(at) || undefined}
+    data-slot="change-words"
+    {@attach measured(at)}
+  >
     <span class="font-medium text-ink-strong">{line.element}</span>
     {#if line.moved}
       <span class="text-ink-muted"
@@ -109,7 +144,7 @@
               <span aria-hidden="true" class="mark-cell text-c-change-ring"
                 ><IconRefresh class="size-icon-sm" /></span
               >
-              {@render said(line)}
+              {@render said(line, at)}
             </button>
           {:else}
             <span
@@ -118,8 +153,28 @@
               <span aria-hidden="true" class="mark-cell text-c-change-ring"
                 ><IconRefresh class="size-icon-sm" /></span
               >
-              {@render said(line)}
+              {@render said(line, at)}
             </span>
+          {/if}
+          {#if clipped.has(at) || opened.has(at)}
+            <!-- The line's words past its three lines, opened in place. -->
+            <div class="flex justify-end">
+              <button
+                aria-expanded={opened.has(at)}
+                class="select-none px-space-2 py-0 rounded-sm border-none bg-transparent type-meta font-medium text-ink-strong underline underline-offset-2 can-hover:hover:bg-surface-hover press-tint focus-inset"
+                data-slot="change-more"
+                onclick={() => {
+                  if (opened.has(at)) {
+                    opened.delete(at);
+                  } else {
+                    opened.add(at);
+                  }
+                }}
+                type="button"
+              >
+                {opened.has(at) ? commentWords.less : commentWords.more}
+              </button>
+            </div>
           {/if}
         </li>
       {/each}
