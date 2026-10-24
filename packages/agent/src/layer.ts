@@ -192,6 +192,18 @@ export const overlaySync = (id: string): boolean => {
   }
 };
 
+/** Whether workspace `id` is a copy of a folder that is no repository (read from its record, synchronously). */
+export const folderSync = (id: string): boolean => {
+  try {
+    return (
+      (JSON.parse(readFileSync(layerFile(id), "utf8")) as Layer).kind ===
+      "folder"
+    );
+  } catch {
+    return false;
+  }
+};
+
 // ---------------------------------------------------------------- Linux view
 
 /** A program on the system PATH, where workspace-needs.ts looks. */

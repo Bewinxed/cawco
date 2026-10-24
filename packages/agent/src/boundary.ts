@@ -212,6 +212,7 @@ import { hubPreviewsPath } from "./hub-previews";
 import { type HeldProc, KeeperPool } from "./keepers";
 import {
   ensureView,
+  folderSync,
   layerOf,
   overlaySync,
   ownModules,
@@ -3601,6 +3602,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         ...(place
           ? { CAWCO_SANDBOX_CWD: policy.scratch, [PLACE_ENV]: "1" }
           : {}),
+        // A delegate's copy of a folder that is no repository: the host
+        // holds it as a folder, never asking it for a `.git` (layer.ts).
+        ...(folderSync(id) ? { CAWCO_FOLDER: "1" } : {}),
       },
     },
   };
