@@ -18,6 +18,14 @@
  *   two, the stage's one fact, a third line only for Working and Review,
  *   none on a card waiting on him);
  * - the pane holds at most two cards before its tabs;
+ * - one act per view: exactly one coral-filled control in view, in every
+ *   state at every width (Ask Caw, Approve, the empty project's Send, Retry);
+ * - no glyph stands in a box of its own: a glyph whose parent draws a
+ *   border or a fill shares that box with words (a labelled control or
+ *   tile); an icon alone has no container, controls included;
+ * - no box overlaps another, the Dropped rail and the columns included, and
+ *   a board scrolled sideways never cuts a column at its leading edge;
+ * - the empty project's starters share one height;
  * - every named motion, held on the DevTools clock and sought to 0, ¼, ½,
  *   ¾ and 1 of its own length, moves the whole way on its own curve: each
  *   reading strictly between its ends, and within 0.06 of where the run's
@@ -113,6 +121,9 @@ const openFrame = async (
 /* ---------- Boxes ---------- */
 
 const PARENTS = [
+  ".board",
+  ".col",
+  ".col-cards",
   ".bar",
   ".glass",
   ".head",
@@ -160,14 +171,19 @@ interface Group {
  */
 const groupsOf = (page: Page) =>
   page.evaluate((parents) => {
-    const inFlow = (element: Element): boolean => {
+    // On the board a pinned box (the Dropped rail) stands among the
+    // columns, so it is held to them like any other.
+    const inFlow = (element: Element, pinned = false): boolean => {
       const box = element.getBoundingClientRect();
       const style = getComputedStyle(element);
+      const out = pinned
+        ? ["absolute", "fixed"]
+        : ["absolute", "fixed", "sticky"];
       return (
         box.width > 0 &&
         box.height > 0 &&
         style.visibility !== "hidden" &&
-        !["absolute", "fixed", "sticky"].includes(style.position)
+        !out.includes(style.position)
       );
     };
     const plain = (element: Element) => {
@@ -176,25 +192,34 @@ const groupsOf = (page: Page) =>
     };
     const root = document.documentElement;
     const groups = parents.flatMap((selector) =>
-      [...document.querySelectorAll(selector)].filter(inFlow).map((parent) => ({
-        selector,
-        outer: plain(parent),
-        kids: [...parent.children].filter(inFlow).map((kid) => ({
-          name: `${kid.localName}.${[...kid.classList].join(".")}`,
-          box: plain(kid),
-        })),
-      }))
+      [...document.querySelectorAll(selector)]
+        .filter((parent) => inFlow(parent))
+        .map((parent) => ({
+          selector,
+          outer: plain(parent),
+          kids: [...parent.children]
+            .filter((kid) => inFlow(kid, selector === ".board"))
+            .map((kid) => ({
+              name: `${kid.localName}.${[...kid.classList].join(".")}`,
+              box: plain(kid),
+            })),
+        }))
     );
     return { groups, wide: root.scrollWidth, view: root.clientWidth };
   }, PARENTS);
 
+/** Scrollers, whose children run past their box by design: overlaps only. */
+const SCROLLERS = new Set([".board"]);
+
 const spills = ({ kids, outer, selector }: Group): string[] =>
-  kids.flatMap(({ box, name }) => {
-    const over = Math.max(outer.left - box.left, box.right - outer.right);
-    return over > 0.5
-      ? [`${name} spills out of ${selector} by ${over.toFixed(1)}px`]
-      : [];
-  });
+  SCROLLERS.has(selector)
+    ? []
+    : kids.flatMap(({ box, name }) => {
+        const over = Math.max(outer.left - box.left, box.right - outer.right);
+        return over > 0.5
+          ? [`${name} spills out of ${selector} by ${over.toFixed(1)}px`]
+          : [];
+      });
 
 const overlaps = ({ kids, selector }: Group): string[] =>
   kids.flatMap((one, i) =>
@@ -223,6 +248,172 @@ const boxFaults = async (page: Page): Promise<string[]> => {
     ...groups.flatMap((group) => [...spills(group), ...overlaps(group)]),
   ];
 };
+
+/**
+ * A board scrolled sideways shows each column it reaches from its start: a
+ * column cut at the leading edge (its words broken mid-word) is a fault; one
+ * running past the trailing edge is the hint that more lies there.
+ */
+const cutColumns = (page: Page): Promise<string[]> =>
+  page.evaluate(() => {
+    const board = document.querySelector<HTMLElement>(".board");
+    if (!board || board.hidden || board.scrollWidth <= board.clientWidth) {
+      return [];
+    }
+    const edge =
+      board.getBoundingClientRect().left +
+      Number.parseFloat(getComputedStyle(board).paddingLeft);
+    return [...board.children].flatMap((col) => {
+      const box = col.getBoundingClientRect();
+      return box.width > 0 && box.right > edge + 0.5 && box.left < edge - 0.5
+        ? [
+            `${col.className} ${(col as HTMLElement).dataset.col ?? ""} starts ${(edge - box.left).toFixed(1)}px before the board's edge`,
+          ]
+        : [];
+    });
+  });
+
+/**
+ * Every control in view filled with the coral action: its background, or
+ * any colour of its background image, at a coral hue (20 to 50 degrees in
+ * OKLCH) with a chroma of 0.1 or more (the status tints sit under it).
+ */
+const coralFills = (page: Page): Promise<string[]> =>
+  page.evaluate(() => {
+    const canvas = document.createElement("canvas").getContext("2d");
+    const coral = (colour: string): boolean => {
+      if (!canvas) {
+        return false;
+      }
+      canvas.clearRect(0, 0, 1, 1);
+      canvas.fillStyle = "rgba(0, 0, 0, 0)";
+      canvas.fillStyle = colour;
+      canvas.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+      if (a < 200) {
+        return false;
+      }
+      const lin = (v: number) => {
+        const c = v / 255;
+        return c <= 0.040_45 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      const [R, G, B] = [lin(r), lin(g), lin(b)];
+      const l = Math.cbrt(
+        0.412_221_470_8 * R + 0.536_332_536_3 * G + 0.051_445_992_9 * B
+      );
+      const m = Math.cbrt(
+        0.211_903_498_2 * R + 0.680_699_545_1 * G + 0.107_396_956_6 * B
+      );
+      const s = Math.cbrt(
+        0.088_302_461_9 * R + 0.281_718_837_6 * G + 0.629_978_700_5 * B
+      );
+      const A = 1.977_998_495_1 * l - 2.428_592_205 * m + 0.450_593_709_9 * s;
+      const Bb = 0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766 * s;
+      const chroma = Math.hypot(A, Bb);
+      const hue = (Math.atan2(Bb, A) * 180) / Math.PI;
+      return chroma >= 0.1 && hue >= 20 && hue <= 50;
+    };
+    const colours = (style: CSSStyleDeclaration): string[] => [
+      style.backgroundColor,
+      ...(style.backgroundImage.match(
+        /(?:rgba?|oklch|oklab|lab|lch|color)\([^()]*\)/g
+      ) ?? []),
+    ];
+    const inView = (element: Element): boolean => {
+      const box = element.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        box.right > 0 &&
+        box.bottom > 0 &&
+        box.left < innerWidth &&
+        box.top < innerHeight &&
+        getComputedStyle(element).visibility === "visible"
+      );
+    };
+    return [...document.querySelectorAll("button, a, [role='button'], label")]
+      .filter(inView)
+      .filter((control) => colours(getComputedStyle(control)).some(coral))
+      .map(
+        (control) =>
+          (control.textContent?.trim() || control.getAttribute("aria-label")) ??
+          control.localName
+      );
+  });
+
+/**
+ * Each glyph in view standing in a box of its own: its parent draws a
+ * border, a fill other than what lies behind it, or a background image, and
+ * holds no words of its own beside the glyph.
+ */
+const boxedGlyphs = (page: Page): Promise<string[]> =>
+  page.evaluate(() => {
+    const clear = (colour: string) =>
+      colour === "transparent" ||
+      colour.endsWith("/ 0)") ||
+      colour.endsWith(", 0)");
+    const behind = (element: Element): string => {
+      for (let at = element.parentElement; at; at = at.parentElement) {
+        const fill = getComputedStyle(at).backgroundColor;
+        if (!clear(fill)) {
+          return fill;
+        }
+      }
+      return getComputedStyle(document.documentElement).backgroundColor;
+    };
+    const draws = (box: Element): boolean => {
+      const style = getComputedStyle(box);
+      const edged = ["Top", "Right", "Bottom", "Left"].some(
+        (side) =>
+          Number.parseFloat(
+            style.getPropertyValue(`border-${side.toLowerCase()}-width`)
+          ) > 0 &&
+          !clear(style.getPropertyValue(`border-${side.toLowerCase()}-color`))
+      );
+      const filled =
+        !clear(style.backgroundColor) && style.backgroundColor !== behind(box);
+      return edged || filled || style.backgroundImage !== "none";
+    };
+    return [...document.querySelectorAll("svg.glyph")].flatMap((glyph) => {
+      const box = glyph.parentElement;
+      const shown = glyph.getBoundingClientRect();
+      if (
+        !box ||
+        shown.width === 0 ||
+        getComputedStyle(glyph).visibility !== "visible"
+      ) {
+        return [];
+      }
+      const words = [...box.childNodes].some(
+        (node) => node !== glyph && (node.textContent ?? "").trim() !== ""
+      );
+      return draws(box) && !words
+        ? [
+            `${box.localName}.${[...box.classList].join(".")} (${box.getAttribute("aria-label") ?? ""})`,
+          ]
+        : [];
+    });
+  });
+
+/**
+ * The empty project's starters: each one's height, and how far its words'
+ * middle stands from its box's (a one-line starter in a two-line row leaves
+ * no blank foot when its words are centred).
+ */
+const starterBoxes = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll(".starter")]
+      .filter((starter) => starter.getBoundingClientRect().height > 0)
+      .map((starter) => {
+        const box = starter.getBoundingClientRect();
+        const words = starter.querySelector("span")?.getBoundingClientRect();
+        const middle = (b: DOMRect) => b.top + b.height / 2;
+        return {
+          height: box.height,
+          off: words ? Math.abs(middle(words) - middle(box)) : Number.NaN,
+        };
+      })
+  );
 
 /** Caw's centre against his block's, and the block's against the page column's. */
 const cawAxis = (page: Page) =>
@@ -717,12 +908,40 @@ const checkState = async (
   where: string,
   state: string
 ): Promise<void> => {
-  const faults = await boxFaults(page);
+  const faults = [...(await boxFaults(page)), ...(await cutColumns(page))];
   kit.check(
-    `${where}: nothing spills or overlaps`,
+    `${where}: nothing spills or overlaps, and no column is cut at the board's edge`,
     faults.length === 0,
     faults.slice(0, 6).join("; ")
   );
+  const acts = await coralFills(page);
+  kit.check(
+    `${where}: exactly one coral-filled control in view`,
+    acts.length === 1,
+    acts.join(", ") || "none"
+  );
+  const boxed = await boxedGlyphs(page);
+  kit.check(
+    `${where}: no glyph stands in a box of its own`,
+    boxed.length === 0,
+    boxed.slice(0, 6).join("; ")
+  );
+  if (state === "empty") {
+    const starters = await starterBoxes(page);
+    const heights = starters.map((starter) => starter.height);
+    kit.check(
+      `${where}: the starters share one height, their words centred in it`,
+      starters.length === 4 &&
+        Math.max(...heights) - Math.min(...heights) <= 0.5 &&
+        starters.every((starter) => starter.off <= 1),
+      starters
+        .map(
+          (starter) =>
+            `${starter.height.toFixed(1)} (words ${starter.off.toFixed(1)}px off centre)`
+        )
+        .join(", ")
+    );
+  }
   const off = offGrammar(await cardLines(page));
   kit.check(
     `${where}: every card keeps its stage's grammar`,

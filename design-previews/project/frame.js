@@ -258,11 +258,13 @@ const PROJECTS = {
   "cawco-dev": {
     name: "Cawco-Dev",
     place: "obelisk-of-light · ~/cockpit · 43 places",
+    where: "obelisk-of-light · ~/cockpit",
     decisions: "8",
   },
   tidewater: {
     name: "tidewater",
     place: "obelisk-of-light · ~/tidewater",
+    where: "obelisk-of-light · ~/tidewater",
     decisions: "",
   },
 };
@@ -571,7 +573,9 @@ const drawHead = (animate) => {
   for (const slot of $$('[data-slot="project-name"]')) {
     slot.textContent = project.name;
   }
-  $('[data-slot="place"]').textContent = project.place;
+  /* A read the hub refused claims nothing it read: the place, no counts. */
+  $('[data-slot="place"]').textContent =
+    S.state === "fault" ? project.where : project.place;
   $('[data-slot="decisions"]').textContent = project.decisions;
   for (const row of $$(".rail-row[data-project]")) {
     if (row.dataset.project === S.project) {
@@ -855,7 +859,7 @@ const paneHTML = (task) => `
     <form class="composer" data-composer="pane">
       <label class="composer-field"><span class="visually-hidden">Message ${task.agent ?? "Caw"}</span>
         <textarea rows="1" placeholder="Message ${task.agent ?? "Caw"}…" data-slot="pane-field"></textarea></label>
-      <button class="composer-send" type="submit" aria-label="Send">${use("plain-2")}</button>
+      <button class="composer-send" type="submit" aria-label="Send">${use("plain-2")}<span class="send-word">Send</span></button>
     </form>
   </footer>`;
 
@@ -996,6 +1000,7 @@ const closePane = () => {
     pane.hidden = true;
     pane.replaceChildren();
     nodes.get(id)?.focus({ preventScroll: true });
+    paintActs();
   };
   if (!motionOk()) {
     finish();
@@ -1127,6 +1132,36 @@ const approve = () => {
   say(`${task.title} approved and moved to Done`);
 };
 
+/** Send back with its note: the card flies back to Working, the pill turns, the review folds. */
+const sendBackGo = () => {
+  const id = S.selected;
+  const task = taskOf(id);
+  if (!task || task.stage !== "review") {
+    return;
+  }
+  const before = rects();
+  task.stage = "working";
+  task.step = "Reading your note";
+  task.ring = [0, 3];
+  task.age = "now";
+  S.needs = without(S.needs, id);
+  place();
+  flip(before, { id: "card-back", ease: "--ease-drawer" });
+  drawHead(false);
+  const pill = $('[data-slot="pill"]');
+  pill.dataset.tone = "live";
+  morph(pill, "Working", "pill-morph");
+  const review = $('[data-slot="review"]');
+  if (review) {
+    foldTo(
+      review,
+      `<p class="review-result"><span>Sent back to ${task.agent} · just now</span></p>`,
+      "review-fold"
+    );
+  }
+  say(`${task.title} sent back to ${task.agent}`);
+};
+
 const sendBack = () => {
   const bar = $('[data-slot="decision"]');
   if (!bar) {
@@ -1256,6 +1291,7 @@ const closeCaw = () => {
   }
   const finish = () => {
     col.hidden = true;
+    paintActs();
   };
   if (!motionOk()) {
     finish();
@@ -1296,6 +1332,7 @@ const liftOut = (element, id) => {
   const finish = () => {
     element.hidden = true;
     element.removeAttribute("style");
+    paintActs();
     for (const animation of element.getAnimations({ subtree: true })) {
       animation.cancel();
     }
@@ -1503,6 +1540,10 @@ const hubAnswers = () => {
   $('[data-act="retry"]').removeAttribute("aria-disabled");
   liftOut(fault, "fault-out");
   revealBoard(boardTasks([TIDE]), false);
+  S.state = "rest";
+  APP.dataset.state = "rest";
+  drawHead(false);
+  paintActs();
   say("The board for Cawco-Dev was read");
 };
 
@@ -1592,6 +1633,11 @@ const resetSurfaces = () => {
 };
 
 const setState = async (state) => {
+  await enter(state);
+  paintActs();
+};
+
+const enter = async (state) => {
   S.state = state;
   APP.dataset.state = state;
   resetSurfaces();
@@ -1638,6 +1684,63 @@ const setState = async (state) => {
   flip(before, { id: "needs-reflow" });
   drawHead(true);
   say("2 tasks need you");
+};
+
+/* ---------- One act per view ---------- */
+
+/**
+ * Coral marks the one place he acts, so each view has one coral control:
+ * the pane's decision while a result waits on him (Approve, or Send back
+ * once its note is open), else the pane's composer; Caw's composer while
+ * his column is open; the empty project's field; Retry over a refused read;
+ * and otherwise Ask Caw. The rest take the outline, or a glyph alone.
+ * Ask Caw stands down while Caw is open or a field is already the way in.
+ */
+const paintActs = () => {
+  const pane = $('[data-slot="pane"]');
+  const settled = (block) => !(block.hidden || block.style.position);
+  const paneOpen = !pane.hidden;
+  const cawOpen = !$(".caw-col").hidden;
+  const heroOpen = settled($(".empty"));
+  const faultOpen = settled($(".fault"));
+  const decision = paneOpen
+    ? $('[data-act="send-back-go"], [data-act="approve"]', pane)
+    : null;
+  let act = null;
+  if (decision) {
+    act = decision;
+  } else if (paneOpen) {
+    act = $(".composer-send", pane);
+  } else if (cawOpen) {
+    act = $(".composer-caw .composer-send");
+  } else if (heroOpen) {
+    act = $(".composer-hero .composer-send");
+  } else if (faultOpen) {
+    act = $('[data-act="retry"]');
+  }
+  for (const send of $$(".composer-send")) {
+    send.classList.toggle("act", send === act);
+  }
+  for (const button of $$(
+    '[data-act="approve"], [data-act="send-back-go"], [data-act="retry"]'
+  )) {
+    button.classList.toggle("primary", button === act);
+    button.classList.toggle("outline", button !== act);
+  }
+  for (const ask of $$('[data-act="ask-caw"]')) {
+    const returning = ask.hidden && !(cawOpen || heroOpen);
+    ask.hidden = cawOpen || heroOpen;
+    /* Back once Caw's column shuts: it fades in where it stood, never pops. */
+    if (returning && S.ringDrawn) {
+      run(ask, [{ opacity: 0 }, { opacity: 1 }], {
+        dur: "--dur-fade",
+        ease: "--ease-out",
+        id: "ask-back",
+      });
+    }
+    ask.classList.toggle("primary", !act);
+    ask.classList.toggle("outline", Boolean(act));
+  }
 };
 
 /* ---------- The ⋯ menu ---------- */
@@ -1701,6 +1804,7 @@ const ACTS = {
   more: toggleMenu,
   approve,
   "send-back": sendBack,
+  "send-back-go": () => sendBackGo(),
   "send-back-cancel": () => {
     const task = taskOf(S.selected);
     const bar = $('[data-slot="decision"]');
@@ -1733,6 +1837,11 @@ const ACTS = {
 };
 
 document.addEventListener("click", (event) => {
+  pressed(event);
+  paintActs();
+});
+
+const pressed = (event) => {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) {
     return;
@@ -1778,11 +1887,15 @@ document.addEventListener("click", (event) => {
   if (target.closest("a[href^='#']")) {
     event.preventDefault();
   }
-});
+};
 
 document.addEventListener("submit", (event) => {
   event.preventDefault();
-  const form = event.target;
+  sent(event.target);
+  paintActs();
+});
+
+const sent = (form) => {
   const field = $("textarea", form);
   const words = field.value.trim();
   if (!words) {
@@ -1804,7 +1917,7 @@ document.addEventListener("submit", (event) => {
   autosize(field);
   hideTray();
   say("Sent");
-});
+};
 
 document.addEventListener("input", (event) => {
   if (event.target instanceof HTMLTextAreaElement) {

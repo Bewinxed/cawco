@@ -211,9 +211,11 @@ pre {
     background: var(--action-surface-hover);
   }
   .btn.outline:hover,
-  .btn.ghost:hover,
-  .ghost-icon:hover {
+  .btn.ghost:hover {
     background: var(--surface-hover);
+  }
+  .ghost-icon:hover {
+    color: var(--ink-strong);
   }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -234,8 +236,12 @@ pre {
   border-radius: var(--radius-md);
   color: var(--ink-muted);
   transition:
-    background-color var(--dur-control) var(--ease-out),
+    color var(--dur-control) var(--ease-out),
     scale var(--dur-toggle) var(--ease-out);
+}
+.ghost-icon.lg {
+  width: var(--c-btn-h);
+  height: var(--c-btn-h);
 }
 
 /* A label with a second wording stands both in one cell (The Steady Swap Rule). */
@@ -313,8 +319,8 @@ pre {
   color: var(--project-ink);
 }
 .rail-row[aria-current="page"] {
-  background: var(--selected-bg);
-  color: var(--selected-ink);
+  background: var(--surface-fill);
+  color: var(--ink-strong);
 }
 .rail-name {
   flex: 1;
@@ -642,6 +648,13 @@ pre {
   min-width: 0;
   transition: opacity var(--dur-fade) var(--ease-out);
 }
+.app[data-pane] .board {
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--space-2);
+}
+.app[data-pane] .col {
+  scroll-snap-align: start;
+}
 .col[data-dim] {
   opacity: 0.4;
 }
@@ -678,12 +691,9 @@ pre {
 }
 .col-foot {
   align-self: flex-start;
-  margin-inline-start: calc(-1 * var(--space-1));
 }
 
 .dropped-rail {
-  position: sticky;
-  inset-block-start: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -798,15 +808,7 @@ pre {
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: var(--icon-md);
-  height: var(--icon-md);
-  border-radius: var(--radius-row-mark, 4.6px);
-  background: var(--mark-overlay), var(--m, var(--mark-6));
-  color: var(--mark-glyph);
-}
-.agent .glyph {
-  width: 11px;
-  height: 11px;
+  color: var(--m, var(--mark-6));
 }
 .st-live {
   color: var(--status-live-glyph);
@@ -946,13 +948,39 @@ pre {
   display: grid;
   flex: none;
   place-items: center;
-  width: var(--c-composer-field);
+  min-width: var(--c-composer-field);
   height: var(--c-composer-field);
   /* Concentric with the shell: its radius less its inset and its edge. */
   border-radius: calc(var(--radius-lg) - var(--c-composer-inset) - var(--border-width));
+  color: var(--ink-muted);
+  transition:
+    color var(--dur-control) var(--ease-out),
+    scale var(--dur-toggle) var(--ease-out);
+}
+.composer-send .send-word {
+  display: none;
+}
+/* The view's one act: its word on the coral action, no glyph in a box. */
+.composer-send.act {
+  padding: 0 var(--space-4);
   background: var(--action-surface);
   color: var(--on-action);
-  transition: scale var(--dur-toggle) var(--ease-out);
+  font: var(--type-button);
+  letter-spacing: -0.01em;
+}
+.composer-send.act .glyph {
+  display: none;
+}
+.composer-send.act .send-word {
+  display: inline;
+}
+@media (hover: hover) {
+  .composer-send:not(.act):hover {
+    color: var(--ink-strong);
+  }
+  .composer-send.act:hover {
+    background: var(--action-surface-hover);
+  }
 }
 .composer-send .glyph {
   translate: 0.5px -0.5px;
@@ -971,7 +999,7 @@ pre {
 }
 .starter {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
   min-height: var(--c-starter-h);
   padding: var(--space-3) var(--space-4);
@@ -984,7 +1012,6 @@ pre {
   transition: background-color var(--dur-control) var(--ease-out);
 }
 .starter .glyph {
-  margin-block-start: 1px;
   color: var(--ink-muted);
 }
 .starter span {
@@ -1238,8 +1265,9 @@ pre {
   text-wrap: pretty;
 }
 .review-words .more {
-  color: var(--link-ink);
-  font-weight: 500;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .review-check {
   font: var(--type-meta);
@@ -1257,7 +1285,10 @@ pre {
   color: var(--ink-muted);
 }
 .attachments a {
-  color: var(--link-ink);
+  color: var(--ink-strong);
+  text-decoration: underline;
+  text-decoration-color: var(--border-control-strong);
+  text-underline-offset: 3px;
 }
 .stage {
   margin-block-start: var(--space-1);
@@ -1704,16 +1735,18 @@ pre {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    height: var(--c-btn-h-sm);
-    padding: 0 var(--space-3);
-    border-radius: var(--radius-pill);
-    background: var(--status-attn-bg);
+    height: var(--c-touch-floor);
+    padding: 0 var(--space-2);
     color: var(--status-attn-ink);
     font: var(--type-label);
   }
+  .viewbar-needs .glyph {
+    color: var(--status-attn-glyph);
+  }
   .viewbar-needs[aria-pressed="true"] {
-    background: var(--brand-wash);
-    color: var(--brand-ink);
+    color: var(--ink-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   .viewbar-ask {
     margin-inline-start: auto;
