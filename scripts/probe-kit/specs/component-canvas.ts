@@ -104,11 +104,18 @@
  * 22. A page open on a section that failed on its own helper's missing
  *     export draws it within seconds of the export being written, never
  *     navigating: the section's graph alone is fetched again.
+ * 23. A heavy canvas answers the daemon's render inside its limit: 27
+ *     stories in rest, hover, focus and pressed (108 frames), each a cloud of
+ *     300 dots on loops of their own (32,400 CSS animations standing), every
+ *     frame drawn with its box and every hover frame's delta probed (the
+ *     pairing canvas's render timed out at 90 s on its 80 frames and 10,869
+ *     animations).
  *
  *   bun scripts/probe-kit/run.ts component-canvas
  *   bun scripts/probe-kit/run.ts component-canvas --leg comment-and-stray   # 18 and 19 alone
  *   bun scripts/probe-kit/run.ts component-canvas --leg workspace-package  # 20 to 22 alone
  *   bun scripts/probe-kit/run.ts component-canvas --leg dashboard-cold     # the dashboard's own stage, cold
+ *   bun scripts/probe-kit/run.ts component-canvas --leg heavy              # 23 alone
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -132,6 +139,7 @@ import {
   REPORT_PATH,
   type RenderReport,
   type ReportAnswer,
+  STAGE_RENDER_MS,
   type StageError,
   unkeyedPath,
 } from "../../../packages/core/src/stage";
@@ -1454,6 +1462,46 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
   }
 }
 
+/**
+ * Leg 23: a heavy canvas (Cloud: 27 cards, each 300 dots on a loop of their
+ * own over a button with hover, focus and press, so 108 frames standing
+ * with 32,400 CSS animations among them) answers the daemon's render inside
+ * its limit, every frame drawn with its box read and each hover frame's
+ * delta probed.
+ */
+async function heavy(kit: Kit, stage: Stage): Promise<void> {
+  const port = Number(new URL(stage.base).port);
+  const started = performance.now();
+  const rendered = await renderCanvas("host", port, {
+    files: ["src/Cloud.stories.js"],
+    spec: { name: "Cloud" },
+  }).catch((error: Error) => error);
+  const ms = Math.round(performance.now() - started);
+  const frames = rendered instanceof Error ? [] : framesOf(rendered.report);
+  const columns = (interaction: string) =>
+    frames.filter((one) => one.interaction === interaction);
+  const hovers = columns("hover");
+  kit.check(
+    `23: a canvas of 27 stories in rest, hover, focus and pressed, its dots on loops (32,400 CSS animations), answers the daemon's render within its ${STAGE_RENDER_MS / 1000} s, all 108 frames drawn with their boxes and every hover frame's delta probed`,
+    ms < STAGE_RENDER_MS &&
+      frames.length === 108 &&
+      ["rest", "hover", "focus", "pressed"].every(
+        (one) => columns(one).length === 27
+      ) &&
+      frames.every(
+        (one) => one.state === "drawn" && one.box.w > 0 && one.box.h > 0
+      ) &&
+      hovers.every((one) =>
+        (one.delta?.changed ?? []).some((change) =>
+          change.selector.startsWith("button.go")
+        )
+      ),
+    rendered instanceof Error
+      ? `${ms} ms: ${rendered.message.split("\n")[0]}`
+      : `${ms} ms: ${frames.length} frames (${["rest", "hover", "focus", "pressed"].map((one) => `${one} ${columns(one).length}`).join(", ")}), states ${[...new Set(frames.map((one) => one.state))].join(",")}, boxes ${frames.filter((one) => one.box.w > 0 && one.box.h > 0).length} with area, hover deltas on the button ${hovers.filter((one) => (one.delta?.changed ?? []).some((change) => change.selector.startsWith("button.go"))).length}`
+  );
+}
+
 /** Leg 17: the stage's sweep ends on a story with an `infinite` animation, its hover probed. */
 async function endless(kit: Kit, stage: Stage): Promise<void> {
   const port = Number(new URL(stage.base).port);
@@ -1900,7 +1948,7 @@ async function dashboardCold(kit: Kit, host: string): Promise<void> {
   }
 }
 
-/** `--leg comment-and-stray`: legs 18 and 19 alone; `--leg workspace-package`: legs 20 to 22 alone; on the Svelte stage. `--leg dashboard-cold`: the dashboard's own stage alone. */
+/** `--leg comment-and-stray`: legs 18 and 19 alone; `--leg workspace-package`: legs 20 to 22 alone; `--leg heavy`: leg 23 alone; on the Svelte stage. `--leg dashboard-cold`: the dashboard's own stage alone. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -2175,6 +2223,10 @@ const spec: Spec = {
         await strayRequest(kit, svelte);
         return;
       }
+      if (ONLY_LEG === "heavy") {
+        await heavy(kit, svelte);
+        return;
+      }
       if (ONLY_LEG === "workspace-package") {
         await coldCount(kit, svelte);
         await failedRedraws(kit, svelte);
@@ -2190,6 +2242,7 @@ const spec: Spec = {
       await floor(kit, svelte);
       await daemonRender(kit, svelte);
       await endless(kit, svelte);
+      await heavy(kit, svelte);
       await commentMarksOne(kit, svelte);
       await strayRequest(kit, svelte);
       // The pre-bundle's legs: 20 rebuilds it, a restart of the stage's Vite each time, so it goes last.

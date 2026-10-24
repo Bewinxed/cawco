@@ -223,6 +223,8 @@ export interface Section {
   /** Its name in plain words: its states file's title, else its component's, else its file's. */
   name: string;
   probes: Map<string, Probe>;
+  /** Its columns, probes and moves read since it was last shown ({@link settle}): one pass, which a stage's sweep waits on. */
+  settling?: Promise<void>;
   /** What stands for its frames until they draw: the line saying what it waits for and each story's frame on its way, or why it didn't load. */
   standIns: HTMLElement[];
 }
@@ -1445,11 +1447,15 @@ export function boot(options: BootOptions): void {
     return found;
   }
 
-  /** Each story's columns, from its rest frame: frames made for each, frames of columns it no longer reaches taken down. */
-  async function columnsFor(section: Section): Promise<void> {
+  /**
+   * Each story's columns, from its rest frame: frames made for each, frames
+   * of columns it no longer reaches taken down, and the section probed
+   * again. Answers whether the columns changed, and so it probed.
+   */
+  async function columnsFor(section: Section): Promise<boolean> {
     // An embed shows each story at rest only.
     if (!section.mod || embed) {
-      return;
+      return false;
     }
     await frameTick();
     rewriteAll();
@@ -1470,11 +1476,12 @@ export function boot(options: BootOptions): void {
       }
     }
     if (!changed) {
-      return;
+      return false;
     }
     syncFrames(section);
     await probeAll(section);
     later();
+    return true;
   }
 
   /** The section's frames as its stories and columns say: new ones mounted, gone ones taken down. */
@@ -1566,14 +1573,25 @@ export function boot(options: BootOptions): void {
       setTimeout(sayShape);
       document.fonts.ready.then(sayShape, () => undefined);
     } else {
-      quietly(
-        columnsFor(section).then(() => {
-          quietly(probeAll(section));
-          quietly(playAll(section));
-        })
-      );
+      quietly(settle(section));
     }
     later();
+  }
+
+  /**
+   * A section's columns, probes and moves read once it is shown, one after
+   * another: its probes once (columnsFor probes when the columns change,
+   * else they are probed here), its moves after them, never two passes at
+   * once in the rig. The stage's sweep waits on this same pass.
+   */
+  function settle(section: Section): Promise<void> {
+    section.settling = (async () => {
+      if (!(await columnsFor(section))) {
+        await probeAll(section);
+      }
+      await playAll(section);
+    })();
+    return section.settling;
   }
 
   /** The line saying which stories an embed names that no states file of its canvas has; none while every one is held. */
@@ -1688,10 +1706,8 @@ export function boot(options: BootOptions): void {
    */
   const sweeping = by === "stage";
   const settled = async (section: Section) => {
-    // Its columns, probes and moves, then its report.
-    await columnsFor(section);
-    await probeAll(section);
-    await playAll(section);
+    // Its columns, probes and moves (the one pass its showing began), then its report.
+    await (section.settling ?? settle(section));
     await post();
     const mounted = sections.filter((one) => one.loaded);
     for (const one of mounted.slice(0, -SWEEP_KEPT)) {
@@ -1728,17 +1744,73 @@ export function boot(options: BootOptions): void {
 
   /* --- Probes: each story's states read off screen ----------------------- */
 
+  /** How many of the sweep's rig passes run now, the world out of the page's rendering for each ({@link apart}). */
+  let apartRuns = 0;
+  /** What waits for the world to be back in the page's rendering: a report, which reads the frames' boxes. */
+  const backWaiters = new Set<() => void>();
+  const worldBack = (): Promise<void> =>
+    apartRuns === 0
+      ? Promise.resolve()
+      : new Promise((done) => {
+          backWaiters.add(done);
+        });
+  /**
+   * What the stage's sweep plays in the rig (a section's probes, its
+   * moves), played with the world out of the page's rendering
+   * (`display: none`) and put back after. Each probe asks the engine for
+   * its body's animations (`getAnimations({ subtree: true })`), which walks
+   * and sorts every animation the document holds, not the body's alone,
+   * and lands them; and each step waits two of the page's frames. Every
+   * drawn frame's loops held thousands of CSS animations on a canvas of
+   * dot clouds (the pairing canvas: 10,869 over its 80 frames, 128 ms a
+   * call, so its probes ran past the render's limit), and a frame of the
+   * page drew all of them. Taken out of rendering, the frames' CSS
+   * animations end (CSS Animations: an element with `display: none` runs
+   * none) and begin again once they are back, the report posted then
+   * ({@link worldBack}); a person's panel never hides what it shows.
+   */
+  async function apart<T>(run: () => Promise<T>): Promise<T> {
+    if (!sweeping) {
+      return await run();
+    }
+    // The frames mounted just now first draw as a person's page draws them: what their stories do on their first frames (a still held two frames in) is done.
+    await frameTick();
+    apartRuns += 1;
+    world.style.display = "none";
+    try {
+      return await run();
+    } finally {
+      apartRuns -= 1;
+      if (apartRuns === 0) {
+        world.style.display = "";
+        for (const done of backWaiters) {
+          done();
+        }
+        backWaiters.clear();
+      }
+    }
+  }
+
   async function probeAll(section: Section): Promise<void> {
-    for (const story of section.mod?.SHEET.stories ?? []) {
-      const reached = (section.interactions.get(story.name) ?? []).filter(
+    const asked = (section.mod?.SHEET.stories ?? []).map((story) => ({
+      story,
+      reached: (section.interactions.get(story.name) ?? []).filter(
         (one) => one !== "rest"
-      );
+      ),
+    }));
+    for (const { story, reached } of asked) {
       if (reached.length === 0) {
         section.probes.delete(story.name);
-        continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one probe in the rig at a time
-      section.probes.set(story.name, await probe(section, story, reached));
+    }
+    const probed = asked.filter((one) => one.reached.length > 0);
+    if (probed.length > 0) {
+      await apart(async () => {
+        for (const { story, reached } of probed) {
+          // biome-ignore lint/performance/noAwaitInLoops: one probe in the rig at a time
+          section.probes.set(story.name, await probe(section, story, reached));
+        }
+      });
     }
     later();
   }
@@ -1931,14 +2003,14 @@ export function boot(options: BootOptions): void {
   /** Every move of a section played off screen: what each fires, for the report. */
   async function playAll(section: Section): Promise<void> {
     const moves: MoveRender[] = [];
-    for (const { to } of movesOf(section)) {
+    const asked = movesOf(section);
+    const playOne = async (to: string) => {
       const body = document.createElement("div");
       body.className = "cawco-frame-body";
       const story = storiesOf(section).find((one) => one.name === to);
       sizeBody(body, story ? widthOf(story, "own") : null);
       rig.append(body);
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one move in the rig at a time
         moves.push((await playIn(section, to, body)).move);
       } finally {
         (
@@ -1946,6 +2018,14 @@ export function boot(options: BootOptions): void {
         ).__cawcoMounted?.unmount();
         body.remove();
       }
+    };
+    if (asked.length > 0) {
+      await apart(async () => {
+        for (const { to } of asked) {
+          // biome-ignore lint/performance/noAwaitInLoops: one move in the rig at a time
+          await playOne(to);
+        }
+      });
     }
     section.moves = moves;
     drawEdges();
@@ -2117,6 +2197,8 @@ export function boot(options: BootOptions): void {
   }
 
   async function post(): Promise<void> {
+    // The frames are read where they stand, never while the sweep has them out of rendering.
+    await worldBack();
     const report = reportNow();
     chrome.counts(report);
     drawEdges();
@@ -2959,7 +3041,10 @@ export function boot(options: BootOptions): void {
         refused: `${section.file} did not load: the canvas's report says why.`,
       };
     }
+    // Its pass of probes and moves done first: the stage's sweep plays them with the world out of rendering.
+    await section.settling;
     await columnsFor(section);
+    await worldBack();
     await frameTick();
     const frame = [...section.frames.values()].find(
       (one) =>
