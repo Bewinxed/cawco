@@ -30,6 +30,8 @@ export interface CachedSession {
   /** When a caller last read it (ms epoch): what {@link IDLE_MS} counts from. */
   readAt: number;
   records: LocatedRecord[];
+  /** The conversation as it was said (`readSessionSaid`), cached and invalidated as `walkedMessages` is. */
+  saidMessages?: unknown[];
   /**
    * Lazily-cached chain-walked messages. Invalidated (set to undefined) when
    * records change (append/full-read). Avoids re-walking on every hot read.
@@ -166,6 +168,7 @@ export class TranscriptCache {
       existing.records.push(...tail.records);
       existing.checkpoint = tail.checkpoint;
       existing.walkedMessages = undefined; // invalidate cached walk
+      existing.saidMessages = undefined;
       this.totalBytes -= existing.bytes;
       existing.bytes = existing.checkpoint.size * HEAP_FACTOR;
       this.totalBytes += existing.bytes;

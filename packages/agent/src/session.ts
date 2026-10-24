@@ -6276,17 +6276,25 @@ export class SessionSupervisor {
           }
           case "getSessionMessages": {
             const at = Date.now();
+            // `said`: the conversation as it was said, what a transcript
+            // shows; `whole`: every message stored. Neither: the active chain.
             const options = args[1] as
-              { tail?: number; whole?: boolean } | undefined;
+              { said?: boolean; tail?: number; whole?: boolean } | undefined;
+            let span: "chain" | "said" | "whole" = "chain";
+            if (options?.whole) {
+              span = "whole";
+            } else if (options?.said) {
+              span = "said";
+            }
             const messages = await adapter.getSessionMessages(
               args[0] as string,
               dirOf(args[1]),
               options?.tail,
-              options?.whole
+              span
             );
             catalogRead(
               at,
-              `getSessionMessages ${adapter.kind} ${String(args[0]).slice(0, 8)}${options?.whole ? " whole" : ""}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
+              `getSessionMessages ${adapter.kind} ${String(args[0]).slice(0, 8)}${span === "chain" ? "" : ` ${span}`}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
             );
             return messages;
           }
@@ -6295,7 +6303,12 @@ export class SessionSupervisor {
             const key = args[0] as string;
             const [live, whole] = await Promise.all([
               adapter.getSessionMessages(key, dirOf(args[1])),
-              adapter.getSessionMessages(key, dirOf(args[1]), undefined, true),
+              adapter.getSessionMessages(
+                key,
+                dirOf(args[1]),
+                undefined,
+                "whole"
+              ),
             ]);
             const read = readContinuation(live, whole, askersOf(args[1]));
             console.info(

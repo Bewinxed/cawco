@@ -243,6 +243,7 @@ import {
   readSessionContext,
   readSessionEnd,
   readSessionFull,
+  readSessionSaid,
   readSessionWhole,
   type SDKSessionMessage,
   withHarnessNote,
@@ -5017,21 +5018,22 @@ export class ClaudeHarness implements Harness {
     sessionKey: string,
     dir?: string,
     tailCount?: number,
-    whole?: boolean
+    span: "chain" | "said" | "whole" = "chain"
   ): Promise<SessionMessage[]> {
     const file = await claudeSessionFile(sessionKey, dir);
     if (!file) {
       return [];
     }
-    if (whole) {
+    if (span === "whole") {
       return (await readSessionWhole(file)).map(toEntry);
     }
     // A tail read scans backward from EOF and parses only the newest window —
     // ~4ms on a 97MB transcript vs ~150ms for the full parse. Callers that
     // page deeper omit `tail` and get the whole conversation.
+    const read = span === "said" ? readSessionSaid : readSessionFull;
     const rows = tailCount
       ? (await readSessionEnd(file, tailCount)).messages
-      : await readSessionFull(file);
+      : await read(file);
     // `readSessionFull` preserves `toolUseResult` on each record, so
     // `AskUserQuestion` answers can be folded without re-reading the file.
     // Only entries whose assistant message contained an `AskUserQuestion`

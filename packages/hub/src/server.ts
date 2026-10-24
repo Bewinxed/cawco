@@ -21663,10 +21663,15 @@ export const createServer = (
     { entries: SessionMessage[] } | Extract<HistoryRead, { fault: string }>
   > => {
     const { machineId } = where;
+    // The conversation as it was said (`said`): a compaction changes what
+    // the model reads next, never what the transcript shows. Read as the
+    // active chain alone, a transcript the hub read again (its restart, its
+    // machine's new build) began at the newest compaction, and every turn
+    // before it was gone from the list, on every screen and after a reload.
     const answer = await readAgent(
       machineId,
       CONTROL_GET_SESSION_MESSAGES,
-      [where.sessionKey, { dir: where.cwd || undefined }],
+      [where.sessionKey, { dir: where.cwd || undefined, said: true }],
       READ_TIMEOUT_MS,
       where.harness
     );
