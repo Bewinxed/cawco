@@ -17,12 +17,12 @@
  * stands, and goes ahead by itself once the hub runs a build that does,
  * whichever of the hub's machine and this one took the release first.
  */
-import { readFile, rename, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
 import {
-  archiveMatches,
-  readAtMost,
+  ARCHIVE_ASK_AGAIN_S,
+  type ArchiveFetching,
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
 import {
@@ -69,9 +69,15 @@ import {
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
+import {
+  type Answered,
+  type DownloadProgress,
+  downloadResumably,
+  fileMatches,
+} from "@cawco/core/resumable-download";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { writeStateFile } from "@cawco/core/state-file";
+import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 import { leaveRetiringKeepers } from "./boundary";
 import {
@@ -360,6 +366,15 @@ const HUB_DROPPED = new Set([
   "ETIMEDOUT",
 ]);
 
+/** Of {@link HUB_DROPPED}, the codes that say no hub is there at all (a restart), rather than a connection cut mid-answer: a download stops on them and waits for the hub, where a cut is gone on from at once. */
+const HUB_GONE = new Set([
+  "ECONNREFUSED",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EHOSTUNREACH",
+  "EHOSTDOWN",
+]);
+
 const droppedCode = (error: unknown): string | undefined => {
   const { code } = (error ?? {}) as { code?: unknown };
   return typeof code === "string" && HUB_DROPPED.has(code) ? code : undefined;
@@ -403,6 +418,45 @@ const askHub = async <T>(
     }
   }
 };
+
+/**
+ * What the agent makes of its hub's answer to an archive's ask before it is
+ * read as a body: a 503 that says how far the hub's own fetch is
+ * ({@link ArchiveFetching}) is a wait of the hub's `Retry-After`, said on
+ * the way (`hubFetching`); a 416 or another 5xx is read as the download
+ * reads it (start over, or retry); any other refusal (the hub's fetch
+ * failed, 502; a build it does not offer, 404) is this attempt's failure,
+ * said with the hub's own words.
+ */
+async function hubAnswered(
+  response: Response,
+  hubFetching: (progress: DownloadProgress) => void
+): Promise<Answered | undefined> {
+  if (response.ok) {
+    return;
+  }
+  const text = await response.text().catch(() => "");
+  if (response.status === 503) {
+    const { fetching } = ((): Partial<ArchiveFetching> => {
+      try {
+        return JSON.parse(text) as Partial<ArchiveFetching>;
+      } catch {
+        return {};
+      }
+    })();
+    if (fetching) {
+      hubFetching(fetching);
+      const again = Number(response.headers.get("retry-after"));
+      return {
+        waitMs: (again > 0 ? again : ARCHIVE_ASK_AGAIN_S) * 1000,
+      };
+    }
+  }
+  if (response.status === 416 || response.status >= 503) {
+    return;
+  }
+  return { refuse: downloadWords.hubRefused(response.status, text) };
+}
 
 /**
  * An attempt at an offered build failed (its download, its verification, the
@@ -461,9 +515,16 @@ export class BinaryUpdater {
    * `commanded`: a person asked for a build, so it applies at the first moment
    * allowed; `version`, the build they were shown, when they named one. Held in
    * memory only: a command acts on this process's passes and on no other.
+   * `fresh`: the command has not been attempted yet, so its attempt is made
+   * now, inside a failed attempt's retry delay too; once attempted, a
+   * command that stands through a failure is retried on the schedule like
+   * any other (2026-10-24: Install now on every machine answered "The
+   * operation timed out." from the last failure and tried nothing, its
+   * retry 18 minutes off).
    */
-  readonly #flags: { commanded: boolean; version?: string } = {
+  readonly #flags: { commanded: boolean; fresh: boolean; version?: string } = {
     commanded: false,
+    fresh: false,
   };
   /** The build the hub offered on the last pass, and whether it is newer than the running one; unset while a pass has read no offer. */
   #offered: { newer: boolean; version: string } | undefined;
@@ -607,6 +668,7 @@ export class BinaryUpdater {
       commands: [...(this.#state.commands ?? []), id].slice(-COMMANDS_KEPT),
     });
     this.#flags.commanded = true;
+    this.#flags.fresh = true;
     this.#flags.version = command.version;
     // A pass already in flight began before the command: let it end, then run one that sees it.
     if (this.#running) {
@@ -669,9 +731,12 @@ export class BinaryUpdater {
   }
 
   async #set(update: Partial<BinaryUpdateState>): Promise<void> {
+    const next = { ...this.#state, ...update };
     this.#state = {
-      ...this.#state,
-      ...update,
+      ...next,
+      // How far a download is, while it runs, and never after.
+      download: next.phase === "downloading" ? next.download : undefined,
+      hubFetch: next.phase === "downloading" ? next.hubFetch : undefined,
       hostsHub: this.#hostsHub,
       updatedAt: Date.now(),
     };
@@ -1360,15 +1425,15 @@ export class BinaryUpdater {
       }
       return;
     }
-    const failure = attempt ? await readFailure(version) : undefined;
-    const waiting = failure !== undefined && Date.now() < failure.nextAt;
+    const failure = attempt ? await this.#retryDelayed(version) : undefined;
+    const waiting = failure !== undefined;
     if (
       !["installing", "waiting-sessions", "ready"].includes(this.#state.phase)
     ) {
       let said: Partial<BinaryUpdateState> = failedBefore
         ? { phase: "failed-rolled-back" }
         : { phase: "available", error: undefined };
-      if (waiting) {
+      if (failure) {
         said = { phase: "failed", error: failure.error };
       }
       await this.#setChanged({
@@ -1381,6 +1446,7 @@ export class BinaryUpdater {
     if (!attempt || waiting) {
       return;
     }
+    this.#flags.fresh = false;
     try {
       await this.#stage(release, installation);
       await this.#apply(release);
@@ -1393,6 +1459,20 @@ export class BinaryUpdater {
       await recordFailure(version, said);
       throw new AttemptFailed(said, { cause: error });
     }
+  }
+
+  /**
+   * The failed attempt at `version` whose retry delay has not passed, when
+   * one holds the next attempt back. A command not yet attempted is never
+   * held: the schedule is the automatic retries'. Its own attempt's failure
+   * is recorded as any other, and the schedule after it holds.
+   */
+  async #retryDelayed(version: string): Promise<Failure | undefined> {
+    if (this.#flags.commanded && this.#flags.fresh) {
+      return undefined;
+    }
+    const failure = await readFailure(version);
+    return failure && Date.now() < failure.nextAt ? failure : undefined;
   }
 
   /**
@@ -1475,36 +1555,14 @@ export class BinaryUpdater {
     if (!artifact) {
       throw new Error(`This release has no build for ${target}`);
     }
-    // A new attempt: what the last one said is not this one's.
-    await this.#set({
-      phase: "downloading",
-      error: undefined,
-      hubWait: undefined,
-    });
-    const bytes = await askHub(
-      `with the build ${manifest.version}`,
-      600_000,
-      `${installation.hubUrl}/api/binary-updates/artifacts/${encodeURIComponent(manifest.version)}/${encodeURIComponent(artifact.archive)}`,
-      {},
-      (response) => {
-        if (!response.ok) {
-          throw new Error(
-            `The hub could not supply the build: ${response.status}`
-          );
-        }
-        return readAtMost(response, artifact.size);
-      }
+    const archive = await this.#download(
+      manifest.version,
+      artifact,
+      installation.hubUrl
     );
-    if (!archiveMatches(manifest, target, bytes)) {
-      throw new Error(
-        "The downloaded build does not match the signed manifest"
-      );
-    }
     const directory = versionDirectory(manifest.version);
     const work = `${directory}.partial-${crypto.randomUUID()}`;
-    const archive = `${work}.tar.gz`;
     try {
-      await writeStateFile(archive, bytes);
       // On macOS the signed CawCo Agent.app, exactly as the release signed it.
       await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`
         .env(hostEnvironment())
@@ -1533,6 +1591,92 @@ export class BinaryUpdater {
     }
     this.#staged = manifest.version;
     await this.#set({ phase: "ready" });
+  }
+
+  /**
+   * The build's archive, read from the hub into a partial file of this
+   * machine's own and verified against the signed manifest: its path. The
+   * progress rule is the hub's leg's (core resumable-download.ts): no
+   * deadline on the body, only a stall abandons an attempt, and the next
+   * one asks the hub for the rest, which it serves from the file it holds.
+   * A partial a download that gave up left is gone on from by the next
+   * attempt; one of any other build is deleted first.
+   *
+   * While the hub still fetches the build from its release host it answers
+   * 503 with how far it is: the machine says the hub's progress, waits the
+   * hub's `Retry-After` and asks again, its own attempt standing, until the
+   * hub holds the archive or says its fetch failed (502, said with the
+   * hub's words as this attempt's failure). A hub that refuses the
+   * connection is gone (a restart): no failure, the partial kept for the
+   * next register ({@link HubUnreachable}).
+   */
+  async #download(
+    version: string,
+    artifact: SignedRelease["manifest"]["artifacts"][number],
+    hub: string
+  ): Promise<string> {
+    const downloads = join(binaryRoot(), "downloads");
+    const partial = join(downloads, `${artifact.archive}.partial`);
+    await mkdir(downloads, { recursive: true });
+    await Promise.all(
+      (await readdir(downloads))
+        .filter((name) => name !== `${artifact.archive}.partial`)
+        .map((name) => rm(join(downloads, name), { force: true }))
+    );
+    // A new attempt: what the last one said is not this one's.
+    await this.#set({
+      phase: "downloading",
+      error: undefined,
+      hubWait: undefined,
+      download: { received: Bun.file(partial).size, total: artifact.size },
+      hubFetch: undefined,
+    });
+    const url = `${hub}/api/binary-updates/artifacts/${encodeURIComponent(version)}/${encodeURIComponent(artifact.archive)}`;
+    const what = `${artifact.archive} from its hub`;
+    let saidAt = 0;
+    const say = (
+      progress: Pick<BinaryUpdateState, "download" | "hubFetch">
+    ): void => {
+      const { received = 0, total = 0 } =
+        progress.download ?? progress.hubFetch ?? {};
+      // Written and reported at most every two seconds, and at the end.
+      if (Date.now() - saidAt < 2000 && received < total) {
+        return;
+      }
+      saidAt = Date.now();
+      this.#set(progress).catch(logFailure);
+    };
+    try {
+      await downloadResumably({
+        url,
+        partial,
+        size: artifact.size,
+        what,
+        fetch,
+        log: (line) => console.info(`[update] ${line}`),
+        onProgress: (download) => say({ download, hubFetch: undefined }),
+        ends: (error) => HUB_GONE.has(droppedCode(error) ?? ""),
+        answered: (response) =>
+          hubAnswered(response, (hubFetch) => {
+            saidAt = 0;
+            say({ hubFetch });
+          }),
+      });
+    } catch (error) {
+      const code = droppedCode(error);
+      if (code) {
+        throw new HubUnreachable(
+          updatesWords.hubDropped(new URL(hub).origin, code, `with ${what}`),
+          { cause: error }
+        );
+      }
+      throw error;
+    }
+    if (!(await fileMatches(partial, artifact.size, artifact.sha256))) {
+      await rm(partial, { force: true });
+      throw new Error(downloadWords.mismatch(`build ${version}`));
+    }
+    return partial;
   }
 
   /**

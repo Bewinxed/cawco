@@ -62,6 +62,7 @@ import {
   type BinaryUpdateState,
   hubWaitWords,
 } from "../../../packages/core/src/binary-updates";
+import { downloadWords } from "../../../packages/core/src/words/downloads";
 import { updatesWords } from "../../../packages/core/src/words/updates";
 import { type Fleet, MACHINE } from "../../scratch-fleet";
 import {
@@ -101,13 +102,16 @@ const readJson = async <T>(path: string): Promise<T | undefined> =>
     .json()
     .catch(() => undefined)) as T | undefined;
 
+/** What the stand-in's 500 for the archive says. */
+const ARCHIVE_REFUSED_WORDS = "the hub failed to supply it";
+
 /** The stand-in's answer for N+1's archive, as it plays it; undefined passes it to the hub. */
 const archiveAnswer = (plays: ArchivePlays): Response | undefined => {
   switch (plays) {
     case "pass":
       return;
     case "500":
-      return new Response("the hub failed to supply it", { status: 500 });
+      return new Response(ARCHIVE_REFUSED_WORDS, { status: 500 });
     case "partial":
       // A first part, then nothing until the hub goes and cuts it.
       return new Response(
@@ -148,14 +152,18 @@ async function checkCutIsNoFailure(
   const kept = await readJson<Failure>(files.failures);
   const local = await readJson<BinaryUpdateState>(files.state);
   const dropped = shaped(updatesWords.hubDropped);
-  const said = (await fleet.logs("agent"))
-    .split("\n")
-    .filter((line) => dropped.test(line));
+  const retried = shaped(downloadWords.retrying);
+  const lines = (await fleet.logs("agent")).split("\n");
+  const said = lines.filter((line) => dropped.test(line));
   const codes = new Set(said.map((line) => dropped.exec(line)?.[2]));
+  const cutThenAsked = lines.filter(
+    (line) =>
+      retried.test(line) && line.includes(downloadWords.cut("ECONNRESET"))
+  );
   check(
-    "a hub killed mid-download, then refusing every ask through an update tick, is one that did not answer: both said so in the agent's log (ECONNRESET, ECONNREFUSED)",
-    codes.has("ECONNRESET") && codes.has("ECONNREFUSED"),
-    JSON.stringify(said.slice(0, 4))
+    "a hub killed mid-download is a cut the download goes on from at once (ECONNRESET, its next attempt logged), and a hub refusing every ask after it through an update tick is one that did not answer (ECONNREFUSED): both said so in the agent's log",
+    cutThenAsked.length > 0 && codes.has("ECONNREFUSED"),
+    JSON.stringify([...cutThenAsked.slice(0, 2), ...said.slice(0, 3)])
   );
   check(
     "no failure is recorded for N+1",
@@ -188,7 +196,7 @@ async function checkRefusalFails(
   check(
     "the hub's 500 for the archive is a failed attempt: the hub records the machine failed with the download's own error, never a wait's",
     ended?.phase === "failed" &&
-      ended.error === "The hub could not supply the build: 500" &&
+      ended.error === downloadWords.hubRefused(500, ARCHIVE_REFUSED_WORDS) &&
       !(["behind", "unanswered", "trial"] as const).some(
         (wait) => ended.error === hubWaitWords(version, wait)
       ),

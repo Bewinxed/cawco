@@ -45242,6 +45242,10 @@
               "$ref": "#/components/schemas/RestartHold"
             }
           },
+          "download": {
+            "$ref": "#/components/schemas/BinaryDownload",
+            "description": "How far this machine's download of `availableVersion` from its hub is,\nwhile `downloading`; absent in every other phase."
+          },
           "error": {
             "type": "string"
           },
@@ -45256,6 +45260,10 @@
           "hostsHub": {
             "description": "True on the machine that runs the hub.",
             "type": "boolean"
+          },
+          "hubFetch": {
+            "$ref": "#/components/schemas/BinaryDownload",
+            "description": "While `downloading`, and the hub still fetches the build from its\nrelease host: how far the hub's own fetch is, which the machine waits\non. Absent in every other phase, and once the hub holds the build."
           },
           "hubWait": {
             "$ref": "#/components/schemas/BinaryUpdateStateHubWait",
@@ -45398,6 +45406,22 @@
           "wake-ups-unknown",
           "workspace",
           "write"
+        ]
+      },
+      "BinaryDownload": {
+        "description": "How far a download of a build is, in bytes of its signed size.",
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "received",
+          "total"
         ]
       },
       "BinaryUpdateLanding": {

@@ -37,6 +37,12 @@ export const BINARY_UPDATE_PHASES = [
 
 export type BinaryUpdatePhase = (typeof BINARY_UPDATE_PHASES)[number];
 
+/** How far a download of a build is, in bytes of its signed size. */
+export interface BinaryDownload {
+  received: number;
+  total: number;
+}
+
 /** The newest signed release of one channel, as the release host shows it. */
 export interface ChannelRelease {
   notes: string;
@@ -337,6 +343,11 @@ export interface BinaryUpdateState {
    * Kept until the next install.
    */
   cut?: RestartHold[];
+  /**
+   * How far this machine's download of `availableVersion` from its hub is,
+   * while `downloading`; absent in every other phase.
+   */
+  download?: BinaryDownload;
   error?: string;
   /** The build that failed to come up and was rolled back; not retried by itself. */
   failedVersion?: string;
@@ -344,6 +355,12 @@ export interface BinaryUpdateState {
   heldChildren?: number;
   /** True on the machine that runs the hub. */
   hostsHub: boolean;
+  /**
+   * While `downloading`, and the hub still fetches the build from its
+   * release host: how far the hub's own fetch is, which the machine waits
+   * on. Absent in every other phase, and once the hub holds the build.
+   */
+  hubFetch?: BinaryDownload;
   /** What `waiting-for-hub` waits for ({@link HubWait}). */
   hubWait?: HubWait;
   installedVersion: string;

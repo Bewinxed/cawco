@@ -19,9 +19,11 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type DamagedHubRecord, damagedHubRecordWords } from "@cawco/core";
 import {
+  ARCHIVE_ASK_AGAIN_S,
+  type ArchiveFetching,
+  archiveFor,
   assetBase,
   discoverRelease,
-  fetchArchive,
   type LocatedRelease,
   NoReleaseError,
   type SignedRelease,
@@ -367,12 +369,7 @@ export function createBinaryUpdates(options: Options) {
     )
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
-      async ({ params, request, server, status }) => {
-        // The first ask of a build waits on its download from the release
-        // host (`fetchArchive`, bounded there): silent that whole time, and
-        // never cut by the hub's idle timer, whose cut a machine's fetch
-        // answers by sending the request again with the proof already taken.
-        server?.timeout(request, 0);
+      async ({ params, status }) => {
         const candidates = [await runningRelease().catch(() => undefined)];
         if (current) {
           candidates.push(current.release);
@@ -385,27 +382,50 @@ export function createBinaryUpdates(options: Options) {
         const artifact = found?.manifest.artifacts.find(
           (a) => a.archive === params.archive
         );
-        if (found && artifact) {
-          // A download that fails is said, in the log and to the machine
-          // that asked: it was a bare 500, said nowhere.
-          const fetched = await fetchArchive(found, artifact.target, root).then(
-            (path) => ({ path }),
-            (error: unknown) => ({
-              error: error instanceof Error ? error.message : String(error),
-            })
-          );
-          if ("error" in fetched) {
-            console.warn(
-              `[updates] the hub could not fetch ${artifact.archive} of ${found.manifest.version} from its release host: ${fetched.error}`
+        if (!(found && artifact)) {
+          return status(404, "This build is not one the hub offers");
+        }
+        // Answered at once, never held open on the release host: a machine
+        // whose fetch waited on a silent hub was cut by its own idle timer
+        // (Bun's default, five minutes: 2026-10-24, "[update] The operation
+        // timed out.") while the hub's download ran on.
+        const archive = await archiveFor(found, artifact.target, root, (line) =>
+          console.warn(`[updates] ${line}`)
+        );
+        switch (archive.kind) {
+          case "held":
+            // Bun.serve answers a Range ask of a file body itself (206 and
+            // its Content-Range): a machine's download goes on from where
+            // its last attempt stopped.
+            return new Response(Bun.file(archive.path));
+          case "fetching":
+            // Not yet: the machine waits and asks again, its own attempt
+            // standing, and says how far the hub is.
+            return new Response(
+              JSON.stringify({
+                fetching: {
+                  received: archive.received,
+                  total: archive.total,
+                },
+              } satisfies ArchiveFetching),
+              {
+                status: 503,
+                headers: {
+                  "content-type": "application/json",
+                  "retry-after": String(ARCHIVE_ASK_AGAIN_S),
+                },
+              }
             );
+          case "failed":
             return status(
               502,
-              `The hub could not fetch this build from its release host: ${fetched.error}`
+              `The hub could not fetch this build from its release host: ${archive.error}`
             );
+          default: {
+            const unhandled: never = archive;
+            throw new Error(`unhandled archive: ${JSON.stringify(unhandled)}`);
           }
-          return new Response(Bun.file(fetched.path));
         }
-        return status(404, "This build is not one the hub offers");
       }
     );
   /**

@@ -1,6 +1,6 @@
 /**
  * Updates › machines of one target asking the hub for a build at once share
- * one download of its archive (core binary-distribution.ts `fetchArchive`).
+ * one download of its archive (core binary-distribution.ts `archiveFor`).
  *
  * 2026-10-23: obelisk and both VPSes (linux-x64 each) asked for the same
  * nightly in one second, and the hub drew three copies of its 120 MB
@@ -12,8 +12,9 @@
  * sends back: three asks of the offered build's archive for this host's
  * target, at once, while nothing has it cached.
  *
- * (a) Each ask comes whole (200, the signed manifest's bytes), and the
- *     release host sent one archive's worth through the proxy, not three.
+ * (a) Each ask, answered 503 while the hub fetches and asked again, comes
+ *     whole (200, the signed manifest's bytes), and the release host sent
+ *     one archive's worth through the proxy, not three.
  *
  *   bun scripts/probe-kit/run.ts archive-once
  */
@@ -85,7 +86,14 @@ async function run(kit: Kit): Promise<void> {
     const connectsBefore = proxy.targets().length;
     proxy.hold(true);
     const asks = Array.from({ length: ASKS }, async (): Promise<Asked> => {
-      const response = await fetch(url);
+      // The hub answers at once: 503 while it fetches, as a machine hears it.
+      let response = await fetch(url);
+      while (response.status === 503) {
+        // biome-ignore lint/performance/noAwaitInLoops: one ask at a time, as a machine asks
+        await response.arrayBuffer();
+        await delay(1000);
+        response = await fetch(url);
+      }
       const bytes = new Uint8Array(await response.arrayBuffer());
       return {
         status: response.status,

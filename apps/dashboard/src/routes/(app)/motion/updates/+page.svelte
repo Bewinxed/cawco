@@ -151,7 +151,10 @@
       binaryUpdate: update({ phase: "installing" }),
     }),
     machine("r6", "obelisk-of-light", "linux", {
-      binaryUpdate: update({ phase: "downloading" }),
+      binaryUpdate: update({
+        phase: "downloading",
+        download: { received: 45_200_000, total: 117_733_127 },
+      }),
     }),
     machine("r7", "nixbox", "linux", {
       binaryUpdate: update({ phase: "ready", waitingOn: WAITING_ON }),

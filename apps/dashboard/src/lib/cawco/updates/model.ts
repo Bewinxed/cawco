@@ -13,6 +13,7 @@ import {
   RESTART_WAIT_CAP_MS,
   type RetiringKeeper,
 } from "@cawco/core/binary-updates";
+import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 
 /** The part of a machine row these functions read. */
@@ -204,6 +205,23 @@ const handingOver = (u: BinaryUpdateState): string =>
  * What a ready build waits for, in words: the work in flight its restart
  * would cut (`2 tool calls`, `1 image generation`). Empty when nothing holds it.
  */
+/**
+ * How far a download is, in words: "45 of 118 MB" on the machine, or the
+ * hub's own fetch while the machine waits on it. Undefined before the first
+ * byte is counted.
+ */
+const downloadProgress = (u: BinaryUpdateState): string | undefined => {
+  if (u.phase !== "downloading") {
+    return undefined;
+  }
+  if (u.hubFetch) {
+    return downloadWords.hubFetching(u.hubFetch.received, u.hubFetch.total);
+  }
+  return u.download
+    ? downloadWords.progress(u.download.received, u.download.total)
+    : undefined;
+};
+
 const waitsOn = (u: BinaryUpdateState): string[] =>
   u.phase === "ready" && u.waitingOn ? holdPhrases(u.waitingOn) : [];
 
@@ -253,7 +271,12 @@ function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
     case "installing":
       return { ...EMPTY(5), icon: "spinner", text: words("Installing", v) };
     case "downloading":
-      return { ...EMPTY(6), icon: "spinner", text: words("Downloading", v) };
+      return {
+        ...EMPTY(6),
+        icon: "spinner",
+        text: words("Downloading", v),
+        meta: downloadProgress(u),
+      };
     case "ready": {
       const waiting = waitsOn(u);
       return {
@@ -602,7 +625,11 @@ function installLine(machine: UpdateMachine, name: string): NoticeLine {
     return { state: "busy", text: `${name} · restarting` };
   }
   if (state.phase === "downloading") {
-    return { state: "busy", text: `${name} · downloading` };
+    const progress = downloadProgress(state);
+    return {
+      state: "busy",
+      text: `${name} · downloading${progress ? `, ${progress}` : ""}`,
+    };
   }
   if (state.phase === "waiting-for-hub") {
     return { state: "wait", text: updatesWords.installLineWaitsForHub(name) };
