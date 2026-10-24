@@ -38,6 +38,8 @@
 
 import type {
   BriefTarget,
+  ChangedPath,
+  ChangeVersion,
   CheckoutMove,
   CommandResult,
   DeclaredStep,
@@ -62,8 +64,10 @@ import type {
   WorkItemSummary,
   WorkspaceArchive,
   WorkspaceArchived,
+  WorkspaceChanges,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceConflict,
   WorkspaceCut,
   WorkspaceFirstSession,
   WorkspaceHolding,
@@ -78,10 +82,12 @@ import {
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
+  CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   handoffMarker,
@@ -1222,6 +1228,16 @@ export interface ItemPlacement {
  * which no machine call may treat as a clone (an archive deletes one), so
  * naming one throws.
  */
+/**
+ * Whether the workspace works in a copy of its own (a clone on macOS, and
+ * every workspace made before layers), which the fleet may place a
+ * project's skills and memory into as one of its places: not a Linux view
+ * of the folder itself (agent layer.ts), whose path is the person's folder,
+ * written by nothing of CawCo's until its change set lands.
+ */
+const ownCopy = (workspace: WorkspaceRow): boolean =>
+  workspace.path !== workspace.repoRoot;
+
 const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
   if (workspace.host) {
     throw new Error(
@@ -2032,6 +2048,56 @@ const dirtyText = (files: string, where: string): string =>
   `Not landed: the workspace has changes that are not committed, new files included. The hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or move scratch to $TMPDIR, then call finish_item again.${fenced(files)}`;
 
 /** The text that hands failed merge checks back to the session. */
+/** The paths a folder landing changed, as its report lists them. */
+const changedList = (changed: readonly ChangedPath[]): string =>
+  fenced(
+    changed
+      .map(
+        (each) =>
+          `${each.change === "delete" ? "deleted" : "written"} ${each.path}`
+      )
+      .join("\n")
+  );
+
+/** One version of a conflicting file, as the conflict's text shows it. */
+const versionWords = (version: ChangeVersion): string => {
+  switch (version.kind) {
+    case "text":
+      return fenced(version.text);
+    case "binary":
+      return ` binary, ${version.bytes} bytes`;
+    case "large":
+      return ` ${version.bytes} bytes, too large to show here`;
+    case "link":
+      return ` a link to ${version.target}`;
+    case "folder":
+      return " a folder";
+    case "gone":
+      return " deleted";
+    default: {
+      const unhandled: never = version;
+      return String(unhandled);
+    }
+  }
+};
+
+/**
+ * A folder landing's conflicts as the delegate and the owner read them:
+ * each path both changed, the version in the folder now and the delegate's,
+ * with no base to merge from. Nothing was written.
+ */
+const conflictText = (
+  conflicts: readonly WorkspaceConflict[],
+  folder: string
+): string =>
+  [
+    `Not landed: ${conflicts.length === 1 ? "a file" : `${conflicts.length} files`} you changed ${conflicts.length === 1 ? "was" : "were"} changed in ${folder} too since you started, so nothing was written there. Each is below as the folder has it now and as you left it; there is no common version to merge from. Write the version that should land (yours, the folder's, or both merged) and call finish_item again: the folder's version as it stands is what your next landing is read against.`,
+    ...conflicts.map(
+      (each) =>
+        `### ${each.path}\n\nIn ${folder} now:${versionWords(each.yours)}\n\nYours:${versionWords(each.delegate)}`
+    ),
+  ].join("\n\n");
+
 const gateFailedText = (run: GateRun, where: string): string => {
   const { head, lines } = failedRun(run);
   return `Not landed: the merge checks ran on ${where}, and ${head}. Fix it, commit, and call finish_item again.\n\n${lines}`;
@@ -4404,7 +4470,7 @@ export const createWorkItems = ({
           `workspace ${handle(workspace.id)} was cut again at ${path}, not at its own path ${workspace.path}`
         );
       }
-      if (projectId && db.project(projectId)) {
+      if (projectId && db.project(projectId) && ownCopy(workspace)) {
         const { place } = db.addPlace({
           projectId,
           machineId: workspace.machineId,
@@ -4648,6 +4714,7 @@ export const createWorkItems = ({
         path: cutPath(machineId, checkout.path),
         branch: checkout.branch,
         base: checkout.base,
+        kind: checkout.kind,
         boundaryPid: checkout.boundaryPid,
         tmp: checkout.tmp,
         state: "active",
@@ -5014,7 +5081,8 @@ export const createWorkItems = ({
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
     const told =
-      item.lands === "main" && !item.outputs?.length
+      (item.lands === "main" && !item.outputs?.length) ||
+      workspace.kind === "folder"
         ? brief
         : withLandingLine(brief, workspace.base, landingOf(item));
     const sent = send(messageOf(session.id, session.machineId, parent, told));
@@ -5672,9 +5740,10 @@ export const createWorkItems = ({
     if (projectId) {
       recordRepository(projectId, workspace);
     }
-    // While it lives, the clone is one of the parent's project's places;
-    // archiving the workspace removes it.
-    if (parent.projectId) {
+    // While it lives, the copy is one of the parent's project's places;
+    // archiving the workspace removes it. A view of the folder itself is no
+    // place of its own ({@link ownCopy}).
+    if (parent.projectId && ownCopy(workspace)) {
       projectStands(parent.projectId);
       const { place } = db.addPlace({
         projectId: parent.projectId,
@@ -5925,7 +5994,7 @@ export const createWorkItems = ({
               )
             : withWorkspaceLine(
                 content,
-                workspace.repoRoot,
+                workspace,
                 workspace.base,
                 landingOf(item)
               )
@@ -6442,6 +6511,15 @@ export const createWorkItems = ({
     if (isHeld(workspace)) {
       return true;
     }
+    // A folder's work since is its change set not yet in its folder.
+    if (workspace.kind === "folder") {
+      const changes = (await call(
+        workspace.machineId,
+        CONTROL_WORKSPACE_CHANGES,
+        [refOf(workspace)]
+      )) as WorkspaceChanges;
+      return changes.changed.length > 0;
+    }
     const read = await command(
       workspace.machineId,
       workspace.path,
@@ -6530,7 +6608,12 @@ export const createWorkItems = ({
     item: WorkItemRow
   ): Promise<string | undefined> => {
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    if (workspace?.state !== "active" || workspace.host) {
+    // A folder's changes are its change set, which is what lands.
+    if (
+      workspace?.state !== "active" ||
+      workspace.host ||
+      workspace.kind === "folder"
+    ) {
       return;
     }
     const run = runIn(workspace, item);
@@ -6642,8 +6725,15 @@ export const createWorkItems = ({
       projectId,
       { checksFor: workspace.id }
     );
-    db.addPlace({ projectId, machineId, path: opened.path, kind: "workspace" });
-    placesChanged(machineId, projectId);
+    if (ownCopy(opened)) {
+      db.addPlace({
+        projectId,
+        machineId,
+        path: opened.path,
+        kind: "workspace",
+      });
+      placesChanged(machineId, projectId);
+    }
     return opened;
   };
 
@@ -7531,10 +7621,92 @@ export const createWorkItems = ({
         });
       case "branch":
       case "pr":
-        return landOnBranch(workspace, item, summary, earlier);
       case "main":
-        return landOnBase(workspace, item, gate);
+        // A folder lands by its change set into the folder itself; a
+        // repository by git, on its base or a branch of its own.
+        if (workspace.kind === "folder") {
+          return landFolder(workspace, item, gate);
+        }
+        return item.lands === "main"
+          ? landOnBase(workspace, item, gate)
+          : landOnBranch(workspace, item, summary, earlier);
     }
+  };
+
+  /**
+   * Lands a finished folder item's change set in its folder (agent
+   * layer.ts): the change set read against the folder as it is now, any
+   * path changed there too since the delegate's start a conflict that lands
+   * nothing and goes back to the delegate with both versions; then the
+   * folder's checks (its project's gate.md, as a repository's merge checks
+   * are), run in the workspace's view of the folder; then the change set put
+   * into the folder by the agent on its machine, outside every wall, which
+   * scans for conflicts once more first. The services its work touched are
+   * the delegate's report's to name, and its parent's to restart.
+   */
+  const landFolder = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    gate: Gate
+  ): Promise<Landed> => {
+    const ref = refOf(workspace);
+    const read = (await call(workspace.machineId, CONTROL_WORKSPACE_CHANGES, [
+      ref,
+    ])) as WorkspaceChanges;
+    const ran: GateRun = { declared: gate.declared, outcomes: [] };
+    if (read.conflicts.length > 0) {
+      return { kind: "retry", text: conflictText(read.conflicts, read.folder) };
+    }
+    if (read.changed.length === 0) {
+      return {
+        kind: "done",
+        gate: ran,
+        line: `Nothing to land: ${read.folder} already holds every change in this workspace.`,
+      };
+    }
+    landingAt(item, "gating");
+    const how: GateHow = {
+      inTurn: false,
+      say: (words, step) =>
+        landingWait(
+          item.id,
+          words
+            ? `running the folder's checks: ${stepWaitWords(words, step)}`
+            : "running the folder's checks"
+        ),
+    };
+    how.say(null);
+    const checked = await gateOnce(
+      workspace,
+      item,
+      gate,
+      `while it ran the folder's checks on its changes to ${read.folder}`,
+      how
+    );
+    landingWait(item.id, null);
+    if (runFailed(checked)) {
+      return {
+        kind: "retry",
+        text: gateFailedText(
+          checked,
+          `your changes over ${read.folder} as it is now`
+        ),
+      };
+    }
+    const applied = (await call(workspace.machineId, CONTROL_WORKSPACE_APPLY, [
+      ref,
+    ])) as { applied: number; conflicts: WorkspaceConflict[] };
+    if (applied.conflicts.length > 0) {
+      return {
+        kind: "retry",
+        text: conflictText(applied.conflicts, read.folder),
+      };
+    }
+    return {
+      kind: "done",
+      gate: checked,
+      line: `Landed: ${applied.applied} ${applied.applied === 1 ? "path" : "paths"} of this workspace's changes are in ${read.folder} on ${machineName(workspace.machineId)}.${changedList(read.changed)}`,
+    };
   };
 
   /**

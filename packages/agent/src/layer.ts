@@ -112,6 +112,12 @@ export interface Layer {
   mounts?: LayerMount[];
   /** Where the delegate works: F itself (overlay), or the clone (copy). */
   path: string;
+  /**
+   * Overlay: each path of F whose conflict the delegate was shown, with F's
+   * ctime then: F as it stood then is what the delegate answered, so it is
+   * no conflict again until F changes once more ({@link noteSeen}).
+   */
+  seen?: Record<string, number>;
   /** When the delegate's view of F began (epoch ms): the line a conflict is read from. */
   started: number;
 }
@@ -932,20 +938,66 @@ const delegateFile = (layer: Layer, rel: string): string | undefined => {
  */
 export const changesOf = async (layer: Layer): Promise<ChangedPath[]> => {
   const skip = notCarried(layer.folder);
+  let candidates: ChangedPath[];
   if (layer.form === "overlay") {
     const all = await Promise.all(
       (layer.mounts ?? []).map((mount) =>
         upperChanges(layer.folder, mount.at, mount.upper, skip)
       )
     );
-    return all.flat();
-  }
-  if (!layer.base) {
+    candidates = all.flat();
+  } else if (layer.base) {
+    candidates = await copyChanges(layer.path, layer.base, skip);
+  } else {
     throw new Error(
       `${layer.path} is a clone cut before layers, with no base to read its changes against`
     );
   }
-  return await copyChanges(layer.path, layer.base, skip);
+  const differ = await Promise.all(
+    candidates.map((change) => differsFromFolder(layer, change))
+  );
+  return candidates.filter((_, at) => differ[at]);
+};
+
+/**
+ * Whether the delegate's `change` is not yet so in F: a written path whose
+ * F entry is missing or another kind, size, link target or content; a
+ * deleted one F still has. A change set landed ({@link applyChanges}) is so
+ * in F, and holds nothing more until the delegate writes again.
+ */
+const differsFromFolder = async (
+  layer: Layer,
+  change: ChangedPath
+): Promise<boolean> => {
+  const target = join(layer.folder, change.path);
+  const there = await lstat(target).catch(() => undefined);
+  if (change.change === "delete") {
+    return there !== undefined;
+  }
+  const from = delegateFile(layer, change.path);
+  const mine = from ? await lstat(from).catch(() => undefined) : undefined;
+  if (!(there && mine)) {
+    return true;
+  }
+  if (mine.isSymbolicLink() || there.isSymbolicLink()) {
+    return !(
+      mine.isSymbolicLink() &&
+      there.isSymbolicLink() &&
+      (await readlink(from as string)) === (await readlink(target))
+    );
+  }
+  if (!(mine.isFile() && there.isFile()) || mine.size !== there.size) {
+    return true;
+  }
+  // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
+  if ((mine.mode & 0o7777) !== (there.mode & 0o7777)) {
+    return true;
+  }
+  const [a, b] = await Promise.all([
+    readFile(from as string),
+    readFile(target),
+  ]);
+  return !a.equals(b);
 };
 
 /** The most of one version of a file a conflict shows as text. */
@@ -982,7 +1034,10 @@ const changedInFolder = async (layer: Layer, rel: string): Promise<boolean> => {
   if (layer.form === "overlay") {
     const info = await lstat(target).catch(() => undefined);
     return (
-      info !== undefined && !info.isDirectory() && info.ctimeMs > layer.started
+      info !== undefined &&
+      !info.isDirectory() &&
+      info.ctimeMs > layer.started &&
+      layer.seen?.[rel] !== info.ctimeMs
     );
   }
   if (!layer.base) {
@@ -1023,14 +1078,59 @@ export const conflictsOf = async (
   return found.filter((each): each is WorkspaceConflict => each !== undefined);
 };
 
-/** Workspace `id`'s change set and its conflicts with F as it is now. */
-export const readChanges = async (layer: Layer): Promise<WorkspaceChanges> => {
+/**
+ * Notes that the delegate was shown `conflicts`: F as it is now at each
+ * path is what its next landing is read against, so the version the
+ * delegate then leaves lands unless F changes again. On Linux by F's ctime
+ * now ({@link Layer.seen}); on the Mac by F's entry cloned into the base.
+ */
+const noteSeen = async (
+  id: string,
+  layer: Layer,
+  conflicts: readonly WorkspaceConflict[]
+): Promise<void> => {
+  if (conflicts.length === 0) {
+    return;
+  }
+  if (layer.form === "overlay") {
+    const seen = { ...layer.seen };
+    for (const each of conflicts) {
+      // biome-ignore lint/performance/noAwaitInLoops: a few conflicting paths
+      const info = await lstat(join(layer.folder, each.path)).catch(
+        () => undefined
+      );
+      seen[each.path] = info?.ctimeMs ?? -1;
+    }
+    await writeLayer(id, { ...layer, seen });
+    return;
+  }
+  const { base } = layer;
+  if (!base) {
+    return;
+  }
+  for (const each of conflicts) {
+    const into = join(base, each.path);
+    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, each replaced whole
+    await removeTree(into);
+    if (await lstat(join(layer.folder, each.path)).catch(() => undefined)) {
+      await mkdir(dirname(into), { recursive: true });
+      await cloneInto([join(layer.folder, each.path)], dirname(into));
+    }
+  }
+};
+
+/**
+ * Workspace `id`'s change set and its conflicts with F as it is now; each
+ * conflict shown is noted ({@link noteSeen}).
+ */
+export const readChanges = async (
+  id: string,
+  layer: Layer
+): Promise<WorkspaceChanges> => {
   const changed = await changesOf(layer);
-  return {
-    folder: layer.folder,
-    changed,
-    conflicts: await conflictsOf(layer, changed),
-  };
+  const conflicts = await conflictsOf(layer, changed);
+  await noteSeen(id, layer, conflicts);
+  return { folder: layer.folder, changed, conflicts };
 };
 
 // ------------------------------------------------------------- the landing
@@ -1085,13 +1185,16 @@ const putOne = async (layer: Layer, rel: string): Promise<void> => {
  * it changed. A run cut short is safe to run again: each step is whole.
  */
 export const applyChanges = async (
+  id: string,
   layer: Layer
 ): Promise<{ applied: number; conflicts: WorkspaceConflict[] }> => {
   const changed = await changesOf(layer);
   const conflicts = await conflictsOf(layer, changed);
   if (conflicts.length > 0) {
+    await noteSeen(id, layer, conflicts);
     return { applied: 0, conflicts };
   }
+  const landedAt = Date.now();
   const writes = changed.filter((each) => each.change === "write");
   const deletes = changed
     .filter((each) => each.change === "delete")
@@ -1104,7 +1207,35 @@ export const applyChanges = async (
     // biome-ignore lint/performance/noAwaitInLoops: deepest first, so a folder's entries go before it
     await removeTree(join(layer.folder, each.path));
   }
+  await landedInBase(layer, changed);
+  // F's paths it just wrote are past the old start: the next conflict scan
+  // reads from this landing on.
+  await writeLayer(id, { ...layer, started: landedAt });
   return { applied: changed.length, conflicts: [] };
+};
+
+/**
+ * A copy's base, brought to what just landed: each written path cloned from
+ * the copy, each deleted one removed, so F's landed paths read unchanged
+ * against it from now on. Nothing for a Linux view, which keeps no base.
+ */
+const landedInBase = async (
+  layer: Layer,
+  changed: readonly ChangedPath[]
+): Promise<void> => {
+  const { base } = layer;
+  if (!(layer.form === "copy" && base)) {
+    return;
+  }
+  for (const each of changed) {
+    const into = join(base, each.path);
+    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, each replaced whole
+    await removeTree(into);
+    if (each.change === "write") {
+      await mkdir(dirname(into), { recursive: true });
+      await cloneInto([join(layer.path, each.path)], dirname(into));
+    }
+  }
 };
 
 /**

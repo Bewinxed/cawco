@@ -2360,7 +2360,10 @@ const folderLayer = async (workspace: WorkspaceRef): Promise<Layer> => {
 export const workspaceChanges = async (
   ref: unknown
 ): Promise<WorkspaceChanges> =>
-  await readChanges(await folderLayer(ref as WorkspaceRef));
+  await readChanges(
+    (ref as WorkspaceRef).id,
+    await folderLayer(ref as WorkspaceRef)
+  );
 
 /**
  * {@link CONTROL_WORKSPACE_APPLY}: a folder workspace's change set landed in
@@ -2379,7 +2382,7 @@ export const workspaceApply = async (
     conflicts: [],
   };
   await whileBoundaryClosed(workspace, async () => {
-    result = await applyChanges(layer);
+    result = await applyChanges(workspace.id, layer);
   });
   console.info(
     result.conflicts.length > 0
