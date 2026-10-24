@@ -51,6 +51,7 @@ import {
   readMotion,
   type Spec,
   settle,
+  stillWithin,
   type View,
 } from "../../kit";
 
@@ -210,6 +211,18 @@ async function held(
 /** One surface the composer owns: how it is found, opened and closed. */
 interface Surface {
   close: (page: Page) => Promise<void>;
+  /**
+   * A layer floating a `space-2` step over the tray row (the plan, the
+   * shelf): open, the composer's ground (`layer-ground`) stands solid under
+   * it up to its foot, so no row scrolled behind shows between the two.
+   */
+  grounds?: boolean;
+  /**
+   * Open, what it holds has come in before its close is read: a part that
+   * lands later (a delegate's tail read slowly) is its own arrival, revealed
+   * on its own clock while the surface stands open, never part of the close.
+   */
+  landed?: (page: Page, within: string) => Promise<void>;
   name: string;
   open: (page: Page) => Promise<void>;
   /** Whether this leg has it to open; a reason when it does not. */
@@ -338,6 +351,7 @@ const SURFACES: Surface[] = [
     present: async (page) =>
       (await visible(page, MORE)) ? null : 'every chip fits: no "+N"',
     within: async () => SHELF,
+    grounds: true,
     open: (page) => page.locator(MORE).click(),
     close: (page) => page.locator(SHELF_CLOSE).click(),
   },
@@ -346,6 +360,7 @@ const SURFACES: Surface[] = [
     present: async (page) =>
       (await visible(page, FAILED)) ? null : "no failure chip",
     within: async () => SHELF,
+    grounds: true,
     open: (page) => page.locator(FAILED).first().click(),
     close: (page) => page.locator(SHELF_CLOSE).click(),
   },
@@ -371,6 +386,20 @@ const SURFACES: Surface[] = [
       await settle(page, 300);
       return stood;
     },
+    // Its tail is read as it opens (HoverPanel `watch`). One that lands
+    // after the panel has come in is revealed from its skeleton on the
+    // tail's own clock (DelegateTail `arrive`): on a loaded run it landed
+    // as the close was pressed, and the close read its reveal and the
+    // panel's size tween as its own (webkit 1440, 2026-10-24). The close is
+    // read once the tail is in and the panel stands still.
+    async landed(page, within) {
+      await page
+        .locator(
+          `${within} [role="status"][aria-label="Loading its transcript"]`
+        )
+        .waitFor({ state: "detached", timeout: 10_000 });
+      await stillWithin(page, within);
+    },
     open: (page) => page.locator(CHIP).first().click(),
     close: (page) => page.locator(CHIP).first().click(),
   },
@@ -395,6 +424,7 @@ const SURFACES: Surface[] = [
     present: async (page) =>
       (await visible(page, RING)) ? null : "no plan ring",
     within: async () => 'section[data-slot="plan"]',
+    grounds: true,
     open: (page) => page.locator(RING).click(),
     close: (page) => page.locator(RING).click(),
   },
@@ -493,6 +523,10 @@ async function measure(
   const within = await surface.within(page);
   const opening = await held(page, () => surface.open(page), within);
   const openFaults = await through(page, opening, before);
+  if (surface.grounds) {
+    await grounded(kit, page, within, what);
+  }
+  await surface.landed?.(page, within);
   const closing = await held(page, () => surface.close(page), within);
   const closeFaults = await through(page, closing, before);
   const faults = [
@@ -521,6 +555,51 @@ async function measure(
     `${what}: the page throws nothing through it`,
     thrown.length === 0,
     thrown.slice(0, 2).join(" | ")
+  );
+}
+
+/**
+ * Open and settled, the layer (`within`) has the composer's ground under it:
+ * opaque, solid from the layer's foot down, the pane's own recess. Read on
+ * its box against the ground's: its solid part is its height less the
+ * `space-8` it dissolves over above the foot.
+ */
+async function grounded(
+  kit: Kit,
+  page: Page,
+  within: string,
+  what: string
+): Promise<void> {
+  const read = await page.evaluate((layerSel) => {
+    const layer = [...document.querySelectorAll<HTMLElement>(layerSel)].find(
+      (el) => el.matches("section")
+    );
+    const ground = layer
+      ?.closest('[data-slot="dock"]')
+      ?.querySelector<HTMLElement>('[data-slot="layer-ground"]');
+    if (!(layer && ground)) {
+      return null;
+    }
+    const space8 = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--space-8")
+    );
+    const css = getComputedStyle(ground);
+    return {
+      foot: layer.getBoundingClientRect().bottom,
+      solidTop: ground.getBoundingClientRect().top + space8,
+      opacity: Number(css.opacity),
+      visibility: css.visibility,
+    };
+  }, within);
+  kit.check(
+    `${what}: open, the ground under it stands solid up to its foot`,
+    read !== null &&
+      read.opacity > 0.999 &&
+      read.visibility === "visible" &&
+      read.solidTop <= read.foot + 0.5,
+    read
+      ? `solid from ${read.solidTop.toFixed(2)} against the foot ${read.foot.toFixed(2)}, opacity ${read.opacity}, ${read.visibility}`
+      : "no layer or no ground"
   );
 }
 
