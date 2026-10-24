@@ -21,7 +21,7 @@ const ANSWER = `Good catch. The 30 second ceiling came from the hub's restart ti
 
 - The daemon retries with \`backoff(1s, ×2, max 30s)\`, so after five misses it waits 30 seconds between tries, forever.
 - The dashboard keeps showing the machine as **Connected** until \`lastSeen\` is older than \`STALE_AFTER\` (90 seconds), so a dead link can look healthy for a minute and a half.
-- Nothing tells you it is retrying; the only trace is \`reconnect attempt 7\` in \`~/.cawco/daemon.log\`.
+- Nothing tells you it is retrying; the only trace is \`reconnect attempt 7\` in \`~/.cawco/daemon.log\`, which the dashboard never shows, so from the board a machine that is retrying looks exactly like one that is fine.
 
 **What I'd change**
 
