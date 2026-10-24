@@ -352,7 +352,8 @@ a {
   color: var(--ink-muted);
   line-height: 1.4;
 }
-.dp-opt .dp-cost {
+/* What it costs and what it builds, under what it gets: the meta size. */
+.dp-opt :is(.dp-cost, .dp-builds) {
   font-size: var(--text-meta);
 }
 /* Recommended, first in its option, over the label: the badge (DESIGN.md,

@@ -41,6 +41,7 @@
  */
 import {
   type ChoiceEntry,
+  decisionsWords,
   ENDED_STATUSES,
   type InstanceRow,
 } from "@cawco/core";
@@ -129,6 +130,13 @@ const shown = (raw: string): string =>
 const MOCKUP_CLASS = /(?:^|\s)mk-([a-z0-9-]+)(?:\s|$)/;
 const RECOMMENDED = /recommended/i;
 
+/** An option's part as the kit labels it (`Gets: …`, RECIPES.md), its words without the label the card draws for itself. */
+const unlabelled = (raw: string, label: (words: string) => string): string => {
+  const words = shown(raw);
+  const head = label("");
+  return words.startsWith(head) ? words.slice(head.length).trim() : words;
+};
+
 /** What a page says of itself: its title and its cards, in page order, and a program's Sections. */
 export interface ReadPage {
   cards: DecisionCard[];
@@ -144,6 +152,8 @@ interface OpenArticle {
 }
 
 interface OpenOption {
+  builds: string;
+  cost: string;
   label: string;
   line: string;
   option: DecisionOption;
@@ -153,7 +163,8 @@ interface OpenOption {
  * A built decision page's title and cards. A card is a choice group
  * (`[data-cawco-choice]` with options): its question and why are its
  * article's, its options labelled by their `<b>`, their first plain
- * `<span>` and a `.dp-tag` saying Recommended. A choice group outside an
+ * `<span>` (what it gets), their `.dp-cost` and `.dp-builds`, each without
+ * the kit's label, and a `.dp-tag` saying Recommended. A choice group outside an
  * article is named by its `aria-label`.
  */
 export const readPage = async (html: string): Promise<ReadPage> => {
@@ -163,12 +174,17 @@ export const readPage = async (html: string): Promise<ReadPage> => {
   let article: OpenArticle | null = null;
   let card: DecisionCard | null = null;
   let option: OpenOption | null = null;
-  let span: { tag: boolean; text: string } | null = null;
+  let span: {
+    kind: "dp-tag" | "dp-cost" | "dp-builds" | undefined;
+    text: string;
+  } | null = null;
   const closeOption = () => {
     if (option && card) {
       option.option.label = shown(option.label) || option.option.id;
-      option.option.line = shown(option.line);
-      card.options.push(option.option);
+      option.option.line = unlabelled(option.line, decisionsWords.gets);
+      option.option.cost = unlabelled(option.cost, decisionsWords.costs);
+      const builds = unlabelled(option.builds, decisionsWords.builds);
+      card.options.push(builds ? { ...option.option, builds } : option.option);
     }
     option = null;
   };
@@ -254,6 +270,8 @@ export const readPage = async (html: string): Promise<ReadPage> => {
         }
         closeOption();
         option = {
+          builds: "",
+          cost: "",
           label: "",
           line: "",
           option: {
@@ -277,13 +295,20 @@ export const readPage = async (html: string): Promise<ReadPage> => {
     })
     .on("[data-cawco-choice] [data-option] span", {
       element(element) {
-        const tag = (element.getAttribute("class") ?? "").includes("dp-tag");
-        const open = { tag, text: "" };
+        const classes = (element.getAttribute("class") ?? "").split(SPACES);
+        const kind = (["dp-tag", "dp-cost", "dp-builds"] as const).find((one) =>
+          classes.includes(one)
+        );
+        const open = { kind, text: "" };
         span = open;
         element.onEndTag(() => {
           if (option) {
-            if (open.tag) {
+            if (open.kind === "dp-tag") {
               option.option.recommended ||= RECOMMENDED.test(open.text);
+            } else if (open.kind === "dp-cost") {
+              option.cost ||= open.text;
+            } else if (open.kind === "dp-builds") {
+              option.builds ||= open.text;
             } else if (!option.line) {
               option.line = open.text;
             }
