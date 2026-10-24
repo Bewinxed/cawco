@@ -356,7 +356,7 @@ const HOST_RUN_SILENCE_MS = 120_000;
 const HOST_RUN_ERR_KEPT = 64_000;
 
 /** A host run's whole stdout, the tail of its stderr, and its exit (128 when it was stopped or never ran). */
-interface HostRun {
+export interface HostRun {
   readonly code: number;
   readonly err: string;
   readonly out: string;
@@ -371,9 +371,10 @@ interface HostRun {
  * process group of its own. When it says nothing for
  * {@link HOST_RUN_SILENCE_MS}, the whole group is stopped (the credential
  * helper it waits on included, and with it the lock that helper holds), and
- * its last words say why it ended.
+ * its last words say why it ended. The door's own runs, and a held push made
+ * on approval (upstream-posts.ts `makeHeldPush`).
  */
-const runOnHost = (
+export const runOnHost = (
   ref: WorkspaceRef,
   args: readonly string[],
   env: Record<string, string>

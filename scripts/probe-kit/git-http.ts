@@ -11,6 +11,10 @@
  * (docs/api/batch.md: `POST <endpoint>/objects/batch`, `upload` actions),
  * signed in with Basic auth alone (401 with `LFS-Authenticate` otherwise),
  * each object stored with the login that sent it.
+ *
+ * A repository made `signedIn` takes pushes signed in with Basic auth
+ * (401 with `WWW-Authenticate` otherwise) and reads from anyone, as a forge
+ * serves a public repository: a push there asks git's credential helper.
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -32,8 +36,8 @@ export interface LfsObject {
 }
 
 export interface GitHttp {
-  /** Makes a bare repository at `path` (`owner/repo.git`) under the root: answers its URL. */
-  readonly bare: (path: string) => Promise<string>;
+  /** Makes a bare repository at `path` (`owner/repo.git`) under the root, taking only signed-in pushes when `signedIn`: answers its URL. */
+  readonly bare: (path: string, signedIn?: boolean) => Promise<string>;
   /** Where repository `path` lies on disk. */
   readonly dir: (path: string) => string;
   /** The LFS objects the server at endpoint path `endpoint` took (`someone/else.git`, or any other path before `/info/lfs`). */
@@ -98,6 +102,8 @@ export const serveGitHttp = (
   const pushed = new Map<string, number>();
   const stored = new Map<string, LfsObject[]>();
   const calls = new Map<string, number>();
+  /** The repositories that take only signed-in pushes, by their path. */
+  const signedIn = new Set<string>();
   const lfs = async (
     request: Request,
     url: URL,
@@ -179,6 +185,17 @@ export const serveGitHttp = (
       if (lfsAnswer) {
         return lfsAnswer;
       }
+      if (
+        [...signedIn].some((path) => url.pathname.startsWith(`/${path}/`)) &&
+        (RECEIVE_PACK.test(url.pathname) ||
+          url.searchParams.get("service") === "git-receive-pack") &&
+        !basicUser(request, login)
+      ) {
+        return new Response("Credentials needed\n", {
+          status: 401,
+          headers: { "www-authenticate": 'Basic realm="probe"' },
+        });
+      }
       if (request.method === "POST" && RECEIVE_PACK.test(url.pathname)) {
         const repo = url.pathname.replace(RECEIVE_PACK, "").slice(1);
         pushed.set(repo, (pushed.get(repo) ?? 0) + 1);
@@ -210,7 +227,10 @@ export const serveGitHttp = (
   });
   const base = `http://127.0.0.1:${server.port}`;
   return {
-    bare: async (path) => {
+    bare: async (path, signed = false) => {
+      if (signed) {
+        signedIn.add(path);
+      }
       const dir = join(root, path);
       await mkdir(dir, { recursive: true });
       await Bun.$`git init -q --bare -b main ${dir} && git -C ${dir} config http.receivepack true`.quiet();

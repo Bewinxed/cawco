@@ -69,6 +69,9 @@
  *     osxkeychain waits on a keychain prompt nobody is there for), the
  *     door stops the git-lfs it runs, helper and all, after 120 s of
  *     silence, and the push is refused in words that say so;
+ * (y2) an approved held push (`makeHeldPush`) whose helper never answers
+ *     ends the same way: its git push's whole process group is stopped
+ *     after 120 s of silence, and no credential helper is left;
  * (z) when the door says `ok` and then nothing (a stuck agent), the helper
  *     ends git's push itself after 60 s, in words that say so.
  * A command's git, through the workspace's real executor and runner, on
@@ -91,6 +94,8 @@ import { workspaceGitQuietLeg } from "../workspace-git-quiet";
 
 const ORIGIN = "probe/origin.git";
 const ELSE = "someone/else.git";
+/** A repository that takes only signed-in pushes, as a forge's public one does. */
+const PRIVATE = "someone/private.git";
 const IDENTITY = ["-c", "user.name=Probe", "-c", "user.email=probe@probe.test"];
 /** git-lfs's filters, given per command so the clone's own config stays as a clone's is. */
 const LFS_FILTERS = [
@@ -162,6 +167,7 @@ const spec: Spec = {
     const http = serveGitHttp(join(scratch, "srv"), HOST_LOGIN);
     const originUrl = await http.bare(ORIGIN);
     const elseUrl = await http.bare(ELSE);
+    const privateUrl = await http.bare(PRIVATE, true);
     // The origin holds one commit, as a project's remote would.
     const seed = join(scratch, "seed");
     await Bun.$`git init -q -b main ${seed} && git -C ${seed} ${IDENTITY} commit -q --allow-empty -m seed && git -C ${seed} push -q ${originUrl} main`.quiet();
@@ -731,7 +737,6 @@ const spec: Spec = {
         "HEAD:refs/heads/door-lfs-stall",
       ]);
       const stallTook = Math.round((Date.now() - stallStart) / 1000);
-      await writeFile(gitconfig, storeConfig);
       const helperLeft = (
         await Bun.$`pgrep -f ${marker}`.quiet().nothrow().text()
       ).trim();
@@ -745,6 +750,44 @@ const spec: Spec = {
           helperLeft === "",
         `exit ${stalled.exitCode} after ${stallTook} s; helper left ${helperLeft || "none"}; ${said(stalled)}`
       );
+
+      // (y2): an approved held push whose helper never answers. A commit of
+      // its own with no large file, so git-lfs has nothing to send, to a
+      // repository that reads from anyone and takes only signed-in pushes:
+      // git's push itself waits on the helper.
+      const heldStallLeg = async (): Promise<void> => {
+        const emptyTree = (
+          await Bun.$`git -C ${clone} mktree < ${new Response("")}`.text()
+        ).trim();
+        const lone = (
+          await Bun.$`git -C ${clone} ${IDENTITY} commit-tree ${emptyTree} -m held-stall`.text()
+        ).trim();
+        const privatePushes = http.pushes(PRIVATE);
+        const heldStart = Date.now();
+        const heldStall = await makeHeldPush(ref, {
+          via: "git",
+          url: privateUrl,
+          refs: [
+            { sha: lone, dst: "refs/heads/door-held-stall", force: false },
+          ],
+        });
+        const heldTook = Math.round((Date.now() - heldStart) / 1000);
+        await writeFile(gitconfig, storeConfig);
+        const heldHelperLeft = (
+          await Bun.$`pgrep -f ${marker}`.quiet().nothrow().text()
+        ).trim();
+        check(
+          "(y2) an approved held push whose credential helper never answers ends within the silence limit, its whole process group stopped: refused in words that say so, nothing lands, and no credential helper is left",
+          !heldStall.ok &&
+            heldStall.said.includes("git push said nothing for 120 s") &&
+            heldTook < 180 &&
+            http.pushes(PRIVATE) === privatePushes &&
+            (await tip(PRIVATE, "door-held-stall")) === "" &&
+            heldHelperLeft === "",
+          `after ${heldTook} s; helper left ${heldHelperLeft || "none"}; made ${JSON.stringify(heldStall)}`
+        );
+      };
+      await heldStallLeg();
 
       // (z): a door that says ok and then nothing, as a stuck agent would.
       const mutePath = join(scratch, "mute.sock");

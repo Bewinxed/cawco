@@ -13,12 +13,8 @@
  */
 import { join } from "node:path";
 import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import {
-  repositoryConfigProblem,
-  SAFE_GIT_ENV,
-  safeGitArgv,
-} from "@cawco/core/safe-git";
+import { readWithin } from "@cawco/core/bounded";
+import { repositoryConfigProblem } from "@cawco/core/safe-git";
 import { GITHUB_API } from "@cawco/core/upstream-guard";
 import {
   FORGE_NAMES,
@@ -31,65 +27,17 @@ import { Octokit } from "@octokit/rest";
 import { toHttpBase } from "./discovery";
 import { forgeLocation, forgeOn, makeForgePost } from "./forges/forge";
 import { hostGhToken } from "./host-gh";
-import { hostGitEnv, isNetworkRemote, pushLfs } from "./hub-git";
+import { hostGitEnv, isNetworkRemote, pushLfs, runOnHost } from "./hub-git";
 import { provenFetch } from "./hub-proof";
 import { workspaceRefs } from "./workspace-records";
 
-/** How long one approved post may take to make. Our choice: a push of a large branch is the slowest. */
+/** How long GitHub may take to answer one approved request. Our choice. A held push is bounded by its silence instead (hub-git.ts `runOnHost`). */
 const MAKE_MS = 5 * 60_000;
 /** How much of what the post's program said is kept for the session. */
 const SAID_MAX = 4000;
 
 /** How long a forge may take to name the login. Our choice. */
 const ACCOUNT_MS = 15_000;
-
-/** What a program said: its exit, and its stdout and stderr together. */
-interface Ran {
-  readonly code: number;
-  readonly said: string;
-}
-
-/** Runs `argv` with `ms` to finish (core bounded.ts): stopped when the time is up. */
-const runWithin = (
-  ms: number,
-  argv: string[],
-  options: {
-    cwd?: string;
-    env: Record<string, string>;
-    stdin: "ignore" | Buffer;
-  }
-): Promise<Bounded<Ran>> =>
-  readWithin(ms, async (signal) => {
-    const child = Bun.spawn(argv, {
-      ...options,
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    });
-    const [code, out, err] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    return { code, said: `${out}\n${err}`.trim() };
-  });
-
-/** A post made by a program, as the session hears it: what it said, or that it did not finish in time. */
-const madeBy = (read: Bounded<Ran>, what: string): PostMade => {
-  switch (read.kind) {
-    case "answered":
-      return { ok: read.value.code === 0, said: cut(read.value.said) };
-    case "unanswered":
-      return {
-        ok: false,
-        said: `${what} did not finish within ${Math.round(read.after / 1000)} s and was stopped, so it may or may not have posted.`,
-      };
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-};
 
 /**
  * Who a post to `repo` (`host/owner/repo`) is made as: the login of the
@@ -285,23 +233,36 @@ export const makeHeldPush = async (
   if (lfsRefused) {
     return { ok: false, said: `CawCo did not push: ${lfsRefused}.` };
   }
-  const read = await runWithin(
-    MAKE_MS,
-    safeGitArgv([
+  // In a process group of its own, its progress forced on, as the door's
+  // own push: when it says nothing for the door's silence limit the whole
+  // group is stopped, the credential helper it waits on included. A
+  // stopped `git-credential-osxkeychain` left behind keeps its lock on its
+  // own binary, and every keychain lookup on the machine waits on it.
+  const ran = await runOnHost(
+    ref,
+    [
       "push",
+      "--progress",
       post.url,
       ...post.refs.map(
         (each) => `${each.force ? "+" : ""}${each.sha}:${each.dst}`
       ),
-    ]),
-    {
-      cwd: ref.path,
-      env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: gitDir },
-      stdin: "ignore",
-    }
+    ],
+    env
   );
-  return madeBy(read, "git push");
+  return {
+    ok: ran.code === 0,
+    said: cut(settled(`${ran.out}\n${ran.err}`)),
+  };
 };
+
+/** What git said with each progress meter at its last redraw: a line redrawn after `\r` keeps only its last state. */
+const settled = (said: string): string =>
+  said
+    .split("\n")
+    .map((line) => line.split("\r").filter(Boolean).at(-1) ?? "")
+    .filter(Boolean)
+    .join("\n");
 
 /**
  * Makes one post once (the hub's `CONTROL_UPSTREAM_POST`), approved or the
