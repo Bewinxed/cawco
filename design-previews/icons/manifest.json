@@ -308,14 +308,14 @@
     },
     {
       "id": "tree",
-      "question": "Session rows: keep the sprite's tile?",
+      "question": "Session rows: the sprite without its tile?",
       "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "today",
+      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
-          "label": "Keep as it is",
-          "result": "Kept as it is: the tile also carries the row's count, its deck of rows and the status dot.",
+          "label": "Today (in its container)",
+          "result": "What ships now: the sprite on a hued tile, which also carries the row's count, its deck of rows and the status dot.",
           "items": [
             {
               "label": "Sidebar session rows",
@@ -326,7 +326,7 @@
         {
           "id": "bare",
           "label": "Without its container",
-          "result": "The sprite alone in its hue; the count, deck and dot would need a new home.",
+          "result": "The sprite alone in its hue. The count, deck and status dot each need a new place: a TreeMark redesign, which comes back to you as its own page before any build.",
           "items": [
             {
               "label": "Sidebar session rows",
