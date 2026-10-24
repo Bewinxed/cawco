@@ -212,6 +212,18 @@ export const ANSWERED_AT = at(2);
 /** The conversation when he comes back: the agent's last turn is revision 7's. */
 export const CAME_BACK_TURNS = [
   {
+    id: "t-brief",
+    by: "person" as const,
+    at: at(52),
+    text: "Draft a landing hero for CawCo: one headline, one button, and a screenshot of the board.",
+  },
+  {
+    id: "t-draft",
+    by: "agent" as const,
+    at: at(47),
+    text: "First pass is in Hero.svelte: the long headline, Get started under the paragraph, and the board screenshot at 50%. Showing it in the preview next.",
+  },
+  {
     id: "t-shown",
     by: "agent" as const,
     at: at(40),
@@ -233,7 +245,7 @@ export const CAME_BACK_TURNS = [
 
 /** The conversation after a 30-minute run: one agent turn per revision. */
 export const RUN_TURNS = [
-  CAME_BACK_TURNS[1],
+  ...CAME_BACK_TURNS.slice(0, 4),
   ...TURNS.map((turn) => ({
     id: `t-rev-${turn.revision}`,
     by: "agent" as const,

@@ -17,19 +17,19 @@ export default {
   args: { scene: "came-back" },
 };
 
-/** Back at the desk: the agent's last turn carries the update card, 2 answered and 1 not; the panel as today. Desk 1440. */
+/** Back at the desk: the agent's last turn carries the update card, 2 answered and 1 not; the panel as today, so no toast (it stands only while the panel is closed). Desk 1440. */
 export const CameBack = {
   args: { scene: "came-back" },
   parameters: { viewport: 1440 },
 };
 
-/** First stop after Review: today's stepping, pin 1's thread open beside its pill; the card stays in the turn. Desk 1440. */
+/** First stop after Review: today's stepping, pin 1's thread open beside its pill; the card stays in the turn; no toast, which stands only while the panel is closed. Desk 1440. */
 export const StoppedAtHeadline = {
   args: { scene: "stop-1" },
   parameters: { viewport: 1440 },
 };
 
-/** The stop on pin 2: today's tag at 3 of 3 with no thread; the card's ! row offers Ask again. Desk 1440. */
+/** The stop on pin 2: today's tag at 3 of 3 with no thread; the card's ! row offers Ask again; no toast, which stands only while the panel is closed. Desk 1440. */
 export const PinTwoUnanswered = {
   args: { scene: "pin-2" },
   parameters: { viewport: 1440 },

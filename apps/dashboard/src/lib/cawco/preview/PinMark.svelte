@@ -45,7 +45,7 @@
   }: {
     number?: number | null;
     state?: PinMarkState;
-    tail?: "bottom-start" | "none";
+    tail?: "bottom-start" | "bottom-end" | "none";
     focused?: boolean;
     dot?: "live" | "unread" | null;
     gone?: boolean;
@@ -56,7 +56,7 @@
 <!-- mark-line: the dot stands on the pill's top-end corner, absolutely, not beside its figure -->
 <span
   aria-hidden="true"
-  class="relative inline-flex flex-none items-center justify-center h-c-pin min-w-c-pin data-inline:h-c-inline-chip-line data-inline:min-w-c-inline-chip-line rounded-pill ring-2 ring-surface-raised shadow-xs type-caps num leading-none data-wide:px-c-pin-pad data-tail:rounded-es-hair data-[state=provisional]:border-2 data-[state=provisional]:border-action-solid data-[state=provisional]:bg-surface-raised data-[state=unsent]:border-2 data-[state=unsent]:border-action-solid data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-action-solid data-[state=sent]:bg-action-solid data-[state=sent]:text-on-action data-[state=resolved]:bg-surface-fill-strong data-[state=resolved]:text-ink-muted data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-(length:--c-pin-gone-ring) not-data-focused:data-gone:outline-border-control"
+  class="relative inline-flex flex-none items-center justify-center h-c-pin min-w-c-pin data-inline:h-c-inline-chip-line data-inline:min-w-c-inline-chip-line rounded-pill ring-2 ring-surface-raised shadow-xs type-caps num leading-none data-wide:px-c-pin-pad data-[tail=bottom-start]:rounded-es-hair data-[tail=bottom-end]:rounded-ee-hair data-[state=provisional]:border-2 data-[state=provisional]:border-action-solid data-[state=provisional]:bg-surface-raised data-[state=unsent]:border-2 data-[state=unsent]:border-action-solid data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-action-solid data-[state=sent]:bg-action-solid data-[state=sent]:text-on-action data-[state=resolved]:bg-surface-fill-strong data-[state=resolved]:text-ink-muted data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-(length:--c-pin-gone-ring) not-data-focused:data-gone:outline-border-control"
   data-focused={focused || undefined}
   data-gone={gone || undefined}
   data-inline={size === "inline" || undefined}

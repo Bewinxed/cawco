@@ -47,13 +47,18 @@
     class="relative flex min-h-0 min-w-0 flex-1 flex-col"
     data-slot="conversation"
   >
-    <!-- The transcript scrolls; its newest turn stands on the composer. A
-         toast's room is kept clear at the end it stands on. -->
+    <!-- The transcript scrolls, opened at its end as the conversation
+         opens: a short one stands from the top, a long one shows its newest
+         turns on the composer. A toast's room is kept clear at the end it
+         stands on. -->
     <div
-      class="relative flex min-h-0 flex-auto flex-col justify-end overflow-y-auto overscroll-contain px-space-5 pt-space-5 data-[shape=desk]:px-space-7 data-toast-top:pt-space-8"
+      class="relative min-h-0 flex-auto overflow-y-auto overscroll-contain px-space-5 pt-space-5 data-[shape=desk]:px-space-7 data-toast-top:pt-space-8"
       data-shape={shape}
       data-slot="transcript"
       data-toast-top={(toast && shape !== "desk") || undefined}
+      {@attach frameSize((node: HTMLDivElement) => {
+        node.scrollTop = node.scrollHeight;
+      })}
     >
       <div
         class="mx-auto w-full max-w-c-composer-w pb-space-4 data-toast-end:pb-space-8"

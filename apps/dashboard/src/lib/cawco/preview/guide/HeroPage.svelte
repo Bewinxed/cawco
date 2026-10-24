@@ -5,8 +5,13 @@
    * draws over it (overlay changes.ts and pins.ts): the done wash
    * (`--c-change-wash`) over each element changed since he looked, the 1px
    * chosen line (`--c-target-stroke`, 2px out) on the stepped one, and each
-   * pin's pill (PinMark) where it was pinned.
+   * pin's pill (PinMark) where the overlay stands it (pins.ts `standing`):
+   * up-right of the point it was made at, its tail on the point. Pin 1 was
+   * made with no point, so it stands on its element's top-right corner (the
+   * overlay's `{ x: 1, y: 0 }`); pin 2 on the screenshot block's top edge,
+   * four fifths across.
    */
+  import { frameSize } from "../../frame-observer";
   import PinMark from "../PinMark.svelte";
 
   type Anchor = "#headline" | "#cta" | "#sub" | "#shot" | "#foot" | "#nav-docs";
@@ -33,6 +38,27 @@
   } = $props();
 
   const mark = (anchor: Anchor) => marks.find((one) => one.anchor === anchor);
+
+  /**
+   * The pills that stand up-left of their point: the page's width leaves
+   * no room for them on the right (pins.ts `standing`: "up-left where the
+   * page's width leaves no room on the right").
+   */
+  let leftward = $state<Record<number, boolean>>({});
+  /** Its point, `along` its element's width, and whether a pill its width fits right of it inside the page. */
+  const roomFor = (number: number, along: number) =>
+    frameSize((node: HTMLElement) => {
+      const element = node.parentElement?.getBoundingClientRect();
+      const page = node.closest("[data-hero-page]")?.getBoundingClientRect();
+      if (!(element && page)) {
+        return;
+      }
+      const point = element.left + along * element.width;
+      const left = point + node.offsetWidth > page.right;
+      if (leftward[number] !== left) {
+        leftward[number] = left;
+      }
+    });
 </script>
 
 {#snippet wash(anchor: Anchor)}
@@ -52,14 +78,21 @@
   {/if}
 {/snippet}
 
-{#snippet pin(anchor: Anchor, at: string)}
+{#snippet pin(anchor: Anchor, along: number, right: string, left: string)}
   {@const one = mark(anchor)}
   {#if one}
-    <span class={["absolute z-1 -top-space-4", at]} data-page-pin={one.number}>
+    {@const flipped = !!leftward[one.number]}
+    <!-- Up-right of its point, its tail on the point; up-left where the page leaves no room on the right. -->
+    <span
+      class={["absolute bottom-full z-1 flex", flipped ? left : right]}
+      data-page-pin={one.number}
+      {@attach roomFor(one.number, along)}
+    >
       <PinMark
         dot={one.dot ?? null}
         focused={one.focused}
         number={one.number}
+        tail={flipped ? "bottom-end" : "bottom-start"}
       />
     </span>
   {/if}
@@ -68,6 +101,7 @@
 <!-- The page fills the well as the frame does; it scrolls in the frame, so here its foot is cut by the well. -->
 <div
   data-slot="hero-page"
+  data-hero-page
   data-compact={compact || undefined}
   class="absolute inset-0 overflow-y-auto overscroll-contain bg-surface-page text-ink-strong"
 >
@@ -91,7 +125,7 @@
       id="headline"
     >
       {@render wash("#headline")}
-      {@render pin("#headline", "start-space-7")}
+      {@render pin("#headline", 1, "start-full", "end-0")}
       <span class="relative">One board for every agent</span>
     </h1>
     <span class="relative" id="cta">
@@ -113,7 +147,7 @@
     </p>
     <figure class="relative m-0 mt-space-2 w-full" id="shot">
       {@render wash("#shot")}
-      {@render pin("#shot", "start-space-4")}
+      {@render pin("#shot", 0.8, "start-4/5", "end-1/5")}
       <div
         class="relative flex flex-col gap-space-2 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-xs"
       >
