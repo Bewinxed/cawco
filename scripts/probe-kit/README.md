@@ -28,6 +28,9 @@ the edit never touched.
 bun scripts/probe-kit/run.ts journeys [name…] [--engine chromium|webkit|firefox] [--size phone|tablet|desk]
 ```
 
+`--engine` and `--size` each take one, or several by commas
+(`--engine chromium,webkit --size phone,desk`).
+
 One suite of user journeys (`journeys/`) proves the product works for the
 person: each a flow from JOURNEY.md done start to finish on a scratch fleet,
 asserting the outcome the flow promises on the hub or the machine and on what
@@ -56,6 +59,7 @@ nightly release, not per change.
 | `j9-jump` | Jump | a word of what was said finds the moment; it opens the conversation at the machine's own record of that line, in view |
 | `j10-rules` | 5, rules | a template is live on the next session; an edit's words go out next; delete, then undo |
 | `j11-plugin-update` | plugin update | a running session's hook runs the new version after Fetch again; the hook never fails through the swap, and the plugin is written once (plugin-swap's protection) |
+| `j12-connect` | connect ask | an agent's ask to sign in stands on the message box with its reason, the provider's address and the access as a choice; Not now hands the agent his words; a closed tab, a refused start and an offline machine each say so and recover; Connect signs in on the provider's page, the agent hears as whom and with what access and calls the service; an expired sign-in turns the record line, and a reconnect keeps the access; on Claude Code, OpenCode and pi |
 
 J4, J5 and J8 start Caw's session or delegates, which run inside workspace
 boundaries: those journeys run only where a boundary can start (the host,

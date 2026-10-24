@@ -15,6 +15,7 @@ import {
 import { createActions } from "./actions";
 import { createBrowserAsks } from "./browser-tools";
 import { createCaw } from "./caw";
+import { createConnectAsks } from "./connect-asks";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createFleetWatch } from "./fleet-watch";
 import { createHubTools } from "./hub-tools";
@@ -561,6 +562,16 @@ export const listRoleTools = (): RoleTools[] => {
           throw new Error("measuring");
         },
         park: () => undefined,
+        settle: () => undefined,
+      }).tools(actor),
+    // The connect ask, from the one list the server gives sessions.
+    connectTools: (actor) =>
+      createConnectAsks({
+        facts: () => {
+          throw new Error("measuring");
+        },
+        park: () => undefined,
+        servers: () => [],
         settle: () => undefined,
       }).tools(actor),
   });

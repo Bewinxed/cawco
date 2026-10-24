@@ -1,10 +1,13 @@
 import {
   CAWCO_OAUTH_URL,
+  type ConnectAccess,
+  type ConnectAccessSet,
   configurePage,
   type FleetMcpServer,
   type MachineFleetConfig,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { mcpWords } from "@cawco/core/words/mcp";
 import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
@@ -30,7 +33,83 @@ const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 const SHARED_REDIRECT = `${CAWCO_OAUTH_URL}/callback`;
 export interface SignInStart {
   authorizationUrl: string;
+  /** When the provider's page stops taking this sign-in's answer, epoch ms. */
+  expiresAt: number;
 }
+
+/** How long a started sign-in's answer is taken: the provider's page is good for minutes. */
+const SIGN_IN_TTL_MS = 10 * 60_000;
+
+/**
+ * A scope that reads and does no more: one ending in a read word (`read`,
+ * `readonly`, `read_only`, `ro`, `view`) after a separator, or that word
+ * alone (`docs.read`, `files:read`, `repo_readonly`). CawCo's own call: no
+ * standard names an OAuth scope's reach, so the name is all there is.
+ */
+const READ_SCOPE = /(?:^|[.:_/-])(?:read(?:[._-]?only)?|ro|view)$/i;
+
+/**
+ * The access a server's scopes offer (core `ConnectAccessSet`): read-only
+ * (its read scopes) and read and write (all of them) when it names both
+ * kinds; else the one set it has, or none when it names no scopes.
+ */
+export const accessOffers = (scopes: readonly string[]): ConnectAccessSet[] => {
+  const all = [...new Set(scopes)];
+  const read = all.filter((scope) => READ_SCOPE.test(scope));
+  if (all.length === 0) {
+    return [];
+  }
+  if (read.length > 0 && read.length < all.length) {
+    return [
+      { access: "read", scopes: read },
+      { access: "write", scopes: all },
+    ];
+  }
+  return [{ access: read.length > 0 ? "read" : "write", scopes: all }];
+};
+
+/** What a connect ask for a server says before anything opens (connect-asks.ts). */
+export interface AskFacts {
+  /** As whom the hub is signed in there, while it is. */
+  as: string | null;
+  /** Its sign-in ended without the person: a reconnect. */
+  ended: boolean;
+  /** The access the last sign-in asked for, kept past its end. */
+  held: ConnectAccess | null;
+  offers: ConnectAccessSet[];
+  signedIn: boolean;
+  /** The provider's authorization page. */
+  url: string;
+}
+
+/** Where an ID token's claims are: its middle part, base64url JSON. */
+const claimsOf = (idToken: unknown): Record<string, unknown> => {
+  if (typeof idToken !== "string") {
+    return {};
+  }
+  const [, body] = idToken.split(".");
+  try {
+    return JSON.parse(
+      Buffer.from(body ?? "", "base64url").toString("utf8")
+    ) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * As whom the provider signed the hub in: its ID token's email, else its
+ * preferred username, else its name (OpenID Connect Core §5.1). Read for
+ * the person's eyes only, never to decide anything, so it is not verified.
+ * None when the provider sent no ID token.
+ */
+const identityOf = (tokens: { id_token?: unknown }): string | null => {
+  const claims = claimsOf(tokens.id_token);
+  const said = [claims.email, claims.preferred_username, claims.name].find(
+    (one): one is string => typeof one === "string" && one.trim() !== ""
+  );
+  return said?.trim() ?? null;
+};
 const DISCOVERY_TIMEOUT_MS = 15_000;
 /** Re-probes of a server the hub could not reach: 30 s, 1 m, 2 m, 4 m, 8 m, then every 15 m. */
 const REPROBE_FIRST_MS = 30_000;
@@ -561,8 +640,8 @@ export class FleetMcp {
       if (server.auth?.mode !== "oauth") {
         return server;
       }
-      // Why a sign-in ended is the person's to read, on the dashboard.
-      const { ended: _ended, ...auth } = server.auth;
+      // Why a sign-in ended, and as whom, are the person's to read, on the dashboard.
+      const { ended: _ended, as: _as, ...auth } = server.auth;
       return {
         ...server,
         auth,
@@ -583,23 +662,66 @@ export class FleetMcp {
     };
   }
 
-  start(name: string): Promise<SignInStart> {
-    const running = this.#signingIn.get(name);
+  /**
+   * What a connect ask for `name` says: the provider's page, the access its
+   * scopes offer and the one held from the last sign-in, and whether the
+   * hub is signed in there now. Throws the sentence an agent reads when it
+   * is no server a person can sign in to.
+   */
+  askFacts(name: string): AskFacts {
+    const server = this.#db.getMcpServer(name);
+    const row = this.#db.getMcpOauth(name);
+    if (!(server && server.authMode === "oauth" && row)) {
+      throw new Error(
+        `${name} is no MCP server of the fleet's that signs in with OAuth.`
+      );
+    }
+    if (!server.enabled) {
+      throw new Error(
+        `${name} is switched off on the MCP page; the person turns it on there before anyone signs in to it.`
+      );
+    }
+    return {
+      held: row.access ?? null,
+      as: row.tokens ? (row.identity ?? null) : null,
+      ended: !row.tokens && row.endedAt !== null && row.endedAt !== undefined,
+      offers: accessOffers(this.#scopes(row)),
+      signedIn: Boolean(row.tokens),
+      url: row.metadata.authorization_endpoint,
+    };
+  }
+
+  /** The scopes a server names: its resource's, else its authorization server's. */
+  #scopes(row: OAuthRow): string[] {
+    return (
+      row.resource.scopes_supported ??
+      (row.metadata as { scopes_supported?: string[] }).scopes_supported ??
+      []
+    );
+  }
+
+  /**
+   * Starts a sign-in to `name`, asking for `access` of its scopes; none
+   * asks for the access the last sign-in did, else every scope it names.
+   */
+  start(name: string, access?: ConnectAccess): Promise<SignInStart> {
+    const key = `${name}\u0000${access ?? ""}`;
+    const running = this.#signingIn.get(key);
     if (running !== undefined) {
       return running;
     }
-    const starting = this.#start(name).finally(() =>
-      this.#signingIn.delete(name)
+    const starting = this.#start(name, access).finally(() =>
+      this.#signingIn.delete(key)
     );
-    this.#signingIn.set(name, starting);
+    this.#signingIn.set(key, starting);
     return starting;
   }
 
-  async #start(name: string): Promise<SignInStart> {
+  async #start(name: string, asked?: ConnectAccess): Promise<SignInStart> {
     await this.#probing.get(name);
     const server = this.#server(name);
     if (!server.enabled) {
-      throw new Error("Enable this server before signing in.");
+      throw new Error(mcpWords.enableBeforeSignIn);
     }
     const row = this.#db.getMcpOauth(name);
     if (!row || server.authMode !== "oauth") {
@@ -640,6 +762,11 @@ export class FleetMcp {
       }
     }
     const state = crypto.randomUUID();
+    const offers = accessOffers(this.#scopes(row));
+    const access = asked ?? row.access ?? null;
+    const scopes =
+      offers.find((offer) => offer.access === access)?.scopes ??
+      offers.at(-1)?.scopes;
     const { authorizationUrl, codeVerifier } = await startAuthorization(
       row.issuer,
       {
@@ -647,7 +774,7 @@ export class FleetMcp {
         clientInformation: client,
         redirectUrl: SHARED_REDIRECT,
         state,
-        scope: row.resource.scopes_supported?.join(" "),
+        scope: scopes?.join(" "),
         resource: new URL(row.resource.resource),
       }
     );
@@ -659,6 +786,7 @@ export class FleetMcp {
         "This server changed during sign-in. Start sign-in again."
       );
     }
+    const expiresAt = Date.now() + SIGN_IN_TTL_MS;
     this.#db.putMcpOauth({
       ...row,
       client,
@@ -668,10 +796,13 @@ export class FleetMcp {
         redirectUri: SHARED_REDIRECT,
         state,
         verifier: codeVerifier,
-        expiresAt: Date.now() + 10 * 60_000,
+        expiresAt,
+        access: offers.some((offer) => offer.access === access)
+          ? access
+          : (offers.at(-1)?.access ?? null),
       },
     });
-    return { authorizationUrl: authorizationUrl.toString() };
+    return { authorizationUrl: authorizationUrl.toString(), expiresAt };
   }
 
   async complete(
@@ -732,6 +863,8 @@ export class FleetMcp {
       pending: null,
       endedAt: null,
       endedWhy: null,
+      access: row.pending.access ?? null,
+      identity: identityOf(tokens),
     });
     this.#issued.set(row.name, Date.now());
     this.#cooling.delete(row.name);

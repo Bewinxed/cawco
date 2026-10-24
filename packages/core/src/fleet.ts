@@ -80,6 +80,11 @@ export interface FleetMcpServer extends FleetPlacement {
      * Needs you item. Never sent to a machine (hub fleet-mcp.ts `syncConfig`).
      */
     ended?: { at: number; why: string };
+    /**
+     * As whom the provider signed the hub in (its ID token's email or name),
+     * while signed in and when it said. Never sent to a machine.
+     */
+    as?: string;
   };
   config: FleetMcpConfig;
   /** Disabled rows stay in the hub but are removed from the machines. */

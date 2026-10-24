@@ -6403,6 +6403,7 @@ const make = async (path: string): Promise<DbShape> => {
                   tokens: fleetMcpOauth.tokens,
                   endedAt: fleetMcpOauth.endedAt,
                   endedWhy: fleetMcpOauth.endedWhy,
+                  identity: fleetMcpOauth.identity,
                 })
                 .from(fleetMcpOauth)
                 .where(eq(fleetMcpOauth.name, name))
@@ -6412,7 +6413,11 @@ const make = async (path: string): Promise<DbShape> => {
           return { mode, state: "failed", detail: error };
         }
         if (mode === "direct" || oauth?.tokens) {
-          return { mode, state: "signed-in" };
+          return {
+            mode,
+            state: "signed-in",
+            ...(oauth?.identity ? { as: oauth.identity } : {}),
+          };
         }
         return {
           mode,

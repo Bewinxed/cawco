@@ -57,6 +57,7 @@ import { classifyCommand } from "@cawco/core/fleet";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type {
   BrowserAskFrame,
+  ConnectAskFrame,
   FleetFetchFrame,
   HarnessFailed,
   HarnessUnanswered,
@@ -222,7 +223,6 @@ import {
 } from "./stream";
 import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { warmCompactionMark } from "./transcript/compaction-mark";
-import type { ConnectAsk } from "./transcript/connect-ask";
 import {
   answeredNote,
   errorMessage,
@@ -443,12 +443,8 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
 export interface PendingPermission {
   /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
   browserAsk?: BrowserAskFrame;
-  /**
-   * A connect ask's service, why and sign-in address (transcript/connect-ask.ts):
-   * its card offers Connect and Not now. Set only by its states files until
-   * the hub raises one; nothing in the app makes it.
-   */
-  connectAsk?: ConnectAsk;
+  /** A connect ask's server, reason, sign-in address and access (core `ConnectAskFrame`): its card offers Connect and Not now. */
+  connectAsk?: ConnectAskFrame;
   /**
    * When this device last heard the hub park it, in the order it hears
    * things ({@link askHeard}): a read of `/api/pending` asked for before
@@ -3647,6 +3643,7 @@ function handleFrame(frame: FramePayload): void {
         threadId: frame.threadId,
         originInstanceId: frame.originInstanceId,
         browserAsk: frame.browserAsk,
+        connectAsk: frame.connectAsk,
       });
       break;
     }

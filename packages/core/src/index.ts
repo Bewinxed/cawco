@@ -23,6 +23,8 @@ export * from "./browser";
 export * from "./choices";
 // Claude Code's dir names, as a screen, a message or a shell script names them (paths.ts owns the paths).
 export * from "./claude-dirs";
+// A connect ask's answer, as its agent reads it and its record reads it back.
+export * from "./connect-ask";
 export * from "./connections";
 export * from "./continuation";
 export * from "./continuation-read";

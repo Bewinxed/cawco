@@ -2129,6 +2129,13 @@
       "when": 1792878573701,
       "tag": "0311_line_anchors",
       "breakpoints": true
+    },
+    {
+      "idx": 312,
+      "version": "6",
+      "when": 1792881297527,
+      "tag": "0312_mcp_sign_in_access",
+      "breakpoints": true
     }
   ]
 }

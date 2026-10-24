@@ -461,9 +461,16 @@
     openPeek({ viewId: item.instanceId, href: href ?? "", title: item.title });
   }
 
-  /** A permission answered on the row, under the `answer` choice. */
+  /**
+   * A permission answered on the row, under the `answer` choice. A question
+   * and a connect ask are answered on their own card in the session (a
+   * connect ask by signing in there), which the row opens.
+   */
   const answerable = $derived(
-    item.kind === "ask" && !item.isQuestion && choices.answer === "a"
+    item.kind === "ask" &&
+      !item.isQuestion &&
+      !item.request.connectAsk &&
+      choices.answer === "a"
   );
 
   /**
@@ -500,10 +507,13 @@
   /** What an ask is, as its meta line names it. */
   const askKind = (ask: {
     isQuestion: boolean;
-    request: { browserAsk?: unknown };
+    request: { browserAsk?: unknown; connectAsk?: unknown };
   }): string => {
     if (ask.request.browserAsk) {
       return askWords.browserAsk;
+    }
+    if (ask.request.connectAsk) {
+      return askWords.connectAsk;
     }
     return ask.isQuestion ? "Question" : "Permission";
   };

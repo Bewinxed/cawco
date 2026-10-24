@@ -20,6 +20,7 @@ import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
 import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
 import { type CallKeys, CLAUDE_CALL_META, mcpCallKey } from "./call-keys";
 import type { Caw } from "./caw";
+import { CONNECT_TOOLS, type ConnectAsks } from "./connect-asks";
 import type { Connections } from "./connections";
 import type {
   Fleet,
@@ -75,6 +76,7 @@ type TriageTool = ReturnType<FleetWatch["tools"]>[number];
 /** One of the hub's own session tools (hub-tools.ts). */
 type HubTool = ReturnType<ReturnType<typeof createHubTools>>[number];
 type BrowserTool = ReturnType<BrowserAsks["tools"]>[number];
+type ConnectTool = ReturnType<ConnectAsks["tools"]>[number];
 
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
@@ -303,6 +305,11 @@ export function createDelegationMcp(options: {
     actor: InstanceRow | undefined,
     toolUseId?: string
   ) => BrowserTool[];
+  /** `connect_ask` (connect-asks.ts): the session asks the person to sign in to a fleet MCP server. */
+  connectTools?: (
+    actor: InstanceRow | undefined,
+    toolUseId?: string
+  ) => ConnectTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -431,6 +438,7 @@ export function createDelegationMcp(options: {
           options.triageTools,
           options.hubTools,
           options.browserTools,
+          options.connectTools,
         ] as (
           | ((actor: undefined) => (ProjectTool | CawTool | TriageTool)[])
           | undefined
@@ -757,10 +765,14 @@ export function createDelegationMcp(options: {
     input: Record<string, unknown>,
     toolUseId: string | undefined
   ): Promise<CallToolResult | undefined> => {
-    let group: (ProjectTool | HubTool | BrowserTool)[] | undefined;
+    let group:
+      (ProjectTool | HubTool | BrowserTool | ConnectTool)[] | undefined;
     if (BROWSER_TOOLS.has(name)) {
       // The call's id: the ask it parks is drawn at that call.
       group = options.browserTools?.(actor, toolUseId);
+    } else if (CONNECT_TOOLS.has(name)) {
+      // The call's id: the ask it parks is drawn at that call.
+      group = options.connectTools?.(actor, toolUseId);
     } else if (HUB_TOOLS.has(name)) {
       // The call's id: a design proposal it parks is drawn at that call.
       group = options.hubTools?.(actor, toolUseId);

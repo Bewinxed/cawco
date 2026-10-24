@@ -35,7 +35,7 @@
     problem = null;
     let tab: Window;
     try {
-      tab = await signInToMcp(server.name);
+      ({ tab } = await signInToMcp(server.name));
     } catch (error) {
       problem = failureWords(error);
       waiting = false;

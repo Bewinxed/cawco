@@ -28,6 +28,8 @@ export const mcpWords = {
   signingIn: (name: string) => `Waiting for ${name}…`,
   signedIn: "Signed in for the fleet",
   signInClosed: "The sign-in tab closed before it finished.",
+  /** The hub refuses to start a sign-in to a server switched off. */
+  enableBeforeSignIn: "Enable this server before signing in.",
   /** The machines card's line for a server waiting on the fleet's sign-in, once however many machines report it. */
   needsSignIn: (name: string) =>
     `${name} needs a sign-in for the fleet. Until then, no session gets its tools.`,

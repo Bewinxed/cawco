@@ -15,6 +15,7 @@ import type {
   CapPeriod,
   CheckoutMove,
   ClaudeModelUsage,
+  ConnectAccess,
   ContinuationJob,
   DelegateAskStatus,
   DelegateEventKind,
@@ -1900,6 +1901,8 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
     verifier: string;
     state: string;
     expiresAt: number;
+    /** The access this sign-in asks for: what `access` keeps once it lands. */
+    access?: ConnectAccess | null;
   }>("pending"),
   lastOpenedAt: timestamp("last_opened_at"),
   /**
@@ -1910,6 +1913,14 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   endedAt: timestamp("ended_at"),
   /** Why it ended, in the provider's own words where it gave any: Needs you's Show details. */
   endedWhy: text("ended_why"),
+  /**
+   * The access the last sign-in asked for (core `ConnectAccess`), kept past
+   * its end: the next sign-in asks for it again. Null: every scope the
+   * server names.
+   */
+  access: text("access").$type<ConnectAccess>(),
+  /** As whom the provider signed the hub in (its ID token's email or name), kept past the sign-in's end. */
+  identity: text("identity"),
 });
 
 /**

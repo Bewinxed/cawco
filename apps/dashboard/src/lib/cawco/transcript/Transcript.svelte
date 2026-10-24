@@ -79,6 +79,7 @@
   import Behind from "./Behind.svelte";
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
+  import ConnectRow from "./ConnectRow.svelte";
   import { compactionMarkComing } from "./compaction-mark";
   import { paneDrafts } from "./composer-draft.svelte";
   import Delegate from "./Delegate.svelte";
@@ -3558,7 +3559,8 @@
       (row.kind === "live" && !row.text) ||
       row.kind === "livetool" ||
       row.kind === "subagent" ||
-      row.kind === "delegate"
+      row.kind === "delegate" ||
+      row.kind === "connect"
     );
   }
 
@@ -4230,6 +4232,8 @@
               <ToolGroup messages={row.messages} />
             {:else if row.kind === "question"}
               <QuestionCard asker={agentName} message={row.message} />
+            {:else if row.kind === "connect"}
+              <ConnectRow answer={row.answer} />
             {:else if row.kind === "harness"}
               <SystemLine
                 disclosed={disclosureAt(session.instanceId, row.key)}

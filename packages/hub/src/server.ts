@@ -577,6 +577,7 @@ import {
   PREVIEW_PORTS,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
+import { createConnectAsks } from "./connect-asks";
 import { connectionWrite } from "./connection-writes";
 import { connectionRoutes, createConnections } from "./connections";
 import {
@@ -3499,6 +3500,26 @@ export const createServer = (
       pending.resolve(requestId);
     },
   });
+  // A session's ask that the person sign the hub in to a fleet MCP server
+  // (connect-asks.ts), answered by the hub's own sign-in landing.
+  const connectAsks = createConnectAsks({
+    facts: (server) => fleetMcp.askFacts(server),
+    // A project's own server reaches that project's sessions alone.
+    servers: (actor) =>
+      db
+        .fleetConfig()
+        .mcp.filter(
+          (row) =>
+            row.auth?.mode === "oauth" &&
+            (!row.projectId || row.projectId === actor.projectId)
+        )
+        .map((row) => row.name),
+    // Not kept across a restart: the call that waits on it ends with the hub.
+    park: (envelope) => parkForPerson(envelope),
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+  });
   /**
    * The session a workspace's held post is its ask: a project's Caw for his
    * place (caw.ts `leadPlaceRef`), else the session of the workspace's
@@ -3716,6 +3737,7 @@ export const createServer = (
     if (outcome === "cancelled") {
       adminAsks.withdrawn(parked.requestId);
       browserAsks.withdrawn(parked.requestId);
+      connectAsks.withdrawn(parked.requestId);
     }
     registry.broadcast({
       verb: "frames",
@@ -20841,7 +20863,11 @@ export const createServer = (
   // the next sign-in takes that push down.
   const fleetMcp = new FleetMcp(db, announceMcp, lifetime, {
     ended: (ended) => push.mcpSignInEnded(ended),
-    signedIn: (name) => push.mcpSignedIn(name),
+    signedIn: (name) => {
+      push.mcpSignedIn(name);
+      // Every connect ask waiting on it is answered.
+      connectAsks.signedIn(name);
+    },
   });
   const mcpReady = Promise.all(
     db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
@@ -20944,6 +20970,15 @@ export const createServer = (
       // Approve is refused with the sentence saying to take over.
       if (browserAsks.owns(requestId)) {
         await browserAsks.answer(requestId, result);
+        if (receipt.outcome !== "answered") {
+          throw new Error("That request is no longer pending.");
+        }
+        return;
+      }
+      // A connect ask (connect-asks.ts): Not now answers its call; an
+      // Approve is refused with the sentence saying to connect.
+      if (connectAsks.owns(requestId)) {
+        await connectAsks.answer(requestId, result);
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
@@ -25048,6 +25083,7 @@ export const createServer = (
     connections,
     hubTools,
     browserTools: (actor, toolUseId) => browserAsks.tools(actor, toolUseId),
+    connectTools: (actor, toolUseId) => connectAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
     // A host-scope item ends with its report alone (work-items.ts `startHost`).
     workItemLands: (id) => {
@@ -29844,18 +29880,35 @@ export const createServer = (
         announceMcp();
         return undoable(trashed);
       })
-      .post("/api/fleet/mcp/:name/sign-in", async ({ params, status }) => {
-        try {
-          return await fleetMcp.start(params.name);
-        } catch (error) {
-          return status(
-            400,
-            error instanceof Error
-              ? error.message
-              : "Sign-in could not start. Save this server and retry sign-in."
-          );
+      .post(
+        "/api/fleet/mcp/:name/sign-in",
+        {
+          body: t.Optional(
+            t.Object({
+              /**
+               * The access to ask the provider for (core `ConnectAccess`),
+               * a connect ask's pick. Left out: the access the last
+               * sign-in asked for, else every scope the server names.
+               */
+              access: t.Optional(
+                t.Union([t.Literal("read"), t.Literal("write")])
+              ),
+            })
+          ),
+        },
+        async ({ params, body, status }) => {
+          try {
+            return await fleetMcp.start(params.name, body?.access);
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error
+                ? error.message
+                : "Sign-in could not start. Save this server and retry sign-in."
+            );
+          }
         }
-      })
+      )
       .post(
         "/api/fleet/mcp/oauth/complete",
         {

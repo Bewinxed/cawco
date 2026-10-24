@@ -54,6 +54,7 @@
 <script lang="ts">
   import type { AvailableCommand } from "@cawco/core/fleet";
   import { questionsOf } from "@cawco/core/question";
+  import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
@@ -131,7 +132,6 @@
   import type { ComposerDraft } from "./composer-draft.svelte";
   import type { ComposerFleet } from "./composer-fleet";
   import { stand } from "./composer-presence.svelte";
-  import { connectWords } from "./connect-ask";
   import { GrownShape, layoutScale, measureShape } from "./grown";
   import { sentByReader } from "./recall";
   import { opensTurn } from "./rows";
@@ -2784,15 +2784,25 @@
       : null
   );
   /**
-   * The parked ask can fold to its bar: a question, or a connect ask
-   * (connect-ask.ts, drawn only by its states files until the hub raises
-   * one).
+   * The parked ask can fold to its bar: a question, or a connect ask (its
+   * sign-in waits on the person in another tab, as a question waits on
+   * them).
    */
   const askParks = $derived(!!(askQuestions || ask?.request.connectAsk));
   /** The parked ask is one the reader minimized here. */
   const minimized = $derived(
     !!(ask && askParks && minimizedAsks.has(ask.request.requestId))
   );
+  /** What a minimized connect ask's bar says: its wait while the provider's page is open, else who asks for what. */
+  const connectBar = $derived.by(() => {
+    const connect = ask?.request.connectAsk;
+    if (!(ask && connect && fleet)) {
+      return null;
+    }
+    return fleet.connectSignIns.of(ask.request.requestId).stage === "waiting"
+      ? askWords.signingIn(connect.server)
+      : askWords.connectBar(ask.asker, connect.server);
+  });
   /** The ask the composer grows into: the parked one, unless it is minimized. */
   const grownAsk = $derived(minimized ? null : ask);
   /** The minimized question's bar. */
@@ -2967,6 +2977,23 @@
 
   /** Answered, dismissed or withdrawn: back into the pill. */
   async function foldAsk(turn: number): Promise<void> {
+    // A connect ask whose sign-in landed (the fleet read its server signed
+    // in, which the hub says before it settles the ask) holds a beat in the
+    // card, connected and as whom, before it folds; minimized, it is still
+    // parked and folds at once.
+    const connected =
+      !minimized && drawnAsk?.request.connectAsk
+        ? drawnAsk.request.requestId
+        : null;
+    if (connected && fleet?.connectSignIns.of(connected).stage === "done") {
+      await new Promise((done) => setTimeout(done, dur("--dur-hold")));
+      if (turn !== askTurn) {
+        return;
+      }
+    }
+    if (connected) {
+      fleet?.connectSignIns.forget(connected);
+    }
     askShown = false;
     askRaised = false;
     const shape = askShape;
@@ -3344,7 +3371,7 @@
         <button
           data-slot="asked-chip"
           aria-label={connect
-            ? connectWords.showAsk(ask.asker, connect.service)
+            ? askWords.showConnectAsk(ask.asker, connect.server)
             : `Show the question from ${ask.asker}: ${first?.question ?? ""}`}
           class={chipVariants({
             variant: "tray",
@@ -3365,9 +3392,7 @@
           </span>
           <span
             class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
-            >{connect
-              ? connectWords.bar(ask.asker, connect.service)
-              : (first?.question ?? first?.header)}</span
+            >{connectBar ?? first?.question ?? first?.header}</span
           >
           {#if ask.more > 0}
             <span data-slot="num" class="num flex-none font-normal"

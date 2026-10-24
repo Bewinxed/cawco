@@ -24,12 +24,14 @@ export type FleetWatchSignal = (typeof FLEET_WATCH_SIGNALS)[number];
  * The CawCo tools whose job is to wait until something happens, so the same
  * call made again is the wait going on, never a loop: `wait_item` (a
  * declared wait on a command the session started, which the hub ends by
- * waking it) and `browser_ask` (waits for the person to hand the browser
- * back). By the tool's own name, its harness's prefix off.
+ * waking it), `browser_ask` (waits for the person to hand the browser
+ * back) and `connect_ask` (waits for the person to sign in). By the tool's
+ * own name, its harness's prefix off.
  */
 export const FLEET_WATCH_WAITS: ReadonlySet<string> = new Set([
   "wait_item",
   "browser_ask",
+  "connect_ask",
 ]);
 
 /**

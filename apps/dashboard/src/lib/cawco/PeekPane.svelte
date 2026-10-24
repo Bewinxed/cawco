@@ -478,9 +478,10 @@
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
-      {#if question}
+      {#if question || request.connectAsk}
         <!-- A question wants a real choice, which is made on its own card
-             in the session — never guessed at from out here. -->
+             in the session — never guessed at from out here; a connect ask
+             is answered by signing in, on its card there. -->
         <div class="flex items-center justify-end">
           <Button href={target.href} size="sm" variant="secondary"
             >Answer</Button

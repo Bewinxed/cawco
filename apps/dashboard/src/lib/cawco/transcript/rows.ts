@@ -8,6 +8,8 @@
 
 import type { AccountMove } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import { connectAnswerOf, isConnectAskTool } from "@cawco/core/connect-ask";
+import type { ConnectAnswer } from "@cawco/core/frames";
 import { CAWCO_NOTICE } from "@cawco/core/harness";
 import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
 import type { ToolGlance } from "@cawco/core/transcript-types";
@@ -37,6 +39,8 @@ export type Row =
     }
   | { kind: "tools"; key: string; messages: Message[] }
   | { kind: "question"; key: string; message: Message }
+  /** A `connect_ask` call once answered: its record line (ConnectRow). */
+  | { kind: "connect"; key: string; message: Message; answer: ConnectAnswer }
   | { kind: "subagent"; key: string; branch: SubagentState; spawn: Message }
   /** A `delegate` / `start_session` call: the fleet session it spawned, as a fold. */
   | { kind: "delegate"; key: string; message: Message }
@@ -213,6 +217,7 @@ function voiceOf(row: Row): Voice {
       return "note";
     // tools, livetool, question, subagent, delegate, thinking, stream, and
     // a harness task note: all of them the agent's run.
+    case "connect":
     case "delegate":
     case "harness":
     case "livetool":
@@ -410,6 +415,22 @@ const isToolMsg = (m: Message): boolean =>
 /** A question the agent asked, rendered as its own card rather than a tool row. */
 const isQuestionMsg = (m: Message): boolean =>
   isToolMsg(m) && m.metadata?.toolName === ASK_USER_QUESTION;
+
+/**
+ * A connect ask's call, answered: what its result says, read back (core
+ * connect-ask.ts). A call refused or still waiting is no record, and stays
+ * a tool row.
+ */
+const connectRecordOf = (m: Message): ConnectAnswer | null => {
+  if (!(isToolMsg(m) && isConnectAskTool(m.metadata?.toolName))) {
+    return null;
+  }
+  const server = m.metadata?.toolInput?.server;
+  const result = m.metadata?.toolResult;
+  return typeof server === "string" && typeof result === "string"
+    ? connectAnswerOf(server.trim(), result)
+    : null;
+};
 
 /**
  * A hand-off that spawned a session of its own. A plain `handoff` addresses a
@@ -731,6 +752,10 @@ function ownRow(
   if (isQuestionMsg(m)) {
     return { kind: "question", key: `q:${keyOf(m, i)}`, message: m };
   }
+  const answer = connectRecordOf(m);
+  if (answer) {
+    return { kind: "connect", key: `c:${keyOf(m, i)}`, message: m, answer };
+  }
   if (isDelegateMsg(m)) {
     return { kind: "delegate", key: `d:${keyOf(m, i)}`, message: m };
   }
@@ -794,6 +819,7 @@ function foldRange(
         run.length < callsPerRow &&
         isToolMsg(messages[i]) &&
         !isQuestionMsg(messages[i]) &&
+        !connectRecordOf(messages[i]) &&
         !isDelegateMsg(messages[i]) &&
         !branchOf(messages[i], subagents)
       ) {

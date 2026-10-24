@@ -447,9 +447,73 @@ export interface BrowserAskFrame {
   reason: string;
 }
 
+/** The tool a connect ask parks under (hub connect-asks.ts). */
+export const CONNECT_ASK_TOOL = "mcp__cawco__connect_ask";
+
+/**
+ * The access a sign-in may ask of its provider: what its scopes let an agent
+ * do there. `read` is the server's read scopes alone; `write`, every scope it
+ * names.
+ */
+export type ConnectAccess = "read" | "write";
+
+/** One access a connect ask offers, and the provider's scopes it asks for. */
+export interface ConnectAccessSet {
+  access: ConnectAccess;
+  scopes: string[];
+}
+
+/**
+ * A connect ask: a session asks the person to sign the hub in to one of the
+ * fleet's MCP servers that signs in with OAuth (Configure › MCP), so the
+ * session gets its tools. It parks as a `permission_request` for
+ * {@link CONNECT_ASK_TOOL} carrying this beside the tool's input. Connect
+ * starts the hub's sign-in (`POST /api/fleet/mcp/:name/sign-in` with its
+ * `requestId` and `access`) in a tab of its own; the hub keeps the
+ * credential, and its sign-in landing answers the call. Not now declines it
+ * with the person's words.
+ *
+ * The accounts the hub keeps for a server would stand beside `offers` as a
+ * list to pick from; the hub keeps one sign-in per server today.
+ */
+export interface ConnectAskFrame {
+  /**
+   * Asked again: the server's sign-in ended (`auth.ended`), and the access
+   * picked then is held (`held`), not offered.
+   */
+  again: boolean;
+  /** The access the last sign-in was made with: a reconnect's, kept. */
+  held: ConnectAccess | null;
+  /**
+   * The access offered: two (`read`, then `write`) are a choice; one is the
+   * scopes it asks for, said; none, a server that names no scopes.
+   */
+  offers: ConnectAccessSet[];
+  /** One sentence: why the session needs it. */
+  reason: string;
+  /** The fleet MCP server, as Configure › MCP names it. */
+  server: string;
+  /** The provider's sign-in address (its authorization endpoint), shown whole before anything opens. */
+  url: string;
+}
+
+/** What a connect ask's call is answered with. */
+export type ConnectAnswer =
+  | {
+      outcome: "connected";
+      server: string;
+      /** As whom the provider signed the hub in, when it said. */
+      as: string | null;
+      /** The access the sign-in was made with, when it was known. */
+      access: ConnectAccess | null;
+    }
+  | { outcome: "declined"; server: string; words: string };
+
 export interface PermissionRequestFrame {
   /** A browser ask's browser, reason and origin; absent on every other ask. */
   browserAsk?: BrowserAskFrame;
+  /** A connect ask's server, reason, address and access; absent on every other ask. */
+  connectAsk?: ConnectAskFrame;
   harness: HarnessKind;
   input: Record<string, unknown>;
   instanceId: string;

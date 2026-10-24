@@ -69,6 +69,12 @@ const CORE = ["handoff", "send_to_user", "set_title", "open_items"] as const;
  */
 const BROWSER = ["browser_ask"] as const;
 
+/**
+ * Asking the person to sign in to one of the fleet's MCP servers
+ * (connect-asks.ts): every role that may need a service's tools.
+ */
+const CONNECT = ["connect_ask"] as const;
+
 /** The task tools every role but the worker's and the lead's is limited to. */
 const TASK_READ = ["task_read", "todo_write", "task_comment"] as const;
 
@@ -178,6 +184,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   delegate: new Set([
     ...CORE,
     ...BROWSER,
+    ...CONNECT,
     ...DELEGATE_SESSION,
     ...TASK_READ,
     // An attempt at a task hands in its result (task-tools.ts).
@@ -197,6 +204,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   lead: new Set([
     ...CORE,
     ...BROWSER,
+    ...CONNECT,
     ...TASK_READ,
     ...TASK_WRITE,
     ...CAW_TOOLS,
@@ -223,6 +231,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   "web-facing": new Set([
     ...CORE,
     ...BROWSER,
+    ...CONNECT,
     ...TASK_READ,
     "finish_item",
     "wait_item",

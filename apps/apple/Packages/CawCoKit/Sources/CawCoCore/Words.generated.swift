@@ -868,6 +868,109 @@ public enum Words {
 
         public static let stillWaiting = "The agent is still waiting; try Take over again."
 
+        /// A connect ask (hub connect-asks.ts): the card's title, as a screen reader names it, first asked and asked again once its sign-in ended.
+        public static func connectAskFrom(who: String) -> String {
+            "Connect ask from \(who)"
+        }
+
+        public static func reconnectAskFrom(who: String) -> String {
+            "Reconnect ask from \(who)"
+        }
+
+        /// A connect ask, as Needs you names its kind.
+        public static let connectAsk = "Connect ask"
+
+        /// Its yes, first asked and asked again, and its no, and while each goes.
+        public static let connect = "Connect"
+
+        public static let reconnect = "Reconnect"
+
+        public static let notNow = "Not now"
+
+        public static let declining = "Declining…"
+
+        public static func signingIn(server: String) -> String {
+            "Signing in to \(server)…"
+        }
+
+        /// The access it offers as a choice, read-only first.
+        public static let readOnly = "Read-only"
+
+        public static let readWrite = "Read & write"
+
+        /// A reconnect's access, held from the last sign-in.
+        public static func asBefore(access: String) -> String {
+            "\(access), as before."
+        }
+
+        /// What Connect reaches, and for how long.
+        public static func connectReach(server: String) -> String {
+            "The hub keeps the sign-in for the fleet: every session with \(server) gets it until you remove it on the MCP page. No agent sees a password."
+        }
+
+        /// Over the pair while the provider's page is open.
+        public static func connectWaiting(server: String) -> String {
+            "Finish in the \(server) tab. This card waits for it."
+        }
+
+        /// The beat in the card once the hub has signed in, before it folds.
+        public static func connectedAs(who: String) -> String {
+            "Connected as \(who)"
+        }
+
+        public static let connected = "Connected"
+
+        /// Why a sign-in did not come back, over Connect.
+        public static func connectTabClosed(server: String) -> String {
+            "The \(server) tab closed before it finished."
+        }
+
+        public static func connectRefused(server: String) -> String {
+            "Couldn't start the \(server) sign-in. Try again starts it again; Show details has what the hub said."
+        }
+
+        public static func connectPageExpired(server: String) -> String {
+            "\(server)'s sign-in page expired before it finished."
+        }
+
+        /// Under the pair while the session's machine is offline.
+        public static let connectOffline = "Machine offline — can't connect yet."
+
+        /// The minimized ask's bar, and its name.
+        public static func connectBar(who: String, server: String) -> String {
+            "\(who) asks to connect \(server)"
+        }
+
+        public static func showConnectAsk(who: String, server: String) -> String {
+            "Show the connect ask from \(who): \(server)"
+        }
+
+        public static let minimizeConnectAsk = "Minimize connect ask"
+
+        /// The line the transcript keeps once it settled, in the tool row's form: connected, as whom and with what access; not connected, with the person's words; and a kept sign-in that later lapsed.
+        public static func recordConnected(server: String) -> String {
+            "Connected \(server)"
+        }
+
+        public static func recordConnectedAs(server: String, who: String) -> String {
+            "Connected \(server) as \(who)"
+        }
+
+        public static let recordReadOnly = "read-only"
+
+        public static let recordReadWrite = "read and write"
+
+        public static func recordNotConnected(server: String) -> String {
+            "\(server) not connected"
+        }
+
+        public static let recordExpired = "sign-in expired"
+
+        /// The record's tail, the server's name, opens the MCP page.
+        public static func recordOnMcpPage(server: String) -> String {
+            "\(server) on the MCP page"
+        }
+
         /// A question's own answer field.
         public static let yourAnswer = "Your answer…"
 
@@ -2793,6 +2896,9 @@ public enum Words {
         public static let signedIn = "Signed in for the fleet"
 
         public static let signInClosed = "The sign-in tab closed before it finished."
+
+        /// The hub refuses to start a sign-in to a server switched off.
+        public static let enableBeforeSignIn = "Enable this server before signing in."
 
         /// The machines card's line for a server waiting on the fleet's sign-in, once however many machines report it.
         public static func needsSignIn(name: String) -> String {

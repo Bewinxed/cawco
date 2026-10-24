@@ -488,10 +488,13 @@ class FleetMcp {
     changes: readonly FleetMcpChange[],
     door: BrowserDoor | undefined
   ): Promise<{ servers: { name: string; kind: string; status: string }[] }> {
+    // A sign-in or sign-out at the hub, and a server switched back on, are
+    // dialled anew: pi holds a server switched off on its config as it was,
+    // and the hub folds a sign-in that lands with the switch into
+    // `enabled` (hub fleet-mcp-changes.ts `merged`), so a held registration
+    // that met the sign-in's absence never hears of it otherwise.
     const again = new Set(
-      changes
-        .filter(({ kind }) => kind === "signed-in" || kind === "signed-out")
-        .map(({ name }) => name)
+      changes.filter(({ kind }) => AGAIN.has(kind)).map(({ name }) => name)
     );
     const { servers, skipped } = await this.read(door);
     const done = this.#apply(servers, again);
@@ -507,6 +510,13 @@ class FleetMcp {
     };
   }
 }
+
+/** The changes a held server is dialled anew for ({@link FleetMcp.take}). */
+const AGAIN: ReadonlySet<FleetMcpChange["kind"]> = new Set([
+  "signed-in",
+  "signed-out",
+  "enabled",
+]);
 
 /** What CawCo's fleet hooks put in a pi session's conversation, by this custom type. */
 const FLEET_HOOK_MESSAGE = "cawco-fleet-hook";

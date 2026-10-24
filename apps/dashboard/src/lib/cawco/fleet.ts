@@ -27,7 +27,7 @@ import {
   type MemoryScope,
   parseAgentFrontMatter,
 } from "@cawco/core/fleet";
-import type { FleetFetchFrame } from "@cawco/core/frames";
+import type { ConnectAccess, FleetFetchFrame } from "@cawco/core/frames";
 import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
@@ -389,9 +389,15 @@ export const removeMcpServer = (name: string): Promise<Deleted> =>
  *
  * The tab is opened in the press itself (before anything is awaited), so a
  * pop-up blocker lets it through; a refused start closes it again. Resolves
- * with the tab, which the caller watches for closing before it finished.
+ * with the tab, which the caller watches for closing before it finished,
+ * and when the provider's page stops taking its answer. `access` is a
+ * connect ask's pick of what to ask the provider for (core `ConnectAccess`);
+ * none asks for what the last sign-in did.
  */
-export const signInToMcp = async (name: string): Promise<Window> => {
+export const signInToMcp = async (
+  name: string,
+  access?: ConnectAccess
+): Promise<{ tab: Window; expiresAt: number }> => {
   const tab = window.open("", "_blank");
   if (!tab) {
     throw new Error(
@@ -400,10 +406,20 @@ export const signInToMcp = async (name: string): Promise<Window> => {
   }
   const { origin } = window.location;
   let authorizationUrl: string;
+  let expiresAt: number;
   try {
-    ({ authorizationUrl } = await send<{ authorizationUrl: string }>(
+    ({ authorizationUrl, expiresAt } = await send<{
+      authorizationUrl: string;
+      expiresAt: number;
+    }>(
       `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
-      { method: "POST" },
+      access
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ access }),
+          }
+        : { method: "POST" },
       `start sign-in to ${name}`
     ));
   } catch (error) {
@@ -416,7 +432,7 @@ export const signInToMcp = async (name: string): Promise<Window> => {
     .replaceAll("/", "_")
     .replaceAll("=", "");
   tab.location.assign(`${CAWCO_OAUTH_URL}/start#${hop}`);
-  return tab;
+  return { tab, expiresAt };
 };
 
 /**

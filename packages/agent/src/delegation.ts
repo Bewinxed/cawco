@@ -6,6 +6,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { FLEET_WATCH_WAITS } from "@cawco/core/fleet-watch";
 import { hubAnswer } from "./hub-away";
 
 export const MCP_SERVER_NAME = "cawco";
@@ -127,11 +128,14 @@ export async function callDelegationTool(
     }
     return { content: result.content, details: {} };
   };
-  // Workspace creation, continuation and checks may take minutes without a response byte.
+  // Workspace creation, continuation and checks may take minutes without a
+  // response byte; a tool whose job is to wait (on the person: a browser or
+  // connect ask; on a command: wait_item) answers when that ends.
   if (
     name === "continue_session" ||
     name === "finish_item" ||
-    name === "delegate"
+    name === "delegate" ||
+    FLEET_WATCH_WAITS.has(name)
   ) {
     return take(await fetch(url, { ...init, timeout: false }));
   }

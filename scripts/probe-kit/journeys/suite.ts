@@ -149,7 +149,18 @@ export interface StepOptions {
    * connection to … failed”) is what that is, not the page's error.
    */
   hubDown?: boolean;
+  /**
+   * The step has the hub refuse a request on purpose (a 4xx the page says
+   * in its own words): the browser's own line for that answer ("Failed to
+   * load resource: … status of 400") is the refusal arriving, not the
+   * page's error.
+   */
+  refused?: boolean;
 }
+
+/** The browser's own line for a request the hub answered with a refusal. */
+const REFUSED_LINE =
+  /Failed to load resource: the server responded with a status of 4\d\d/;
 
 /** One leg: a journey on one engine, at one size, with one data set. */
 export interface Leg {
@@ -433,12 +444,16 @@ async function runLeg(
   });
   const said: string[] = [];
   let hubDown = false;
+  let refusing = false;
   const heard = (message: ConsoleMessage) => {
     if (message.type() !== "error") {
       return;
     }
     const text = message.text();
-    if (hubDown && NETWORK_LINE.test(text)) {
+    if (
+      (hubDown && NETWORK_LINE.test(text)) ||
+      (refusing && REFUSED_LINE.test(text))
+    ) {
       return;
     }
     said.push(text.slice(0, 300));
@@ -453,6 +468,7 @@ async function runLeg(
     number += 1;
     current = `step ${number} “${does}”`;
     hubDown = options.hubDown === true;
+    refusing = options.refused === true;
     try {
       await act();
       await outcome();
@@ -506,6 +522,7 @@ async function runLeg(
     } finally {
       said.length = 0;
       hubDown = false;
+      refusing = false;
     }
   };
   const leg: Leg = {
@@ -550,7 +567,7 @@ async function runLeg(
   }
 }
 
-/** The run's arguments: journeys named, `--engine` and `--size` narrowing. */
+/** The run's arguments: journeys named, `--engine` and `--size` narrowing, each to one or a comma's list. */
 export function parse(rest: string[]): {
   names: string[];
   narrow: Narrow;
@@ -560,12 +577,14 @@ export function parse(rest: string[]): {
     if (at === -1) {
       return [...all];
     }
-    const value = rest[at + 1] as T | undefined;
-    if (!(value && all.includes(value))) {
-      console.error(`${flag} takes one of ${all.join(", ")}`);
+    const values = (rest[at + 1] ?? "").split(",") as T[];
+    if (!values.every((value) => all.includes(value))) {
+      console.error(
+        `${flag} takes one or more of ${all.join(", ")}, by commas`
+      );
       process.exit(2);
     }
-    return [value];
+    return values;
   };
   const flags = new Set(["--engine", "--size"]);
   const names = rest.filter(

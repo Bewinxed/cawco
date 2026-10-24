@@ -1664,6 +1664,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ConnectAccess`.
+    public enum ConnectAccess: OpenEnum {
+        case read
+        case write
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "read": self = .read
+            case "write": self = .write
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .read: "read"
+            case .write: "write"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.read, .write]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ConnectionAuth`.
     public enum ConnectionAuth: OpenEnum {
         case app

@@ -21574,6 +21574,25 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "access": {
+                    "type": "string",
+                    "enum": [
+                      "read",
+                      "write"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
         "operationId": "postApiFleetMcpByNameSignIn",
         "responses": {
           "200": {
@@ -21592,6 +21611,16 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFleetMcpByNameSignIn 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -51479,6 +51508,10 @@
                   "at",
                   "why"
                 ]
+              },
+              "as": {
+                "description": "As whom the provider signed the hub in (its ID token's email or name),\nwhile signed in and when it said. Never sent to a machine.",
+                "type": "string"
               }
             },
             "required": [
@@ -51880,10 +51913,15 @@
         "properties": {
           "authorizationUrl": {
             "type": "string"
+          },
+          "expiresAt": {
+            "description": "When the provider's page stops taking this sign-in's answer, epoch ms.",
+            "type": "number"
           }
         },
         "required": [
-          "authorizationUrl"
+          "authorizationUrl",
+          "expiresAt"
         ]
       },
       "RuleStats": {
@@ -57973,6 +58011,10 @@
             "$ref": "#/components/schemas/BrowserAskFrame",
             "description": "A browser ask's browser, reason and origin; absent on every other ask."
           },
+          "connectAsk": {
+            "$ref": "#/components/schemas/ConnectAskFrame",
+            "description": "A connect ask's server, reason, address and access; absent on every other ask."
+          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -58069,6 +58111,73 @@
           "machineId",
           "origin",
           "reason"
+        ]
+      },
+      "ConnectAskFrame": {
+        "description": "A connect ask: a session asks the person to sign the hub in to one of the\nfleet's MCP servers that signs in with OAuth (Configure › MCP), so the\nsession gets its tools. It parks as a `permission_request` for\n{@link CONNECT_ASK_TOOL} carrying this beside the tool's input. Connect\nstarts the hub's sign-in (`POST /api/fleet/mcp/:name/sign-in` with its\n`requestId` and `access`) in a tab of its own; the hub keeps the\ncredential, and its sign-in landing answers the call. Not now declines it\nwith the person's words.\n\nThe accounts the hub keeps for a server would stand beside `offers` as a\nlist to pick from; the hub keeps one sign-in per server today.",
+        "type": "object",
+        "properties": {
+          "again": {
+            "description": "Asked again: the server's sign-in ended (`auth.ended`), and the access\npicked then is held (`held`), not offered.",
+            "type": "boolean"
+          },
+          "held": {
+            "$ref": "#/components/schemas/ConnectAccess",
+            "description": "The access the last sign-in was made with: a reconnect's, kept."
+          },
+          "offers": {
+            "description": "The access offered: two (`read`, then `write`) are a choice; one is the\nscopes it asks for, said; none, a server that names no scopes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectAccessSet"
+            }
+          },
+          "reason": {
+            "description": "One sentence: why the session needs it.",
+            "type": "string"
+          },
+          "server": {
+            "description": "The fleet MCP server, as Configure › MCP names it.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The provider's sign-in address (its authorization endpoint), shown whole before anything opens.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "again",
+          "offers",
+          "reason",
+          "server",
+          "url"
+        ]
+      },
+      "ConnectAccessSet": {
+        "description": "One access a connect ask offers, and the provider's scopes it asks for.",
+        "type": "object",
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/ConnectAccess"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "access",
+          "scopes"
+        ]
+      },
+      "ConnectAccess": {
+        "description": "The access a sign-in may ask of its provider: what its scopes let an agent\ndo there. `read` is the server's read scopes alone; `write`, every scope it\nnames.",
+        "type": "string",
+        "enum": [
+          "read",
+          "write"
         ]
       },
       "PermissionPresentation": {
