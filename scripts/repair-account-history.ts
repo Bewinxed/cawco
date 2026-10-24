@@ -24,11 +24,14 @@
  *
  * It refuses before writing when one instant holds rows of both: one event
  * reads one identity. One transaction; it prints the series it found and
- * rows per account before and after, waits on a busy hub, and a second run
- * changes nothing.
+ * rows per account before and after, and a second run changes nothing. A run
+ * that writes refuses while the hub runs (only the hub writes its database
+ * then): stop the hub, run it, start the hub. `--dry-run` reads beside it.
  */
 import { Database } from "bun:sqlite";
+import { rmSync } from "node:fs";
 import { parseArgs } from "node:util";
+import { DatabaseHeld, lockDatabase } from "../packages/core/src/db-lock";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -51,8 +54,6 @@ const accountId = values.account;
 const identity = values.identity.toLowerCase();
 const dryRun = values["dry-run"];
 
-/** How long a write waits on the running hub's own. */
-const BUSY_TIMEOUT_MS = 30_000;
 const MINUTE_MS = 60_000;
 
 interface HistoryRow {
@@ -71,8 +72,25 @@ const fail = (why: string): never => {
   process.exit(1);
 };
 
-const db = new Database(dbPath);
-db.run(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
+// A dry run only reads, which WAL lets it do beside a running hub. A run that
+// writes holds the hub's own lock (core db-lock.ts) while it does: while the
+// hub runs, only the hub writes its database (hub db/wal.ts), so this
+// refuses then.
+if (!dryRun) {
+  try {
+    await lockDatabase(dbPath);
+    // Let go however this run ends, a refusal's exit included.
+    process.on("exit", () => rmSync(`${dbPath}.lock`, { force: true }));
+  } catch (error) {
+    if (error instanceof DatabaseHeld) {
+      fail(
+        `${dbPath} is held by the hub in process ${error.pid}: while the hub runs, only the hub writes its database. Stop the hub, run this again, then start it.`
+      );
+    }
+    throw error;
+  }
+}
+const db = new Database(dbPath, dryRun ? { readonly: true } : {});
 
 const accounts = db.query("SELECT id, email FROM accounts").all() as {
   email: string | null;

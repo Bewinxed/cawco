@@ -104,6 +104,7 @@ import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
+import { type DelegateTypesShape, makeDelegateTypes } from "../delegate-types";
 import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
@@ -795,6 +796,8 @@ export interface DbShape {
   ) => number;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
+  /** The fleet's delegate types (delegate-types.ts), on this connection. */
+  readonly delegateTypes: DelegateTypesShape;
   readonly deleteContinuation: (id: string) => void;
   readonly deleteFleetMemoryDoc: (path: string) => void;
   /**
@@ -2907,8 +2910,8 @@ const make = async (path: string): Promise<DbShape> => {
   const db = drizzle(path);
   // EVERY WRITE WAITS ITS TURN. WAL lets reads run beside a write, but
   // "there can only be one writer at a time" (sqlite.org/wal.html 2.2):
-  // another connection's write to this file (delegate-types.ts's, the CLI's
-  // `cawco pairing off`, a probe's writes, the sqlite3 shell) holds the write
+  // another connection's write to this file (the CLI's `cawco pairing off`,
+  // a probe's writes to a scratch hub, the sqlite3 shell) holds the write
   // lock for a statement's or a transaction's length, and the hub's write
   // waits it out rather than failing with "database is locked".
   // busy_timeout: a write that opens the file's lock waits up to 5 s for it
@@ -3131,6 +3134,9 @@ const make = async (path: string): Promise<DbShape> => {
   const takeChanges = db.$client.prepare<{ id: string }, []>(
     "DELETE FROM instance_changes RETURNING id"
   );
+  // The fleet's delegate types: their own table, on this connection, the
+  // hub's one writer to its file.
+  const delegateTypes = makeDelegateTypes(db.$client);
 
   /**
    * The hash a row of files is stored under: always its files' own
@@ -4405,6 +4411,7 @@ const make = async (path: string): Promise<DbShape> => {
 
   const store: DbShape = {
     close: () => closeWal(db.$client),
+    delegateTypes,
     machinePathOn: (machineId, raw) => {
       const agent = db
         .select({ home: agents.home, hostname: agents.hostname })

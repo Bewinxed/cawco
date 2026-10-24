@@ -2,19 +2,16 @@
  * Delegate types (`@cawco/core`'s `DelegateType`): the fleet-wide presets a
  * `delegate` call's `type` param resolves against.
  *
- * Kept out of `db/schema.ts` and `db/index.ts` deliberately — both files are
- * mid-edit in another session's working tree right now, and this table's
- * shape is small and self-contained enough not to need Drizzle's migration
- * machinery. It opens its own connection to the same sqlite file (bun:sqlite
- * allows concurrent connections; each of the hub's own tables already does
- * exactly this for its own reads and writes) and owns its schema with a
- * plain `CREATE TABLE IF NOT EXISTS`.
+ * Its table is outside Drizzle's migrations: it owns its schema with a plain
+ * `CREATE TABLE IF NOT EXISTS` and grows its columns by hand. It reads and
+ * writes through the hub's one connection (db/index.ts `make` hands it in):
+ * while the hub runs, the hub's database has one writer, from one thread
+ * (db/wal.ts).
  */
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import type { DelegateType } from "@cawco/core";
 import { DEFAULT_DELEGATE_TYPES, delegateTypeProblem } from "@cawco/core";
 import { Elysia, t } from "elysia";
-import { DB_PATH } from "./config";
 import { undoable } from "./db/trash";
 
 interface DelegateTypeRow {
@@ -54,17 +51,11 @@ export interface DelegateTypesShape {
 }
 
 /**
- * Opens (or creates) the table, seeds the defaults on an empty table, and
- * returns the CRUD surface. Called once at hub start; the returned handle is
- * cheap to hold for the process lifetime, same as the rest of `db/index.ts`.
+ * Makes (or grows) the table on the hub's connection, seeds the defaults on
+ * a table never seeded, and returns the CRUD surface. Called once, as the
+ * hub opens its database (db/index.ts `make`).
  */
-export const makeDelegateTypes = (
-  path: string = DB_PATH
-): DelegateTypesShape => {
-  const sqlite = new Database(path);
-  // As the hub's own connection waits (db/index.ts `make`): another
-  // process's write lock is waited out, not failed on.
-  sqlite.run("PRAGMA busy_timeout = 5000");
+export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS delegate_types (
       name TEXT PRIMARY KEY,

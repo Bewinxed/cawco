@@ -628,7 +628,7 @@ import {
   decidedTasks,
   decisionRoutes,
 } from "./decisions";
-import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
+import { delegateTypesRoutes } from "./delegate-types";
 import type {
   DelegateResult,
   SendDelivery,
@@ -22001,10 +22001,10 @@ export const createServer = (
     }
   };
 
-  // Delegate types (fleet-wide `delegate` presets): a standalone table and
-  // route group, mounted rather than folded into the routes below — see
-  // delegate-types.ts for why it keeps its own connection.
-  const delegateTypes = makeDelegateTypes();
+  // Delegate types (fleet-wide `delegate` presets): a standalone table on the
+  // hub's connection (delegate-types.ts) and a route group, mounted rather
+  // than folded into the routes below.
+  const { delegateTypes } = db;
   // What each ask says on every surface, read as it parks (ask-presentation.ts).
   pending.presentWith(createAskPresenter(db, delegateTypes));
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.

@@ -53,8 +53,17 @@ const readHolder = async (file: string): Promise<Holder> => {
 const same = (a: Holder, b: Holder): boolean =>
   a.pid === b.pid && a.procStart === b.procStart && a.bootId === b.bootId;
 
-/** Thrown when another live hub holds the database. */
-export class DatabaseHeld extends Error {}
+/**
+ * Thrown when another live process holds the database: `pid` names it, for a
+ * caller that says the refusal in its own words.
+ */
+export class DatabaseHeld extends Error {
+  readonly pid: number | undefined;
+  constructor(message: string, pid: number | undefined) {
+    super(message);
+    this.pid = pid;
+  }
+}
 
 /**
  * Takes `<path>.lock` for this process, or throws {@link DatabaseHeld} naming
@@ -84,7 +93,8 @@ export const lockDatabase = async (path: string): Promise<void> => {
           ? `, started ${new Date(holder.startedAt).toISOString()}`
           : "";
         throw new DatabaseHeld(
-          `${path} is held by the hub in process ${holder.pid}${since} (${lock}), so this hub does not open it: stop that hub, or start this one on another database with CAWCO_DB_PATH (the hub package's dev and start scripts use $XDG_DATA_HOME/cawco-dev/cawco.db).`
+          `${path} is held by the hub in process ${holder.pid}${since} (${lock}), so this hub does not open it: stop that hub, or start this one on another database with CAWCO_DB_PATH (the hub package's dev and start scripts use $XDG_DATA_HOME/cawco-dev/cawco.db).`,
+          holder.pid
         );
       }
       // Stale: moved aside under a name of this process's own, then checked
