@@ -142,6 +142,8 @@
     NEXT_COMMENT,
     type RailSort,
   } from "./comment-rows";
+  import { DesignGraph } from "./graph/design-graph.svelte";
+  import GraphPanel from "./graph/GraphPanel.svelte";
   import { loadedPanes } from "./loaded.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";
@@ -161,6 +163,7 @@
     previewCompose,
     previewError,
     previewErrorOf,
+    previewGraph,
     previewKey,
     previewPickPlace,
     previewPinAt,
@@ -2583,6 +2586,14 @@
           failure = null;
         }
         break;
+      case "cawco:graph": {
+        // A component canvas's page said its sections and stories: the design graph's.
+        const said = previewGraph(message.graph);
+        if (said && designGraph) {
+          designGraph.heard(said);
+        }
+        break;
+      }
       case "cawco:sheet": {
         // A sheet's page said its stories and props: the inspector's controls.
         const said = previewSheet(message.sheet);
@@ -2766,6 +2777,21 @@
     const held = canvasView;
     if (connected && held) {
       untrack(() => held.send(held.chosen));
+    }
+  });
+  /**
+   * A component canvas's design graph (Projects spec §5.10, "The design
+   * graph"): built once per session and kind, as the view is; the page says
+   * what it holds (`cawco:graph`) and the graph asks it what to stand.
+   */
+  const designGraph = $derived.by(() => {
+    const session = instanceId;
+    return isSheet ? untrack(() => new DesignGraph(session, post)) : null;
+  });
+  $effect(() => {
+    const held = designGraph;
+    if (connected && held) {
+      untrack(() => held.again());
     }
   });
   /** The canvas view's Verify: a design system round on the canvas, its verdict to the session; the hub's sentence says what it did. */
@@ -3466,6 +3492,13 @@
         </p>
       {/if}
     </div>
+    {#if designGraph && !canvasView?.map}
+      <!-- The design graph over the page: a state previewed on a hover, kept on a press; clear of an inspector beside it. -->
+      <GraphPanel
+        end={inspecting && inspectorLayout === "panel"}
+        graph={designGraph}
+      />
+    {/if}
     {#if canvasView?.map && artifact && isSheet}
       <!-- Map mode: the canvas's component among what renders it and what it renders, over the page, which stays loaded under it. -->
       <CanvasMap

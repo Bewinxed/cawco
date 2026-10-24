@@ -323,6 +323,11 @@
   --spacing-c-canvas-skeleton-h: var(--c-canvas-skeleton-h);
   --spacing-c-graph-edge: var(--c-graph-edge);
   --spacing-c-map-node-w: var(--c-map-node-w);
+  --spacing-c-graph-panel-w: var(--c-graph-panel-w);
+  --spacing-c-graph-node-w: var(--c-graph-node-w);
+  --spacing-c-graph-node-min-w: var(--c-graph-node-min-w);
+  --spacing-c-graph-region-band-h: var(--c-graph-region-band-h);
+  --spacing-c-graph-drawer-stop: var(--c-graph-drawer-stop);
   --spacing-c-pin-list-min: var(--c-pin-list-min);
   --spacing-c-pin-list-max: var(--c-pin-list-max);
   --spacing-c-review-words: var(--c-review-words);

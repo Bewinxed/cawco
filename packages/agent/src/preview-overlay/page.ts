@@ -2541,6 +2541,11 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       if (onPage) {
         post("cawco:sheet", { sheet: onPage });
       }
+      // And a component canvas's design graph, said before the pane listened.
+      const graph = (window as { __cawcoGraph?: object }).__cawcoGraph;
+      if (graph) {
+        post("cawco:graph", { graph });
+      }
     },
     "cawco:place": (message) => takeInset(message.inset),
     // A sheet's inspector: a story mounted again with the pane's args (null lets them go), and the story it shows.
@@ -2553,6 +2558,27 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
               message.args && typeof message.args === "object"
                 ? message.args
                 : null,
+          },
+        })
+      );
+    },
+    // The design graph's ask (core design-graph.ts `StageAsk`): the state kept, the one a hover previews, the room the graph leaves.
+    "cawco:stage": (message) => {
+      const kept = stagePoint(message.kept);
+      const room = message.room as { bottom?: unknown; end?: unknown } | null;
+      const length = (value: unknown) =>
+        typeof value === "number" && Number.isFinite(value) && value >= 0
+          ? Math.min(value, STAGE_ROOM_MAX)
+          : 0;
+      if (!kept) {
+        return;
+      }
+      dispatchEvent(
+        new CustomEvent("cawco:stage", {
+          detail: {
+            kept,
+            peek: stagePoint(message.peek),
+            room: { end: length(room?.end), bottom: length(room?.bottom) },
           },
         })
       );
@@ -2783,6 +2809,40 @@ window.addEventListener("cawco:element-press", (event) => {
 window.addEventListener("cawco:sheet", (event) => {
   post("cawco:sheet", { sheet: (event as CustomEvent<object>).detail });
 });
+
+/* A component canvas's design graph: its sections and stories as its page says them on each change (stage-host runtime.ts `sayGraph`). */
+window.addEventListener("cawco:graph", (event) => {
+  post("cawco:graph", { graph: (event as CustomEvent<object>).detail });
+});
+
+/** The most room a pane says its design graph takes from the page, in CSS px. Ours: past any screen. */
+const STAGE_ROOM_MAX = 10_000;
+/** The interactions a stage point may force (core stage.ts `Interaction`). */
+const STAGE_INTERACTIONS = new Set(["rest", "hover", "focus", "pressed"]);
+/** A stage point the pane said, bounded (core design-graph.ts `StagePoint`); null when it is not one. */
+function stagePoint(
+  said: unknown
+): { file: string; interaction: string; story: string } | null {
+  const point = said as
+    | { file?: unknown; interaction?: unknown; story?: unknown }
+    | null
+    | undefined;
+  if (
+    typeof point?.file !== "string" ||
+    typeof point.story !== "string" ||
+    typeof point.interaction !== "string" ||
+    !STAGE_INTERACTIONS.has(point.interaction) ||
+    point.file.length > 1000 ||
+    point.story.length > 200
+  ) {
+    return null;
+  }
+  return {
+    file: point.file,
+    story: point.story,
+    interaction: point.interaction,
+  };
+}
 
 /** What this page reads of one of its elements for a page that frames it from another origin (embeds.ts). */
 function remoteOf(el: Element): Remote {

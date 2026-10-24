@@ -580,6 +580,16 @@ public enum Size {
     public static let cGraphEdge: Double = 1.5
     /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
     public static let cMapNodeW: Double = 264
+    /// The design graph's panel beside a component under review on a desk (Projects spec §5.10, "The design graph"; mockup round 28): two 168px states side by side in a machine's region with its padding, and the panel's own. A pane narrower than twice it holds the graph as a drawer at its foot instead.
+    public static let cGraphPanelW: Double = 448
+    /// A state on the design graph: its name over its variations' chips, two to a region's row in the 448px panel (mockup round 28).
+    public static let cGraphNodeW: Double = 168
+    /// The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor).
+    public static let cGraphNodeMinW: Double = 120
+    /// A machine's header band on the design graph: its name in the label role across the top of its region (mockup round 27, pin 30).
+    public static let cGraphRegionBandH: Double = 24
+    /// The design graph's drawer at its first stop on a phone or a narrow pane: the graph in view, the component above it (mockup round 22).
+    public static let cGraphDrawerStop: Double = 379.8
     /// The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines.
     public static let cPinListShare: Double = 0.3
     /// The Comments panel at its narrowest: a row's text column of 225px beside its disc, where a six-word comment in the body role stands on one line and a 48-word one wraps to its four-line cut.

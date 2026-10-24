@@ -10,7 +10,13 @@ import {
   type ShellShortcut,
   shellShortcutNamed,
 } from "@cawco/core/shell-shortcuts";
+import type {
+  GraphModel,
+  GraphSection,
+  GraphStory,
+} from "@cawco/core/design-graph";
 import {
+  CANVAS_SPEC_LIMITS,
   type ComponentDoc,
   FORMS,
   type Form,
@@ -394,6 +400,73 @@ export function previewSheet(value: unknown): SheetOnPage | null {
   };
 }
 
+/** The interactions a story's CSS may reach past rest (core stage.ts `Interaction`). */
+const GRAPH_INTERACTIONS = new Set(["hover", "focus", "pressed"]);
+
+const graphStoryOf = (value: unknown): GraphStory | null => {
+  const raw = record(value);
+  const name = text(raw?.name, SHEET_BOUNDS.name);
+  if (!(raw && name)) {
+    return null;
+  }
+  return {
+    name,
+    label: text(raw.label, SHEET_BOUNDS.text),
+    from: text(raw.from, SHEET_BOUNDS.name),
+    interactions: list(raw.interactions, 3).filter(
+      (one): one is GraphStory["interactions"][number] =>
+        typeof one === "string" && GRAPH_INTERACTIONS.has(one)
+    ),
+  };
+};
+
+const graphSectionOf = (value: unknown): GraphSection | null => {
+  const raw = record(value);
+  const file = text(raw?.file, SHEET_BOUNDS.text);
+  const name = text(raw?.name, SHEET_BOUNDS.text);
+  if (!(raw && file && name)) {
+    return null;
+  }
+  return {
+    file,
+    name,
+    state:
+      raw.state === "drawn" || raw.state === "failed" ? raw.state : "waiting",
+    stories: list(raw.stories, SHEET_BOUNDS.stories).flatMap(
+      (one) => graphStoryOf(one) ?? []
+    ),
+  };
+};
+
+/** A component canvas's design graph as its page says it (`cawco:graph`, core design-graph.ts `GraphModel`). */
+export function previewGraph(value: unknown): GraphModel | null {
+  const raw = record(value);
+  if (!raw) {
+    return null;
+  }
+  const group = record(raw.group) ?? {};
+  return {
+    sections: list(raw.sections, CANVAS_SPEC_LIMITS.files).flatMap(
+      (one) => graphSectionOf(one) ?? []
+    ),
+    group: Object.fromEntries(
+      Object.entries(group)
+        .slice(0, SHEET_BOUNDS.stories * CANVAS_SPEC_LIMITS.files)
+        .flatMap(([child, parent]) => {
+          const to = text(parent, SHEET_BOUNDS.text);
+          return to ? [[child.slice(0, SHEET_BOUNDS.text), to]] : [];
+        })
+    ),
+    edges: list(raw.edges, CANVAS_SPEC_LIMITS.edges).flatMap((one) => {
+      const edge = record(one);
+      const from = text(edge?.from, SHEET_BOUNDS.text);
+      const to = text(edge?.to, SHEET_BOUNDS.text);
+      const label = text(edge?.label, CANVAS_SPEC_LIMITS.label);
+      return from && to ? [{ from, to, ...(label ? { label } : {}) }] : [];
+    }),
+  };
+}
+
 /** The pane's keys: V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K a step, Enter and Esc. */
 export type PaneKey =
   "v" | "c" | "d" | "C" | "j" | "k" | "/" | "Enter" | "Escape";
@@ -447,6 +520,7 @@ const PAGE_MESSAGES = [
   "cawco:error",
   "cawco:resolved",
   "cawco:sheet",
+  "cawco:graph",
 ] as const;
 
 /** A message the pane answers by its `type`; each field besides is checked by what reads it. */

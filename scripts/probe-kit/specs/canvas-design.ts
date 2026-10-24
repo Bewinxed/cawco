@@ -123,6 +123,10 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import {
+  injectOverlay,
+  overlayResponse,
+} from "../../../packages/core/src/preview-proxy";
 import type {
   CanvasMap,
   CanvasSpec,
@@ -135,7 +139,15 @@ import { previewWords } from "../../../packages/core/src/words/preview";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Kit, open as openPage, ROOT, type Spec, specOut } from "../kit";
+import { type Box, box, inside, overlap } from "../geom";
+import {
+  type Kit,
+  open as openPage,
+  ROOT,
+  readMotion,
+  type Spec,
+  specOut,
+} from "../kit";
 import { shaped } from "../words";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
@@ -169,6 +181,13 @@ const CANVAS: CanvasSpec = {
       target: { cssVar: "--radius-md" },
     },
   ],
+  // The design graph's machines (§5.10): the speaker line's two speakers in one, its second turn in another, a
+  // variation of the agent's; the stat tile's stories in its own, which its tab names.
+  group: {
+    "src/lib/cawco/turn/Who.stories.ts:Agent": "Who speaks",
+    "src/lib/cawco/turn/Who.stories.ts:You": "Who speaks",
+    "src/lib/cawco/turn/Who.stories.ts:Grouped": "A second turn",
+  },
   // Edges a straight route would cross frames on: one skips a row, one crosses a whole sheet.
   edges: [
     {
@@ -1471,13 +1490,19 @@ async function openBench(
   stage: Stage,
   width: number,
   theme: "light" | "dark",
-  query: string
+  query: string,
+  /** Its canvas page served as the hub serves it into a panel, with the overlay (`withOverlay`). */
+  overlaid = false
 ): Promise<Page | null> {
   const page = await kit.page(width < 640 ? "phone" : "desk", {
     theme,
     scale: 2,
   });
+  if (overlaid) {
+    await withOverlay(page, stage, bench);
+  }
   const errors: string[] = [];
+  benchErrors.set(page, errors);
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -1517,6 +1542,34 @@ async function openBench(
   }
   await page.waitForTimeout(4000);
   return page;
+}
+
+/** What each bench page said went wrong, from its first load. */
+const benchErrors = new WeakMap<Page, string[]>();
+
+/**
+ * The canvas page as the hub serves it into a panel: its overlay's tag in
+ * the page (preview-proxy.ts `injectOverlay`) and the overlay answered for
+ * the bench's origin (`overlayResponse`), so the page and the pane speak as
+ * they do live (the design graph's `cawco:graph` and `cawco:stage`).
+ */
+async function withOverlay(page: Page, stage: Stage, bench: string): Promise<void> {
+  const parent = new URL(bench).origin;
+  await page.route(`${stage.base}/__cawco/overlay.js*`, async (route) => {
+    const answer = await overlayResponse([parent], null, null);
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "text/javascript", "cache-control": "no-store" },
+      body: await answer.text(),
+    });
+  });
+  await page.route(
+    (url) => url.origin === stage.base && url.pathname === "/@cawco/canvas",
+    async (route) => {
+      const answer = await route.fetch();
+      await route.fulfill({ response: answer, body: injectOverlay(await answer.text()) });
+    }
+  );
 }
 
 /** N7 with the Plan | Preview switch in the head, as the panel stands beside a conversation with a plan. */
@@ -3655,6 +3708,338 @@ async function sweeps(kit: Kit, bench: string, stage: Stage): Promise<void> {
   }
 }
 
+/* --- The design graph (Projects spec §5.10, "The design graph") ---------------- */
+
+/** The design graph's panel on the bench, read from the engine: its box, its regions, states, edges and words. */
+interface GraphRead {
+  bands: { machine: string; text: string; kept: boolean; bg: string; box: Box }[];
+  /** How many elements in the panel say each machine's name: its band's alone (the owner's "stop adding redundant/useless copy"). */
+  namesSaid: Record<string, number>;
+  edges: { from: string; to: string; lit: boolean; stroke: string }[];
+  between: number;
+  /** The smallest font size any text in the panel is set in, px, and the meta role's. */
+  fonts: { least: number; meta: number; at: string };
+  mode: string | null;
+  nodes: { story: string; machine: string; box: Box; kept: boolean; peek: boolean; bg: string; border: string }[];
+  open: string | null;
+  panel: Box | null;
+  pane: Box | null;
+  regions: { machine: string; box: Box }[];
+  /** Text that spills its own box, or a box standing out of the panel, by name; and the bench's own sideways scroll. */
+  spills: string[];
+  tabs: string[];
+  tokens: { brandSolid: string; brandWash: string; selectedBg: string };
+}
+
+const GRAPH_PANEL = "[data-graph-panel]";
+
+async function readGraph(page: Page): Promise<GraphRead> {
+  return await page.evaluate((selector) => {
+    const boxOf = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const panel = document.querySelector<HTMLElement>(selector);
+    const frame = document.querySelector("[data-bench-pane] iframe[data-ready]");
+    const probe = document.createElement("i");
+    document.body.append(probe);
+    const colour = (token: string) => {
+      probe.style.color = `var(${token})`;
+      return getComputedStyle(probe).color;
+    };
+    const tokens = {
+      brandSolid: colour("--brand-solid"),
+      brandWash: colour("--brand-wash"),
+      selectedBg: colour("--selected-bg"),
+    };
+    probe.style.fontSize = "var(--text-meta)";
+    probe.style.font = "var(--type-meta)";
+    const meta = Number.parseFloat(getComputedStyle(probe).fontSize);
+    probe.remove();
+    const regions = [...(panel?.querySelectorAll<HTMLElement>("[data-machine]") ?? [])];
+    const bands = regions.flatMap((region) => {
+      const band = region.querySelector<HTMLElement>("[data-band]");
+      return band
+        ? [{ machine: region.dataset.machine ?? "", text: band.textContent?.trim() ?? "", kept: region.hasAttribute("data-kept"), bg: getComputedStyle(band).backgroundColor, box: boxOf(band) }]
+        : [];
+    });
+    const namesSaid: Record<string, number> = {};
+    const all = [...(panel?.querySelectorAll<HTMLElement>("*") ?? [])];
+    for (const band of bands) {
+      namesSaid[band.text] = all.filter((el) => [...el.childNodes].some((one) => one.nodeType === 3 && one.textContent?.trim() === band.text)).length;
+    }
+    let least = Number.POSITIVE_INFINITY;
+    let at = "";
+    const spills: string[] = [];
+    const panelBox = panel ? boxOf(panel) : null;
+    for (const el of all) {
+      const own = [...el.childNodes].some((one) => one.nodeType === 3 && one.textContent?.trim());
+      const style = getComputedStyle(el);
+      if (own && style.visibility !== "hidden" && el.getClientRects().length > 0) {
+        const size = Number.parseFloat(style.fontSize);
+        if (size < least) {
+          least = size;
+          at = `${el.tagName.toLowerCase()} "${el.textContent?.trim().slice(0, 30)}"`;
+        }
+        if (el.scrollWidth > el.clientWidth + 1 && style.overflowX === "visible" && el.clientWidth > 0) {
+          spills.push(`${el.tagName.toLowerCase()} "${el.textContent?.trim().slice(0, 30)}" ${el.scrollWidth}>${el.clientWidth}`);
+        }
+      }
+    }
+    // The chrome stands inside the panel; the graph's own content scrolls inside its well.
+    for (const el of panel?.querySelectorAll<HTMLElement>(".toolbar *") ?? []) {
+      const b = boxOf(el);
+      if (panelBox && b.width > 0 && (b.left < panelBox.left - 0.5 || b.top < panelBox.top - 0.5 || b.right > panelBox.right + 0.5 || b.bottom > panelBox.bottom + 0.5) && panel?.dataset.open !== "false") {
+        spills.push(`${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} outside the panel`);
+      }
+    }
+    if (document.documentElement.scrollWidth > innerWidth + 1) {
+      spills.push(`the bench scrolls sideways: ${document.documentElement.scrollWidth} > ${innerWidth}`);
+    }
+    return {
+      bands,
+      namesSaid,
+      edges: [...(panel?.querySelectorAll<SVGPathElement>("path.move") ?? [])].map((one) => ({
+        from: one.dataset.from ?? "",
+        to: one.dataset.to ?? "",
+        lit: one.hasAttribute("data-lit"),
+        stroke: getComputedStyle(one).stroke,
+      })),
+      between: panel?.querySelectorAll("path.between").length ?? 0,
+      fonts: { least, meta, at },
+      mode: panel?.dataset.graphPanel ?? null,
+      nodes: [...(panel?.querySelectorAll<HTMLElement>("[data-node]") ?? [])].map((one) => ({
+        story: one.dataset.node ?? "",
+        machine: one.closest<HTMLElement>("[data-machine]")?.dataset.machine ?? "",
+        box: boxOf(one),
+        kept: one.hasAttribute("data-kept"),
+        peek: one.hasAttribute("data-peek"),
+        bg: getComputedStyle(one).backgroundColor,
+        border: getComputedStyle(one).borderTopColor,
+      })),
+      open: panel?.dataset.open ?? null,
+      panel: panelBox,
+      pane: frame ? boxOf(frame) : null,
+      regions: regions.map((one) => ({ machine: one.dataset.machine ?? "", box: boxOf(one) })),
+      spills,
+      tabs: [...(panel?.querySelectorAll('[role="tab"]') ?? [])].map((one) => one.textContent?.trim() ?? ""),
+      tokens,
+    };
+  }, GRAPH_PANEL);
+}
+
+/** What the canvas page stands, in the bench's own coordinates: each frame on its stage, and whether it is staged. */
+async function readStage(page: Page): Promise<{ staged: boolean; on: { story: string; interaction: string; box: Box }[]; seen: number }> {
+  const frame = page.frames().find((one) => one.url().includes("/@cawco/canvas"));
+  const pane = await box(page, "[data-bench-pane] iframe[data-ready]");
+  if (!(frame && pane)) {
+    return { staged: false, on: [], seen: 0 };
+  }
+  const read = await frame.evaluate(() => {
+    const on = [...document.querySelectorAll<HTMLElement>(".cawco-frame[data-cawco-on-stage]")].map((el) => {
+      const r = (el.querySelector(".cawco-frame-body") ?? el).getBoundingClientRect();
+      return { story: el.dataset.cawcoStory ?? "", interaction: el.dataset.cawcoInteraction ?? "", box: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } };
+    });
+    // Frames a reader would see: drawn, in the canvas's view, and not faded out.
+    const view = document.querySelector(".cawco-canvas")?.getBoundingClientRect();
+    const seen = [...document.querySelectorAll<HTMLElement>(".cawco-frame")].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return !!view && Number(getComputedStyle(el).opacity) > 0 && r.right > view.left && r.left < view.right && r.bottom > view.top && r.top < view.bottom;
+    }).length;
+    return { staged: document.documentElement.hasAttribute("data-cawco-staged"), on, seen };
+  });
+  return {
+    ...read,
+    on: read.on.map((one) => ({ ...one, box: { left: one.box.left + pane.left, right: one.box.right + pane.left, top: one.box.top + pane.top, bottom: one.box.bottom + pane.top, width: one.box.width, height: one.box.height } })),
+  };
+}
+
+/** Waits until the stage stands `story` (at `interaction`), or `ms` pass: what it stands then. */
+async function stageStands(page: Page, story: string, interaction = "rest", ms = 8000) {
+  const end = Date.now() + ms;
+  let read = await readStage(page);
+  while (Date.now() < end && !read.on.some((one) => one.story === story && one.interaction === interaction)) {
+    // biome-ignore lint/performance/noAwaitInLoops: polling the page's own stage until it answers the ask
+    await page.waitForTimeout(100);
+    read = await readStage(page);
+  }
+  return read;
+}
+
+const nodeAt = (story: string) => `${GRAPH_PANEL} [data-node="${story}"]`;
+
+/**
+ * G: the design graph on the bench, at a pane `width`, in `theme`: the panel at the page's inline end on a desk pane
+ * and a drawer at its foot on a narrower one, inside the pane; a machine named by its region's band alone; states
+ * inside their regions and never on each other; the move into the kept state lit in coral; a hover previewing a state
+ * on the page and a press keeping it (the node in the selected pair, its region's band on the brand wash), kept
+ * across a reload; the page standing the kept state's frames alone, clear of the panel; no text under the meta size;
+ * nothing spilling; and Hide folding the panel into its Show pill on one clip (scrubbed), the component not moving.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of the graph's flow, each step checked where it happens
+async function graphLeg(kit: Kit, bench: string, stage: Stage, width: number, theme: "light" | "dark"): Promise<void> {
+  const page = await openBench(kit, bench, stage, width, theme, "", true);
+  if (!page) {
+    return;
+  }
+  const engine = page.context().browser()?.browserType().name() ?? "chromium";
+  const leg = `${engine} ${width} ${theme}`;
+  const touch = width < 640;
+  const desk = width >= 896;
+  const errors = benchErrors.get(page) ?? [];
+  await page.waitForSelector(nodeAt("Spend"), { timeout: 20_000 }).catch(() => undefined);
+  let read = await readGraph(page);
+  kit.check(
+    `G1: ${leg}: the graph stands as a ${desk ? "panel at the page's inline end" : "drawer across the page's foot"}, inside the pane`,
+    read.mode === (desk ? "desk" : "drawer") &&
+      !!read.panel &&
+      !!read.pane &&
+      inside(read.panel, read.pane, 1) &&
+      (desk
+        ? read.pane.right - read.panel.right > 4
+        : Math.abs(read.pane.bottom - read.panel.bottom) <= 1 && Math.abs(read.panel.width - read.pane.width) <= 1),
+    `${JSON.stringify({ mode: read.mode, panel: read.panel, pane: read.pane })} ${read.panel ? "" : await page.evaluate(() => document.querySelector("[data-bench-pane]")?.outerHTML.replaceAll(/class="[^"]*"/g, "").slice(0, 2500) ?? `no pane at ${location.href}: ${document.body.innerText.slice(0, 800)}`)} errors: ${errors.join(" | ")}`
+  );
+  kit.check(
+    `G2: ${leg}: a tab per component, named in words`,
+    read.tabs.join("|") === "Stat tile|Who|Unnamed" || read.tabs.length === 3,
+    read.tabs.join(" | ")
+  );
+  // The kept state at first: the first component's first state, on the page alone.
+  let staged = await stageStands(page, "Spend");
+  kit.check(
+    `G3: ${leg}: the page stands the kept state's frame alone (Spend), every other frame mounted out of sight`,
+    staged.staged && staged.on.length >= 1 && staged.on.every((one) => one.story === "Spend") && staged.seen === staged.on.length,
+    JSON.stringify(staged)
+  );
+  read = await readGraph(page);
+  const spend = read.nodes.find((one) => one.story === "Spend");
+  kit.check(
+    `G4: ${leg}: the kept state's node is the selected pair: selected-bg and the brand edge`,
+    !!spend?.kept && spend.bg === read.tokens.selectedBg && spend.border === read.tokens.brandSolid,
+    JSON.stringify({ spend, tokens: read.tokens })
+  );
+  const placed = read.nodes.every((node) => {
+    const region = read.regions.find((one) => one.machine === node.machine);
+    return !!region && inside(node.box, region.box, 1);
+  });
+  const apart = read.nodes.every((a, at) => read.nodes.slice(at + 1).every((b) => overlap(a.box, b.box) <= 0.5)) &&
+    read.regions.every((a, at) => read.regions.slice(at + 1).every((b) => overlap(a.box, b.box) <= 0.5));
+  kit.check(`G5: ${leg}: every state stands inside its region, none on another, no region on another`, placed && apart, JSON.stringify(read.nodes.map((one) => [one.story, one.machine, one.box])));
+  if (staged.on[0] && read.panel) {
+    kit.check(
+      `G6: ${leg}: the kept frame stands clear of the graph`,
+      overlap(staged.on[0].box, read.panel) <= 0.5,
+      JSON.stringify({ frame: staged.on[0].box, panel: read.panel })
+    );
+  }
+  // A hover previews (a pointer that hovers); a press keeps.
+  if (!touch) {
+    await page.hover(nodeAt("Live"));
+    staged = await stageStands(page, "Live");
+    read = await readGraph(page);
+    kit.check(
+      `G7: ${leg}: a hover on Live previews it on the page, the node marked previewed, Spend still kept`,
+      staged.on.some((one) => one.story === "Live") && !!read.nodes.find((one) => one.story === "Live")?.peek && !!read.nodes.find((one) => one.story === "Spend")?.kept,
+      JSON.stringify(staged.on)
+    );
+    await page.mouse.move(2, 2);
+    staged = await stageStands(page, "Spend");
+    kit.check(`G8: ${leg}: leaving it, the page stands the kept state again`, staged.on.every((one) => one.story === "Spend") && staged.on.length > 0, JSON.stringify(staged.on));
+  }
+  await page.locator(nodeAt("Live")).click();
+  staged = await stageStands(page, "Live");
+  read = await readGraph(page);
+  kit.check(
+    `G9: ${leg}: a press keeps Live: the page stands it, its node the selected pair, Spend's no longer`,
+    staged.on.length > 0 && staged.on.every((one) => one.story === "Live") && !!read.nodes.find((one) => one.story === "Live")?.kept && !read.nodes.find((one) => one.story === "Spend")?.kept,
+    JSON.stringify({ on: staged.on, nodes: read.nodes.map((one) => [one.story, one.kept]) })
+  );
+  // The Who component: its two machines, each named by its band alone.
+  await page.locator(`${GRAPH_PANEL} [role="tab"]`, { hasText: "Who" }).click();
+  await page.waitForSelector(nodeAt("You"), { timeout: 15_000 }).catch(() => undefined);
+  await page.locator(nodeAt("You")).click();
+  await stageStands(page, "You");
+  await page.waitForTimeout(400);
+  read = await readGraph(page);
+  const speaks = read.bands.find((one) => one.text === "Who speaks");
+  kit.check(
+    `G10: ${leg}: each machine is named by its region's band, and said nowhere else in the panel`,
+    read.bands.map((one) => one.text).sort().join("|") === "A second turn|Who speaks" && Object.values(read.namesSaid).every((count) => count === 1),
+    JSON.stringify({ bands: read.bands.map((one) => one.text), said: read.namesSaid })
+  );
+  kit.check(
+    `G11: ${leg}: the kept state's machine has its band on the brand wash`,
+    !!speaks?.kept && speaks.bg === read.tokens.brandWash,
+    JSON.stringify({ speaks, wash: read.tokens.brandWash })
+  );
+  kit.check(`G12: ${leg}: a link between two machines is drawn between their regions`, read.between >= 1, `between ${read.between}`);
+  const grouped = await page.locator(`${GRAPH_PANEL} [data-chip="Grouped|rest"]`).count();
+  kit.check(`G13: ${leg}: a story grouped under another is a chip on its node`, grouped === 0, `Grouped is its own machine's state here: ${grouped} chips`);
+  // The Unnamed component: its move One → Two, lit once Two is kept.
+  await page.locator(`${GRAPH_PANEL} [role="tab"]`, { hasText: "Unnamed" }).click();
+  await page.waitForSelector(nodeAt("Two"), { timeout: 15_000 }).catch(() => undefined);
+  await page.locator(nodeAt("Two")).click();
+  await stageStands(page, "Two");
+  await page.waitForTimeout(400);
+  read = await readGraph(page);
+  const move = read.edges.find((one) => one.from === "One" && one.to === "Two");
+  kit.check(
+    `G14: ${leg}: the move into the kept state is drawn and lit in coral`,
+    !!move?.lit && move.stroke === read.tokens.brandSolid,
+    JSON.stringify({ edges: read.edges, coral: read.tokens.brandSolid })
+  );
+  kit.check(
+    `G15: ${leg}: no text in the graph is set under the meta size`,
+    read.fonts.least >= read.fonts.meta - 0.01,
+    JSON.stringify(read.fonts)
+  );
+  kit.check(`G16: ${leg}: overflow sweep: nothing spills`, read.spills.length === 0, `${read.spills.length}: ${read.spills.join("; ")}`);
+  // Kept across a reload: the graph opens on the state kept last.
+  await page.reload();
+  await page.waitForSelector("[data-bench-pane] iframe[data-ready]", { timeout: 60_000 }).catch(() => undefined);
+  staged = await stageStands(page, "Two", "rest", 20_000);
+  kit.check(`G17: ${leg}: after a reload the graph opens on the state kept last`, staged.on.some((one) => one.story === "Two"), JSON.stringify(staged.on));
+  // Hide folds the panel into its Show pill and Show opens it back (pin 29); the component never moves.
+  const before = staged.on[0]?.box ?? null;
+  const panelBefore = (await readGraph(page)).panel;
+  const fold = desk
+    ? await readMotion(page, () => page.locator(`${GRAPH_PANEL} [data-hide-graph]`).click(), GRAPH_PANEL, {
+        fractions: [0, 0.5, 1],
+        own: true,
+        read: async () => await page.evaluate((selector) => getComputedStyle(document.querySelector(selector) as Element).clipPath, GRAPH_PANEL),
+      })
+    : null;
+  if (!desk) {
+    await page.locator(`${GRAPH_PANEL} [data-hide-graph]`).click();
+  }
+  await page.waitForTimeout(700);
+  read = await readGraph(page);
+  const pill = await box(page, `${GRAPH_PANEL} [data-hide-graph]`);
+  const pillWords = await page.locator(`${GRAPH_PANEL} [data-hide-graph]`).getAttribute("aria-label");
+  staged = await readStage(page);
+  if (desk && fold) {
+    const insets = fold.at.map((one) => String(one.value));
+    const clipRun = fold.runs.find((one) => one.name === "clip-path");
+    kit.check(
+      `G18: ${leg}: Hide folds the panel on one clip-path run, from the panel's box at 0 to the pill's at its end, past half-way at 0.5`,
+      !!clipRun && insets[0] !== insets[2] && insets[1] !== insets[0] && insets[1] !== insets[2],
+      JSON.stringify({ runs: fold.runs.map((one) => [one.name, one.end, one.easing]), insets })
+    );
+  }
+  kit.check(
+    `G19: ${leg}: folded, the graph is its Show pill, inside where the panel stood, and the component has not moved`,
+    read.open === "false" && pillWords === sheetWords.showGraph && !!pill && !!panelBefore && inside(pill, panelBefore, 1) && !!before && (desk ? staged.on[0]?.box.left === before.left && staged.on[0]?.box.top === before.top : true),
+    JSON.stringify({ open: read.open, pill, pillWords, before, after: staged.on[0]?.box })
+  );
+  await page.locator(`${GRAPH_PANEL} [data-hide-graph]`).click();
+  await page.waitForTimeout(700);
+  read = await readGraph(page);
+  kit.check(`G20: ${leg}: Show opens the panel back out of the pill`, read.open === "true" && !!read.panel && !!panelBefore && Math.abs(read.panel.width - panelBefore.width) <= 1, JSON.stringify({ open: read.open, panel: read.panel }));
+  kit.check(`G21: ${leg}: no page error`, errors.length === 0, errors.join(" | "));
+  await page.close();
+}
+
 const spec: Spec = {
   name: "canvas-design",
   run: async (kit) => {
@@ -3662,6 +4047,21 @@ const spec: Spec = {
     // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W4 alone; `=desk` leg D alone.
     const only = process.env.CANVAS_DESIGN;
     try {
+      if (only === "graph") {
+        const bench = await kit.bench();
+        // `CANVAS_GRAPH=<width>[,<theme>]` one leg alone, as a change is made.
+        const [onlyWidth, onlyTheme] = (process.env.CANVAS_GRAPH ?? "").split(",");
+        for (const theme of ["light", "dark"] as const) {
+          for (const width of [390, 680, 1440]) {
+            if ((onlyWidth && Number(onlyWidth) !== width) || (onlyTheme && onlyTheme !== theme)) {
+              continue;
+            }
+            // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+            await graphLeg(kit, bench, stage, width, theme);
+          }
+        }
+        return;
+      }
       if (only === "switch") {
         const bench = await kit.bench();
         for (const theme of ["light", "dark"] as const) {

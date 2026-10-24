@@ -69,6 +69,7 @@
     "./pin-name": "./src/pin-name.ts",
     "./doc-link": "./src/doc-link.ts",
     "./stage": "./src/stage.ts",
+    "./design-graph": "./src/design-graph.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./decision-host": "./src/decision-host.ts",
     "./shell-shortcuts": "./src/shell-shortcuts.ts",

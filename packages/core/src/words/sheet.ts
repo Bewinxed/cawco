@@ -57,4 +57,23 @@ export const sheetWords = {
   tryAgain: commonWords.tryAgain,
   /** Try again's words while the stage starts again. */
   tryingAgain: "Starting…",
+  /** The design graph (Projects spec §5.10): what its panel is called to a reader. */
+  graph: "Design graph",
+  /** Its tabs, one per component under review, to a reader. */
+  graphComponents: "Components",
+  /** Its zoom group, to a reader; each button's words. */
+  graphZoom: "Zoom",
+  zoomIn: "Zoom in",
+  zoomOut: "Zoom out",
+  zoomFit: "Fit",
+  /** The same, with the keys that do it, in its tooltip. */
+  zoomInTip: "Zoom in (⌘ scroll)",
+  zoomOutTip: "Zoom out (⌘ scroll)",
+  /** Hide folds the panel into Show; Show grows it back (pin 29, The One Object Rule). */
+  hideGraph: "Hide graph",
+  showGraph: "Show graph",
+  /** A section whose states file hasn't loaded yet: its graph waits for its stories. */
+  graphWaiting: "Reading its states…",
+  /** A section whose states file didn't load: the page says why where the component would stand. */
+  graphFailed: "Its states file didn't load. The page says why.",
 };

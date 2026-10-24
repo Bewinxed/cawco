@@ -168,9 +168,12 @@ export {
 } from "~icons/solar/magnifer-bold-duotone";
 export { default as IconMapPoint } from "~icons/solar/map-point-bold-duotone";
 export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
+/** Fit: a graph zoomed to show all of it (the design graph's zoom group). */
+export { default as IconFit } from "~icons/solar/maximize-square-minimalistic-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
+export { default as IconZoomOut } from "~icons/solar/minimalistic-magnifer-zoom-out-bold-duotone";
 export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
 /** A routine that has not run yet, or a run that ended without an outcome (cancelled, skipped, denied): the neutral status. */
 export { default as IconMinusCircle } from "~icons/solar/minus-circle-bold-duotone";
