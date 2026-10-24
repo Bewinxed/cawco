@@ -2006,15 +2006,32 @@ export type GitChanges =
  * branch pushed there (Projects spec §5.1: "A project with no outside remote
  * gets the hub as its remote"). The boundary starts reading the user layer
  * of `account`, the Claude account the workspace's first session launches
- * on, so that session's spawn hands it over to no new generation. `at`, when
- * given, cuts the branch at that commit instead ({@link WorkspaceCut}): a
- * retired workspace cut again at the same path for its delegate to go on.
- * Args `[cwd, workspaceId, projectId | null, account | null, at?]`; answers
- * {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
+ * on, and that session's spill folder, `first` ({@link WorkspaceFirstSession}),
+ * so that session's spawn hands it over to no new generation: the boundary
+ * starts once. `at`, when given, cuts the branch at that commit instead
+ * ({@link WorkspaceCut}): a retired workspace cut again at the same path for
+ * its delegate to go on.
+ * Args `[cwd, workspaceId, projectId | null, account | null, at | null, first | null]`;
+ * answers {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
  * in a git repository is refused, so is one with no `origin` and no project,
  * and so is a machine that cannot hold the boundary.
  */
 export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
+
+/**
+ * The session a workspace is cut for ({@link CONTROL_WORKSPACE_CREATE}'s
+ * `first`): the work item's session the hub spawns there next, on a first
+ * cut and a cut again alike. Its machine places that session's spill folder
+ * before the boundary starts. A Claude session that resumes its conversation
+ * `resume` saves under that conversation's id; a new one under an id the
+ * machine mints at the cut and keeps for that session's first launch alone.
+ */
+export interface WorkspaceFirstSession {
+  readonly harness: HarnessKind;
+  readonly instanceId: string;
+  /** The conversation the session resumes there; null for a new one. */
+  readonly resume: string | null;
+}
 
 /**
  * Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s

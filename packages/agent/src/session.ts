@@ -173,6 +173,7 @@ import { fetchDefaultBranch, hostGit } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
+import { forgetFirstSession } from "./first-session";
 import { placeMemoryAtLaunch } from "./fleet";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
 import { writeFleetMcpSet } from "./fleet-mcp-set";
@@ -4939,6 +4940,11 @@ export class SessionSupervisor {
       const workspace =
         this.#placed.get(instanceId)?.workspace ??
         (dir ? (await cloneHolding(dir))?.id : undefined);
+      // Stopped before its first launch: the session id its workspace's cut
+      // minted for it goes with it, never another's (first-session.ts).
+      if (why === "stopped" && workspace) {
+        await forgetFirstSession(workspace, instanceId);
+      }
       const { ended, left } = await endSessionWork(instanceId, workspace);
       if (ended.length > 0) {
         console.info(

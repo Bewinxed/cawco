@@ -168,6 +168,7 @@ import {
 import { reportDamaged } from "../damaged-records";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
+import { claudeSpillDir, takeFirstSession } from "../first-session";
 import {
   fleetHoldings,
   fleetStatus,
@@ -4562,20 +4563,20 @@ export class ClaudeHarness implements Harness {
    */
   async spill(
     spec: SpawnPayload,
-    cwd: string
+    cwd: string,
+    workspace: string
   ): Promise<{ dir: string; spec: SpawnPayload }> {
     const goesOn = spec.resume && !spec.resume.fork ? spec.resume : undefined;
-    const sessionId = goesOn ? goesOn.sessionKey : crypto.randomUUID();
+    // A new conversation takes the id minted for it as its workspace was cut,
+    // whose folder the boundary started with (first-session.ts); else one of
+    // its own.
+    const sessionId = goesOn
+      ? goesOn.sessionKey
+      : ((await takeFirstSession(workspace, spec.instanceId)) ??
+        crypto.randomUUID());
     const account = await launchAccountOf(spec);
-    const real = await realpath(cwd).catch(() => cwd);
     return {
-      dir: join(
-        sessionConfigDir({ accountId: account ?? null }),
-        "projects",
-        projectSlug(real),
-        sessionId,
-        "tool-results"
-      ),
+      dir: await claudeSpillDir(account, cwd, sessionId),
       spec: goesOn
         ? spec
         : { ...spec, options: { ...(spec.options ?? {}), sessionId } },

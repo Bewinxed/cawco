@@ -3473,10 +3473,10 @@ export const startDaemon = (rediscover = false) =>
     // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_CREATE,
-      (cwd, id, projectId, account, at) =>
+      (cwd, id, projectId, account, at, first) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : createWorkspace(cwd, id, projectId, account, at)
+          : createWorkspace(cwd, id, projectId, account, at, first)
     );
     // A place's first commit writes its folder: none starts behind a raised fence.
     supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>

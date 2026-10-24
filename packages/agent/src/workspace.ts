@@ -72,6 +72,7 @@ import {
 } from "@cawco/core/workspace-policy";
 import {
   addAccount,
+  addSpill,
   closeBoundary,
   ensureBoundary,
   heldBy,
@@ -89,6 +90,7 @@ import {
   ownFilesOnly,
 } from "./carry";
 import { hostGit, prepareClone } from "./clone";
+import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
 import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
@@ -649,6 +651,35 @@ const clearOwnCut = async (
 };
 
 /**
+ * What workspace `id`'s boundary reads from its first start, cut at `path`:
+ * the user layer of `account`, the Claude account its first session launches
+ * on, the folder of project `projectId`, and the spill folder of that session
+ * `first` (first-session.ts), each as the hub named it, so the session's spawn
+ * finds the boundary's form unchanged.
+ */
+const placeFirst = async (
+  id: string,
+  path: string,
+  {
+    account,
+    first,
+    projectId,
+  }: { account: unknown; first: unknown; projectId: unknown }
+): Promise<void> => {
+  const named = typeof account === "string" && account ? account : null;
+  if (named) {
+    await addAccount(id, named);
+  }
+  if (typeof projectId === "string" && projectId) {
+    await setProject(id, projectId);
+  }
+  const spill = await firstSpill(id, path, named, firstSessionOf(first));
+  if (spill) {
+    await addSpill(id, spill);
+  }
+};
+
+/**
  * {@link CONTROL_WORKSPACE_CREATE}: a clone of its own on `ws/<id8>` from the
  * remote's default branch as it stands now, and its boundary. A boundary that
  * cannot start takes the clone with it. A repository with no `origin` gets
@@ -660,7 +691,10 @@ const clearOwnCut = async (
  * account the workspace's first session launches on, placed by the hub
  * before the clone is cut: the boundary starts reading that account's user
  * layer, so the session's spawn finds its form unchanged and hands nothing
- * over (`boundaryFor`). `at` ({@link WorkspaceCut}) cuts a retired workspace
+ * over (`boundaryFor`); `first` is that session ({@link
+ * WorkspaceFirstSession}), whose spill folder the boundary starts reading
+ * too (first-session.ts), so its spawn finds the form unchanged and the
+ * boundary starts once. `at` ({@link WorkspaceCut}) cuts a retired workspace
  * again at its own path (a function of its id): `ws/<id8>` at the commit its
  * clone's HEAD was on when it retired, fetched from `origin`'s branch that
  * held it then, tracking the default branch as a first cut does. A commit
@@ -675,7 +709,8 @@ export const createWorkspace = async (
   workspaceId: unknown,
   projectId?: unknown,
   account?: unknown,
-  at?: unknown
+  at?: unknown,
+  first?: unknown
 ): Promise<WorkspaceCheckout> => {
   // What this machine lacks first, before the folder is read at all.
   refuseShortOfWorkspace();
@@ -782,12 +817,7 @@ export const createWorkspace = async (
       );
     }
     await copyOwnSecrets(repoRoot, path, plain);
-    if (typeof account === "string" && account) {
-      await addAccount(id, account);
-    }
-    if (typeof projectId === "string" && projectId) {
-      await setProject(id, projectId);
-    }
+    await placeFirst(id, path, { account, first, projectId });
     const boundary = await ensureBoundary({ id, path });
     const restored = await applyCarried({ id, path }, carried);
     await cutMade(id);

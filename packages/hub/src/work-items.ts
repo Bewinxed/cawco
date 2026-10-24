@@ -65,6 +65,7 @@ import type {
   WorkspaceCheckout,
   WorkspaceCommit,
   WorkspaceCut,
+  WorkspaceFirstSession,
   WorkspaceHolding,
   WorkspaceRef,
   WorkspaceUnlanded,
@@ -4377,6 +4378,15 @@ export const createWorkItems = ({
       const [latest] = db.workItemsIn(workspace.id);
       const [session] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
       const projectId = latest?.projectId ?? null;
+      // Its delegate goes on in that session: its conversation resumed there,
+      // or a new one when it had none yet.
+      const first: WorkspaceFirstSession | null = session
+        ? {
+            instanceId: session.id,
+            harness: session.harness,
+            resume: session.sessionId ?? null,
+          }
+        : null;
       const checkout = (await call(
         workspace.machineId,
         CONTROL_WORKSPACE_CREATE,
@@ -4386,6 +4396,7 @@ export const createWorkItems = ({
           projectId,
           session?.accountId ?? null,
           head,
+          first,
         ]
       )) as WorkspaceCheckout;
       const path = cutPath(workspace.machineId, checkout.path);
@@ -4595,14 +4606,24 @@ export const createWorkItems = ({
    * anything is cut. `checksFor` makes it the gate workspace of that one;
    * `account` is the Claude account its first session launches on
    * ({@link ItemPlacement}), whose user layer the boundary reads from its
-   * first start.
+   * first start; `first` is that session ({@link WorkspaceFirstSession}),
+   * whose spill folder it reads from then too, so its spawn hands the
+   * boundary over to no second one.
    */
   const openWorkspace = async (
     createdBy: string,
     cwd: MachinePath,
     machineId: string,
     projectId: string | null,
-    { account, checksFor }: { account?: string; checksFor?: string } = {}
+    {
+      account,
+      checksFor,
+      first,
+    }: {
+      account?: string;
+      checksFor?: string;
+      first?: WorkspaceFirstSession;
+    } = {}
   ): Promise<WorkspaceRow> => {
     if (projectId) {
       await beforeCut(projectId, machineId, cwd);
@@ -4617,6 +4638,8 @@ export const createWorkItems = ({
         id,
         projectId,
         account ?? null,
+        null,
+        first ?? null,
       ])) as WorkspaceCheckout;
       return db.createWorkspace({
         id,
@@ -5636,7 +5659,10 @@ export const createWorkItems = ({
       cwdOn(machineId, source?.repoRoot ?? request.cwd ?? parent.cwd),
       machineId,
       projectId,
-      { account: placement.launchesOn }
+      {
+        account: placement.launchesOn,
+        first: { instanceId, harness: settings.harness, resume: null },
+      }
     );
     if (source) {
       await cutFrom(workspace, source);
