@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>Pairing · preview</title>
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/Figtree.ttf"
+      rel="preload"
+      type="font/ttf"
+    />
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/JetBrainsMono.ttf"
+      rel="preload"
+      type="font/ttf"
+    />
+    <link href="./preview.css" rel="stylesheet" />
+    <script src="./preview.js" type="module"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>Pairing a browser</h1>
+      <fieldset class="row">
+        <legend class="label">Play into</legend>
+        <div class="seg" data-slot="moments"></div>
+        <button class="btn" data-size="sm" data-slot="replay" type="button">
+          Replay
+        </button>
+      </fieldset>
+      <fieldset class="row">
+        <legend class="label">Caw swallows</legend>
+        <div class="seg" data-slot="fork">
+          <button aria-pressed="true" data-fork="approve" type="button">
+            The device, at Approve
+          </button>
+          <button aria-pressed="false" data-fork="scan" type="button">
+            The code, at the scan
+          </button>
+        </div>
+        <span class="note"
+          >Approve, Deny, New code and Retry in the cards play the flow on from
+          where it stands.</span
+        >
+      </fieldset>
+    </header>
+
+    <main class="frames">
+      <figure class="frame">
+        <figcaption>Desk</figcaption>
+        <div class="viewport" data-layout="desk" style="--frame-w: 544px"></div>
+      </figure>
+      <figure class="frame">
+        <figcaption>Phone</figcaption>
+        <div
+          class="viewport"
+          data-layout="phone"
+          style="--frame-w: 390px"
+        ></div>
+      </figure>
+    </main>
+
+    <template id="stage">
+      <div class="stage">
+        <img alt="" class="caw" height="80" src="./caw/asking.png" width="80" />
+        <h2 class="title">Scan with the CawCo app</h2>
+        <div class="card-wrap">
+          <div aria-hidden="true" class="ping"></div>
+          <section aria-live="polite" class="card">
+            <div class="scene scene-code">
+              <div class="well">
+                <div class="recess"></div>
+                <div
+                  aria-label="Pairing QR code"
+                  class="clusters"
+                  role="img"
+                ></div>
+                <img alt="" class="badge" src="./caw/badge.png" />
+              </div>
+              <div class="letters"></div>
+              <p class="readout">
+                <span aria-hidden="true" class="dot"></span
+                ><span class="words"></span>
+              </p>
+            </div>
+            <div class="scene scene-device">
+              <div aria-label="iPhone" class="wire" role="img"></div>
+              <div class="facts">
+                <p class="name">Bewin's iPhone</p>
+                <p class="kind">iPhone · iOS 26.1</p>
+                <p class="addr"></p>
+                <p class="second"></p>
+                <p class="meta">
+                  CawCo 1.4 · asked <span class="ago">8s</span> ago
+                </p>
+              </div>
+              <div class="actions">
+                <button class="btn" data-act="deny" type="button">Deny</button>
+                <button
+                  class="btn"
+                  data-act="approve"
+                  data-tone="primary"
+                  type="button"
+                >
+                  Approve
+                </button>
+              </div>
+            </div>
+            <div class="scene scene-outcome">
+              <p class="said"></p>
+              <a class="link" data-act="devices" href="#devices">Devices ›</a>
+              <button
+                class="btn"
+                data-act="again"
+                data-tone="primary"
+                type="button"
+              >
+                New code
+              </button>
+            </div>
+            <div aria-hidden="true" class="debris"></div>
+          </section>
+        </div>
+        <div aria-hidden="true" class="flight"></div>
+      </div>
+    </template>
+  </body>
+</html>

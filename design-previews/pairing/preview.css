@@ -1,0 +1,641 @@
+/* The pairing preview: the card and Caw above it, at their real size, on
+   the house tokens (tokens.css, copied from the dashboard's build). Motion
+   is WAAPI for the parts (preview.js) and CSS for the band. */
+@layer theme, base, components, preview;
+@import url("./tokens.css") layer(theme);
+
+/* Registered so they interpolate: the band's lap and strength, and the ring
+   the outcomes turn to (DESIGN B, the band's CSS). */
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --band {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --ring {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+
+@font-face {
+  font-display: block;
+  font-family: "Figtree Variable";
+  font-weight: 300 900;
+  src: url("./fonts/Figtree.ttf") format("truetype");
+}
+@font-face {
+  font-display: block;
+  font-family: "JetBrains Mono Variable";
+  font-weight: 100 800;
+  src: url("./fonts/JetBrainsMono.ttf") format("truetype");
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    background: var(--surface-page);
+    color: var(--ink-strong);
+    font: var(--type-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    min-block-size: 100dvh;
+  }
+  h1,
+  h2,
+  p,
+  figure,
+  dl,
+  dd {
+    margin: 0;
+  }
+  h1,
+  h2 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    &:disabled,
+    &[aria-disabled="true"] {
+      cursor: default;
+    }
+  }
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+  [hidden] {
+    display: none !important;
+  }
+  .sr-only {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@layer components {
+  /* The kit's button: outline by default, the coral primary. */
+  .btn {
+    display: inline flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-inline-size: 5.5rem;
+    block-size: var(--c-btn-h);
+    padding-inline: var(--space-4);
+    border: 1px solid var(--border-button-outline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    font: var(--type-button);
+    white-space: nowrap;
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        background-color: var(--surface-hover);
+      }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      &:active:not(:disabled) {
+        transform: scale(0.97);
+      }
+    }
+    &:disabled {
+      opacity: 0.5;
+    }
+    &[data-tone="primary"] {
+      border-color: transparent;
+      background: var(--action-surface), var(--action-solid);
+      color: var(--on-action);
+      box-shadow: var(--action-ring);
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled) {
+          background: var(--action-surface-hover), var(--action-hover);
+        }
+      }
+    }
+    &[data-size="sm"] {
+      min-inline-size: 0;
+      block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      font: var(--type-label);
+    }
+  }
+
+  .link {
+    color: var(--link-ink);
+    font: var(--type-label);
+    text-decoration: none;
+    white-space: nowrap;
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        text-decoration: underline;
+        text-underline-offset: var(--underline-offset);
+      }
+    }
+    &:active {
+      opacity: 0.72;
+    }
+  }
+
+  /* A segmented control: the groove and its chosen segment. */
+  .seg {
+    display: inline flex;
+    flex-wrap: wrap;
+    gap: var(--space-row);
+    padding: var(--c-segmented-pad);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+    button {
+      min-block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      border: 0;
+      border-radius: var(--radius-well);
+      background: transparent;
+      color: var(--ink-muted);
+      font: var(--type-label);
+      white-space: nowrap;
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out);
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--ink-strong);
+        }
+      }
+      &[aria-pressed="true"] {
+        background: var(--surface-lift);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-knob);
+      }
+    }
+  }
+}
+
+@layer preview {
+  /* ---- The page around the frames. ---- */
+  .bar {
+    display: block grid;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6) var(--space-4);
+    border-block-end: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    h1 {
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+    }
+    .row {
+      display: block flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-3);
+      min-inline-size: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .label {
+      /* A floated legend is laid out as the fieldset's first flex item. */
+      float: inline-start;
+      padding: 0;
+      min-inline-size: 4.5rem;
+      color: var(--ink-muted);
+      font: var(--type-label);
+    }
+    .note {
+      color: var(--ink-muted);
+      font: var(--type-meta);
+    }
+  }
+
+  .frames {
+    display: block flex;
+    flex-wrap: wrap;
+    align-items: start;
+    justify-content: center;
+    gap: var(--space-8);
+    padding: var(--space-8) var(--space-6);
+  }
+
+  .frame {
+    display: block grid;
+    gap: var(--space-3);
+    figcaption {
+      color: var(--ink-muted);
+      font: var(--type-label);
+    }
+  }
+
+  /* The window the card stands in: its real width, the page's recess. */
+  .viewport {
+    position: relative;
+    inline-size: var(--frame-w);
+    padding-block: var(--space-8);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-lg);
+    background: var(--surface-page);
+    overflow: clip;
+  }
+
+  /* ---- The stage: Caw, the title, the card. ---- */
+  .stage {
+    --caw: 80px;
+    --pad: var(--space-5);
+    --wire: 96px;
+    position: relative;
+    display: block grid;
+    justify-items: center;
+    align-content: start;
+    gap: var(--space-4);
+    min-block-size: var(--stage-h, 0px);
+    &[data-layout="phone"] {
+      --caw: 64px;
+      --wire: 80px;
+    }
+  }
+
+  .caw {
+    position: relative;
+    z-index: 3;
+    display: block;
+    inline-size: var(--caw);
+    block-size: var(--caw);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .title {
+    max-inline-size: var(--card-w);
+    color: var(--ink-strong);
+    font: var(--type-title);
+    letter-spacing: var(--track-title);
+    text-align: center;
+  }
+
+  .card-wrap {
+    position: relative;
+    inline-size: var(--card-w);
+  }
+
+  /* The card and its band (DESIGN B, verbatim but for the delay hook). */
+  .card {
+    --ring: var(--border-hairline);
+    --band-dur: var(--dur-pop);
+    --band-delay: 0ms;
+    --ring-delay: 0ms;
+    position: relative;
+    z-index: 1;
+    border: 1px solid transparent;
+    border-radius: var(--radius-panel);
+    background:
+      linear-gradient(var(--surface-raised), var(--surface-raised)) padding-box,
+      conic-gradient(
+          from var(--border-angle),
+          var(--ring) 80%,
+          color-mix(
+              in oklab,
+              var(--ink-muted) calc(var(--band) * 100%),
+              var(--ring)
+            )
+            86%,
+          color-mix(
+              in oklab,
+              var(--ink-strong) calc(var(--band) * 100%),
+              var(--ring)
+            )
+            90%,
+          color-mix(
+              in oklab,
+              var(--ink-muted) calc(var(--band) * 100%),
+              var(--ring)
+            )
+            94%,
+          var(--ring) 100%
+        )
+        border-box;
+    box-shadow: var(--shadow-tile);
+    overflow: clip;
+    transition:
+      --band var(--band-dur) var(--ease-out) var(--band-delay),
+      --ring var(--dur-pop) var(--ease-out) var(--ring-delay);
+    &[data-busy] {
+      --band: 1;
+    }
+    &[data-outcome="done"] {
+      --ring: var(--status-done-ink);
+    }
+    &[data-outcome="fail"] {
+      --ring: var(--status-fail-ink);
+    }
+    /* The lap runs while the band shows and pauses once --band has reached
+       0 (preview.js lifts .lap on that transition's end), so no
+       outcome stops it mid-frame. */
+    @media (prefers-reduced-motion: no-preference) {
+      animation: border-lap calc(var(--breath) * 2) linear infinite paused;
+      animation-delay: var(--breath-phase, 0ms);
+      &.lap {
+        animation-play-state: running;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      &[data-busy] {
+        --band: 0;
+        --ring: var(--border-control);
+      }
+    }
+  }
+  @keyframes border-lap {
+    to {
+      --border-angle: 360deg;
+    }
+  }
+
+  /* The owner's ping: a ring leaving the contour outward. */
+  .ping {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border: 1px solid var(--ink-muted);
+    border-radius: var(--radius-panel);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Every scene stands at the card's top; the card's height is its scene's. */
+  .scene {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    padding: var(--pad);
+    &:not([data-on]) {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+
+  /* ---- The code: the well, the badge, the letters, the readout. ---- */
+  .scene-code {
+    display: block grid;
+    justify-items: center;
+    gap: var(--space-4);
+  }
+
+  .well {
+    position: relative;
+    inline-size: var(--q);
+    block-size: var(--q);
+  }
+
+  .recess {
+    position: absolute;
+    inset: calc(var(--m) * -1);
+    border: 1px dashed var(--border-control);
+    border-radius: var(--radius-sm);
+    background: var(--surface-recess);
+  }
+
+  .cluster {
+    position: absolute;
+    background: var(--ink-strong);
+    mask: url("./qr.svg") no-repeat;
+    mask-size: var(--q) var(--q);
+  }
+
+  .badge {
+    position: absolute;
+    inset-block-start: var(--badge-at);
+    inset-inline-start: var(--badge-at);
+    z-index: 2;
+    inline-size: var(--badge);
+    block-size: var(--badge);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 0 1px var(--night-ring);
+  }
+
+  .letters {
+    display: block flex;
+    gap: var(--space-1);
+  }
+  .tile {
+    display: block grid;
+    place-items: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    background: var(--surface-recess);
+    color: var(--ink-stat);
+    font: 500 var(--text-kpi) / 1 var(--font-mono);
+    font-variant-ligatures: none;
+  }
+
+  .readout {
+    position: relative;
+    display: block;
+    min-block-size: calc(2lh);
+    max-inline-size: 100%;
+    color: var(--ink-muted);
+    font: var(--type-meta);
+    text-align: center;
+    .dot {
+      position: absolute;
+      inset-block-start: calc(0.5lh - 3px);
+      inset-inline-end: calc(100% + var(--space-2));
+      inline-size: 6px;
+      block-size: 6px;
+      border-radius: var(--radius-pill);
+      background: var(--status-live-glyph, var(--ink-muted));
+      @media (prefers-reduced-motion: no-preference) {
+        animation: breath var(--breath) var(--ease-in-out) infinite;
+      }
+    }
+    .words {
+      position: relative;
+      display: inline;
+    }
+  }
+  @keyframes breath {
+    50% {
+      opacity: var(--breath-floor);
+    }
+  }
+
+  /* ---- The device asking. ---- */
+  .scene-device {
+    display: block grid;
+    grid-template-columns: var(--wire) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-4);
+    .stage[data-layout="phone"] & {
+      grid-template-columns: minmax(0, 1fr);
+      justify-items: center;
+      text-align: center;
+    }
+  }
+
+  .wire {
+    position: relative;
+    inline-size: var(--wire);
+    block-size: var(--wire);
+    color: var(--ink-muted);
+    svg {
+      position: absolute;
+      inset: 0;
+      inline-size: 100%;
+      block-size: 100%;
+      overflow: visible;
+    }
+  }
+
+  .facts {
+    display: block grid;
+    gap: var(--space-1);
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    .name {
+      color: var(--ink-strong);
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+    }
+    .kind,
+    .place,
+    .alias {
+      color: var(--ink-muted);
+      font: var(--type-body);
+    }
+    .alias code {
+      font: var(--type-code);
+      font-size: var(--text-body);
+      font-size-adjust: cap-height var(--mono-figure-cap);
+      font-variant-ligatures: none;
+    }
+    .addr {
+      color: var(--ink-strong);
+      font: var(--type-body);
+      code {
+        font: var(--type-code);
+        font-size: var(--text-body);
+        font-size-adjust: cap-height var(--mono-figure-cap);
+        font-variant-numeric: tabular-nums;
+        font-variant-ligatures: none;
+      }
+    }
+    .meta {
+      margin-block-start: var(--space-1);
+      color: var(--ink-muted);
+      font: var(--type-meta);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+    justify-self: end;
+    display: block flex;
+    gap: var(--space-2);
+    .stage[data-layout="phone"] & {
+      justify-self: stretch;
+      .btn {
+        flex: 1 1 0;
+      }
+    }
+  }
+
+  /* ---- An outcome: what happened, and the way on. ---- */
+  .scene-outcome {
+    display: block flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-4);
+    .said {
+      flex: 1 1 12rem;
+      min-inline-size: 0;
+      color: var(--ink-strong);
+      font: var(--type-body);
+    }
+    .stage[data-layout="phone"] &[data-has-button] {
+      .btn {
+        flex: 1 1 100%;
+      }
+    }
+  }
+
+  /* ---- Debris (shards, a falling badge) and flights (the swallow). ---- */
+  .debris {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .shard {
+    position: absolute;
+    background: var(--shard-ground, transparent);
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--shard-ink, transparent);
+      mask: var(--shard-mask) no-repeat;
+      mask-size: var(--shard-size);
+      mask-position: var(--shard-at);
+    }
+  }
+
+  .flight {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    > * {
+      position: absolute;
+      margin: 0;
+    }
+    svg {
+      color: var(--ink-muted);
+      overflow: visible;
+    }
+  }
+
+  .morph-letters {
+    position: relative;
+    display: inline flow-root;
+    white-space: nowrap;
+    overflow-x: clip;
+    vertical-align: top;
+    span {
+      display: inline flow-root;
+      white-space: pre;
+    }
+    [data-roll] {
+      overflow: clip;
+      vertical-align: top;
+      span {
+        display: block;
+      }
+    }
+  }
+}
