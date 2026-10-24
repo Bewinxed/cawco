@@ -17,6 +17,7 @@
     shellWords,
   } from "@cawco/core";
   import {
+    type ActivityLine,
     type ChangedItem,
     newAnswer,
     type Pin,
@@ -137,6 +138,7 @@
     type ArtifactDoc,
     type ArtifactView,
     artifactSyncPath,
+    askAgain,
     type DocSync,
     joinArtifact,
     LINK_DOWN_MS,
@@ -149,6 +151,7 @@
   import BrowserView from "./BrowserView.svelte";
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import CanvasView from "./CanvasView.svelte";
+  import ChangeLines, { type ChangeLine } from "./ChangeLines.svelte";
   import CommentRail from "./CommentRail.svelte";
   import CoverState, { type CoverWaiting } from "./CoverState.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
@@ -1455,6 +1458,8 @@
     doc = joined;
     view = null;
     return () => {
+      // A look waiting on its ping is written before its doc goes (the pane laid out again, closed, another artifact).
+      writeLooks();
       joined.destroy();
       releaseArtifact(id);
       doc = null;
@@ -1768,7 +1773,7 @@
     listOpen && railSheet && (!!cardPin || !!composing || !!picking)
   );
   /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
-  let listFilter = $state<"open" | "resolved">("open");
+  let listFilter = $state<"check" | "open" | "resolved">("open");
   let listScroll = $state(0);
   /**
    * The foot sheet's height while it stands, px: the page's frame ends
@@ -1881,13 +1886,13 @@
   });
   /*
    * Changed since you looked (PRD §5.7, "Pointing and what changed"): what
-   * the latest revision changed (the hub's `meta.changes`) less what the
-   * person has looked at (the doc's `seen`), each washed on the page in the
-   * done wash; and the pins with an answer he hasn't looked at. The tag at
-   * the well's top steps through them in page order, a pin and its changed
-   * element one stop: a step brings it out and chooses it, and opens a
-   * pin's thread; each is seen as it is stepped onto, and all of them on
-   * his Send (the hub's).
+   * changed since he looked (the hub's `meta.changes`, carried across
+   * revisions) less what he has looked at (the doc's `seen`), each ringed
+   * on the page (`c-change-ring`); and the pins with an answer he hasn't
+   * looked at. The tag at the well's top steps through them in the check
+   * order, a pin and its changed element one stop: a step brings it out,
+   * chooses it and pings its ring, and opens a pin's thread; each is seen
+   * once its ping has played, and all of them on his Send (the hub's).
    */
   const unseenChanges = $derived.by((): ChangedItem[] => {
     const changes = view?.changes;
@@ -1913,7 +1918,7 @@
     label: string;
     pin: string | null;
   }
-  /** The stops not looked at yet, in page order, then what was taken out (no box to wash). */
+  /** The stops not looked at yet, in the check order, then what was taken out (no box to ring). */
   const changeStops = $derived.by((): ChangeStop[] => {
     const labels = new Map(
       unseenChanges.map((item) => [item.anchor, item.label])
@@ -1945,7 +1950,20 @@
         stops.push({ anchors: [item.anchor], pin: null, label: item.label });
       }
     }
-    return stops;
+    // In the rail's check order: what answers him, what changed under him
+    // with no answer, then the rest; page order within each.
+    const items = new Map(unseenChanges.map((item) => [item.anchor, item]));
+    const rank = (stop: ChangeStop) => {
+      const of = stop.anchors.map((anchor) => items.get(anchor));
+      if (of.some((item) => item?.answered)) {
+        return 0;
+      }
+      return of.some((item) => item?.pin) ? 1 : 2;
+    };
+    return stops
+      .map((stop, at) => ({ stop, at, rank: rank(stop) }))
+      .sort((a, b) => a.rank - b.rank || a.at - b.at)
+      .map(({ stop }) => stop);
   });
   /** The stops as they stood at the first step: "k of N" counts them while he steps. */
   let tour = $state.raw<ChangeStop[] | null>(null);
@@ -1989,21 +2007,197 @@
     if (anchor && !anchor.startsWith("removed:")) {
       post({ type: "cawco:show-element", selector: anchor, outline: "chosen" });
     }
-    const revision = view?.changes?.revision;
-    if (revision !== undefined && stop.anchors.length > 0) {
-      doc?.seeChanges(revision, stop.anchors);
-    }
+    seeSoon(stop.anchors);
     if (stop.pin) {
       openCard(stop.pin, "key");
     }
   }
-  /** The person pressed a washed element in Interact mode: he has looked at it. */
+  /** The person pressed a ringed element in Interact mode: he has looked at it. */
   function changePressed(anchor: unknown) {
     const revision = view?.changes?.revision;
     if (typeof anchor === "string" && revision !== undefined) {
       doc?.seeChanges(revision, [anchor]);
     }
   }
+  /*
+   * What to check (the owner's pick, B: change lines in each thread, the
+   * rail as the inbox), from what changed since he looked: the comments an
+   * update answered, then those whose element changed with no answer, then
+   * what changed under no comment. A row leaves as he looks at it: its
+   * thread opened, its spot stepped to, a chip pressed.
+   */
+  const checking = $derived.by(() => {
+    const held = new Set(pins.map((pin) => pin.id));
+    const byPin = new Map<string, ChangedItem[]>();
+    const unasked: ChangedItem[] = [];
+    for (const item of unseenChanges) {
+      if (item.pin && held.has(item.pin)) {
+        byPin.set(item.pin, [...(byPin.get(item.pin) ?? []), item]);
+      } else if (item.kind !== "removed") {
+        unasked.push(item);
+      }
+    }
+    const number = (id: string) =>
+      pins.find((pin) => pin.id === id)?.number ?? 0;
+    const order = [...byPin.keys()].sort((a, b) => number(a) - number(b));
+    const answers = (id: string) =>
+      (byPin.get(id) ?? []).some((item) => item.answered);
+    return {
+      byPin,
+      unasked,
+      pins: [
+        ...order.filter((id) => answers(id)),
+        ...order.filter((id) => !answers(id)),
+      ],
+    };
+  });
+  const checkCount = $derived(checking.pins.length + checking.unasked.length);
+  /** A changed thing as a line: what it is, its words then and now, its move, its revision, how often. */
+  const lineOf = (item: ChangedItem): ChangeLine => ({
+    element: item.element ?? item.label,
+    after: item.label,
+    anchor: item.anchor,
+    ...(item.before === undefined ? {} : { before: item.before }),
+    ...(item.moved ? { moved: item.moved } : {}),
+    ...(item.revision === undefined ? {} : { revision: item.revision }),
+    ...(item.times ? { times: item.times } : {}),
+  });
+  /** A thread's line, as the hub kept it (the doc's `activity`). */
+  const lineOfActivity = (line: ActivityLine): ChangeLine => ({
+    element: line.element,
+    after: line.after,
+    anchor: line.anchor,
+    revision: line.revision,
+    ...(line.before === undefined ? {} : { before: line.before }),
+    ...(line.moved ? { moved: line.moved } : {}),
+  });
+  /**
+   * Whether an update changed what pin `pin` stands on and the agent never
+   * answered it: a line of its own the update left unanswered, with no reply
+   * of the agent's in its thread since.
+   */
+  const changedNoAnswer = (pin: Pin): boolean => {
+    const lines = view?.activity[pin.id] ?? [];
+    const replied = pin.thread.findLast((entry) => entry.by === "agent")?.at;
+    return lines.some(
+      (line) => !line.answered && (!replied || replied < line.at)
+    );
+  };
+  /** The comments whose Ask again is on its way. */
+  let askingAgain = $state.raw<ReadonlySet<string>>(new Set());
+  /** A comment's Ask again: it goes to the session again, whole; once it went, what changed under it is looked at. */
+  async function askAgainPin(id: string) {
+    if (!artifact || askingAgain.has(id)) {
+      return;
+    }
+    askingAgain = new Set([...askingAgain, id]);
+    try {
+      await askAgain(instanceId, artifact.id, id);
+      seeSoon(
+        (checking.byPin.get(id) ?? []).map((item) => item.anchor),
+        0
+      );
+    } catch (error) {
+      failure = { message: failureWords(error), again: null };
+    } finally {
+      askingAgain = new Set([...askingAgain].filter((one) => one !== id));
+    }
+  }
+  /**
+   * These changes looked at, once their ring's ping has played (`--dur-loop`,
+   * or `after` ms): the step that brought him there pings it, and a ring
+   * looked at fades off, so the look is written after the ping, not over it.
+   */
+  function seeSoon(anchors: string[], after = dur("--dur-loop")) {
+    const revision = view?.changes?.revision;
+    if (revision === undefined || anchors.length === 0) {
+      return;
+    }
+    const look = {
+      revision,
+      anchors,
+      timer: 0 as unknown as ReturnType<typeof setTimeout>,
+    };
+    look.timer = setTimeout(() => {
+      looks.delete(look);
+      doc?.seeChanges(revision, anchors);
+    }, after);
+    looks.add(look);
+  }
+  /** Looks written once their ping has played; the pane going before then writes them at once, so no look is lost. */
+  const looks = new Set<{
+    anchors: string[];
+    revision: number;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+  /** Every look still waiting on its ping, written now: the doc it goes in is about to be let go. */
+  function writeLooks() {
+    for (const look of looks) {
+      clearTimeout(look.timer);
+      doc?.seeChanges(look.revision, look.anchors);
+    }
+    looks.clear();
+  }
+  /**
+   * A change's spot brought out on the page (scrolled to, chosen, its ring
+   * pinging), with its comment's thread open when one stands on it or it
+   * answers one: a To check row, a change chip, the thread's own lines.
+   */
+  function stepToChange(anchor: string) {
+    const item = view?.changes?.items.find((one) => one.anchor === anchor);
+    const its =
+      item?.pin ??
+      Object.entries(view?.activity ?? {}).find(([, lines]) =>
+        lines.some((line) => line.anchor === anchor)
+      )?.[0];
+    if (its && pins.some((pin) => pin.id === its)) {
+      openCard(its, "pointer");
+    }
+    if (!anchor.startsWith("removed:")) {
+      post({ type: "cawco:show-element", selector: anchor, outline: "chosen" });
+    }
+    seeSoon([anchor]);
+  }
+  /** A To check row pressed: its thread opens, and its first change is brought out. */
+  function openChecked(id: string, via: "key" | "pointer") {
+    const [first] = checking.byPin.get(id) ?? [];
+    openCard(id, via);
+    if (first && !first.anchor.startsWith("removed:")) {
+      post({
+        type: "cawco:show-element",
+        selector: first.anchor,
+        outline: "chosen",
+      });
+    }
+  }
+  // The open thread is looked at: what changed under it leaves To check once its ring has pinged.
+  $effect(() => {
+    const pin = cardPin;
+    const mine = pin ? (checking.byPin.get(pin.id) ?? []) : [];
+    if (mine.length > 0) {
+      untrack(() => seeSoon(mine.map((item) => item.anchor)));
+    }
+  });
+  /**
+   * Back on a page with something to check, the rail opens itself on To
+   * check, once per page as it is read; a change that lands while he is
+   * here only counts in its tab.
+   */
+  let checkedFor: string | null = null;
+  $effect(() => {
+    const id = artifactId;
+    if (!id || listHold !== "ready" || checkedFor === id || isCanvas) {
+      return;
+    }
+    checkedFor = id;
+    if (untrack(() => checkCount) > 0) {
+      untrack(() => {
+        listFilter = "check";
+        showList(true);
+      });
+    }
+  });
+
   /** J and K step the tag while it holds the focus; elsewhere they step the pins. */
   function tagKey(event: KeyboardEvent) {
     const key = event.key.toLowerCase();
@@ -2318,6 +2512,12 @@
       showCard(card);
       return;
     }
+    const change = asked.get("change");
+    if (change) {
+      linkedFor = artifactId;
+      stepToChange(change);
+      return;
+    }
     const number = Number(asked.get("pin"));
     if (openPinNumbered(number)) {
       linkedFor = artifactId;
@@ -2369,6 +2569,8 @@
         openPinNumbered(at.pin);
       } else if ("card" in at) {
         showCard(at.card);
+      } else if ("change" in at) {
+        stepToChange(at.change);
       }
     });
   });
@@ -3581,6 +3783,38 @@
   {/if}
 {/snippet}
 
+<!-- A To check row's change lines: what changed under its comment, and Ask again when the agent didn't answer it. -->
+{#snippet checkChanges(pin: Pin)}
+  <ChangeLines
+    asking={askingAgain.has(pin.id)}
+    inset="rail"
+    lines={(checking.byPin.get(pin.id) ?? []).map(lineOf)}
+    onask={() => askAgainPin(pin.id)}
+    unanswered={!(checking.byPin.get(pin.id) ?? []).some(
+      (item) => item.answered
+    )}
+  />
+{/snippet}
+<!-- The last To check row: what changed under no comment, each line a step to its spot. -->
+{#snippet checkUnasked()}
+  <div class="flex flex-col gap-space-1 px-space-2 py-space-2">
+    <p class="m-0 text-ink-row type-label font-medium">
+      {commentWords.unasked}
+    </p>
+    <ChangeLines lines={checking.unasked.map(lineOf)} step={stepToChange} />
+  </div>
+{/snippet}
+<!-- A thread's change lines, under its replies: every one the hub kept for it. -->
+{#snippet threadChanges(pin: Pin)}
+  <ChangeLines
+    asking={askingAgain.has(pin.id)}
+    lines={(view?.activity[pin.id] ?? []).map(lineOfActivity)}
+    onask={() => askAgainPin(pin.id)}
+    step={stepToChange}
+    unanswered={changedNoAnswer(pin)}
+  />
+{/snippet}
+
 {#snippet railOf(layout: "beside" | "sheet")}
   <CommentRail
     bind:this={rail}
@@ -3591,7 +3825,16 @@
     {live}
     onclose={() => showList(false)}
     onhover={(id) => post({ type: "cawco:hover-pin", id })}
-    onopen={(id, via) => openCard(id, via)}
+    onopen={(id, via) =>
+      listFilter === "check" ? openChecked(id, via) : openCard(id, via)}
+    checks={isCanvas
+      ? undefined
+      : {
+          count: checkCount,
+          pins: checking.pins,
+          changes: checkChanges,
+          unasked: checking.unasked.length > 0 ? checkUnasked : null,
+        }}
     onpage={() => {
       if (openPin) {
         closeCard();
@@ -4145,6 +4388,7 @@
       {@const Composer = kit.CommentComposer}
       <PinFloat
         bare
+        box={composing.at?.box ?? null}
         label={commentWords.comment}
         mark={composing.at?.mark ?? null}
         room={{ w: roomW, h: roomH }}
@@ -4179,6 +4423,7 @@
       {#key cardPin.id}
         <PinFloat
           exit={cardExit}
+          box={pinAt?.box ?? null}
           label={`Comment ${cardPin.number}`}
           mark={pinAt?.mark ?? null}
           pin={cardPin.number}
@@ -4189,6 +4434,9 @@
         >
           <Card
             agentName={owner ? ownerName : "The session"}
+            changes={(view?.activity[cardPin.id]?.length ?? 0) > 0
+              ? threadChanges
+              : undefined}
             marked={!!pinAt?.mark}
             session={owner ? instanceId : null}
             draft={replyDraft}

@@ -448,20 +448,20 @@ const sendBodyProblem = (body: unknown): string | null => {
   if (control !== undefined && !isSendControl(control)) {
     return `control is one of ${Object.keys(SEND_CONTROLS).join(", ")}.`;
   }
-  const { pins } = body;
-  if (
-    pins !== undefined &&
-    !(
-      Array.isArray(pins) &&
-      pins.length > 0 &&
-      pins.length <= COMMENT_LIMITS.pins &&
-      pins.every(
+  const ids = (value: unknown) =>
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length > 0 &&
+      value.length <= COMMENT_LIMITS.pins &&
+      value.every(
         (pin) =>
           typeof pin === "string" && pin.length > 0 && pin.length <= MARK_ID_MAX
-      )
-    )
-  ) {
+      ));
+  if (!ids(body.pins)) {
     return `pins is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
+  }
+  if (!ids(body.again)) {
+    return `again is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
   }
   return null;
 };
@@ -551,9 +551,10 @@ export const artifactPictures =
   };
 
 /** A checked send's body as the service takes it: its text trimmed, and only the fields it holds. */
-const sentBody = ({ text, pins, control }: SendBody): SendBody => ({
+const sentBody = ({ text, pins, again, control }: SendBody): SendBody => ({
   ...(text?.trim() ? { text: text.trim() } : {}),
   ...(pins ? { pins } : {}),
+  ...(again ? { again } : {}),
   ...(control ? { control } : {}),
 });
 

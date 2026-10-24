@@ -33,7 +33,7 @@
    * by a press on the page. Delete is asked in the card itself.
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
-  import { tick, untrack } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -87,7 +87,10 @@
     onclose,
     onfind,
     ondraft,
+    changes,
   }: {
+    /** What changed on the page for this comment, as its change lines under the reply (ChangeLines). */
+    changes?: Snippet<[Pin]>;
     pin: Pin;
     /** What it stands on, in words (core pin-name.ts). */
     name: string;
@@ -559,6 +562,9 @@
       </li>
     {/each}
   </ol>
+  {#if changes}
+    <div class="mt-space-2" data-slot="pin-changes">{@render changes(pin)}</div>
+  {/if}
 </div>
 <div
   bind:this={foot}

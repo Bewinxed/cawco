@@ -483,6 +483,7 @@ export const artifactCreatedWords = (created: Created): string =>
   lines(
     `Made ${named(created)}. ${openedWords(created.opened ? { opened: true } : { opened: false, why: created.why ?? "no view said why" })}`,
     created.link && `Name it to the person as ${created.link}.`,
+    markedLine(created.marked),
     created.held,
     created.note,
     cardLinkLines("Its cards, as you name each to the person:", created.cards),
@@ -535,6 +536,7 @@ const revisedWords = (revised: Revised): string => {
       "The cards it put in or rewrote, as you name each to the person:",
       revised.cards
     ),
+    markedLine(revised.marked),
     revised.moved.added.length > 0 &&
       `New decisions: ${listed(revised.moved.added)}.`,
     revised.moved.removed.length > 0 &&
@@ -567,16 +569,25 @@ const componentChangedWords = (changed: ComponentChanged): string => {
   );
 };
 
-/** A page's change: the page as it reads now, its link first when the answer carries it. */
+/** What an update changed on the page, each by its link, as the agent names it to the person. */
+const markedLine = (marked: string[] | undefined): string | false =>
+  !!marked?.length &&
+  `What it changed, as you name each to the person: ${marked.join(", ")}.`;
+
+/** A page's change: the page as it reads now, its link and what it changed first when the answer carries them. */
 const pageChangedWords = (
   answer: ArtifactRead & { link?: string }
 ): Presented => {
-  const read = artifactReadWords(answer);
+  const { marked, ...rest } = answer;
+  const read = artifactReadWords(rest);
   const { link } = answer;
-  if (!link) {
+  const naming = lines(
+    link && `Name it to the person as ${link}.`,
+    markedLine(marked)
+  );
+  if (!naming) {
     return read;
   }
-  const naming = `Name it to the person as ${link}.`;
   return typeof read === "string"
     ? lines(naming, read)
     : { ...read, text: lines(naming, read.text) };

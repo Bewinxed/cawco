@@ -171,7 +171,7 @@
   --color-brand-hover: var(--brand-hover);
   --color-brand-wash: var(--brand-wash);
   --color-c-target-tint: var(--c-target-tint);
-  --color-c-change-wash: var(--c-change-wash);
+  --color-c-change-ring: var(--c-change-ring);
   --color-brand-ink: var(--brand-ink);
   --color-brand-ink-strong: var(--brand-ink-strong);
   --color-link-ink: var(--link-ink);
@@ -417,6 +417,9 @@
   --spacing-icon-sm: var(--icon-sm);
   --spacing-icon-md: var(--icon-md);
   --spacing-icon-lg: var(--icon-lg);
+  --spacing-c-change-ring-width: var(--c-change-ring-width);
+  --spacing-c-change-ring-offset: var(--c-change-ring-offset);
+  --spacing-c-change-ping-spread: var(--c-change-ping-spread);
   --spacing-c-segmented-pad: var(--c-segmented-pad);
   --spacing-c-segment-gap: var(--c-segment-gap);
   --spacing-c-segment-pad-x: var(--c-segment-pad-x);

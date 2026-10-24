@@ -5,12 +5,16 @@
  * `meta.changes` less the person's looks in its `seen` map, read from the doc
  * this page holds, so every screen of the canvas marks the same.
  *
- * Each changed element wears the done wash (`--c-change-wash`, the same the
- * pages wear: the element's strokes and words read through it) on a layer of
- * its own over the scene, in the scene's coordinates: it pans and zooms with
- * the drawing, takes no press, and fades off over `--dur-fade` once seen. An
- * ellipse is washed as an ellipse, a diamond as a diamond, a rounded box at
- * its own radius.
+ * Each changed element wears the ring the pages wear (`--c-change-ring`,
+ * `--c-change-ring-width` heavy, `--c-change-ring-offset` outside its box,
+ * so it never covers its strokes or words) on a layer of its own over the
+ * scene, in the scene's coordinates: it pans and zooms with the drawing,
+ * takes no press, and fades off over `--dur-fade` once seen. An ellipse is
+ * ringed as an ellipse, a diamond as a diamond, a rounded box at its own
+ * radius grown by as much. A ring pings once as it lands and again when a
+ * step reaches it: its halo, the same shape, grows `--c-change-ping-spread`
+ * outward as it fades over `--dur-loop`, its line kept as heavy
+ * (`vector-effect: non-scaling-stroke`); with less motion it stands still.
  *
  * The tag (the floating tag recipe, under the rail) reads "N changed since
  * you looked", then "k of N" while stepping, between ‹ (Previous change) and
@@ -18,7 +22,7 @@
  * K step it while it holds the focus. Stops run in the scene's reading
  * order, top to bottom, then what was taken out. A step brings the element
  * into view and selects it (the canvas's chosen line), and marks it seen;
- * so does the person selecting a washed element; so does a Send (the
+ * so does the person selecting a ringed element; so does a Send (the
  * hub's). The tag leaves once every stop is seen.
  */
 import {
@@ -58,8 +62,8 @@ const readOf = (doc: Doc): Read => {
   };
 };
 
-/** One element's wash in the view's px: its box, and the shape it is drawn in. */
-interface Wash {
+/** One element's ring in the view's px: its element's box, and the shape it is drawn in. */
+interface Ring {
   anchor: string;
   h: number;
   radius: number;
@@ -90,11 +94,11 @@ const sceneBoxOf = (el: ExcalidrawElement) => {
   return { x: el.x, y: el.y, w: el.width, h: el.height };
 };
 
-/** The washes of `anchors` as the view stands now, in its px. */
-const washesOf = (
+/** The rings of `anchors` as the view stands now, in its px. */
+const ringsOf = (
   api: ExcalidrawImperativeAPI,
   anchors: readonly string[]
-): Wash[] => {
+): Ring[] => {
   const state = api.getAppState();
   const zoom = state.zoom.value;
   const byId = new Map(
@@ -103,13 +107,13 @@ const washesOf = (
       .filter((el) => !el.isDeleted)
       .map((el) => [el.id, el])
   );
-  return anchors.flatMap((anchor): Wash[] => {
+  return anchors.flatMap((anchor): Ring[] => {
     const el = byId.get(anchor);
     if (!el) {
       return [];
     }
     const box = sceneBoxOf(el);
-    let shape: Wash["shape"] = "box";
+    let shape: Ring["shape"] = "box";
     if (el.type === "ellipse") {
       shape = "ellipse";
     } else if (el.type === "diamond") {
@@ -132,44 +136,101 @@ const washesOf = (
   });
 };
 
-/** One wash, drawn in its element's shape; fading off once it leaves. */
-function WashShape({ wash, leaving }: { leaving: boolean; wash: Wash }) {
-  const common = {
-    "data-change": leaving ? undefined : wash.anchor,
-    "data-leaving": leaving ? "" : undefined,
-    className: "canvas-change",
+/** How far a ring's line stands out from its element's box, to the line's middle, px: the offset and half the line (tokens read once per draw). */
+const ringOut = (): number => {
+  const root = getComputedStyle(document.documentElement);
+  const offset =
+    Number.parseFloat(root.getPropertyValue("--c-change-ring-offset")) || 3;
+  const line =
+    Number.parseFloat(root.getPropertyValue("--c-change-ring-width")) || 2;
+  return offset + line / 2;
+};
+
+/** The ping's spread, px. */
+const pingSpread = (): number =>
+  Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue(
+      "--c-change-ping-spread"
+    )
+  ) || 10;
+
+/**
+ * One ring, drawn in its element's shape `out` px outside it; fading off
+ * once it leaves. `ping` draws its halo, which grows outward once as it
+ * fades: one per ping, so a step that reaches it plays it again.
+ */
+function RingShape({
+  ring,
+  leaving,
+  ping,
+}: {
+  leaving: boolean;
+  ping?: number;
+  ring: Ring;
+}) {
+  const out = ringOut();
+  const box = {
+    x: ring.x - out,
+    y: ring.y - out,
+    w: ring.w + 2 * out,
+    h: ring.h + 2 * out,
   };
-  if (wash.shape === "ellipse") {
+  const spread = pingSpread();
+  const shape = (className: string, extra: Record<string, unknown>) => {
+    const common = { className, ...extra };
+    if (ring.shape === "ellipse") {
+      return (
+        <ellipse
+          {...common}
+          cx={box.x + box.w / 2}
+          cy={box.y + box.h / 2}
+          rx={box.w / 2}
+          ry={box.h / 2}
+        />
+      );
+    }
+    if (ring.shape === "diamond") {
+      const cx = box.x + box.w / 2;
+      const cy = box.y + box.h / 2;
+      return (
+        <polygon
+          {...common}
+          points={`${cx},${box.y} ${box.x + box.w},${cy} ${cx},${box.y + box.h} ${box.x},${cy}`}
+        />
+      );
+    }
+    const radius = ring.radius > 0 ? ring.radius + out : 0;
     return (
-      <ellipse
+      <rect
         {...common}
-        cx={wash.x + wash.w / 2}
-        cy={wash.y + wash.h / 2}
-        rx={wash.w / 2}
-        ry={wash.h / 2}
+        height={box.h}
+        rx={radius}
+        ry={radius}
+        width={box.w}
+        x={box.x}
+        y={box.y}
       />
     );
-  }
-  if (wash.shape === "diamond") {
-    const cx = wash.x + wash.w / 2;
-    const cy = wash.y + wash.h / 2;
-    return (
-      <polygon
-        {...common}
-        points={`${cx},${wash.y} ${wash.x + wash.w},${cy} ${cx},${wash.y + wash.h} ${wash.x},${cy}`}
-      />
-    );
-  }
+  };
   return (
-    <rect
-      {...common}
-      height={wash.h}
-      rx={wash.radius}
-      ry={wash.radius}
-      width={wash.w}
-      x={wash.x}
-      y={wash.y}
-    />
+    <>
+      {ping !== undefined && !leaving ? (
+        // One halo per ping: a new one plays its growth again.
+        <g key={`ping:${ping}`}>
+          {shape("canvas-change-ping", {
+            "data-ping": "",
+            style: {
+              "--ping-x": String(1 + (2 * spread) / Math.max(1, box.w)),
+              "--ping-y": String(1 + (2 * spread) / Math.max(1, box.h)),
+            },
+          })}
+        </g>
+      ) : null}
+      {shape("canvas-change", {
+        "data-change": leaving ? undefined : ring.anchor,
+        "data-leaving": leaving ? "" : undefined,
+      })}
+    </>
   );
 }
 
@@ -215,7 +276,7 @@ export function Changes({
     doc.on("update", again);
     return () => doc.off("update", again);
   }, [doc]);
-  // The view moves: the washes follow the scene's scroll and zoom.
+  // The view moves: the rings follow the scene's scroll and zoom.
   const [view, setView] = useState(0);
   useEffect(
     () =>
@@ -236,34 +297,56 @@ export function Changes({
         .map((item) => item.anchor),
     [unseen]
   );
-  // `view` is the scene's scroll, zoom and elements moving, which washesOf reads from the API.
-  const washes = useMemo(() => washesOf(api, anchors), [api, anchors, view]);
+  // `view` is the scene's scroll, zoom and elements moving, which ringsOf reads from the API.
+  const rings = useMemo(() => ringsOf(api, anchors), [api, anchors, view]);
   /**
-   * Washes looked at, fading off over --dur-fade before they go: each one
-   * the last washes held that these don't, kept until its fade has run
+   * Each ring's pings, by anchor: one as it first lands on this screen, one
+   * more each time a step reaches it.
+   */
+  const [pings, setPings] = useState<ReadonlyMap<string, number>>(new Map());
+  const landed = useRef(new Set<string>());
+  useEffect(() => {
+    const fresh = anchors.filter((anchor) => !landed.current.has(anchor));
+    if (fresh.length === 0) {
+      return;
+    }
+    for (const anchor of fresh) {
+      landed.current.add(anchor);
+    }
+    setPings((was) => {
+      const next = new Map(was);
+      for (const anchor of fresh) {
+        next.set(anchor, (next.get(anchor) ?? 0) + 1);
+      }
+      return next;
+    });
+  }, [anchors]);
+  /**
+   * Rings looked at, fading off over --dur-fade before they go: each one
+   * the last rings held that these don't, kept until its fade has run
    * however often the view redraws meanwhile.
    */
-  const [leaving, setLeaving] = useState<Wash[]>([]);
-  const before = useRef<Wash[]>([]);
+  const [leaving, setLeaving] = useState<Ring[]>([]);
+  const before = useRef<Ring[]>([]);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   useEffect(() => {
-    const now = new Set(washes.map((wash) => wash.anchor));
-    const gone = before.current.filter((wash) => !now.has(wash.anchor));
-    before.current = washes;
+    const now = new Set(rings.map((ring) => ring.anchor));
+    const gone = before.current.filter((ring) => !now.has(ring.anchor));
+    before.current = rings;
     if (gone.length === 0) {
       return;
     }
-    const goneAnchors = new Set(gone.map((wash) => wash.anchor));
+    const goneAnchors = new Set(gone.map((ring) => ring.anchor));
     setLeaving((was) => [
-      ...was.filter((wash) => !goneAnchors.has(wash.anchor)),
+      ...was.filter((ring) => !goneAnchors.has(ring.anchor)),
       ...gone,
     ]);
     const timer = setTimeout(() => {
       timers.current.delete(timer);
-      setLeaving((was) => was.filter((wash) => !gone.includes(wash)));
+      setLeaving((was) => was.filter((ring) => !gone.includes(ring)));
     }, tokenMs("--dur-fade"));
     timers.current.add(timer);
-  }, [washes]);
+  }, [rings]);
   useEffect(() => {
     const held = timers.current;
     return () => {
@@ -296,7 +379,7 @@ export function Changes({
     [doc]
   );
 
-  // The person selecting a washed element has looked at it.
+  // The person selecting a ringed element has looked at it.
   useEffect(
     () =>
       api.onChange((_elements, state) => {
@@ -340,6 +423,9 @@ export function Changes({
         api.updateScene({
           appState: { selectedElementIds: { [el.id]: true } },
         });
+        setPings((was) =>
+          new Map(was).set(stop.anchor, (was.get(stop.anchor) ?? 0) + 1)
+        );
       }
       looked([stop.anchor]);
     },
@@ -376,11 +462,16 @@ export function Changes({
         data-canvas-changes=""
         data-cawco-changes=""
       >
-        {washes.map((wash) => (
-          <WashShape key={wash.anchor} leaving={false} wash={wash} />
+        {rings.map((ring) => (
+          <RingShape
+            key={ring.anchor}
+            leaving={false}
+            ping={pings.get(ring.anchor)}
+            ring={ring}
+          />
         ))}
-        {leaving.map((wash) => (
-          <WashShape key={`gone:${wash.anchor}`} leaving wash={wash} />
+        {leaving.map((ring) => (
+          <RingShape key={`gone:${ring.anchor}`} leaving ring={ring} />
         ))}
       </svg>
       {stops.length > 0 ? (

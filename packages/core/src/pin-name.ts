@@ -74,11 +74,38 @@ function componentOf(anchor: PageAnchor): string | null {
 
 /** The element itself, when it says nothing: its id, its first class, else what it is. */
 function elementWords(element: PinnedElement | undefined): string {
-  if (!element) {
-    return "Element";
+  return element ? elementName(element) : "Element";
+}
+
+/** Elements a person names by what they are, whatever their id says: a button is "Button", never "Cta". */
+const KIND_FIRST = new Set([
+  "a",
+  "button",
+  "img",
+  "input",
+  "picture",
+  "select",
+  "textarea",
+  "video",
+]);
+
+/**
+ * An element by what it is, not what it says ("Headline", "Button"): a
+ * control or a picture by its kind; anything else by its id, else its first
+ * class, else its kind. What a change line names it by (core comments.ts
+ * `ChangedItem.element`).
+ */
+export function elementName(element: {
+  classes: readonly string[];
+  id?: string | null;
+  tag: string;
+}): string {
+  const kind = TAG_WORDS[element.tag];
+  if (kind && KIND_FIRST.has(element.tag)) {
+    return kind;
   }
   const named = element.id || element.classes[0];
-  return (named && words(named)) || TAG_WORDS[element.tag] || "Element";
+  return (named && words(named)) || kind || "Element";
 }
 
 /**
@@ -89,6 +116,9 @@ function elementWords(element: PinnedElement | undefined): string {
  * name: it is the head's tooltip.
  */
 export function pinName(pin: Pin): string {
+  if (pin.title) {
+    return pin.title;
+  }
   const { anchor } = pin;
   if (!("selector" in anchor)) {
     return `Element ${anchor.element}`;

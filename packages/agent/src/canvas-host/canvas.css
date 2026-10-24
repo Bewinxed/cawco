@@ -540,8 +540,9 @@ body {
 }
 
 /* ---- Changed since you looked (changes.tsx; DESIGN.md, Changed since you
-   looked): the agent's changes the person hasn't looked at, washed in the
-   scene's coordinates over the drawing, never taking a press; and the tag
+   looked): the agent's changes the person hasn't looked at, ringed in the
+   scene's coordinates over the drawing, outside each element's shape, never
+   taking a press; and the tag
    that steps through them, the floating tag recipe, where the refusal band
    stands. */
 .canvas-changes {
@@ -555,10 +556,41 @@ body {
 }
 
 .canvas-change {
-  fill: var(--c-change-wash);
+  fill: none;
+  stroke: var(--c-change-ring);
+  stroke-width: var(--c-change-ring-width);
 
   &[data-leaving] {
     animation: canvas-change-out var(--dur-fade) var(--ease-out) forwards;
+  }
+}
+
+/* The ring's ping: its halo grows outward once as it fades, its line as
+   heavy as the ring's whatever its scale; none with less motion. */
+.canvas-change-ping {
+  fill: none;
+  stroke: var(--c-change-ring);
+  stroke-width: var(--c-change-ring-width);
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: canvas-change-ping var(--dur-loop) var(--ease-out);
+
+  @media (prefers-reduced-motion: reduce) {
+    display: none;
+  }
+}
+
+@keyframes canvas-change-ping {
+  from {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(var(--ping-x), var(--ping-y));
   }
 }
 

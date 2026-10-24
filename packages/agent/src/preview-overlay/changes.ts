@@ -1,26 +1,35 @@
 /**
- * What the latest revision changed that the person hasn't looked at (PRD
- * §5.7, "Pointing and what changed"; core comments.ts `ArtifactChanges`),
- * as the host names it (`cawco:changes`): each changed element washed in
- * `--c-change-wash` (the done wash seen through: it stands over the element,
- * so its words read through it) where it stands, at its own radius, with no
- * edge, in an `<svg>` in the page's own document as the pins are (it scrolls
- * with the page), never taking a press. A wash the host stops naming fades off over
+ * What the person hasn't looked at since an update changed it (PRD §5.7,
+ * "Pointing and what changed"; core comments.ts `ArtifactChanges`), as the
+ * host names it (`cawco:changes`): each changed element ringed where it
+ * stands, a `--c-change-ring` line `--c-change-ring-width` heavy standing
+ * `--c-change-ring-offset` outside its box at its own radius grown by as
+ * much, so it follows the element's shape and never covers what it says;
+ * in the page's own document as the pins are (it scrolls with the page),
+ * never taking a press. A ring the host stops naming fades off over
  * `--dur-fade`. Coral is the target's alone (DESIGN.md, The One Target
- * Rule): a wash is never coral, and the hover's `brand-wash` is not it.
+ * Rule): a ring is never coral.
  *
- * The host steps through them (its tag, `‹ ›`): this answers where each
- * stands in the page (`cawco:change-stops`), a pin whose element is in, holds
- * or is inside a changed one standing with it as one stop, in page order;
- * and a step brings its element into view and chooses it, the one 1px line
- * (`cawco:step-change`). A press on a washed element in Interact mode is a
- * look at it (`cawco:change-pressed`).
+ * A ring pings once as its change lands, and again when the person steps
+ * to it: a halo of its own colour spreading `--c-change-ping-spread` out
+ * from the line as it fades, one turn of `--dur-loop` on `--ease-out`, a
+ * Web Animation (`id` {@link PING}) on the ring's own halo, never on the
+ * element. Asking for less motion, the ring stands without its ping.
+ *
+ * The host steps through them (its tag, `‹ ›`, a To check row, a chip):
+ * this answers where each stands in the page (`cawco:change-stops`), a pin
+ * whose element is in, holds or is inside a changed one standing with it
+ * as one stop, in page order; and a step brings its element into view and
+ * chooses it, the one 1px line (`cawco:step-change`), and pings its ring.
+ * A press on a ringed element in Interact mode is a look at it
+ * (`cawco:change-pressed`).
  */
 import { type PageAnchor, readPins } from "@cawco/core/comments";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
 
-const SVG = "http://www.w3.org/2000/svg";
+/** A ring's ping, as `getAnimations()` names it. */
+export const PING = "cawco-change-ping";
 
 export interface ChangesDeps {
   chrome: InkChrome;
@@ -34,12 +43,12 @@ export interface ChangesDeps {
 }
 
 export interface Changes {
-  /** Every wash drawn again where its element stands now. */
+  /** Every ring drawn again where its element stands now. */
   draw: () => void;
-  layer: SVGSVGElement;
-  /** The changes the person hasn't looked at, by anchor, and the pins with an answer he hasn't: washed, and their stops told. */
+  layer: HTMLDivElement;
+  /** The changes the person hasn't looked at, by anchor, and the pins with an answer he hasn't: ringed, and their stops told. */
   show: (anchors: string[], pins: string[]) => void;
-  /** The change at `anchor` brought into view and chosen; a decision card's only for a moment (`flash`). */
+  /** The change at `anchor` brought into view, chosen and its ring pinged; a decision card's only for a moment (`flash`). */
   step: (anchor: string, flash: boolean) => void;
 }
 
@@ -60,7 +69,7 @@ const elementOf = (anchor: string): Element | null => {
 };
 
 export function startChanges(deps: ChangesDeps): Changes {
-  const layer = document.createElementNS(SVG, "svg");
+  const layer = document.createElement("div");
   layer.setAttribute("data-cawco-changes", "");
   layer.setAttribute("aria-hidden", "true");
   // Under the pins and the ink: it marks the page, never what stands on it.
@@ -72,52 +81,105 @@ export function startChanges(deps: ChangesDeps): Changes {
   let pinIds: string[] = [];
   /** The stops as last said to the host. */
   let lastSaid = "";
-  /** Each wash drawn, by anchor. */
-  const drawn = new Map<string, SVGRectElement>();
+  /** Each ring drawn, by anchor. */
+  const drawn = new Map<string, HTMLDivElement>();
+  /** Rings drawn since the page loaded: one is pinged as it first stands. */
+  const landed = new Set<string>();
 
   const radiusOf = (el: Element): number => {
     const own = getComputedStyle(el);
     return Number.parseFloat(own.borderTopLeftRadius) || 0;
   };
 
-  function draw() {
-    const fill = deps.chrome.token("--c-change-wash");
-    const fade = deps.chrome.ms("--dur-fade");
-    const wanted = new Set(anchors);
-    for (const [anchor, rect] of drawn) {
-      if (!wanted.has(anchor)) {
-        drawn.delete(anchor);
-        rect.removeAttribute("data-change");
-        rect.setAttribute("data-leaving", "");
-        // Faded off over --dur-fade, then gone.
-        rect.style.transition = `opacity ${fade}ms ease-out`;
-        rect.style.opacity = "0";
-        setTimeout(() => rect.remove(), fade);
-      }
+  const look = () =>
+    deps.chrome.tokens({
+      ring: ["--c-change-ring"],
+      width: ["--c-change-ring-width", "width"],
+      offset: ["--c-change-ring-offset", "width"],
+      spread: ["--c-change-ping-spread", "width"],
+    });
+
+  /** Ring `ring` pings once: its halo spreads out from the line and fades, unless the person asks for less motion. */
+  function ping(ring: HTMLDivElement) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
     }
+    const halo = ring.firstElementChild as HTMLDivElement | null;
+    if (!halo) {
+      return;
+    }
+    for (const running of halo.getAnimations()) {
+      running.cancel();
+    }
+    const { ring: colour, spread } = look();
+    const run = halo.animate(
+      [
+        { boxShadow: `0 0 0 0 ${colour}`, opacity: 0.6 },
+        { boxShadow: `0 0 0 ${spread} ${colour}`, opacity: 0 },
+      ],
+      {
+        duration: deps.chrome.ms("--dur-loop"),
+        easing: deps.chrome.token("--ease-out", "transition-timing-function"),
+      }
+    );
+    run.id = PING;
+  }
+
+  /** The rings the host no longer names fade off over --dur-fade, then go. */
+  function letGo(wanted: ReadonlySet<string>) {
+    const fade = deps.chrome.ms("--dur-fade");
+    for (const [anchor, ring] of drawn) {
+      if (wanted.has(anchor)) {
+        continue;
+      }
+      drawn.delete(anchor);
+      ring.removeAttribute("data-change");
+      ring.setAttribute("data-leaving", "");
+      ring
+        .animate([{ opacity: 1 }, { opacity: 0 }], {
+          duration: fade,
+          easing: "ease-out",
+          fill: "forwards",
+        })
+        .finished.then(
+          () => ring.remove(),
+          () => ring.remove()
+        );
+    }
+  }
+
+  function draw() {
+    const { ring: colour, width, offset } = look();
+    const line = Number.parseFloat(width) || 2;
+    const out = (Number.parseFloat(offset) || 3) + line;
+    letGo(new Set(anchors));
     for (const anchor of anchors) {
       const el = elementOf(anchor);
       const r = el?.getBoundingClientRect();
-      let rect = drawn.get(anchor);
+      let ring = drawn.get(anchor);
       if (!(el && r && r.width > 0 && r.height > 0)) {
-        rect?.remove();
+        ring?.remove();
         drawn.delete(anchor);
         continue;
       }
-      if (!rect) {
-        rect = document.createElementNS(SVG, "rect");
-        rect.setAttribute("data-change", anchor);
-        layer.append(rect);
-        drawn.set(anchor, rect);
+      const fresh = !ring;
+      if (!ring) {
+        ring = document.createElement("div");
+        ring.setAttribute("data-change", anchor);
+        const halo = document.createElement("div");
+        halo.setAttribute("data-ping", "");
+        ring.append(halo);
+        layer.append(ring);
+        drawn.set(anchor, ring);
       }
-      const radius = radiusOf(el);
-      rect.setAttribute("x", String(r.left + scrollX));
-      rect.setAttribute("y", String(r.top + scrollY));
-      rect.setAttribute("width", String(r.width));
-      rect.setAttribute("height", String(r.height));
-      rect.setAttribute("rx", String(radius));
-      rect.setAttribute("ry", String(radius));
-      rect.setAttribute("fill", fill);
+      const radius = radiusOf(el) + out;
+      ring.style.cssText = `position:absolute;box-sizing:border-box;pointer-events:none;left:${r.left + scrollX - out}px;top:${r.top + scrollY - out}px;width:${r.width + 2 * out}px;height:${r.height + 2 * out}px;border:${line}px solid ${colour};border-radius:${radius}px`;
+      (ring.firstElementChild as HTMLDivElement).style.cssText =
+        `position:absolute;inset:-${line}px;border-radius:${radius}px;opacity:0;pointer-events:none`;
+      if (fresh && !landed.has(anchor)) {
+        landed.add(anchor);
+        ping(ring);
+      }
     }
     if (anchors.length + pinIds.length > 0 || lastSaid !== "") {
       tellStops();
@@ -185,6 +247,10 @@ export function startChanges(deps: ChangesDeps): Changes {
       behavior: reduce ? "auto" : "smooth",
     });
     deps.outline(el);
+    const ring = drawn.get(anchor);
+    if (ring) {
+      ping(ring);
+    }
     if (flash) {
       flashTimer = setTimeout(
         () => deps.outline(null),
@@ -193,7 +259,7 @@ export function startChanges(deps: ChangesDeps): Changes {
     }
   }
 
-  // A press on a washed element in Interact mode is a look at it.
+  // A press on a ringed element in Interact mode is a look at it.
   addEventListener(
     "pointerdown",
     (event) => {
@@ -212,7 +278,7 @@ export function startChanges(deps: ChangesDeps): Changes {
     { capture: true, passive: true }
   );
   addEventListener("resize", () => draw(), { passive: true });
-  // The page laid out again (a font, a picture, a morph): each wash stands
+  // The page laid out again (a font, a picture, a morph): each ring stands
   // where its element is now, drawn in the next frame. Drawn inside the
   // delivery, what it wrote laid the page out again where the delivery had
   // already passed, and WebKit reported "ResizeObserver loop completed with

@@ -36327,6 +36327,13 @@
             "description": "Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person.",
             "type": "string"
           },
+          "marked": {
+            "description": "Made again under its name: what it changed, each by its link (`[label](cawco:change/<artifact>/<anchor>)`).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "moves": {
             "description": "A component canvas's flow moves, each with the animations it fired.",
             "type": "array",
@@ -37361,6 +37368,13 @@
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind"
           },
+          "marked": {
+            "description": "What this update changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`): what the agent names each to the person by.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "missing": {
             "type": "array",
             "items": {
@@ -37926,6 +37940,13 @@
           },
           "id": {
             "type": "string"
+          },
+          "marked": {
+            "description": "What it changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "moved": {
             "description": "Decisions the revision added or took out, by id; a removed one's pick is kept.",
@@ -38523,6 +38544,10 @@
             "items": {
               "$ref": "#/components/schemas/ThreadEntry"
             }
+          },
+          "title": {
+            "description": "What it stood on when it was made, in words (core pin-name.ts), kept as\nits title: a revision that rewrites its element moves its anchor's text,\nand that text is what changed (\"after\"), never the pin's name.",
+            "type": "string"
           }
         },
         "required": [

@@ -223,10 +223,10 @@
  *   card outlined for a moment; the artifact in front), on the desk and on
  *   the phone's sheet.
  * - changed: a revision's changes in `meta.changes` (a page's elements, a
- *   decision page's cards and redrawn pictures), washed in `c-change-wash`
- *   on their own box, words 4.5:1 through it; the tag steps through them,
- *   each step seen in the doc and its wash fading over `--dur-fade`; seen,
- *   a reload washes nothing.
+ *   decision page's cards and redrawn pictures), ringed in `c-change-ring`
+ *   outside their own box, covering none of it; the tag steps through them,
+ *   each step seen in the doc and its ring fading over `--dur-fade`; seen,
+ *   a reload rings nothing.
  * - drafts (The Work Outlives Its Surface Rule): a half-written comment
  *   survives a reload with its composer open at its target; Esc and a press
  *   outside park it as the hollow pill saying it holds a draft; one press
@@ -271,6 +271,7 @@
  *   bun scripts/probe-kit/run.ts comments
  *   bun scripts/probe-kit/run.ts comments --leg yjs      # y1 and y2 alone
  *   bun scripts/probe-kit/run.ts comments --leg sizing   # the sizing leg alone
+ *   bun scripts/probe-kit/run.ts comments --leg changed  # Changed since you looked, on a page and a canvas
  */
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "node:fs";
@@ -704,7 +705,7 @@ const near = (
 
 /** What Yjs logs when a second copy of it loads into a realm (yjs src/index.js). */
 const YJS_TWICE = /Yjs was already imported/;
-/** `--leg yjs`: y1 and y2 alone; `--leg sizing`: the sizing, switch and edges legs; `--leg switch`: the switch and edges legs. */
+/** `--leg yjs`: y1 and y2 alone; `--leg sizing`: the sizing, switch and edges legs; `--leg switch`: the switch and edges legs; `--leg changed`: the changed page's and canvas's legs. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -908,6 +909,11 @@ const runOn = async (kit: Kit, on: On) => {
     await sizingChecks(on);
     return;
   }
+  if (ONLY_LEG === "changed") {
+    await changedChecks(on);
+    await canvasChangedChecks(on, id);
+    return;
+  }
   if (ONLY_LEG === "switch") {
     const sized = await sizingPin(on);
     if (sized) {
@@ -948,7 +954,7 @@ const runOn = async (kit: Kit, on: On) => {
     () => insertChecks(on),
     () => mintedIdChecks(on),
     () => listChecks(on),
-    // Pointing and what changed: the links, their chips, the wash and the dot.
+    // Pointing and what changed: the links, their chips, the ring and the dot.
     () => pointChecks(on, { id, made, one, two }),
     () => changedChecks(on),
     // The Work Outlives Its Surface Rule on the composer.
@@ -1491,7 +1497,7 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
  * of their own); and nothing breathes under reduced motion. And what the
  * overlay paints with tokens read as it draws takes the night scheme the
  * moment the dashboard's theme turns: the pill's ring (`--surface-raised`)
- * and the ink's strokes (`--brand-solid`); the changes' washes are read the
+ * and the ink's strokes (`--brand-solid`); the changes' rings are read the
  * same way in the changed leg.
  */
 const breathChecks = async (on: On, frame: Frame) => {
@@ -8463,7 +8469,7 @@ const pointChecks = async (
   );
   const cardChange = cards
     ? await until(
-        "the rewritten card washed",
+        "the rewritten card ringed",
         () =>
           cards.evaluate(() => {
             const meta = (
@@ -8481,9 +8487,9 @@ const pointChecks = async (
               } | null,
               washed: [
                 ...document.querySelectorAll(
-                  "svg[data-cawco-changes] rect[data-change]"
+                  "[data-cawco-changes] [data-change]"
                 ),
-              ].map((rect) => rect.getAttribute("data-change")),
+              ].map((ring) => ring.getAttribute("data-change")),
             };
           }),
         (now) => now.washed.length > 1,
@@ -8492,7 +8498,7 @@ const pointChecks = async (
     : null;
   const picture = 'img[src$="files/0-line.png"]';
   on.kit.check(
-    "changed: a decision page's revision writes the card it rewrote and the picture drawn again into meta.changes, and the page washes those two alone",
+    "changed: a decision page's revision writes the card it rewrote and the picture drawn again into meta.changes, and the page rings those two alone",
     JSON.stringify(
       cardChange?.changes?.items.map((item) => [item.kind, item.anchor])
     ) ===
@@ -8770,75 +8776,22 @@ const MORE_LINES = Array.from(
     `<p>Line ${i + 1} of the page, words that stand at its top as it scrolls.</p>`
 ).join("");
 
-/**
- * WCAG 2 contrast of `selector`'s words over its ground with the change
- * wash (`c-change-wash`) laid over both, as the overlay lays it, by day and
- * by night: the ground the nearest painted ancestor's, else the page's
- * canvas.
- */
-const textUnderWash = (frame: Frame, selector: string) =>
-  frame.evaluate((sel) => {
+/** How far a change's ring stands out from its element's box to its outer edge, px: `--c-change-ring-offset` and `--c-change-ring-width`, read in the page. */
+const ringOut = (frame: Frame) =>
+  frame.evaluate(() => {
+    const probe = document.createElement("span");
     const shadow = document.querySelector("cawco-overlay")?.shadowRoot;
-    const el = document.querySelector(sel);
-    const paint = document.createElement("canvas").getContext("2d", {
-      willReadFrequently: true,
-    });
-    if (!(shadow && el && paint)) {
-      return null;
-    }
-    const pixel = (...layers: string[]) => {
-      paint.clearRect(0, 0, 1, 1);
-      for (const layer of layers) {
-        paint.fillStyle = layer;
-        paint.fillRect(0, 0, 1, 1);
-      }
-      const [r = 0, g = 0, b = 0] = paint.getImageData(0, 0, 1, 1).data;
-      return { r, g, b };
-    };
-    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
-      const lin = (c: number) => {
-        const v = c / 255;
-        return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-      };
-      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-    };
-    const clear = (color: string) =>
-      color === "transparent" ||
-      color.endsWith(", 0)") ||
-      color.endsWith("/ 0)");
-    const root = document.documentElement;
-    const was = root.style.colorScheme;
-    const out: Record<string, number> = {};
-    for (const scheme of ["light", "dark"] as const) {
-      root.style.colorScheme = scheme;
-      let ground = "";
-      for (let at: Element | null = el; at && !ground; at = at.parentElement) {
-        const color = getComputedStyle(at).backgroundColor;
-        if (!clear(color)) {
-          ground = color;
-        }
-      }
-      const probe = document.createElement("span");
-      probe.style.colorScheme = scheme;
-      probe.style.color = "var(--c-change-wash)";
-      probe.style.background = "Canvas";
-      shadow.append(probe);
-      const { color: wash, backgroundColor: canvas } = getComputedStyle(probe);
-      probe.remove();
-      const base = ground || canvas;
-      const text = lum(pixel(base, getComputedStyle(el).color, wash));
-      const under = lum(pixel(base, wash));
-      out[scheme === "light" ? "day" : "night"] =
-        Math.round(
-          ((Math.max(text, under) + 0.05) / (Math.min(text, under) + 0.05)) *
-            100
-        ) / 100;
-    }
-    root.style.colorScheme = was;
+    probe.style.width = "var(--c-change-ring-offset)";
+    probe.style.height = "var(--c-change-ring-width)";
+    probe.style.position = "fixed";
+    (shadow ?? document.body).append(probe);
+    const own = getComputedStyle(probe);
+    const out = Number.parseFloat(own.width) + Number.parseFloat(own.height);
+    probe.remove();
     return out;
-  }, selector);
+  });
 
-/** What a page's doc says of its latest changes and the person's looks at them, and what its overlay washes. */
+/** What a page's doc says of its changes since he looked and the person's looks at them, and what its overlay rings. */
 const changedRead = (frame: Frame) =>
   frame.evaluate(() => {
     const { doc } = (
@@ -8862,27 +8815,30 @@ const changedRead = (frame: Frame) =>
       changes,
       seen: changes ? (seen[String(changes.revision)] ?? []) : [],
       washes: [
-        ...document.querySelectorAll<SVGRectElement>(
-          "svg[data-cawco-changes] rect[data-change]"
+        ...document.querySelectorAll<HTMLElement>(
+          "[data-cawco-changes] [data-change]"
         ),
-      ].map((rect) => {
-        const anchor = rect.getAttribute("data-change") ?? "";
+      ].map((ring) => {
+        const anchor = ring.getAttribute("data-change") ?? "";
         const el = document.querySelector(anchor);
         const r = el?.getBoundingClientRect();
+        const own = getComputedStyle(ring);
+        const box = ring.getBoundingClientRect();
         return {
           anchor,
-          fill: rect.getAttribute("fill") ?? "",
-          rx: Number(rect.getAttribute("rx")),
+          fill: own.borderTopColor,
+          ground: own.backgroundColor,
+          rx: Number.parseFloat(own.borderTopLeftRadius),
           box: {
-            x: Number(rect.getAttribute("x")),
-            y: Number(rect.getAttribute("y")),
-            w: Number(rect.getAttribute("width")),
-            h: Number(rect.getAttribute("height")),
+            x: box.x + scrollX,
+            y: box.y + scrollY,
+            w: box.width,
+            h: box.height,
           },
           element: r
             ? { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }
             : null,
-          pointer: getComputedStyle(rect).pointerEvents,
+          pointer: own.pointerEvents,
         };
       }),
     };
@@ -8890,10 +8846,10 @@ const changedRead = (frame: Frame) =>
 
 /**
  * Changed since you looked (5): a revision's changes in `meta.changes`, each
- * changed element washed in the done wash where it stands after the person
- * comes back (a reload), the tag counting them; each step brings one out,
- * marks it seen in the doc and fades its wash off over `--dur-fade`; every
- * stop seen, the tag leaves, and a reload washes nothing.
+ * changed element ringed where it stands after the person comes back (a
+ * reload), the tag counting them; each step brings one out, marks it seen
+ * in the doc once its ring has pinged and fades its ring off over
+ * `--dur-fade`; every stop seen, the tag leaves, and a reload rings nothing.
  */
 /** The widths the bar is swept at: a phone, a narrow pane, a desk. */
 const SWEEP_WIDTHS = [390, 680, 1440] as const;
@@ -9136,30 +9092,37 @@ const changedChecks = async (on: On) => {
     15_000
   ).catch(() => null);
   const items = before?.changes?.items ?? [];
-  const done = await tokenColor(on.page, "--c-change-wash");
+  const done = await tokenColor(on.page, "--c-change-ring");
   const coral = await tokenColor(on.page, "--brand-solid");
   const [washRgb, doneRgb, coralRgb] = await srgbOf(on.page, [
     before?.washes[0]?.fill ?? "",
     done,
     coral,
   ]);
+  const out = await ringOut(frame);
+  const grown = (box: { x: number; y: number; w: number; h: number }) => ({
+    x: box.x - out,
+    y: box.y - out,
+    w: box.w + 2 * out,
+    h: box.h + 2 * out,
+  });
+  // Each ring stands outside its element's box on its shape: its box the element's grown by the offset and the line, its radius grown by as much, no fill.
   const placed = (before?.washes ?? []).every(
     (wash) =>
       wash.element !== null &&
-      near(wash.box, wash.element, 1) &&
-      wash.rx === 12 &&
+      near(wash.box, grown(wash.element), 1) &&
+      Math.abs(wash.rx - (12 + out)) <= 0.5 &&
+      (wash.ground === "rgba(0, 0, 0, 0)" || wash.ground === "transparent") &&
       wash.pointer === "none"
   );
   const tag = on.page.locator(
     '[data-slot="changes-tag"] [data-slot="change-count"]'
   );
-  // The wash stands over the element: its words read through it.
-  const readable = await textUnderWash(frame, "#b");
   const said = (
     await tag.textContent({ timeout: 5000 }).catch(() => null)
   )?.trim();
   on.kit.check(
-    "changed: the revision's changes are in the doc (#b rewritten, #c put in, the gone paragraph a removed stop); coming back, #b and #c wear the done wash (c-change-wash, status-done-bg seen through, never coral) on their own box and radius, taking no press, #b's words 4.5:1 or better through it by day and by night; the tag reads \"3 changed since you looked\"",
+    'changed: the revision\'s changes are in the doc (#b rewritten, #c put in, the gone paragraph a removed stop); coming back, #b and #c wear the ring (c-change-ring, never coral) outside their own box on their own radius grown by its offset and line, with no fill and taking no press; the tag reads "3 changed since you looked"',
     JSON.stringify(
       items.map((item) => [
         item.kind,
@@ -9176,29 +9139,27 @@ const changedChecks = async (on: On) => {
       sameRgb(washRgb, doneRgb) &&
       !sameRgb(washRgb, coralRgb, 10) &&
       placed &&
-      said === "3 changed since you looked" &&
-      (readable?.day ?? 0) >= 4.5 &&
-      (readable?.night ?? 0) >= 4.5,
-    `contrast ${JSON.stringify(readable)}; items ${JSON.stringify(items)}; washes ${JSON.stringify(before?.washes)}; wash ${JSON.stringify(washRgb)} done ${JSON.stringify(doneRgb)}; tag ${said}`
+      said === "3 changed since you looked",
+    `ring out ${out}; items ${JSON.stringify(items)}; washes ${JSON.stringify(before?.washes)}; wash ${JSON.stringify(washRgb)} done ${JSON.stringify(doneRgb)}; tag ${said}`
   );
 
-  // The theme turned to night: the washes are drawn again in it at once.
+  // The theme turned to night: the rings are drawn again in it at once.
   await switchTheme(on.page, "dark");
   const night = await until(
-    "the washes in the night scheme",
+    "the rings in the night scheme",
     () => changedRead(frame),
     (read) =>
       read.washes.length > 0 &&
       read.washes[0]?.fill !== before?.washes[0]?.fill,
     5000
   ).catch(() => changedRead(frame));
-  const nightDone = await tokenColor(on.page, "--c-change-wash");
+  const nightDone = await tokenColor(on.page, "--c-change-ring");
   const [nightWashRgb, nightDoneRgb] = await srgbOf(on.page, [
     night.washes[0]?.fill ?? "",
     nightDone,
   ]);
   on.kit.check(
-    "changed (scheme): the dashboard's theme switched to night, the page's washes take --c-change-wash's night value at once, as they had its day value",
+    "changed (scheme): the dashboard's theme switched to night, the page's rings take --c-change-ring's night value at once, as they had its day value",
     sameRgb(washRgb, doneRgb) &&
       sameRgb(nightWashRgb, nightDoneRgb) &&
       !sameRgb(doneRgb, nightDoneRgb),
@@ -9209,18 +9170,20 @@ const changedChecks = async (on: On) => {
   // The sweep lays the panel out at three widths and back: the steps read the frame as it stands after.
   const held = (await changesBarSweep(on, id)) ?? frame;
 
-  // A step: #b brought out and chosen, seen in the doc, its wash fading off over --dur-fade.
+  // A step: #b brought out and chosen, seen in the doc once its ring pinged, its ring fading off over --dur-fade.
   await held.evaluate(() => {
     const leaving: string[] = [];
     (window as unknown as { probeLeaving: string[] }).probeLeaving = leaving;
     new MutationObserver((records) => {
       for (const record of records) {
-        const rect = record.target as SVGRectElement;
-        if (rect.hasAttribute("data-leaving")) {
-          leaving.push(rect.style.transition);
+        const ring = record.target as HTMLElement;
+        if (ring.hasAttribute("data-leaving")) {
+          for (const fade of ring.getAnimations()) {
+            leaving.push(`${fade.effect?.getTiming().duration}ms`);
+          }
         }
       }
-    }).observe(document.querySelector("svg[data-cawco-changes]") as Element, {
+    }).observe(document.querySelector("[data-cawco-changes]") as Element, {
       attributes: true,
       attributeFilter: ["data-leaving"],
       subtree: true,
@@ -9242,10 +9205,10 @@ const changedChecks = async (on: On) => {
   const b = await boxIn(held, "#b");
   const counted = (await tag.textContent().catch(() => null))?.trim();
   on.kit.check(
-    'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen`, fades its wash off over --dur-fade (200ms), and the tag reads "1 of 3"',
+    'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen` once its ring has pinged, fades its ring off over --dur-fade (200ms), and the tag reads "1 of 3"',
     !!stepped &&
       near(chosen, b, 6) &&
-      leaving.some((transition) => transition.includes("200ms")) &&
+      leaving.includes("200ms") &&
       counted === "1 of 3",
     `seen ${JSON.stringify(stepped?.seen)}; washes ${JSON.stringify(stepped?.washes.map((w) => w.anchor))}; outline ${JSON.stringify(chosen)} over ${JSON.stringify(b)}; leaving ${JSON.stringify(leaving)}; tag ${counted}`
   );
@@ -9273,7 +9236,7 @@ const changedChecks = async (on: On) => {
   const still = again ? await changedRead(again) : null;
   const tagBack = await on.page.locator('[data-slot="changes-tag"]').count();
   on.kit.check(
-    "changed: every stop stepped onto, all three are seen and the tag leaves; coming back again washes nothing and draws no tag",
+    "changed: every stop stepped onto, all three are seen and the tag leaves; coming back again rings nothing and draws no tag",
     !!cleared &&
       tagGone &&
       !!still &&
@@ -11399,6 +11362,7 @@ const canvasChangesRead = (frame: Frame) =>
       anchor: shape.getAttribute("data-change") ?? "",
       tag: shape.tagName,
       fill: getComputedStyle(shape).fill,
+      stroke: getComputedStyle(shape).stroke,
       pointer: getComputedStyle(shape).pointerEvents,
       box: (() => {
         const r = (shape as SVGGraphicsElement).getBBox();
@@ -11423,67 +11387,32 @@ const canvasChangesRead = (frame: Frame) =>
     };
   });
 
-/** WCAG 2 contrast of the canvas's ink over its ground with the change wash over both, by day and by night, in the canvas page's own tokens. */
-const canvasInkUnderWash = (frame: Frame) =>
+/** The canvas's ring as its page computes it: its colour, and how far its line's middle stands outside the element (`--c-change-ring-offset` and half `--c-change-ring-width`). */
+const canvasRing = (frame: Frame) =>
   frame.evaluate(() => {
-    const paint = document.createElement("canvas").getContext("2d", {
-      willReadFrequently: true,
-    });
-    if (!paint) {
-      return null;
-    }
-    const pixel = (...layers: string[]) => {
-      paint.clearRect(0, 0, 1, 1);
-      for (const layer of layers) {
-        paint.fillStyle = layer;
-        paint.fillRect(0, 0, 1, 1);
-      }
-      const [r = 0, g = 0, b = 0] = paint.getImageData(0, 0, 1, 1).data;
-      return { r, g, b };
+    const probe = document.createElement("span");
+    probe.style.color = "var(--c-change-ring)";
+    probe.style.width = "var(--c-change-ring-offset)";
+    probe.style.height = "var(--c-change-ring-width)";
+    probe.style.position = "fixed";
+    document.body.append(probe);
+    const own = getComputedStyle(probe);
+    const ring = {
+      colour: own.color,
+      out: Number.parseFloat(own.width) + Number.parseFloat(own.height) / 2,
     };
-    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
-      const lin = (c: number) => {
-        const v = c / 255;
-        return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-      };
-      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-    };
-    const root = document.documentElement;
-    const was = root.style.colorScheme;
-    const out: Record<string, number> = {};
-    for (const scheme of ["light", "dark"] as const) {
-      root.style.colorScheme = scheme;
-      const probe = document.createElement("span");
-      probe.style.color = "var(--ink-strong)";
-      probe.style.background = "var(--surface-raised)";
-      probe.style.borderColor = "var(--c-change-wash)";
-      probe.style.borderStyle = "solid";
-      document.body.append(probe);
-      const own = getComputedStyle(probe);
-      const ink = own.color;
-      const ground = own.backgroundColor;
-      const wash = own.borderTopColor;
-      probe.remove();
-      const text = lum(pixel(ground, ink, wash));
-      const under = lum(pixel(ground, wash));
-      out[scheme === "light" ? "day" : "night"] =
-        Math.round(
-          ((Math.max(text, under) + 0.05) / (Math.min(text, under) + 0.05)) *
-            100
-        ) / 100;
-    }
-    root.style.colorScheme = was;
-    return out;
+    probe.remove();
+    return ring;
   });
 
 /**
  * Canvas (5, on a canvas): two agent updates (Beta's label rewritten,
  * Delta put in; then Gamma taken out) mark their elements under the scene
  * version, the second carrying what the first marked; coming back, Beta and
- * Delta wear the wash on their own boxes, the ink 4.5:1 through it, and it
- * pans and zooms with the scene; the tag counts three and steps through
- * them, each seen in the doc, a selection a look too, the wash fading over
- * `--dur-fade`; every stop seen, the tag leaves, and a reload washes nothing.
+ * Delta wear the ring outside their own boxes, with no fill, and it pans
+ * and zooms with the scene; the tag counts three and steps through them,
+ * each seen in the doc, a selection a look too, the ring fading over
+ * `--dur-fade`; every stop seen, the tag leaves, and a reload rings nothing.
  */
 const canvasChangedChecks = async (on: On, pageId: string) => {
   const { origin } = new URL(on.page.url());
@@ -11532,13 +11461,25 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
     15_000
   ).catch(() => null);
   const items = before?.changes?.items ?? [];
+  const ring = await canvasRing(frame);
+  const grown = (box: { x: number; y: number; w: number; h: number }) => ({
+    x: box.x - ring.out,
+    y: box.y - ring.out,
+    w: box.w + 2 * ring.out,
+    h: box.h + 2 * ring.out,
+  });
   const placed = (before?.washes ?? []).every((wash) => {
     const el = before?.boxes[wash.anchor];
-    return !!el && near(wash.box, el, 1) && wash.pointer === "none";
+    return (
+      !!el &&
+      near(wash.box, grown(el), 1) &&
+      wash.fill === "none" &&
+      wash.stroke === ring.colour &&
+      wash.pointer === "none"
+    );
   });
-  const contrast = await canvasInkUnderWash(frame);
   on.kit.check(
-    "canvas changed: two agent updates mark Beta, Delta and the gone ellipse under the scene version (2, the second carrying the first's); coming back, Beta and Delta wear the wash (c-change-wash) on their own boxes, taking no press, the ink 4.5:1 or better through it by day and by night; the canvas's tag reads \"3 changed since you looked\"",
+    "canvas changed: two agent updates mark Beta, Delta and the gone ellipse under the scene version (2, the second carrying the first's); coming back, Beta and Delta wear the ring (c-change-ring, no fill) outside their own boxes, taking no press; the canvas's tag reads \"3 changed since you looked\"",
     JSON.stringify(
       items.map((item) => [
         item.kind,
@@ -11555,13 +11496,11 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
       JSON.stringify(before.washes.map((wash) => wash.anchor).sort()) ===
         JSON.stringify(["b", "c"]) &&
       placed &&
-      (contrast?.day ?? 0) >= 4.5 &&
-      (contrast?.night ?? 0) >= 4.5 &&
       before.tag === "3 changed since you looked",
-    `items ${JSON.stringify(items)}; version ${before?.sceneVersion}; washes ${JSON.stringify(before?.washes)}; boxes ${JSON.stringify(before?.boxes)}; contrast ${JSON.stringify(contrast)}; tag ${before?.tag}`
+    `items ${JSON.stringify(items)}; version ${before?.sceneVersion}; rings ${JSON.stringify(before?.washes)}; boxes ${JSON.stringify(before?.boxes)}; ring ${JSON.stringify(ring)}; tag ${before?.tag}`
   );
 
-  // Panned and zoomed, the wash stays on its element.
+  // Panned and zoomed, the ring stays on its element.
   await frame.evaluate(() => {
     const { api } = (
       window as unknown as {
@@ -11589,12 +11528,12 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
       read.washes.length === 2 &&
       read.washes.every((wash) => {
         const el = read.boxes[wash.anchor];
-        return !!el && near(wash.box, el, 1);
+        return !!el && near(wash.box, grown(el), 1);
       }),
     5000
   ).catch(() => null);
   on.kit.check(
-    "canvas changed: panned and zoomed (1.5), each wash stands on its element's box as the view draws it now (±1px)",
+    "canvas changed: panned and zoomed (1.5), each ring stands round its element's box as the view draws it now (±1px)",
     !!moved,
     JSON.stringify(moved?.washes)
   );
@@ -11626,7 +11565,7 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
     () => (window as unknown as { probeLeaving: string[] }).probeLeaving
   );
   on.kit.check(
-    'canvas changed: a step onto Beta selects it, marks it seen in the doc\'s seen, fades its wash off over --dur-fade (0.2s), and the tag reads "1 of 3"',
+    'canvas changed: a step onto Beta selects it, marks it seen in the doc\'s seen, fades its ring off over --dur-fade (0.2s), and the tag reads "1 of 3"',
     !!stepped &&
       stepped.selected.includes("b") &&
       !stepped.washes.some((wash) => wash.anchor === "b") &&

@@ -71,4 +71,27 @@ export const commentWords = {
   nextChange: "Next change",
   newAnswer: "New answer",
   pinNewAnswer: (n: number) => `Pin ${n}, new answer`,
+  // What changed for a comment: its thread's change lines, the rail's To check, the turn's chips.
+  changed: "Changed",
+  /** A change chip, read out: what changed, and that it opens there. */
+  changeChip: (what: string) => `Changed: ${what}`,
+  toCheck: "To check",
+  /** A comment whose element an update changed and the agent never answered. */
+  changedNoAnswer: "changed, no answer",
+  answered: "answered",
+  askAgain: "Ask again",
+  askingAgain: "Asking again…",
+  /** The To check row of changes no comment asked for. */
+  unasked: "Changed, no comment asked",
+  /** A change line's revision. */
+  revision: (n: number) => `rev ${n}`,
+  /** A change line's count of revisions that changed it since he looked. */
+  times: (n: number) => `${n} times`,
+  /** A change line's move: what it came after, then and now. */
+  moved: (before: string, after: string) =>
+    `moved from after ${before || "the start"} to after ${after || "the start"}`,
+  /** A change line's thing put in: no before. */
+  added: "added",
+  noneToCheck: "All looked at",
+  noneToCheckHint: "What an update changes shows here until you look at it.",
 } as const;

@@ -3,7 +3,9 @@
  * §5.10; core comments.ts; DESIGN.md, A pin's pill). A pin is a pill with a
  * tail corner: `--c-pin` tall, as wide as its number needs, three corners
  * round and the fourth, the tail, a 2px corner standing on the point the
- * person pressed. It stands up-right of that point, up-left where the page's
+ * person pressed; a point in the middle of a line of words stands at that
+ * line's end instead, at its foot, so the pill covers no word of it or of
+ * the line above. It stands up-right of that point, up-left where the page's
  * edge leaves no room on the right, below where none is left above. Its
  * fill says where it stands: hollow while the session hasn't heard it (no
  * number yet while it is being written), filled once sent, recessed when
@@ -92,6 +94,10 @@ const PILL_PAD = 6;
 const RING = 2;
 /** The radius of a pill's tail corner: `--radius-hair`. */
 const TAIL_R = 2;
+/** The longest text whose lines a pin's point is read against (`lineEnd`), characters. Our call: a paragraph's, never a page's. */
+const LINE_READ_MOST = 4000;
+/** The room a pill needs past its line's end to stand there, px: a three-figure pill and its rings. Our call. */
+const PILL_ROOM = 40;
 /** Room round a mark's crop, px. Our call. */
 export const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
@@ -468,11 +474,51 @@ export function startPins(deps: PinsDeps): Pins {
       return { at: [0, 0], box, el, page: true, shown: true };
     }
     const spot = point ?? { x: 1, y: 0 };
-    const at: [number, number] = [
+    const pressed: [number, number] = [
       box.x + spot.x * box.w,
       box.y + spot.y * box.h,
     ];
+    const at = lineEnd(el, pressed) ?? pressed;
     return { at, box, el, page: false, shown: showsAt(el, at) };
+  };
+
+  /**
+   * A point pressed in the middle of a line of `el`'s words, moved to that
+   * line's end, at its foot: the pill stands up-right of its point, so on
+   * the press itself it would stand over the words of the line above and
+   * of its own. At the line's end it stands in the line's own band past its
+   * last word, covering none. Null where the point is on no line of words
+   * (a picture, the padding, past a line's end), or the line ends too near
+   * the page's edge for a pill. A long element's lines are not read: past
+   * {@link LINE_READ_MOST} characters the press stands where it was.
+   */
+  const lineEnd = (
+    el: Element,
+    [px, py]: [number, number]
+  ): [number, number] | null => {
+    if (
+      el.ownerDocument !== document ||
+      (el.textContent?.length ?? 0) > LINE_READ_MOST
+    ) {
+      return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const x = px - scrollX;
+    const y = py - scrollY;
+    const fragments = [...range.getClientRects()].filter(
+      (r) => r.width > 0 && r.top <= y && r.bottom >= y
+    );
+    if (fragments.length === 0) {
+      return null;
+    }
+    const right = Math.max(...fragments.map((r) => r.right));
+    const bottom = Math.max(...fragments.map((r) => r.bottom));
+    const room = document.documentElement.clientWidth - RING;
+    if (x >= right || right + PILL_ROOM > room) {
+      return null;
+    }
+    return [right + scrollX + 1, bottom + scrollY];
   };
 
   /** Where pin `pin` stands in the page now, or null when it is not on it. */

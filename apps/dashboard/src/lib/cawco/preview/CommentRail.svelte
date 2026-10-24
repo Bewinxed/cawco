@@ -37,7 +37,7 @@
   import type { Pin } from "@cawco/core/comments";
   import { parse } from "@cawco/core/find-match";
   import { pinName } from "@cawco/core/pin-name";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -94,6 +94,7 @@
     onresolve,
     onretrypin,
     whyNotSent = () => null,
+    checks,
     filter = $bindable("open"),
     sort = $bindable("newest"),
     scroll = $bindable(0),
@@ -128,7 +129,20 @@
     onretrypin: (id: string) => void;
     /** Why a comment hasn't reached the session, in words, when its delivery reached no one or it stands only on the page; null while it is on its way. */
     whyNotSent?: (pin: Pin) => string | null;
-    filter?: "open" | "resolved";
+    /**
+     * What to check since he looked (the owner's pick, B: the rail as the
+     * inbox): a first tab, To check, its rows the comments whose elements
+     * changed, in the check order (answered, then changed with no answer),
+     * each with what changed under it (`changes`), then what changed under
+     * no comment (`unasked`, none when nothing did) as the last row.
+     */
+    checks?: {
+      count: number;
+      pins: string[];
+      changes: Snippet<[Pin]>;
+      unasked: Snippet | null;
+    };
+    filter?: "check" | "open" | "resolved";
     sort?: RailSort;
     scroll?: number;
   } = $props();
@@ -158,10 +172,12 @@
   const openPins = $derived(pins.filter((pin) => !pin.resolvedAt));
   const resolvedPins = $derived(pins.filter((pin) => !!pin.resolvedAt));
   const shown = $derived(
-    searched(
-      sortedPins(filter === "open" ? openPins : resolvedPins, sort),
-      asked
-    )
+    filter === "check" && checks
+      ? checks.pins.flatMap((id) => pins.filter((pin) => pin.id === id))
+      : searched(
+          sortedPins(filter === "open" ? openPins : resolvedPins, sort),
+          asked
+        )
   );
   const failed = $derived(typeof hold === "object" ? hold.failed : null);
   /** A tab's label: its count once the pins are read, and only above 0 (The Earned Count Rule). */
@@ -170,14 +186,32 @@
   /** The query's words, for the matching words a row marks. */
   const marked = $derived(parse(asked).tokens);
 
-  // The focused comment's own filter shows, so J and K never land on a hidden row.
+  /*
+   * The focused comment's own filter shows, so J and K never land on a
+   * hidden row: as the focus moves to a comment, or it is resolved or
+   * reopened. One To check holds keeps To check; its row leaving To check
+   * (looked at) leaves the tab where it is.
+   */
+  let toldFor: string | null = null;
+  /** The rail as it mounts (a phone's sheet standing back after a thread): its tab is what it was, To check included. */
+  let mounting = true;
   $effect(() => {
     const pin = pins.find((one) => one.id === focused);
-    if (pin) {
-      untrack(() => {
-        filter = pin.resolvedAt ? "resolved" : "open";
-      });
+    const state = pin ? `${pin.id}:${!!pin.resolvedAt}` : null;
+    const first = mounting;
+    mounting = false;
+    if (!pin || state === toldFor) {
+      return;
     }
+    toldFor = state;
+    untrack(() => {
+      if (first && filter === "check") {
+        return;
+      }
+      if (!(filter === "check" && checks?.pins.includes(pin.id))) {
+        filter = pin.resolvedAt ? "resolved" : "open";
+      }
+    });
   });
 
   /** The rows come back where they were read: the rail shut and open again keeps its scroll. */
@@ -387,6 +421,9 @@
         </Button>
       </div>
     {/if}
+    {#if filter === "check" && checks}
+      {@render checks.changes(pin)}
+    {/if}
     {#if !coarse.current}
       <span
         class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--dur-control) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
@@ -484,13 +521,16 @@
     </InputGroup.Root>
     <Tabs
       onValueChange={(next) => {
-        filter = next as "open" | "resolved";
+        filter = next as "check" | "open" | "resolved";
       }}
       size="compact"
       value={filter}
-      values={["open", "resolved"]}
+      values={checks ? ["check", "open", "resolved"] : ["open", "resolved"]}
     >
       <TabsList aria-label="Which comments">
+        {#if checks}
+          <TabItem label={tab(said.toCheck, checks.count)} value="check" />
+        {/if}
         <TabItem label={tab(said.open, openPins.length)} value="open" />
         <TabItem
           label={tab(said.resolved, resolvedPins.length)}
@@ -574,7 +614,29 @@
         in:reveal
         {@attach keepScroll}
       >
-        {#if shown.length > 0}
+        {#if filter === "check" && checks}
+          {#if checks.count > 0}
+            <ol
+              class="flex flex-col gap-space-row m-0 p-0 list-none"
+              data-slot="to-check"
+            >
+              {#each shown as pin (pin.id)}
+                {@render row(pin)}
+              {/each}
+              {#if checks.unasked}
+                <li data-slot="unasked">{@render checks.unasked()}</li>
+              {/if}
+            </ol>
+          {:else}
+            <p
+              data-slot="pin-list-empty"
+              class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
+            >
+              <span class="text-ink-strong type-label">{said.noneToCheck}</span>
+              {said.noneToCheckHint}
+            </p>
+          {/if}
+        {:else if shown.length > 0}
           <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
             {#each shown as pin (pin.id)}
               {@render row(pin)}

@@ -16,6 +16,7 @@ import {
   generatedId,
   type MarkPicture,
   type PageAnchor,
+  type Pin,
   type PinnedElement,
   type PreviewMode,
   pinUnsent,
@@ -27,6 +28,7 @@ import {
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
+import { pinName } from "@cawco/core/pin-name";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
@@ -692,8 +694,8 @@ function takeTheme(said: unknown) {
     themed();
     // What the overlay paints with tokens read as it is drawn, the pills
     // (pins.ts paintOf: their inks and their breath's floor), the ink's
-    // strokes (ink.ts, `--brand-solid`) and the changes' washes (changes.ts,
-    // `--c-change-wash`), is drawn again in the new scheme.
+    // strokes (ink.ts, `--brand-solid`) and the changes' rings (changes.ts,
+    // `--c-change-ring`), is drawn again in the new scheme.
     if (said !== drawnIn) {
       drawnIn = said;
       pins.draw();
@@ -2269,7 +2271,12 @@ async function writeDraft(message: HostMessage) {
     return;
   }
   await artifact.whenKnown();
-  const pin = commentOn(artifact.doc(), target, said);
+  // Its title is what it stands on now: a later revision's words are what changed there, never its name.
+  const pin = commentOn(
+    artifact.doc(),
+    { ...target, title: pinName(target as unknown as Pin) },
+    said
+  );
   if (typeof pin === "string") {
     post("cawco:comment-result", { ok: false, error: pin });
     return;
@@ -2843,7 +2850,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         message.scroll === true,
         message.instant === true
       ),
-    // What the latest revision changed that the person hasn't looked at, and the pins with an answer he hasn't: washed, their stops told.
+    // What changed that the person hasn't looked at, and the pins with an answer he hasn't: ringed, their stops told.
     "cawco:changes": (message) =>
       changes.show(strings(message.anchors), strings(message.pins)),
     // A step of the host's tag, or a chip's decision card: brought into view and chosen.

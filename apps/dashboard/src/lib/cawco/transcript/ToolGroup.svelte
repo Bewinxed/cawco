@@ -26,6 +26,7 @@
     calledArtifact,
     previewPlace,
   } from "#lib/cawco/preview/source.js";
+  import { referenceOf } from "#lib/cawco/references.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,
@@ -116,6 +117,37 @@
           attached.filter((path): path is string => typeof path === "string")
         )
       : [];
+  };
+
+  /** The calls that change a page or answer a comment, under any harness's naming of them. */
+  const POINTING_CALL =
+    /(^|_)(artifact_update|artifact_create|comment_reply|comment_resolve)$/;
+  /** A change's or a pin's link in a call's answer, its label escaped as markdown (and JSON) write it. */
+  const POINTED = /\[((?:[^\]\\]|\\.)*)\]\((cawco:(?:change|pin)\/[^)\s"]+)\)/g;
+  const ESCAPED = /\\(.)/g;
+
+  /**
+   * What a call changed on a page or which comment it answered, each by the
+   * link the hub's answer names it by (core references.ts): the turn that
+   * made the change carries each as its chip under the call's row, which
+   * opens the panel at that spot with its thread (the owner's pick, C's
+   * chip). Each once, in the order the answer names them.
+   */
+  const pointedBy = (m: Message): { href: string; label: string }[] => {
+    const name = (m.metadata?.toolName ?? "").toLowerCase();
+    if (!POINTING_CALL.test(name) || m.metadata?.toolStatus === "error") {
+      return [];
+    }
+    const text = resultField(m.metadata?.toolResult)?.text ?? "";
+    const seen = new Set<string>();
+    return [...text.matchAll(POINTED)].flatMap((match) => {
+      const href = match[2] ?? "";
+      if (seen.has(href)) {
+        return [];
+      }
+      seen.add(href);
+      return [{ href, label: (match[1] ?? "").replace(ESCAPED, "$1") }];
+    });
   };
 
   let { messages }: { messages: Message[] } = $props();
@@ -757,6 +789,24 @@
                 {/if}
               {/each}
             </div>
+          {/if}
+          {#if pointedBy(m).length > 0}
+            <!-- What the call changed on the page, or the comment it answered: each a chip that opens it there. -->
+            <p
+              data-slot="call-chips"
+              class="flex flex-wrap items-baseline gap-x-space-1 gap-y-space-1 m-0 ms-(--x-hang) mt-space-1 mb-space-2 text-size-label"
+            >
+              {#each pointedBy(m) as pointed (pointed.href)}
+                {@const drawn = referenceOf(pointed.href)}
+                {#if drawn.draw === "element"}
+                  <drawn.element
+                    id={drawn.id}
+                    kind={drawn.kind}
+                    label={pointed.label}
+                  />
+                {/if}
+              {/each}
+            </p>
           {/if}
           {#if m.metadata?.resultImages?.length}
             <div

@@ -13,6 +13,7 @@
  * a link.
  */
 import {
+  changeReference,
   decisionReference,
   parseReference,
   pinReference,
@@ -21,6 +22,7 @@ import {
 import type { Component } from "svelte";
 import ArtifactReference from "./ArtifactReference.svelte";
 import { artifactNamed } from "./artifact-names.svelte";
+import ChangeReference from "./ChangeReference.svelte";
 import DecisionReference from "./DecisionReference.svelte";
 import {
   type Drawn,
@@ -77,6 +79,13 @@ export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
     find: (id) => ofArtifact(id, pinReference(id)?.artifact),
     get element() {
       return PinReference;
+    },
+  },
+  /** A spot an update changed, by its artifact and anchor (`<artifact>/<anchor>`). */
+  change: {
+    find: (id) => ofArtifact(id, changeReference(id)?.artifact),
+    get element() {
+      return ChangeReference;
     },
   },
   /** A decision card, by its artifact and id (`<artifact>/<card>`). */

@@ -143,6 +143,8 @@ export interface MarkPictures {
  * by themselves.
  */
 export interface SendBody {
+  /** The person's Ask again: these comments, changed under with no answer, go to the session again, whole. */
+  again?: string[];
   /** The control the person pressed, as the sender names it: the journal's line says it. */
   control?: SendControl;
   pins?: string[];
@@ -337,10 +339,19 @@ export interface Pin {
   sentAt?: string;
   /** Oldest first. */
   thread: ThreadEntry[];
+  /**
+   * What it stood on when it was made, in words (core pin-name.ts), kept as
+   * its title: a revision that rewrites its element moves its anchor's text,
+   * and that text is what changed ("after"), never the pin's name.
+   */
+  title?: string;
 }
 
 /** A pin's head (`pins`): what it is, written once as it is made. */
-export type PinHead = Pick<Pin, "at" | "by" | "id" | "kind" | "number">;
+export type PinHead = Pick<
+  Pin,
+  "at" | "by" | "id" | "kind" | "number" | "title"
+>;
 
 /** Where a pin stands (`places`): moved by the page as its anchor finds its element again, or by the person placing it again. */
 export type PinPlace = Pick<
@@ -623,12 +634,15 @@ export function seePin(doc: MapDoc, pin: string, at: string): void {
 }
 
 /**
- * What one revision of an artifact changed, as the hub reads it at that
- * revision (the doc's `meta.changes`): a page's elements, a decision page's
- * cards, a canvas's elements. Each is a stop the panel marks until the
- * person has looked at it.
+ * What an artifact's revisions changed that the person hasn't looked at, as
+ * the hub reads them (the doc's `meta.changes`): a page's elements, a
+ * decision page's cards, a canvas's elements. Each is a stop the panel
+ * marks until the person has looked at it; one he hasn't is carried into
+ * the next revision's set ({@link carryChanges}), so the set is "since you
+ * looked", never only the latest revision's.
  */
 export interface ArtifactChanges {
+  /** When the latest revision was read. */
   at: string;
   items: ChangedItem[];
   /**
@@ -637,20 +651,234 @@ export interface ArtifactChanges {
    * the agent's updates moves while the canvas stays the one live scene.
    */
   revision: number;
+  /**
+   * When the revision before it was made: an agent's reply in a pin's thread
+   * after it is that revision's answer ({@link bindChanges}).
+   */
+  since?: string;
 }
 
 /**
  * One thing a revision changed: `element`, a page's element by its
- * selector, washed where it stands; `card`, a decision card, by its
+ * selector, marked where it stands; `card`, a decision card, by its
  * selector (`#decision-<id>`); `canvas`, a canvas's element by its id;
- * `removed`, something gone, with no box to wash, stood in the tag by its
+ * `removed`, something gone, with no box to mark, stood in the tag by its
  * label alone. The anchor is what the person's look is kept by.
  */
 export interface ChangedItem {
   anchor: string;
+  /** Whether the agent answered its pin in the revision that changed it (a reply in its thread since the revision before). */
+  answered?: boolean;
+  /** Its words when the person last looked; none when it was put in. */
+  before?: string;
+  /** What it is, by name ("Headline", "Button": core pin-name.ts `elementName`). */
+  element?: string;
   kind: "element" | "card" | "canvas" | "removed";
-  /** Its first words, or what it is. */
+  /** Its words now, or what it is: the "after". */
   label: string;
+  /** It moved: the element it came after then, and the one it comes after now, by their words (empty: it came first). */
+  moved?: { after: string; before: string };
+  /** The comment it answers, or the one that stands on it, by pin id. */
+  pin?: string;
+  /** The revision (a canvas's scene version) that last changed it. */
+  revision?: number;
+  /** How many revisions changed it since the person looked. */
+  times?: number;
+}
+
+/**
+ * One line of a pin's thread saying what changed for it (the doc's
+ * `activity`, by pin id; the hub's alone to write): `↻ <element> <before> →
+ * <after>`, with its revision. Kept after the person has looked, so his
+ * thread still says what was done for him.
+ */
+export interface ActivityLine {
+  after: string;
+  anchor: string;
+  /** Whether it came with the agent's answer in this thread. */
+  answered: boolean;
+  at: string;
+  before?: string;
+  element: string;
+  moved?: { after: string; before: string };
+  revision: number;
+}
+
+/** Lines one pin's thread keeps of what changed for it, newest last. Our call. */
+export const ACTIVITY_LIMIT = 30;
+
+/** The doc's `activity`: each pin's change lines ({@link ActivityLine}), by pin id. */
+export const activityOf = (doc: MapDoc) =>
+  doc.getMap("activity") as DocMap<ActivityLine[]>;
+
+/** The pins whose thread got an agent's answer after `since`, by id. */
+const answeredSince = (pins: Iterable<Pin>, since: string): Set<string> =>
+  new Set(
+    [...pins]
+      .filter(
+        (pin) =>
+          pin.thread.some(
+            (entry) => entry.by === "agent" && entry.at > since
+          ) ||
+          (pin.resolvedBy === "agent" && (pin.resolvedAt ?? "") > since)
+      )
+      .map((pin) => pin.id)
+  );
+
+/** The pin standing on a changed thing: a page's pin on its selector, a canvas's on its id. */
+const pinOn = (pins: Iterable<Pin>, item: ChangedItem): Pin | undefined =>
+  [...pins].find((pin) =>
+    "selector" in pin.anchor
+      ? pin.anchor.selector === item.anchor && !pin.anchor.frames?.length
+      : pin.anchor.element === item.anchor
+  );
+
+/**
+ * What a revision changed, each tied to its comment: the one standing on
+ * it, answered when the agent replied in its thread since the revision
+ * before (`since`); else, when exactly one comment was answered since, that
+ * one (the agent changed it for that comment), answered; else no comment
+ * (a change nobody asked for). Each stamped with `revision`.
+ */
+export function bindChanges(
+  items: readonly ChangedItem[],
+  pins: Iterable<Pin>,
+  since: string,
+  revision: number
+): ChangedItem[] {
+  const all = [...pins];
+  const answered = answeredSince(all, since);
+  const only = answered.size === 1 ? [...answered][0] : undefined;
+  return items.map((item) => {
+    const standing = item.kind === "removed" ? undefined : pinOn(all, item);
+    const pin = standing?.id ?? only;
+    return {
+      ...item,
+      revision,
+      times: 1,
+      ...(pin ? { pin, answered: answered.has(pin) } : {}),
+    };
+  });
+}
+
+/**
+ * The person's set since he looked: what the last set held that he hasn't
+ * looked at (`seen`), carried under the new revision, and what it changed,
+ * one stop per thing. One changed again keeps the words it had when he
+ * last looked as its `before`, counts the time, and is answered when
+ * either revision answered it.
+ */
+export function carryChanges(
+  was: readonly ChangedItem[],
+  seen: ReadonlySet<string>,
+  fresh: readonly ChangedItem[]
+): ChangedItem[] {
+  const unseen = new Map(
+    was
+      .filter((item) => !seen.has(item.anchor))
+      .map((item) => [item.anchor, item])
+  );
+  const merged = fresh.map((item) => {
+    const old = unseen.get(item.anchor);
+    if (!old) {
+      return item;
+    }
+    unseen.delete(item.anchor);
+    const pin = item.pin ?? old.pin;
+    const { before: _now, ...rest } = item;
+    return {
+      ...rest,
+      // Its words when he last looked; none when it was put in since.
+      ...(old.before === undefined ? {} : { before: old.before }),
+      times: (old.times ?? 1) + (item.times ?? 1),
+      ...(pin
+        ? {
+            pin,
+            answered:
+              (item.pin === pin && !!item.answered) ||
+              (old.pin === pin && !!old.answered),
+          }
+        : {}),
+    };
+  });
+  return [...unseen.values(), ...merged].slice(0, CHANGES_LIMIT);
+}
+
+/** Each pin's change lines from one revision's items (`bindChanges`'s), by pin id: what the doc's `activity` gains. */
+export function activityLines(
+  items: readonly ChangedItem[],
+  at: string
+): Map<string, ActivityLine[]> {
+  const lines = new Map<string, ActivityLine[]>();
+  for (const item of items) {
+    if (!item.pin || item.kind === "removed") {
+      continue;
+    }
+    lines.set(item.pin, [
+      ...(lines.get(item.pin) ?? []),
+      {
+        anchor: item.anchor,
+        answered: !!item.answered,
+        at,
+        element: item.element ?? item.label,
+        after: item.label,
+        revision: item.revision ?? 0,
+        ...(item.before === undefined ? {} : { before: item.before }),
+        ...(item.moved ? { moved: item.moved } : {}),
+      },
+    ]);
+  }
+  return lines;
+}
+
+/**
+ * The agent answered pin `pin` after its latest revision (`changes`): that
+ * revision's changes are the answer, tied to it as {@link bindChanges}
+ * would have, had the reply come first. The set as it stands now, and the
+ * items the reply tied or answered (what the pin's `activity` says).
+ */
+export function answerChanges(
+  changes: ArtifactChanges,
+  pins: Iterable<Pin>,
+  pin: string
+): { bound: ChangedItem[]; items: ChangedItem[] } {
+  const answered = answeredSince(pins, changes.since ?? "");
+  const only = answered.size === 1 && answered.has(pin);
+  const bound: ChangedItem[] = [];
+  const items = changes.items.map((item) => {
+    const latest = item.revision === changes.revision;
+    const ours = item.pin === pin && !item.answered;
+    const unasked = !item.pin && only && item.kind !== "removed";
+    if (!(latest && (ours || unasked))) {
+      return item;
+    }
+    const tied = { ...item, pin, answered: true };
+    bound.push(tied);
+    return tied;
+  });
+  return { items, bound };
+}
+
+/** Pin `pin`'s change lines with `bound` (an answer's, {@link answerChanges}) in: each line of theirs answered, each new one added, the oldest let go past {@link ACTIVITY_LIMIT}. */
+export function answeredLines(
+  lines: readonly ActivityLine[],
+  bound: readonly ChangedItem[],
+  at: string
+): ActivityLine[] {
+  const fresh = activityLines(bound, at).get(bound[0]?.pin ?? "") ?? [];
+  const next = lines.map((line) => {
+    const hit = fresh.find(
+      (one) => one.anchor === line.anchor && one.revision === line.revision
+    );
+    return hit ? { ...line, answered: true } : line;
+  });
+  const added = fresh.filter(
+    (one) =>
+      !lines.some(
+        (line) => line.anchor === one.anchor && line.revision === one.revision
+      )
+  );
+  return [...next, ...added].slice(-ACTIVITY_LIMIT);
 }
 
 /** Items one revision's changes keep. Our call: past it, the page changed whole. */
@@ -1147,6 +1375,8 @@ export interface CommentTarget {
   ink?: string;
   /** Where on its element the press landed: fractions of the element's box. */
   point?: { x: number; y: number };
+  /** What it stands on, in words, as the pin's title (core pin-name.ts `pinName`). */
+  title?: string;
 }
 
 /**
@@ -1180,6 +1410,7 @@ export function commentOn(
     elements: target.elements,
     ...(target.ink ? { ink: target.ink } : {}),
     ...(target.point ? { point: target.point } : {}),
+    ...(target.title ? { title: target.title } : {}),
     thread: [entry],
   };
   writePin(doc, pin);
@@ -1559,6 +1790,10 @@ export const attachedLine = (
   }
   return `- I attached: ${attachment.name} (${size}, ${attachment.mediaType}), its "Attached file" line below`;
 };
+
+/** A delivery's line for what an update changed under a comment the agent didn't answer: its element, before and after. */
+export const askedAgainLine = (item: ChangedItem): string =>
+  `- Your update changed ${item.element ?? "it"}${item.before === undefined ? "" : ` from ${JSON.stringify(item.before)}`} to ${JSON.stringify(item.label)}${item.moved ? ", and moved it" : ""}.`;
 
 /** A delivery's line for the person's words in a pin's thread: what a probe reads them by. */
 export const wroteLine = (text: string): string =>

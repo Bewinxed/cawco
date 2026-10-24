@@ -821,20 +821,6 @@
         }
       }
     },
-    "c-change-wash": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklab",
-        "components": [0.40208, -0.046934, 0.076135],
-        "alpha": 0.4
-      },
-      "$description": "The overlay's see-through done wash over what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): status-done-bg at 40%, never the opaque chip fill and never coral; drawn by the overlay over the element, not under it, so the element's words read through it.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklab, {color.status-done-bg} 40%, transparent)"
-        }
-      }
-    },
     "brand-ink-strong": {
       "$type": "color",
       "$value": {

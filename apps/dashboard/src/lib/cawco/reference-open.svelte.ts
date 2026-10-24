@@ -6,7 +6,8 @@
  * sheet too), and the pane holding it opens it at the place the chip names
  * once its page is ready (artifact-names.svelte.ts `askOpen`). In an
  * artifact's own tab, a chip of another artifact opens that artifact's own
- * tab at the place (`?pin=<n>`, `?card=<id>`), as a pin's Copy link does.
+ * tab at the place (`?pin=<n>`, `?card=<id>`, `?change=<anchor>`), as a
+ * pin's Copy link does.
  */
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
@@ -26,6 +27,9 @@ const ownTab = (id: string, at: OpenAt): string => {
   }
   if ("card" in at) {
     return `${base}?card=${encodeURIComponent(at.card)}`;
+  }
+  if ("change" in at) {
+    return `${base}?change=${encodeURIComponent(at.change)}`;
   }
   return base;
 };

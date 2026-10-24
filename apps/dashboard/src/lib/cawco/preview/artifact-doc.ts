@@ -1,6 +1,8 @@
 import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
 import {
+  type ActivityLine,
   type ArtifactChanges,
+  activityOf,
   deletePin,
   goneOf,
   honourDeletions,
@@ -60,7 +62,9 @@ export const LINK_DROPPED = `${NOT_REACHING}. The link to the hub dropped.`;
 
 /** The doc as the pane reads it. */
 export interface ArtifactView extends ArtifactChoices {
-  /** What the latest revision changed, as the hub read it (`meta.changes`); null before any revision did. */
+  /** Each pin's lines of what changed for it, by pin id (the doc's `activity`, the hub's). */
+  activity: Readonly<Record<string, ActivityLine[]>>;
+  /** What changed since the person looked, as the hub read it (`meta.changes`); null before any revision did. */
   changes: ArtifactChanges | null;
   /** A decision page, carrying its own Send at its foot (`meta.ownSend`): the panel's head stands none for it. */
   ownSend: boolean;
@@ -142,6 +146,7 @@ const viewOf = (doc: Doc): ArtifactView => {
   const pins = [...readPins(doc).values()].filter((pin) => !gone.has(pin.id));
   const changes = (meta.get("changes") as ArtifactChanges | undefined) ?? null;
   return {
+    activity: activityOf(doc).toJSON() as Record<string, ActivityLine[]>,
     changes,
     seen: new Set(
       changes ? (seenOf(doc).get(String(changes.revision)) ?? []) : []
@@ -165,7 +170,7 @@ export const artifactSyncPath = (artifactId: string): string =>
 async function postSend(
   instanceId: string,
   artifactId: string,
-  body: Pick<SendBody, "control" | "pins">,
+  body: Pick<SendBody, "again" | "control" | "pins">,
   again: string
 ): Promise<void> {
   const response = await fetch(
@@ -205,6 +210,19 @@ export const retryComment = (
     artifactId,
     { pins: [pin] },
     "so the comment didn't go. Try again."
+  );
+
+/** A comment's Ask again: an update changed what it stands on with no answer, so it goes to the session again, whole. */
+export const askAgain = (
+  instanceId: string,
+  artifactId: string,
+  pin: string
+): Promise<void> =>
+  postSend(
+    instanceId,
+    artifactId,
+    { again: [pin] },
+    "so the comment wasn't asked again. Ask again."
   );
 
 /** The person's entries in pin `pin`'s thread that a refused write of the pane's held and the hub's doc does not. */

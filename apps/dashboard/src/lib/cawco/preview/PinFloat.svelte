@@ -8,15 +8,19 @@
   so a card never changes width as it goes from composer to thread
   (commenting addendum §3; the owner's pick "Beside the comment").
 
-  It stands at the pill's end side, its top at the pill's; else at its
-  start side; else below it (over it where the room below is short);
-  `--space-2` from the pill as drawn, its focus ring included, inside the
-  well, never on it. It
-  runs down the page as far as there is room: its tallest is the room from
-  where it stands to the well's foot, until that room is under
-  `--c-pin-card-reading-room`; then it takes the well's height, its foot on
-  the well's. A pin not on the page (its element gone) stands at the well's
-  top-right, as tall as the well. On a phone, under a finger, and wherever
+  It never stands over what the comment is about: the element's box and the
+  pill together (`subject`). It stands beside them at their end side, its
+  top at the pill's; else at their start side; else below them, else above
+  them, whichever side has `--c-pin-card-reading-room` (or its own height,
+  when that is less); `--space-2` from the pill as drawn, its focus ring
+  included, inside the well. Beside them it runs down the page as far as
+  there is room: its tallest is the room from where it stands to the well's
+  foot, until that room is under `--c-pin-card-reading-room`; then it takes
+  the well's height, its foot on the well's. Below or above them, its
+  tallest is that side's room. Only an element that leaves no such room on
+  any side has the card beside, under or over its pill alone. A pin not on
+  the page (its element gone) stands at the well's top-right, as tall as the
+  well. On a phone, under a finger, and wherever
   the pane says so (`sheet`), it is the well's foot sheet, full width.
 
   It comes in from the pill, growing from `--press-scale` as it fades in
@@ -38,6 +42,7 @@
 
   let {
     mark,
+    box = null,
     room,
     sheet = false,
     bare = false,
@@ -56,6 +61,8 @@
     exit?: { at: "fade" | "cut" };
     /** The pill's box in the well, px; null while it is not on screen. */
     mark: Box | null;
+    /** The box of what the pill stands on, in the well, px: the card never stands over it. */
+    box?: Box | null;
     /** The well's room, px. */
     room: { h: number; w: number };
     sheet?: boolean;
@@ -105,6 +112,31 @@
   /** The least room below where it stands that it hangs in from the pill: `--c-pin-card-reading-room`. */
   const reach = $derived(numberOf("--c-pin-card-reading-room") || 320);
 
+  /**
+   * What the comment is about, in the well: the pill and its element's box
+   * as the well shows it (cut to the well), one box; the pill alone without
+   * its element's.
+   */
+  const subject = $derived.by((): Box | null => {
+    if (!mark) {
+      return null;
+    }
+    const parts = box ? [mark, box] : [mark];
+    const left = Math.max(0, Math.min(...parts.map((one) => one.x)));
+    const top = Math.max(0, Math.min(...parts.map((one) => one.y)));
+    const right = Math.min(
+      room.w,
+      Math.max(...parts.map((one) => one.x + one.w))
+    );
+    const bottom = Math.min(
+      room.h,
+      Math.max(...parts.map((one) => one.y + one.h))
+    );
+    return right > left && bottom > top
+      ? { x: left, y: top, w: right - left, h: bottom - top }
+      : mark;
+  });
+
   const place = $derived.by(() => {
     if (sheet) {
       return null;
@@ -113,55 +145,80 @@
       left: Math.max(gap, Math.min(left, room.w - width - gap)),
       top: Math.max(gap, Math.min(top, room.h - height - gap)),
     });
-    if (!mark) {
+    if (!(mark && subject)) {
       return {
         ...inside(room.w - width - gap, gap),
         side: "room",
         origin: "top right",
       };
     }
-    const end = mark.x + mark.w + clear;
+    const about = subject;
+    // A side's least room: the reading room, or the card's own height when less.
+    const least = Math.min(reach, height || reach);
+    const end = about.x + about.w + clear;
     if (end + width <= room.w - gap) {
       return { ...inside(end, mark.y), side: "end", origin: "top left" };
     }
-    const start = mark.x - clear - width;
+    const start = about.x - clear - width;
     if (start >= gap) {
       return { ...inside(start, mark.y), side: "start", origin: "top right" };
     }
-    // No side has its width: under the pill, or over it where the room
-    // under it is short of `reach` and the room over it is more, so it
-    // never stands on the pill.
-    const under = room.h - (mark.y + mark.h + clear) - gap;
-    if (under < reach && mark.y - clear - gap > under) {
+    const under = room.h - (about.y + about.h + clear) - gap;
+    const over = about.y - clear - gap;
+    if (under >= least || over >= least) {
+      return under >= least
+        ? {
+            ...inside(mark.x, about.y + about.h + clear),
+            side: "below",
+            origin: "top left",
+          }
+        : {
+            ...inside(mark.x, about.y - clear - height),
+            side: "above",
+            origin: "bottom left",
+          };
+    }
+    // The element leaves no room on any side: under the pill, or over it
+    // where the room under it is short of `reach` and the room over it is
+    // more, so it never stands on the pill.
+    const belowPill = room.h - (mark.y + mark.h + clear) - gap;
+    if (belowPill < reach && mark.y - clear - gap > belowPill) {
       return {
         ...inside(mark.x, mark.y - clear - height),
-        side: "above",
+        side: "above-pill",
         origin: "bottom left",
       };
     }
     return {
       ...inside(mark.x, mark.y + mark.h + clear),
-      side: "below",
+      side: "below-pill",
       origin: "top left",
     };
   });
 
   /**
-   * Its tallest, px: beside the pill, the room from the pill's top to the
-   * well's foot, else the well's height once that room is under `reach`;
-   * under or over the pill, the room on that side of it.
+   * Its tallest, px: beside what it is about, the room from the pill's top
+   * to the well's foot, else the well's height once that room is under
+   * `reach`; under or over it, the room on that side.
    */
   const tallest = $derived.by(() => {
     if (sheet) {
       return null;
     }
-    if (!mark) {
+    if (!(mark && subject)) {
       return room.h - 2 * gap;
     }
-    if (place?.side === "above") {
+    const side = place?.side;
+    if (side === "above") {
+      return subject.y - clear - gap;
+    }
+    if (side === "below") {
+      return room.h - (subject.y + subject.h + clear) - gap;
+    }
+    if (side === "above-pill") {
       return mark.y - clear - gap;
     }
-    if (place?.side === "below") {
+    if (side === "below-pill") {
       return room.h - (mark.y + mark.h + clear) - gap;
     }
     const below = room.h - Math.max(gap, mark.y) - gap;

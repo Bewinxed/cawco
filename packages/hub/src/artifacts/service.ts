@@ -35,6 +35,7 @@ import {
   artifactSavesNotice,
   artifactToolWords,
   type ChoiceEntry,
+  changeLink,
   choiceEntryProblem,
   DESK_CAPTURE_WIDTH,
   DESK_CAPTURES_PER_PAGE,
@@ -61,12 +62,20 @@ import {
 } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
+  ACTIVITY_LIMIT,
   type ArtifactChanges,
+  activityLines,
+  activityOf,
+  answerChanges,
+  answeredLines,
+  askedAgainLine,
+  bindChanges,
   type Carried,
   CHANGES_LIMIT,
   type ChangedItem,
   COMMENT_LIMITS,
   type CommentAttachment,
+  carryChanges,
   inkSection,
   type MarkPictures,
   newAnswer,
@@ -74,6 +83,7 @@ import {
   pinAsks,
   pinDelivery,
   pinSaid,
+  pinStandsOn,
   pinUnsent,
   readPin,
   readPins,
@@ -88,6 +98,7 @@ import {
   writeDelivery,
   writeEntry,
   writeResolve,
+  wroteLine,
 } from "@cawco/core/comments";
 import {
   type DecisionCard,
@@ -534,6 +545,8 @@ export interface ArtifactRead {
   held?: string;
   id: string;
   kind: ArtifactKind;
+  /** What this update changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`): what the agent names each to the person by. */
+  marked?: string[];
   missing?: string[];
   name: string;
   /** A canvas, as you read it: one line per element (core `canvasOutline`). */
@@ -605,6 +618,8 @@ export interface Revised {
   /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
   held?: string;
   id: string;
+  /** What it changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`). */
+  marked?: string[];
   /** Decisions the revision added or took out, by id; a removed one's pick is kept. */
   moved: { added: string[]; removed: string[] };
   pageHash: string;
@@ -669,6 +684,8 @@ export interface Created {
   kind: ArtifactKind;
   /** Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person. */
   link?: string;
+  /** Made again under its name: what it changed, each by its link (`[label](cawco:change/<artifact>/<anchor>)`). */
+  marked?: string[];
   /** A component canvas's flow moves, each with the animations it fired. */
   moves?: ReturnType<typeof movesSaid>;
   name: string;
@@ -2619,20 +2636,100 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Revision `row.revision`'s changes, in the doc's meta (core
-   * `ArtifactChanges`): every view marks them until the person has looked.
-   * The next revision's replace them.
+   * The agent answered pin `pin` at `at`, after the latest update: that
+   * update's changes are its answer (core `answerChanges`), marked so on the
+   * set and in the pin's lines.
    */
-  const markChanges = (row: ArtifactRow, items: ChangedItem[]) => {
-    const changes: ArtifactChanges = {
-      revision: row.revision,
-      at: new Date().toISOString(),
-      items: items.slice(0, CHANGES_LIMIT),
-    };
-    docs.transact(row.id, "hub", (doc) =>
-      doc.getMap("meta").set("changes", changes)
+  const answeredHere = (doc: Doc, pin: string, at: string) => {
+    const meta = doc.getMap("meta");
+    const changes = meta.get("changes") as ArtifactChanges | undefined;
+    if (!changes) {
+      return;
+    }
+    const { items, bound } = answerChanges(
+      changes,
+      readPins(doc).values(),
+      pin
     );
+    if (bound.length === 0) {
+      return;
+    }
+    meta.set("changes", { ...changes, items });
+    const activity = activityOf(doc);
+    activity.set(pin, answeredLines(activity.get(pin) ?? [], bound, at));
   };
+
+  /**
+   * What an agent's update changed (`items`, page-changes.ts), marked in the
+   * doc's meta under `revision` (core `ArtifactChanges`) until the person
+   * has looked: each tied to the comment it answers or stands under (core
+   * `bindChanges`, a reply since the update before it being the answer),
+   * and what the last set held that he hasn't looked at carried in (core
+   * `carryChanges`), so the set is everything since he looked. Each pin's
+   * thread gains a line per change made for it (the doc's `activity`, core
+   * `activityLines`), kept after he has looked.
+   */
+  const markRevision = (
+    row: ArtifactRow,
+    items: ChangedItem[],
+    revision: (meta: ReturnType<Doc["getMap"]>) => number
+  ): ChangedItem[] => {
+    let bound: ChangedItem[] = [];
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      const was = meta.get("changes") as ArtifactChanges | undefined;
+      const seen = new Set(
+        was ? (seenOf(doc).get(String(was.revision)) ?? []) : []
+      );
+      const at = new Date().toISOString();
+      const since = was?.at ?? row.createdAt.toISOString();
+      const next = revision(meta);
+      const fresh = bindChanges(items, readPins(doc).values(), since, next);
+      bound = fresh;
+      const changes: ArtifactChanges = {
+        revision: next,
+        at,
+        since,
+        items: carryChanges(was?.items ?? [], seen, fresh),
+      };
+      meta.set("changes", changes);
+      const activity = activityOf(doc);
+      for (const [pin, lines] of activityLines(fresh, at)) {
+        activity.set(
+          pin,
+          [...(activity.get(pin) ?? []), ...lines].slice(-ACTIVITY_LIMIT)
+        );
+      }
+    });
+    return bound;
+  };
+
+  /**
+   * What an update marked, each by its link (core `changeLink`): what the
+   * agent names each to the person by, and what the turn's row draws as its
+   * chips; a thing taken out has no place to open, and is left out.
+   */
+  const markedLinks = (
+    id: string,
+    items: readonly ChangedItem[]
+  ): { marked?: string[] } => {
+    const links = items
+      .filter((item) => item.kind !== "removed")
+      .map((item) =>
+        changeLink(
+          id,
+          item.anchor,
+          item.element && item.element !== item.label
+            ? `${item.element} · ${item.label}`
+            : item.label
+        )
+      );
+    return links.length > 0 ? { marked: links } : {};
+  };
+
+  /** Page `row`'s revision changed `items`: marked under its revision ({@link markRevision}). */
+  const markChanges = (row: ArtifactRow, items: ChangedItem[]): ChangedItem[] =>
+    markRevision(row, items.slice(0, CHANGES_LIMIT), () => row.revision);
 
   /**
    * What an agent's update to canvas `row` changed (page-changes.ts
@@ -2641,33 +2738,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * looks are kept by its scene version, not its revision: an update draws
    * into the live scene every screen holds, and moving the revision would
    * load the panel's frame again under the person for every batch the agent
-   * draws. What the last update changed that the person hasn't looked at yet
-   * is carried into the new set, so a turn of several updates marks all of
-   * them; one changed again is marked once, as it stands now.
+   * draws.
    */
-  const markSceneChanges = (row: ArtifactRow, before: CanvasEntry[]) => {
+  const markSceneChanges = (
+    row: ArtifactRow,
+    before: CanvasEntry[]
+  ): ChangedItem[] => {
     const items = sceneChanges(before, canvasEntries(docs, row.id));
     if (items.length === 0) {
-      return;
+      return [];
     }
-    docs.transact(row.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
-      const was = meta.get("changes") as ArtifactChanges | undefined;
-      const seen = new Set(
-        was ? (seenOf(doc).get(String(was.revision)) ?? []) : []
-      );
-      const fresh = new Set(items.map((item) => item.anchor));
-      const carried = (was?.items ?? []).filter(
-        (item) => !(seen.has(item.anchor) || fresh.has(item.anchor))
-      );
+    return markRevision(row, items, (meta) => {
       const version = (Number(meta.get("sceneVersion")) || 0) + 1;
       meta.set("sceneVersion", version);
-      const changes: ArtifactChanges = {
-        revision: version,
-        at: new Date().toISOString(),
-        items: [...carried, ...items].slice(0, CHANGES_LIMIT),
-      };
-      meta.set("changes", changes);
+      return version;
     });
   };
 
@@ -2680,12 +2764,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     html: string,
     program: BuiltProgram | undefined
-  ) => {
+  ): ChangedItem[] => {
     const was = pageWas(row.id);
     writePage(row.id, html, program);
-    if (was) {
-      markChanges(row, pageChanges(row.id, was, { html, program }));
-    }
+    return was
+      ? markChanges(row, pageChanges(row.id, was, { html, program }))
+      : [];
   };
 
   /** A create's answer with the artifact's link, which the agent names it by. */
@@ -3452,6 +3536,74 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * The person's Ask again on comments `again` of artifact `row`: an update
+   * changed what each stands on and the agent never answered it there
+   * (core `ChangedItem.answered`). Each goes to the session again, whole:
+   * what it stands on, every word of the person's in its thread, and what
+   * changed under it, before and after, with its link to answer by. Refused
+   * while a delivery is on its way, when none of them stands, or when no one
+   * takes it.
+   */
+  const askAgain = async (row: ArtifactRow, again: ReadonlySet<string>) => {
+    const instance = holder(row);
+    if (!instance) {
+      throw new ArtifactRefusal(409, artifactToolWords.askAgainNoSession);
+    }
+    const doc = docs.doc(row.id);
+    const pins = [...readPins(doc).values()].filter((pin) => again.has(pin.id));
+    if (pins.length === 0) {
+      throw new ArtifactRefusal(404, artifactToolWords.askAgainGone);
+    }
+    if (delivering.has(row.id)) {
+      throw new ArtifactRefusal(
+        409,
+        "Its comments are on their way to the session already, so this didn't go."
+      );
+    }
+    const changes = doc.getMap("meta").get("changes") as
+      ArtifactChanges | undefined;
+    const url = addressOf(row.id, doc);
+    const sections = pins.map((pin) =>
+      [
+        ...pinStandsOn(pin, url),
+        ...pin.thread
+          .filter((entry) => entry.by === "person" && entry.text.trim())
+          .map((entry) => wroteLine(entry.text)),
+        ...(changes?.items ?? [])
+          .filter((item) => item.pin === pin.id && !item.answered)
+          .map((item) => askedAgainLine(item)),
+        `- Pin: ${pin.id}`,
+        `- Link: ${linkOfPin(row.id, pin)}`,
+        artifactToolWords.askedAgain,
+      ].join("\n")
+    );
+    delivering.add(row.id);
+    try {
+      const outcome = await deps.deliverMarks(instance, row, {
+        text: artifactCommentsNotice(row, sections),
+        images: [],
+        attachments: [],
+      });
+      sayDelivery(row, instance, {
+        pins,
+        strokes: 0,
+        errors: 0,
+        saves: 0,
+        retry: true,
+        outcome,
+      });
+      if (!outcome.ok) {
+        throw new ArtifactRefusal(
+          503,
+          `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. Ask again.`
+        );
+      }
+    } finally {
+      delivering.delete(row.id);
+    }
+  };
+
+  /**
    * A comment's Try again: comments `only` of artifact `row`, which a
    * delivery no one took left owed, go to the session now. Refused while a
    * delivery is on its way, when none of them is owed, or when no one takes
@@ -4200,7 +4352,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const before = canvasEntries(docs, row.id);
       const { deleted, missing } = deleteElements(docs, row.id, change.delete);
-      markSceneChanges(row, before);
+      const fresh = markSceneChanges(row, before);
       return {
         ...readCanvas(
           db.get(row.id) as ArtifactRow,
@@ -4208,6 +4360,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           false,
           ownersRead
         ),
+        ...markedLinks(row.id, fresh),
         deleted,
         ...(missing.length > 0 ? { missing } : {}),
       };
@@ -4222,7 +4375,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           )
         : [];
     const wrote = await draw(row, change);
-    markSceneChanges(row, before);
+    const fresh = markSceneChanges(row, before);
     return {
       ...readCanvas(
         db.get(row.id) as ArtifactRow,
@@ -4230,6 +4383,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         false,
         ownersRead
       ),
+      ...markedLinks(row.id, fresh),
       wrote,
       ...(underYou.length > 0
         ? { changedUnderYou: underYou.map((id) => `${id} changed under you`) }
@@ -4985,8 +5139,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // Every page open on it hears the new revision in the doc and morphs
       // in place (the overlay); nothing reloads.
       stampMeta(moved, pageHash(html));
-      markChanges(moved, was ? pageChanges(moved.id, was, { html }) : []);
-      return read(moved, undefined, ownersRead);
+      const fresh = markChanges(
+        moved,
+        was ? pageChanges(moved.id, was, { html }) : []
+      );
+      return {
+        ...read(moved, undefined, ownersRead),
+        ...markedLinks(moved.heldFor ?? moved.id, fresh),
+      };
     }
     const doc = docs.doc(row.id);
     const before = stateOf(doc);
@@ -5051,7 +5211,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...cardChanges(kept, program.read.cards),
       ...pictureChanges(was?.files ?? new Map(), program.files),
     ];
-    markChanges(moved, changes);
+    const fresh = markChanges(moved, changes);
     const touched = new Set(
       changes.filter((item) => item.kind === "card").map((item) => item.anchor)
     );
@@ -5072,6 +5232,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         added: after.filter((card) => !before.has(card)),
         removed: [...before].filter((card) => !after.includes(card)),
       },
+      ...markedLinks(moved.heldFor ?? moved.id, fresh),
       ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
       ...(broken ? { broken } : {}),
     };
@@ -5835,9 +5996,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         machineId,
       });
       await letGo(movedFrom, row);
-      if (html !== null) {
-        writeMade(row, html, program);
-      }
+      const made = html === null ? [] : writeMade(row, html, program);
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
       // A held next version leaves the server its artifact shows up until it is opened (promote).
@@ -5861,6 +6020,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ...(stage ? { stage } : {}),
         ...(weight ? { weight } : {}),
         ...programAnswer(said.id, program),
+        ...markedLinks(said.id, made),
         ...(broken ? { broken } : {}),
       };
     },
@@ -6863,6 +7023,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       docs.transact(row.id, "hub", (doc) => {
         stampHeard(doc, pin, pin, entry.at);
         writeEntry(doc, pin.id, entry);
+        answeredHere(doc, pin.id, entry.at);
       });
       if (asks) {
         deps.pinAsked(row.id, text);
@@ -6905,6 +7066,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           writeEntry(doc, pin.id, said);
         }
         writeResolve(doc, pin.id, { at, by: "agent" });
+        answeredHere(doc, pin.id, at);
         if (pin.heard !== undefined) {
           writeDelivery(doc, pin.id, {
             ...(pin.sentAt ? { sentAt: pin.sentAt } : {}),
@@ -6979,6 +7141,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const state = stateOf(doc);
       if (body.pins) {
         await retry(row, new Set(body.pins));
+        return { choices: state, ...metaOf(doc) };
+      }
+      if (body.again) {
+        await askAgain(row, new Set(body.again));
         return { choices: state, ...metaOf(doc) };
       }
       let owes: ReturnType<typeof sendOwes>;

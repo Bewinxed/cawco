@@ -1,7 +1,7 @@
 /**
  * What a revision of a page changed, read by the hub at that revision and
  * written into the doc's `meta.changes` (core comments.ts `ArtifactChanges`):
- * the panel marks each changed thing with the done wash until the person has
+ * the panel rings each changed thing (`c-change-ring`) until the person has
  * looked at it (PRD §5.7, "Pointing and what changed").
  *
  * An HTML page's is a diff of its body before and after, element by
@@ -26,6 +26,7 @@ import {
   generatedId,
 } from "@cawco/core/comments";
 import type { DecisionCard } from "@cawco/core/decisions";
+import { elementName } from "@cawco/core/pin-name";
 
 /** Elements whose insides are no part of what the person sees. */
 const UNSEEN = new Set(["script", "style", "template", "noscript", "head"]);
@@ -353,6 +354,63 @@ function pair(
   return out;
 }
 
+/** An element by name, as a change line says it (core pin-name.ts `elementName`). */
+const nameOf = (node: Node): string => {
+  const attr = (name: string) =>
+    node.attrs.find(([key]) => key === name)?.[1] ?? "";
+  const id = attr("id");
+  return elementName({
+    id: id && !generatedId(id) ? id : null,
+    classes: attr("class").split(" ").filter(Boolean),
+    tag: node.tag,
+  });
+};
+
+/** The words of the element `node` comes after among its siblings; empty when it comes first. */
+const neighbourWords = (node: Node): string => {
+  const siblings = node.parent?.children ?? [];
+  const before = siblings[siblings.indexOf(node) - 1];
+  return before ? labelOf(before) : "";
+};
+
+/**
+ * The pairs of `old`'s and `node`'s children that changed their order: in
+ * the new order, those off the longest run that keeps the old order. An
+ * element put in or taken out moves no other.
+ */
+function reordered(
+  old: Node,
+  node: Node,
+  pairs: readonly [Node, Node][]
+): [Node, Node][] {
+  const sorted = [...pairs].sort(
+    (a, b) => node.children.indexOf(a[1]) - node.children.indexOf(b[1])
+  );
+  const rank = sorted.map(([a]) => old.children.indexOf(a));
+  // Longest increasing run of old places, by patience sorting.
+  const tails: number[] = [];
+  const back = new Array<number>(rank.length).fill(-1);
+  for (let i = 0; i < rank.length; i += 1) {
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if ((rank[tails[mid] as number] as number) < (rank[i] as number)) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    back[i] = lo > 0 ? (tails[lo - 1] as number) : -1;
+    tails[lo] = i;
+  }
+  const kept = new Set<number>();
+  for (let i = tails.at(-1) ?? -1; i !== -1; i = back[i] as number) {
+    kept.add(i);
+  }
+  return sorted.filter((_, i) => !kept.has(i));
+}
+
 /**
  * What changed from the page `before` to the page `after`, each told at its
  * nearest element that names itself or holds a pin's anchor (`anchors`, the
@@ -391,7 +449,12 @@ export function htmlChanges(
   const toldAt = (node: Node): Node => holderOf(node) ?? node;
   const changed = new Set<Node>();
   const removed: ChangedItem[] = [];
+  /** Each element of the new page by the one it was in the old. */
+  const oldOf = new Map<Node, Node>([[now, was]]);
+  /** Each element that moved: the words of the one it came after then and now. */
+  const moves = new Map<Node, { after: string; before: string }>();
   const compare = (old: Node, node: Node) => {
+    oldOf.set(node, old);
     if (old.sig === node.sig) {
       return;
     }
@@ -403,23 +466,46 @@ export function htmlChanges(
       changed.add(toldAt(node));
     }
     const paired = pair(old.children, node.children);
+    // One taken out here and put in there, reading the same, moved.
+    const gone = [...paired.removed];
     for (const added of paired.added) {
-      changed.add(toldAt(added));
+      const at = gone.findIndex((one) => one.sig === added.sig);
+      if (at === -1) {
+        changed.add(toldAt(added));
+        continue;
+      }
+      const [then] = gone.splice(at, 1);
+      oldOf.set(added, then as Node);
+      moved(then as Node, added);
     }
-    for (const gone of paired.removed) {
+    for (const out of gone) {
       const holder = holderOf(node);
       if (holder) {
         changed.add(holder);
       } else {
         removed.push({
           kind: "removed",
-          anchor: `removed:${selectorOf(node)}:${labelOf(gone)}`,
-          label: labelOf(gone),
+          anchor: `removed:${selectorOf(node)}:${labelOf(out)}`,
+          label: labelOf(out),
         });
       }
     }
+    for (const [a, b] of reordered(old, node, paired.pairs)) {
+      moved(a, b);
+    }
     for (const [a, b] of paired.pairs) {
       compare(a, b);
+    }
+  };
+  /** `node` (of the new page), `old` in the old, stands after another element than it did: told where it stands, with both neighbours' words. */
+  const moved = (old: Node, node: Node) => {
+    const at = toldAt(node);
+    changed.add(at);
+    if (at === node) {
+      moves.set(node, {
+        before: neighbourWords(old),
+        after: neighbourWords(node),
+      });
     }
   };
   compare(was, now);
@@ -433,11 +519,21 @@ export function htmlChanges(
   };
   walk(now);
   const told = order.filter((node) => changed.has(node));
-  const items: ChangedItem[] = told.map((node) => ({
-    kind: "element",
-    anchor: node.parent ? selectorOf(node) : "body",
-    label: node.parent ? labelOf(node) : "Whole page",
-  }));
+  const items: ChangedItem[] = told.map((node) => {
+    if (!node.parent) {
+      return { kind: "element", anchor: "body", label: "Whole page" };
+    }
+    const old = oldOf.get(node);
+    const move = moves.get(node);
+    return {
+      kind: "element",
+      anchor: selectorOf(node),
+      label: labelOf(node),
+      element: nameOf(node),
+      ...(old ? { before: labelOf(old) } : {}),
+      ...(move ? { moved: move } : {}),
+    };
+  });
   return [...items, ...removed].slice(0, CHANGES_LIMIT);
 }
 
@@ -515,7 +611,14 @@ export function sceneChanges(
     }
     told.add(at);
     const shown = now.get(at) ?? el;
-    items.push({ kind: "canvas", anchor: at, label: elementWords(shown, now) });
+    const then = was.get(at);
+    items.push({
+      kind: "canvas",
+      anchor: at,
+      label: elementWords(shown, now),
+      element: SCENE_WORDS[shown.type] ?? "Element",
+      ...(then ? { before: elementWords(then, was) } : {}),
+    });
   }
   for (const [id, el] of was) {
     if (!(now.has(id) || (el.containerId && was.has(el.containerId)))) {
@@ -566,11 +669,16 @@ export function cardChanges(
   const now = new Set(after.map((card) => card.id));
   const items: ChangedItem[] = after
     .filter((card) => JSON.stringify(was.get(card.id)) !== JSON.stringify(card))
-    .map((card) => ({
-      kind: "card",
-      anchor: `#decision-${cssEscape(card.id)}`,
-      label: card.question,
-    }));
+    .map((card) => {
+      const then = was.get(card.id);
+      return {
+        kind: "card",
+        anchor: `#decision-${cssEscape(card.id)}`,
+        label: card.question,
+        element: "Card",
+        ...(then ? { before: then.question } : {}),
+      };
+    });
   for (const card of before) {
     if (!now.has(card.id)) {
       items.push({

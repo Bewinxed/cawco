@@ -15,7 +15,9 @@
  * The kinds a reference can name. A new kind is added here and to the
  * dashboard's registry. A pin is named by its artifact and its number
  * (`<artifact>/<number>`: the number its pill shows, never reused), a
- * decision card by its artifact and its id (`<artifact>/<card>`), an
+ * spot an update changed by its artifact and its anchor
+ * (`<artifact>/<anchor>`: the selector or canvas element id the hub marked
+ * it by, core comments.ts `ChangedItem`), a decision card by its artifact and its id (`<artifact>/<card>`), an
  * artifact by its id. A task by its project and its id
  * (`<project>/<task>`: a task's id is its project's own number, `tsk-12`),
  * a task's to-do by those and its id (`<project>/<task>/<td-3>`), a
@@ -26,6 +28,7 @@
 export const REFERENCE_KINDS = [
   "session",
   "pin",
+  "change",
   "decision",
   "artifact",
   "task",
@@ -68,6 +71,13 @@ export const pinLink = (
   number: number,
   label: string
 ): string => referenceLink("pin", `${artifact}/${number}`, label);
+
+/** What an update changed on artifact `artifact` at `anchor`, labelled by what it is and says: its chip opens the panel at that spot, marked, with its comment's thread. */
+export const changeLink = (
+  artifact: string,
+  anchor: string,
+  label: string
+): string => referenceLink("change", `${artifact}/${anchor}`, label);
 
 /** Decision card `card` of artifact `artifact`, labelled by its question: its chip opens the page at that card. */
 export const decisionLink = (
@@ -147,6 +157,16 @@ export function pinReference(
     : null;
 }
 
+/** A change reference's id, `<artifact>/<anchor>`, read (the anchor is the rest: a selector may hold a slash); null when it is not one. */
+export function changeReference(
+  id: string
+): { anchor: string; artifact: string } | null {
+  const slash = id.indexOf("/");
+  return slash > 0 && slash < id.length - 1
+    ? { artifact: id.slice(0, slash), anchor: id.slice(slash + 1) }
+    : null;
+}
+
 /** A decision reference's id, `<artifact>/<card>`, read; null when it is not one. */
 export function decisionReference(
   id: string
@@ -182,4 +202,4 @@ export function parseReference(
  */
 export const REFERENCE_GUIDANCE =
   "To mention a session, delegate or Caw thread in anything you write, link it by the handle CawCo's tools name it by, or its id: `[its title](cawco:session/cockpit#5a167bde)`. CawCo shows the link as that session's chip; a bare id or handle stays plain text. CawCo's own tool results and reports name sessions this way. " +
-  'To point at a pin, a decision card, an artifact, a task or its to-do, a plan or its step, a routine, a project or a machine, write the link CawCo\'s tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`). CawCo draws each as a chip that opens it where it lives; a bare id or number ("tsk-12", "pin 12") stays plain text.';
+  'To point at a pin, a spot an update changed, a decision card, an artifact, a task or its to-do, a plan or its step, a routine, a project or a machine, write the link CawCo\'s tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`). CawCo draws each as a chip that opens it where it lives; a bare id or number ("tsk-12", "pin 12") stays plain text.';

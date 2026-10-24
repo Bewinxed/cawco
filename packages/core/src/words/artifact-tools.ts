@@ -7,6 +7,14 @@
  * (scripts/probe-words-check.ts refuses a copy).
  */
 export const artifactToolWords = {
+  /** The person's Ask again, its section's last line: an update changed what the comment stands on and it got no answer. */
+  askedAgain:
+    "- The person asks again: your update changed what this comment stands on, and you didn't answer it. Answer it with comment_reply.",
+  /** An Ask again on an artifact no session holds. */
+  askAgainNoSession:
+    "No session holds this page now, so the comment wasn't asked again.",
+  /** An Ask again on a comment gone from the page. */
+  askAgainGone: "This comment is gone from the page, so it wasn't asked again.",
   /** A `to: "parent"` create opened nothing: the parent opens it. */
   handedToParent:
     "Handed to your parent, not opened: it opens in their panel when they call artifact_show.",

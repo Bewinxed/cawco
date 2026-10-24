@@ -50,6 +50,8 @@ export const MAPS = [
   "requests",
   // The person's looks at what the latest revision changed (core comments.ts `seenOf`).
   "seen",
+  // Each pin's lines of what changed for it, the hub's alone (core comments.ts `activityOf`).
+  "activity",
 ] as const;
 
 /** The doc's one top-level array: a canvas's scene, as y-excalidraw lays it out. */

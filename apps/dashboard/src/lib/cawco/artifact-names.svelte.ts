@@ -161,8 +161,9 @@ export function artifactMarks(id: string): HeldMarks | null {
   return null;
 }
 
-/** Where a press opens an artifact: at a pin's thread, at a decision card, or at its top. */
-export type OpenAt = { pin: number } | { card: string } | { top: true };
+/** Where a press opens an artifact: at a pin's thread, at a decision card, at a spot an update changed (its anchor), or at its top. */
+export type OpenAt =
+  { pin: number } | { card: string } | { change: string } | { top: true };
 
 /** The open each artifact's pane is asked for; a second press asks again with a new object. */
 const asked = new SvelteMap<string, OpenAt>();
