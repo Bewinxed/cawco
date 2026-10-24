@@ -35,13 +35,12 @@
  *
  * - Beside the session on a phone in WebKit, 390×844 and 430×932, where the
  *   preview is the sheet over the composer ({@link runPhoneSheet}): open, its
- *   floor is the screen's foot and the composer is under it; the composer
- *   taking the focus sends it to its lower stop, on the composer; a keyboard
- *   resizing the web view never drops it.
+ *   floor is the screen's foot and the composer is under it, inert; a
+ *   keyboard resizing the web view never drops it.
  * - On a phone in WebKit and Chromium, a session with a plan whose ring
- *   stands in the tray row: shown while the reader writes, the sheet stands
- *   on the composer; the focus leaving, it climbs back over the composer
- *   and the ring, its top the open stop's ({@link runPhoneSheetLeaves}).
+ *   stands in the tray row: shown while the reader writes, the sheet opens
+ *   over the composer and the ring, the composer's focus gone, its top the
+ *   open stop's ({@link runPhoneSheetLeaves}).
  *
  * On opening and over every sweep, the page sent the hub no error report
  * and logged no ResizeObserver loop. A desk page draws its scrollbars as a
@@ -903,11 +902,11 @@ const START_WITHIN_MS = 10_000;
 const MOVERS = '[data-slot="preview-sheet-host"], [data-preview-sheet]';
 
 /**
- * Moves the sheet between its stops (`focus`: the composer's field takes
- * the focus; `grab`: a tap on the grabber), holds every animation the move
- * starts on the sheet and its host at its start, and seeks them together to
- * each fraction of their duration (SCRUB), reading the floor and the
- * sheet's top at each. Then it lets them run on to their end.
+ * Moves the sheet between its stops by a tap on the grabber, holds every
+ * animation the move starts on the sheet and its host at its start, and
+ * seeks them together to each fraction of their duration (SCRUB), reading
+ * the floor and the sheet's top at each. Then it lets them run on to their
+ * end.
  *
  * Read as the kit reads motion (kit.ts `readMotion`): WebKit has no
  * DevTools Animation domain, so the page holds the clock itself, each run
@@ -919,20 +918,13 @@ const MOVERS = '[data-slot="preview-sheet-host"], [data-preview-sheet]';
  * frame, one busy loop per core) let the whole 500ms move finish before the
  * read, and it found nothing to scrub.
  */
-const scrub = async (page: Page, act: "focus" | "grab") => {
+const scrub = async (page: Page) => {
   const moved = await readMotion(
     page,
     () =>
-      page.evaluate(
-        ({ does, field }) => {
-          if (does === "focus") {
-            document.querySelector<HTMLElement>(field)?.focus();
-          } else {
-            document.querySelector<HTMLElement>("[data-preview-grab]")?.click();
-          }
-        },
-        { does: act, field: COMPOSER }
-      ),
+      page.evaluate(() => {
+        document.querySelector<HTMLElement>("[data-preview-grab]")?.click();
+      }),
     MOVERS,
     {
       // Their own runs alone, as the scrub held them before the kit did:
@@ -980,47 +972,33 @@ const scrub = async (page: Page, act: "focus" | "grab") => {
 };
 
 /**
- * The scrub's verdict: the sheet's move and the clip run on one clock (the
- * same start, duration and easing, one each), held at its start before a
- * frame of it played, the floor and the sheet's top
- * at the stops' places at 0 and 1, and at 0.5 both the same share of their
- * way along.
+ * The scrub's verdict on a phone, where the sheet never stands on the
+ * composer: vaul's one move, held at its start before a frame of it played,
+ * and no clip run (the floor holds at the screen's foot at 0, 0.5 and 1);
+ * the top at the stops' places at 0 and 1, and part of its way along at 0.5.
  */
-const oneClock = (
+const sheetAlone = (
   scrubbed: Awaited<ReturnType<typeof scrub>>,
   from: { floor: number; top: number },
   to: { floor: number; top: number }
 ) => {
   const clip = scrubbed.runs.filter((each: Run) => each.on === "clip");
   const sheet = scrubbed.runs.filter((each: Run) => each.on === "sheet");
-  const [a] = clip;
-  const [b] = sheet;
-  const clocked =
-    clip.length === 1 &&
-    sheet.length === 1 &&
-    !!a &&
-    !!b &&
-    a.start !== null &&
-    a.start === b.start &&
-    a.duration === b.duration &&
-    a.easing === b.easing &&
-    a.playedFirst === 0 &&
-    b.playedFirst === 0;
+  const held =
+    clip.length === 0 && sheet.length === 1 && sheet[0]?.playedFirst === 0;
   const [start, middle, end] = scrubbed.at;
   const near = (x: number, y: number) => Math.abs(x - y) <= 1;
   const placed =
     !!start &&
     !!end &&
-    near(start.floor, from.floor) &&
     near(start.top, from.top) &&
-    near(end.floor, to.floor) &&
-    near(end.top, to.top);
-  const share = (at: number, a0: number, a1: number) => (at - a0) / (a1 - a0);
-  const floorShare = middle ? share(middle.floor, from.floor, to.floor) : -1;
-  const topShare = middle ? share(middle.top, from.top, to.top) : -1;
-  const together =
-    floorShare > 0 && floorShare < 1 && Math.abs(floorShare - topShare) < 0.03;
-  return { ok: clocked && placed && together, floorShare, topShare };
+    near(end.top, to.top) &&
+    scrubbed.at.every((one) => near(one.floor, from.floor)) &&
+    near(from.floor, to.floor);
+  const topShare = middle
+    ? (middle.top - from.top) / (to.top - from.top)
+    : Number.NaN;
+  return { ok: held && placed && topShare > 0 && topShare < 1, topShare };
 };
 
 /**
@@ -1030,16 +1008,18 @@ const oneClock = (
  * - Open, the sheet's floor is the screen's foot less the home indicator's
  *   room, and every part of the composer that paints (the pill, the tray's
  *   chips, the suggestions, the plan's ring) is under the sheet.
- * - The composer's field taking the focus sends the sheet to its lower
- *   stop: its floor the composer's drawn top, and the pill in view.
- * - Over a keyboard that resizes the web view (823d7d363), no frame drops
- *   the sheet below where it stood, and it ends standing on the composer.
- * - Both moves (the focus down, a tap on the grabber back up) run the
- *   host's clip on vaul's own clock, seeked to 0, 0.5 and 1 ({@link scrub}).
+ * - The composer under it is inert (the owner: "the preview and drawer
+ *   should cover the composer"): its field asked for the focus takes none,
+ *   and the sheet stands at its open stop over it, the pill out of view.
+ * - Over a keyboard that resizes the web view (823d7d363) with nothing of
+ *   the page focused (a field of the sheet's own, a thread's Reply), no
+ *   frame drops the sheet and it keeps its place, its floor and its top
+ *   where they stood; the page's own focus over it (the frame holds it),
+ *   the sheet stands on the keyboard, its floor the screen's new foot.
+ * - The grabber tapped, the sheet climbs to the whole host on vaul's one
+ *   move, seeked to 0, 0.5 and 1 ({@link scrub}), its floor the screen's
+ *   foot throughout: no clip runs, as it never stands on the composer.
  * - None of it posts an error to the hub or logs a ResizeObserver loop.
- *
- * No element pick on the web writes into the composer (comments.ts 6:
- * selection.md is gone), so the pick's step down is not a leg.
  */
 export const runPhoneSheet = async (
   kit: Kit,
@@ -1072,35 +1052,22 @@ export const runPhoneSheet = async (
       !opened.pillInView,
     JSON.stringify(opened)
   );
-  const down = await scrub(page, "focus");
+  await page.evaluate(
+    (field) => document.querySelector<HTMLElement>(field)?.focus(),
+    COMPOSER
+  );
   await settle(page, 700);
   await frames(page);
-  const focused = await now();
-  const downClock =
-    opened && focused
-      ? oneClock(
-          down,
-          { floor: opened.floor, top: opened.top ?? Number.NaN },
-          { floor: focused.floor, top: focused.top ?? Number.NaN }
-        )
-      : null;
+  const asked = await now();
   kit.check(
-    `${name}: stepping down onto the composer, the clip rises with the sheet on vaul's clock (one start, duration and easing; seeked to 0, 0.5 and 1, the floor and the top the same share along)`,
-    !!downClock?.ok,
-    JSON.stringify({ ...down, ...downClock })
-  );
-  kit.check(
-    `${name}: the composer taking the focus sends the sheet to its lower stop, its floor the composer's drawn top, the pill in view`,
-    !!focused &&
-      focused.focused &&
-      focused.stop === "lower" &&
-      focused.composerTop !== null &&
-      Math.abs(focused.floor - focused.composerTop) <= 1 &&
-      focused.pillInView &&
-      !!opened?.top &&
-      !!focused.top &&
-      focused.top > opened.top,
-    JSON.stringify({ opened, focused })
+    `${name}: the composer under the sheet is inert: its field asked for the focus takes none, and the sheet stands at its open stop over it`,
+    !!asked &&
+      !asked.focused &&
+      asked.stop === "open" &&
+      Math.abs(asked.floor - asked.screenFloor) <= 1 &&
+      asked.covered.every((part) => part.covered) &&
+      !asked.pillInView,
+    JSON.stringify(asked)
   );
   // A keyboard that resizes the web view: every frame's floor read while
   // the page lays itself out in the smaller viewport.
@@ -1125,52 +1092,70 @@ export const runPhoneSheet = async (
   await page.setViewportSize({ width, height: height - KEYBOARD });
   await settle(page, 700);
   await frames(page);
-  const typed = await now();
+  const held = await now();
   const floors = await page.evaluate(() => window.__floors ?? []);
-  const before = focused?.floor ?? 0;
+  const before = asked?.floor ?? 0;
   const dropped = floors.filter((frame) => frame.floor > before + 1);
   kit.check(
-    `${name}: over a keyboard that resizes the web view, no frame drops the sheet below where it stood, and it ends on the composer`,
-    !!typed &&
+    `${name}: over a keyboard that resizes the web view with nothing of the page focused, the sheet keeps its place: no frame drops it, its floor and its top where they stood, at its open stop`,
+    !!held &&
       floors.length > 0 &&
       dropped.length === 0 &&
-      typed.stop === "lower" &&
-      typed.composerTop !== null &&
-      Math.abs(typed.floor - typed.composerTop) <= 1 &&
+      held.stop === "open" &&
+      Math.abs(held.floor - before) <= 1 &&
+      held.top !== null &&
+      typeof asked?.top === "number" &&
+      Math.abs(held.top - asked.top) <= 1,
+    JSON.stringify({ before, dropped: dropped.slice(0, 5), asked, held })
+  );
+  // The page's own field takes the focus (the frame holds it): the page is
+  // the one to bring it into view, so the sheet stands on the keyboard.
+  await page.locator("[data-preview-sheet] iframe[title='Preview']").focus();
+  await settle(page, 700);
+  await frames(page);
+  const typed = await now();
+  kit.check(
+    `${name}: the page's own focus over that keyboard, the sheet stands on it: its floor the screen's new foot, at its open stop`,
+    !!typed &&
+      typed.stop === "open" &&
+      Math.abs(typed.floor - typed.screenFloor) <= 1 &&
       typed.floor < before - KEYBOARD / 2,
-    JSON.stringify({ before, dropped: dropped.slice(0, 5), typed })
+    JSON.stringify({ before, typed })
+  );
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur()
   );
   await page.setViewportSize({ width, height });
   await settle(page, 400);
   await frames(page);
-  // The grabber tapped on the composer: the sheet climbs back over it, the
-  // clip falling with it.
-  const lowered = await now();
-  const up = await scrub(page, "grab");
+  // The grabber tapped at the open stop: the sheet climbs to the whole
+  // host, its floor where it stood.
+  const resting = await now();
+  const up = await scrub(page);
   await settle(page, 700);
   await frames(page);
   const raised = await now();
-  const upClock =
-    lowered && raised
-      ? oneClock(
+  const upMove =
+    resting && raised
+      ? sheetAlone(
           up,
-          { floor: lowered.floor, top: lowered.top ?? Number.NaN },
+          { floor: resting.floor, top: resting.top ?? Number.NaN },
           { floor: raised.floor, top: raised.top ?? Number.NaN }
         )
       : null;
   kit.check(
-    `${name}: the grabber tapped, the sheet climbs back to its open stop over the composer, the clip falling with it on vaul's clock`,
+    `${name}: the grabber tapped, the sheet climbs to the whole host on vaul's one move (seeked to 0, 0.5 and 1, its top along its way), its floor the screen's foot throughout and no clip run`,
     !!raised &&
-      raised.stop === "open" &&
+      raised.stop === "full" &&
       Math.abs(raised.floor - raised.screenFloor) <= 1 &&
-      !!upClock?.ok,
-    JSON.stringify({ lowered, raised, ...up, ...upClock })
+      !!upMove?.ok,
+    JSON.stringify({ resting, raised, ...up, ...upMove })
   );
   await checkQuiet(
     kit,
     page,
     said,
-    `${name}: opening the sheet, focusing the composer, a keyboard up and down, the grabber tapped`,
+    `${name}: opening the sheet, asking the composer for the focus, a keyboard up and down, the grabber tapped`,
     start,
     await mark(page, said)
   );
@@ -1206,16 +1191,17 @@ export const planOn = async (
 
 /**
  * The owner, on his iPhone: "the preview sheet should cover the composer
- * and the chip row, lost space". A session with a plan, its ring a chip in
- * the composer's tray row, at 390×844 in `engine` (WebKit with an iPhone's
- * agent, and Chromium): the reader writes in the composer (its field holds
- * the focus) as the agent shows a page, so the sheet stands on the
- * composer, the pill and the ring in view. The focus leaves (the keyboard
- * put away): the sheet climbs back to its open stop, its floor the screen's
- * foot, and a press at the middle of the pill and of the ring lands in the
- * sheet: no composer or chip shows inside or below it. Its top is where
- * the open stop stands on a fresh load (the top as it is on main). No
- * console error, no post to the hub, no ResizeObserver loop.
+ * and the chip row, lost space", and "the preview and drawer should cover
+ * the composer". A session with a plan, its ring a chip in the composer's
+ * tray row, at 390×844 in `engine` (WebKit with an iPhone's agent, and
+ * Chromium): the reader writes in the composer (its field holds the focus,
+ * a draft in it) as the agent shows a page. The sheet opens at its open
+ * stop over the composer, its floor the screen's foot; the composer gives
+ * up the focus (it is inert under the sheet), and a press at the middle of
+ * the pill and of the ring lands in the sheet: no composer or chip shows
+ * inside or below it. Its top is where the open stop stands on a fresh load
+ * (the top as it is on main). No console error, no post to the hub, no
+ * ResizeObserver loop.
  */
 export const runPhoneSheetLeaves = async (
   kit: Kit,
@@ -1235,7 +1221,8 @@ export const runPhoneSheetLeaves = async (
   const said = heard(page);
   const start = await mark(page, said);
   await open(page, `${base}/session/${session}`, PLAN_RING);
-  await page.locator(COMPOSER).focus();
+  await page.locator(COMPOSER).click();
+  await page.keyboard.type("a draft under way");
   const id = await made(kit, shown, `plan-chips-${engine}`, () =>
     fleet.send(session, `PROBE-CALL:${shown}`)
   );
@@ -1246,27 +1233,12 @@ export const runPhoneSheetLeaves = async (
   await settle(page, 700);
   await frames(page);
   const now = () => page.evaluate(() => window.__sheetNow?.() ?? null);
-  const writing = await now();
-  kit.check(
-    `${name}: shown while the reader writes, the sheet stands on the composer, the pill and the ring in view`,
-    !!id &&
-      !!writing &&
-      writing.focused &&
-      writing.stop === "lower" &&
-      writing.pillInView &&
-      writing.covered.some((part) => part.chip && !part.covered),
-    JSON.stringify(writing)
-  );
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur()
-  );
-  await settle(page, 900);
-  await frames(page);
   const left = await now();
   const chips = left?.covered.filter((part) => part.chip) ?? [];
   kit.check(
-    `${name}: the focus gone, the sheet climbs back over the composer: its floor the screen's foot, the pill and every chip under it (a press at each one's middle lands in the sheet)`,
-    !!left &&
+    `${name}: shown while the reader writes, the sheet opens over the composer: its floor the screen's foot, the composer's focus gone, the pill and every chip under it (a press at each one's middle lands in the sheet)`,
+    !!id &&
+      !!left &&
       !left.focused &&
       left.stop === "open" &&
       Math.abs(left.floor - left.screenFloor) <= 1 &&
@@ -1296,16 +1268,9 @@ export const runPhoneSheetLeaves = async (
       left.top !== null &&
       Math.abs(fresh.top - left.top) <= 1 &&
       errors.length === 0,
-    JSON.stringify({ climbed: left?.top, fresh: fresh?.top, errors })
+    JSON.stringify({ opened: left?.top, fresh: fresh?.top, errors })
   );
-  await checkQuiet(
-    kit,
-    page,
-    said,
-    `${name}: shown while writing, the focus leaving`,
-    start,
-    end
-  );
+  await checkQuiet(kit, page, said, `${name}: shown while writing`, start, end);
   await page.context().close();
 };
 

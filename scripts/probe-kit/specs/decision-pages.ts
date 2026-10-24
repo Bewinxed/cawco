@@ -108,9 +108,9 @@
  *     delegate's artifact_read holds the picks, the delegate is told); a
  *     session outside the tree is refused the Send and the doc socket with
  *     today's words. With the rail's foot sheet open (a 507px pane at the
- *     desk, and 390), on Chromium and WebKit, the page's frame ends where the
- *     sheet begins, Send's box is clear of the sheet's, and a press at its
- *     centre sends. The page's thumbnail from the parent's panel is kept; an
+ *     desk, and 390), on Chromium and WebKit, the sheet lies over the page's
+ *     foot, Send under it, and the frame's box and Send's are the same open
+ *     and shut; the rail closed, a press at Send's centre sends. The page's thumbnail from the parent's panel is kept; an
  *     outsider's is refused with today's words.
  * (r) A dozen Previews of one heavy component canvas on one page all draw,
  *     in Chromium and in WebKit: the dashboard's own stage (decision-embeds.ts
@@ -3779,45 +3779,79 @@ const panelOfTreeLeg = async (on: On) => {
       )
       .filter((each) => each.body.includes(noticeOf(made.id))).length;
 
-  // The page's own Send, pressed with the rail open: in a pane under 640px
-  // (this desk's split is 507px) the rail is the well's foot sheet, and the
-  // page's frame ends where it begins, so Send stands clear of it.
+  // The page's own Send with the rail's foot sheet open: in a pane under
+  // 640px (this desk's split is 507px) the rail is the well's foot sheet, a
+  // layer over the page (DESIGN.md, The Comments rail): the frame keeps its
+  // whole box under it, so the sheet lies over the page's foot and Send
+  // under it. The rail closed, Send stands where it stood, and a press at
+  // its centre sends.
   const told = { count: 0 };
-  const sendClear = async (page: Page, inFrame: Frame, label: string) => {
+  const sendUnderRail = async (page: Page, inFrame: Frame, label: string) => {
     const engine = page.context().browser()?.browserType().name() ?? "?";
     const sheetBox = page.locator('[data-slot="rail-sheet"]');
     await sheetBox.waitFor({ timeout: 10_000 }).catch(() => undefined);
     await settle(page, 400);
-    const boxes = await page.evaluate((at) => {
-      const box = (el: Element | null | undefined) => {
-        const r = el?.getBoundingClientRect();
-        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
-      };
-      return {
-        frame: box(document.querySelector(at)),
-        sheet: box(document.querySelector('[data-slot="rail-sheet"]')),
-      };
-    }, FRAME);
-    // The page's own box, read by the engine across the frame's origin.
-    const sendBox = await inFrame
-      .locator("[data-send]")
-      .boundingBox({ timeout: 5000 })
-      .catch(() => null);
-    const read = {
-      ...boxes,
-      send: sendBox
+    const read = async () => {
+      // The page's own box, read by the engine across the frame's origin.
+      const sendBox = await inFrame
+        .locator("[data-send]")
+        .boundingBox({ timeout: 5000 })
+        .catch(() => null);
+      const send = sendBox
         ? { x: sendBox.x, y: sendBox.y, w: sendBox.width, h: sendBox.height }
-        : null,
+        : null;
+      const boxes = await page.evaluate(
+        ([at, point]) => {
+          const box = (el: Element | null | undefined) => {
+            const r = el?.getBoundingClientRect();
+            return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+          };
+          const sheet = document.querySelector('[data-slot="rail-sheet"]');
+          const hit = point
+            ? document.elementFromPoint(
+                point.x + point.w / 2,
+                point.y + point.h / 2
+              )
+            : null;
+          return {
+            frame: box(document.querySelector(at)),
+            sheet: box(sheet),
+            sendUnderSheet: !!(hit && sheet?.contains(hit)),
+          };
+        },
+        [FRAME, send] as const
+      );
+      return { ...boxes, send };
     };
-    const { frame: framed, send, sheet } = read;
-    const clear =
-      !!send &&
+    const opened = await read();
+    await page
+      .locator('[data-slot="comment-rail"]')
+      .getByRole("button", { name: commentWords.closeComments })
+      .click();
+    await sheetBox
+      .waitFor({ state: "detached", timeout: 10_000 })
+      .catch(() => undefined);
+    await settle(page, 400);
+    const shut = await read();
+    const near = (
+      x: { h: number; w: number; x: number; y: number } | null,
+      y: { h: number; w: number; x: number; y: number } | null
+    ) =>
+      !!x &&
+      !!y &&
+      Math.abs(x.x - y.x) <= 0.5 &&
+      Math.abs(x.y - y.y) <= 0.5 &&
+      Math.abs(x.w - y.w) <= 0.5 &&
+      Math.abs(x.h - y.h) <= 0.5;
+    const { frame: framed, sheet } = opened;
+    const layered =
+      near(opened.frame, shut.frame) &&
+      near(opened.send, shut.send) &&
       !!sheet &&
       !!framed &&
-      (send.y + send.h <= sheet.y + 0.5 ||
-        send.x + send.w <= sheet.x ||
-        send.x >= sheet.x + sheet.w) &&
-      framed.y + framed.h <= sheet.y + 0.5;
+      Math.abs(sheet.y + sheet.h - (framed.y + framed.h)) <= 1 &&
+      opened.sendUnderSheet &&
+      shut.sheet === null;
     // A new pick, so Send has something to send, then a press at its centre.
     const next =
       ((await delegateRead()).state.shape?.options ?? [])[0] === "lean"
@@ -3845,15 +3879,21 @@ const panelOfTreeLeg = async (on: On) => {
     told.count = now;
     const after = await delegateRead();
     kit.check(
-      `(q) ${engine} ${label}: with the Comments rail's foot sheet open, the page's frame ends where the sheet begins, Send's box clear of the sheet's, and a press at Send's centre sends: the delegate's artifact_read holds the pick and the delegate is told`,
-      clear &&
+      `(q) ${engine} ${label}: the Comments rail's foot sheet lies over the page's foot, Send under it, the frame's box and Send's the same open and shut; the rail closed, a press at Send's centre sends: the delegate's artifact_read holds the pick and the delegate is told`,
+      layered &&
         pressed === "pressed" &&
         now >= want &&
         JSON.stringify(after.state.shape?.options) === JSON.stringify([next]),
-      JSON.stringify({ ...read, pressed, told: now, picked: after.state.shape })
+      JSON.stringify({
+        opened,
+        shut,
+        pressed,
+        told: now,
+        picked: after.state.shape,
+      })
     );
   };
-  await sendClear(shown, frame, "desk (507px pane)");
+  await sendUnderRail(shown, frame, "desk (507px pane)");
   for (const [engine, view] of [
     ["chromium", "phone"],
     ["webkit", "desk"],
@@ -3875,7 +3915,7 @@ const panelOfTreeLeg = async (on: On) => {
     ).catch(() => null);
     if (inFrame) {
       await railOpen(page);
-      await sendClear(
+      await sendUnderRail(
         page,
         inFrame,
         view === "phone" ? "phone (390)" : "desk (507px pane)"

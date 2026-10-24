@@ -9,12 +9,17 @@
     ...props
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
 
-  /** A press on the frame's touch area beside its field: the field's own focus. */
+  /**
+   * A press on the frame's touch area beside its field: the field's own
+   * focus. Under a finger the area stands over the whole frame, the field
+   * included, so every tap on the field lands here. The field is found by
+   * `data-group-control`, which its kit part writes after the props it is
+   * given: a field named by a `data-slot` of its own (the Comments rail's
+   * `search`) is found all the same.
+   */
   function focusField(event: MouseEvent): void {
     if (event.target === event.currentTarget) {
-      ref
-        ?.querySelector<HTMLElement>('[data-slot="input-group-control"]')
-        ?.focus();
+      ref?.querySelector<HTMLElement>("[data-group-control]")?.focus();
     }
   }
 </script>

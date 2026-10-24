@@ -734,6 +734,17 @@
 @utility pointer-events-all {
   pointer-events: all;
 }
+/* A foot sheet over the preview's well (the Comments sheet, a thread's or
+   a new comment's sheet, the inspector's: PreviewPane, PinFloat,
+   SheetInspector): its cap the given percent of the well, and never taller
+   than the well's room over a software keyboard, which lifts it by the
+   well's `--keyboard-lift` (PreviewPane). */
+@utility max-h-over-keyboard-* {
+  max-height: min(
+    calc(--value(integer) * 1%),
+    calc(100% - var(--keyboard-lift, 0px))
+  );
+}
 @utility max-h-inherit {
   max-height: inherit;
 }

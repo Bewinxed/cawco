@@ -132,6 +132,7 @@
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, unstore, writeJson } from "../storage";
   import { toast } from "../toasts";
+  import { floor as visibleFloor } from "../visible-viewport.svelte";
   import { afterPaint, warm } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
@@ -296,6 +297,27 @@
           css: (t: number) => `width: ${t * width}px; opacity: ${t}`,
         }
       : { duration: dur("--dur-exit"), css: (t: number) => `opacity: ${t}` };
+  }
+  /**
+   * The rail's foot sheet in and out on the sheet recipe (DESIGN.md Dialog,
+   * sheet and drawer): its whole height up from the well's foot over
+   * `--dur-panel` on `--ease-drawer`, down over `--dur-exit`; with less
+   * motion it fades. A transform alone, over the page: nothing under it is
+   * told a size.
+   */
+  function railSheetSlide(_node: Element, { leaving }: { leaving: boolean }) {
+    if (!motionOk.current) {
+      return {
+        duration: dur(leaving ? "--dur-exit" : "--dur-fade"),
+        easing: easeOut,
+        css: (t: number) => `opacity: ${t}`,
+      };
+    }
+    return {
+      duration: dur(leaving ? "--dur-exit" : "--dur-panel"),
+      easing: leaving ? easeOut : easeDrawer,
+      css: (t: number) => `transform: translateY(${(1 - t) * 100}%)`,
+    };
   }
   let connected = $state(false);
   let loaded = $state(false);
@@ -1784,34 +1806,51 @@
   const railAway = $derived(
     listOpen && railSheet && (!!cardPin || !!composing || !!picking)
   );
-  /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
-  let listFilter = $state<"check" | "open" | "resolved">("open");
-  let listScroll = $state(0);
   /**
-   * The foot sheet's height while it stands, px: the page's frame ends
-   * where it begins, so the page's own foot (a decision page's Send) stays
-   * above it and the page scrolls in what is left. 0 while none stands.
+   * How much of the well's foot a software keyboard covers, px: what stands
+   * at the foot over the page (the Comments sheet, a thread's or the
+   * composer's foot sheet, the inspector's sheet) is lifted by it, so the
+   * field being typed in stands over the keyboard while the page under them
+   * keeps its box (a phone's preview sheet holds its place for a field of
+   * its own: SideSheet). Written on the well as `--keyboard-lift`; 0 with
+   * no keyboard, and under a pinch zoom (`floor.bottom` 0). Read as the
+   * visible area is published and as the well resizes, in the frame after.
    */
-  let railSheetH = $state(0);
-  const measureRailSheet = (node: HTMLElement) => {
+  $effect(() => {
+    const node = well;
+    const { bottom } = visibleFloor;
+    if (!node) {
+      return;
+    }
     const read = () => {
-      railSheetH = node.offsetHeight;
+      const covered =
+        bottom > 0
+          ? Math.max(
+              0,
+              Math.round(node.getBoundingClientRect().bottom - bottom)
+            )
+          : 0;
+      node.style.setProperty("--keyboard-lift", `${covered}px`);
     };
     read();
     const watch = frameObserver(read);
     watch.observe(node);
     return () => {
       watch.disconnect();
-      railSheetH = 0;
+      node.style.removeProperty("--keyboard-lift");
     };
-  };
+  });
+  /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
+  let listFilter = $state<"check" | "open" | "resolved">("open");
+  let listScroll = $state(0);
   /**
    * What the host's chrome covers of the page, told to its overlay
    * (`cawco:covered`, the page's viewport px): on a phone, the thread or the
-   * composer standing at the well's foot (the rail's foot sheet covers
-   * nothing: the frame ends where it begins). A pin the pane opens is
-   * brought out from under them (pins.ts `reveal`). Told again as either
-   * resizes, and as nothing once neither stands.
+   * composer standing at the well's foot. A pin the pane opens is brought
+   * out from under them (pins.ts `reveal`). Told again as either resizes,
+   * and as nothing once neither stands. The rail's foot sheet is a layer
+   * over the page that never moves it: it stands aside for a thread
+   * (`railAway`), so no pin is brought out from under it.
    */
   $effect(() => {
     const frame = iframe;
@@ -4081,10 +4120,8 @@
         data-ready={!current || loaded || undefined}
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
           undefined}
-        data-comments-sheet={railSheetH > 0 || undefined}
-        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w) data-comments-sheet:h-(--frame-h)"
+        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
-        style:--frame-h={`calc(100% - ${railSheetH}px)`}
         allow="clipboard-write"
         inert={!current}
         onerror={() => arrived(key)}
@@ -4409,11 +4446,17 @@
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
   {#if listOpen && railPlaced && !isCanvas && railSheet && !railAway}
-    <!-- The rail as the well's foot sheet, at most 60% of it: on a phone and in a pane under 640px. -->
+    <!-- The rail as the well's foot sheet, at most 60% of it: on a phone and
+         in a pane under 640px. A layer over the page (DESIGN.md, The
+         Comments rail): the frame keeps its whole box under it, so the page
+         neither moves, resizes nor scrolls as it opens, drags or closes.
+         A keyboard's lift stands it over the keyboard, no taller than the
+         well's room above it. -->
     <div
-      class="absolute inset-x-0 bottom-0 z-2 flex max-h-3/5"
+      class="absolute inset-x-0 bottom-(--keyboard-lift,0px) z-2 flex max-h-over-keyboard-60"
       data-slot="rail-sheet"
-      {@attach measureRailSheet}
+      in:railSheetSlide={{ leaving: false }}
+      out:railSheetSlide={{ leaving: true }}
     >
       {@render railOf("sheet")}
     </div>

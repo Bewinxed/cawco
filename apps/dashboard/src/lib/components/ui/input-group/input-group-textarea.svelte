@@ -21,4 +21,5 @@
   bind:ref
   bind:value
   {...props}
+  data-group-control
 />

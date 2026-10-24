@@ -21,7 +21,9 @@
   any side has the card beside, under or over its pill alone. A pin not on
   the page (its element gone) stands at the well's top-right, as tall as the
   well. On a phone, under a finger, and wherever
-  the pane says so (`sheet`), it is the well's foot sheet, full width.
+  the pane says so (`sheet`), it is the well's foot sheet, full width,
+  standing over a software keyboard by the well's `--keyboard-lift`
+  (PreviewPane) so its field stays in view while the page keeps its box.
 
   It comes in from the pill, growing from `--press-scale` as it fades in
   over `--dur-menu` on `--ease-out`, its origin the pill's corner nearest
@@ -257,7 +259,7 @@
 
 <div
   aria-label={label}
-  class="pointer-events-auto absolute z-2 flex flex-col w-(--float-w) max-h-(--float-max) not-data-sheet:start-(--float-x) not-data-sheet:top-(--float-y) origin-(--float-origin) not-data-bare:overflow-y-auto not-data-bare:overscroll-contain not-data-bare:gap-space-2 not-data-sheet:not-data-bare:p-space-3 not-data-sheet:not-data-bare:border not-data-sheet:not-data-bare:border-border-control not-data-sheet:not-data-bare:rounded-lg not-data-bare:bg-surface-raised not-data-sheet:not-data-bare:shadow-hairline data-sheet:inset-x-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-7/10 data-sheet:px-space-3 data-sheet:pt-space-3 data-sheet:pb-(--sheet-pb) data-sheet:border-t data-sheet:border-border-hairline data-sheet:rounded-t-lg data-sheet:bg-surface-raised data-sheet:shadow-drawer"
+  class="pointer-events-auto absolute z-2 flex flex-col w-(--float-w) max-h-(--float-max) not-data-sheet:start-(--float-x) not-data-sheet:top-(--float-y) origin-(--float-origin) not-data-bare:overflow-y-auto not-data-bare:overscroll-contain not-data-bare:gap-space-2 not-data-sheet:not-data-bare:p-space-3 not-data-sheet:not-data-bare:border not-data-sheet:not-data-bare:border-border-control not-data-sheet:not-data-bare:rounded-lg not-data-bare:bg-surface-raised not-data-sheet:not-data-bare:shadow-hairline data-sheet:inset-x-0 data-sheet:bottom-(--keyboard-lift,0px) data-sheet:w-full data-sheet:max-h-over-keyboard-70 data-sheet:px-space-3 data-sheet:pt-space-3 data-sheet:pb-(--sheet-pb) data-sheet:border-t data-sheet:border-border-hairline data-sheet:rounded-t-lg data-sheet:bg-surface-raised data-sheet:shadow-drawer"
   data-bare={bare || undefined}
   data-sheet={sheet || undefined}
   data-side={place?.side}

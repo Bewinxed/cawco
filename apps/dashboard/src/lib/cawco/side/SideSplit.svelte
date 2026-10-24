@@ -6,8 +6,9 @@
    * preview, a task one of its cards opened, or both under a switch. On a
    * desk and at an iPad's regular width it is the split. On a phone, or in
    * a desk's pane under 900px (layoutPolicy.sideDrawer), the preview rises
-   * as a sheet standing on the composer (SideSheet), so the reader can
-   * write while it is up. A task there is its own page (the project page's
+   * as a sheet (SideSheet): on a phone over the composer, which it covers
+   * while it is up; in the desk's narrow pane standing on it, so the mouse
+   * can write while it is up. A task there is its own page (the project page's
    * `?task=`), never a sheet: the thread's cards link to it, as a thread's
    * file chips link to the page's `?file=`. A session and a thread draw it
    * alike. The plan is not here: its ring is the composer's, so it opens

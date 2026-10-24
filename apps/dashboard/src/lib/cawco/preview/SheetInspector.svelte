@@ -202,7 +202,7 @@
 <aside
   data-sheet={layout === "sheet" || undefined}
   aria-label="Inspector"
-  class="absolute inset-y-0 end-0 z-2 flex flex-col w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-0 data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-3/5 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
+  class="absolute inset-y-0 end-0 z-2 flex flex-col w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-(--keyboard-lift,0px) data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-over-keyboard-60 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
   data-inspector={layout}
   style:--foot-pb="calc(var(--space-2) + env(safe-area-inset-bottom, 0px))"
   in:slide={{ leaving: false }}

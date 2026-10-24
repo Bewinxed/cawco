@@ -2,9 +2,12 @@
   /**
    * The preview on a phone (SideSplit): a sheet over the transcript and
    * the composer, down to the screen's foot, so the page has the composer's
-   * room too. When the reader takes the composer it steps down onto it, so
-   * what they write stands in view; dragged up, or once they leave it, it
-   * covers it again. The preview closes it from its own header.
+   * room too. While it is open it covers the composer (the owner: "the
+   * preview and drawer should cover the composer"): it never stands on it,
+   * and the composer under it is inert, out of reach of a finger, a key or
+   * a screen reader, until the preview closes, its draft and the
+   * transcript's place kept as they were. The preview closes it from its
+   * own header.
    */
   import { Portal } from "bits-ui";
   import type { Snippet } from "svelte";
@@ -36,8 +39,8 @@
   } = $props();
   /**
    * How the sheet arrives, decided once as it mounts. It settles on its
-   * open stop (on the composer, the lower one, if the reader is writing
-   * there). Opened by its card's
+   * open stop (on a phone over the composer; in a desk's narrow pane on
+   * it, the lower one). Opened by its card's
    * Preview button in the transcript, it comes out of the card
    * (motion/share.svelte.ts, clipped open from the card's box over
    * --dur-panel on --ease-drawer) standing still at that snap: vaul's own
@@ -57,8 +60,9 @@
    * over the delegate chips on a phone. Drawn is what has a box and paints:
    * neither `visibility: hidden` nor faded to nothing.
    */
+  const PILL = ':scope > [data-slot="composer"]';
   const COMPOSER_PARTS = [
-    ':scope > [data-slot="composer"]',
+    PILL,
     '[data-slot="ask"]',
     '[data-slot="lift"] [data-tray-chip]',
     '[data-slot="suggest"]:has([data-slot="track"])',
@@ -76,9 +80,9 @@
    */
   const TAB = "44px";
   const DRAWN = { opacityProperty: true, visibilityProperty: true };
-  function drawnTop(composer: HTMLElement): number {
+  function drawnTop(composer: HTMLElement, parts = COMPOSER_PARTS): number {
     let top = Number.POSITIVE_INFINITY;
-    for (const part of composer.querySelectorAll<HTMLElement>(COMPOSER_PARTS)) {
+    for (const part of composer.querySelectorAll<HTMLElement>(parts)) {
       const box = part.getBoundingClientRect();
       if (box.height > 0 && part.checkVisibility(DRAWN)) {
         top = Math.min(top, box.top);
@@ -93,15 +97,20 @@
    * the screen's foot (less the home indicator's room), and each stop is a
    * height shown over that foot.
    *
-   * - `open`, where it opens: its floor the screen's foot, over the
-   *   composer, its chips, its suggestions and the plan's ring, its top the
-   *   composer's room above where `lower` stands.
-   * - `lower`, when the reader needs the composer (it takes the focus): its
-   *   floor the composer's drawn top, 60% of the visible height or all the
-   *   room above the composer. The composer's room under it is clipped off
-   *   the host, so the sheet steps down onto the composer and never floats
-   *   over its empty rows. Once the focus leaves the composer, a sheet that
-   *   stepped down for it climbs back to `open` ({@link steppedDown}).
+   * - `open`, where it opens on a phone: its floor the screen's foot, over
+   *   the composer, its chips, its suggestions and the plan's ring. Its top
+   *   is measured from the pill alone (`pillRoom`, `abovePill`): the pill's
+   *   room above where the sheet would stand on the pill. What the covered
+   *   composer shows over its pill comes and goes under the sheet (the
+   *   suggestions filling their row as a turn ends, a delegate's chip in the
+   *   tray row), and counted, each moved the sheet and the page in it 90px
+   *   while the person read it (decision-pages (q)).
+   * - `lower`, where it opens in a desk's pane under 900px, and while an
+   *   ask is up: its floor the composer's drawn top, 60% of the visible
+   *   height or all the room above the composer. The composer's room under
+   *   it is clipped off the host, so the sheet stands on the composer and
+   *   never floats over its empty rows. A phone has no such stop: there
+   *   the sheet covers the composer.
    * - `full`: the whole host, its floor the screen's foot.
    * - `tab`, while an ask is up (TAB, below).
    *
@@ -124,13 +133,62 @@
   let aboveComposer = $state(0);
   /** The composer's room: from its drawn top to the screen's foot. */
   let composerRoom = $state(0);
+  /** The room above the pill's top, from the safe area's top: a phone's `open` stop. */
+  let abovePill = $state(0);
+  /** The pill's room: from its top to the screen's foot. */
+  let pillRoom = $state(0);
+  /** The sheet's geometry as last measured with no keyboard up: what a phone's sheet keeps while one is. */
+  let atRest: {
+    aboveComposer: number;
+    abovePill: number;
+    composerRoom: number;
+    hostHeight: number;
+    pillRoom: number;
+    viewportHeight: number;
+  } | null = null;
+  /** A software keyboard covers the screen's bottom (visible-viewport's `data-keyboard`). */
+  const keyboardUp = () =>
+    document.documentElement.hasAttribute("data-keyboard");
+  /**
+   * On a phone the open sheet covers the composer, and a keyboard raised
+   * while the focus is anywhere but the page's frame (a field of the
+   * sheet's own: the Comments sheet's search, a thread's Reply, a new
+   * comment's field) moves none of it: the sheet keeps the
+   * place it has with the keyboard down, so the page in it neither moves
+   * nor resizes, and the pane lifts what holds the field over the keyboard
+   * (PreviewPane `--keyboard-lift`). A field of the page's own (the frame
+   * holds the focus) is the page's to bring into view, and there the sheet
+   * stands on the keyboard, as it does on an ask's card it folds onto.
+   * Whether it holds; holding, the geometry is put back to the keyboard-down
+   * one, should the sheet have stood on the keyboard a moment before (the
+   * page's field focused as the keyboard rose).
+   */
+  function heldForKeyboard(): boolean {
+    if (
+      !(covers.current && !asking && keyboardUp()) ||
+      document.activeElement instanceof HTMLIFrameElement
+    ) {
+      return false;
+    }
+    if (atRest) {
+      ({
+        hostHeight,
+        aboveComposer,
+        abovePill,
+        composerRoom,
+        pillRoom,
+        viewportHeight,
+      } = atRest);
+    }
+    return true;
+  }
   /** vaul reads a px snap point with parseInt: every one is whole. */
   const px = (height: number) => `${Math.round(height)}px`;
   /** Each stop's snap point, as vaul takes it. */
   const values = $derived.by((): Record<Stop, number | string> => {
     const middle = Math.min(viewportHeight * 0.6, aboveComposer);
     const onIt = composerRoom + middle;
-    const over = onIt + composerRoom;
+    const over = 2 * pillRoom + Math.min(viewportHeight * 0.6, abovePill);
     return {
       tab: px(composerRoom + Number.parseFloat(TAB)),
       lower: px(onIt),
@@ -152,8 +210,7 @@
     snap = stop === rest ? values.full : values[rest];
   }
   /** The stop the sheet rests at: over the composer on a phone, else on it. */
-  const restStop = (): Stop =>
-    covers.current && !asking && snapStops.includes("open") ? "open" : "lower";
+  const restStop = (): Stop => (covers.current && !asking ? "open" : "lower");
   let snapPoints = $state<(number | string)[]>([0.6, 1]);
   /** The stop each of `snapPoints` is, in order. */
   let snapStops = $state<Stop[]>([]);
@@ -331,7 +388,7 @@
     if (tabbed) {
       names = ["tab", "lower", "full"];
     } else if (phone) {
-      names = ["lower", "open", "full"];
+      names = ["open", "full"];
     }
     // `open` is the whole host where the room allows no more.
     return names.filter(
@@ -339,7 +396,7 @@
     );
   }
   $effect(() => {
-    const dimensions = viewportHeight + hostHeight + composerRoom;
+    const dimensions = viewportHeight + hostHeight + composerRoom + pillRoom;
     const next = values;
     const tabbed = asking;
     const phone = covers.current;
@@ -375,37 +432,35 @@
     }
   });
   /** The composer standing over this conversation, once found. */
-  let composerNode: HTMLElement | undefined;
-  /** The reader is writing: the composer holds the focus. */
-  const writing = () =>
-    !!composerNode?.contains(document.activeElement) &&
-    document.activeElement !== document.body;
+  let composerNode = $state<HTMLElement>();
   /**
-   * The sheet stands on the composer because the reader was writing there
-   * (its field had the focus as it opened, or took it since), not because
-   * they dragged it down: once the focus leaves the composer it climbs back
-   * to its rest, over the composer and its chips (the owner: "the preview
-   * sheet should cover the composer and the chip row, lost space").
+   * On a phone the open sheet covers the composer, and the composer under
+   * it is inert: no finger, key or screen reader reaches it behind the
+   * page (the owner: "the preview and drawer should cover the composer").
+   * An ask raised on the composer is the reader's to answer, so while one
+   * is up (the sheet folded to its tab on the ask's card) the composer is
+   * live; so it is once the sheet closes, its draft as it was.
    */
-  let steppedDown = false;
-  // Dragged or tapped to another stop, it stands where the reader put it.
   $effect(() => {
-    if (stop !== null && stop !== "lower") {
-      steppedDown = false;
+    const node = composerNode;
+    if (!(node && open && covers.current && !asking)) {
+      return;
     }
+    node.inert = true;
+    return () => {
+      node.inert = false;
+    };
   });
   // The sheet mounts at its open stop, which is known once the composer and
-  // the screen's foot have been measured; on the composer if the reader is
-  // writing in it.
+  // the screen's foot have been measured: over the composer on a phone, on
+  // it in a desk's narrow pane.
   let placed = false;
   /** The stop the sheet mounted at. */
   let firstStop: Stop = "open";
   $effect.pre(() => {
     if (!placed && hostHeight) {
       placed = true;
-      const wrote = untrack(writing);
-      firstStop = covers.current && !wrote ? "open" : "lower";
-      steppedDown = covers.current && wrote;
+      firstStop = untrack(restStop);
       snap = untrack(() => values[firstStop]);
     }
   });
@@ -433,9 +488,7 @@
     const request = cawco.previewRequests[instanceId];
     if (request !== undefined && placed) {
       untrack(() => {
-        const wrote = writing();
-        snap = values[wrote ? "lower" : restStop()];
-        steppedDown = wrote && covers.current;
+        snap = values[restStop()];
       });
     }
   });
@@ -464,6 +517,9 @@
       );
       const composerTop = composer ? drawnTop(composer) : box.bottom - offset;
       asking = composer?.hasAttribute("data-asking") ?? false;
+      if (heldForKeyboard()) {
+        return;
+      }
       const viewport = window.visualViewport;
       // A keyboard that resizes the web view (Brave) reports the new visible
       // area a frame before the page is laid out in it, with the composer
@@ -498,37 +554,21 @@
       hostHeight = floor - safeTop;
       aboveComposer = composerTop - safeTop;
       composerRoom = floor - composerTop;
-    };
-    measure();
-    /**
-     * The reader takes the composer (its field focused): the sheet steps
-     * down to its lower stop on vaul's own curve, the composer in view to
-     * write in. It climbs back when dragged, or once the focus leaves.
-     */
-    const toComposer = () => {
-      if (placed && !onComposer && snapPoints.includes(values.lower)) {
-        snap = values.lower;
-        steppedDown = true;
+      const pillTop = composer ? drawnTop(composer, PILL) : composerTop;
+      abovePill = Math.min(pillTop, floor) - safeTop;
+      pillRoom = floor - Math.min(pillTop, floor);
+      if (!keyboardUp()) {
+        atRest = {
+          hostHeight,
+          aboveComposer,
+          abovePill,
+          composerRoom,
+          pillRoom,
+          viewportHeight,
+        };
       }
     };
-    /**
-     * The focus left the composer (the keyboard put away, a tap in the
-     * page or the conversation): a sheet that stepped down for the writing
-     * climbs back to its rest, over the composer, on vaul's own curve. Read
-     * in the frame after, once the focus has landed wherever it went.
-     */
-    const fromComposer = () => {
-      requestAnimationFrame(() => {
-        if (!(steppedDown && placed && stop === "lower") || writing()) {
-          return;
-        }
-        const rest = restStop();
-        if (rest !== "lower" && snapStops.includes(rest)) {
-          steppedDown = false;
-          snap = values[rest];
-        }
-      });
-    };
+    measure();
     // A resize is read in the frame after it too (frameObserver): measured
     // in the observer's callback, the sheet's new height (its host's)
     // resized the pane in it inside that delivery, at a depth the delivery
@@ -562,9 +602,13 @@
       composer.addEventListener("transitionend", remeasure);
       composer.addEventListener("introend", remeasure, { capture: true });
       composer.addEventListener("outroend", remeasure, { capture: true });
-      composer.addEventListener("focusin", toComposer);
-      composer.addEventListener("focusout", fromComposer);
     }
+    // Whether a keyboard's field is the sheet's or the page's moves the
+    // sheet (above): the focus going between the two, the keyboard staying
+    // up, publishes no new visible area, so it asks for the frame itself.
+    // The focus going into the frame leaves the window (`blur`).
+    document.addEventListener("focusin", remeasure);
+    window.addEventListener("blur", remeasure);
     // A keyboard, a resized window or a pan moves the composer through the
     // visible area as published (visible-viewport), in the frame after the
     // event: the shell takes its height from it there, and the composer
@@ -586,8 +630,8 @@
       composer?.removeEventListener("transitionend", remeasure);
       composer?.removeEventListener("introend", remeasure, { capture: true });
       composer?.removeEventListener("outroend", remeasure, { capture: true });
-      composer?.removeEventListener("focusin", toComposer);
-      composer?.removeEventListener("focusout", fromComposer);
+      document.removeEventListener("focusin", remeasure);
+      window.removeEventListener("blur", remeasure);
     };
   });
 </script>
