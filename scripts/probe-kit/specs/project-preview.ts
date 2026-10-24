@@ -26,6 +26,15 @@
  * - no box overlaps another, the Dropped rail and the columns included, and
  *   a board scrolled sideways never cuts a column at its leading edge;
  * - the empty project's starters share one height;
+ * - interface text starts at its column's edge (the empty and failed
+ *   blocks' title and lines), while Caw keeps the composition's axis;
+ * - the pane's tab strip stands directly over its panel, and the panel
+ *   shows whole above the composer;
+ * - a board with more past an edge wears the house edge fade there (the
+ *   pane or Caw's column narrowing it, the Dropped column opened);
+ * - the preview page shows one frame at a time where both can't be read
+ *   (under 1100px), at a scale of 0.9 or more for the Phone and 1 for the
+ *   Desk, which pans; both frames side by side or stacked above that;
  * - every named motion, held on the DevTools clock and sought to 0, ¼, ½,
  *   ¾ and 1 of its own length, moves the whole way on its own curve: each
  *   reading strictly between its ends, and within 0.06 of where the run's
@@ -522,18 +531,97 @@ const offGrammar = (cards: Awaited<ReturnType<typeof cardLines>>): string[] =>
         ];
   });
 
+/** The cards in the pane's region above its tab strip. */
 const cardsBeforeTabs = (page: Page): Promise<number> =>
+  page.evaluate(() =>
+    document.querySelector(".pane-tabs .ptabs")
+      ? document.querySelectorAll(".pane-scroll > .pcard").length
+      : -1
+  );
+
+/** Where the pane's strip, its panel and its composer stand. */
+const paneParts = (page: Page) =>
   page.evaluate(() => {
-    const scroll = document.querySelector(".pane-scroll");
-    const tabs = scroll?.querySelector(".ptabs");
-    if (!(scroll && tabs)) {
-      return -1;
-    }
-    const order = [...scroll.children];
-    return order
-      .slice(0, order.indexOf(tabs))
-      .filter((part) => part.classList.contains("pcard")).length;
+    const box = (selector: string) => {
+      const found = document.querySelector(selector)?.getBoundingClientRect();
+      return found ? { top: found.top, bottom: found.bottom } : null;
+    };
+    return {
+      strip: box(".pane-tabs .ptabs"),
+      panel: box('.pane-tabs [data-slot="panel"]'),
+      foot: box(".pane-foot"),
+      view: innerHeight,
+    };
   });
+
+const paneFaults = (parts: Awaited<ReturnType<typeof paneParts>>): string[] => {
+  const { foot, panel, strip, view } = parts;
+  if (!(strip && panel && foot)) {
+    return ["the pane has no tab strip, panel or composer"];
+  }
+  return [
+    ...(panel.top - strip.bottom > 11.5 || panel.top < strip.bottom - 0.5
+      ? [
+          `the panel starts ${(panel.top - strip.bottom).toFixed(1)}px from its strip`,
+        ]
+      : []),
+    ...(panel.bottom > foot.top + 0.5
+      ? [
+          `the panel runs ${(panel.bottom - foot.top).toFixed(1)}px under the composer`,
+        ]
+      : []),
+    ...(strip.bottom > view ? ["the strip stands below the screen"] : []),
+  ];
+};
+
+/** The words of the empty and failed blocks and how each is aligned. */
+const blockAlign = (page: Page) =>
+  page.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        ".empty-title, .empty-line, .fault-what, .fault-why"
+      ),
+    ]
+      .filter((words) => words.getBoundingClientRect().width > 0)
+      .map((words) => ({
+        what: words.className,
+        align: getComputedStyle(words).textAlign,
+      }))
+  );
+
+/** Whether a board with more past an edge wears the edge fade on that edge. */
+const edgeFade = (page: Page) =>
+  page.evaluate(() => {
+    const board = document.querySelector<HTMLElement>(".board");
+    if (!board || board.hidden) {
+      return { more: false, faded: true, detail: "no board" };
+    }
+    const past = board.scrollWidth - board.clientWidth;
+    const start = past > 1 && board.scrollLeft > 1;
+    const end = past > 1 && board.scrollLeft < past - 1;
+    const mask = getComputedStyle(board).maskImage;
+    const stops = mask.includes("gradient");
+    return {
+      more: start || end,
+      faded: !(start || end) || stops,
+      detail: `${Math.round(past)}px past, at ${Math.round(board.scrollLeft)}; mask ${mask.slice(0, 60)}`,
+    };
+  });
+
+/** The preview page's frames: which show, and at what scale. */
+const shownFrames = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".frame")]
+      .filter((frame) => getComputedStyle(frame).display !== "none")
+      .map((frame) => ({
+        frame: frame.dataset.frame ?? "",
+        scale: Number(
+          getComputedStyle(frame.querySelector(".screen") as Element)
+            .getPropertyValue("--s")
+            .trim() || "1"
+        ),
+      }))
+  );
 
 /* ---------- Motion ---------- */
 
@@ -956,7 +1044,29 @@ const checkState = async (
       `Caw ${axis.caw.toFixed(2)}, his block ${axis.block.toFixed(2)}, the page column ${axis.column.toFixed(2)}`
     );
   }
+  if (state === "empty" || state === "fault") {
+    const centred = (await blockAlign(page)).filter(
+      ({ align }) => !["start", "left"].includes(align)
+    );
+    kit.check(
+      `${where}: the block's words start at its edge`,
+      centred.length === 0,
+      centred.map(({ align, what }) => `${what} ${align}`).join(", ")
+    );
+  }
+  const fade = await edgeFade(page);
+  kit.check(
+    `${where}: the board fades at an edge with more past it`,
+    fade.faded,
+    fade.detail
+  );
   if (state === "open") {
+    const pane = paneFaults(await paneParts(page));
+    kit.check(
+      `${where}: the tab strip stands over its whole panel`,
+      pane.length === 0,
+      pane.join("; ")
+    );
     const count = await cardsBeforeTabs(page);
     kit.check(
       `${where}: the pane shows at most two cards before its tabs`,
@@ -976,6 +1086,34 @@ const LEGS = (size: View): [string, string][] =>
         ["waiting", "columns"],
       ];
 
+/** The preview page itself at one size: which frames show and whether it holds them. */
+const checkShell = async (
+  kit: Kit,
+  page: Page,
+  where: string
+): Promise<void> => {
+  const frames = await shownFrames(page);
+  const narrow = (page.viewportSize()?.width ?? 0) < 1100;
+  kit.check(
+    `${where}: the preview shows ${narrow ? "one frame, readable" : "both frames"}`,
+    narrow
+      ? frames.length === 1 &&
+          frames.every(
+            ({ frame, scale }) => scale >= (frame === "desk" ? 1 : 0.9)
+          )
+      : frames.length === 2,
+    frames
+      .map(({ frame, scale }) => `${frame} at ${scale.toFixed(2)}`)
+      .join(", ")
+  );
+  const shell = await boxFaults(page);
+  kit.check(
+    `${where}: the preview page holds its frames`,
+    shell.length === 0,
+    shell.join("; ")
+  );
+};
+
 const boxes = async (kit: Kit, origin: string): Promise<void> => {
   for (const engine of ENGINES) {
     for (const size of SIZES) {
@@ -983,12 +1121,7 @@ const boxes = async (kit: Kit, origin: string): Promise<void> => {
       listen(page, `${engine} ${size}`);
       await page.goto(`${origin}/index.html`);
       await page.waitForFunction(() => document.fonts.status === "loaded");
-      const shell = await boxFaults(page);
-      kit.check(
-        `${engine} ${size}: the preview page holds its frames`,
-        shell.length === 0,
-        shell.join("; ")
-      );
+      await checkShell(kit, page, `${engine} ${size}`);
       for (const [state, layout] of LEGS(size)) {
         await openFrame(page, origin, state, layout);
         await checkState(
@@ -996,6 +1129,17 @@ const boxes = async (kit: Kit, origin: string): Promise<void> => {
           page,
           `${engine} ${size} ${state}${layout === "columns" ? " (columns)" : ""}`,
           state
+        );
+      }
+      if (size === "desk") {
+        await openFrame(page, origin, "rest");
+        await page.click('[data-act="dropped"]');
+        await still(page);
+        await checkState(
+          kit,
+          page,
+          `${engine} ${size} rest, Dropped open`,
+          "rest"
         );
       }
     }

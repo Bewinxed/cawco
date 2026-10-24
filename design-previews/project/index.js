@@ -39,11 +39,16 @@ const placeThumb = (fieldset) => {
   thumb.style.width = `${chosen.offsetWidth}px`;
 };
 
+const ONE = matchMedia("(width < 1100px)");
+
 const fit = () => {
   for (const screen of $$(".screen")) {
     const width = Number(screen.style.getPropertyValue("--w"));
     const room = screen.parentElement.clientWidth - 2;
-    screen.style.setProperty("--s", String(Math.min(1, room / width)));
+    const desk = screen.closest('[data-frame="desk"]');
+    /* One frame at a time: the Desk keeps its own size and pans. */
+    const scale = ONE.matches && desk ? 1 : Math.min(1, room / width);
+    screen.style.setProperty("--s", String(scale));
   }
   for (const fieldset of $$(".seg")) {
     placeThumb(fieldset);
@@ -72,10 +77,19 @@ document.addEventListener("change", (event) => {
     post({ layout: input.value });
     return;
   }
+  if (input.name === "frame") {
+    for (const figure of $$(".frame")) {
+      figure.toggleAttribute("data-shown", figure.dataset.frame === input.value);
+    }
+    fit();
+    return;
+  }
   send();
 });
 
 $('[data-act="replay"]').addEventListener("click", send);
+
+ONE.addEventListener("change", fit);
 
 let fitting = 0;
 new ResizeObserver(() => {

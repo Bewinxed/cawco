@@ -204,6 +204,25 @@ body {
   transform-origin: 0 0;
 }
 
+/* Narrower than a readable Desk beside a Phone: one frame at a time, the
+   Frame switch picks it, and the Desk stands at its own size, panned in its
+   screen rather than shrunk past reading. */
+.frame-pick {
+  display: none;
+}
+@media (width < 1100px) {
+  .frame-pick {
+    display: block;
+  }
+  .frame:not([data-shown]) {
+    display: none;
+  }
+  .frame[data-frame="desk"] .screen {
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+}
+
 @media (width < 640px) {
   body {
     padding-inline: var(--space-3);

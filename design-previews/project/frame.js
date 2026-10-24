@@ -481,6 +481,22 @@ const place = () => {
       node.remove();
     }
   }
+  markEdges();
+};
+
+/**
+ * The house edge fade on the board's sides while more of it lies past them
+ * (the pane or Caw's column narrows it): a column cut at an edge fades out
+ * there rather than being sliced.
+ */
+const markEdges = () => {
+  const board = $('[data-slot="board"]');
+  const more = board.scrollWidth - board.clientWidth;
+  board.toggleAttribute("data-more-start", more > 1 && board.scrollLeft > 1);
+  board.toggleAttribute(
+    "data-more-end",
+    more > 1 && board.scrollLeft < more - 1
+  );
 };
 
 const rects = () => {
@@ -852,9 +868,11 @@ const paneHTML = (task) => `
     </header>
     ${askCard(task)}
     ${reviewCard(task)}
+  </div>
+  <section class="pane-tabs" aria-label="Task sections">
     ${tabsHTML(S.tab)}
     <div data-slot="panel">${tabPanel(task, S.tab)}</div>
-  </div>
+  </section>
   <footer class="pane-foot">
     <form class="composer" data-composer="pane">
       <label class="composer-field"><span class="visually-hidden">Message ${task.agent ?? "Caw"}</span>
@@ -1989,6 +2007,11 @@ window.preview = {
   hubAnswers,
   state: S,
 };
+
+/* The board's edge fade follows its scroll and its width (the pane and Caw's column narrow it). */
+const BOARD = $('[data-slot="board"]');
+BOARD.addEventListener("scroll", markEdges, { passive: true });
+new ResizeObserver(markEdges).observe(BOARD);
 
 const params = new URLSearchParams(location.search);
 applyScheme(params.get("scheme") ?? "light");

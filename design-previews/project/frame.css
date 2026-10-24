@@ -637,6 +637,29 @@ pre {
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+.board[data-more-end] {
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
+}
+.board[data-more-start] {
+  mask-image: linear-gradient(
+    to left,
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
+}
+.board[data-more-start][data-more-end] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--c-edge-fade-len),
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
+}
 .board[data-dropped="open"] {
   grid-template-columns: repeat(5, minmax(var(--c-board-col-min), 1fr));
 }
@@ -871,14 +894,16 @@ pre {
   display: flex;
   flex: 1;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   align-self: center;
   width: min(100%, var(--c-composer-w));
   padding-block: var(--space-8) var(--space-8);
-  text-align: center;
+  text-align: start;
 }
 .caw-hero,
 .caw-fault {
+  /* Caw stands on the composition's axis; the words beside him start at the column's edge. */
+  align-self: center;
   width: var(--c-caw-hero);
   height: var(--c-caw-hero);
   margin-block-end: var(--space-3);
@@ -1067,7 +1092,9 @@ pre {
 /* ---------- The task pane ---------- */
 .pane {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  /* The cards give way (they scroll in their own region) before the tab
+     strip and its panel do: the strip always stands over its panel, whole. */
+  grid-template-rows: minmax(0, auto) auto auto;
   width: var(--pane-w);
   margin: var(--space-2) var(--space-2) var(--space-2) 0;
   border-radius: var(--radius-lg);
@@ -1083,6 +1110,12 @@ pre {
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+.pane-tabs {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5) var(--space-2);
+  border-block-start: 1px solid var(--border-hairline);
 }
 .pane-top {
   display: flex;
@@ -1677,7 +1710,8 @@ pre {
     border-radius: 0;
     box-shadow: none;
   }
-  .pane-scroll {
+  .pane-scroll,
+  .pane-tabs {
     padding-inline: var(--c-screen-margin);
   }
   .pane .chips {
