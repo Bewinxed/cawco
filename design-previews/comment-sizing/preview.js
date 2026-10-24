@@ -363,8 +363,12 @@ function build() {
     shell.append(holder);
     return shell;
   };
+  // PreviewPane `railAway` (main 9d00bda27, PreviewPane.svelte:1782-1785,
+  // 4378): on a phone the list's foot sheet stands aside while a thread or a
+  // composer stands as the well's foot drawer, so neither covers the other.
+  const railAway = phone && float !== null;
   if (phone) {
-    if (stands === "row" || stands === "bottom" || listOpen) {
+    if (stands === "row" || stands === "bottom" || (listOpen && !railAway)) {
       sheet = document.createElement("div");
       sheet.className = "foot-sheet";
       sheet.dataset.slot = "foot-sheet";
@@ -650,14 +654,21 @@ function layout() {
   }
   const { well, scroller, room, pills, target, float, sheet, look } = built;
   const size = { w: well.clientWidth, h: well.clientHeight };
-  // Under a foot sheet the page is scrolled as little as lifts what the
-  // comment is about clear above it (the overlay's `reveal`), never so far
-  // that its pill leaves the top.
-  const covers = look.phone
-    ? [float?.dataset.sheet ? float : null, sheet].filter(Boolean)
-    : [];
-  if (covers.length > 0) {
-    const over = Math.min(...covers.map((one) => inWell(one).y));
+  // The rail's foot sheet covers nothing: the page ends where it begins
+  // (PreviewPane.svelte:4051-4054, `--frame-h: calc(100% - railSheetH)`),
+  // and so do the page's pills.
+  const railH = sheet ? sheet.getBoundingClientRect().height / built.s : 0;
+  scroller.style.insetBlockEnd = `${railH}px`;
+  room.style.insetBlockEnd = `${railH}px`;
+  room.style.overflow = railH > 0 ? "clip" : "";
+  // Under a foot drawer, or past the page's end over the rail's sheet, the
+  // page is scrolled as little as lifts what the comment is about clear
+  // above it (the overlay's `reveal`), never so far that its pill leaves the top.
+  if (look.phone) {
+    const over = Math.min(
+      size.h - railH,
+      float?.dataset.sheet ? inWell(float).y : Number.POSITIVE_INFINITY
+    );
     const about = inWell(target);
     const need = about.y + about.h + T.clearance - over;
     const headroom = about.y - (T.gap + T.pin + T.gap);
@@ -906,7 +917,49 @@ function wireThread() {
 }
 
 /* ---- The readout: what the person reads in this frame. ---- */
-/** The open thread's readout: where it stands, its size, and the agent's reply against the room it scrolls in. */
+/**
+ * How much of `node` a person sees, px: its box cut by every box that clips
+ * it (its scroller, a sheet, the well, the frame), `clipped`; then less what
+ * stands over it (a drawer, a card, the rail or panel it is not in), `seen`.
+ */
+function inView(node) {
+  const r = node.getBoundingClientRect();
+  let { top, bottom } = r;
+  for (
+    let up = node.parentElement;
+    up && up !== els.fit;
+    up = up.parentElement
+  ) {
+    if (getComputedStyle(up).overflowY !== "visible") {
+      const b = up.getBoundingClientRect();
+      top = Math.max(top, b.top);
+      bottom = Math.min(bottom, b.bottom);
+    }
+  }
+  const clipped = Math.max(0, bottom - top);
+  for (const el of [built.float, built.sheet, built.side]) {
+    if (!el || el.contains(node)) {
+      continue;
+    }
+    const b = el.getBoundingClientRect();
+    if (b.left >= r.right || b.right <= r.left) {
+      continue;
+    }
+    if (b.top <= top && b.bottom >= bottom) {
+      bottom = top;
+    } else if (b.top > top && b.top < bottom && b.bottom >= bottom) {
+      bottom = b.top;
+    } else if (b.bottom > top && b.bottom < bottom && b.top <= top) {
+      top = b.bottom;
+    }
+  }
+  return {
+    clipped: clipped / built.s,
+    seen: Math.max(0, bottom - top) / built.s,
+  };
+}
+
+/** The open thread's readout: where it stands, its size, and how much of the agent's reply a person sees. */
 function threadReadout() {
   const { look, float, side, sheet } = built;
   const holder =
@@ -933,10 +986,16 @@ function threadReadout() {
     bottom: "a drawer at the bottom",
   }[els.frame.dataset.stands];
   const size = `${Math.round(box.width / built.s)} × ${Math.round(box.height / built.s)}`;
-  const read =
-    h <= roomH
-      ? `In ${where} (${size}): the agent's reply, ${h}px of text, reads whole in a ${roomH}px room.`
-      : `In ${where} (${size}): the agent's reply is ${h}px of text in a ${roomH}px room, ${h - roomH}px of it a scroll away.`;
+  const view = inView(reply);
+  const seen = Math.min(h, Math.round(view.seen));
+  const under = Math.round(view.clipped - view.seen);
+  els.readout.dataset.visible = `${seen}/${h}`;
+  let read = `In ${where} (${size}): the agent's reply, ${h}px of text, is all in view.`;
+  if (seen < h) {
+    const covered = under > 0 ? `, ${under}px of it under what stands over it` : "";
+    const room = h > roomH ? ` (it scrolls in a ${roomH}px room)` : "";
+    read = `In ${where} (${size}): ${seen}px of the agent's ${h}px reply is in view${covered}; the rest is a scroll away${room}.`;
+  }
   if (state.option !== "b") {
     return read;
   }
@@ -947,6 +1006,7 @@ function threadReadout() {
 
 function readout() {
   const { look, float } = built;
+  delete els.readout.dataset.visible;
   let text = "";
   if (look.composing) {
     const w = float

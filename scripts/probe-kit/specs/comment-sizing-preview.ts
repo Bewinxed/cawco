@@ -72,7 +72,19 @@ interface Read {
   onPill: number;
   /** What spills sideways, each as `what: px`. */
   overflow: string[];
-  reply: { h: number; room: number; words: number } | null;
+  /** The list's foot sheet stands in the well. */
+  railSheet: boolean;
+  reply: {
+    /** Its box cut by every box that clips it, px. */
+    clipped: number;
+    h: number;
+    /** What the page hits there: the rows of it a press lands on the reply, px. */
+    hit: number;
+    /** What the readout says is in view, `seen/height`. */
+    readout: string;
+    room: number;
+    words: number;
+  } | null;
   s: number;
   side: number | null;
   stands: string;
@@ -284,7 +296,38 @@ function readFrame(): Read {
       ? sheet?.querySelector<HTMLElement>('[data-slot="rows"]')
       : holderEl?.querySelector<HTMLElement>("[data-pin-room]");
   if (replyEl && room && stands !== "compose") {
+    // Its box cut by every box that clips it, then what a person sees of it:
+    // each 2px row of that box where the page's own hit test, at a quarter,
+    // half and three quarters across, lands on the reply.
+    const r = replyEl.getBoundingClientRect();
+    let { top, bottom } = r;
+    for (
+      let up = replyEl.parentElement;
+      up && up !== fit;
+      up = up.parentElement
+    ) {
+      if (getComputedStyle(up).overflowY !== "visible") {
+        const b = up.getBoundingClientRect();
+        top = Math.max(top, b.top);
+        bottom = Math.min(bottom, b.bottom);
+      }
+    }
+    let hit = 0;
+    for (let y = top + 1; y < bottom; y += 2) {
+      const lands = [0.25, 0.5, 0.75].some((f) => {
+        const at = document.elementFromPoint(r.left + r.width * f, y);
+        return at !== null && replyEl.contains(at);
+      });
+      if (lands) {
+        hit += 2;
+      }
+    }
     reply = {
+      clipped: Math.round(Math.max(0, bottom - top) / s),
+      hit: Math.round(Math.min(hit / s, r.height / s)),
+      readout:
+        document.querySelector<HTMLElement>('[data-slot="readout"]')?.dataset
+          .visible ?? "",
       h: Math.round(box(replyEl).h),
       room: room.clientHeight,
       words: (replyEl.querySelector('[data-slot="msg"]')?.textContent ?? "")
@@ -294,6 +337,7 @@ function readFrame(): Read {
     };
   }
   return {
+    railSheet: sheet !== null,
     s,
     stands,
     well,
@@ -354,6 +398,26 @@ async function boxesLeg(
         read.onPill <= 1,
         `${read.onPill.toFixed(0)}px²`
       );
+      if (
+        screen === "phone" &&
+        (read.stands === "sheet" || read.stands === "compose")
+      ) {
+        kit.check(
+          `${at}: on a phone the list's foot sheet stands aside while the ${read.stands === "sheet" ? "thread's" : "composer's"} drawer stands (PreviewPane railAway)`,
+          !read.railSheet
+        );
+      }
+      if (which !== "new") {
+        const r = read.reply;
+        if (r) {
+          const [said] = r.readout.split("/").map(Number);
+          kit.check(
+            `${at}: nothing stands over the reply (${r.hit}px hit of ${r.clipped}px its clips leave), and the readout says what a person sees of it (${r.readout} against ${r.hit}px)`,
+            r.hit >= r.clipped - 4 && Math.abs(said - r.hit) <= 4,
+            JSON.stringify(r)
+          );
+        }
+      }
       if (which === "long" || which === "closed") {
         const r = read.reply;
         if (!r) {
@@ -361,10 +425,14 @@ async function boxesLeg(
           continue;
         }
         const { room } = r;
-        const line =
+        const fits =
           r.h <= room
-            ? `the agent's reply (${r.words} words, ${r.h}px) reads whole without scrolling in its ${room}px room, ${Math.round(read.holder?.w ?? 0)} × ${Math.round(read.holder?.h ?? 0)}`
-            : `scrolling remains: the agent's reply (${r.words} words, ${r.h}px) in a ${room}px room, ${r.h - room}px a scroll away, because ${why(option, read)} (${Math.round(read.holder?.w ?? 0)} × ${Math.round(read.holder?.h ?? 0)})`;
+            ? `fits its ${room}px room`
+            : `needs ${r.h - room}px more than its ${room}px room, because ${why(option, read)}`;
+        const line =
+          r.hit >= r.h - 2
+            ? `the agent's reply (${r.words} words, ${r.h}px) is all in view as it opens, ${Math.round(read.holder?.w ?? 0)} × ${Math.round(read.holder?.h ?? 0)}`
+            : `${r.hit}px of the agent's reply (${r.words} words, ${r.h}px) is in view as it opens, ${r.h - r.hit}px a scroll away; it ${fits} (${Math.round(read.holder?.w ?? 0)} × ${Math.round(read.holder?.h ?? 0)})`;
         kit.check(
           `${at}, his case in ${OPTION_NAME[option]}: ${line}`,
           r.h > 0 && room > 0 && r.words >= 150
@@ -733,7 +801,7 @@ const spec: Spec = {
           page.on("pageerror", (error) => errors.push(String(error)));
           await page.setViewportSize({
             width: shape.window,
-            height: shape.h + 360,
+            height: shape.h + 600,
           });
           await page.goto(base);
           await page.evaluate(() => localStorage.clear());
