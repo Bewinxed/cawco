@@ -89,10 +89,90 @@ const LAN_DIRECT_CODE = /lan-direct:\d+/;
 const BROWSE_ADDRESS = /Load https?:\/\/\S+ once in your browser tool/;
 const HUB_API_CODE = /hub-api:\d+/;
 
-/** The request's message `back` from its last, as sent: `1`, a tool call's result; `2`, the call. */
-const messageBack = (body: string, back: number): string => {
-  const parsed = JSON.parse(body) as { messages?: unknown[] };
-  return JSON.stringify(parsed.messages?.at(-back) ?? null);
+interface Block {
+  content?: unknown;
+  id?: string;
+  input?: { command?: string };
+  name?: string;
+  text?: string;
+  tool_use_id?: string;
+  type?: string;
+}
+
+/** A tool call a request's history holds, and its answer once it has one. */
+export interface Answered {
+  /** The answer's words: a string result whole, a list's text blocks joined, any other block as JSON. */
+  answer?: string;
+  id: string;
+}
+
+/**
+ * The newest tool call `picks` takes in an Anthropic messages body, and the
+ * `tool_result` whose `tool_use_id` is that call's id: never another call's
+ * result (ToolSearch's `tool_reference` that loads the tool comes before it).
+ * None: the body holds no such call.
+ */
+export const answerOf = (
+  body: string,
+  picks: (use: Block) => boolean
+): Answered | undefined => {
+  const parsed = JSON.parse(body) as { messages?: { content?: unknown }[] };
+  const blocks = (parsed.messages ?? []).flatMap((message) =>
+    Array.isArray(message.content) ? (message.content as Block[]) : []
+  );
+  const use = blocks.findLast(
+    (block) => block.type === "tool_use" && picks(block)
+  );
+  if (!use?.id) {
+    return;
+  }
+  const result = blocks.find(
+    (block) => block.type === "tool_result" && block.tool_use_id === use.id
+  );
+  if (!result) {
+    return { id: use.id };
+  }
+  const { content } = result;
+  const answer =
+    typeof content === "string"
+      ? content
+      : (Array.isArray(content) ? (content as Block[]) : [])
+          .map((part) =>
+            part.type === "text" ? (part.text ?? "") : JSON.stringify(part)
+          )
+          .join("\n");
+  return { id: use.id, answer };
+};
+
+const isBrowse = (use: Block): boolean => use.name === BROWSE;
+const isBash = (use: Block, words: string): boolean =>
+  use.name === "Bash" && (use.input?.command ?? "").includes(words);
+const loadsBrowse = (use: Block): boolean =>
+  use.name === "ToolSearch" && JSON.stringify(use.input).includes(BROWSE);
+
+/**
+ * Step 5's read of B's artifact_browse over B's requests, oldest first: the
+ * call's own answer, else why there is none.
+ */
+export const browseRead = (
+  bodies: string[]
+): { answer?: string; why: string } => {
+  const calls = bodies.map((body) => answerOf(body, isBrowse));
+  const answer = calls.find((one) => one?.answer !== undefined)?.answer;
+  if (answer !== undefined) {
+    return { answer, why: answer };
+  }
+  if (calls.some(Boolean)) {
+    return { why: "B called artifact_browse and no answer came back" };
+  }
+  const loaded = bodies.some(
+    (body) => answerOf(body, loadsBrowse)?.answer !== undefined
+  );
+  return {
+    why: loaded
+      ? "B loaded artifact_browse and never called it"
+      : "B never loaded artifact_browse",
+  };
 };
 
 /** A private address that is not the hub's: B's boundary still refuses it. */
@@ -575,20 +655,20 @@ const previewReach = async (
   const tried = await until(
     "B's curls",
     () =>
-      fleet.seen.find(
-        (one) =>
-          one.afterTool &&
-          one.all.includes(TAG_B) &&
-          one.body.includes("hub-api:")
-      ),
+      fleet.seen
+        .filter((one) => one.all.includes(TAG_B))
+        .map((one) => answerOf(one.body, (use) => isBash(use, "hub-api:")))
+        .find((one) => one?.answer !== undefined),
     Boolean,
     180_000
   ).catch(() => undefined);
-  const said5 = tried?.body ?? "";
+  const said5 = tried?.answer ?? "";
   check(
     "5: the preview's pass, opened from inside B's workspace, serves the folder's page",
     said5.includes(PREVIEW_TOKEN),
-    tried ? "B's curl answered without the page's words" : "no curl answer"
+    tried
+      ? `B's curl answered without the page's words: ${said5.slice(0, 300)}`
+      : "no curl answer"
   );
   check(
     "5: a private address that is not the hub's stays refused from inside B's workspace: no route dialed direct, 403 through the proxy",
@@ -600,27 +680,23 @@ const previewReach = async (
     said5.includes("hub-api:403"),
     said5.match(HUB_API_CODE)?.[0] ?? "no answer"
   );
+  const bodiesOfB = () =>
+    fleet.seen.filter((one) => one.all.includes(TAG_B)).map((one) => one.body);
   const browsed = await until(
     "B's artifact_browse of the preview, answered",
-    () =>
-      fleet.seen.find(
-        (one) =>
-          one.afterTool &&
-          one.all.includes(TAG_B) &&
-          messageBack(one.body, 2).includes(BROWSE)
-      ),
-    Boolean,
+    () => browseRead(bodiesOfB()),
+    (read) => read.answer !== undefined,
     120_000
-  ).catch(() => undefined);
+  ).catch(() => browseRead(bodiesOfB()));
   check(
     "5: B's artifact_browse of the preview, from inside its workspace, answers an address",
     // Its words (hub presenters/artifacts.ts `artifactBrowsedWords`): the address to load.
-    browsed !== undefined &&
-      BROWSE_ADDRESS.test(messageBack(browsed.body, 1)) &&
-      !messageBack(browsed.body, 1).includes(
+    browsed.answer !== undefined &&
+      BROWSE_ADDRESS.test(browsed.answer) &&
+      !browsed.answer.includes(
         "a workspace's boundary reaches public hosts only"
       ),
-    browsed ? messageBack(browsed.body, 1).slice(0, 300) : "no answer"
+    browsed.why.slice(0, 300)
   );
 };
 
@@ -656,18 +732,17 @@ const otherHarness = async (
   const read = await until(
     `the ${harness} parent's leaf read its input`,
     () =>
-      fleet.seen.find(
-        (one) =>
-          one.afterTool &&
-          one.all.includes(leg.leafTag) &&
-          one.body.includes(leg.token)
-      ),
+      fleet.seen
+        .filter((one) => one.all.includes(leg.leafTag))
+        .map((one) => answerOf(one.body, (use) => isBash(use, leg.file)))
+        .find((one) => one?.answer !== undefined),
     Boolean,
     120_000
   ).catch(() => undefined);
   check(
     `7: the leaf reads the ${harness} parent's words from $TMPDIR/inputs/`,
-    read !== undefined
+    read?.answer?.includes(leg.token) === true,
+    read ? (read.answer ?? "").slice(0, 300) : "the leaf's cat answered nothing"
   );
 };
 
