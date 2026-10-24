@@ -1,0 +1,4 @@
+/* The dashboard's whole stylesheet, as its build emits it, with this
+   folder's files among the sources Tailwind reads for classes. */
+@import "../../../src/app.css";
+@source "./";
