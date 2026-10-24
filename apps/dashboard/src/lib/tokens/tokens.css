@@ -75,29 +75,29 @@
     --mark-deck-shade: oklch(14% 0.01 60);
     /* The shadow the card in front casts on the band of the next deck card that shows. */
     --mark-deck-cast: oklch(0 0 0 / 0.16);
-    /* Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness. */
+    /* Identity hues: a section's or machine's glyph ink (new-session modal, Configure), drawn bare on the page and raised surfaces, so each holds 3:1 there (The Bare Glyph Rule; token-contrast-check). Dark keeps each hue's chroma and raises its lightness. */
     --hue-cyan-400: light-dark(
-      oklch(75.35% 0.139 232.66),
+      oklch(62.8% 0.139 232.66),
       oklch(80% 0.139 232.66)
     );
     --hue-cyan-500: light-dark(
-      oklch(70.66% 0.1331 226.72),
+      oklch(58% 0.1331 226.72),
       oklch(78% 0.1331 226.72)
     );
     --hue-amber-500: light-dark(
-      oklch(79.08% 0.1577 79.28),
+      oklch(64% 0.1577 79.28),
       oklch(82% 0.1577 79.28)
     );
     --hue-orange-500: light-dark(
-      oklch(70.49% 0.1867 47.6),
+      oklch(65% 0.1867 47.6),
       oklch(76% 0.1867 47.6)
     );
     --hue-green-500: light-dark(
-      oklch(72.27% 0.192 149.58),
+      oklch(61% 0.192 149.58),
       oklch(76% 0.192 149.58)
     );
     --hue-green-600: light-dark(
-      oklch(62.71% 0.1699 149.21),
+      oklch(55% 0.1699 149.21),
       oklch(74% 0.1699 149.21)
     );
     --hue-blue-500: light-dark(

@@ -127,6 +127,26 @@ const S = {
 };
 
 const PAIRS: Pair[] = [
+  // A section's or machine's glyph, bare in its identity hue on the
+  // surfaces it stands on (DESIGN.md, The Bare Glyph Rule: no tile under it).
+  ...[
+    "hue-cyan-400",
+    "hue-cyan-500",
+    "hue-amber-500",
+    "hue-orange-500",
+    "hue-green-500",
+    "hue-green-600",
+    "hue-blue-500",
+    "hue-blue-600",
+  ].flatMap((hue) =>
+    ["surface-page", "surface-raised"].map((bg) => ({
+      label: `${hue} glyph on ${bg}`,
+      fg: hue,
+      bg: [bg],
+      floor: UI,
+      source: "token hue-* ($description): a glyph's identity ink, 3:1",
+    }))
+  ),
   // Text inks on the surfaces they stand on.
   ...["ink-strong", "ink-row", "ink-stat", "ink-muted"].flatMap((ink) =>
     [

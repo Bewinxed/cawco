@@ -5,7 +5,7 @@
     {
       "id": "status",
       "question": "Status glyphs: bare, and in which cut?",
-      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass; the i and ! are the weakest at 16px. The third option draws the whole row in the line cut, one stroke weight. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass, and the i and ! are the weakest at 16px. The third draws the whole row in the line cut, each glyph's strokes weighed to within 0.7–1.4 of the row's ink at 16, 20 and 24px. Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "line",
       "candidates": [
         {
@@ -16,6 +16,10 @@
             {
               "label": "Status rows, in their inks",
               "after": "img/status-today-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "after": "img/status-today-1.svg"
             }
           ]
         },
@@ -28,18 +32,28 @@
               "label": "Status rows, in their inks",
               "before": "img/status-today-0.svg",
               "after": "img/status-bare-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/status-today-1.svg",
+              "after": "img/status-bare-1.svg"
             }
           ]
         },
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
-          "result": "Every status in the line cut, one weight; Idle and Stopped lose their fill.",
+          "result": "Line cut, even ink: i, ! and ? with heavier stems and real dots; Stopped keeps its filled square (an outline reads as a checkbox), your call; Sleeping's moon in full ink.",
           "items": [
             {
               "label": "Status rows, in their inks",
               "before": "img/status-today-0.svg",
               "after": "img/status-line-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/status-today-1.svg",
+              "after": "img/status-line-1.svg"
             }
           ]
         }
@@ -48,7 +62,7 @@
     {
       "id": "configure",
       "question": "Configure rail: tiles off, and in which cut?",
-      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass; the i and ! are the weakest at 16px. The third option draws the whole row in the line cut, one stroke weight. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass, and the i and ! are the weakest at 16px. The third draws the whole row in the line cut, each glyph's strokes weighed to within 0.7–1.4 of the row's ink at 16, 20 and 24px. Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "line",
       "candidates": [
         {
@@ -59,6 +73,10 @@
             {
               "label": "Configure rail",
               "after": "img/configure-today-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "after": "img/configure-today-1.svg"
             }
           ]
         },
@@ -71,18 +89,28 @@
               "label": "Configure rail",
               "before": "img/configure-today-0.svg",
               "after": "img/configure-bare-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/configure-today-1.svg",
+              "after": "img/configure-bare-1.svg"
             }
           ]
         },
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
-          "result": "Every row in the line cut, one weight; MCP's plug head is an outline.",
+          "result": "Every row in the line cut, even ink as cut; MCP's plug head is an outline.",
           "items": [
             {
               "label": "Configure rail",
               "before": "img/configure-today-0.svg",
               "after": "img/configure-line-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/configure-today-1.svg",
+              "after": "img/configure-line-1.svg"
             }
           ]
         }
@@ -91,7 +119,7 @@
     {
       "id": "menus",
       "question": "Menus and tabs: bare, and in which cut?",
-      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass; the i and ! are the weakest at 16px. The third option draws the whole row in the line cut, one stroke weight. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass, and the i and ! are the weakest at 16px. The third draws the whole row in the line cut, each glyph's strokes weighed to within 0.7–1.4 of the row's ink at 16, 20 and 24px. Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "line",
       "candidates": [
         {
@@ -102,6 +130,10 @@
             {
               "label": "Session and tab menus",
               "after": "img/menus-today-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "after": "img/menus-today-1.svg"
             }
           ]
         },
@@ -114,18 +146,28 @@
               "label": "Session and tab menus",
               "before": "img/menus-today-0.svg",
               "after": "img/menus-bare-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/menus-today-1.svg",
+              "after": "img/menus-bare-1.svg"
             }
           ]
         },
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
-          "result": "Every row in the line cut, one weight; Rename's pencil is an outline.",
+          "result": "Every row in the line cut, even ink as cut; Split view stands heavier (1.7–1.85×).",
           "items": [
             {
               "label": "Session and tab menus",
               "before": "img/menus-today-0.svg",
               "after": "img/menus-line-0.svg"
+            },
+            {
+              "label": "16 · 20 · 24, beside a folder",
+              "before": "img/menus-today-1.svg",
+              "after": "img/menus-line-1.svg"
             }
           ]
         }

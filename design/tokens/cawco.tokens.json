@@ -700,43 +700,43 @@
       "$type": "color",
       "$value": {
         "colorSpace": "oklch",
-        "components": [0.7535, 0.139, 232.66]
+        "components": [0.628, 0.139, 232.66]
       },
-      "$description": "Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness."
+      "$description": "Identity hues: a section's or machine's glyph ink (new-session modal, Configure), drawn bare on the page and raised surfaces, so each holds 3:1 there (The Bare Glyph Rule; token-contrast-check). Dark keeps each hue's chroma and raises its lightness."
     },
     "hue-cyan-500": {
       "$type": "color",
       "$value": {
         "colorSpace": "oklch",
-        "components": [0.7066, 0.1331, 226.72]
+        "components": [0.58, 0.1331, 226.72]
       }
     },
     "hue-amber-500": {
       "$type": "color",
       "$value": {
         "colorSpace": "oklch",
-        "components": [0.7908, 0.1577, 79.28]
+        "components": [0.64, 0.1577, 79.28]
       }
     },
     "hue-orange-500": {
       "$type": "color",
       "$value": {
         "colorSpace": "oklch",
-        "components": [0.7049, 0.1867, 47.6]
+        "components": [0.65, 0.1867, 47.6]
       }
     },
     "hue-green-500": {
       "$type": "color",
       "$value": {
         "colorSpace": "oklch",
-        "components": [0.7227, 0.192, 149.58]
+        "components": [0.61, 0.192, 149.58]
       }
     },
     "hue-green-600": {
       "$type": "color",
       "$value": {
         "colorSpace": "oklch",
-        "components": [0.6271, 0.1699, 149.21]
+        "components": [0.55, 0.1699, 149.21]
       }
     },
     "hue-blue-500": {

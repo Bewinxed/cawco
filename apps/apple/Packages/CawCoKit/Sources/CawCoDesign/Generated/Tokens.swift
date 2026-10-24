@@ -74,7 +74,7 @@ public enum Palette {
     public static let markDeckShade = Palette.named("mark-deck-shade")
     /// The shadow the card in front casts on the band of the next deck card that shows.
     public static let markDeckCast = Palette.named("mark-deck-cast")
-    /// Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness.
+    /// Identity hues: a section's or machine's glyph ink (new-session modal, Configure), drawn bare on the page and raised surfaces, so each holds 3:1 there (The Bare Glyph Rule; token-contrast-check). Dark keeps each hue's chroma and raises its lightness.
     public static let hueCyan400 = Palette.named("hue-cyan-400")
     public static let hueCyan500 = Palette.named("hue-cyan-500")
     public static let hueAmber500 = Palette.named("hue-amber-500")
