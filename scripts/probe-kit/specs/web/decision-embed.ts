@@ -93,7 +93,12 @@
  *    to bottom.
  * 13. The pictured page and its five canvases load with no console error,
  *    no response of 400 or more and no failed request, on the page or any
- *    frame; the page names the house icon, which answers 200 with an image.
+ *    frame; the page names the house icon, which answers 200 with an image;
+ *    every form field on it and in its canvases has an id or a name (Chrome's
+ *    "A form field element should have an id or name attribute": each
+ *    card's note and its measuring twin). A page whose Preview names an
+ *    artifact the hub no longer has says so in one line in its well, with
+ *    no frame, no console error and no failed request.
  * 14. Every option's media at its real size and whole (the owner: "the
  *    container for all of the things ur asking me to compare is so small
  *    that i'm not even able to compare"), on a page of two 390px phone
@@ -122,6 +127,7 @@
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  *   bun scripts/probe-kit/run.ts web decision-embed --leg one-yjs   # 15 alone
+ *   bun scripts/probe-kit/run.ts web decision-embed --leg loads-clean   # 13 alone
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { cpSync, mkdirSync } from "node:fs";
@@ -1060,18 +1066,29 @@ async function footOverWords() {
   return met;
 }
 
+/** A page whose one Preview names an artifact the hub no longer has: its media names nothing at that id. */
+const GONE_PAGE = "gone";
+const GONE_ID = idOf("removed-card");
+const GONE_PROGRAM = [
+  `root = Decisions("Keep the card?", [keep])`,
+  `keep = Decision("keep", "Does the card stay?", [stay, go], "It was pictured once.", [gone])`,
+  `stay = Option("stay", "It stays", "Nothing moves.", true, [], "It stands where it stood.")`,
+  `go = Option("go", "It goes", "The row is shorter.", false, [], "Its place is lost.")`,
+  `gone = Preview("${GONE_ID}", "The card as it was")`,
+].join("\n");
+
 /**
- * 13. A page loads clean: the pictured page (five component Previews) at
- * 1440 light logs no console error and answers no request with 400 or
- * more, on the page or any of its frames, and no request fails; it names
- * its icon (the house's, `/__cawco/decision/icon.png`), which answers 200
- * with an image, so a tab of its own asks for no `/favicon.ico`.
+ * Every form field of the document (an `input`, `select` or `textarea`)
+ * with neither an id nor a name: what Chrome's "A form field element should
+ * have an id or name attribute" counts. In the page or a frame.
  */
-async function loadsClean(
-  kit: Kit,
-  stage: Awaited<ReturnType<typeof startDecisionStage>>
-): Promise<void> {
-  const page = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
+const unnamedFields = (): string[] =>
+  [...document.querySelectorAll("input, select, textarea")]
+    .filter((one) => !(one.id || one.getAttribute("name")))
+    .map((one) => one.outerHTML.slice(0, 160));
+
+/** Every console error, page error, response of 400 or more and failed request on `page` or any of its frames, from now on. */
+function faultsOf(page: Page): string[] {
   const faults: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -1096,6 +1113,26 @@ async function loadsClean(
       `failed ${request.method()} ${request.url()}: ${request.failure()?.errorText ?? ""} (from ${request.frame().url()})`
     )
   );
+  return faults;
+}
+
+/**
+ * 13. A page loads clean: the pictured page (five component Previews) at
+ * 1440 light logs no console error and answers no request with 400 or
+ * more, on the page or any of its frames, and no request fails; it names
+ * its icon (the house's, `/__cawco/decision/icon.png`), which answers 200
+ * with an image, so a tab of its own asks for no `/favicon.ico`. Every form
+ * field on it and in its canvases has an id or a name (each card's note,
+ * and the twin its height is measured on). A page whose Preview names an
+ * artifact the hub no longer has says so in its place, one line in its
+ * well, with no console error and no failed request.
+ */
+async function loadsClean(
+  kit: Kit,
+  stage: Awaited<ReturnType<typeof startDecisionStage>>
+): Promise<void> {
+  const page = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
+  const faults = faultsOf(page);
   await page.goto(stage.pageUrl(PICTURED_PAGE, "light"), { waitUntil: "load" });
   await picturesUnscrolled(kit, page, {
     leg: "1440px light, loading clean",
@@ -1132,7 +1169,50 @@ async function loadsClean(
     faults.length === 0,
     [...new Set(faults)].slice(0, 12).join("\n    ")
   );
+  const unnamed: string[] = [];
+  let fields = 0;
+  for (const frame of page.frames()) {
+    fields += await frame.evaluate(
+      () => document.querySelectorAll("input, select, textarea").length
+    );
+    const without = await frame.evaluate(unnamedFields);
+    unnamed.push(...without.map((one) => `${frame.url()}: ${one}`));
+  }
+  kit.check(
+    `1440px light, ${PICTURED_PAGE}: every one of its ${fields} form fields, on the page and in its canvases, has an id or a name (${unnamed.length} without)`,
+    fields > 0 && unnamed.length === 0,
+    unnamed.slice(0, 6).join("\n    ")
+  );
   await page.close();
+
+  const gone = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
+  const goneFaults = faultsOf(gone);
+  await gone.goto(stage.pageUrl(GONE_PAGE, "light"), { waitUntil: "load" });
+  await gone.waitForSelector("[data-slot=media-gone]");
+  await settle(gone, 1500);
+  const said = await gone.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("[data-slot=media-gone]")].map(
+      (one) => {
+        const box = one.getBoundingClientRect();
+        return {
+          words: one.textContent?.trim() ?? "",
+          w: Math.round(box.width),
+          h: Math.round(box.height),
+          frames: document.querySelectorAll("[data-slot=media] iframe").length,
+        };
+      }
+    )
+  );
+  kit.check(
+    `1440px light, ${GONE_PAGE}: a Preview of an artifact the hub no longer has says so in its place, one line in its well (${said.map((one) => `“${one.words}” ${one.w}×${one.h}px`).join(", ")}), no frame, no console error and no failed request (${goneFaults.length} found)`,
+    said.length === 1 &&
+      (said[0]?.words.length ?? 0) > 0 &&
+      (said[0]?.h ?? 0) > 0 &&
+      said[0]?.frames === 0 &&
+      goneFaults.length === 0,
+    [JSON.stringify(said), ...new Set(goneFaults)].join("\n    ")
+  );
+  await gone.close();
 }
 
 /** One leg of 12: a page at a width, under a mouse or a finger, in a scheme. */
@@ -1876,7 +1956,7 @@ const SHARED_PROGRAM = [
   `one = Preview("${SHARED_ID}", "The note alone", ["Note"])`,
   `pair = Preview("${SHARED_PAIR_ID}", "The reply beside the pinned note", ["Reply", "Pinned"])`,
 ].join("\n");
-/** `--leg one-yjs`: item 15 alone. */
+/** `--leg one-yjs`: item 15 alone; `--leg loads-clean`: 13 alone. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -2143,6 +2223,7 @@ const spec: Spec = {
       [WORDED_PAGE, WORDED_PROGRAM],
       [REAL_PAGE, REAL_PROGRAM],
       [SHARED_PAGE, SHARED_PROGRAM],
+      [GONE_PAGE, GONE_PROGRAM],
     ] as const) {
       let refusal = "";
       try {
@@ -2165,6 +2246,7 @@ const spec: Spec = {
         [WORDED_PAGE, WORDED_PROGRAM],
         [REAL_PAGE, REAL_PROGRAM],
         [SHARED_PAGE, SHARED_PROGRAM],
+        [GONE_PAGE, GONE_PROGRAM],
       ]),
       {
         [BOOK_ID]: [LEDGER, NOTE],
@@ -2183,6 +2265,10 @@ const spec: Spec = {
       new Set([SHARED_PAGE])
     );
     try {
+      if (ONLY_LEG === "loads-clean") {
+        await loadsClean(kit, stage);
+        return;
+      }
       if (ONLY_LEG === "one-yjs") {
         await oneYjs(kit, stage);
         await oneYjsOnDashboard(kit);

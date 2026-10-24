@@ -38,6 +38,9 @@ function nextFrame(node: HTMLElement, fit: () => void) {
   };
 }
 
+/** Measuring twins made on this page so far: each twin's id is its count. */
+let twins = 0;
+
 /**
  * A text field that grows with what is in it, the same way on every engine:
  * a textarea, or an editable box (the composer's MentionField). Its height
@@ -101,6 +104,13 @@ export function autosize(
       // textarea stands two rows tall, and scrollHeight never reads less
       // than the box it scrolls in.
       twin.rows = 1;
+      // Still a form field to the browser, which wants each to have an id
+      // or a name (Chrome's "A form field element should have an id or
+      // name attribute"): an id of its own, never a name, so no form sends
+      // it, and marked as no answer for the overlay (fields.ts `keyOf`).
+      twins += 1;
+      twin.id = `autosize-twin-${twins}`;
+      twin.setAttribute("data-cawco-unkept", "");
     }
     twin.setAttribute("aria-hidden", "true");
     twin.tabIndex = -1;

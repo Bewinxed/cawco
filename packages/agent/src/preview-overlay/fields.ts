@@ -10,7 +10,11 @@
  * typed in.
  *
  * Passwords, files, hidden inputs and buttons are not kept: they are not
- * answers, and a password is never the agent's to read.
+ * answers, and a password is never the agent's to read. Nor is a field
+ * marked `data-cawco-unkept`: one whose words reach the artifact another
+ * way (a decision card's note, through `cawco.note`), or a field that is
+ * no answer at all (a text field's measuring twin, dashboard autosize),
+ * each named by its id all the same, as every field of a page is.
  */
 import type { ChoiceEntry } from "@cawco/core/choices";
 
@@ -42,7 +46,7 @@ const isText = (el: Element): boolean =>
 
 /** The key a field is kept under, or null when it is not kept. */
 function keyOf(el: Element): string | null {
-  if (!el.matches(FIELDS)) {
+  if (!el.matches(FIELDS) || el.hasAttribute("data-cawco-unkept")) {
     return null;
   }
   if (el instanceof HTMLInputElement && UNKEPT.has(el.type)) {
