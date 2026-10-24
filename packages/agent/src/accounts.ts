@@ -40,7 +40,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
-import { hostGit } from "./clone";
+import { hostGit } from "./host-git";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
 import { probeStarted } from "./probe-count";
 

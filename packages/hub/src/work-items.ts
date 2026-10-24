@@ -84,7 +84,6 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_MIGRATE,
   handoffMarker,
   holdingWords,
   INPUTS_LIMIT_BYTES,
@@ -9365,22 +9364,6 @@ export const createWorkItems = ({
       return inWorkspaceTurn(workspace.id, () =>
         archiveNow(workspace.id, true)
       );
-    },
-
-    /**
-     * An agent has started: its machine's workspaces that still have a clone
-     * (active and held) go to it, and each one still a git worktree from
-     * before workspaces were clones becomes a clone in place. The machine
-     * logs each workspace it converts, skips or cannot convert.
-     */
-    async convertWorktrees(machineId: string): Promise<void> {
-      const refs = [
-        ...db.activeWorkspacesOn(machineId),
-        ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
-      ].map(refOf);
-      if (refs.length > 0) {
-        await call(machineId, CONTROL_WORKSPACE_MIGRATE, [refs]);
-      }
     },
 
     /**

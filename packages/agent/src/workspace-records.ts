@@ -17,6 +17,7 @@ import {
 } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { reportDamaged } from "./damaged-records";
+import { overlaySync } from "./layer";
 
 interface Scan {
   refs: WorkspaceRef[];
@@ -128,11 +129,15 @@ const insideCloneOf = async (at: string, id: string): Promise<boolean> => {
 };
 
 /**
- * The workspace whose clone holds `path`, if one does: the clone itself or
+ * The workspace whose copy holds `path`, if one does: the copy itself or
  * any directory inside it, both at their real paths, whole path segments
- * only (`/ws/abc` never holds `/ws/abcd`). Of clones inside one another,
- * the deepest. The bridge plugin's `workspaceOf` (harnesses/opencode.ts)
- * answers by the same rule inside OpenCode's server.
+ * only (`/ws/abc` never holds `/ws/abcd`). Of copies inside one another,
+ * the deepest. A Linux view of a folder (layer.ts) is no copy of its own:
+ * its path is the person's folder, which any number of workspaces and the
+ * person's own sessions share, so it holds no path here, and a session
+ * there is a workspace's only when its spawn names it. The bridge plugin's
+ * `workspaceOf` (harnesses/opencode.ts) answers by the same rule inside
+ * OpenCode's server.
  *
  * A path inside the clone of a workspace whose records are damaged, so that
  * none names its clone, is that workspace's too: the damage is thrown, and
@@ -162,7 +167,7 @@ const holding = async (
   const { refs, unread } = await scan();
   const clones = await Promise.all(
     refs
-      .filter(take)
+      .filter((ref) => take(ref) && !overlaySync(ref.id))
       .map(async (ref) => ({ ref, root: await realOf(ref.path) }))
   );
   const held = clones

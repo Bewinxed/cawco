@@ -1,9 +1,14 @@
 /**
- * A delegation workspace's checkout, on the machine that holds it. The hub
- * owns the workspace record; the machine cuts the clone (`./clone`), runs its
- * boundary while something holds it (a session attached, a live work item, a
- * preview, a command: boundary.ts `liveWhy`) and starts it again on its next
- * command once a quiet one has closed, and deletes it all on archive.
+ * A delegation workspace on the machine that holds it. The hub owns the
+ * workspace record; the machine makes its private copy of the folder it was
+ * made from (`./layer`: a live view with private writes on Linux, an APFS
+ * clone on macOS), starts a repository's copy on its own branch from
+ * `origin`'s default branch, runs its boundary while something holds it (a
+ * session attached, a live work item, a preview, a command: boundary.ts
+ * `liveWhy`) and starts it again on its next command once a quiet one has
+ * closed, lands a folder's change set, and removes its layer on archive.
+ * Every read of the copy from here runs in it as its layer holds it
+ * ({@link accessOf}): never the person's folder beneath a Linux view.
  */
 import { constants } from "node:fs";
 import {
@@ -14,7 +19,7 @@ import {
   open,
   readdir,
   readFile,
-  rename,
+  realpath,
   rm,
   stat,
   writeFile,
@@ -25,8 +30,10 @@ import type {
   CommandResult,
   WorkspaceArchive,
   WorkspaceArchived,
+  WorkspaceChanges,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceConflict,
   WorkspaceCut,
   WorkspaceHolding,
   WorkspaceRef,
@@ -52,6 +59,7 @@ import {
 } from "@cawco/core/paths";
 import { commandLine, processLineage } from "@cawco/core/process-identity";
 import {
+  allowedConfigKey,
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
@@ -65,18 +73,12 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import {
-  excludedPaths,
-  IGNORED_STATUS,
-  isPlace,
-} from "@cawco/core/workspace-policy";
+import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
 import {
   addAccount,
   addSpill,
   closeBoundary,
   ensureBoundary,
-  heldBy,
-  ownInodes,
   setProject,
   shellQuote,
   stopWorkspaceBoundary,
@@ -89,11 +91,10 @@ import {
   copyStrays,
   ownFilesOnly,
 } from "./carry";
-import { hostGit, prepareClone } from "./clone";
 import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
 import { expandHome } from "./fs";
-import { useHubCredentialHelper } from "./git-credential";
+import { fetchDefaultBranch } from "./host-git";
 import {
   declaredLfs,
   hostSigns,
@@ -102,14 +103,20 @@ import {
 } from "./host-lfs";
 import { ownConfigChanges, ownConfigWords, runHubCommand } from "./hub-command";
 import {
-  createdAt,
-  cutMade,
-  cutMark,
-  entriesAt,
-  entryWords,
-  markCut,
-  ownCutProblem,
-} from "./interrupted-cut";
+  applyChanges,
+  changesOf,
+  endView,
+  ensureView,
+  type Layer,
+  layerDir,
+  layerOf,
+  makeLayer,
+  readChanges,
+  readLayer,
+  removeLayer,
+  viewArgv,
+  viewPath,
+} from "./layer";
 import {
   configEnv,
   type DeclaredLfs,
@@ -127,26 +134,34 @@ import { removeTree } from "./remove-tree";
 import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { refuseShortOfWorkspace } from "./workspace-needs";
-import { cloneHolding } from "./workspace-records";
 
 type Git = (root: string, ...args: string[]) => Promise<string>;
 
 /**
  * git on this host as `safe-git.ts` says, its stdout trimmed, within the
  * create's one `deadline`; `env` in place of the host's (the hub's
- * credential, env-only). git's stderr, credential taken out, is the error.
+ * credential, env-only); in a workspace's copy as `access` reaches it
+ * ({@link accessOf}) when given. git's stderr, credential taken out, is the
+ * error.
  */
 export const gitUntil =
-  (deadline: number, env: Record<string, string> = hostEnvironment()): Git =>
+  (
+    deadline: number,
+    env: Record<string, string> = hostEnvironment(),
+    access?: CopyAccess
+  ): Git =>
   async (root, ...args) => {
     const late = `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
       throw new Error(late);
     }
+    const run = access
+      ? access.run(root, safeGitArgv(args))
+      : { argv: safeGitArgv(args), cwd: root };
     const ran = await readWithin(remaining, async (signal) => {
-      const child = Bun.spawn(safeGitArgv(args), {
-        cwd: root,
+      const child = Bun.spawn(run.argv, {
+        cwd: run.cwd,
         env: { ...env, ...SAFE_GIT_ENV },
         stdin: "ignore",
         stdout: "pipe",
@@ -383,271 +398,306 @@ const holdingSource = async <T>(
 };
 
 /**
- * Readies source repository `repoRoot` for a workspace cut from it, inside
- * {@link inSource}: its `origin` (the hub's remote of `projectId` when it has
- * none), the hub's credential helper in its config when that is the hub and
- * `source` (another workspace's clone, whose config is that workspace's) is
- * none, and the branch the workspace starts from ({@link hubBase}). `hub` is
+ * Readies workspace `path`'s copy of the repository at `folder` for its
+ * branch, inside {@link inSource} (keyed by the person's checkout, whose git
+ * directory is only ever locked, never written): its `origin` (the hub's
+ * remote of `projectId` when it has none), and the branch the workspace
+ * starts from ({@link hubBase}), each written in the copy alone. `hub` is
  * that origin's URL when it is the hub's, which every git that reaches it
  * runs under ({@link hubGitEnv}), git-lfs held to the project's `declared`
  * endpoint when it has one.
  */
 const readySource = (
-  repoRoot: string,
+  folder: string,
+  path: string,
   projectId: unknown,
-  fromClone: boolean,
   deadline: number,
-  declared: DeclaredLfs | undefined
+  declared: DeclaredLfs | undefined,
+  access: CopyAccess
 ): Promise<{ hub: string | undefined; known: string | undefined }> =>
-  inSource(repoRoot, deadline, async () => {
-    const plain = gitUntil(deadline);
+  inSource(folder, deadline, async () => {
+    const plain = gitUntil(deadline, hostEnvironment(), access);
     // A workspace starts from origin's default branch and lands there.
-    let origin = await plain(repoRoot, "remote", "get-url", "origin").catch(
+    let origin = await plain(path, "remote", "get-url", "origin").catch(
       () => undefined
     );
     if (!origin) {
       if (typeof projectId !== "string" || !projectId) {
         throw new Error(
-          `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
+          `${folder} has no origin remote and belongs to no project, so it has no hub remote to start a workspace's branch from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
         );
       }
       origin = hubRepo(projectId);
-      await plain(repoRoot, "remote", "add", "origin", origin);
+      await plain(path, "remote", "add", "origin", origin);
       console.info(
-        `[workspace] ${repoRoot} had no origin: the hub's remote of project ${projectId} is its origin now`
+        `[workspace] ${folder} has no origin: the hub's remote of project ${projectId} is its workspace's origin`
       );
     }
-    // A clone of a workspace's clone reaches the hub as that workspace does.
     const hub = isHubRemote(origin) ? origin : undefined;
-    if (hub && !fromClone) {
-      useHubCredentialHelper(repoRoot);
-    }
     const known = hub
       ? await hubBase(
-          gitUntil(deadline, hubGitEnv(hub, [], declared)),
-          repoRoot
+          gitUntil(deadline, hubGitEnv(hub, [], declared), access),
+          path
         )
       : undefined;
     return { hub, known };
   });
 
-/** This agent's start-up pass over the cuts its last process left under way ({@link clearInterruptedCuts}): every cut waits for it. */
-let interruptedCleared: Promise<void> = Promise.resolve();
+/**
+ * How this process reaches a workspace's copy ({@link accessOf}): its
+ * layer, a path of the copy as this process reads and writes it, and an
+ * argv run in the copy, in a directory there, with the directory its spawn
+ * starts in.
+ */
+export interface CopyAccess {
+  at: (path: string) => string;
+  layer: Layer;
+  run: (
+    cwd: string,
+    argv: readonly string[]
+  ) => { argv: string[]; cwd: string };
+}
 
 /**
- * At this agent's start, before any cut: each cut its last process left
- * marked under way (interrupted-cut.ts `cut.json`; an install's restart, a
- * crash or a full disk ended it) whose path holds nothing but what that cut
- * writes ({@link ownCutProblem}) is cleared as a failed cut is (an `unmade`
- * archive: the path, the state and scratch dirs), so its husk never waits
- * for the next ask; the hub, told the create was not run again
- * (request-record.ts), cuts it whole at the next. One whose path holds
- * anything else is left as it is and said, and its next cut is refused
- * naming what is there.
+ * `workspace`'s copy as this process reaches it: through its view's
+ * namespace on Linux (layer.ts `viewArgv`, `viewPath`), started for this
+ * when nothing holds it; its own folder on macOS and for a clone cut before
+ * layers. Nothing when it has no layer there.
  */
-export const clearInterruptedCuts = (): Promise<void> => {
-  interruptedCleared = sweepInterrupted();
-  return interruptedCleared;
-};
-
-/** {@link clearInterruptedCuts}'s pass; never throws. */
-const sweepInterrupted = async (): Promise<void> => {
-  try {
-    const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
-    for (const id of ids) {
-      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each its own folder to read and clear
-      await clearInterrupted(id);
-    }
-  } catch (error) {
-    console.warn(
-      `[workspace] the cuts this agent's last process left under way could not all be looked at: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-};
-
-/** Workspace `id`'s cut, when its mark says this agent's last process left it under way: cleared when its path holds only what it writes. */
-const clearInterrupted = async (id: string): Promise<void> => {
-  let mark: Awaited<ReturnType<typeof cutMark>>;
-  try {
-    mark = await cutMark(id);
-  } catch (error) {
-    console.warn(
-      `[workspace] ${id}: its cut mark could not be read, so its cut is left as it is: ${error instanceof Error ? error.message : String(error)}`
-    );
+export const accessOf = async (
+  workspace: WorkspaceRef
+): Promise<CopyAccess | undefined> => {
+  const layer = await layerOf(workspace.id, workspace.path);
+  if (!layer) {
     return;
   }
-  if (!mark) {
-    return;
+  if (layer.form !== "overlay") {
+    return {
+      layer,
+      at: (path) => path,
+      run: (cwd, argv) => ({ argv: [...argv], cwd }),
+    };
   }
-  const there = await lstat(mark.path).catch(() => undefined);
-  const problem = there ? await ownCutProblem(mark) : undefined;
-  if (problem) {
-    console.warn(
-      `[workspace] ${id}: its cut at ${mark.path} was cut short when this agent's last process ended, and is left as it is: ${problem}`
-    );
-    return;
-  }
-  await archiveWorkspace({
-    id,
-    path: mark.path,
-    unlanded: "unmade",
-  } satisfies WorkspaceArchive);
-  console.info(
-    `[workspace] ${id}: its cut at ${mark.path}, cut short when this agent's last process ended, is cleared; its next cut is made whole`
-  );
-};
-
-/** Whether {@link clearUnmarkedHusks}' one pass has begun. */
-let unmarkedSwept = false;
-
-/**
- * Once per agent, at the hub's first answer to a beat that names its live
- * workspaces (`liveWorkspaces`, so they are known, boundary.ts `heldBy`):
- * each clone a cut of a build before the cut mark (bada22d43) left behind, `create.json` naming its path and no
- * `cut.json`, cleared as a failed cut is (an `unmade` archive), when all of
- * these hold: its path is where a delegate's cut goes
- * (`~/.worktrees/<repo>-<id8>`, never a stage clone's); its HEAD is not on
- * `ws/<id8>`, the branch every whole cut checks out last, so it never got
- * that far; nothing holds it (no live work item, boundary, session process
- * or command: `heldBy`); and it holds nothing that is not on its remote
- * ({@link ownCutProblem} with its own `origin` as the source and a first
- * cut's start: no commit on a branch or stash past origin, and beside `.git`
- * only files of `origin/HEAD` as checkout writes them, or CawCo's). Such a
- * husk links the source's object files (git-clone(1) `--local`), and the
- * source's place denied each one: 4,342 of them stopped cockpit's Caw on
- * 2026-10-23. Anything else is kept, and said with why. Never throws.
- */
-export const clearUnmarkedHusks = (liveWorkspaces: unknown): void => {
-  // Only once the hub's answer names the live workspaces (`heldBy`).
-  if (Array.isArray(liveWorkspaces) && !unmarkedSwept) {
-    unmarkedSwept = true;
-    sweepUnmarked();
-  }
-};
-
-/** {@link clearUnmarkedHusks}' pass; never throws. */
-const sweepUnmarked = async (): Promise<void> => {
-  try {
-    await interruptedCleared;
-    const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
-    for (const id of ids) {
-      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each its own folder to read and clear
-      await clearUnmarked(id);
-    }
-  } catch (error) {
-    console.warn(
-      `[workspace] the clones that cuts of an earlier build left behind could not all be looked at: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-};
-
-/** Workspace `id`'s clone, when a cut of a build before the mark left it ({@link clearUnmarkedHusks}). */
-const clearUnmarked = async (id: string): Promise<void> => {
-  if (isPlace(id) || (await cutMark(id).catch(() => undefined))) {
-    return;
-  }
-  const path = await createdAt(id);
-  const id8 = id.slice(0, 8);
-  const name = path ? basename(path) : "";
-  if (
-    !path ||
-    dirname(path) !== expandHome("~/.worktrees") ||
-    !name.endsWith(`-${id8}`) ||
-    name.endsWith(`-stage-${id8}`) ||
-    !(await lstat(path).catch(() => undefined))?.isDirectory()
-  ) {
-    return;
-  }
-  const head = await hostGit(path, ["symbolic-ref", "-q", "HEAD"]).catch(
-    () => undefined
-  );
-  if (head?.exitCode === 0 && head.text().trim() === `refs/heads/ws/${id8}`) {
-    return;
-  }
-  const keep = (why: string): void =>
-    console.warn(
-      `[workspace] ${id}: ${path} was left by a cut of an earlier build, and is kept: ${why}`
-    );
-  const held = await heldBy({ id, path });
-  if (held) {
-    keep(held);
-    return;
-  }
-  const origin = await hostGit(path, [
-    "config",
-    "--get",
-    "remote.origin.url",
-  ]).catch(() => undefined);
-  const source = origin?.exitCode === 0 ? origin.text().trim() : "";
-  if (!source) {
-    keep("its .git names no origin to hold its work");
-    return;
-  }
-  const problem = await ownCutProblem({ path, source, at: null });
-  if (problem) {
-    keep(problem);
-    return;
-  }
-  await archiveWorkspace({
-    id,
-    path,
-    unlanded: "unmade",
-  } satisfies WorkspaceArchive);
-  console.info(
-    `[workspace] ${id}: ${path}, left by a cut of an earlier build and holding nothing that is not on its remote, is cleared`
-  );
-};
-
-/** What the folder at `path` holds, in words. */
-const heldAt = async (path: string): Promise<string> => {
-  try {
-    const names = await entriesAt(path);
-    return names.length > 0 ? entryWords(names) : "nothing";
-  } catch {
-    return "what cannot be read";
-  }
+  const pid = await ensureView(workspace.id, layer);
+  return {
+    layer,
+    at: (path) => viewPath(pid, path),
+    run: (cwd, argv) => ({ argv: viewArgv(pid, cwd, argv), cwd: "/" }),
+  };
 };
 
 /**
- * Something already at `path`, where workspace `id`'s cut (again, `at`)
- * makes its clone. A cut that fails takes its path with it unread (its
- * `unmade` archive), so a cut over someone's files would delete them
- * (9a220f37b's refusal). Cleared and cut again only when this agent's
- * records say a cut of this workspace's was made there (its mark, or the
- * `create.json` every cut writes first, all a build before the mark wrote)
- * and the folder holds nothing but what that cut writes
- * ({@link ownCutProblem}): one cut short, or one whole whose answer never
- * reached the hub. Anything else refuses the cut, naming what is there and
- * how to clear it, and is left as it is.
+ * The copy's own `.git/config`: the keys of the person's that git may run
+ * under (core safe-git.ts `allowedConfigKey`), and no other, so the copy's
+ * git runs where the person's config would refuse it (a credential helper,
+ * a hooks path), and nothing the person's config names runs for the
+ * workspace. The person's config is read, never written; a
+ * `config.worktree` the copy holds goes.
  */
-const clearOwnCut = async (
-  id: string,
+const ownGitConfig = async (
+  folder: string,
   path: string,
-  source: string,
-  at: WorkspaceCut | null
+  access: CopyAccess
 ): Promise<void> => {
-  if (!(await lstat(path).catch(() => undefined))) {
-    return;
-  }
-  const again = at ? " again" : "";
-  const mark = await cutMark(id).catch(() => undefined);
-  const refusal =
-    mark?.path === path || (await createdAt(id)) === path
-      ? await ownCutProblem(mark?.path === path ? mark : { path, source, at })
-      : `this machine's agent has no record of cutting workspace ${id} there, and it holds ${await heldAt(path)}`;
-  if (refusal) {
+  const listed = Bun.spawnSync(
+    [
+      "git",
+      ...SAFE_GIT_FLAGS,
+      "config",
+      "--file",
+      join(folder, ".git", "config"),
+      "--no-includes",
+      "--list",
+      "-z",
+    ],
+    { env: { ...hostEnvironment(), ...SAFE_GIT_ENV }, stderr: "pipe" }
+  );
+  if (listed.exitCode !== 0) {
     throw new Error(
-      `workspace ${id} cannot be cut${again} at ${path}: ${refusal}, so it is left as it is. Move it away or delete it (rm -rf ${shellQuote(path)}), then ask again.`
+      `${folder}'s git config could not be read: ${listed.stderr.toString().trim()}`
     );
   }
-  await archiveWorkspace({
-    id,
-    path,
-    unlanded: "unmade",
-  } satisfies WorkspaceArchive);
-  console.info(
-    `[workspace] ${id}: ${path} held only its own cut${again}, never finished; it is cleared and cut${again} now`
+  const kept = listed.stdout
+    .toString()
+    .split("\0")
+    .filter(Boolean)
+    .map((entry) => {
+      const at = entry.indexOf("\n");
+      return at < 0
+        ? { key: entry, value: "true" }
+        : { key: entry.slice(0, at), value: entry.slice(at + 1) };
+    })
+    .filter(({ key }) => allowedConfigKey(key));
+  const config = access.at(join(path, ".git", "config"));
+  await rm(access.at(join(path, ".git", "config.worktree")), { force: true });
+  await writeStateFile(config, "");
+  for (const { key, value } of kept) {
+    const set = Bun.spawnSync(
+      [
+        "git",
+        ...SAFE_GIT_FLAGS,
+        "config",
+        "--file",
+        config,
+        "--add",
+        key,
+        value,
+      ],
+      { env: { ...hostEnvironment(), ...SAFE_GIT_ENV }, stderr: "pipe" }
+    );
+    if (set.exitCode !== 0) {
+      throw new Error(
+        `the copy's git config could not take ${key}: ${set.stderr.toString().trim()}`
+      );
+    }
+  }
+};
+
+/** Where CawCo's block of the person's own untracked files begins and ends in a copy's `info/exclude`. */
+const OWN_UNTRACKED_START =
+  "# cawco: the folder's own untracked files as the workspace started";
+const OWN_UNTRACKED_END = "# cawco: end of the folder's own";
+
+/**
+ * The person's untracked files the copy started with (each path `git
+ * ls-files --others --exclude-standard` names once the branch is checked
+ * out), kept out of the copy's status by one anchored line each in its
+ * `info/exclude`: they came along with the folder (layer.ts) and are the
+ * person's, never the delegate's work, so neither the landing's check for
+ * uncommitted changes nor an archive reads them as held.
+ */
+const excludeOwnUntracked = async (
+  path: string,
+  git: Git,
+  access: CopyAccess
+): Promise<void> => {
+  const untracked = (
+    await git(path, "ls-files", "-z", "--others", "--exclude-standard")
+  )
+    .split("\0")
+    .filter(Boolean);
+  if (untracked.length === 0) {
+    return;
+  }
+  const exclude = access.at(join(path, ".git", "info", "exclude"));
+  const before = await readFile(exclude, "utf8").catch(() => "");
+  const block = [
+    OWN_UNTRACKED_START,
+    ...untracked.map((file) => `/${file}`),
+    OWN_UNTRACKED_END,
+  ];
+  await writeStateFile(
+    exclude,
+    `${before}${before && !before.endsWith("\n") ? "\n" : ""}${block.join("\n")}\n`
   );
+};
+
+/** The person's untracked files a copy's `info/exclude` names in CawCo's block ({@link excludeOwnUntracked}). */
+const ownUntracked = async (
+  path: string,
+  access: CopyAccess
+): Promise<Set<string>> => {
+  const text = await readFile(
+    access.at(join(path, ".git", "info", "exclude")),
+    "utf8"
+  ).catch(() => "");
+  const named = new Set<string>();
+  let inside = false;
+  for (const line of text.split("\n")) {
+    if (line === OWN_UNTRACKED_START) {
+      inside = true;
+    } else if (line === OWN_UNTRACKED_END) {
+      inside = false;
+    } else if (inside && line.startsWith("/")) {
+      named.add(line.slice(1));
+    }
+  }
+  return named;
+};
+
+/**
+ * A repository copy's branch, checked out: the copy's own config
+ * ({@link ownGitConfig}) and origin ({@link readySource}), `origin`'s
+ * default branch fetched into the copy as it stands now (with `origin/HEAD`
+ * naming it), and `ws/<id8>` checked out there with `--force`, so every
+ * tracked file the person's checkout holds otherwise is written in the copy
+ * at origin's version (a Linux view copies up just those files) and the
+ * person's own uncommitted work stays theirs. `at` ({@link WorkspaceCut})
+ * cuts it at the commit a retired workspace's copy was on, fetched from
+ * `origin`'s branch that held it then, tracking the default branch; a carry's
+ * commits are fetched and checked out instead when it holds any. The
+ * person's untracked files are kept out of its status
+ * ({@link excludeOwnUntracked}).
+ */
+const startBranch = async (
+  workspace: WorkspaceRef,
+  folder: string,
+  {
+    access,
+    carried,
+    cut,
+    deadline,
+    projectId,
+  }: {
+    access: CopyAccess;
+    carried: Carried | undefined;
+    cut: WorkspaceCut | undefined;
+    deadline: number;
+    projectId: unknown;
+  }
+): Promise<{ base: string; branch: string }> => {
+  const { id, path } = workspace;
+  const branch = `ws/${id.slice(0, 8)}`;
+  const plain = gitUntil(deadline, hostEnvironment(), access);
+  await ownGitConfig(folder, path, access);
+  const declared = await declaredLfs(projectId);
+  const { hub, known } = await readySource(
+    folder,
+    path,
+    projectId,
+    deadline,
+    declared,
+    access
+  );
+  const authed = hub ? gitUntil(deadline, hubGitEnv(hub), access) : plain;
+  const base = await fetchDefaultBranch(path, authed, known);
+  // The origin it was cut from, as the copy names it: the one URL an
+  // archive refreshes the base from ({@link refreshBase}).
+  await writeStateFile(
+    join(workspacesDir(), id, "create.json"),
+    JSON.stringify({
+      path,
+      origin: await plain(path, "remote", "get-url", "origin"),
+    } satisfies CreateRecord)
+  );
+  if (cut) {
+    await fetchCut(path, id, base, cut, authed);
+  }
+  if (carried?.commits) {
+    await carryOnto(path, carried.commits, plain);
+  }
+  const start = startOf(cut, carried, base);
+  const checkout = (await marksLfs(authed, path, start))
+    ? await lfsCheckout({
+        deadline,
+        declared,
+        hub,
+        path,
+        plain,
+        projectId,
+        start,
+      })
+    : authed;
+  await checkout(path, "checkout", "--quiet", "--force", "-B", branch, start);
+  await plain(
+    path,
+    "branch",
+    "--quiet",
+    `--set-upstream-to=origin/${base}`,
+    branch
+  );
+  await excludeOwnUntracked(path, plain, access);
+  return { base, branch };
 };
 
 /**
@@ -679,30 +729,152 @@ const placeFirst = async (
   }
 };
 
+/** The cut mark of a build before layers (`cut.json`): a clone it began at `path` and never finished. */
+const oldCutPath = async (id: string): Promise<string | undefined> =>
+  (
+    await readRecord<{ path?: unknown }>(
+      join(workspacesDir(), id, "cut.json")
+    ).catch(() => undefined)
+  )?.path as string | undefined;
+
+/** Whether `path` is where a build before layers cut workspace `id`'s clone: `~/.worktrees/<repo>-<id8>`. */
+const isOldCutPath = (id: string, path: string): boolean =>
+  dirname(path) === expandHome("~/.worktrees") &&
+  basename(path).endsWith(`-${id.slice(0, 8)}`);
+
 /**
- * {@link CONTROL_WORKSPACE_CREATE}: a clone of its own on `ws/<id8>` from the
- * remote's default branch as it stands now, and its boundary. A boundary that
- * cannot start takes the clone with it. A repository with no `origin` gets
- * the hub's remote of `projectId` as its `origin` (Projects spec §5.1: "A
- * project with no outside remote gets the hub as its remote"), and a
- * repository whose `origin` is the hub reaches it with this machine's
- * credential, env-only; the owner's own pulls and pushes there go through
- * `cawco git-credential`, named in its config. `account` is the Claude
- * account the workspace's first session launches on, placed by the hub
- * before the clone is cut: the boundary starts reading that account's user
- * layer, so the session's spawn finds its form unchanged and hands nothing
- * over (`boundaryFor`); `first` is that session ({@link
- * WorkspaceFirstSession}), whose spill folder the boundary starts reading
- * too (first-session.ts), so its spawn finds the form unchanged and the
- * boundary starts once. `at` ({@link WorkspaceCut}) cuts a retired workspace
- * again at its own path (a function of its id): `ws/<id8>` at the commit its
- * clone's HEAD was on when it retired, fetched from `origin`'s branch that
- * held it then, tracking the default branch as a first cut does. A commit
- * that branch no longer holds refuses it, since a cut anywhere else would
- * leave it behind. Something already at the path refuses any cut, and is
- * left as it is, unless it is this workspace's own cut cut short
- * ({@link clearOwnCut}). The cut is marked under way before it writes
- * anything at the path, and unmarked once it is whole (interrupted-cut.ts).
+ * At this agent's start, before any create: each layer its last process
+ * left unmade (layer.json `made` false: an install's restart, a crash or a
+ * full disk cut its making short) is removed, with its state and scratch
+ * dirs, as a failed create is (an `unmade` archive); and so is each clone a
+ * build before layers began and never finished (its `cut.json`), at the
+ * path such a build cut it. The hub, told the create was not run again
+ * (request-record.ts), makes it whole at the next. Never throws.
+ */
+export const clearUnmadeLayers = (): Promise<void> => {
+  unmadeCleared = sweepUnmade();
+  return unmadeCleared;
+};
+
+let unmadeCleared: Promise<void> = Promise.resolve();
+
+const sweepUnmade = async (): Promise<void> => {
+  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  for (const id of ids) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each its own folder
+      const layer = await readLayer(id).catch(() => undefined);
+      const old = await oldCutPath(id);
+      if (layer && !layer.made) {
+        await archiveWorkspace({
+          id,
+          path: layer.path,
+          unlanded: "unmade",
+        } satisfies WorkspaceArchive);
+        console.info(
+          `[workspace] ${id}: its layer of ${layer.folder}, cut short when this agent's last process ended, is cleared; its next create makes it whole`
+        );
+      } else if (old && isOldCutPath(id, old)) {
+        await clearOldCut(id, old);
+      }
+    } catch (error) {
+      console.warn(
+        `[workspace] ${id}: what its unfinished create left could not be cleared: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+};
+
+/** A clone a build before layers began at `path` and never finished: removed with its mark. */
+const clearOldCut = async (id: string, path: string): Promise<void> => {
+  await removeTree(path);
+  await rm(join(workspacesDir(), id, "cut.json"), { force: true });
+  console.info(
+    `[workspace] ${id}: the clone a build before layers began at ${path} and never finished is cleared`
+  );
+};
+
+/**
+ * What workspace `id` already has where its create makes its copy (again,
+ * `again`): a layer this agent began and never finished, or an old build's
+ * unfinished clone, is cleared; a whole layer that holds nothing of the
+ * delegate's is archived and made again (a create whose answer never
+ * reached the hub). A whole layer that holds work, or a folder at the Mac
+ * path that no record of this workspace names, refuses the create, and is
+ * left as it is.
+ */
+const clearStale = async (
+  id: string,
+  path: string,
+  again: boolean
+): Promise<void> => {
+  const layer = await readLayer(id).catch(() => undefined);
+  const old = await oldCutPath(id);
+  if (old && isOldCutPath(id, old)) {
+    await clearOldCut(id, old);
+  }
+  if (layer) {
+    const archived = await archiveWorkspace({
+      id,
+      path: layer.path,
+      unlanded: layer.made ? "keep" : "unmade",
+    } satisfies WorkspaceArchive);
+    if (archived.held) {
+      throw new Error(
+        `workspace ${id} cannot be made${again ? " again" : ""}: its copy at ${layer.path} holds ${holdingWords(archived.held)}, so it is left as it is`
+      );
+    }
+    return;
+  }
+  if (
+    process.platform !== "linux" &&
+    (await lstat(path).catch(() => undefined))
+  ) {
+    throw new Error(
+      `workspace ${id} cannot be made${again ? " again" : ""} at ${path}: this machine's agent has no record of making it there, so it is left as it is. Move it away or delete it (rm -rf ${shellQuote(path)}), then ask again.`
+    );
+  }
+};
+
+/** `path` at its real path, links followed; as given when it does not exist. */
+const realFolder = (path: string): Promise<string> =>
+  realpath(path).catch(() => path);
+
+/**
+ * The folder a workspace is made of for a session at `dir`: the repository's
+ * root when `dir` is in one, else `dir` itself, at its real path.
+ */
+const folderOf = async (dir: string, git: Git): Promise<string> => {
+  const real = await realFolder(dir);
+  const info = await stat(real).catch(() => undefined);
+  if (!info?.isDirectory()) {
+    throw new Error(`${dir} is not a folder, so it cannot have a workspace`);
+  }
+  const top = await git(real, "rev-parse", "--show-toplevel").catch(
+    () => undefined
+  );
+  return top ? await realFolder(top) : real;
+};
+
+/**
+ * {@link CONTROL_WORKSPACE_CREATE}: a private copy of the folder `cwd` is in
+ * (its repository's root, or the folder itself: {@link folderOf}), made by
+ * its layer (layer.ts `makeLayer`: on Linux the folder itself, seen through
+ * the workspace's own view; on macOS an APFS clone at
+ * `~/.worktrees/<name>-<id8>`), a repository's copy on its own branch
+ * ({@link startBranch}), and its boundary. Nothing of the person's folder is
+ * written. A boundary that cannot start takes the layer with it. `account`
+ * is the Claude account the workspace's first session launches on, placed by
+ * the hub before the copy is made: the boundary starts reading that
+ * account's user layer, so the session's spawn finds its form unchanged and
+ * hands nothing over (`boundaryFor`); `first` is that session
+ * ({@link WorkspaceFirstSession}), whose spill folder the boundary starts
+ * reading too (first-session.ts), so its spawn finds the form unchanged and
+ * the boundary starts once. `at` ({@link WorkspaceCut}) makes a retired
+ * workspace again, a repository's at the commit its copy's HEAD was on when
+ * it retired. What the workspace already has is cleared first, or refuses
+ * it ({@link clearStale}). The layer is recorded unmade before anything of it
+ * is made, and made once it is whole.
  */
 export const createWorkspace = async (
   cwd: unknown,
@@ -717,115 +889,56 @@ export const createWorkspace = async (
   // A MachinePath from the hub (work-items `openWorkspace`): absolute.
   const dir = String(cwd);
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
-  const plain = gitUntil(deadline);
-  const repoRoot = await plain(dir, "rev-parse", "--show-toplevel").catch(
-    (error: Error) => {
-      throw new Error(
-        `${dir} is not in a git repository, so it cannot have a workspace: ${error.message}`,
-        { cause: error }
-      );
-    }
-  );
-  // A workspace cut from another workspace's clone: that clone's config is
-  // the other workspace's to write. A place is a person's own repo,
-  // whose config is theirs.
-  const source = await cloneHolding(repoRoot);
-  const problem = source
-    ? await repositoryConfigProblem(join(source.path, ".git"))
-    : undefined;
-  if (problem) {
-    throw new Error(`${repoRoot} cannot have a workspace: ${problem}`);
-  }
-  const declared = await declaredLfs(projectId);
-  const { hub, known } = await readySource(
-    repoRoot,
-    projectId,
-    Boolean(source),
-    deadline,
-    declared
-  );
-  const authed = hub ? gitUntil(deadline, hubGitEnv(hub)) : plain;
+  const folder = await folderOf(dir, gitUntil(deadline));
   const id = String(workspaceId);
   const id8 = id.slice(0, 8);
-  const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
-  const branch = `ws/${id8}`;
+  const path =
+    process.platform === "linux"
+      ? folder
+      : expandHome(`~/.worktrees/${basename(folder)}-${id8}`);
   const state = join(workspacesDir(), id);
   const cut = (at ?? undefined) as WorkspaceCut | undefined;
   if (cut && !COMMIT.test(cut.commit)) {
     throw new Error(`"${cut.commit}" is not a commit id`);
   }
-  // Cut again with a carry's commits: the clone's own start is the carry's
-  // HEAD, which is what a cut cut short holds and is cleared with.
   const carried = cut?.carry ? await carryOf(id, cut.carry) : undefined;
-  const marked: WorkspaceCut | null = cut
-    ? { branch: cut.branch, commit: carried?.commits?.head ?? cut.commit }
-    : null;
-  await interruptedCleared;
-  await clearOwnCut(id, path, repoRoot, marked);
+  await unmadeCleared;
+  await clearStale(id, path, Boolean(cut));
   try {
     await mkdir(state, { recursive: true });
-    // Before anything at the path: a cut this agent's end cuts short is
-    // found its own and cleared, at its start or the next cut.
-    await markCut(id, { path, source: repoRoot, at: marked });
-    // Written before the clone: archive-by-id survives a lost reply or an agent restart.
+    // Written before the layer: archive-by-id survives a lost reply or an agent restart.
     await writeStateFile(
       join(state, "create.json"),
       JSON.stringify({ path } satisfies CreateRecord)
     );
-    const base = await prepareClone(repoRoot, path, authed, known);
-    // The origin it was cut from, as this host read it from the source: the
-    // one URL an archive refreshes the base from ({@link refreshBase}).
-    await writeStateFile(
-      join(state, "create.json"),
-      JSON.stringify({
-        path,
-        origin: await plain(path, "remote", "get-url", "origin"),
-      } satisfies CreateRecord)
-    );
-    // git linked the source's object files into the clone (`--local`); each
-    // gets its own inode now, before the long fetch and checkout, so a cut
-    // cut short there (an agent's restart) leaves nothing linked to the
-    // source, whose place's boundary would deny every linked file. On macOS
-    // each copy is an APFS clone, so it costs no space.
-    await ownInodes(path);
-    if (cut) {
-      await fetchCut(path, id, base, cut, authed);
+    const layer = await makeLayer(id, folder, path);
+    const workspace: WorkspaceRef = { id, path };
+    const access = await accessOf(workspace);
+    if (!access) {
+      throw new Error(`workspace ${id}'s copy of ${folder} is not there`);
     }
-    if (carried?.commits) {
-      await carryOnto(path, carried.commits, plain);
-    }
-    const start = startOf(cut, carried, base);
-    const checkout = (await marksLfs(authed, path, start))
-      ? await lfsCheckout({
-          deadline,
-          declared,
-          hub,
-          path,
-          plain,
-          projectId,
-          start,
-        })
-      : authed;
-    await checkout(path, "checkout", "--quiet", "-b", branch, start);
-    if (cut) {
-      await plain(
-        path,
-        "branch",
-        "--quiet",
-        `--set-upstream-to=origin/${base}`,
-        branch
-      );
-    }
-    await copyOwnSecrets(repoRoot, path, plain);
+    const repo =
+      layer.kind === "repo"
+        ? await startBranch(workspace, folder, {
+            access,
+            carried,
+            cut,
+            deadline,
+            projectId,
+          })
+        : undefined;
     await placeFirst(id, path, { account, first, projectId });
-    const boundary = await ensureBoundary({ id, path });
-    const restored = await applyCarried({ id, path }, carried);
-    await cutMade(id);
+    const boundary = await ensureBoundary(workspace);
+    const restored = repo ? await applyCarried(workspace, carried) : undefined;
+    console.info(
+      `[workspace] ${id}: made of ${folder} (${layer.kind}, ${layer.form}) at ${path} in ${Date.now() - layer.started} ms`
+    );
     return {
-      repoRoot,
+      kind: layer.kind,
+      repoRoot: folder,
       path,
-      branch,
-      base,
+      branch: repo?.branch ?? "",
+      base: repo?.base ?? "",
       boundaryPid: boundary.pid,
       tmp: workspaceScratchDir(id),
       ...(restored ? { restored } : {}),
@@ -1204,7 +1317,13 @@ export const workspaceAt = async (
       `if git grep -q filter=lfs ${head} -- ':(glob)**/.gitattributes'; then echo lfs; fi`
     )) === "lfs";
   await whileBoundaryClosed(workspace, async () => {
-    const host = await closedCloneGit(workspace);
+    const access = await accessOf(workspace);
+    if (!access) {
+      throw new Error(
+        `workspace ${workspace.id} has no copy at ${workspace.path}`
+      );
+    }
+    const host = await closedCloneGit(workspace, access);
     const env = { GIT_LFS_SKIP_SMUDGE: "1" };
     await host(["checkout", "--quiet", "--force", "--detach", head], { env });
     await host(["clean", "-ffdq"], { env });
@@ -1281,6 +1400,7 @@ const BRANCH_NAME = /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/;
  */
 const refreshBase = async (
   workspace: WorkspaceRef,
+  access: CopyAccess,
   base: string | undefined
 ): Promise<void> => {
   if (!(base && BRANCH_NAME.test(base))) {
@@ -1290,19 +1410,20 @@ const refreshBase = async (
     join(workspacesDir(), workspace.id, "create.json")
   ).catch(() => undefined);
   const origin = record?.origin;
-  const clone = await lstat(join(workspace.path, ".git")).catch(
+  const clone = await lstat(access.at(join(workspace.path, ".git"))).catch(
     () => undefined
   );
   if (
     !(origin && clone?.isDirectory()) ||
-    (await noRepositoryAt(workspace.path))
+    (await noRepositoryAt(access.at(workspace.path)))
   ) {
     return;
   }
-  await closedCloneGit(workspace);
+  await closedCloneGit(workspace, access);
   const git = gitUntil(
     Date.now() + WORKSPACE_GIT_TIMEOUT_MS,
-    isHubRemote(origin) ? hubGitEnv(origin) : hostEnvironment()
+    isHubRemote(origin) ? hubGitEnv(origin) : hostEnvironment(),
+    access
   );
   await git(
     workspace.path,
@@ -1337,10 +1458,36 @@ interface GitGiven {
 }
 
 /**
- * git on this host in workspace `workspace`'s clone, once its boundary is
- * closed ({@link closeClone}, {@link workspaceAt}): nothing can write the
- * clone meanwhile, so its config cannot change between the look below and
- * the run (safe-git.ts).
+ * `argv` run in a workspace's copy as `access` reaches it, in `cwd` there:
+ * its exit, stdout and stderr; `input` on its stdin, `env` over the host's.
+ */
+const runInCopy = async (
+  access: CopyAccess,
+  cwd: string,
+  argv: readonly string[],
+  { env = {}, input }: GitGiven = {}
+): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
+  const run = access.run(cwd, argv);
+  const child = Bun.spawn(run.argv, {
+    cwd: run.cwd,
+    env: { ...hostEnvironment(), ...env, ...SAFE_GIT_ENV },
+    stdin: input === undefined ? "ignore" : Buffer.from(input),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { exitCode, stderr, stdout };
+};
+
+/**
+ * git in workspace `workspace`'s copy, as `access` reaches it
+ * ({@link accessOf}), once its boundary is closed ({@link closeClone},
+ * {@link workspaceAt}): nothing can write the copy meanwhile, so its config
+ * cannot change between the look below and the run (safe-git.ts).
  * Refused, nothing run, when its `.git` is no folder of its own (a link is
  * never followed: a delegate can point one at any folder it can name) or
  * when its git directory names another or its config holds a key past the
@@ -1349,13 +1496,14 @@ interface GitGiven {
  * `exits` throws its stderr.
  */
 const closedCloneGit = async (
-  workspace: WorkspaceRef
+  workspace: WorkspaceRef,
+  access: CopyAccess
 ): Promise<(args: readonly string[], given?: GitGiven) => Promise<string>> => {
-  const dotGit = join(workspace.path, ".git");
+  const dotGit = access.at(join(workspace.path, ".git"));
   const found = await lstat(dotGit);
   if (!found.isDirectory()) {
     throw new Error(
-      `Workspace ${workspace.id} was not archived: ${dotGit} is ${found.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through, so nothing was deleted.`
+      `Workspace ${workspace.id} was not archived: ${join(workspace.path, ".git")} is ${found.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through, so nothing was deleted.`
     );
   }
   const problem = await repositoryConfigProblem(dotGit);
@@ -1365,20 +1513,18 @@ const closedCloneGit = async (
     );
   }
   return async (args, { env = {}, exits = [0], input }: GitGiven = {}) => {
-    const command =
-      input === undefined
-        ? Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args}`
-        : Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args} < ${Buffer.from(input)}`;
-    const ran = await command
-      .env({ ...hostEnvironment(), ...env, ...SAFE_GIT_ENV })
-      .quiet()
-      .nothrow();
+    const ran = await runInCopy(
+      access,
+      workspace.path,
+      ["git", ...SAFE_GIT_FLAGS, "-C", workspace.path, ...args],
+      { env, ...(input === undefined ? {} : { input }) }
+    );
     if (!exits.includes(ran.exitCode)) {
       throw new Error(
-        `git ${args[0]} failed in workspace ${workspace.id}: ${ran.stderr.toString().trim() || `exit ${ran.exitCode}`}`
+        `git ${args[0]} failed in workspace ${workspace.id}: ${ran.stderr.trim() || `exit ${ran.exitCode}`}`
       );
     }
-    return ran.text().trim();
+    return ran.stdout.trim();
   };
 };
 
@@ -1393,18 +1539,17 @@ const closedCloneGit = async (
  * the borrowing"). Git on this host once its boundary is closed
  * ({@link closedCloneGit}). One that borrows nothing is left as it is.
  */
-const ownObjects = async (workspace: WorkspaceRef): Promise<void> => {
-  const alternates = join(
-    workspace.path,
-    ".git",
-    "objects",
-    "info",
-    "alternates"
+const ownObjects = async (
+  workspace: WorkspaceRef,
+  access: CopyAccess
+): Promise<void> => {
+  const alternates = access.at(
+    join(workspace.path, ".git", "objects", "info", "alternates")
   );
   if (!(await lstat(alternates).catch(() => undefined))) {
     return;
   }
-  const git = await closedCloneGit(workspace);
+  const git = await closedCloneGit(workspace, access);
   await git(["repack", "-a", "-d", "-q"]);
   await rm(alternates, { force: true });
   console.info(
@@ -1469,19 +1614,19 @@ const notLanded = (landed: readonly string[] | undefined): string[] => {
  */
 const ownCommits = async (
   workspace: WorkspaceRef,
+  access: CopyAccess,
   base: string | undefined,
   landed: readonly string[] | undefined
 ): Promise<number> => {
-  const ran =
-    await Bun.$`sh -c ${`${SAFE_GIT_SHELL}${ownCommitsShell(base, notLanded(landed))}`}`
-      .cwd(workspace.path)
-      .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
-      .quiet()
-      .nothrow();
-  const count = Number(ran.stdout.toString().trim());
+  const ran = await runInCopy(access, workspace.path, [
+    "sh",
+    "-c",
+    `${SAFE_GIT_SHELL}${ownCommitsShell(base, notLanded(landed))}`,
+  ]);
+  const count = Number(ran.stdout.trim());
   if (ran.exitCode !== 0 || !Number.isInteger(count)) {
     throw new Error(
-      `Workspace ${workspace.id} was not archived: its own commits could not be counted, so nothing was deleted. ${ran.stderr.toString().trim() || `exit ${ran.exitCode}`}`
+      `Workspace ${workspace.id} was not archived: its own commits could not be counted, so nothing was deleted. ${ran.stderr.trim() || `exit ${ran.exitCode}`}`
     );
   }
   return count;
@@ -1489,55 +1634,61 @@ const ownCommits = async (
 
 /**
  * What the workspace holds that is nowhere else ({@link WorkspaceHolding}),
- * read by git on this host once its boundary is closed
- * ({@link closedCloneGit}); `skip` are paths `git status` passes over, and
- * its commits are counted by {@link ownCommits} against `base`. Files a
- * tracked `.gitignore` covers are not read: they go with the clone.
+ * read in its copy once its boundary is closed ({@link closedCloneGit}). A
+ * folder's is its change set (layer.ts `changesOf`), each path one change. A
+ * repository's: `skip` are paths `git status` passes over, its commits are
+ * counted by {@link ownCommits} against `base`, and files a tracked
+ * `.gitignore` covers are not read: they go with the copy. The person's own
+ * untracked files the copy started with are theirs, never held
+ * ({@link ownUntracked}).
  */
 const holding = async (
   workspace: WorkspaceRef,
+  access: CopyAccess,
   skip: readonly string[],
   base: string | undefined,
   landed: readonly string[] | undefined
 ): Promise<Held> => {
-  // A clone already deleted (an archive that died after its `rm`) holds nothing.
-  const gone = await stat(workspace.path).then(
-    () => false,
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") {
-        return true;
-      }
-      throw error;
-    }
-  );
-  if (gone) {
+  if (access.layer.kind === "folder") {
+    return {
+      ...NOTHING_HELD,
+      dirty: (await changesOf(access.layer)).length,
+    };
+  }
+  // A copy already deleted (an archive that died after its removal) holds nothing.
+  const there = await lstat(access.at(workspace.path)).catch(() => undefined);
+  if (!there) {
     return NOTHING_HELD;
   }
   // No git clone any more: what is there besides what CawCo wrote is
   // counted. A husk has nothing besides, holds nothing, and goes.
-  if (await noRepositoryAt(workspace.path)) {
+  if (await noRepositoryAt(access.at(workspace.path))) {
     return {
       ...NOTHING_HELD,
       strays: (await strayEntries(workspace.path)).length,
     };
   }
-  const git = await closedCloneGit(workspace);
+  const git = await closedCloneGit(workspace, access);
   const pathspec =
     skip.length > 0
       ? ["--", ".", ...skip.map((path) => `:(exclude,literal)${path}`)]
       : [];
   const lines = (out: string): number => out.split("\n").filter(Boolean).length;
-  const [ahead, status, stashes, excluded] = await Promise.all([
-    ownCommits(workspace, base, landed),
+  const [ahead, status, stashes, excluded, own] = await Promise.all([
+    ownCommits(workspace, access, base, landed),
     git(["status", "--porcelain", ...pathspec]),
     git(["stash", "list"]),
     excludedIn(workspace.path, git, pathspec),
+    ownUntracked(workspace.path, access),
   ]);
+  const delegates = excluded.filter(
+    (path) => !own.has(path.replace(TRAILING_SLASH, ""))
+  );
   return {
     ahead,
     dirty: lines(status),
     stashes: lines(stashes),
-    ...(excluded.length > 0 ? { excluded } : {}),
+    ...(delegates.length > 0 ? { excluded: delegates } : {}),
   };
 };
 
@@ -1556,13 +1707,19 @@ const holding = async (
  */
 const headOnOrigin = async (
   workspace: WorkspaceRef,
+  access: CopyAccess,
   base: string | undefined,
   landed: readonly string[] | undefined
 ): Promise<WorkspaceCut | undefined> => {
-  if (!(await lstat(join(workspace.path, ".git")).catch(() => undefined))) {
+  if (
+    access.layer.kind !== "repo" ||
+    !(await lstat(access.at(join(workspace.path, ".git"))).catch(
+      () => undefined
+    ))
+  ) {
     return;
   }
-  const git = await closedCloneGit(workspace);
+  const git = await closedCloneGit(workspace, access);
   const commit = await git(["rev-parse", "--verify", "HEAD^{commit}"]);
   const holders = (
     await git([
@@ -1612,12 +1769,13 @@ const headOnOrigin = async (
  */
 const carriedFrom = async (
   workspace: WorkspaceRef,
+  access: CopyAccess,
   base: string | undefined
 ): Promise<WorkspaceCut | undefined> => {
   if (!base) {
     return;
   }
-  const git = await closedCloneGit(workspace);
+  const git = await closedCloneGit(workspace, access);
   // Exit 1: no commit in common; 128: no such base here. Neither is cut again.
   const commit = await git(
     ["merge-base", "HEAD", `refs/remotes/origin/${base}`],
@@ -1734,26 +1892,26 @@ const cacheOfClone = async (clone: string): Promise<string[]> => {
  */
 const writeCarry = async (
   workspace: WorkspaceRef,
+  access: CopyAccess,
   held: Held,
   skip: readonly string[]
 ): Promise<{ carry: string; left: string[] }> => {
-  await closedCloneGit(workspace);
+  await closedCloneGit(workspace, access);
   const carry = carryFolder(workspace.id);
   await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
-  const ran =
-    await Bun.$`sh -c ${`${SAFE_GIT_SHELL}${carrySteps(shellQuote(carry), held, skip, "clone")}`}`
-      .cwd(workspace.path)
-      .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
-      .quiet()
-      .nothrow();
+  const ran = await runInCopy(access, workspace.path, [
+    "sh",
+    "-c",
+    `${SAFE_GIT_SHELL}${carrySteps(shellQuote(carry), held, skip, "clone")}`,
+  ]);
   try {
     if (ran.exitCode !== 0) {
-      throw new Error(ran.stderr.toString().trim() || `exit ${ran.exitCode}`);
+      throw new Error(ran.stderr.trim() || `exit ${ran.exitCode}`);
     }
     // A folder's entry without its slash: a link named as one is never followed.
     const left = held.excluded?.length
       ? await copyStrays(
-          workspace.path,
+          access.at(workspace.path),
           held.excluded.map((path) => path.replace(TRAILING_SLASH, "")),
           join(carry, "excluded")
         )
@@ -1796,6 +1954,46 @@ const carryStrays = async (
 };
 
 /**
+ * The carry of a folder workspace's change set (layer.ts `changesOf`): each
+ * written path copied as the delegate left it into the carry's `changes/`,
+ * at its path in the folder, and each deleted one named in `deleted.txt`.
+ * One that could not be written whole is taken away again, and nothing is
+ * deleted.
+ */
+const carryChanged = async (
+  id: string,
+  layer: Layer
+): Promise<{ carry: string; left: string[] }> => {
+  const carry = carryFolder(id);
+  await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
+  try {
+    const changed = await changesOf(layer);
+    const written = changed
+      .filter((each) => each.change === "write")
+      .map((each) => each.path);
+    const from =
+      layer.form === "copy"
+        ? layer.path
+        : (layer.mounts?.[0]?.upper ?? layerDir(id));
+    const left = await copyStrays(from, written, join(carry, "changes"));
+    await writeFile(
+      join(carry, "deleted.txt"),
+      changed
+        .filter((each) => each.change === "delete")
+        .map((each) => `${each.path}\n`)
+        .join("")
+    );
+    return { carry, left };
+  } catch (error) {
+    await rm(carry, { recursive: true, force: true });
+    throw new Error(
+      `Workspace ${id} was not archived: its carry could not be written, so nothing was deleted. ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
+};
+
+/**
  * {@link CONTROL_WORKSPACE_ARCHIVE}: the boundary killed first with
  * everything in it, never started ({@link stopWorkspaceBoundary}); then what
  * the clone holds that is nowhere else is read on this host
@@ -1819,34 +2017,6 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
  */
 export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
   closeClone({ ...(ref as WorkspaceArchive), unlanded: "keep" }, true);
-
-/** Where a clone is moved as its removal begins ({@link removeClone}): beside it, on its filesystem. */
-const removingOf = (path: string): string => `${path}.cawco-removing`;
-
-/**
- * Removes the clone at `path` once nothing of it is held: renamed out of its
- * path first, in one step, then removed ({@link removeTree}). A removal that
- * stops part-way (a file its owner may not unlink: a macOS `uchg` flag, a
- * bind mount still held) leaves no clone at the path, so the next archive
- * reads nothing there and only finishes the removal, rather than reading a
- * half-deleted tree as work. On the Mac on 2026-10-23 workspace 032d6b65
- * was held for "377 changed files", every one a deletion: whole top-level
- * entries (`mocks/`, `artifacts/`, `patches/`, LICENSE, WORDS.md and 13
- * more) gone and `.git` standing, the shape of a recursive removal cut off
- * part-way through its folder's entries, and the sweep after it read what
- * was left as held. What an earlier removal left at {@link removingOf} goes
- * first; one that still cannot go throws, with the clone untouched.
- */
-const removeClone = async (path: string): Promise<void> => {
-  const removing = removingOf(path);
-  await removeTree(removing);
-  await rename(path, removing).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") {
-      throw error;
-    }
-  });
-  await removeTree(removing);
-};
 
 /** How many times {@link endLeftInside} reads and kills: enough for a process forked between a reading and its kill. */
 const LEFT_INSIDE_PASSES = 5;
@@ -1940,9 +2110,29 @@ const processWords = (left: readonly LeftInside[]): string =>
  * is deleted, and the next sweep tries again. So does one of CawCo's still
  * there after the rounds.
  */
+/**
+ * A Linux view's processes, every process in its namespace, ended whole
+ * (layer.ts `endView`): its path is the person's folder, whose own processes
+ * are never the workspace's. Answers whether `workspace` is such a view.
+ */
+const endViewProcesses = async (workspace: WorkspaceRef): Promise<boolean> => {
+  const layer = await readLayer(workspace.id).catch(() => undefined);
+  if (layer?.form !== "overlay") {
+    return false;
+  }
+  const stayed = await endView(workspace.id);
+  if (stayed.length > 0) {
+    throw new Error(
+      `Workspace ${workspace.id} was not archived: pid ${stayed.join(", ")} of its view still ${stayed.length === 1 ? "runs" : "run"} after SIGKILL, so nothing was deleted.`
+    );
+  }
+  return true;
+};
+
 const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
+  const overlay = await endViewProcesses(workspace);
   const roots = [
-    workspace.path,
+    ...(overlay ? [] : [workspace.path]),
     workspaceScratchDir(workspace.id),
     workspaceTmpDir(workspace.id),
   ];
@@ -1993,18 +2183,27 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
  */
 const carryAway = async (
   workspace: WorkspaceRef,
+  access: CopyAccess,
   request: WorkspaceArchive,
   held: Held,
   skip: readonly string[]
 ): Promise<{ carry: string; head: WorkspaceCut | undefined }> => {
   const words = holdingWords({ ...held, bytes: 0 });
-  // `strays` is read only in a folder that is no git clone: no git writes
-  // its carry; its own entries are copied.
-  const folder = held.strays !== undefined;
-  const { carry, left } = folder
-    ? await carryStrays(request.id, workspace.path)
-    : await writeCarry(workspace, held, skip);
-  const head = folder ? undefined : await carriedFrom(workspace, request.base);
+  // A folder's carry is its change set; `strays` is read only in a copy that
+  // is no git clone any more: no git writes either, their entries are copied.
+  const folder = access.layer.kind === "folder" || held.strays !== undefined;
+  let written: { carry: string; left: string[] };
+  if (access.layer.kind === "folder") {
+    written = await carryChanged(request.id, access.layer);
+  } else if (held.strays === undefined) {
+    written = await writeCarry(workspace, access, held, skip);
+  } else {
+    written = await carryStrays(request.id, workspace.path);
+  }
+  const { carry, left } = written;
+  const head = folder
+    ? undefined
+    : await carriedFrom(workspace, access, request.base);
   await writeFile(
     join(carry, "README.md"),
     await carryReadme({
@@ -2022,77 +2221,170 @@ const carryAway = async (
   return { carry, head };
 };
 
+/**
+ * A copy that holds work and is kept: one cut before clones had stores of
+ * their own takes what it borrows into its own ({@link ownObjects}), and
+ * what it holds is answered with its size on disk (a Linux view's: its
+ * upper and work dirs).
+ */
+const keepHeld = async (
+  workspace: WorkspaceRef,
+  access: CopyAccess,
+  held: Held
+): Promise<WorkspaceHolding> => {
+  if (access.layer.kind === "repo" && held.strays === undefined) {
+    await ownObjects(workspace, access);
+  }
+  const kept: WorkspaceHolding = {
+    ...held,
+    bytes: await sizeOf(
+      access.layer.form === "overlay" ? layerDir(workspace.id) : workspace.path
+    ),
+  };
+  console.info(
+    `[workspace] ${workspace.id}: not archived: its copy ${workspace.path} holds ${holdingWords(kept)}; its boundary is closed and nothing was deleted`
+  );
+  return kept;
+};
+
 const closeClone = async (
   request: WorkspaceArchive,
   carryHeld: boolean
 ): Promise<WorkspaceArchived> => {
-  // Read unless it names a clone with nothing of anyone's own: a request
+  // Read unless it names a copy with nothing of anyone's own: a request
   // naming no mode is a `keep`.
   const unread: WorkspaceUnlanded[] = ["check", "unmade"];
   const read = !unread.includes(request.unlanded);
   const path = request.path ?? (await createdPath(request.id));
-  if (!path) {
+  const forget = async () => {
     await Promise.all(
       [join(workspacesDir(), request.id), workspaceScratchDir(request.id)].map(
         removeTree
       )
     );
     forgetWorkspaceTmp(request.id);
+  };
+  if (!path) {
+    await forget();
     return { carry: null };
   }
   const workspace: WorkspaceRef = { id: request.id, path };
   const skip = request.skip ?? [];
-  // Nothing writes the clone from here on, and no boundary is started to
-  // read it: git reads it on this host.
+  // Nothing writes the copy from here on: its boundary and every process of
+  // its view end, and what reads it below runs in it alone.
   await stopWorkspaceBoundary(workspace);
   await endLeftInside(workspace);
-  if (read) {
-    await refreshBase(workspace, request.base);
+  const access = await accessOf(workspace);
+  if (!access) {
+    // No layer there (a create cut short before it made one): nothing of the
+    // folder is the workspace's.
+    await closeBoundary(workspace);
+    await forget();
+    console.info(
+      `[workspace] ${request.id}: archived; it had no copy at ${path}, and its state and scratch dir are gone`
+    );
+    return { carry: null };
+  }
+  if (read && access.layer.kind === "repo") {
+    await refreshBase(workspace, access, request.base);
   }
   const held = read
-    ? await holding(workspace, skip, request.base, request.landed)
+    ? await holding(workspace, access, skip, request.base, request.landed)
     : NOTHING_HELD;
   const holds = !holdsNothing({ ...held, bytes: 0 });
   if (holds && !carryHeld) {
-    if (held.strays === undefined) {
-      await ownObjects(workspace);
-    }
-    const kept: WorkspaceHolding = { ...held, bytes: await sizeOf(path) };
-    console.info(
-      `[workspace] ${request.id}: not archived: its clone ${path} holds ${holdingWords(kept)}; its boundary is closed and nothing was deleted`
-    );
-    return { carry: null, held: kept };
+    return { carry: null, held: await keepHeld(workspace, access, held) };
   }
-  // Read before the clone goes: where it is cut again, and what it carries.
+  // Read before the copy goes: where it is made again, and what it carries.
   const { carry, head } = holds
-    ? await carryAway(workspace, request, held, skip)
+    ? await carryAway(workspace, access, request, held, skip)
     : {
         carry: null,
         head:
           read && held.strays === undefined
-            ? await headOnOrigin(workspace, request.base, request.landed)
+            ? await headOnOrigin(
+                workspace,
+                access,
+                request.base,
+                request.landed
+              )
             : undefined,
       };
-  const cached = await cacheOfClone(path);
+  const cached = access.layer.form === "copy" ? await cacheOfClone(path) : [];
+  await removeLayer(request.id, access.layer);
   await closeBoundary(workspace);
-  await removeClone(workspace.path);
   await Promise.all(cached.map(removeTree));
   console.info(
-    `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is cut again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
+    `[workspace] ${request.id}: archived; its ${goneFolder(access.layer, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is made again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
   );
   return head ? { carry, head } : { carry };
 };
 
 /**
- * What an archive deleted, in its log line: a clone, or a folder that was no
- * git clone any more (`strays` read): a husk when none of its entries was
- * anyone's (stand-ins.ts `straysIn`).
+ * What an archive deleted, in its log line: a Linux view's own dirs, a copy,
+ * or a copy that was no git clone any more (`strays` read): a husk when none
+ * of its entries was anyone's (stand-ins.ts `straysIn`).
  */
-const goneFolder = (path: string, strays: number | undefined): string => {
+const goneFolder = (layer: Layer, strays: number | undefined): string => {
+  if (layer.form === "overlay") {
+    return `view of ${layer.folder} (its upper and work dirs; the folder untouched)`;
+  }
   if (strays === undefined) {
-    return `clone ${path}`;
+    return `copy ${layer.path}`;
   }
   return strays === 0
-    ? `husk ${path} (a deleted clone holding only what CawCo wrote there)`
-    : `folder ${path} (a deleted clone, its own entries saved to the carry)`;
+    ? `husk ${layer.path} (a deleted clone holding only what CawCo wrote there)`
+    : `folder ${layer.path} (a deleted clone, its own entries saved to the carry)`;
+};
+
+/** A folder workspace's layer, or the refusal for one that lands by git or has none. */
+const folderLayer = async (workspace: WorkspaceRef): Promise<Layer> => {
+  const layer = await layerOf(workspace.id, workspace.path);
+  if (!layer) {
+    throw new Error(
+      `workspace ${workspace.id} has no copy at ${workspace.path} to land`
+    );
+  }
+  if (layer.kind !== "folder") {
+    throw new Error(
+      `workspace ${workspace.id} holds a repository, which lands by git, not by its change set`
+    );
+  }
+  return layer;
+};
+
+/**
+ * {@link CONTROL_WORKSPACE_CHANGES}: a folder workspace's change set and its
+ * conflicts with the folder as it is now (layer.ts `readChanges`).
+ */
+export const workspaceChanges = async (
+  ref: unknown
+): Promise<WorkspaceChanges> =>
+  await readChanges(await folderLayer(ref as WorkspaceRef));
+
+/**
+ * {@link CONTROL_WORKSPACE_APPLY}: a folder workspace's change set landed in
+ * its folder by this agent, outside every wall, with its boundary closed so
+ * no command writes the copy meanwhile (layer.ts `applyChanges`: the
+ * conflict scan first, then each path whole). The boundary starts again at
+ * its next command.
+ */
+export const workspaceApply = async (
+  ref: unknown
+): Promise<{ applied: number; conflicts: WorkspaceConflict[] }> => {
+  const workspace = ref as WorkspaceRef;
+  const layer = await folderLayer(workspace);
+  let result: { applied: number; conflicts: WorkspaceConflict[] } = {
+    applied: 0,
+    conflicts: [],
+  };
+  await whileBoundaryClosed(workspace, async () => {
+    result = await applyChanges(layer);
+  });
+  console.info(
+    result.conflicts.length > 0
+      ? `[workspace] ${workspace.id}: its change set was not landed in ${layer.folder}: ${result.conflicts.length} path(s) changed there too since it started (${result.conflicts.map((each) => each.path).join(", ")})`
+      : `[workspace] ${workspace.id}: its change set of ${result.applied} path(s) landed in ${layer.folder}`
+  );
+  return result;
 };

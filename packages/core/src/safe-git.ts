@@ -119,6 +119,10 @@ const ALLOWED_KEYS: readonly RegExp[] = [
   /^(pull\.(rebase|ff)|push\.(default|autosetupremote)|rebase\.(autosquash|autostash|updaterefs)|merge\.(ff|conflictstyle)|fetch\.prune|init\.defaultbranch|color\.ui|gc\.auto)$/,
 ];
 
+/** Whether git may run under a repository config holding `key` ({@link ALLOWED_KEYS}). */
+export const allowedConfigKey = (key: string): boolean =>
+  ALLOWED_KEYS.some((allowed) => allowed.test(key.toLowerCase()));
+
 /** The repository's own config files: `config`, and `config.worktree` where one is. */
 const ownConfigs = (gitDir: string): string[] => [
   join(gitDir, "config"),

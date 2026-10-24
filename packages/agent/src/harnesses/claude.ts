@@ -198,6 +198,7 @@ import {
 } from "../harness";
 import { HUB_AWAY_BOUND_MS } from "../hub-away";
 import { type HeldProc, KeeperPool, type KeeperReading } from "../keepers";
+import { enterSpawn } from "../layer";
 import {
   beginAccountLogin,
   completeAccountLogin,
@@ -2041,7 +2042,11 @@ const launchUnderSessiond = (
     return sessiondBridge(
       sessiond.client,
       sessiond.procId,
-      launch ? { ...spawnOptions, args: launch.args } : spawnOptions,
+      // In a Linux view of its folder, the CLI runs inside it (layer.ts).
+      enterSpawn(
+        ctx.workspace,
+        launch ? { ...spawnOptions, args: launch.args } : spawnOptions
+      ),
       { seqs, attach: sessiond.attach },
       (refusal) => ctx.keeperRefused(refusal),
       (exit) => {
