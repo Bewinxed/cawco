@@ -95,6 +95,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
 import { type ServiceId, service, stopService } from "./service";
 
@@ -264,6 +265,7 @@ export async function applyBinary(
   }
   try {
     await say(`start ${version} keeperOnly=${keeperOnly}`);
+    await recordApply({ kind: "start", keeperOnly, version });
     await (keeperOnly ? handOverKeeperAlone(version) : applyBuild(version));
     await say(`end ${version}`);
   } catch (error) {
@@ -477,6 +479,7 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
   }
   try {
     await say(`keeper ${to}: units: ${await writeKeeperUnits(to, job.file)}`);
+    await recordApply({ kind: "keeper-units", version: to });
     await job.start();
     await awaitWelcome(endpoint, job);
   } catch (error) {
@@ -661,12 +664,26 @@ async function applyBuild(version: string): Promise<void> {
     // stopped), and the restart starts the dashboard on it.
     await refreshServiceUnits(version);
     await say(`swap ${previous} -> ${version}; restarting ${units.join(", ")}`);
+    await recordApply({
+      kind: "swap",
+      error: null,
+      from: previous,
+      restarting: units,
+      version,
+    });
     // The keeper is left alone: it is the one piece that holds sessions, and
     // it is handed over only once the new build has answered.
     await svc("restart", units);
   } catch (error) {
     // What did not happen shows in the verification: the build is not healthy.
     await say(`swap ${version}: ${message(error)}`);
+    await recordApply({
+      kind: "swap",
+      error: message(error),
+      from: previous,
+      restarting: [],
+      version,
+    });
   }
   await decide(trial, false);
 }

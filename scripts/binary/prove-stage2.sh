@@ -957,7 +957,10 @@ has_file() { as_user "$1" test -e "/home/cawco/.local/share/cawco/binary/$2"; }
 has_version() { as_user "$1" test -d "/home/cawco/.local/share/cawco/binary/versions/$2"; }
 install_order() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/install-order.json 2> /dev/null || true' | json "d => d.join(' ')"; }
 custody_of() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.custody?.state"; }
-apply_log_count() { as_user "$hubc" sh -c "grep -c '$1' /home/cawco/.local/share/cawco/binary/apply.log || true"; }
+# What machine $1's update helper did, as it records it beside apply.log (cli apply-record.ts, apply-record.json): each
+# start, each build's units written, each keeper handover's units, each swap, with its version. $2 a JS function of the
+# list, printed. apply.log says the same for people.
+apply_record() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/apply-record.json 2> /dev/null || echo "[]"' | json "$2"; }
 # The machine has an IPv6 loopback (`::1` on lo), as the installer judges before it names [::1] in the dashboard socket.
 has_ipv6_loopback() { as_user "$1" grep -q '^00000000000000000000000000000001 ' /proc/net/if_inet6; }
 # A keeper that exits before it answers did not start: the handover gives it up at its first exit, not after systemd
@@ -981,7 +984,7 @@ export -f diagnose as_user put_executable user_exec proof_runner run_script need
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
-  end_all_sessions keeper_dropin keeper_link current_link has_file has_version install_order custody_of apply_log_count \
+  end_all_sessions keeper_dropin keeper_link current_link has_file has_version install_order custody_of apply_record \
   has_ipv6_loopback started_at_most_twice stub_when_staged settled
 
 # ---------------------------------------------------------------- a rig's machines
@@ -1812,7 +1815,7 @@ held_survives() {
 # its loopback socket is [::1]:3455 alone where the machine has ::1 and gone where it has not (0.0.0.0 answers
 # 127.0.0.1); 127.0.0.1, the hub's address and [::1] answer the dashboard on 3455 and nothing listens on 3000; the hub's
 # unit lost `CAWCO_DASHBOARD_PORT=3000` and nothing else; the agent's unit is as it was; the install's record names
-# http://localhost:3455, which the update's verification probed to install NEXT; and the apply log says NEXT wrote them.
+# http://localhost:3455, which the update's verification probed to install NEXT; and the update's record says NEXT wrote them.
 units_carried() {
   need_hub
   local u=/home/cawco/.config/systemd/user
@@ -1842,11 +1845,11 @@ units_carried() {
     || { echo "ASSERTION FAILED: the agent's unit changed though nothing in it did"; return 1; }
   as_user "$hubc" grep -q '"dashboardUrl":"http://localhost:3455"' /home/cawco/.local/share/cawco/binary/installation.json \
     || { echo "ASSERTION FAILED: the install's record does not name http://localhost:3455"; return 1; }
-  (( $(apply_log_count "units $NEXT: units: .*rewrote") >= 1 )) \
-    || { echo "ASSERTION FAILED: the apply log says nothing of $NEXT rewriting the units"; return 1; }
-  (( $(apply_log_count "units $NEXT: .*the dashboard answers at http://localhost:3455") >= 1 )) \
-    || { echo "ASSERTION FAILED: the apply log says nothing of $NEXT recording the dashboard at http://localhost:3455"; return 1; }
-  as_user "$hubc" grep "units $NEXT" /home/cawco/.local/share/cawco/binary/apply.log
+  [[ "$(apply_record "$hubc" "d => d.some(e => e.kind === 'units' && e.version === '$NEXT' && e.services && e.rewrote.length > 0)")" == true ]] \
+    || { echo "ASSERTION FAILED: the update's record has $NEXT rewriting no units: $(apply_record "$hubc" 'd => JSON.stringify(d.filter(e => e.kind === "units"))')"; return 1; }
+  [[ "$(apply_record "$hubc" "d => d.some(e => e.kind === 'units' && e.version === '$NEXT' && e.dashboard?.now === 'http://localhost:3455')")" == true ]] \
+    || { echo "ASSERTION FAILED: the update's record has $NEXT recording no dashboard at http://localhost:3455: $(apply_record "$hubc" 'd => JSON.stringify(d.filter(e => e.kind === "units"))')"; return 1; }
+  echo "the update's record of $NEXT's units: $(apply_record "$hubc" "d => JSON.stringify(d.filter(e => e.kind === 'units' && e.version === '$NEXT'))")"
 }
 export -f units_before_3455 hub_self_update hub_starts_held held_survives units_carried
 rig_hubself() {
@@ -2003,7 +2006,7 @@ keeper_cannot_start_with_held() {
   # again, for the one place a handover starts from returns while the state names this build's keeper as failed
   # (binary-update.ts `#advanceKeeper`: `this.#state.keeperFailedVersion === runtimeVersion` → return), which the
   # wait above read off the hub.
-  [[ "$(apply_log_count "keeper $NEXT: units")" == 1 ]]
+  [[ "$(apply_record "$hubc" "d => d.filter(e => e.kind === 'keeper-units' && e.version === '$NEXT').length")" == 1 ]]
   [[ "$(keeper_link "$hubc")" == "$before" ]]
   update_sends_stop
 }
@@ -2216,8 +2219,8 @@ hub_installs_first() {
   learn
   wait_until 120 '[[ "$(field $jid availableVersion)" == $NEXT ]]'
 }
-# How many helpers started applying build $2 on machine $1, as its apply.log says: 0 before any helper wrote one.
-apply_starts() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/apply.log 2> /dev/null | grep -c "start $1 keeperOnly=false" || true' sh "$2"; }
+# How many helpers started applying build $2 on machine $1, as its update record says (apply_record): 0 before any.
+apply_starts() { apply_record "$1" "d => d.filter(e => e.kind === 'start' && e.version === '$2' && !e.keeperOnly).length"; }
 # The joined machine updates by its own auto-update pass, with the person's side of it under way
 # (update_outcomes_start): a session running before it, which its keeper before holds on, answering its listing late
 # once it retires; and the sign-in, with the machine's Claude Code answering late. No messages: a turn is work the
@@ -2370,7 +2373,7 @@ rig_hubwire() {
 # own `cawco binary-pins`). The hub's machine has OpenCode as a bun global, laid out as `bun install -g --trust
 # @opencode/cli` lays it out (~/.bun/bin/opencode2 into ~/.bun/install/global/node_modules/@opencode/cli): a stub that
 # says the version ~/opencode-version holds, one release below what this tree pins. ~/.bun/bin/bun is a stand-in: each
-# `install -g` it is asked for is a line of ~/bun-calls.log, with how many swaps apply.log held then; it fails while
+# `install -g` it is asked for is a line of ~/bun-calls.log, with how many swaps the update's record (apply-record.json) held then; it fails while
 # ~/bun-fails is there, and otherwise puts the version it was asked for in ~/opencode-version.
 plant_bun_opencode() {
   local stub="$rigdir/opencode-stub" bun="$rigdir/bun-stand-in"
@@ -2383,7 +2386,7 @@ EOF
   cat > "$bun" << 'EOF'
 #!/bin/sh
 if [ "$1" = install ] && [ "$2" = -g ]; then
-  swaps=$(grep -c " swap " "$HOME/.local/share/cawco/binary/apply.log" 2> /dev/null || true)
+  swaps=$(grep -o '"kind":"swap"' "$HOME/.local/share/cawco/binary/apply-record.json" 2> /dev/null | wc -l)
   echo "bun $* swaps=${swaps:-0}" >> "$HOME/bun-calls.log"
   if [ -e "$HOME/bun-fails" ]; then echo "error: GET https://registry.npmjs.org/@opencode%2fcli - 503" >&2; exit 1; fi
   for arg in "$@"; do case "$arg" in @opencode/cli@*) echo "${arg#@opencode/cli@}" > "$HOME/opencode-version";; esac; done
@@ -2423,15 +2426,15 @@ pins_refused() {
 pins_first() {
   need_hub
   local before
-  before=$(as_user "$hubc" sh -c 'grep -c " swap " ~/.local/share/cawco/binary/apply.log 2> /dev/null || true')
+  before=$(apply_record "$hubc" "d => d.filter(e => e.kind === 'swap').length")
   # bun works now: the command that failed stands, and tries the build again by itself after its delay.
   as_user "$hubc" rm -f /home/cawco/bun-fails
   wait_until 400 '[[ "$(build_version $hid)" == $NEXT && "$(phase $hid)" == installed ]]'
   as_user "$hubc" cat /home/cawco/bun-calls.log
-  # The last bun install, the one that worked, was the pin's, and ran before the swap to the build: apply.log held
-  # no more swaps then than before the update, and holds one more now.
+  # The last bun install, the one that worked, was the pin's, and ran before the swap to the build: the update's record
+  # held no more swaps then than before the update, and holds one more now.
   [[ "$(as_user "$hubc" tail -n 1 /home/cawco/bun-calls.log)" == "bun install -g --trust @opencode/cli@$PIN swaps=${before:-0}" ]]
-  [[ "$(as_user "$hubc" sh -c 'grep -c " swap " ~/.local/share/cawco/binary/apply.log')" == $(( ${before:-0} + 1 )) ]]
+  [[ "$(apply_record "$hubc" "d => d.filter(e => e.kind === 'swap').length")" == $(( ${before:-0} + 1 )) ]]
   [[ "$(as_user "$hubc" cat /home/cawco/opencode-version)" == "$PIN" ]]
   # The build's agent reads OpenCode installed with bun at the pin, no restart beyond the update's own; and once the
   # build is confirmed, what the pin replaced is no longer kept to put back.

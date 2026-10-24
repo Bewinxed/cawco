@@ -2538,10 +2538,10 @@ const dashboardUrlOf = (
  * the dashboard's socket listens on too: an install from before that,
  * listening on 3000, moves to it here); the socket's host is read back from
  * the socket itself (`installedDashboardHost`). Only a unit whose text
- * changed is rewritten. Answers the dashboard's browser address as its
- * socket now names it, when this machine has the dashboard, for the
- * install's record (cli.ts `writeBinaryUnits`), which the update's
- * verification probes.
+ * changed is rewritten. Answers each unit file it rewrote, and the
+ * dashboard's browser address as its socket now names it, when this machine
+ * has the dashboard, for the install's record (cli.ts `writeBinaryUnits`),
+ * which the update's verification probes.
  *
  * systemd: one daemon-reload for the set; a socket that changed (or is not
  * listening) is rebound through `bindSockets`, which stops the dashboard and
@@ -2558,8 +2558,9 @@ export const refreshServices = async (
   ids: readonly ServiceId[],
   binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>,
   note: (line: string) => void
-): Promise<{ dashboardUrl?: string }> => {
+): Promise<{ dashboardUrl?: string; rewrote: string[] }> => {
   const mac = platform() === "darwin";
+  const rewrote: string[] = [];
   const fileOf = (id: ServiceId) =>
     mac ? launchAgentPath(id) : systemdPath(id);
   const installed = new Map<ServiceId, string>();
@@ -2592,6 +2593,7 @@ export const refreshServices = async (
     if (text !== before) {
       // biome-ignore lint/performance/noAwaitInLoops: units rewrite one at a time, each note in its order
       await writeUnit(path, text);
+      rewrote.push(path);
       note(`rewrote ${path}`);
       if (mac) {
         await loadLaunchAgent(spec, note);
@@ -2620,7 +2622,7 @@ export const refreshServices = async (
   if (rebind) {
     await bindSockets(rebind.spec, rebind.moving, note);
   }
-  return dashboardUrlOf(rendered);
+  return { ...dashboardUrlOf(rendered), rewrote };
 };
 
 /**

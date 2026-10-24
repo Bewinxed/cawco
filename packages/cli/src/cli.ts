@@ -586,13 +586,20 @@ const runBinaryApply = async (args: Args): Promise<number> => {
 const writeBinaryUnits = async (services: boolean): Promise<void> => {
   const { binaryLayout } = await import("./binary-install");
   const { refreshServices, refreshUnits } = await import("./service");
+  const { recordApply } = await import("./apply-record");
   const say = (line: string) => console.log(`units: ${line}`);
+  // Each file rewritten, and where the dashboard answers once that moved:
+  // the update's record of what this build's units did (apply-record.ts).
+  let rewrote: string[];
+  let dashboard: { now: string; was: string | null } | null = null;
   if (services) {
-    const { dashboardUrl } = await refreshServices(
+    const refreshed = await refreshServices(
       ["hub", "dashboard", "agent"],
       binaryLayout(CLI_VERSION),
       say
     );
+    ({ rewrote } = refreshed);
+    const { dashboardUrl } = refreshed;
     const { installationPath, readInstallation, writeJsonAtomic } =
       await import("@cawco/core/binary-installation");
     const installation = await readInstallation();
@@ -608,10 +615,21 @@ const writeBinaryUnits = async (services: boolean): Promise<void> => {
       say(
         `the dashboard answers at ${dashboardUrl} (was ${installation.dashboardUrl ?? "not recorded"})`
       );
+      dashboard = {
+        now: dashboardUrl,
+        was: installation.dashboardUrl ?? null,
+      };
     }
   } else {
-    await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), say);
+    rewrote = await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), say);
   }
+  await recordApply({
+    kind: "units",
+    dashboard,
+    rewrote,
+    services,
+    version: CLI_VERSION,
+  });
 };
 
 /**
