@@ -11,7 +11,10 @@
   --c-edge-lit-fade: 36px;
 
   /* ---- Round 29, the designer's section 5 ("Tokens to add") ---- */
-  /* The clip kinds' hues (section B, `prop-*`), cut as the tool families are (DESIGN.md: one hue per family at
+  /* PROPOSED, local to the mockup: the hue-or-ink choice is the owner's, on the page's switch, which labels
+     these as a proposal. If he picks hue, the six hues and the two mixes below go into
+     design/tokens/cawco.resolver.json in the build; if ink, they go with the option.
+     The clip kinds' hues (section B, `prop-*`), cut as the tool families are (DESIGN.md: one hue per family at
      50% / 0.12 by day, 74% / 0.11 at night). The designer named opacity teal, position blue, size ochre,
      colour magenta, text violet, unfold green. The Reserved Hue Rule keeps crimson (22), spark yellow (85),
      olive and green (122 to 140) and blue (245 to 252) for status, and coral (33) is the action, so position
@@ -51,8 +54,6 @@
   --c-tucked-tab: 36px;
   /* Regions (section E): the doorway tab's height. */
   --c-doorway-tab-h: 28px;
-  /* The narrowest a state may draw where a machine must fit its view at the touch floor's zoom of 1. */
-  --c-node-w-floor: 96px;
   /* The slab's ground: one step down from the well by day (--surface-recess-deep). At night the well is
      already neutral-1, the deepest step (recess-deep is the same neutral-1, 1.0:1, the slab gone), so the slab
      takes the recess there, the one step the night has (1.09:1) (my call). Its edges' inks are held to 3:1 on
@@ -123,6 +124,10 @@ button { font: inherit; color: inherit; }
 /* The round's open choice, over the pages: one segmented control, its label in meta. */
 .review-bar { inline-size: min(100%, 600px); display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); margin-block-end: var(--space-5); }
 .review-label { font: var(--type-meta); color: var(--ink-muted); }
+/* The hue option is a proposal: its kit badge in the segment, and one line saying what picking it adds. */
+.review-bar .t-tab { display: inline-flex; align-items: center; gap: var(--space-2); }
+.review-bar .badge.proposal { block-size: var(--c-badge-h); padding-inline: var(--space-2); font: var(--type-meta); line-height: 1; color: var(--ink-muted); background: var(--surface-recess); }
+.review-note { flex-basis: 100%; margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 .pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
 .stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); container: page / inline-size; }
 .stage-wrap[hidden] { display: none; }
@@ -228,7 +233,8 @@ button { font: inherit; color: inherit; }
    Show tab's shape), its name in meta and a chevron pointing out, along the edge at the region's own place. It
    comes in over --dur-fade as its region leaves the view and goes over --dur-exit as it returns, sliding 4px
    from the edge. */
-.doors { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+/* It clips nothing, so a door's 44px touch layer reaches past its 28px band. */
+.doors { position: absolute; inset: 0; pointer-events: none; border-radius: inherit; }
 .door { all: unset; box-sizing: border-box; position: absolute; display: inline-flex; align-items: center; gap: var(--space-1); block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; opacity: 0; translate: var(--door-out); pointer-events: none; transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door[data-on] { opacity: 1; translate: 0 0; pointer-events: auto; transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .door span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -472,10 +478,10 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .clip[data-prop="size"] { --kind: var(--prop-size); }
 .clip[data-prop="colour"] { --kind: var(--prop-colour); }
 .clip[data-prop="unfold"] { --kind: var(--prop-unfold); }
-/* The chosen clip wears the card's selection frame (highlight.svelte.ts: "1px brand-solid over the recess at
-   the card's own radius"), not the apricot wash: a full row of coral would stand against the page's own coral
-   button, and coral is the act's. The hover ghost glides under the row a pointer is on. */
-.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--surface-recess); box-shadow: inset 0 0 0 1px var(--brand-solid); }
+/* The chosen clip: the brand wash with the card's 1px brand-solid ring (the second review: the recess alone
+   with a ring read as a focused input, not "this one is chosen"). The hover ghost glides under the row a
+   pointer is on. */
+.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--brand-wash); box-shadow: inset 0 0 0 1px var(--brand-solid); }
 .row-ghost { position: absolute; z-index: 0; inset-inline: calc(-1 * var(--space-2)); inset-block-start: 0; block-size: var(--ghost-h, 0px); translate: 0 var(--ghost-y, 0px); border-radius: var(--radius-sm); background: var(--surface-hover); opacity: 0; pointer-events: none; transition: translate var(--dur-ghost) var(--ease-in-out), block-size var(--dur-ghost) var(--ease-in-out), opacity var(--dur-control) var(--ease-out); }
 .row-ghost[data-on] { opacity: 1; }
 .row-ghost[data-fresh] { transition: opacity var(--dur-control) var(--ease-out); }
@@ -524,7 +530,10 @@ html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
    in the hue; in ink only, surface-fill with the 3:1 edge. */
 .lane { position: relative; block-size: var(--c-pill-h); user-select: none; touch-action: none; }
 .bar { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --bar-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--bar-fill); box-shadow: inset 0 0 0 1px var(--bar-edge); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
-html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill); --bar-edge: var(--border-row-outline); }
+/* In ink only the bar stands one step stronger than the row's own fills (the second review: surface-fill at
+   night read 0.31 on about 0.2): surface-fill-strong, its edge border-contrast; under the pointer and held,
+   the edge steps to the muted ink. */
+html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill-strong); --bar-edge: var(--border-contrast); }
 .bar[data-zone] { cursor: ew-resize; }
 /* A bar's touch layer: its lane's height grown to the touch floor, transparent; shown on touch and phones. */
 .bar-hit { display: none; position: absolute; inset-inline: 0; inset-block: calc((var(--c-pill-h) - var(--c-touch-floor)) / 2); }
@@ -533,17 +542,17 @@ html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill); --bar-edge: var(-
 .bar::after { inset-inline-end: var(--space-1); }
 @media (hover: hover) {
   .dock:not([data-view="original"]) .bar:hover { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix-held), transparent); }
-  html[data-kinds="ink"] .dock:not([data-view="original"]) .bar:hover { --bar-fill: var(--surface-fill-strong); }
+  html[data-kinds="ink"] .dock:not([data-view="original"]) .bar:hover { --bar-edge: var(--ink-muted); }
   .dock:not([data-view="original"]) .bar:hover::before, .dock:not([data-view="original"]) .bar:hover::after { opacity: 1; }
 }
 .bar[aria-pressed="true"] { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix-held), transparent); }
-html[data-kinds="ink"] .bar[aria-pressed="true"] { --bar-fill: var(--surface-fill-strong); --bar-edge: var(--border-contrast); }
+html[data-kinds="ink"] .bar[aria-pressed="true"] { --bar-edge: var(--ink-muted); }
 .bar[aria-pressed="true"]::before, .bar[aria-pressed="true"]::after { opacity: 1; }
 .bar.spring { border-start-end-radius: 0; border-end-end-radius: 0; box-shadow: inset 0 1px 0 0 var(--bar-edge), inset 0 -1px 0 0 var(--bar-edge), inset 1px 0 0 0 var(--bar-edge); }
 .lane.rescaling .bar, .lane.rescaling .ghost, .lane.rescaling .tail { transition: left var(--dur-reveal) var(--ease-in-out), width var(--dur-reveal) var(--ease-in-out), background-color var(--dur-control) var(--ease-out); }
 .ghost { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); border: 1px dashed var(--border-contrast); pointer-events: none; }
 .tail { --tail-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --tail-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--tail-edge), transparent) top / 100% 1px no-repeat, linear-gradient(to right, var(--tail-edge), transparent) bottom / 100% 1px no-repeat, linear-gradient(to right, var(--tail-fill), transparent); pointer-events: none; }
-html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill); --tail-edge: var(--border-row-outline); }
+html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-edge: var(--border-contrast); }
 .dock[data-view="original"] .bar { background: none; box-shadow: none; border: 1px dashed var(--border-contrast); cursor: default; }
 .dock[data-view="original"] .bar::before, .dock[data-view="original"] .bar::after { opacity: 0; }
 .dock[data-view="original"] .ghost, .dock[data-view="original"] .tail { display: none; }
@@ -738,6 +747,13 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show) { touch-action: manipulation; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
+/* Touch layers take presses only where nothing clips them and no neighbour's stands over them: a segmented
+   groove lets its segments' layers past its edge (it scrolls only on a desk), and the toolbar's end stands its
+   controls far enough apart that their 44px layers meet without crossing. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .t-tabs { overflow: visible; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-end { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+/* The toolbar's layers reach 4px under it and a door's 8px over its band: --space-4 between keeps them apart. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .toolbar { margin-block-end: var(--space-4); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
@@ -757,7 +773,9 @@ html:is([data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom :
 html:not([data-layout="desk"]) .tools { position: fixed; z-index: var(--layer-dock); display: flex; flex-direction: column; color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); font: var(--type-label); font-weight: var(--weight-body); }
 .edge-pill-top { position: absolute; z-index: 5; pointer-events: none; border-radius: var(--radius-pill); background: var(--border-row-outline); block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
 html:not([data-layout="desk"]) .sheet-head { position: relative; display: flex; align-items: center; gap: var(--space-2); flex: none; block-size: var(--c-sheet-inspector-head-h); padding-inline: var(--space-1) var(--space-2); }
-.sheet-title { all: unset; box-sizing: border-box; display: block; flex: 1 1 auto; min-inline-size: 0; block-size: var(--c-btn-h); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); line-height: var(--c-btn-h); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.sheet-title { all: unset; box-sizing: border-box; display: block; flex: 1 1 auto; min-inline-size: 0; block-size: var(--c-btn-h); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); line-height: var(--c-btn-h); color: var(--ink-muted); cursor: pointer; }
+/* Its words cut at their end inside it; the title itself clips nothing, so its 44px touch layer takes presses. */
+.sheet-title-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-title b { font-weight: var(--weight-strong); color: var(--ink-strong); }
 .sheet-title:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .faces { flex: none; overflow: visible; }
@@ -765,11 +783,13 @@ html:not([data-layout="desk"]) .tools > .tool { position: relative; inset: auto;
 html:not([data-layout="desk"]) :is(.sash, .lit, .arc, .panel-shell, #hide) { display: none !important; }
 html:not([data-layout="desk"]) .tools[data-face="graph"] > .dock,
 html:not([data-layout="desk"]) .tools[data-face="move"] > .panel { display: none; }
-html:not([data-layout="desk"]) .panel { padding-block-start: 0; }
+/* The face clips its content; the toolbar stands a step in from its top so its 44px touch layers fall inside. */
+html:not([data-layout="desk"]) .panel { padding-block-start: var(--space-1); }
 html:not([data-layout="desk"]) :is(.graphs, .gsec[data-current], .gview, .graph) { flex: 1 1 auto; }
 html:not([data-layout="desk"]) .graph { block-size: auto; }
-html:not([data-layout="desk"]) .dock { padding-block-start: 0; }
-html:not([data-layout="desk"]) .dock-head { min-block-size: var(--c-btn-h); }
+html:not([data-layout="desk"]) .dock { padding-block-start: var(--space-1); }
+/* The head bar on the face is the touch floor tall, so play and loop take presses over their whole 44px. */
+html:not([data-layout="desk"]) .dock-head { min-block-size: var(--c-touch-floor); }
 
 /* The drawer: the house bottom drawer, three stops (head, peek, full). The page takes the room above it. */
 html[data-layout="drawer"] .tools { inset-inline: 0; inset-block-end: 0; block-size: var(--drawer-h, var(--c-graph-drawer-stop)); border-block-end: 0; border-start-start-radius: var(--radius-panel); border-start-end-radius: var(--radius-panel); box-shadow: var(--shadow-drawer); padding-block-end: env(safe-area-inset-bottom, 0px); transition: block-size var(--dur-panel) var(--ease-drawer); }
