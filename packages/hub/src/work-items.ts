@@ -653,6 +653,13 @@ const NO_INPUTS: Inputs = {
   held: [],
 };
 
+/** A sentence's closing stops and space, which an inputs refusal ends once. */
+const CLOSED = /[.\s]+$/;
+
+/** A refusal of a delegation's inputs, in `words` closed by one full stop. */
+const inputsRefused = (words: string, options?: ErrorOptions) =>
+  new WorkItemRefusal(400, `inputs: ${words.replace(CLOSED, "")}.`, options);
+
 /** Entries one delegation's inputs may name (agent inputs.ts holds its paths to the same). */
 const INPUTS_COUNT_LIMIT = 50;
 
@@ -5247,7 +5254,7 @@ export const createWorkItems = ({
       reader.projectId ?? null,
     ])) as InputsAdmitted;
     if ("refused" in judged) {
-      throw new WorkItemRefusal(400, `inputs: ${judged.refused}.`);
+      throw inputsRefused(judged.refused);
     }
     return judged.files;
   };
@@ -5268,9 +5275,7 @@ export const createWorkItems = ({
             return await resolveHanded(reader, input);
           } catch (error) {
             throw error instanceof HandedInputRefusal
-              ? new WorkItemRefusal(400, `inputs: ${error.message}.`, {
-                  cause: error,
-                })
+              ? inputsRefused(error.message, { cause: error })
               : error;
           }
         })
@@ -5326,7 +5331,7 @@ export const createWorkItems = ({
     }
     const checked = handedInputs(entries);
     if ("refused" in checked) {
-      throw new WorkItemRefusal(400, `inputs: ${checked.refused}.`);
+      throw inputsRefused(checked.refused);
     }
     if (checked.inputs.length > INPUTS_COUNT_LIMIT) {
       throw new WorkItemRefusal(
@@ -5430,7 +5435,7 @@ export const createWorkItems = ({
         inputs.project,
       ])) as InputsAdmitted;
       if ("refused" in copied) {
-        throw new WorkItemRefusal(400, `inputs: ${copied.refused}.`);
+        throw inputsRefused(copied.refused);
       }
       return;
     }
@@ -5440,7 +5445,7 @@ export const createWorkItems = ({
       inputs.project,
     ])) as InputsRead;
     if ("refused" in read) {
-      throw new WorkItemRefusal(400, `inputs: ${read.refused}.`);
+      throw inputsRefused(read.refused);
     }
     await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
       refOf(workspace),

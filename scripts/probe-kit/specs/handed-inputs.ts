@@ -53,6 +53,13 @@
  *    parent's `handoff` (its words reach that leaf), `interrupt_delegate`,
  *    `answer_delegate` and `stop_delegate` (each answer names it, the stop
  *    cancels its item), and `find`'s `around` reads that session.
+ *    Two leaves, each continued by the parent's `continue_session` (one
+ *    session from then, its old id a former id of the new): handed off by
+ *    the old id and by the new, each reaches the continuation (the answer
+ *    names it, the words reach it); one is stopped by its old id, the other
+ *    by its new, and each time the continuation's item is cancelled. Two
+ *    sessions spawned with ids sharing their first six characters: a
+ *    handoff to those six is refused, naming both, and reaches neither.
  *
  * It delegates, so its fleet cuts workspaces: it runs on the host, outside
  * every boundary.
@@ -62,7 +69,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import { type ToolSession, toolRecord, toolWords } from "../../lib/tool-call";
+import {
+  type ToolSession,
+  type ToolWords,
+  toolRecord,
+  toolWords,
+} from "../../lib/tool-call";
 import {
   MACHINE,
   MODEL,
@@ -132,6 +144,8 @@ const LAN_DIRECT_CODE = /lan-direct:\d+/;
 /** artifact_browse's answer: the address its browser loads. */
 const BROWSE_ADDRESS = /Load https?:\/\/\S+ once in your browser tool/;
 const HUB_API_CODE = /hub-api:\d+/;
+/** An entry's one value, as its JSON quotes it: `{"report":"x"}` → `x`. */
+const QUOTED_VALUE = /:"([^"]*)"/;
 
 interface Block {
   content?: unknown;
@@ -617,10 +631,11 @@ const refuses = async (
   delegate: (inputs: unknown[]) => Promise<Started>
 ): Promise<void> => {
   const cases: [string, unknown, string][] = [
+    // The entry, then the item it names, quoted again in the hub's words.
     [
       "a report of no item",
       { report: "no-such-item" },
-      '{ report: "no-such-item" } names no work item',
+      '{ report: "no-such-item" }: ',
     ],
     [
       "an artifact the parent has none of",
@@ -641,6 +656,19 @@ const refuses = async (
       refused.includes(": 400 ") && refused.includes(words),
       refused.slice(0, 400)
     );
+    check(
+      `3: ${what}: the refusal ends with one full stop`,
+      !refused.trimEnd().endsWith(".."),
+      refused.slice(-200)
+    );
+    if (words.endsWith(": ")) {
+      const named = JSON.stringify(entry).match(QUOTED_VALUE)?.[1] ?? "";
+      check(
+        `3: ${what}: after the entry, the refusal names the item it asked for`,
+        refused.slice(refused.indexOf(words) + words.length).includes(named),
+        refused.slice(0, 400)
+      );
+    }
     check(
       `3: ${what}: the refused delegate cut no workspace`,
       workspaceCount(fleet) === before,
@@ -1048,23 +1076,15 @@ const reachedAs = async (
     Boolean,
     180_000
   ).catch(() => undefined);
-  const token = `forms-handoff-${crypto.randomUUID()}`;
-  const handed = await toolWords(session, "handoff", {
+  const { answer: handed, reached } = await handedTo(
+    fleet,
+    session,
     target,
-    message: token,
-  });
-  const reached = await until(
-    `the handoff named by ${form}, read by its leaf`,
-    () =>
-      fleet.seen.find(
-        (one) => one.all.includes(tag) && one.all.includes(token)
-      ),
-    Boolean,
-    120_000
-  ).catch(() => undefined);
+    tag
+  );
   check(
     `10: handoff to ${form} (${target}) reaches that leaf`,
-    !handed.refused && !!reached,
+    !handed.refused && reached,
     `${handed.status} ${handed.text.slice(0, 200)}${reached ? "" : "; its leaf never read it"}`
   );
   const names = async (tool: string, args: Record<string, unknown>) => {
@@ -1095,6 +1115,147 @@ const reachedAs = async (
     `10: stop_delegate to ${form} cancels that leaf's item`,
     stopped?.state === "cancelled",
     stopped?.state ?? "still running"
+  );
+};
+
+/** Every whole id an answer names, in order. */
+const UUIDS = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+
+/** A handoff of fresh words to `target`, and whether they reached a request of `tag`'s; the answer as said. */
+const handedTo = async (
+  fleet: KitFleet,
+  session: ToolSession,
+  target: string,
+  tag: string
+): Promise<{ answer: ToolWords; reached: boolean }> => {
+  const token = `forms-handoff-${crypto.randomUUID()}`;
+  const answer = await toolWords(session, "handoff", {
+    target,
+    message: token,
+  });
+  const reached = await until(
+    `the handoff to ${target}, read`,
+    () =>
+      fleet.seen.find(
+        (one) => one.all.includes(tag) && one.all.includes(token)
+      ),
+    Boolean,
+    120_000
+  ).then(Boolean, () => false);
+  return { answer, reached };
+};
+
+/**
+ * Step 10, continued: a working leaf, interrupted, is continued by the
+ * parent's `continue_session` from its asks into one session under a new
+ * id. Handed off by the old id and by the new, each reaches the
+ * continuation; stopped by `stopBy`, the continuation's item is cancelled.
+ */
+const continuedAs = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  session: ToolSession,
+  stopBy: "its old id" | "its new id",
+  delegate: (tag: string) => Promise<Started>
+): Promise<void> => {
+  const tag = `${TAG_FORM} continued, stopped by ${stopBy}`;
+  const leaf = await delegate(tag);
+  const old = leaf.instanceId;
+  await until(
+    "the leaf to continue, working",
+    () => fleet.seen.find((one) => one.all.includes(tag)),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  // Idle first: a turn in flight would hold its continuation back.
+  await toolWords(session, "interrupt_delegate", { target: old });
+  const continued = await toolWords(session, "continue_session", {
+    session: old,
+    from: "asks",
+    target_harness: "claude",
+    target_model: MODEL.claude,
+  });
+  const now = (continued.text.match(UUIDS) ?? []).find((id) => id !== old);
+  check(
+    `10: continue_session continues the leaf stopped by ${stopBy} under a new id`,
+    !continued.refused && !!now,
+    `${continued.status} ${continued.text.slice(0, 300)}`
+  );
+  if (!now) {
+    return;
+  }
+  for (const [by, target] of [
+    ["its old id", old],
+    ["its new id", now],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one handoff after the other, each read before the next
+    const { answer, reached } = await handedTo(fleet, session, target, tag);
+    check(
+      `10: handoff to a continued leaf by ${by} reaches the continuation`,
+      !answer.refused && answer.text.includes(now) && reached,
+      `${answer.status} ${answer.text.slice(0, 200)}${reached ? "" : "; the continuation never read it"}`
+    );
+  }
+  const stop = await toolWords(session, "stop_delegate", {
+    target: stopBy === "its old id" ? old : now,
+  });
+  const stopped = await ended(fleet, leaf.workItemId);
+  check(
+    `10: stop_delegate to a continued leaf by ${stopBy} stops the continuation: its answer names it, its item is cancelled`,
+    !stop.refused &&
+      stop.text.includes(now.slice(0, 8)) &&
+      stopped?.state === "cancelled",
+    `${stop.status} ${stop.text.slice(0, 200)}; item ${stopped?.state ?? "still running"}`
+  );
+};
+
+/**
+ * Step 10, ambiguous: two sessions spawned under ids that share their first
+ * six characters (the spawn names its id, as the dashboard's does). A
+ * handoff to those six is refused naming both, and neither reads it.
+ */
+const ambiguousPrefix = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  session: ToolSession,
+  repo: string
+): Promise<void> => {
+  const prefix = crypto.randomUUID().slice(0, 6);
+  const tag = `${TAG_FORM} ambiguous`;
+  const ids = ["a1", "b2"].map(
+    (tail) =>
+      `${prefix}${tail}-0000-4000-8000-${crypto.randomUUID().slice(-12)}`
+  );
+  for (const id of ids) {
+    // biome-ignore lint/performance/noAwaitInLoops: one spawn after the other, each running before the next
+    await fleet.post({
+      verb: "spawn",
+      machineId: MACHINE,
+      instanceId: id,
+      requestId: crypto.randomUUID(),
+      payload: {
+        instanceId: id,
+        cwd: repo,
+        harness: "claude",
+        model: MODEL.claude,
+        title: tag,
+        permissionMode: "bypassPermissions",
+      },
+    });
+    await until(
+      `session ${id} running`,
+      () => fleet.instance(id),
+      (row) => row?.status === "running",
+      180_000
+    ).catch(() => undefined);
+  }
+  const { answer, reached } = await handedTo(fleet, session, prefix, prefix);
+  check(
+    "10: a handoff to six characters two sessions' ids share is refused, naming both, and reaches neither",
+    answer.refused &&
+      ids.every((id) => answer.text.includes(id.slice(0, 8))) &&
+      !reached,
+    `${answer.status} ${answer.text.slice(0, 300)}`
   );
 };
 
@@ -1348,6 +1509,13 @@ const spec: Spec = {
         delegate(tag, [])
       );
     }
+    for (const stopBy of ["its old id", "its new id"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one continuation after the other
+      await continuedAs(kit, fleet, session, stopBy, (tag) =>
+        delegate(tag, [])
+      );
+    }
+    await ambiguousPrefix(kit, fleet, session, repo);
   },
 };
 
