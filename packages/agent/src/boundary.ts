@@ -4378,14 +4378,41 @@ const agentExecutors = new Map<string, Set<number>>();
  * in workspace `id` ({@link agentExecutors}); answers what lets it go once
  * the command has ended.
  */
-export const agentCommandStarted = (id: string, pid: number): (() => void) => {
-  const theirs = agentExecutors.get(id) ?? new Set<number>();
+export const agentCommandStarted = (id: string, pid: number): (() => void) =>
+  counted(agentExecutors, id, pid);
+
+/**
+ * The executors of the agent's own servers running in each workspace now, by
+ * pid (stage.ts `start`: a stage's `serve` command or its host, which run
+ * until the stage ends): none is a session's, as none of
+ * {@link agentExecutors} is ({@link agentWork}), but a session's sweep never
+ * waits for one to end ({@link endWorkspaceWork}), as it would for ever.
+ * On the Mac a delegate's interrupt or stop, and its workspace's settle,
+ * ended the hub-run preview it served until 2026-10-24.
+ */
+const agentServers = new Map<string, Set<number>>();
+
+/**
+ * Counts executor `pid`, which the agent started, as one of its own servers
+ * in workspace `id` ({@link agentServers}); answers what lets it go once the
+ * server has ended.
+ */
+export const agentServerStarted = (id: string, pid: number): (() => void) =>
+  counted(agentServers, id, pid);
+
+/** `pid` added to `id`'s set in `by`; answers what takes it out, and the set with it once empty. */
+const counted = (
+  by: Map<string, Set<number>>,
+  id: string,
+  pid: number
+): (() => void) => {
+  const theirs = by.get(id) ?? new Set<number>();
   theirs.add(pid);
-  agentExecutors.set(id, theirs);
+  by.set(id, theirs);
   return () => {
     theirs.delete(pid);
-    if (theirs.size === 0 && agentExecutors.get(id) === theirs) {
-      agentExecutors.delete(id);
+    if (theirs.size === 0 && by.get(id) === theirs) {
+      by.delete(id);
     }
   };
 };
@@ -4404,7 +4431,8 @@ export const agentCommandStarted = (id: string, pid: number): (() => void) => {
  *   each child of one of those in its own process group (the `cat`s copying
  *   the command's output, and its launch before it leads a group of its own,
  *   {@link LAUNCH}). Each ends with its command;
- * - THE AGENT'S OWN COMMANDS, the hub's landing among them, which a sweep
+ * - THE AGENT'S OWN COMMANDS, the hub's landing among them, and its servers
+ *   (a stage's, {@link agentServers}), which a sweep
  *   never cuts: each by its request's dir, which its executor writes into its
  *   mark ({@link commandsOf}), where nothing inside writes, before it hands
  *   the request to the runner, and which the command's launch, a request
@@ -4412,7 +4440,8 @@ export const agentCommandStarted = (id: string, pid: number): (() => void) => {
  *   below it by parent, and every process of its group launchd adopted. What
  *   one of them moved out of its tree with `setsid` or a double fork is not
  *   among them; it was born while its command ran, and no sweep ends it before
- *   that command has ended ({@link endWorkspaceWork}).
+ *   that command has ended ({@link endWorkspaceWork}). A server's runs as
+ *   long as the server, so a sweep meanwhile ends it.
  */
 const agentWork = async (
   id: string,
@@ -4504,7 +4533,10 @@ const workOf = async (
     }
     return work;
   }
-  const agent = [...(agentExecutors.get(id) ?? [])];
+  const agent = [
+    ...(agentExecutors.get(id) ?? []),
+    ...(agentServers.get(id) ?? []),
+  ];
   const spared = await agentWork(id, generations, rows, lines, agent);
   return [
     ...executors(lines, id).filter((pid) => !agent.includes(pid)),

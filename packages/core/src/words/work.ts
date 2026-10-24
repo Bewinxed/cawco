@@ -79,6 +79,20 @@ export const workWords = {
     `What its workspace ${ws} holds could not be read now (${error}): if it holds work that is nowhere else it is held as its session ends, and you are told then.`,
   /** The hub's log line for a settle whose close failed (hub work-items.ts `settle`): `reason` its machine's words. */
   notRetired: (reason: string) => `not retired: ${reason}`,
+  /** The hub's log line as a settle ends what an ended item's awake sessions left running (hub work-items.ts `endLeftWork`). */
+  workEnding: (sessions: readonly string[], hold: string) =>
+    `its items have all ended, so what ${sessions.length === 1 ? `its session ${sessions[0]}` : `its sessions ${sessions.join(", ")}`} left running there ends; not retired while ${hold}`,
+  /** The hub's log line for that end, failed: `reason` its machine's words. */
+  workNotEnded: (reason: string) =>
+    `what its ended items' sessions left running there was not ended: ${reason}`,
+  /** The agent's log line for what a session left running in its workspace, ended as it was interrupted, stopped, or its items finished (agent session.ts `#endWork`). */
+  workEnded: (
+    instanceId: string,
+    why: string,
+    ended: readonly number[],
+    left: readonly number[]
+  ) =>
+    `${instanceId}: ${why}, so what it left running in its workspace ended: pid ${ended.join(", ")}${left.length > 0 ? `; pid ${left.join(", ")} still ran after SIGKILL` : ""}`,
   /** `stop_delegate`'s word on a stopped item whose workspace is gone. */
   stopGone: (ws: string) =>
     `Its workspace ${ws} is gone or archived: nothing is held.`,

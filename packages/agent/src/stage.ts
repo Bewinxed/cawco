@@ -79,7 +79,7 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
-import { ensureBoundary, shellQuote } from "./boundary";
+import { agentServerStarted, ensureBoundary, shellQuote } from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import {
@@ -1049,6 +1049,17 @@ async function start(stage: Stage): Promise<void> {
     stdio: ["ignore", "pipe", "pipe"],
   });
   stage.child = child;
+  // The agent's own, as its landing's commands are: a session's sweep of
+  // the workspace (an interrupt, a stop, its items' end) leaves it serving
+  // (boundary.ts `agentServerStarted`). On Linux its environment names no
+  // session; on the Mac, where the sweep reads the workspace's whole work,
+  // only this mark spares it.
+  const executor = spawnedPid(child);
+  if (executor !== undefined) {
+    const release = agentServerStarted(stage.workspace.id, executor);
+    child.once("exit", release);
+    child.once("error", release);
+  }
   let said = "";
   let fatal: string | undefined;
   const keep = (chunk: Buffer) => {

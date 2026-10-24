@@ -2318,6 +2318,24 @@ export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
 export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
 
 /**
+ * Ends what the sessions of a workspace's ended items left running in its
+ * boundary (agent boundary.ts `endSessionWork`, as an interrupt and a stop
+ * of a session do), in each session's lane: the boundary runs on, and each
+ * session keeps its transcript, clone and files, so a handoff resumes it
+ * there. The hub sends it as it settles a workspace whose items have all
+ * ended and that nothing but an awake session holds (hub work-items.ts
+ * `settle`). Args `[WorkspaceWorkEnd]`; answers nothing. Only the hub sends
+ * it.
+ */
+export const CONTROL_WORKSPACE_WORK_END = "workspaceWorkEnd";
+
+/** What {@link CONTROL_WORKSPACE_WORK_END} is asked: the workspace, and the sessions whose work in it ends. */
+export interface WorkspaceWorkEnd {
+  id: string;
+  instanceIds: string[];
+}
+
+/**
  * What {@link CONTROL_WORKSPACE_ARCHIVE} does with work in the clone that
  * is nowhere else ({@link WorkspaceHolding}, read by the machine once the
  * boundary is closed, right before it deletes anything):

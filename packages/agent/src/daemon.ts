@@ -21,6 +21,7 @@ import type {
   RegisterAckPayload,
   SessionCustody,
   SpawnPayload,
+  WorkspaceWorkEnd,
 } from "@cawco/core";
 import {
   CANCEL_BINARY_UPDATE,
@@ -66,6 +67,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_WORK_END,
   type HarnessKind,
   invariant,
   lawPolicy,
@@ -3556,6 +3558,23 @@ export const startDaemon = (rediscover = false) =>
         discardWorkspace
       )
     );
+    // A workspace whose items have all ended: what their sessions left
+    // running in its boundary ends, the boundary and the sessions running on
+    // (hub work-items.ts `settle`).
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_WORK_END, (asked) => {
+      const { id, instanceIds } = (asked ?? {}) as Partial<WorkspaceWorkEnd>;
+      if (!(
+        typeof id === "string" &&
+        id &&
+        Array.isArray(instanceIds) &&
+        instanceIds.every((one) => typeof one === "string" && one)
+      )) {
+        return Promise.reject(
+          new Error("workspaceWorkEnd takes a workspace id and its sessions")
+        );
+      }
+      return supervisor.endFinishedWork(id, instanceIds);
+    });
     // A post made once with this machine's own sign-in (upstream-posts.ts):
     // one the person approved, or a landing's pull or merge request.
     supervisor.registerDaemonFunction(CONTROL_UPSTREAM_POST, (id, post) => {

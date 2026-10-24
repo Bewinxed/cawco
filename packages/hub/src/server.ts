@@ -224,6 +224,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_WORK_END,
   type CommandQueue,
   type CommandQueueFrame,
   type CommandRun,
@@ -1452,6 +1453,7 @@ const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_WORK_END,
 ]);
 /**
  * Stage controls only the hub sends (`onStage`), with the workspace or place
@@ -26668,6 +26670,13 @@ export const createServer = (
    * refused ("Leak in a workspace (85634c62) is failed. Only the reader, the
    * session that delegated it, or its project's lead can continue it.") and
    * reached no one.
+   *
+   * Only a climb in memory is told so ({@link leakWords.leaking}): what an
+   * ended item's session left running CawCo ends itself as its workspace
+   * settles, or keeps for an artifact that shows it (work-items.ts
+   * `settle`), so a leftover notice ({@link leakWords.leftBehind}) for one
+   * is logged and told to no one. On 2026-10-24 a parent was told to end
+   * three pids a done delegate left, which had exited by the time it looked.
    */
   const tellLeak = (
     machineId: string,
@@ -26699,6 +26708,12 @@ export const createServer = (
       parent &&
       inputRefusal(row.id, { kind: "system", name: LEAK_ORIGIN })
     ) {
+      if (!said.content.includes(leakWords.leaking)) {
+        console.warn(
+          `[leak] ${row.id} (its item ${item.id} is ${item.state}), told to no one: its workspace's settle ends what it left: ${said.content}`
+        );
+        return;
+      }
       console.warn(
         `[leak] ${row.id} (its item ${item.id} is ${item.state}), told to ${parent}: ${said.content}`
       );
