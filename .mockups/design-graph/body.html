@@ -1,7 +1,14 @@
 <body>
   <!-- The pages under review: one per component, drawn by app.js. Below the line where they all fit, the tabs
-       show one; from there they stand in one row (all-components-design.md). -->
-  <main class="page" id="page"><div class="pages" id="pages"></div></main>
+       show one; from there they stand in one row (all-components-design.md). Over them, the round's one open
+       choice for the owner (round 29): how a clip's kind is dressed. -->
+  <main class="page" id="page">
+    <div class="review-bar" role="group" aria-labelledby="kindsLabel">
+      <span class="review-label" id="kindsLabel">Clip kinds</span>
+      <div class="t-tabs" id="kinds" role="tablist" aria-labelledby="kindsLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-kinds="hue" aria-selected="true">In their own hue</button><button class="t-tab" role="tab" type="button" data-kinds="ink" aria-selected="false">In ink only</button></div>
+    </div>
+    <div class="pages" id="pages"></div>
+  </main>
 
   <!-- The tool. At a desk its two surfaces stand apart (the panel at the side, the dock at the foot) and this
        wrapper draws nothing; on a phone, a portrait tablet or a short window it is one drawer or side sheet,
@@ -10,44 +17,40 @@
     <header class="sheet-head" id="sheetHead">
       <span class="edge-pill edge-pill-top" aria-hidden="true"></span>
       <button class="sheet-title" id="sheetTitle" type="button"><b>Design graph</b> · <span id="sheetState"></span></button>
-      <div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph">Graph</button><button class="t-tab" role="tab" data-face="move">Move</button></div>
-      <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph" data-icon="eyeClosed"></button>
+      <div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph">Graph</button><button class="t-tab" role="tab" data-face="move">Timeline</button></div>
+      <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph" data-icon="chevronRight"></button>
     </header>
 
     <aside class="tool panel" id="panel" data-open="true" aria-label="Design graph">
+      <!-- The panel's surface (round 29, section D): its fill, edge and shadow. Hide folds this one box into
+           the 36px tab tucked at the screen's trailing edge, and then it is the tab: a press on it is Show. -->
+      <button class="panel-shell" id="shell" type="button" tabindex="-1" aria-hidden="true" aria-label="Show graph" data-tip="Show graph (H)"><span class="tab-glyph" data-icon="graph"></span></button>
       <div class="toolbar">
         <div class="t-tabs" id="tabs" role="tablist" aria-label="Components"><span class="t-tabs-pill" aria-hidden="true"></span></div>
-        <div class="bar-end">
-          <div class="zoom" role="group" aria-label="Zoom">
-            <button class="icon-btn" id="zoomOut" aria-label="Zoom out" data-tip="Zoom out (⌘ scroll)" data-icon="zoomOut"></button>
-            <output id="zoomLevel" aria-live="polite">100%</output>
-            <button class="icon-btn" id="zoomIn" aria-label="Zoom in" data-tip="Zoom in (⌘ scroll)" data-icon="zoomIn"></button>
-            <button class="icon-btn" id="zoomFit" aria-label="Fit" data-tip="Fit" data-icon="fit"></button>
-          </div>
-          <!-- Hide, and at a desk the Show pill too: the panel folds into this button (round 27, pin 29). -->
-          <button class="icon-btn hide-btn" id="hide" aria-label="Hide graph" aria-expanded="true" data-tip="Hide graph (H)"><span class="hs-glyph hs-closed" data-icon="eyeClosed"></span><span class="hs-glyph hs-open" data-icon="eye"></span><span class="show-label">Show graph</span></button>
-        </div>
+        <div class="bar-end" id="barEnd"></div>
       </div>
-      <!-- One section per component: its name, its own zoom and Fit, its graph and its dials. -->
+      <!-- One section per component: its name, its own zoom and Outline, its graph and its dials. -->
       <div class="graphs" id="graphs"></div>
-      <div class="sash sash-w" id="sashW" role="separator" aria-orientation="vertical" aria-label="Resize panel width" tabindex="0" data-edge="w"></div>
-      <div class="sash sash-h" id="sashH" role="separator" aria-orientation="horizontal" aria-label="Resize graph height" tabindex="0" data-edge="h"></div>
-      <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
-      <!-- The resize handle (round 28): iPadOS 26's window handle, a short arc concentric with the panel's
-           corner, at the corner that resizes it. One path; a drag morphs it into the tapered highlight. -->
-      <svg class="resize-handle" id="gripC" aria-hidden="true"><defs><radialGradient id="gripCInk" gradientUnits="userSpaceOnUse" cx="0" cy="0"></radialGradient></defs><path class="handle-pad"/><path class="handle-ink" fill="url(#gripCInk)"/></svg>
+      <!-- Resizing (round 29, section A): 8px bands on the leading edge and the foot take a pointer; the corner
+           square is the one separator a key reaches. The arc is drawn in the corner that resizes. -->
+      <div class="sash sash-w" id="sashW" aria-hidden="true" data-edge="w"></div>
+      <div class="sash sash-h" id="sashH" aria-hidden="true" data-edge="h"></div>
+      <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize the graph panel" tabindex="0" data-edge="wh"></div>
+      <svg class="arc" id="arcP" data-corner="bl" aria-hidden="true" focusable="false"><defs><linearGradient id="arcP-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcP-b" gradientUnits="userSpaceOnUse"></linearGradient></defs><g><path class="arc-leg" data-leg="a" stroke="url(#arcP-a)"/><path class="arc-body"/><path class="arc-leg" data-leg="b" stroke="url(#arcP-b)"/></g></svg>
       <!-- Two graphs stacked: the foot edge between them splits their heights. -->
       <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
       <span class="lit" data-arm="s" aria-hidden="true"></span>
     </aside>
 
-    <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move">
-      <div class="sash sash-d" id="sashD" role="separator" aria-orientation="horizontal" aria-label="Resize the dock's height" tabindex="0" data-edge="d"></div>
-      <svg class="resize-handle" id="gripD" aria-hidden="true"><defs><radialGradient id="gripDInk" gradientUnits="userSpaceOnUse" cx="0" cy="0"></radialGradient></defs><path class="handle-pad"/><path class="handle-ink" fill="url(#gripDInk)"/></svg>
+    <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The timeline">
+      <div class="sash sash-d" id="sashD" aria-hidden="true" data-edge="d"></div>
+      <div class="sash sash-dc" id="sashDC" role="separator" aria-orientation="horizontal" aria-label="Resize the timeline" tabindex="0" data-edge="d"></div>
+      <svg class="arc" id="arcD" data-corner="tr" aria-hidden="true" focusable="false"><defs><linearGradient id="arcD-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcD-b" gradientUnits="userSpaceOnUse"></linearGradient></defs><g transform="scale(-1 -1)"><path class="arc-leg" data-leg="a" stroke="url(#arcD-a)"/><path class="arc-body"/><path class="arc-leg" data-leg="b" stroke="url(#arcD-b)"/></g></svg>
       <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
-  <button class="show" id="show" type="button" data-tip="Show graph (H)" hidden><span data-icon="eye"></span><span class="show-label">Show graph</span></button>
+  <!-- The side sheet's way back once folded: the same tucked tab, at the screen's trailing edge. -->
+  <button class="show" id="show" type="button" aria-label="Show graph" data-tip="Show graph (H)" hidden><span data-icon="graph"></span></button>
 
   <div class="tip" id="tip" role="tooltip"></div>
 <script>
