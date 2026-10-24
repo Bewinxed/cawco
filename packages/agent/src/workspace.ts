@@ -24,7 +24,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import type {
   CarryRestored,
   CommandResult,
@@ -73,7 +73,14 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
+import {
+  cloneDenies,
+  excludedPaths,
+  IGNORED_STATUS,
+  PERSON_UNTRACKED_END,
+  PERSON_UNTRACKED_START,
+  personUntrackedIn,
+} from "@cawco/core/workspace-policy";
 import {
   addAccount,
   addSpill,
@@ -91,6 +98,7 @@ import {
   copyStrays,
   ownFilesOnly,
 } from "./carry";
+import { BLOCK_END, BLOCK_START } from "./checkout-exclude";
 import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
 import { expandHome } from "./fs";
@@ -554,20 +562,20 @@ const ownGitConfig = async (
   }
 };
 
-/** Where CawCo's block of the person's own untracked files begins and ends in a copy's `info/exclude`. */
-const OWN_UNTRACKED_START =
-  "# cawco: the folder's own untracked files as the workspace started";
-const OWN_UNTRACKED_END = "# cawco: end of the folder's own";
-
 /**
- * The person's untracked files the copy started with (each path `git
- * ls-files --others --exclude-standard` names once the branch is checked
- * out), kept out of the copy's status by one anchored line each in its
- * `info/exclude`: they came along with the folder (layer.ts) and are the
- * person's, never the delegate's work, so neither the landing's check for
- * uncommitted changes nor an archive reads them as held.
+ * What the copy's status must never read as the workspace's, kept out of
+ * it by CawCo's blocks in its `info/exclude`, written once its branch is
+ * checked out: the person's untracked files the copy started with (each
+ * path `git ls-files --others --exclude-standard` names: they came along
+ * with the folder, layer.ts, and are the person's), and each of the copy's
+ * deny paths with a stand-in that git does not track (core
+ * workspace-policy.ts `cloneDenies`), which the boundary's host makes in a
+ * Linux view as each sandbox starts, where no host-side pass lists them
+ * (stand-ins.ts `listStandIns`, which a copy of its own runs at each start).
+ * Neither the landing's check for uncommitted changes nor an archive then
+ * reads them as held (core `excludedPaths`, `personUntrackedIn`).
  */
-const excludeOwnUntracked = async (
+const excludeStart = async (
   path: string,
   git: Git,
   access: CopyAccess
@@ -577,44 +585,58 @@ const excludeOwnUntracked = async (
   )
     .split("\0")
     .filter(Boolean);
-  if (untracked.length === 0) {
-    return;
-  }
+  const denies = cloneDenies(path)
+    .filter(({ empty }) => empty.kind !== "none")
+    .map((deny) => relative(path, deny.path))
+    .filter((name) => !name.startsWith(".git/"));
+  const tracked = new Set(
+    (await git(path, "ls-files", "-z", "--", ...denies))
+      .split("\0")
+      .filter(Boolean)
+  );
+  const standIns = denies.filter(
+    (name) =>
+      !(
+        tracked.has(name) ||
+        [...tracked].some((file) => file.startsWith(`${name}/`))
+      )
+  );
   const exclude = access.at(join(path, ".git", "info", "exclude"));
   const before = await readFile(exclude, "utf8").catch(() => "");
-  const block = [
-    OWN_UNTRACKED_START,
-    ...untracked.map((file) => `/${file}`),
-    OWN_UNTRACKED_END,
+  const blocks = [
+    ...(standIns.length > 0
+      ? [BLOCK_START, ...standIns.map((name) => `/${name}`), BLOCK_END]
+      : []),
+    ...(untracked.length > 0
+      ? [
+          PERSON_UNTRACKED_START,
+          ...untracked.map((file) => `/${file}`),
+          PERSON_UNTRACKED_END,
+        ]
+      : []),
   ];
+  if (blocks.length === 0) {
+    return;
+  }
   await writeStateFile(
     exclude,
-    `${before}${before && !before.endsWith("\n") ? "\n" : ""}${block.join("\n")}\n`
+    `${before}${before && !before.endsWith("\n") ? "\n" : ""}${blocks.join("\n")}\n`
   );
 };
 
-/** The person's untracked files a copy's `info/exclude` names in CawCo's block ({@link excludeOwnUntracked}). */
+/** The person's untracked files a copy's `info/exclude` names in CawCo's block ({@link excludeStart}). */
 const ownUntracked = async (
   path: string,
   access: CopyAccess
-): Promise<Set<string>> => {
-  const text = await readFile(
-    access.at(join(path, ".git", "info", "exclude")),
-    "utf8"
-  ).catch(() => "");
-  const named = new Set<string>();
-  let inside = false;
-  for (const line of text.split("\n")) {
-    if (line === OWN_UNTRACKED_START) {
-      inside = true;
-    } else if (line === OWN_UNTRACKED_END) {
-      inside = false;
-    } else if (inside && line.startsWith("/")) {
-      named.add(line.slice(1));
-    }
-  }
-  return named;
-};
+): Promise<Set<string>> =>
+  new Set(
+    personUntrackedIn(
+      await readFile(
+        access.at(join(path, ".git", "info", "exclude")),
+        "utf8"
+      ).catch(() => "")
+    )
+  );
 
 /**
  * A repository copy's branch, checked out: the copy's own config
@@ -628,7 +650,7 @@ const ownUntracked = async (
  * `origin`'s branch that held it then, tracking the default branch; a carry's
  * commits are fetched and checked out instead when it holds any. The
  * person's untracked files are kept out of its status
- * ({@link excludeOwnUntracked}).
+ * ({@link excludeStart}).
  */
 const startBranch = async (
   workspace: WorkspaceRef,
@@ -697,7 +719,7 @@ const startBranch = async (
     `--set-upstream-to=origin/${base}`,
     branch
   );
-  await excludeOwnUntracked(path, plain, access);
+  await excludeStart(path, plain, access);
   return { base, branch };
 };
 
@@ -2369,23 +2391,17 @@ export const workspaceChanges = async (
 
 /**
  * {@link CONTROL_WORKSPACE_APPLY}: a folder workspace's change set landed in
- * its folder by this agent, outside every wall, with its boundary closed so
- * no command writes the copy meanwhile (layer.ts `applyChanges`: the
- * conflict scan first, then each path whole). The boundary starts again at
- * its next command.
+ * its folder by this agent, outside every wall (layer.ts `applyChanges`:
+ * the conflict scan first, then each path whole). Its boundary and its
+ * session run on, as a repository's do while the hub pushes its commits:
+ * the item has finished, and its delegate waits on this landing's answer.
  */
 export const workspaceApply = async (
   ref: unknown
 ): Promise<{ applied: number; conflicts: WorkspaceConflict[] }> => {
   const workspace = ref as WorkspaceRef;
   const layer = await folderLayer(workspace);
-  let result: { applied: number; conflicts: WorkspaceConflict[] } = {
-    applied: 0,
-    conflicts: [],
-  };
-  await whileBoundaryClosed(workspace, async () => {
-    result = await applyChanges(workspace.id, layer);
-  });
+  const result = await applyChanges(workspace.id, layer);
   console.info(
     result.conflicts.length > 0
       ? `[workspace] ${workspace.id}: its change set was not landed in ${layer.folder}: ${result.conflicts.length} path(s) changed there too since it started (${result.conflicts.map((each) => each.path).join(", ")})`

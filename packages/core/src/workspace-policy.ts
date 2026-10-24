@@ -326,16 +326,19 @@ const TRAILING_SLASH = /\/$/;
  * as does one the owner's global excludes file covers (an absolute source,
  * outside every clone: no clone's config may name one, safe-git.ts
  * `repositoryConfigProblem`). What CawCo wrote there ({@link cloneWritten})
- * is CawCo's, and goes too. Each is work no remote has: it holds the
+ * is CawCo's, and goes too; and what `person` names (the person's own
+ * untracked files the copy started with, {@link personUntrackedIn}) is the
+ * person's, never the workspace's. Each is work no remote has: it holds the
  * workspace (agent workspace.ts `holding`), and finish_item names it (hub
  * work-items.ts `leftoversIn`).
  */
 export const excludedPaths = (
   clone: string,
   tracked: string,
-  rules: string
+  rules: string,
+  person: readonly string[] = []
 ): string[] => {
-  const own = cloneWritten(clone);
+  const own = [...cloneWritten(clone), ...person];
   const committed = new Set(tracked.split("\0").filter(Boolean));
   const fields = rules.split("\0");
   const excluded: string[] = [];
@@ -352,6 +355,31 @@ export const excludedPaths = (
     }
   }
   return excluded;
+};
+
+/** Where CawCo's block of the person's own untracked files begins and ends in a copy's `info/exclude` (agent workspace.ts `excludeStart`). */
+export const PERSON_UNTRACKED_START =
+  "# cawco: the folder's own untracked files as the workspace started";
+export const PERSON_UNTRACKED_END = "# cawco: end of the folder's own";
+
+/**
+ * The paths CawCo's block of a copy's `info/exclude` text names as the
+ * person's own untracked files: they came along with the folder (agent
+ * layer.ts) and are no work of the workspace's.
+ */
+export const personUntrackedIn = (exclude: string): string[] => {
+  const named: string[] = [];
+  let inside = false;
+  for (const line of exclude.split("\n")) {
+    if (line === PERSON_UNTRACKED_START) {
+      inside = true;
+    } else if (line === PERSON_UNTRACKED_END) {
+      inside = false;
+    } else if (inside && line.startsWith("/")) {
+      named.push(line.slice(1));
+    }
+  }
+  return named;
 };
 
 /**

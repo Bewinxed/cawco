@@ -127,6 +127,7 @@ import {
 import {
   excludedPaths,
   IGNORED_STATUS,
+  personUntrackedIn,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
@@ -6667,7 +6668,14 @@ export const createWorkItems = ({
             "its tracked .gitignore files",
             "git ls-files -z -- ':(glob)**/.gitignore'"
           ),
-          rules
+          rules,
+          // The person's own untracked files its copy started with: theirs.
+          personUntrackedIn(
+            await read(
+              "its own excludes",
+              'cat "$(git rev-parse --git-path info/exclude)" 2>/dev/null; true'
+            )
+          )
         )
       : [];
     if (!(status || stashes || excluded.length > 0)) {

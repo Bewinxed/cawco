@@ -318,16 +318,26 @@ const repoLegs = async (
     projectId: repoProject.id,
   });
   const bare = join(fleet.sandbox, "hub", "git", `${repoProject.id}.git`);
+  // The hub's repository is there once a first push made it.
   const mainLog = async () =>
-    (await Bun.$`git log --format=%s main`.cwd(bare).nothrow().quiet().text())
-      .trim()
-      .split("\n");
+    (await git(bare, "log", "--format=%s", "main")).text().trim().split("\n");
+  /** What finish_item last answered `tag`'s delegate, for a failure's detail. */
+  const answered = (tag: Tag): string =>
+    fleet.seen
+      .filter(
+        (one) =>
+          one.afterTool &&
+          one.all.includes(`PROBE-FOLDER-${tag}`) &&
+          one.all.includes("Not ")
+      )
+      .at(-1)
+      ?.all.slice(-1500) ?? "no answer read";
   const c1 = await delegate("C1", repo, repoParent);
   const c1Row = await ended("C1", c1.workItemId);
   check(
     "c: a first delegate's commit lands on the hub's main",
     c1Row.state === "done" && (await mainLog())[0] === "Delegate one",
-    `${c1Row.state} ${c1Row.error ?? ""} ${(await mainLog()).join(" | ")}`
+    `${c1Row.state} ${c1Row.error ?? ""} ${(await mainLog()).join(" | ")}\n${answered("C1")}`
   );
   const stateOf = async () => ({
     head: (await git(repo, "rev-parse", "HEAD")).text().trim(),
@@ -358,7 +368,7 @@ const repoLegs = async (
     c2Row.state === "done" &&
       (await mainLog()).slice(0, 2).join(" | ") ===
         "Delegate two | Delegate one",
-    `${c2Row.state} ${c2Row.error ?? ""}\n${(c2Row.result ?? "").slice(0, 1200)}`
+    `${c2Row.state} ${c2Row.error ?? ""}\n${(c2Row.result ?? "").slice(0, 1200)}\n${answered("C2")}`
   );
   const after = await stateOf();
   check(
