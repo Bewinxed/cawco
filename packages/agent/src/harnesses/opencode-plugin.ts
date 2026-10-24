@@ -208,6 +208,12 @@ const workspaceOf = (directory) => {
       if (damage) damaged.push({ id, damage });
       continue;
     }
+    // A Linux view of a folder (the agent's layer.ts) is the person's folder
+    // at its own path, shared with every other view of it and the person's
+    // own sessions: it holds no directory here.
+    let form;
+    try { form = JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/layer.json", "utf8")).form; } catch { form = undefined; }
+    if (form === "overlay") continue;
     const root = realOf(path);
     if ((at === root || at.startsWith(root + "/")) && !(found && found.root.length >= root.length)) found = { id, root };
   }

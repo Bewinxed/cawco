@@ -1,8 +1,9 @@
 /**
  * A place's first commit never reads a file whole and never makes a home or
- * cache folder a repository; a delegate is cut from the checkout its `cwd`
- * is in (agent place-repo.ts `notAProject`, `judge`; hub place-repo.ts
- * `beforeCut`). On a scratch fleet (real hub, agent and sessiond; Claude
+ * cache folder a repository; a delegate works in a private copy of the
+ * folder its `cwd` is in, its repository's root when it is in one, and no
+ * folder is made a repository for it (agent place-repo.ts `notAProject`,
+ * `judge`; agent layer.ts). On a scratch fleet (real hub, agent and sessiond; Claude
  * Code against the mock model). The fleet's HOME stands in for the owner's:
  * it holds `.cache/huggingface/hub/blobs/<sha>`, a sparse file of
  * 8,463,330,762 bytes (the blob that stopped Backlot's delegates), and
@@ -16,10 +17,10 @@
  *   boundary-nesting.ts): that refusal, from the workspace's own create,
  *   is what it then reads; on the host, the workspace's repo root is
  *   `backlot`.
- * - B: a delegate with `cwd` = HOME, which asks for HOME as a repository,
- *   is refused in words naming HOME as the home folder and asking for a
- *   project folder, before anything is read: no `.git` in HOME, and the
- *   agent says nothing of the large file.
+ * - B: a delegate with `cwd` = HOME works in a private copy of HOME, a
+ *   folder's (no repository): no `.git` in HOME, and the agent says nothing
+ *   of the large file. Inside a workspace the host refuses it as it refuses
+ *   A.
  * - C: a project made from a plain folder still becomes a repository, its
  *   files in one commit.
  * - D: a project made from a plain folder holding a sparse file of the same
@@ -44,6 +45,10 @@ const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/;
 const READ_WHOLE = /couldn't read .* to make it a git repository/;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+
+/** Whether a create was refused by the host, a boundary inside another. */
+const refusedByHost = (refused: string): boolean =>
+  refused.includes("Workspace create on") && NESTED.test(refused);
 
 /** A plain folder of a few small sources. */
 const plainFolder = async (folder: string): Promise<void> => {
@@ -115,10 +120,7 @@ const legA = async (
         )
       : [];
   const refused = "refused" in cut ? cut.refused : "";
-  const cutByHost =
-    refused.includes("Workspace create on") &&
-    NESTED.test(refused) &&
-    !READ_WHOLE.test(refused);
+  const cutByHost = refusedByHost(refused) && !READ_WHOLE.test(refused);
   check(
     "A: a delegate with cwd = a repository in the home place is cut from that repository, with no repo step on the home",
     !existsSync(join(home, ".git")) &&
@@ -129,7 +131,7 @@ const legA = async (
   );
 };
 
-/** B: HOME itself asked to become a repository. */
+/** B: a delegate in HOME itself: a folder's private copy, nothing of HOME read. */
 const legB = async (
   { check }: Kit,
   fleet: KitFleet,
@@ -137,15 +139,21 @@ const legB = async (
   home: string
 ): Promise<void> => {
   const homeCut = await delegate(fleet, parent, home, "Home cut");
-  const refused = "refused" in homeCut ? homeCut.refused : "started";
-  const named = (await fleet.logs("agent")).includes(BLOB_SHA);
+  const [workspace] =
+    "workspaceId" in homeCut && homeCut.workspaceId
+      ? fleet.query<{ kind: string; repo_root: string }>(
+          "SELECT kind, repo_root FROM workspaces WHERE id = ?",
+          homeCut.workspaceId
+        )
+      : [];
+  const refused = "refused" in homeCut ? homeCut.refused : "";
+  const cutByHost = refusedByHost(refused);
   check(
-    "B: the home folder asked to become a repository is refused in words naming it, asking for a project folder",
-    refused.includes(
-      `${home} is the home folder on this machine, which holds far more than one project, so CawCo won't make it a git repository.`
-    ) && refused.includes("Make a folder for the project"),
-    refused.slice(0, 600)
+    "B: a delegate with cwd = the home folder works in a private copy of it, a folder's, and no repository is made",
+    (workspace?.kind === "folder" && workspace.repo_root === home) || cutByHost,
+    workspace ? JSON.stringify(workspace) : refused.slice(0, 600)
   );
+  const named = (await fleet.logs("agent")).includes(BLOB_SHA);
   const unread = !(existsSync(join(home, ".git")) || named);
   check(
     "B: nothing of the home was read: no .git in it, and the agent never names the large file",

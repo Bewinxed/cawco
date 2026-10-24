@@ -47,7 +47,7 @@ import { workspaceCarriesDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "./boundary";
-import { hostGit } from "./clone";
+import { hostGit } from "./host-git";
 
 /** What a checkout holds that is nowhere else. */
 export interface CarryHeld {

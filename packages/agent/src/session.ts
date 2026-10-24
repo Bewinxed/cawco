@@ -174,7 +174,6 @@ import {
 } from "./canvas-screen";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { carryRefusal, carrySessions } from "./claude-sessions";
-import { fetchDefaultBranch, hostGit } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
@@ -193,6 +192,7 @@ import {
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
+import { fetchDefaultBranch, hostGit } from "./host-git";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";

@@ -201,5 +201,6 @@ typeOverrides:
     WaitReason: OpenEnums.WaitReason
     WaitingKind: OpenEnums.WaitingKind
     WorkItemState: OpenEnums.WorkItemState
+    WorkspaceKind: OpenEnums.WorkspaceKind
     WorkspaceState: OpenEnums.WorkspaceState
     WorkspaceToolNeed: OpenEnums.WorkspaceToolNeed

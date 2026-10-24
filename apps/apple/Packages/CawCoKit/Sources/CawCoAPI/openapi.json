@@ -30770,6 +30770,9 @@
           "id": {
             "type": "string"
           },
+          "kind": {
+            "$ref": "#/components/schemas/WorkspaceKind"
+          },
           "machineId": {
             "type": "string"
           },
@@ -30897,6 +30900,7 @@
           "createdByInstanceId",
           "host",
           "id",
+          "kind",
           "machineId",
           "path",
           "ports",
@@ -52735,6 +52739,14 @@
           "size",
           "stashes",
           "workspaceId"
+        ]
+      },
+      "WorkspaceKind": {
+        "description": "What a workspace was made from: a repository's root, which lands by git\n(rebase onto its base, the merge checks, push), or any other folder, which\nlands by its change set ({@link CONTROL_WORKSPACE_APPLY}).",
+        "type": "string",
+        "enum": [
+          "folder",
+          "repo"
         ]
       },
       "WorkspaceState": {
