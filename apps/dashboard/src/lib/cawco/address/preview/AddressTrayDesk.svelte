@@ -2,8 +2,8 @@
   /**
    * A direction's tray on a desk, live: the transcript-width page with
    * Needs you (the address's onboarding row over a real budget row,
-   * NeedsCard's own NeedsRow), or Settings' Word address row, and the story's control at
-   * the frame's top edge. The row becomes the tray in place, its box growing
+   * NeedsCard's own NeedsRow), or Settings' Word address row, and the story's control
+   * folded under it. The row becomes the tray in place, its box growing
    * to the tray's while the row under it slides down (The One Object Rule);
    * Settings' Set up opens into the tray floating over it. ×, Esc and a
    * press outside put it back where it came from; its work goes on, and the
@@ -30,6 +30,11 @@
   // svelte-ignore state_referenced_locally — the story's starting network, once
   const tray = new AddressTray({ network });
   onDestroy(() => tray.dispose());
+  // The picture opens on the tray at its first step, the row already grown
+  // into it (its press is the story's own: Start again puts it back).
+  tray.show();
+  /** The tray stood open as the story began: its first draw is still, no entrance. */
+  let entered = false;
 
   /**
    * A project past its budget, as Needs you lists it today, under the
@@ -95,7 +100,10 @@
       const el = trayEl;
       untrack(() => {
         came = opening ?? came;
-        openFrom(el, opening);
+        if (entered) {
+          openFrom(el, opening);
+        }
+        entered = true;
         opening = null;
       });
     }
@@ -147,9 +155,6 @@
   class="grid min-h-c-address-phone-h content-start gap-space-5 bg-surface-page p-space-5"
   data-address-desk={direction}
 >
-  <div bind:this={controlEl} class="mx-auto w-full max-w-c-measure">
-    <JumpControl {tray} />
-  </div>
   <!-- The floating tray stands over the page, not in its flow: the page
        keeps room under it for as tall as it is, so its foot never falls
        past the page's. -->
@@ -255,4 +260,8 @@
       </section>
     {/if}
   </main>
+  <!-- The story's control stands under the design, folded until pressed. -->
+  <div bind:this={controlEl} class="mx-auto w-full max-w-c-measure">
+    <JumpControl {tray} />
+  </div>
 </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * The story's own control, outside the tray at the frame's edge: not part
-   * of the design. It jumps the live tray to any state, on any network,
+   * The story's own control, under the design and folded until pressed: not
+   * part of the design. It jumps the live tray to any state, on any network,
    * with any failure cause, and turns the two facts every state reads (a
    * taken name, a dashboard opened over plain http). A jumped state holds
    * still; the tray's own buttons move it on as the person would, and a
@@ -33,19 +33,20 @@
   );
 </script>
 
-<div
-  class="grid gap-space-2 rounded-md border border-dashed border-border-control bg-surface-recess p-space-3"
+<!-- Folded until pressed, so the picture as first drawn is the design alone. -->
+<details
+  class="group/jump grid gap-space-2 rounded-md border border-dashed border-border-control bg-surface-recess p-space-3"
   data-jump-control
 >
-  <p
-    class="m-0 flex flex-wrap items-baseline justify-between gap-x-space-3 gap-y-space-1 type-meta text-ink-muted"
+  <summary
+    class="press-tint focus-inset flex list-none flex-wrap items-baseline justify-between gap-x-space-3 gap-y-space-1 rounded-xs type-meta text-ink-muted details-marker:hidden"
   >
     <span class="type-label text-ink-strong">Story control</span>
     <span class="wrap-anywhere"
       >Not part of the design. The tray's own buttons move it; waiting states
       move on by themselves.</span
     >
-  </p>
+  </summary>
   <div class="flex flex-wrap items-end gap-x-space-3 gap-y-space-2">
     <label
       class="grid min-w-0 gap-space-1 type-meta text-ink-muted"
@@ -187,4 +188,4 @@
       be drawn ({tray.pose.standIn} stands in).
     </p>
   {/if}
-</div>
+</details>

@@ -7,7 +7,7 @@
    * scrolling inside). It rises over --dur-panel on the drawer curve and
    * goes over --dur-exit; a finger drags it down to put it away
    * (dragToDismiss), as × and a press on the scrim do. The story's control
-   * stands over the screen.
+   * stands folded under the screen.
    */
   import { onDestroy, untrack } from "svelte";
   import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
@@ -30,6 +30,10 @@
   // svelte-ignore state_referenced_locally — the story's starting network, once
   const tray = new AddressTray({ network });
   onDestroy(() => tray.dispose());
+  // The picture opens on the sheet up at the tray's first step.
+  tray.show();
+  /** The sheet stood up as the story began: its first draw is still, no rise. */
+  let entered = false;
 
   /** A project past its budget, drawn by NeedsCard's own row (NeedsRow) as it draws a budget. */
   const budget = {
@@ -63,7 +67,12 @@
   $effect(() => {
     if (tray.open && sheetEl) {
       const sheet = sheetEl;
-      untrack(() => sheetIn(sheet, scrimEl));
+      untrack(() => {
+        if (entered) {
+          sheetIn(sheet, scrimEl);
+        }
+        entered = true;
+      });
     }
   });
 
@@ -88,7 +97,6 @@
   class="grid content-start gap-space-3 bg-surface-page"
   data-address-phone={direction}
 >
-  <JumpControl {tray} />
   <div
     class="relative h-c-address-phone-h overflow-clip rounded-panel border border-border-hairline bg-surface-page"
     data-phone-screen
@@ -152,4 +160,6 @@
       </div>
     {/if}
   </div>
+  <!-- The story's control stands under the screen, folded until pressed. -->
+  <JumpControl {tray} />
 </div>
