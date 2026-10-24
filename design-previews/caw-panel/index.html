@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>Caw’s panel · design preview</title>
+    <link href="faces.css" rel="stylesheet" />
+    <link href="tokens.css" rel="stylesheet" />
+    <link href="panel.css" rel="stylesheet" />
+    <script src="panel.js" type="module"></script>
+  </head>
+  <body>
+    <svg aria-hidden="true" height="0" style="position: absolute" width="0">
+      <!-- Solar (Iconify @iconify-json/solar 1.2.13), and the house's own plus, close and tick (apps/dashboard components/icons). -->
+      <symbol id="i-add-circle" viewBox="0 0 24 24">
+        <g
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="1.5"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M15 12L12 12M12 12L9 12M12 12L12 9M12 12L12 15" />
+        </g>
+      </symbol>
+      <symbol id="i-menu-dots" viewBox="0 0 24 24">
+        <g fill="currentColor">
+          <path
+            d="M7 12C7 13.1 6.1 14 5 14C3.9 14 3 13.1 3 12C3 10.9 3.9 10 5 10C6.1 10 7 10.9 7 12Z"
+          />
+          <path
+            d="M21 12C21 13.1 20.1 14 19 14C17.9 14 17 13.1 17 12C17 10.9 17.9 10 19 10C20.1 10 21 10.9 21 12Z"
+          />
+          <path
+            d="M14 12C14 13.1 13.1 14 12 14C10.9 14 10 13.1 10 12C10 10.9 10.9 10 12 10C13.1 10 14 10.9 14 12Z"
+            opacity=".5"
+          />
+        </g>
+      </symbol>
+      <symbol id="i-close-circle" viewBox="0 0 24 24">
+        <g
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="1.5"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M14.5 9.5L9.5 14.5M9.5 9.5L14.5 14.5" />
+        </g>
+      </symbol>
+      <symbol id="i-send" viewBox="0 0 24 24">
+        <path
+          clip-rule="evenodd"
+          d="M5.796 18.204L21.512 2.488c-.988-.989-2.86-.364-6.606.884l-9.331 3.11c-2.082.694-3.123 1.041-3.439 1.804q-.112.271-.133.564c-.059.824.717 1.6 2.269 3.151l.283.283c.254.254.382.382.478.523c.19.28.297.607.31.945c.008.171-.019.35-.072.705c-.196 1.304-.294 1.956-.179 2.458c.114.495.362.938.704 1.289"
+          fill="currentColor"
+          fill-rule="evenodd"
+        />
+        <path
+          d="m17.498 18.486l3.13-9.392c1.25-3.745 1.873-5.617.885-6.606L5.797 18.204c.348.356.794.617 1.296.74c.5.122 1.153.033 2.46-.144l.071-.01c.369-.05.553-.075.73-.064c.32.02.63.124.898.303c.147.099.278.23.541.493l.251.251c1.51 1.51 2.266 2.265 3.067 2.226c.22-.01.438-.062.64-.151c.734-.323 1.072-1.336 1.747-3.362"
+          fill="currentColor"
+          opacity=".5"
+        />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24">
+        <path
+          d="M12 5v14M5 12h14"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="1.5"
+        />
+      </symbol>
+      <symbol id="i-close" viewBox="0 0 24 24">
+        <path
+          d="M7 7l10 10M17 7L7 17"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="1.5"
+        />
+      </symbol>
+      <symbol id="i-tick" viewBox="0 0 24 24">
+        <path
+          d="M5 12.5l4.5 4.5L19 7.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.5"
+        />
+      </symbol>
+      <symbol id="i-user" viewBox="0 0 24 24">
+        <g fill="currentColor">
+          <circle cx="12" cy="6" r="4" />
+          <path
+            d="M20 17.5C20 19.99 20 22 12 22C4 22 4 19.99 4 17.5C4 15.01 7.58 13 12 13C16.42 13 20 15.01 20 17.5Z"
+            opacity=".5"
+          />
+        </g>
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <g fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="11.5" cy="11.5" r="9.5" />
+          <path d="M18.5 18.5L22 22" stroke-linecap="round" />
+        </g>
+      </symbol>
+      <symbol id="i-laptop" viewBox="0 0 24 24">
+        <g fill="currentColor">
+          <path
+            d="M22.23 19.48C22.66 19.48 23 19.82 23 20.24C23 20.66 22.66 21 22.23 21H1.77C1.34 21 1 20.66 1 20.24C1 19.82 1.34 19.48 1.77 19.48H22.23Z"
+          />
+          <path
+            d="M3.69 3.89C2.79 4.78 2.79 6.21 2.79 9.08V14.15C2.79 16.06 2.79 17.01 3.39 17.61C3.99 18.2 4.95 18.2 6.88 18.2H17.12C19.05 18.2 20.01 18.2 20.61 17.61C21.21 17.01 21.21 16.06 21.21 14.15V9.08C21.21 6.21 21.21 4.78 20.31 3.89C19.41 3 17.96 3 15.07 3H8.93C6.04 3 4.59 3 3.69 3.89Z"
+            opacity=".5"
+          />
+        </g>
+      </symbol>
+      <symbol id="i-burger" viewBox="0 0 24 24">
+        <path
+          d="M4 7h16M4 12h16M4 17h16"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="1.5"
+        />
+      </symbol>
+    </svg>
+
+    <header class="controls">
+      <div>
+        <h1>Caw’s panel</h1>
+        <p class="lede">
+          One panel: what waits stands inline in the thread and docks into the
+          stack as it scrolls away; the message box stays while Caw can’t start,
+          with him as a hero above it; Caw names the thread, with a floating
+          title and glass actions. Scroll the thread, press what is on screen,
+          and switch states here.
+        </p>
+      </div>
+      <div class="switches">
+        <fieldset class="switch" data-control="state">
+          <legend>State</legend>
+          <div class="seg">
+            <label
+              ><input checked name="state" type="radio" value="rest" />At
+              rest</label
+            >
+            <label
+              ><input name="state" type="radio" value="needs" />Needs you</label
+            >
+            <label
+              ><input name="state" type="radio" value="docked" />Docked</label
+            >
+            <label
+              ><input name="state" type="radio" value="cant" />Can’t
+              start</label
+            >
+            <label
+              ><input
+                name="state"
+                type="radio"
+                value="scrolled"
+              />Scrolled</label
+            >
+            <label
+              ><input name="state" type="radio" value="fresh" />New
+              thread</label
+            >
+          </div>
+        </fieldset>
+        <fieldset class="switch" data-control="cause" hidden>
+          <legend>Why he can’t start</legend>
+          <div class="seg">
+            <label
+              ><input checked name="cause" type="radio" value="machine" />No
+              machine</label
+            >
+            <label
+              ><input name="cause" type="radio" value="budget" />Budget</label
+            >
+            <label
+              ><input name="cause" type="radio" value="thread" />Thread won’t
+              read</label
+            >
+            <label
+              ><input name="cause" type="radio" value="hub" />Hub
+              updating</label
+            >
+          </div>
+        </fieldset>
+      </div>
+      <div class="switches">
+        <fieldset class="switch" data-control="arcs">
+          <legend>Fork 1 · what the bar’s arcs count</legend>
+          <div class="seg">
+            <label
+              ><input checked name="arcs" type="radio" value="A" />A · this
+              page’s scope <span class="rec">· recommended</span></label
+            >
+            <label
+              ><input name="arcs" type="radio" value="B" />B · the fleet, with a
+              signpost</label
+            >
+          </div>
+        </fieldset>
+        <fieldset class="switch" data-control="block">
+          <legend>Fork 2 · where the block stands on a full thread</legend>
+          <div class="seg">
+            <label
+              ><input checked name="block" type="radio" value="A" />A · pinned
+              above the composer <span class="rec">· recommended</span></label
+            >
+            <label
+              ><input name="block" type="radio" value="B" />B · the panel’s
+              centre</label
+            >
+          </div>
+        </fieldset>
+        <fieldset class="switch" data-control="theme">
+          <legend>Scheme</legend>
+          <div class="seg">
+            <label
+              ><input
+                checked
+                name="theme"
+                type="radio"
+                value="light"
+              />Day</label
+            >
+            <label><input name="theme" type="radio" value="dark" />Night</label>
+          </div>
+        </fieldset>
+        <fieldset class="switch" data-control="motion">
+          <legend>Motion</legend>
+          <div class="seg">
+            <label
+              ><input
+                checked
+                name="motion"
+                type="radio"
+                value="full"
+              />Full</label
+            >
+            <label
+              ><input
+                name="motion"
+                type="radio"
+                value="reduced"
+              />Reduced</label
+            >
+          </div>
+        </fieldset>
+        <fieldset class="switch show-switch" data-control="show">
+          <legend>Show</legend>
+          <div class="seg">
+            <label
+              ><input
+                checked
+                name="show"
+                type="radio"
+                value="desk"
+              />Desk</label
+            >
+            <label><input name="show" type="radio" value="phone" />Phone</label>
+          </div>
+        </fieldset>
+      </div>
+      <fieldset class="moments">
+        <legend class="sr-only">Moments to play</legend>
+      </fieldset>
+    </header>
+
+    <main class="stage" data-show="desk">
+      <figure class="frame frame-desk">
+        <div class="device desk" data-device="desk">
+          <div class="page-bar">
+            <span aria-current="page" class="tab">Board</span>
+            <span class="tab">Table</span>
+            <span class="tab">Threads</span>
+          </div>
+          <div aria-hidden="true" class="page-body">
+            <p class="project">Cawco-Dev</p>
+            <p class="where">obelisk-of-light · /home/bewinxed/cockpit</p>
+            <div class="lanes">
+              <div>
+                Ready 29
+                <div class="ticket"></div>
+              </div>
+              <div>Working</div>
+              <div>Review</div>
+            </div>
+          </div>
+          <div class="glass" data-glass>
+            <span aria-hidden="true" class="join"></span>
+            <button
+              aria-label="Jump to session"
+              class="bar-item"
+              title="Jump to session ⌘K"
+              type="button"
+            >
+              <svg aria-hidden="true" class="glyph">
+                <use href="#i-search" />
+              </svg>
+            </button>
+            <button
+              aria-label="4 machines"
+              class="bar-item bar-count"
+              title="4 machines"
+              type="button"
+            >
+              <svg aria-hidden="true" class="glyph">
+                <use href="#i-laptop" /></svg
+              ><span>4</span>
+            </button>
+            <button
+              aria-expanded="true"
+              class="bar-item caw-head"
+              data-caw-door
+              type="button"
+            >
+              <img alt="" src="stills/caw-head.png" />
+              <svg aria-hidden="true" class="arcs" viewBox="0 0 28 28"></svg>
+            </button>
+          </div>
+          <div class="hang" data-panel-host></div>
+        </div>
+        <figcaption>Desk</figcaption>
+      </figure>
+
+      <figure class="frame frame-phone">
+        <div class="device phone" data-device="phone">
+          <div aria-hidden="true" class="status-bar">
+            <span>9:41</span><span>●●● ▮</span>
+          </div>
+          <div class="phone-bar">
+            <svg aria-hidden="true" class="glyph burger">
+              <use href="#i-burger" />
+            </svg>
+            <span class="title">Cawco-Dev</span>
+            <button
+              aria-expanded="true"
+              class="caw-tab"
+              data-caw-door
+              type="button"
+            >
+              <img alt="" src="stills/caw-head.png" />
+              <svg aria-hidden="true" class="arcs" viewBox="0 0 28 28"></svg>
+            </button>
+          </div>
+          <div aria-hidden="true" class="phone-page">
+            <p class="project">Cawco-Dev</p>
+            <p class="where">obelisk-of-light · /home/bewinxed/cockpit</p>
+          </div>
+          <div class="sheet" data-panel-host>
+            <button
+              aria-label="Drag down to close"
+              class="grabber"
+              type="button"
+            ></button>
+          </div>
+        </div>
+        <figcaption>Phone</figcaption>
+      </figure>
+    </main>
+
+    <template id="panel">
+      <section class="panel">
+        <div class="stack" data-slot="stack">
+          <div aria-hidden="true" class="stack-room"></div>
+          <h2 class="sr-only" data-slot="stack-head">Needs you</h2>
+          <ul data-slot="rows"></ul>
+          <button
+            class="more-line"
+            data-slot="more"
+            hidden
+            type="button"
+          ></button>
+          <p class="signpost" data-slot="signpost" hidden>
+            <a href="#home-needs">3 waiting in other projects</a>
+          </p>
+          <div aria-hidden="true" class="stack-foot"></div>
+        </div>
+        <div class="scroller" data-slot="scroller">
+          <div class="title-slot" data-slot="title-slot">
+            <h2 class="large-title" data-slot="large-title">
+              Nightly check ready
+            </h2>
+          </div>
+          <ol class="thread" data-slot="thread"></ol>
+          <div class="fresh" data-slot="fresh" hidden>
+            <div class="caw" data-slot="fresh-caw">
+              <img alt="" class="day" src="stills/caw-ready-day.png" />
+              <img alt="" class="night" src="stills/caw-ready-night.png" />
+            </div>
+            <ul class="starters">
+              <li>
+                <button class="starter" type="button">
+                  Make tasks from the plan
+                </button>
+              </li>
+              <li>
+                <button class="starter" type="button">Ask for a view</button>
+              </li>
+              <li>
+                <button class="starter" type="button">What needs me?</button>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="block" data-slot="block" hidden>
+          <div class="block-in">
+            <div class="hero" data-slot="hero">
+              <img
+                alt=""
+                class="day"
+                data-slot="hero-day"
+                src="stills/hero-machine-day.png"
+              />
+              <img
+                alt=""
+                class="night"
+                data-slot="hero-night"
+                src="stills/hero-machine-night.png"
+              />
+            </div>
+            <h3>
+              <span class="morph" data-slot="block-title"
+                >No machine is online</span
+              >
+            </h3>
+            <p class="body">
+              <span class="morph" data-slot="block-body"></span>
+            </p>
+            <div class="ways">
+              <button class="btn-outline" type="button">
+                <span class="morph" data-slot="block-way"></span>
+              </button>
+              <button
+                aria-expanded="false"
+                class="btn-ghost"
+                data-slot="details-toggle"
+                type="button"
+              >
+                Show details
+              </button>
+            </div>
+            <p class="details" data-slot="details" hidden></p>
+          </div>
+        </div>
+        <div class="dock" data-slot="dock">
+          <div class="peek" data-slot="peek">
+            <div class="caw" data-slot="peek-caw">
+              <img alt="" class="day" src="stills/caw-idle-day.png" />
+              <img alt="" class="night" src="stills/caw-idle-night.png" />
+            </div>
+          </div>
+          <form class="composer" data-slot="composer">
+            <button aria-label="Attach" class="attach" type="button">
+              <svg aria-hidden="true" class="glyph"><use href="#i-plus" /></svg>
+            </button>
+            <label class="field">
+              <span class="sr-only">Message Caw</span>
+              <textarea data-slot="field" placeholder=" " rows="1"></textarea>
+              <span aria-hidden="true" class="hint"
+                ><span class="morph" data-slot="hint"></span
+              ></span>
+            </label>
+            <button aria-label="Send" class="send" type="submit">
+              <svg aria-hidden="true" class="glyph"><use href="#i-send" /></svg>
+            </button>
+          </form>
+        </div>
+        <div class="top-zone">
+          <div aria-hidden="true" class="edge" data-slot="edge"></div>
+          <p aria-hidden="true" class="small-title" data-slot="small-title">
+            <span></span>
+          </p>
+          <div aria-label="Thread" class="capsule" role="toolbar">
+            <button
+              aria-label="New thread"
+              class="cap-item"
+              data-act="new"
+              title="New thread"
+              type="button"
+            >
+              <svg aria-hidden="true" class="glyph">
+                <use href="#i-add-circle" />
+              </svg>
+            </button>
+            <button
+              aria-expanded="false"
+              aria-haspopup="menu"
+              aria-label="More"
+              class="cap-item"
+              data-act="more"
+              title="More"
+              type="button"
+            >
+              <svg aria-hidden="true" class="glyph">
+                <use href="#i-menu-dots" />
+              </svg>
+            </button>
+            <button
+              aria-label="Close"
+              class="cap-item"
+              data-act="close"
+              title="Close"
+              type="button"
+            >
+              <svg aria-hidden="true" class="glyph">
+                <use href="#i-close-circle" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="menu" data-slot="menu" hidden role="menu">
+          <button data-act="switch" role="menuitem" type="button">
+            <span>Caw</span
+            ><span class="state" data-slot="switch-state">On</span>
+          </button>
+          <button role="menuitem" type="button">Threads</button>
+          <button role="menuitem" type="button">Open as page</button>
+          <hr />
+          <button role="menuitem" type="button">Clear all notices</button>
+        </div>
+        <p class="sr-only" data-slot="status" role="status"></p>
+      </section>
+    </template>
+  </body>
+</html>

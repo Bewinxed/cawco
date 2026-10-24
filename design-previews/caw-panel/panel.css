@@ -1,0 +1,1596 @@
+/* Caw's panel, the design preview (.design-foundations/plans/2026-10-24-caw-panel.md).
+   Every value is a house token from tokens.css (a copy of the dashboard's
+   generated sheet); the few numbers written here are the plan's own
+   (the hero's 160×120 and 128×96, Caw's 64px on a new thread). */
+
+/* The clock a docked row's press scrolls the thread on: a Web Animation
+   runs it 0 → 1 on the house curve and the page reads it each frame. */
+@property --scroll-t {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+:root {
+  color-scheme: light;
+  /* The panel's top zone: the capsule's 36px, space-2 above and below it. */
+  --top-zone: calc(var(--c-btn-h) + 2 * var(--space-2));
+  /* Caw's peek over the composer: his still's box and how much of it stands above the composer's edge. */
+  --peek-box: 56px;
+  --peek-rise: 30px;
+  /* The hero still: 160×120 on a desk, 128×96 on a phone (plan §2.4). */
+  --hero-w: 160px;
+  --hero-h: 120px;
+  /* The press scale every pressable takes (DESIGN.md Composer: 0.97). */
+  --press-scale: 0.97;
+}
+
+:root.dark {
+  color-scheme: dark;
+}
+
+/* Less motion: a press does not scale (The Reduced Motion Rule); the preview's own Motion switch says the same. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --press-scale: 1;
+  }
+}
+
+:root[data-motion="reduced"] {
+  --press-scale: 1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--ink-strong);
+  font: var(--type-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:where(button, a, input, textarea, [tabindex]):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.glyph {
+  display: block;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  flex: none;
+}
+
+/* ── The preview's own controls ───────────────────────────────────── */
+
+.controls {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 1200px;
+  margin-inline: auto;
+  padding: var(--space-7) var(--space-5) var(--space-5);
+}
+
+.controls h1 {
+  margin: 0;
+  font: var(--type-title);
+  letter-spacing: -0.01em;
+}
+
+.controls .lede {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-muted);
+  max-width: 72ch;
+  text-wrap: pretty;
+}
+
+.switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-6);
+  align-items: end;
+}
+
+.switch {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.switch[hidden] {
+  display: none;
+}
+
+.switch legend {
+  padding: 0 0 var(--space-1);
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.switch .rec {
+  color: var(--ink-subtle);
+}
+
+/* A segmented control: the groove, a lifted thumb under the choice. */
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--surface-recess-deep);
+}
+
+.seg label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: var(--c-btn-h-sm);
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-md) - 2px);
+  font: var(--type-label);
+  color: var(--ink-muted);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    color var(--dur-control) var(--ease-out),
+    box-shadow var(--dur-control) var(--ease-out);
+}
+
+.seg input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.seg label:has(input:checked) {
+  background: var(--surface-lift);
+  color: var(--ink-strong);
+  box-shadow: var(--shadow-tile);
+}
+
+.seg label:has(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .seg label:not(:has(input:checked)):hover {
+    color: var(--ink-strong);
+  }
+}
+
+.moments {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: var(--c-btn-h-sm);
+}
+
+.moment {
+  min-height: var(--c-btn-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-button-outline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--type-label);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    scale var(--dur-control) var(--ease-out);
+}
+
+.moment:active {
+  scale: var(--press-scale);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .moment:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* ── The stage: Desk and Phone side by side ───────────────────────── */
+
+.stage {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-3) var(--space-5) var(--space-8);
+}
+
+.frame {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  min-width: 0;
+}
+
+.frame figcaption {
+  font: var(--type-label);
+  color: var(--ink-muted);
+}
+
+/* Narrower than both frames side by side: one at a time, by the Show switch, each fitted to the width (panel.js sets --fit). */
+.show-switch {
+  display: none;
+}
+
+@media (width < 900px) {
+  .show-switch {
+    display: grid;
+  }
+  .stage {
+    padding-inline: 0;
+  }
+  .stage[data-show="desk"] .frame-phone,
+  .stage[data-show="phone"] .frame-desk {
+    display: none;
+  }
+  .device {
+    zoom: var(--fit, 1);
+    border: 0;
+  }
+}
+
+.device {
+  position: relative;
+  overflow: clip;
+  border: 1px solid var(--border-hairline);
+  background: var(--surface-recess);
+  isolation: isolate;
+}
+
+/* ── Desk: the right end of a project page at 1440, the card hung from the glass ── */
+
+.desk {
+  width: 460px;
+  height: calc(var(--c-top-bar-h) + var(--c-caw-panel-h) + var(--space-6));
+  border-radius: var(--radius-panel);
+}
+
+.page-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--c-top-bar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding-inline: var(--space-4);
+  background: var(--surface-recess);
+}
+
+.page-bar .tab {
+  font: var(--type-label);
+  color: var(--ink-muted);
+}
+
+.page-bar .tab[aria-current] {
+  color: var(--ink-strong);
+}
+
+.page-body {
+  position: absolute;
+  inset: var(--c-top-bar-h) 0 0;
+  padding: var(--space-5) var(--space-4);
+  color: var(--ink-muted);
+}
+
+.page-body .project {
+  margin: 0;
+  font: var(--type-title);
+  color: var(--ink-strong);
+}
+
+.page-body .where {
+  margin: var(--space-1) 0 var(--space-6);
+  font: var(--type-meta);
+}
+
+.page-body .lanes {
+  display: flex;
+  gap: var(--space-5);
+  font: var(--type-label);
+}
+
+.page-body .ticket {
+  width: 88px;
+  height: 52px;
+  margin-top: var(--space-3);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+/* The bar's glass: one capsule of the panel material, its items borderless, Caw last at the edge. */
+.glass {
+  position: absolute;
+  z-index: 3;
+  top: var(--c-bar-group-pad);
+  right: var(--c-bar-group-pad);
+  display: flex;
+  align-items: center;
+  gap: var(--c-bar-group-pad);
+  height: var(--c-btn-h);
+  padding: var(--c-bar-group-pad);
+  border-radius: var(--radius-pill);
+}
+
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid var(--border-hairline);
+  border-radius: inherit;
+  background: var(--material-panel);
+  box-shadow: var(--shadow-tile);
+  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
+    saturate(var(--material-saturate));
+}
+
+/* While the card hangs, the glass is one shape with it: the card's surface and edge over its top and flanks, open at its foot, flaring by radius-lg into the card's top edge at its leading foot. */
+.join {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  bottom: -1px;
+  left: calc(-1 * var(--radius-lg));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+
+.glass[data-joined] .join {
+  opacity: 1;
+  transition-duration: var(--dur-pop);
+}
+
+.join::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 var(--radius-lg);
+  border: 1px solid var(--border-control);
+  border-bottom: 0;
+  border-radius: calc(var(--c-btn-h) / 2) calc(var(--c-btn-h) / 2) 0 0;
+  background: var(--surface-raised);
+}
+
+.join::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--radius-lg);
+  height: var(--radius-lg);
+  background: radial-gradient(
+    circle at 0 0,
+    transparent calc(var(--radius-lg) - 0.5px),
+    var(--border-control) calc(var(--radius-lg) - 0.5px)
+      calc(var(--radius-lg) + 0.5px),
+    var(--surface-raised) calc(var(--radius-lg) + 0.5px)
+  );
+}
+
+.bar-item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--c-bar-item);
+  height: var(--c-bar-item);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-control) var(--ease-out);
+}
+
+.bar-item .glyph {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.bar-item:active {
+  background: var(--surface-pressed);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bar-item:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.bar-count {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: auto;
+  padding-inline: var(--space-1);
+  font: var(--type-meta);
+}
+
+/* Caw's head on his circle; what needs you is arcs on its rim. */
+.caw-head img {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+}
+
+.arcs {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.arcs path {
+  fill: none;
+  stroke: var(--status-attn-glyph);
+  stroke-width: var(--c-caw-ring);
+  stroke-linecap: round;
+}
+
+/* The cut under the bar: the card comes down out of the glass through it. */
+.hang {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--c-btn-h) + var(--c-bar-group-pad));
+  right: var(--c-bar-group-pad);
+  width: var(--c-panel-w);
+  /* Up to 640: the card is as tall as what it holds. */
+  max-height: var(--c-caw-panel-h);
+  overflow: clip;
+  overflow-clip-margin: 64px;
+  clip-path: inset(0 -64px -64px -64px);
+}
+
+.hang > :where(.panel) {
+  max-height: var(--c-caw-panel-h);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg) 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--shadow-overlay-hung);
+}
+
+/* ── Phone: the page's sheet at 390 ───────────────────────────────── */
+
+.phone {
+  --hero-w: 128px;
+  --hero-h: 96px;
+  width: 390px;
+  height: 844px;
+  border-radius: 48px;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 47px;
+  padding: 0 var(--space-8);
+  font: var(--type-label);
+}
+
+.phone-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--c-top-bar-h);
+  padding-inline: var(--space-4) 0;
+}
+
+.phone-bar .title {
+  flex: 1;
+  min-width: 0;
+  font: var(--type-label);
+}
+
+.phone-bar .burger {
+  color: var(--ink-muted);
+}
+
+/* Caw's tucked tab: his own glass, square on the screen's side. */
+.caw-tab {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--c-bar-caw-glass-phone) + var(--space-2));
+  height: var(--c-bar-caw-glass-phone);
+  padding: 0;
+  border: 1px solid var(--border-hairline);
+  border-inline-end: 0;
+  border-radius: calc(var(--c-bar-caw-glass-phone) / 2) 0 0
+    calc(var(--c-bar-caw-glass-phone) / 2);
+  background: var(--material-panel);
+  box-shadow: var(--shadow-tile);
+  cursor: pointer;
+}
+
+.caw-tab img {
+  width: var(--c-bar-caw-head-phone);
+  height: var(--c-bar-caw-head-phone);
+}
+
+.caw-tab .arcs {
+  inset: 2px auto auto var(--space-1);
+  width: 28px;
+  height: 28px;
+}
+
+.phone-page {
+  padding: var(--space-3) var(--space-4);
+}
+
+.phone-page .project {
+  margin: 0;
+  font: var(--type-title);
+}
+
+.phone-page .where {
+  margin: var(--space-1) 0 0;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.sheet {
+  position: absolute;
+  z-index: 2;
+  inset: 150px 0 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-control);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-drawer);
+  overflow: clip;
+  touch-action: none;
+}
+
+.grabber {
+  flex: none;
+  display: grid;
+  place-items: center;
+  height: var(--space-4);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.grabber::before {
+  content: "";
+  width: 36px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--neutral-7);
+}
+
+.sheet > :where(.panel) {
+  flex: 1;
+  min-height: 0;
+  --dock-foot: var(--space-6);
+}
+
+/* ── The panel: top zone, stack, thread, can't-start block, composer ── */
+
+.panel {
+  --pad: var(--space-2);
+  --dock-foot: var(--space-2);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: clip;
+  background: var(--surface-raised);
+  isolation: isolate;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+/* Caw's stills, each drawn by day and by night. */
+.caw {
+  position: relative;
+}
+
+.night,
+:where(:root.dark) .day {
+  display: none;
+}
+
+:where(:root.dark) .night {
+  display: block;
+}
+
+/* Top zone: the edge effect, the small title and the glass capsule, over the content. */
+.top-zone {
+  position: absolute;
+  z-index: 4;
+  inset: 0 0 auto;
+  height: var(--top-zone);
+  pointer-events: none;
+}
+
+.edge {
+  position: absolute;
+  inset: 0 0 auto;
+  height: calc(var(--top-zone) + var(--space-2));
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--surface-well),
+    oklch(from var(--surface-well) l c h / 0.6) 55%,
+    oklch(from var(--surface-well) l c h / 0)
+  );
+  backdrop-filter: blur(var(--material-blur));
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
+
+.small-title {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline: var(--space-3)
+    calc(var(--space-2) + var(--capsule-w) + var(--space-3));
+  display: flex;
+  align-items: center;
+  height: var(--c-btn-h);
+  margin: 0;
+  font: var(--type-label);
+  color: var(--ink-strong);
+  opacity: 0;
+  translate: 0 4px;
+}
+
+.small-title span {
+  min-width: 0;
+  overflow: clip;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capsule {
+  --capsule-items: 3;
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+  display: flex;
+  gap: var(--c-bar-group-pad);
+  height: var(--c-btn-h);
+  padding: var(--c-bar-group-pad);
+  border-radius: var(--radius-pill);
+  pointer-events: auto;
+}
+
+.top-zone {
+  --capsule-w: calc(3 * var(--c-bar-item) + 4 * var(--c-bar-group-pad));
+}
+
+.capsule::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid var(--border-hairline);
+  border-radius: inherit;
+  background: var(--material-panel);
+  box-shadow: var(--shadow-tile);
+  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
+    saturate(var(--material-saturate));
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .capsule::before,
+  .glass::before {
+    border-color: var(--border-contrast);
+    background: var(--surface-raised);
+    backdrop-filter: none;
+  }
+  .edge {
+    backdrop-filter: none;
+  }
+}
+
+.cap-item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--c-bar-item);
+  height: var(--c-bar-item);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-control) var(--ease-out);
+}
+
+/* Each is a 44px touch area under a finger. */
+.cap-item::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--c-bar-item) - 44px) / 2);
+}
+
+.cap-item .glyph {
+  width: var(--c-bar-symbol);
+  height: var(--c-bar-symbol);
+}
+
+.cap-item:active,
+.cap-item[aria-expanded="true"] {
+  background: var(--surface-pressed);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cap-item:hover {
+    background: var(--surface-hover);
+  }
+  .cap-item:active {
+    background: var(--surface-pressed);
+  }
+}
+
+/* The ⋯ menu: the kit popover, hanging from its item. */
+.menu {
+  position: absolute;
+  z-index: 5;
+  inset-block-start: calc(var(--top-zone) - var(--space-1));
+  inset-inline-end: var(--space-2);
+  display: grid;
+  min-width: 200px;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-overlay);
+  transform-origin: top right;
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: calc(var(--radius-md) - var(--space-1));
+  background: transparent;
+  font: var(--type-label);
+  text-align: start;
+  cursor: pointer;
+}
+
+.menu button:active {
+  background: var(--surface-pressed);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menu button:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.menu .state {
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.menu hr {
+  height: 1px;
+  margin: var(--space-1) 0;
+  border: 0;
+  background: var(--border-hairline);
+}
+
+/* Stack: what waits, pinned under the top zone; its foot the one vermillion hairline. Empty, nothing. */
+.stack {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  overflow: clip;
+  background: var(--surface-raised);
+}
+
+.stack-room,
+.stack-foot {
+  display: none;
+}
+
+.stack[data-filled] .stack-room {
+  display: block;
+  height: var(--top-zone);
+}
+
+.stack[data-filled] .stack-foot {
+  display: block;
+  height: 1px;
+  background: var(--brand-solid);
+}
+
+.stack ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stack li {
+  overflow: clip;
+}
+
+.more-line,
+.signpost {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 var(--space-3) 0
+    calc(var(--space-3) + var(--c-row-lead) + var(--space-2));
+  border: 0;
+  background: transparent;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+  text-align: start;
+}
+
+.more-line[hidden],
+.signpost[hidden] {
+  display: none;
+}
+
+.more-line {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.signpost a {
+  color: var(--link-ink);
+  text-decoration: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .signpost a:hover {
+    text-decoration: underline;
+  }
+}
+
+/* The row (stack) and the card (thread): one grid, mark in the 28px lead column, the last control at the trailing edge. */
+.row {
+  display: grid;
+  grid-template-columns: var(--c-row-lead) minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  row-gap: 2px;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+}
+
+.row .lead {
+  grid-row: 1 / span 2;
+  align-self: start;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--c-row-lead);
+  height: calc(var(--text-label) * 1.3);
+}
+
+.lead img {
+  width: var(--c-row-mark);
+  height: var(--c-row-mark);
+}
+
+.row .what {
+  min-width: 0;
+  margin: 0;
+  font: var(--type-label);
+  color: var(--ink-row);
+  overflow: clip;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row .wait {
+  font: var(--type-meta);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.row .why {
+  grid-column: 2 / -1;
+  min-width: 0;
+  margin: 0;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+  overflow: clip;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row .pair {
+  grid-column: 2 / -1;
+  justify-self: end;
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+@media (pointer: coarse) {
+  .row .pair {
+    gap: var(--space-4);
+  }
+}
+
+.row code,
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-variant-ligatures: none;
+}
+
+/* A docked row: its words are the press that goes back to the card. */
+.row .go {
+  display: contents;
+  cursor: pointer;
+}
+
+.docked {
+  cursor: pointer;
+  transition: background-color var(--dur-control) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .docked:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* The Peer Rule, panel form: Deny then Approve, a filled tinted pair at one strength. */
+.peer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--c-btn-h-sm);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: var(--type-label);
+  cursor: pointer;
+  transition: scale var(--dur-control) var(--ease-out);
+}
+
+.peer:active {
+  scale: var(--press-scale);
+}
+
+.peer .glyph {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.peer.deny {
+  background: var(--status-fail-bg);
+  color: var(--status-fail-ink);
+}
+
+.peer.approve {
+  background: var(--status-done-bg);
+  color: var(--status-done-ink);
+}
+
+@media (pointer: coarse) {
+  .peer {
+    position: relative;
+  }
+  .peer::after {
+    content: "";
+    position: absolute;
+    inset: calc((var(--c-btn-h-sm) - 44px) / 2) calc(-1 * var(--space-2));
+  }
+}
+
+/* The kit highlight ring: one ping as a card lands. */
+.ping {
+  position: absolute;
+  inset: calc(50% - var(--c-row-mark) / 2) calc(50% - var(--c-row-mark) / 2);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 2px var(--status-attn-glyph);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Thread: the conversation, on the well; the large title at its start. */
+.scroller {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--top-zone) var(--pad) var(--space-4);
+  background: var(--surface-well);
+  scrollbar-width: thin;
+}
+
+/* What a held conversation's scroll offset cannot take (a fraction of a device pixel), its content takes (panel.js scrollExact). */
+.scroller > :is(.title-slot, .thread, .fresh) {
+  translate: 0 var(--scroll-rem, 0px);
+}
+
+.stack[data-filled] + .scroller {
+  padding-top: var(--space-4);
+}
+
+.title-slot {
+  overflow: clip;
+}
+
+.large-title {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-5);
+  font: var(--type-title);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.turn {
+  padding-inline: var(--space-3);
+  overflow: clip;
+  overflow-clip-margin: var(--space-2);
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font: var(--type-label);
+  color: var(--ink-muted);
+}
+
+.who .role {
+  color: var(--ink-strong);
+}
+
+.who .clock {
+  margin-inline-start: auto;
+  font: var(--type-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--row-mark-box);
+  height: var(--row-mark-box);
+  border-radius: var(--radius-xs);
+}
+
+.mark.you {
+  width: var(--row-mark);
+  height: var(--row-mark);
+  margin-inline: calc((var(--row-mark-box) - var(--row-mark)) / 2);
+  border-radius: var(--row-mark-r);
+  background: var(--action-surface);
+  color: var(--on-action);
+}
+
+.you .glyph {
+  width: var(--row-mark-glyph);
+  height: var(--row-mark-glyph);
+}
+
+.mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+:where(:root.dark) :is(.mark, .lead, .caw-head, .caw-tab) img {
+  /* His rim on the roost (assets/mascot README: at least one device pixel), drawn round the head's own outline. */
+  filter: drop-shadow(0.5px 0 0 var(--paper))
+    drop-shadow(-0.5px 0 0 var(--paper)) drop-shadow(0 0.5px 0 var(--paper))
+    drop-shadow(0 -0.5px 0 var(--paper));
+}
+
+.well {
+  margin-inline-start: calc((var(--row-mark-box) - var(--row-mark)) / 2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--well-edge);
+  border-radius: var(--radius-well);
+  background: var(--surface-recess-deep);
+}
+
+.well p,
+.prose p {
+  margin: 0;
+  font: var(--type-prose);
+  color: var(--ink-strong);
+  text-wrap: pretty;
+}
+
+.prose p + p,
+.prose ul {
+  margin-top: var(--space-2);
+}
+
+.prose ul {
+  margin-bottom: 0;
+  padding-inline-start: var(--space-5);
+  font: var(--type-prose);
+}
+
+.note {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-3);
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.card {
+  position: relative;
+  margin-top: var(--space-3);
+  border: 1px solid var(--border-card, var(--border-hairline));
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-tile);
+  overflow: clip;
+}
+
+.card .row {
+  padding: var(--space-3);
+}
+
+.outcome {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+
+.outcome .glyph {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  color: var(--status-done-glyph);
+}
+
+.outcome:where([data-denied]) .glyph {
+  color: var(--status-fail-glyph);
+}
+
+/* A new thread: Caw on the panel's axis, three starters under him. */
+.fresh {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-5);
+  min-height: 100%;
+  padding: var(--space-4) var(--space-3);
+}
+
+.fresh[hidden] {
+  display: none;
+}
+
+.fresh .caw {
+  width: 64px;
+  height: 64px;
+}
+
+.starters {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.starter {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--c-row-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-row-outline);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: var(--type-label);
+  color: var(--ink-strong);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    scale var(--dur-control) var(--ease-out);
+}
+
+.starter:active {
+  scale: var(--press-scale);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .starter:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* The can't-start block: pinned above the composer (fork A) or the panel's centre (fork B). */
+.block {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  overflow: clip;
+  background: var(--surface-well);
+}
+
+.block[hidden] {
+  display: none;
+}
+
+.block-in {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5) var(--space-2);
+  text-align: center;
+}
+
+.panel[data-block="B"] .block {
+  position: absolute;
+  inset: var(--top-zone) 0 var(--dock-h) 0;
+  display: grid;
+  align-content: center;
+}
+
+.panel[data-block="B"] .block[hidden] {
+  display: none;
+}
+
+.panel[data-block="B"][data-blocked]
+  .scroller
+  > :is(.title-slot, .thread, .fresh) {
+  visibility: hidden;
+}
+
+.hero {
+  position: relative;
+  width: var(--hero-w);
+  height: var(--hero-h);
+}
+
+.hero img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.block h3 {
+  margin: var(--space-1) 0 0;
+  font: var(--type-label);
+  color: var(--ink-strong);
+}
+
+.block .body {
+  max-width: 34ch;
+  margin: 0;
+  font: var(--type-body);
+  color: var(--ink-muted);
+  text-wrap: balance;
+}
+
+.block .ways {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.btn-outline {
+  height: var(--c-btn-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-button-outline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--type-label);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    scale var(--dur-control) var(--ease-out);
+}
+
+.btn-ghost {
+  height: var(--c-btn-h-xs);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-control) var(--ease-out);
+}
+
+.btn-outline:active {
+  scale: var(--press-scale);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-outline:hover,
+  .btn-ghost:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.details {
+  max-width: 36ch;
+  margin: 0;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+  overflow: clip;
+}
+
+.details[hidden] {
+  display: none;
+}
+
+/* Composer: the message box, always; Caw peeks over its top edge on the panel's centre line. */
+.dock {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  padding: 0 var(--pad) var(--dock-foot);
+  background: var(--surface-well);
+}
+
+/* He stands behind the composer's top edge: nothing of him shows through its glass. */
+.peek {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  height: var(--peek-rise);
+  clip-path: inset(-100vh -100vw 0 -100vw);
+}
+
+.peek .caw {
+  position: absolute;
+  top: 0;
+  left: calc(50% - var(--peek-box) / 2);
+  width: var(--peek-box);
+  height: var(--peek-box);
+}
+
+.peek .caw[hidden] {
+  display: none;
+}
+
+.caw img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.caw[data-breathing] {
+  animation: breath var(--breath) var(--ease-in-out) infinite;
+}
+
+@keyframes breath {
+  50% {
+    opacity: var(--breath-floor);
+  }
+}
+
+.composer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--c-composer-inset) var(--c-composer-inset)
+    var(--c-composer-inset) var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg);
+  background: var(--material-panel);
+  box-shadow: var(--shadow-tile);
+  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+}
+
+.field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+
+.field textarea {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-height: var(--c-composer-field);
+  max-height: 200px;
+  padding: calc((var(--c-composer-field) - 20px) / 2) 0;
+  border: 0;
+  background: transparent;
+  font: 400 16px / 1.25 var(--font-body);
+  color: var(--ink-strong);
+  resize: none;
+  scrollbar-width: none;
+}
+
+/* The Caret Rule: a text field never wears the focus ring. */
+.field textarea:focus-visible {
+  outline: none;
+}
+
+.hint {
+  grid-area: 1 / 1;
+  align-self: center;
+  position: relative;
+  min-width: 0;
+  font: 400 16px / 1.25 var(--font-body);
+  color: var(--ink-subtle);
+  pointer-events: none;
+  overflow: clip;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.field:has(textarea:not(:placeholder-shown)) .hint {
+  visibility: hidden;
+}
+
+.attach,
+.send {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--c-composer-field);
+  height: var(--c-composer-field);
+  padding: 0;
+  border-radius: calc(var(--radius-lg) - var(--c-composer-inset) - 1px);
+  cursor: pointer;
+  transition:
+    scale var(--dur-control) var(--ease-out),
+    background-color var(--dur-control) var(--ease-out);
+}
+
+.attach {
+  border: 1px solid var(--border-control);
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+}
+
+.send {
+  border: 0;
+  background: var(--action-surface);
+  color: var(--on-action);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .send:hover {
+    background: var(--action-surface-hover);
+  }
+}
+
+.send .glyph {
+  width: 18px;
+  height: 18px;
+  translate: 0.5px -0.5px;
+}
+
+.attach:active,
+.send:active {
+  scale: var(--press-scale);
+}
+
+/* MorphText, the preview's form: the box holds the wider and taller words while the letters cross. */
+.morph {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.morph-old {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* The one Caw in flight between two places (The One Object Rule). */
+.flyer {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+
+.flyer img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* The scroller's foot fades while more is below (the house edge fade). */
+.scroller[data-more-below] {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
+}
+
+[data-hidden-for-flight] {
+  visibility: hidden;
+}
+
+/* The theme flips at once: no element's colour transition runs for it (DESIGN.md, Theme switch). */
+:root[data-flipping] *,
+:root[data-flipping] *::before,
+:root[data-flipping] *::after {
+  transition: none;
+}

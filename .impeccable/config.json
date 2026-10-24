@@ -9,6 +9,27 @@
         "value": "nunito variable",
         "createdAt": "2026-10-24T17:31:04.938Z",
         "reason": "DESIGN.md Typography line 612 declares it: 'Wordmark font: Nunito Variable (--font-wordmark)'; the hook reads only the frontmatter"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": ["design-previews/caw-panel/index.html"],
+        "createdAt": "2026-10-24T18:29:13.267Z",
+        "reason": "DESIGN.md: the surface is warm paper by day (neutral hue ~85); the preview draws the house tokens"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": ["design-previews/caw-panel/index.html"],
+        "createdAt": "2026-10-24T18:29:13.284Z",
+        "reason": "static scan cannot resolve var(--type-*); rendered: title 18px/500 over body 14px and label 13px, DESIGN.md Hierarchy"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": ["design-previews/caw-panel/index.html"],
+        "createdAt": "2026-10-24T18:29:13.302Z",
+        "reason": "the segmented control's 2px groove round its thumbs is DESIGN.md's segmented recipe, the labels carry space-3 padding"
       }
     ]
   }
