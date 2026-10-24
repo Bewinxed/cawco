@@ -182,6 +182,8 @@ function stageOf(framework: Framework, host: string): Promise<Stage> {
   const dir = join(SCRATCH, framework);
   mkdirSync(dir, { recursive: true });
   cpSync(join(FIXTURES, framework), dir, { recursive: true });
+  // The stage's pre-bundle from an earlier run held what that run's legs wrote (leg 20's gained export: "holds the export 0 ms after the write"): each run's stage bundles the fixture as it stands.
+  rmSync(join(dir, ".cawco/stage/cache"), { recursive: true, force: true });
   // Installed once, and again when the fixture names a package its install lacks (a workspace package added since).
   const manifest = JSON.parse(
     readFileSync(join(dir, "package.json"), "utf8")
