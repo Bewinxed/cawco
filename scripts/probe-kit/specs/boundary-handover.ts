@@ -71,12 +71,10 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type BoundaryDecision,
-  DECISION_FILE,
-} from "../../../packages/agent/src/boundary";
+import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { decisionsOf, startedSince } from "../agent-records";
 import type { Kit, Spec } from "../kit";
 
 const WAIT = "mcp__cawco__wait_item";
@@ -95,15 +93,6 @@ const FG_TAG = "PROBE-FG-F:";
 const FG_ACCOUNT = "acct-probe-older-form-fg";
 /** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
 const CUT_OFF = "boundary stopped while this command ran";
-/**
- * How the agent says it stopped a boundary as narrowed (boundary.ts
- * `replaceNarrowed`, `recheckNow`). The parent of 3aa74a224 said it of a
- * boundary with no record ("… is stopped now, as its access narrowed … (what
- * its boundary started with is not on record)"); the line that keeps one
- * says "not on record" too, so the stop is matched by its own words.
- */
-const STOPPED_NARROWED =
-  /is stopped now, as its access narrowed|its narrowed boundaries are stopped now/;
 /** How long after F's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;
 const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/;
@@ -114,12 +103,6 @@ const STARTED = /BEAT-STARTED-(\d+):/;
 const ALIVE = /BEAT-ALIVE-(\d+):/;
 const BEATS = /BEAT-COUNT-(\d+):/;
 const ACCOUNT_ADDED = "acct-probe-older-form";
-/** How the agent says a fleet sync found a narrowed access (boundary.ts `recheckNow`). */
-const SYNCED = "its access narrowed (the fleet's config was synced)";
-const START_LINE = "[workspace] boundary hooks written for ";
-/** How `closeIdle` says it closed an older generation with nothing in it, or found it gone. */
-const OLDER_CLOSED =
-  /\) (has nothing left running in it and is closed|is gone)$/;
 /** The line a session's command shows once its access narrowed (agent boundary.ts `narrowedLine`). */
 const NARROWED_LINE = /^cawco: this workspace's access was narrowed /;
 /** H's rest after each command: longer than the spec, so its item stays live. */
@@ -273,24 +256,19 @@ const heldOf = async (
     )
   ) as { gen?: string; pid?: number };
 
-/**
- * What the agent last decided of workspace `id`'s boundary across a restart
- * that left it of an older form, as it records it (agent boundary.ts
- * `BoundaryDecision`); none before it decided.
- */
-const decisionOf = async (
-  home: string,
-  id: string
-): Promise<BoundaryDecision | undefined> =>
-  JSON.parse(
-    await readFile(join(stateOf(home, id), DECISION_FILE), "utf8").catch(
-      () => "null"
-    )
-  ) ?? undefined;
+/** A decision, or several, in a check's words. */
+const decisionSaid = (
+  decision: BoundaryDecision | readonly BoundaryDecision[] | undefined
+): string =>
+  decision && !(Array.isArray(decision) && decision.length === 0)
+    ? JSON.stringify(decision)
+    : "no decision recorded";
 
-/** A decision in a check's words. */
-const decisionSaid = (decision: BoundaryDecision | undefined): string =>
-  decision ? JSON.stringify(decision) : "no decision recorded";
+/** The agent's stops of workspace `id`'s boundaries as their access narrowed (agent boundary.ts `replaceNarrowed`), oldest first. */
+const stopsOf = async (home: string, id: string): Promise<BoundaryDecision[]> =>
+  (await decisionsOf(home, id)).filter(
+    (one) => one.decision === "narrowed-stopped"
+  );
 
 /** The policy workspace `id`'s current boundary started with, as its generation keeps it (agent boundary.ts `grantedOf`); none on record. */
 const grantedNow = async (
@@ -372,16 +350,11 @@ const olderFormRestart = async (
     await readFile(accounts, "utf8").catch(() => "[]")
   ) as string[];
   await writeFile(accounts, `${JSON.stringify([...listed, account])}\n`);
-  const before = await fleet.logMark("agent");
+  const before = Date.now();
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
-  await until(
-    "the restarted agent's start-up pass",
-    () => before.since(),
-    (logged) => logged.includes(START_LINE),
-    120_000
-  );
+  await startedSince(fleet.env, before);
 };
 
 const run = async (kit: Kit) => {
@@ -539,31 +512,29 @@ const foregroundAcross = async (
     await olderFormRestart(fleet, home, id, FG_ACCOUNT);
   }
   const restarted = Date.now() - restartAt;
-  // What the agent decided of the boundary while the command ran, read at
-  // each look for its result: once the command ends the decision to keep it
-  // gives way to its handover.
-  let keptWhile: BoundaryDecision | undefined;
   const result = await until(
     "F's foreground command's result",
-    async () => {
-      const decided = await decisionOf(home, id);
-      if (decided?.decision === "kept" && decided.pid === ran.pid) {
-        keptWhile = decided;
-      }
-      return fleet.seen.find(
+    () =>
+      fleet.seen.find(
         (one) => FG_STATUS.test(one.last) || one.last.includes(CUT_OFF)
-      );
-    },
+      ),
     Boolean,
     (FG_SECONDS + 120) * 1000
   ).catch(() => undefined);
   const said = result?.last ?? "";
-  const linesOf = async () =>
-    (await fleet.logs("agent")).split("\n").filter((line) => line.includes(id));
-  const lines = await linesOf();
+  const stops = await stopsOf(home, id);
   const stopped = () =>
-    lines.find((line) => STOPPED_NARROWED.test(line)) ??
-    "no line says it stopped a boundary as narrowed";
+    stops.length > 0
+      ? `stopped as narrowed: ${decisionSaid(stops)}`
+      : "nothing stopped as narrowed";
+  // What the agent decided of the boundary while the command ran.
+  const keptWhile = (await decisionsOf(home, id)).findLast(
+    (one) =>
+      one.decision === "kept" &&
+      one.pid === ran.pid &&
+      one.reasons.grant !== null &&
+      one.reasons.commands.length > 0
+  );
   kit.check(
     `0: F's foreground command, listening on nothing, ran across an agent restart that gave its boundary ${ran.pid ?? "unread"} an older form with its record of what it started with ${record}, ${Math.round(restarted / 1000)} s into its ${FG_SECONDS} s, and finished with its own exit code`,
     started &&
@@ -574,19 +545,19 @@ const foregroundAcross = async (
   );
   kit.check(
     "0: the agent records that it cannot compare the boundary's grant and keeps it while its command runs, and stops nothing as narrowed",
-    ran.pid !== undefined &&
-      keptWhile !== undefined &&
-      keptWhile.reasons.grant !== null &&
-      keptWhile.reasons.commands.length > 0 &&
-      !lines.some((line) => STOPPED_NARROWED.test(line)),
-    `${decisionSaid(keptWhile)}; ${stopped()}`
+    ran.pid !== undefined && keptWhile !== undefined && stops.length === 0,
+    `${keptWhile ? decisionSaid(keptWhile) : `no decision keeps boundary ${ran.pid ?? "unread"} for a grant not comparable while a command runs: ${decisionSaid(await decisionsOf(home, id))}`}; ${stopped()}`
   );
 
   // F rests now, nothing left in its boundary: the agent's look hands it
   // over, as it records, to one that starts with this build's record.
   const ended = Date.now();
   const lookAtF = async () => ({
-    decided: await decisionOf(home, id),
+    decided: (await decisionsOf(home, id)).find(
+      (one) =>
+        (one.decision === "handed-over" || one.decision === "replaced") &&
+        one.pid === ran.pid
+    ),
     granted: await grantedNow(home, id),
     now: await heldOf(home, id),
   });
@@ -595,26 +566,25 @@ const foregroundAcross = async (
     lookAtF,
     ({ decided, granted, now }) =>
       decided !== undefined &&
-      decided.decision !== "kept" &&
-      decided.pid === ran.pid &&
       now.pid !== undefined &&
       now.pid !== ran.pid &&
       granted?.allowRead !== undefined,
     HANDOVER_BOUND_MS
   ).catch(lookAtF);
   const took = Date.now() - ended;
-  const all = await linesOf();
-  kit.note(`0: the agent's lines for F's workspace:\n${all.join("\n")}`);
+  const stopsAfter = await stopsOf(home, id);
+  kit.note(
+    `0: the agent's decisions of F's workspace: ${decisionSaid(await decisionsOf(home, id))}`
+  );
   kit.check(
     `0: once F's command has ended, its boundary is handed over within ${HANDOVER_BOUND_MS / 1000} s to one started with this build's record, as the agent records, and nothing is stopped as narrowed`,
     handed.decided !== undefined &&
-      handed.decided.decision !== "kept" &&
-      handed.decided.pid === ran.pid &&
+      "to" in handed.decided &&
       handed.decided.to?.pid === handed.now.pid &&
       handed.now.pid !== ran.pid &&
       handed.granted?.allowRead !== undefined &&
-      !all.some((line) => STOPPED_NARROWED.test(line)),
-    `ran in ${ran.pid ?? "unread"}; now ${handed.now.pid ?? "unread"}, ${took} ms after the command's result; ${decisionSaid(handed.decided)}; the new boundary's record ${handed.granted?.allowRead ? "is there" : "is not"}; ${all.find((line) => STOPPED_NARROWED.test(line)) ?? "nothing stopped as narrowed"}`
+      stopsAfter.length === 0,
+    `ran in ${ran.pid ?? "unread"}; now ${handed.now.pid ?? "unread"}, ${took} ms after the command's result; ${decisionSaid(handed.decided)}; the new boundary's record ${handed.granted?.allowRead ? "is there" : "is not"}; ${stopsAfter.length > 0 ? `stopped as narrowed: ${decisionSaid(stopsAfter)}` : "nothing stopped as narrowed"}`
   );
 };
 
@@ -736,8 +706,8 @@ const asleep = (fleet: Fleet, id: string): Promise<string | undefined> => {
  * With H, F and their parent asleep (a project is deleted only once nothing of it
  * runs), the project is deleted: the hub trashes its folder and syncs every
  * machine's fleet config (server.ts `projectFolderMoved`). Within
- * {@link LOOK_BOUND_MS} of the delete H's boundary is replaced, said as the
- * sync's in the agent's log, its loop stopped, and the line naming it queued
+ * {@link LOOK_BOUND_MS} of the delete H's boundary is replaced, recorded as
+ * the folder's move's stop, its loop stopped, and the line naming it queued
  * for H's next command.
  */
 const deletedStops = async (
@@ -754,16 +724,11 @@ const deletedStops = async (
   }
 ): Promise<void> => {
   const folder = await realpath(projectFolderOf(fleet, h.project));
-  const before = await fleet.logMark("agent");
+  const before = Date.now();
   await fleet.stop("agent");
   fleet.launch("agent", [], { CAWCO_NARROW_LOOK_MS: "3600000" });
   await fleet.agentUp();
-  await until(
-    "the restarted agent's start-up pass",
-    () => before.since(),
-    (logged) => logged.includes(START_LINE),
-    120_000
-  );
+  await startedSince(fleet.env, before);
   const from = fleet.seen.length;
   await fleet.send(h.instanceId, "PROBE-BEAT-AGAIN-H: start it again.");
   const again = await until(
@@ -800,9 +765,13 @@ const deletedStops = async (
   const beatsThen = await beats(h.clone);
   await Bun.sleep(6000);
   const beatsLater = await beats(h.clone);
-  const said = (await fleet.logs("agent"))
-    .split("\n")
-    .find((line) => line.includes(h.id) && line.includes(SYNCED));
+  // The stop the hub's move of the folder made, as the agent records it.
+  const said = (await stopsOf(home, h.id)).find(
+    (one) =>
+      one.decision === "narrowed-stopped" &&
+      one.cause === "folder-moved" &&
+      one.at >= asked
+  );
   const notice = await readFile(
     join(home, ".cawco", "workspaces", h.id, "notice"),
     "utf8"
@@ -815,7 +784,7 @@ const deletedStops = async (
       !running.includes(after[0] as string) &&
       took <= LOOK_BOUND_MS &&
       Boolean(said),
-    `sessions ${sleeping.join(", ")}; delete: ${answer}; folder there: ${existsSync(folder)}; before: ${running.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the delete; ${said ?? "no line names the sync"}`
+    `sessions ${sleeping.join(", ")}; delete: ${answer}; folder there: ${existsSync(folder)}; before: ${running.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the delete; ${said ? decisionSaid(said) : `no stop for the folder's move: ${decisionSaid(await stopsOf(home, h.id))}`}`
   );
   kit.check(
     "6: its loop is stopped with it, and the line naming it is queued for H's next command",
@@ -833,8 +802,9 @@ const deletedStops = async (
  * An older generation still beside it before the restart (one handed over
  * before the loop started; host runs of 2026-10-19 had one on main and on
  * this build alike) may close meanwhile, but only as `closeIdle` closes one:
- * nothing left running in it, or gone already, said in the log. The agent's
- * lines for the workspace are noted, so a run says which handover made it.
+ * nothing left running in it, or gone already, as the agent records. Its
+ * decisions for the workspace are noted, so a run says which handover made
+ * it.
  */
 const keptAsItWas = async (
   kit: Kit,
@@ -844,16 +814,15 @@ const keptAsItWas = async (
   had: readonly string[]
 ): Promise<void> => {
   const now = await boundariesOf(fleet, id);
-  const lines = (await fleet.logs("agent"))
-    .split("\n")
-    .filter((line) => line.includes(id));
-  kit.note(`3: the agent's lines for H's workspace:\n${lines.join("\n")}`);
+  const decisions = await decisionsOf(home, id);
+  kit.note(
+    `3: the agent's decisions of H's workspace: ${decisionSaid(decisions)}`
+  );
   // What round 1's restart decided of the boundary H runs in.
-  const decided = await decisionOf(home, id);
-  const live =
-    decided?.decision === "kept" && decided.reasons.processes.length > 0
-      ? String(decided.pid)
-      : undefined;
+  const decided = decisions.findLast(
+    (one) => one.decision === "kept" && one.reasons.processes.length > 0
+  );
+  const live = decided?.decision === "kept" ? String(decided.pid) : undefined;
   const pidOf = (entry: string) => entry.slice(entry.lastIndexOf("@") + 1);
   const ownedLive = (list: readonly string[]) =>
     list.some((entry) => pidOf(entry) === live);
@@ -865,14 +834,15 @@ const keptAsItWas = async (
   const closed = had.filter((entry) => !now.includes(entry));
   const unsaid = closed.filter(
     (entry) =>
-      !lines.some(
-        (line) =>
-          line.includes(`its older boundary ${pidOf(entry)} (form `) &&
-          OLDER_CLOSED.test(line)
+      !decisions.some(
+        (one) =>
+          one.decision === "older-closed" &&
+          String(one.pid) === pidOf(entry) &&
+          (one.why === "idle" || one.why === "gone")
       )
   );
   kit.check(
-    "3: any other boundary H had before the restart closed only as an older generation with nothing left running in it, said in the agent's log",
+    "3: any other boundary H had before the restart closed only as an older generation with nothing left running in it, as the agent records",
     unsaid.length === 0 && !closed.some((entry) => pidOf(entry) === live),
     `closed: ${closed.join(",") || "none"}; closed unsaid: ${unsaid.join(",") || "none"}`
   );

@@ -500,7 +500,7 @@ for w in "$HOME"/.cawco/workspaces/*/; do
   [ -d "$w" ] || continue
   echo "== workspace $w"
   ls -la "$w" "$w/boundaries" "$w"/boundaries/* 2>&1
-  for f in "${w}boundary.json" "${w}boundary-decision.json" "$w"retiring-*.json; do
+  for f in "${w}boundary.json" "${w}boundary-decisions.json" "$w"retiring-*.json; do
     [ -f "$f" ] && { echo "-- $f"; cat "$f"; echo; }
   done
 done
@@ -726,6 +726,9 @@ api_on() { local c=$1; shift; as_user "$c" curl -fsS "http://127.0.0.1:3456$1" "
 now_ms() { local t=${EPOCHREALTIME/[.,]/}; echo $(( 10#$t / 1000 )); }
 json() { bun -e "const t = await Bun.stdin.text(); if (!t.trim()) process.exit(0); const d = JSON.parse(t); const v = ($1)(d); console.log(v === undefined ? '' : v)"; }
 jsonl() { bun -e "const t = await Bun.stdin.text(); const d = t.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); const v = ($1)(d); console.log(v === undefined ? '' : v)"; }
+# What machine $1's agent holds now, as it records it (agent agent-state.ts, agent-state.json in CawCo's data dir): $2 a
+# JS function of the record, printed. Its log says the same for people; a proof reads this.
+agent_state() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/agent-state.json 2> /dev/null || true' | json "$2"; }
 machine_id() { hub_api /api/agents | json "d => d.find(a => a.hostname === '$1')?.machineId"; }
 build_version() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.build?.version"; }
 phase() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.phase"; }
@@ -957,7 +960,7 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
 settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-for-hub|waiting-sessions)$ ]]; }
 export PROOF_RUNNER
-export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed \
+export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl agent_state machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
@@ -1283,15 +1286,13 @@ loopback_carried() {
     as_user "$joinerc" curl -fsS --max-time 5 -g 'http://[::1]:3455/session' | grep -q _app/immutable \
       || { echo "ASSERTION FAILED: the joined machine's [::1]:3455 is not the hub's dashboard"; return 1; }
   fi
-  local joined own
-  joined=$(as_user "$joinerc" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service | grep "\[hub loopback\]" || true')
-  own=$(as_user "$hubc" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service | grep "\[hub loopback\]" || true')
-  echo "== the joined machine's agent"; echo "$joined"
-  echo "== the hub machine's agent"; echo "$own"
-  [[ "$joined" == *"the hub at $hub_ip is served on"*"http://localhost:3455 (its dashboard at :3455)"* ]] \
-    || { echo "ASSERTION FAILED: the joined machine's agent says nothing of serving the hub's dashboard at $hub_ip:3455 on localhost:3455"; return 1; }
-  [[ "$own" == *"the hub says this is its own computer"* && "$own" != *"is served on"* ]] \
-    || { echo "ASSERTION FAILED: the hub machine's agent does not say the hub is its own computer, or serves it"; return 1; }
+  # How each agent serves the hub on its loopback, as it records it (agent-state.json `hubLoopback`).
+  echo "== the joined machine's agent: $(agent_state "$joinerc" 'd => JSON.stringify(d.hubLoopback ?? null)')"
+  echo "== the hub machine's agent: $(agent_state "$hubc" 'd => JSON.stringify(d.hubLoopback ?? null)')"
+  [[ "$(agent_state "$joinerc" "d => { const l = d.hubLoopback; return Boolean(l && l.hub === '$hub_ip' && l.here === null && l.hosts.length > 0 && l.listeners > 0 && l.dashboard?.local === 3455 && l.dashboard?.hub === 3455); }")" == true ]] \
+    || { echo "ASSERTION FAILED: the joined machine's agent does not record serving the hub's dashboard at $hub_ip:3455 on localhost:3455"; return 1; }
+  [[ "$(agent_state "$hubc" "d => { const l = d.hubLoopback; return Boolean(l && l.here === 'hub-says' && l.listeners === 0); }")" == true ]] \
+    || { echo "ASSERTION FAILED: the hub machine's agent does not record the hub as its own computer, carrying nothing"; return 1; }
   # With both agents up, the hub's machine still answers 3455 itself and nothing there took 3000.
   check_hub_dashboard_3455
 }
@@ -2452,16 +2453,18 @@ export WS_REPO=/home/cawco/proof-repo WS_ORIGIN=/home/cawco/proof-origin.git
 ws_state() { echo "/home/cawco/.cawco/workspaces/$(cat "$rigdir/ws-id")"; }
 ws_json() { as_user "$joinerc" sh -c 'cat "$1" 2> /dev/null || true' sh "$(ws_state)/$1" | json "$2"; }
 ws_gen() { ws_json boundary.json 'd => d.gen'; }
-# What the agent last decided of the boundary across an update, as it records it beside boundary.json (boundary.ts
-# `BoundaryDecision`, boundary-decision.json): its decision, the generation decided on and the one that took its place,
-# and why (the ports its work listens on, its commands by executor pid, a keeper still owed, a grant not comparable).
-# Its log line says the same for people; a proof reads this. $1 a JS predicate on the record, printed true or false.
-ws_decision() { ws_json boundary-decision.json "$1"; }
-# The record says generation $1 is kept as it is while its work listens on the listener's port (a hook call in flight
-# then is among its commands, the served server's port among its ports): kept in $rigdir/ws-kept.json as first read.
+# What the agent decided of the workspace's boundaries, its latest decisions in order, as it records them beside
+# boundary.json (boundary.ts `BoundaryDecision`, boundary-decisions.json): kept, handed over or replaced across an
+# update and why (the ports its work listens on, its commands by executor pid, a keeper still owed, a grant not
+# comparable), an older generation closed, a narrowing's stop, a quiet close. Its log says the same for people; a proof
+# reads this. $1 a JS function of the list, printed.
+ws_decisions() { ws_json boundary-decisions.json "$1"; }
+ws_decisions_said() { ws_decisions 'd => JSON.stringify(d)'; }
+# The first decision that keeps generation $1 as it is while its work listens on the listener's port (a hook call in
+# flight then is among its commands, the served server's port among its ports), into $rigdir/ws-kept.json.
 ws_kept_listening() {
-  [[ "$(ws_decision "d => d.decision === 'kept' && d.gen === '$1' && d.reasons.listening.includes($WS_LISTENER_PORT)")" == true ]] || return 1
-  ws_json boundary-decision.json 'd => JSON.stringify(d)' > "$rigdir/ws-kept.json"
+  ws_decisions "d => JSON.stringify(d.find(e => e.decision === 'kept' && e.gen === '$1' && e.reasons.listening.includes($WS_LISTENER_PORT)) ?? '')" > "$rigdir/ws-kept.json"
+  [[ "$(cat "$rigdir/ws-kept.json")" == "{"* ]]
 }
 # Runs one command through the workspace's executor, from its clone, as a harness's shell tool does.
 ws_exec() { as_user "$joinerc" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$rigdir/ws-clone")" "$(ws_state)/exec" "$1"; }
@@ -2666,7 +2669,7 @@ ws_hook_calls_stop() {
 # Every call the hook was handed was answered by a live judge and ran, and calls fell in the window between the new
 # build's agent starting and its deciding the workspace's boundary, whose work listens on a port, stays as it is
 # rather than being handed over: the first journal entry of the agent that decided, by its pid, and the decision's time,
-# both from the agent's record as workspace_across_update first read it ($rigdir/ws-kept.json, ws_kept_listening).
+# both from the agent's decision to keep it ($rigdir/ws-kept.json, ws_kept_listening).
 ws_hook_calls_answered() {
   local agent from to inside
   [[ -s "$rigdir/ws-kept.json" ]] || { echo "ASSERTION FAILED: the agent recorded no keeping of the workspace's boundary while its listener runs"; return 1; }
@@ -2810,8 +2813,8 @@ workspace_across_update() {
   # it as it is: handing it over would put every next command in a new network where nothing listens. Read from its
   # record (ws_kept_listening). (The preview's served server listens in it too once the stage starts it again, so the
   # ports may be both; a hook call the loop above has in flight at that moment is among its commands.)
-  wait_until 180 'ws_kept_listening "'"$gen"'"' || { echo "ASSERTION FAILED: the new build's agent did not record keeping generation $gen while its listener runs; its record: $(ws_json boundary-decision.json 'd => JSON.stringify(d)')"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
-  echo "the agent's record: $(cat "$rigdir/ws-kept.json")"
+  wait_until 180 'ws_kept_listening "'"$gen"'"' || { echo "ASSERTION FAILED: the new build's agent did not record keeping generation $gen while its listener runs; its decisions: $(ws_decisions_said)"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
+  echo "the agent's decision: $(cat "$rigdir/ws-kept.json")"
   # Through all of it, no call the hook was handed was refused.
   ws_hook_calls_answered
   # The generation is the one it had, its srt host still held, nothing retiring beside it, and the next command runs in
@@ -2884,14 +2887,14 @@ workspace_across_update() {
   wait_until 60 '[[ -n "$(ws_gen)" && "$(ws_gen)" != "'"$gen"'" ]]' || { echo "ASSERTION FAILED: the boundary was not handed over once its listener stopped"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
   new=$(ws_gen)
   echo "generation $gen is handed over to $new"
-  wait_until 30 '[[ "$(ws_decision "d => d.decision === '"'handed-over'"' && d.gen === '"'$gen'"' && d.to?.gen === '"'$new'"'")" == true ]]' || { echo "ASSERTION FAILED: the agent did not record handing generation $gen over to $new; its record: $(ws_json boundary-decision.json 'd => JSON.stringify(d)')"; return 1; }
-  echo "the agent's record: $(ws_json boundary-decision.json 'd => JSON.stringify(d)')"
+  wait_until 30 '[[ "$(ws_decisions "d => d.some(e => e.decision === '"'handed-over'"' && e.gen === '"'$gen'"' && e.to?.gen === '"'$new'"')")" == true ]]' || { echo "ASSERTION FAILED: the agent did not record handing generation $gen over to $new; its decisions: $(ws_decisions_said)"; return 1; }
   as_user "$joinerc" test -s "$(ws_state)/boundaries/$new/srt.json"
   wait_until 60 '[[ "$(holder_of "$joinerc" "boundary-'"$id"'-'"$new"'")" == "$(endpoint_of $NEXT)" ]]'
   wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
   ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
   ! as_user "$joinerc" kill -0 "$listener" 2> /dev/null
-  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its older boundary .* has nothing left running in it and is closed"
+  [[ "$(ws_decisions "d => d.some(e => e.decision === 'older-closed' && e.gen === '$gen' && e.why === 'idle')")" == true ]] || { echo "ASSERTION FAILED: the agent did not record closing generation $gen with nothing left running in it; its decisions: $(ws_decisions_said)"; return 1; }
+  echo "the agent's decisions: $(ws_decisions_said)"
   # The next command runs in the new generation's sandbox, and still reads no credential.
   read -r _ new_inner _ <<< "$(ws_place "$new")"
   [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
@@ -3008,7 +3011,7 @@ workspace_archive_ends_all() {
   [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_decision ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
 export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
@@ -3060,8 +3063,9 @@ counter_on() { as_user "$1" sh -c 'sed -n "s/^$2 //p" "$1" 2> /dev/null' sh "$2"
 transcript_of() { hub_api "/api/instances/$1/transcript"; }
 send_message() { run_script "$hubc" /shared/stage2-send.ts http://127.0.0.1:3456 "$1" "$2" "$3"; }
 put_session_limits() { hub_api /api/session-limits -X PUT -H 'content-type: application/json' -d "$1"; }
-# The hub machine's agent's word that it holds the hub's session limits, since a moment (unix seconds).
-agent_said_limits() { as_user "$hubc" journalctl --user --no-pager -o cat -u cawco-agent.service --since "@$1" | grep -F "[sessiond] session limits from the hub: $2" || true; }
+# The hub machine's agent holds the hub's session limits, a memory percent $2 (`null` for unlimited), taken since a
+# moment $1 (unix seconds), as it records them (agent-state.json `sessionLimits`).
+agent_holds_limits() { [[ "$(agent_state "$hubc" "d => Boolean(d.sessionLimits && d.sessionLimits.at >= $1 * 1000 && d.sessionLimits.memoryPercent === $2)")" == true ]]; }
 # A child's own cgroup, by the pid the keeper holds under its id.
 group_of() { echo "/sys/fs/cgroup$(cgroup_of "$hubc" "$(child_pids "$hubc" "$1")")"; }
 # The runaway's end, whatever ended its check: its process group, which everything it forked is in, is killed. The
@@ -3123,7 +3127,7 @@ memory_limit_stays_its_own() {
   since=$(as_user "$hubc" date +%s)
   put_session_limits '{"memoryPercent":1,"cpuPercent":null}'
   [[ "$(hub_api /api/session-limits | json 'd => `${d.memoryPercent}/${d.cpuPercent}`')" == 1/null ]]
-  wait_until 60 '[[ -n "$(agent_said_limits "'"$since"'" "memory 1% of this machine")" ]]'
+  wait_until 60 'agent_holds_limits "'"$since"'" 1'
   start_session "$hid" "$m" > /dev/null
   wait_until 60 "session_running $m"
   # The session's process becomes one that hands a child more memory than its limit, bounded at the limit plus
@@ -3155,7 +3159,7 @@ memory_limit_stays_its_own() {
   since=$(as_user "$hubc" date +%s)
   put_session_limits '{"memoryPercent":null,"cpuPercent":null}'
   [[ "$(hub_api /api/session-limits | json 'd => `${d.memoryPercent}/${d.cpuPercent}`')" == null/null ]]
-  wait_until 60 '[[ -n "$(agent_said_limits "'"$since"'" "memory unlimited")" ]]'
+  wait_until 60 'agent_holds_limits "'"$since"'" null'
   start_session "$hid" "$n" > /dev/null
   wait_until 60 "session_running $n"
   [[ "$(as_user "$hubc" cat "$(group_of "$n")/memory.max")" == max ]]
@@ -3270,7 +3274,7 @@ keeper_children_capped() {
   keeper_children_capped_on "$hubc"
   keeper_children_capped_on "$joinerc"
 }
-export -f cgroup_file keeper_restarted keeper_spawn cgroup_of counter_on transcript_of send_message put_session_limits agent_said_limits group_of runaway_gone runaway_stays_its_own memory_limit_stays_its_own keeper_children_capped_on keeper_children_capped
+export -f cgroup_file keeper_restarted keeper_spawn cgroup_of counter_on transcript_of send_message put_session_limits agent_holds_limits group_of runaway_gone runaway_stays_its_own memory_limit_stays_its_own keeper_children_capped_on keeper_children_capped
 rig_runaway() {
   fleet base "$BASE" hub hub
   setup_done

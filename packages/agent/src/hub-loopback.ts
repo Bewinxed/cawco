@@ -12,6 +12,10 @@ import {
 } from "@cawco/core/preview-proxy";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { Server } from "bun";
+import { type AgentState, type HubHere, recordAgentState } from "./agent-state";
+
+/** How the loopback serves the hub, as the agent records it. */
+type HubServing = NonNullable<AgentState["hubLoopback"]>;
 
 /**
  * The hub's dashboard and preview ports on this computer's loopback: on any
@@ -66,10 +70,16 @@ export interface HubPorts {
 }
 
 export interface HubLoopback {
-  /** The hub's tailnet HTTPS as its latest answer says it: the next request carries by it. */
-  follow: (tailnet: TailnetServing | undefined) => void;
+  /** The hub's tailnet HTTPS as its latest answer says it: the next request carries by it. Answers whether its route moved. */
+  follow: (tailnet: TailnetServing | undefined) => boolean;
+  /** What it serves now, as the agent records it ({@link recordAgentState}). */
+  serving: () => HubServing;
   stop: () => Promise<void>;
 }
+
+/** Records how the loopback serves the hub (agent-state.ts `hubLoopback`). */
+const recordHub = (serving: HubServing): void =>
+  detach(recordAgentState("hubLoopback", serving), "hub loopback record");
 
 /** How the loopback reaches the hub now: plain http, or https verified against the tailnet name. */
 type Route = { secure: false } | { secure: true; serverName: string };
@@ -226,22 +236,23 @@ async function listenAll(
 }
 
 /**
- * Why the hub at `hubHost` (resolved, `addresses`) is on this computer, or
- * undefined when it is elsewhere: the hub's own word (`hostsHub`, its
- * register answer: this machine's id is the hub's), or an address that is
- * this computer's: its loopback ({@link loopbackAddress}) or one of its own
- * interfaces' (obelisk's agent reached its hub at 192.168.3.100, its own LAN
- * address, and took 3455 from its dashboard socket, 2026-10-18).
+ * Why the hub at `hubHost` (resolved, `addresses`) is on this computer, and
+ * in words, or undefined when it is elsewhere: the hub's own word
+ * (`hostsHub`, its register answer: this machine's id is the hub's), or an
+ * address that is this computer's: its loopback ({@link loopbackAddress}) or
+ * one of its own interfaces' (obelisk's agent reached its hub at
+ * 192.168.3.100, its own LAN address, and took 3455 from its dashboard
+ * socket, 2026-10-18).
  */
 function onThisComputer(
   addresses: string[],
   hostsHub: boolean
-): string | undefined {
+): { readonly kind: HubHere; readonly words: string } | undefined {
   if (hostsHub) {
-    return "the hub says this is its own computer";
+    return { kind: "hub-says", words: "the hub says this is its own computer" };
   }
   if (addresses.some(loopbackAddress)) {
-    return "it is this computer's loopback";
+    return { kind: "loopback", words: "it is this computer's loopback" };
   }
   const own = new Set(
     Object.values(networkInterfaces())
@@ -249,7 +260,9 @@ function onThisComputer(
       .flatMap((one) => (one ? [one.address] : []))
   );
   const mine = addresses.find((address) => own.has(address));
-  return mine ? `${mine} is this computer's own address` : undefined;
+  return mine
+    ? { kind: "own-address", words: `${mine} is this computer's own address` }
+    : undefined;
 }
 
 /** How a route is said in the agent's lines. */
@@ -279,11 +292,26 @@ export async function startHubLoopback(
   const here = onThisComputer(addresses, hostsHub);
   if (here) {
     console.info(
-      `[${HOP}] the hub at ${hubHost} is on this computer (${here}): its dashboard socket is localhost here, so nothing is carried`
+      `[${HOP}] the hub at ${hubHost} is on this computer (${here.words}): its dashboard socket is localhost here, so nothing is carried`
     );
-    return { follow: () => undefined, stop: async () => undefined };
+    const serving: HubServing = {
+      dashboard: null,
+      here: here.kind,
+      hosts: [],
+      hub: hubHost,
+      listeners: 0,
+      serverName: null,
+    };
+    recordHub(serving);
+    return {
+      follow: () => false,
+      serving: () => serving,
+      stop: async () => undefined,
+    };
   }
-  return await carryElsewhere(hubHost, addresses, ports, tailnet);
+  const loopback = await carryElsewhere(hubHost, addresses, ports, tailnet);
+  recordHub(loopback.serving());
+  return loopback;
 }
 
 /**
@@ -331,19 +359,30 @@ export async function carryElsewhere(
       `[${HOP}] ${hostname} ports ${portRuns(taken)} are held by another program on this computer: left to it`
     );
   }
+  const hosts = LOOPBACK.filter((host) => !absent.includes(host));
   console.info(
-    `[${HOP}] the hub at ${hubHost} is served on ${LOOPBACK.filter((host) => !absent.includes(host)).join(" and ")} ${routeWords(route)}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
+    `[${HOP}] the hub at ${hubHost} is served on ${hosts.join(" and ")} ${routeWords(route)}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
   );
   return {
     follow: (next) => {
       const now = routeOf(addresses, next);
-      if (JSON.stringify(now) !== JSON.stringify(route)) {
-        route = now;
-        console.info(
-          `[${HOP}] the hub at ${hubHost} is carried ${routeWords(route)} now`
-        );
+      if (JSON.stringify(now) === JSON.stringify(route)) {
+        return false;
       }
+      route = now;
+      console.info(
+        `[${HOP}] the hub at ${hubHost} is carried ${routeWords(route)} now`
+      );
+      return true;
     },
+    serving: () => ({
+      dashboard: ports.dashboard,
+      here: null,
+      hosts,
+      hub: hubHost,
+      listeners: servers.length,
+      serverName: route.secure ? route.serverName : null,
+    }),
     stop: async () => {
       await Promise.all(servers.map((server) => server.stop(true)));
     },
@@ -396,7 +435,11 @@ export function followHub(tailnet: TailnetServing | undefined): void {
   const now = carried;
   if (now) {
     detach(
-      now.loopback.then((loopback) => loopback?.follow(tailnet)),
+      now.loopback.then((loopback) => {
+        if (loopback?.follow(tailnet)) {
+          recordHub(loopback.serving());
+        }
+      }),
       "hub loopback follow"
     );
   }

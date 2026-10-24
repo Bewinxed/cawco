@@ -185,6 +185,7 @@ import {
   workspaceSpills,
 } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
+import { recordAgentState } from "./agent-state";
 import {
   MEMBERSHIP_PREFIX,
   membershipName,
@@ -1731,9 +1732,11 @@ export const rearmHooks = async (): Promise<void> => {
   const later = Object.values(armState.workspaces).filter(
     (arm) => arm.kind === "later"
   ).length;
+  const ms = Date.now() - started;
   console.info(
-    `[workspace] boundary hooks written for ${now.length} workspace(s) with a session or command in it, or a session's process with no boundary, in ${Date.now() - started} ms; ${later} with nothing in them are armed when a session there starts`
+    `[workspace] boundary hooks written for ${now.length} workspace(s) with a session or command in it, or a session's process with no boundary, in ${ms} ms; ${later} with nothing in them are armed when a session there starts`
   );
+  await recordAgentState("startup", { armed: now.length, later, ms });
 };
 
 /**
@@ -2167,7 +2170,7 @@ export const setProject = async (
   await writeWhole(file, `${JSON.stringify(project)}\n`, 0o644);
   // Another project's folder: the one before is no longer read, now.
   if (kept !== undefined) {
-    recheckNarrowed("its project changed", [id]).catch(() => undefined);
+    recheckNarrowed("project", [id]).catch(() => undefined);
   }
 };
 
@@ -2449,7 +2452,14 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   // the endpoint ({@link replaceNarrowed}).
   const narrowed = await narrowedGenerations(ref, held);
   if (narrowed) {
-    const runs = await replaceNarrowed(client, ref, held, narrowed, owed);
+    const runs = await replaceNarrowed(
+      client,
+      ref,
+      held,
+      narrowed,
+      owed,
+      "use"
+    );
     if (narrowed.current.length > 0) {
       return runs;
     }
@@ -2481,88 +2491,177 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
 /** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
 const saidUnknown = new Map<string, number>();
 
-/** The file in a workspace's state dir that holds {@link BoundaryDecision}. */
-export const DECISION_FILE = "boundary-decision.json";
+/** The file in a workspace's state dir that holds its {@link BoundaryDecision}s. */
+export const DECISIONS_FILE = "boundary-decisions.json";
 
-/**
- * What the agent last decided of a workspace's boundary that is not of this
- * build's form, on a retiring keeper, or whose grant it cannot compare
- * ({@link replaceOlder}): kept as it is, handed over to a new one started
- * beside it ({@link handOver}), or replaced by a new one once nothing ran in
- * it ({@link restartIfIdle}), and why. Written whole where the agent says the
- * same in its log, from the same values: the log line is for people, this
- * record for what checks the agent (proofs, probe specs). It speaks of the
- * boundary `gen` names; once `boundary.json` names another, it is history.
- */
-export interface BoundaryDecision {
-  /** The agent that decided, by pid. */
-  readonly agent: number;
-  /** When it decided, in ms since the epoch. */
-  readonly at: number;
-  readonly decision: "kept" | "handed-over" | "replaced";
-  /** The form of the boundary decided on ({@link formOf}); null when it has none. */
+/** How many of a workspace's latest decisions its {@link DECISIONS_FILE} keeps. Ours: an update, a narrowing and the closes after them, with room. */
+const DECISIONS_KEPT = 32;
+
+/** A boundary generation as a decision names it. */
+export interface DecidedBoundary {
+  /** Its form ({@link formOf}); null when it has none. */
   readonly form: string | null;
-  /** The generation of the boundary decided on. */
   readonly gen: string;
   /** Its srt host (Linux) or runner (macOS). */
   readonly pid: number;
-  readonly reasons: {
-    /** Its work's commands running, by executor pid ({@link commandsIn}). */
-    readonly commands: readonly number[];
-    /** Why its grant cannot be compared with this build's policy ({@link unknownGrant}); null when it can. */
-    readonly grant: string | null;
-    /** Kept until this build's session keeper is the machine's ({@link ownKeeperOwed}). */
-    readonly keeperOwed: boolean;
-    /** It holds an srt mount point where a dir stands in ({@link stubbed}): replaced whole once nothing runs in it. */
-    readonly leftDirs: boolean;
-    /** The ports its work listens on ({@link workPorts}). */
-    readonly listening: readonly number[];
-    /** Every process of its work, by pid ({@link workProcesses}). */
-    readonly processes: readonly number[];
-  };
-  /** The boundary that took its place; null while it is kept. */
-  readonly to: {
-    readonly form: string | null;
-    readonly gen: string;
-    readonly pid: number;
-  } | null;
 }
 
+/** Why an update decision ({@link BoundaryDecision}) went as it did: each names what held then, the rest none. */
+export interface UpdateReasons {
+  /** Its work's commands running, by executor pid ({@link commandsIn}). */
+  readonly commands: readonly number[];
+  /** Why its grant cannot be compared with this build's policy ({@link unknownGrant}); null when it can. */
+  readonly grant: string | null;
+  /** Kept until this build's session keeper is the machine's ({@link ownKeeperOwed}). */
+  readonly keeperOwed: boolean;
+  /** It holds an srt mount point where a dir stands in ({@link stubbed}): replaced whole once nothing runs in it. */
+  readonly leftDirs: boolean;
+  /** The ports its work listens on ({@link workPorts}). */
+  readonly listening: readonly number[];
+  /** Every process of its work, by pid ({@link workProcesses}). */
+  readonly processes: readonly number[];
+}
+
+/** Why the agent looked for a narrowed access ({@link recheckNarrowed}), or `use`: a use of the boundary ({@link ensure}). */
+export type NarrowCause =
+  "accounts" | "folder-moved" | "look" | "project" | "use";
+
 /**
- * Records `decision` of workspace `id`'s boundary `held` ({@link
- * BoundaryDecision}), whole or not at all: `reasons` names what holds, the
- * rest none, and `to` the boundary that took its place.
+ * What the agent decided of one of a workspace's boundaries, as it says the
+ * same in its log and from the same values: the log line is for people, this
+ * record for what checks the agent (proofs, probe specs). Each carries the
+ * deciding agent's pid (`agent`) and when, in ms since the epoch (`at`).
+ *
+ * - `kept`, `handed-over`, `replaced`: of a boundary not of this build's
+ *   form, on a retiring keeper, or whose grant is not comparable ({@link
+ *   replaceOlder}): kept as it is, handed over to one started beside it
+ *   ({@link handOver}), or replaced by one once nothing ran in it ({@link
+ *   restartIfIdle}), with `reasons` and the boundary that took its place
+ *   (`to`).
+ * - `older-closed`: an older generation beside the current one closed
+ *   ({@link closeIdle}): nothing ran in it (`idle`), it was gone, or a newer
+ *   generation listens on every port its work listened on (`superseded`).
+ * - `narrowed-stopped`: the generations whose access narrowed are stopped
+ *   ({@link replaceNarrowed}), and the boundary that runs after (`runs`).
+ * - `quiet-closed`: nothing held the workspace, and every generation closed
+ *   ({@link closeQuietly}).
+ * - `closed-for-good`: every generation closed with what still ran in its
+ *   clone, the workspace going or settled ({@link stopWorkspaceBoundary}).
  */
-const recordDecision = (
-  id: string,
-  decision: BoundaryDecision["decision"],
-  held: Pick<Held, "form" | "gen" | "pid">,
-  reasons: Partial<BoundaryDecision["reasons"]>,
-  to?: Pick<Held, "form" | "gen" | "pid">
-): Promise<void> => {
-  const record: BoundaryDecision = {
-    agent: process.pid,
-    at: Date.now(),
-    decision,
-    form: held.form ?? null,
-    gen: held.gen,
-    pid: held.pid,
-    reasons: {
-      commands: [],
-      grant: null,
-      keeperOwed: false,
-      leftDirs: false,
-      listening: [],
-      processes: [],
-      ...reasons,
-    },
-    to: to ? { form: to.form ?? null, gen: to.gen, pid: to.pid } : null,
-  };
-  return writeWhole(
-    join(stateDir(id), DECISION_FILE),
-    `${JSON.stringify(record)}\n`,
-    0o644
-  );
+export type BoundaryDecision =
+  | (DecidedBoundary & {
+      readonly agent: number;
+      readonly at: number;
+      readonly decision: "kept" | "handed-over" | "replaced";
+      readonly reasons: UpdateReasons;
+      /** The boundary that took its place; null while it is kept. */
+      readonly to: DecidedBoundary | null;
+    })
+  | (DecidedBoundary & {
+      readonly agent: number;
+      readonly at: number;
+      readonly decision: "older-closed";
+      /** The ports a newer generation took over, when `superseded`. */
+      readonly ports: readonly number[];
+      readonly why: "gone" | "idle" | "superseded";
+    })
+  | {
+      readonly agent: number;
+      readonly at: number;
+      readonly cause: NarrowCause;
+      readonly decision: "narrowed-stopped";
+      /** What its access lost ({@link narrowedBy}). */
+      readonly narrowed: readonly string[];
+      /** The boundary that runs after: a new one when the current was stopped, else the current one. */
+      readonly runs: DecidedBoundary;
+      readonly stopped: readonly DecidedBoundary[];
+      /** The processes of their work that were stopped with them, by pid. */
+      readonly work: readonly number[];
+    }
+  | {
+      readonly agent: number;
+      readonly at: number;
+      readonly closed: readonly DecidedBoundary[];
+      readonly decision: "quiet-closed";
+      readonly judges: number;
+      /** Why it closed now, in the log's words. */
+      readonly why: string;
+    }
+  | {
+      readonly agent: number;
+      readonly at: number;
+      readonly closed: readonly DecidedBoundary[];
+      readonly decision: "closed-for-good";
+    };
+
+/** A {@link BoundaryDecision} as its decider writes it: the agent and the time are added. */
+type Deciding = BoundaryDecision extends infer One
+  ? One extends BoundaryDecision
+    ? Omit<One, "agent" | "at">
+    : never
+  : never;
+
+/** Boundary `held` as a decision names it. */
+const decided = (
+  held: Pick<Held, "form" | "gen" | "pid">
+): DecidedBoundary => ({
+  form: held.form ?? null,
+  gen: held.gen,
+  pid: held.pid,
+});
+
+/** {@link UpdateReasons}: `given` holds, the rest none. */
+const reasonsOf = (given: Partial<UpdateReasons>): UpdateReasons => ({
+  commands: [],
+  grant: null,
+  keeperOwed: false,
+  leftDirs: false,
+  listening: [],
+  processes: [],
+  ...given,
+});
+
+/** Each workspace's decision write under way: one at a time, so none is lost ({@link recordDecision}). */
+const decisionWrites = new Map<string, Promise<void>>();
+
+/**
+ * Adds `entry` to workspace `id`'s {@link DECISIONS_FILE}, its
+ * {@link DECISIONS_KEPT} latest kept, the file written whole or not at all.
+ * A write that fails is said, never thrown: the record follows the agent,
+ * never steers it.
+ */
+const recordDecision = (id: string, entry: Deciding): Promise<void> => {
+  const settled = (decisionWrites.get(id) ?? Promise.resolve())
+    .then(() => appendDecision(id, entry))
+    .catch((error: unknown) => {
+      console.warn(
+        `[workspace] ${id}: its ${DECISIONS_FILE} could not be written: ${error instanceof Error ? error.message : String(error)}`
+      );
+    })
+    .finally(() => {
+      if (decisionWrites.get(id) === settled) {
+        decisionWrites.delete(id);
+      }
+    });
+  decisionWrites.set(id, settled);
+  return settled;
+};
+
+/** {@link recordDecision}'s write itself: the list read, `entry` added, written whole. */
+const appendDecision = async (id: string, entry: Deciding): Promise<void> => {
+  const path = join(stateDir(id), DECISIONS_FILE);
+  const text = await readFile(path, "utf8").catch(() => "[]");
+  let before: unknown;
+  try {
+    before = JSON.parse(text);
+  } catch {
+    before = [];
+  }
+  const all = [
+    ...(Array.isArray(before) ? before : []),
+    { ...entry, agent: process.pid, at: Date.now() },
+  ].slice(-DECISIONS_KEPT);
+  await writeWhole(path, `${JSON.stringify(all)}\n`, 0o644);
 };
 
 /**
@@ -2589,9 +2688,11 @@ const replaceOlder = async (
       console.info(
         `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is handed over once this build's session keeper is the machine's`
       );
-      await recordDecision(ref.id, "kept", held, {
-        grant: grant ?? null,
-        keeperOwed: true,
+      await recordDecision(ref.id, {
+        ...decided(held),
+        decision: "kept",
+        reasons: reasonsOf({ grant: grant ?? null, keeperOwed: true }),
+        to: null,
       });
     }
     replaceSoon(ref);
@@ -2602,9 +2703,11 @@ const replaceOlder = async (
     // keep it; this one is replaced whole once nothing runs in it.
     forgetStale(ref.id);
     if (!stubbed.has(ref.id)) {
-      await recordDecision(ref.id, "kept", held, {
-        grant: grant ?? null,
-        leftDirs: true,
+      await recordDecision(ref.id, {
+        ...decided(held),
+        decision: "kept",
+        reasons: reasonsOf({ grant: grant ?? null, leftDirs: true }),
+        to: null,
       });
     }
     restartWhenIdle(ref);
@@ -2639,11 +2742,16 @@ const replaceOlder = async (
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work.words}, and handed over once that ends`
     );
-    await recordDecision(ref.id, "kept", held, {
-      commands: work.commands,
-      grant: grant ?? null,
-      listening: work.ports,
-      processes: work.processes,
+    await recordDecision(ref.id, {
+      ...decided(held),
+      decision: "kept",
+      reasons: reasonsOf({
+        commands: work.commands,
+        grant: grant ?? null,
+        listening: work.ports,
+        processes: work.processes,
+      }),
+      to: null,
     });
   }
   keptRunning.set(ref.id, { said: work.words, commands: work.commands });
@@ -4874,14 +4982,16 @@ const keeperTakingOver = async (
  * each process by its command and the pid its commands saw: in the agent's
  * log, and as a line the delegate's next command shows ({@link noticeOf}),
  * so it can start it again. Nothing it ran is lost silently, and no access
- * outlives its removal. Answers the boundary that runs.
+ * outlives its removal. Said in the log and recorded ({@link
+ * recordDecision}) with `cause`, what looked. Answers the boundary that runs.
  */
 const replaceNarrowed = async (
   client: SessiondClient,
   ref: WorkspaceRef,
   held: Held,
   narrowed: Narrowed,
-  owed: boolean
+  owed: boolean,
+  cause: NarrowCause
 ): Promise<Boundary> =>
   behindGate(ref.id, async () => {
     const stopping: Held[] = [
@@ -4919,6 +5029,14 @@ const replaceNarrowed = async (
     console.info(
       `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${line ?? `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
     );
+    await recordDecision(ref.id, {
+      cause,
+      decision: "narrowed-stopped",
+      narrowed: why,
+      runs: decided(runs),
+      stopped: stopping.map(decided),
+      work: stopped.map((one) => one.pid),
+    });
     return runs;
   });
 
@@ -4935,7 +5053,16 @@ const NARROW_LOOK_MS = process.env.CAWCO_NARROW_LOOK_MS
 
 /** Each workspace's narrowing check under way, and whether another was asked meanwhile ({@link recheckNarrowed}). */
 let narrowLook: Promise<void> | undefined;
-let narrowAgain: { readonly why: string } | undefined;
+let narrowAgain: { readonly cause: NarrowCause } | undefined;
+
+/** Each {@link NarrowCause} in the log's words. */
+const NARROW_CAUSE_WORDS: Record<NarrowCause, string> = {
+  accounts: "this machine's accounts changed",
+  "folder-moved": "a project's folder moved",
+  look: "a look at the boundaries in use",
+  project: "its project changed",
+  use: "a use of its boundary",
+};
 
 /**
  * Checks the running boundaries for a narrowed access now ({@link narrowing}),
@@ -4977,17 +5104,17 @@ let narrowAgain: { readonly why: string } | undefined;
  * paths) needs none.
  */
 export const recheckNarrowed = (
-  why: string,
+  cause: NarrowCause,
   ids?: readonly string[]
 ): Promise<void> => {
   if (narrowLook) {
-    narrowAgain = { why };
+    narrowAgain = { cause };
     return narrowLook;
   }
-  narrowLook = recheckNow(why, ids)
+  narrowLook = recheckNow(cause, ids)
     .catch((error: unknown) => {
       console.warn(
-        `[workspace] the boundaries could not be checked for a narrowed access (${why}): ${error instanceof Error ? error.message : String(error)}`
+        `[workspace] the boundaries could not be checked for a narrowed access (${NARROW_CAUSE_WORDS[cause]}): ${error instanceof Error ? error.message : String(error)}`
       );
     })
     .finally(() => {
@@ -4995,7 +5122,7 @@ export const recheckNarrowed = (
       const again = narrowAgain;
       narrowAgain = undefined;
       if (again) {
-        recheckNarrowed(again.why).catch(() => undefined);
+        recheckNarrowed(again.cause).catch(() => undefined);
       }
     });
   return narrowLook;
@@ -5003,7 +5130,7 @@ export const recheckNarrowed = (
 
 /** {@link recheckNarrowed}'s check itself. */
 const recheckNow = async (
-  why: string,
+  cause: NarrowCause,
   ids?: readonly string[]
 ): Promise<void> => {
   const procs = (await keepers.held()).filter((proc) => proc.alive);
@@ -5027,7 +5154,7 @@ const recheckNow = async (
       continue;
     }
     console.info(
-      `[workspace] ${id}: its access narrowed (${why}), so its narrowed boundaries are stopped now`
+      `[workspace] ${id}: its access narrowed (${NARROW_CAUSE_WORDS[cause]}), so its narrowed boundaries are stopped now`
     );
     const replaced = (async () =>
       replaceNarrowed(
@@ -5035,7 +5162,8 @@ const recheckNow = async (
         ref,
         held,
         narrowed,
-        await ownKeeperOwed()
+        await ownKeeperOwed(),
+        cause
       ))();
     starting.set(id, replaced);
     await replaced
@@ -5117,7 +5245,7 @@ export const rearmMoved = async (why: string): Promise<void> => {
 
 /** A machine's accounts changed (a sign-in, an account removed): every running boundary is checked for a narrowed access. */
 export const accountsChangedHere = (): void => {
-  recheckNarrowed("this machine's accounts changed").catch(() => undefined);
+  recheckNarrowed("accounts").catch(() => undefined);
 };
 
 let narrowTimer: ReturnType<typeof setInterval> | undefined;
@@ -5133,9 +5261,7 @@ const lookForNarrowing = (): void => {
     }
     inUseNow()
       .then((ids) =>
-        ids.length > 0
-          ? recheckNarrowed("a look at the boundaries in use", ids)
-          : undefined
+        ids.length > 0 ? recheckNarrowed("look", ids) : undefined
       )
       .catch((error: unknown) => {
         console.warn(
@@ -5207,13 +5333,12 @@ const handOver = async (
   console.info(
     `[workspace] ${ref.id}: its boundary ${old.pid} (form ${old.form ?? "none"}) is handed over to ${fresh.pid}; it closes once nothing runs in it`
   );
-  await recordDecision(
-    ref.id,
-    "handed-over",
-    old,
-    { grant: grant ?? null },
-    fresh
-  );
+  await recordDecision(ref.id, {
+    ...decided(old),
+    decision: "handed-over",
+    reasons: reasonsOf({ grant: grant ?? null }),
+    to: decided(fresh),
+  });
   closeWhenIdle(ref.id);
   return fresh;
 };
@@ -5234,6 +5359,8 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
     let closed = alive
       ? "has nothing left running in it and is closed"
       : "is gone";
+    let why: "gone" | "idle" | "superseded" = alive ? "idle" : "gone";
+    let taken: readonly number[] = [];
     if (alive && (await busyOld(seen, id, old))) {
       // A command still running there keeps it, whatever its work listens
       // on and whoever listens there since ({@link commandsIn}).
@@ -5252,6 +5379,8 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
         await workIn(id, old)
       );
       closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})${line ? `; said to the delegate: ${line}` : ""}`;
+      why = "superseded";
+      taken = ports;
     }
     await stopBoundary(id, old);
     await cleanGeneration(id, old);
@@ -5259,6 +5388,12 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
     console.info(
       `[workspace] ${id}: its older boundary ${old.pid} (form ${old.form ?? "none"}) ${closed}`
     );
+    await recordDecision(id, {
+      ...decided(old),
+      decision: "older-closed",
+      ports: taken,
+      why,
+    });
   }
   return left;
 };
@@ -5440,7 +5575,12 @@ const restartIfIdle = (
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
     );
-    await recordDecision(ref.id, "replaced", held, { leftDirs: true }, fresh);
+    await recordDecision(ref.id, {
+      ...decided(held),
+      decision: "replaced",
+      reasons: reasonsOf({ leftDirs: true }),
+      to: decided(fresh),
+    });
     return { fresh };
   });
 
@@ -5941,7 +6081,6 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     );
     await endMembers(id);
     await rm(join(stateDir(id), "boundary.json"), { force: true });
-    await rm(join(stateDir(id), DECISION_FILE), { force: true });
     await closeToolDoor(id);
     await closeGitDoor(id);
     await closeGithubDoor(id);
@@ -5955,6 +6094,12 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     console.info(
       `[workspace] ${id}: nothing holds it (no session attached, no live work item, no preview, no command) and ${why}, so its boundary ${boundaries.map((boundary) => boundary.pid).join(", ")} and its ${judges.length} judge(s) are closed; its clone and state stay, and its next command starts it again`
     );
+    await recordDecision(id, {
+      closed: boundaries.map(decided),
+      decision: "quiet-closed",
+      judges: judges.length,
+      why,
+    });
   });
 };
 
@@ -7706,7 +7851,10 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
     );
   }
   await rm(join(stateDir(ref.id), "boundary.json"), { force: true });
-  await rm(join(stateDir(ref.id), DECISION_FILE), { force: true });
+  await recordDecision(ref.id, {
+    closed: boundaries.map(decided),
+    decision: "closed-for-good",
+  });
   if (users.left.length === 0) {
     await signalHeld((procId) => isJudgeOf(procId, ref.id));
   }

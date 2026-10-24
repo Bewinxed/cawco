@@ -70,7 +70,6 @@
     "signed release": 1
   },
   "scripts/probe-kit/specs/boundary-handover.ts": {
-    "its older boundary": 1,
     "Start it again": 2
   },
   "scripts/probe-kit/specs/browser-cutover.ts": {

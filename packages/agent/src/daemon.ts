@@ -98,6 +98,7 @@ import {
   isBrowserKey,
 } from "@cawco/core/browser";
 import { timerMs } from "@cawco/core/clock";
+import { detach } from "@cawco/core/detach";
 import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
@@ -166,6 +167,7 @@ import {
   onSigninsChanged,
 } from "./accounts";
 import { type Activity, watchActivity } from "./activity";
+import { recordAgentState } from "./agent-state";
 import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
 import {
@@ -391,6 +393,13 @@ const takeSessionLimits = (
   ].join(", ");
   console.info(
     `[sessiond] session limits from the hub: ${said}, for each process started from now`
+  );
+  detach(
+    recordAgentState("sessionLimits", {
+      cpuPercent: limits?.cpuPercent ?? null,
+      memoryPercent: limits?.memoryPercent ?? null,
+    }),
+    "session limits record"
   );
 };
 

@@ -28,7 +28,7 @@
  *    would): each keeps the boundary process it had, and the start-up line
  *    leaves them as they are. W's is given an older form too.
  * 2. After `QUIET_CLOSE_MS` (and a sweep's minute), every idle workspace's
- *    boundary and judge are closed, each said in the agent's log, its clone,
+ *    boundary and judge are closed, each as the agent records, its clone,
  *    state dir and scratch dir standing. P's closes with them: since the
  *    restart no listener of this agent serves its preview (a register starts
  *    none, hub server.ts `reconcilePreviews`), and only a served one holds a
@@ -69,11 +69,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import {
-  type BoundaryDecision,
-  DECISION_FILE,
-  QUIET_CLOSE_MS,
-} from "../../../packages/agent/src/boundary";
+import { QUIET_CLOSE_MS } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf, isJudgeOf } from "../../../packages/agent/src/proc-id";
 import { readWithin } from "../../../packages/core/src/bounded";
 import {
@@ -81,6 +77,11 @@ import {
   OVERLAY_PATH,
 } from "../../../packages/core/src/preview-proxy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  decisionsOf,
+  type RecordedState,
+  startedSince,
+} from "../agent-records";
 import type { Kit, Spec } from "../kit";
 
 const IDLE = 20;
@@ -110,11 +111,6 @@ const W_CLOSE_MS = 13 * 60_000;
 /** A sweep's minute and the slack of a close, past the quiet time. */
 const CLOSE_SLACK_MS = 3 * 60_000;
 const ACCOUNT_ADDED = "acct-probe-older-form";
-const CLOSED_LINE = ": nothing holds it (";
-const START_LINE = "[workspace] boundary hooks written for ";
-/** The start-up pass's count of the workspaces it leaves as they are, armed only when a session there starts (agent boundary.ts `rearmHooks`, since bc1cb9f52). */
-const LEFT_IDLE =
-  /; (\d+) with nothing in them are armed when a session there starts/;
 
 /** `word` as one single-quoted shell word. */
 const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -442,20 +438,26 @@ const serving = async (
   return { ok: false, last };
 };
 
-/** Restarts the agent; answers its start-up pass's line once it is logged. */
-const restart = async (fleet: Fleet): Promise<string> => {
-  const before = await fleet.logMark("agent");
+/** Restarts the agent; answers its start-up pass as it records it once done (agent agent-state.ts `startup`). */
+const restart = async (
+  fleet: Fleet
+): Promise<NonNullable<RecordedState["startup"]>> => {
+  const before = Date.now();
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
-  const log = await until(
-    "the restarted agent's start-up pass",
-    () => before.since(),
-    (logged) => logged.includes(START_LINE),
-    120_000
-  );
-  return log.slice(log.lastIndexOf(START_LINE)).split("\n")[0] ?? "";
+  return startedSince(fleet.env, before);
 };
+
+/** Whether the agent recorded closing workspace `id` as nothing held it (agent boundary.ts `closeQuietly`), since `since` (ms since the epoch). */
+const closedQuietly = async (
+  home: string,
+  id: string,
+  since = 0
+): Promise<boolean> =>
+  (await decisionsOf(home, id)).some(
+    (one) => one.decision === "quiet-closed" && one.at >= since
+  );
 
 /** The fleet up, a project and its parent session, and every delegate's item done and its session asleep. */
 const standUp = async (kit: Kit) => {
@@ -612,18 +614,6 @@ const spillsOf = async (home: string, id: string): Promise<string[]> =>
     ).catch(() => "[]")
   ) as string[];
 
-/** What the agent last decided of workspace `id`'s boundary of an older form, as it records it (agent boundary.ts `BoundaryDecision`); none before it decided. */
-const decisionOf = async (
-  home: string,
-  id: string
-): Promise<BoundaryDecision | undefined> =>
-  JSON.parse(
-    await readFile(
-      join(home, ".cawco", "workspaces", id, DECISION_FILE),
-      "utf8"
-    ).catch(() => "null")
-  ) ?? undefined;
-
 /** Gives workspace `id` an older form: an account added to its policy, as a session on another account would. */
 const reForm = async (home: string, id: string): Promise<void> => {
   const file = join(home, ".cawco", "workspaces", id, "accounts.json");
@@ -657,7 +647,7 @@ const firstRestart = async (
   await Promise.all(
     [...idle.slice(-RE_FORMED), w].map((one) => reForm(home, one.workspaceId))
   );
-  const line = await restart(fleet);
+  const startup = await restart(fleet);
   const after = await boundariesNow();
   const moved = idle.filter(
     (one) =>
@@ -676,9 +666,9 @@ const firstRestart = async (
       .join("; ") || "none moved"
   );
   kit.check(
-    "1: its start-up line leaves the idle ones as they are",
-    Number(LEFT_IDLE.exec(line)?.[1] ?? -1) >= IDLE,
-    line
+    "1: its start-up pass leaves the idle ones as they are, as the agent records",
+    startup.later >= IDLE,
+    JSON.stringify(startup)
   );
 };
 
@@ -698,17 +688,17 @@ const quietCloses = async (
     bound
   ).catch(() => stillOpen(fleet, idle));
   const held = await fleet.heldProcs();
-  const log = await fleet.logs("agent");
-  const unsaid = idle.filter(
-    (one) => !log.includes(`${one.workspaceId}${CLOSED_LINE}`)
+  const quiet = await Promise.all(
+    idle.map((one) => closedQuietly(home, one.workspaceId))
   );
+  const unsaid = idle.filter((_, at) => !quiet[at]);
   const judged = idle.filter((one) =>
     held.some((proc) => isJudgeOf(proc.procId, one.workspaceId))
   );
   const tags = (list: readonly Delegated[]) =>
     list.map((one) => one.tag).join(",") || "none";
   kit.check(
-    `2: within ${bound / 60_000} min of the restart, every idle workspace's boundary and judge are closed, each said in the agent's log`,
+    `2: within ${bound / 60_000} min of the restart, every idle workspace's boundary and judge are closed, each as the agent records`,
     open.length === 0 && judged.length === 0 && unsaid.length === 0,
     `open: ${tags(open)}; judges: ${tags(judged)}; unsaid: ${tags(unsaid)}`
   );
@@ -764,13 +754,11 @@ const waiterHolds = async (
   had: readonly string[]
 ): Promise<void> => {
   const now = await boundariesOf(fleet, w.workspaceId);
-  const unsaid = !(await fleet.logs("agent")).includes(
-    `${w.workspaceId}${CLOSED_LINE}`
-  );
+  const unsaid = !(await closedQuietly(home, w.workspaceId));
   kit.check(
     "7: past the quiet time, W's live item, its session quiet, holds the boundary it had before the restart: never closed or replaced",
     had.length === 1 && JSON.stringify(now) === JSON.stringify(had) && unsaid,
-    `before: ${had.join(",") || "none"}; now: ${now.join(",") || "none"}; close said: ${!unsaid}`
+    `before: ${had.join(",") || "none"}; now: ${now.join(",") || "none"}; close recorded: ${!unsaid}`
   );
   const woke = await until(
     "W woken by its wait's end",
@@ -800,10 +788,13 @@ const waiterHolds = async (
     `reached: ${Boolean(reached)}`
   );
   const last = await boundariesOf(fleet, w.workspaceId);
-  const decided = await decisionOf(home, w.workspaceId);
+  const decided = (await decisionsOf(home, w.workspaceId)).findLast(
+    (one) => one.decision === "kept"
+  );
   const unchanged = JSON.stringify(last) === JSON.stringify(had);
+  const keptPid = decided && "pid" in decided ? String(decided.pid) : "";
   const keptOne = had.some(
-    (entry) => entry.slice(entry.lastIndexOf("@") + 1) === String(decided?.pid)
+    (entry) => entry.slice(entry.lastIndexOf("@") + 1) === keptPid
   );
   kit.check(
     "7: W's boundary, of an older form since the restart, is kept as it is while its server listens, as the agent records, never handed over",
@@ -845,6 +836,7 @@ const waiterFinishes = async (
 const waiterCloses = async (
   kit: Kit,
   fleet: Fleet,
+  home: string,
   w: Delegated,
   endedAt: number
 ): Promise<void> => {
@@ -855,17 +847,22 @@ const waiterCloses = async (
     Math.max(endedAt + W_CLOSE_MS - Date.now(), 0)
   ).catch(() => boundariesOf(fleet, w.workspaceId));
   // Closed quietly, or with its workspace as the hub settles it once its
-  // item is over (hub work-items.ts `settle`): retired, or held.
-  const logged = await fleet.logs("agent");
-  const said = [
-    CLOSED_LINE,
-    ": archived; its ",
-    ": not archived: its clone ",
-  ].some((line) => logged.includes(`${w.workspaceId}${line}`));
+  // item is over (hub work-items.ts `settle`): held, its boundary closed for
+  // good, or retired, its state dir gone with it.
+  const state = join(home, ".cawco", "workspaces", w.workspaceId);
+  const decisions = await decisionsOf(home, w.workspaceId);
+  const said =
+    !existsSync(state) ||
+    decisions.some(
+      (one) =>
+        (one.decision === "quiet-closed" ||
+          one.decision === "closed-for-good") &&
+        one.at >= endedAt
+    );
   kit.check(
-    `8: within ${W_CLOSE_MS / 60_000} min of W's item ending, its boundary closes (quietly, or as its workspace is settled), said in the agent's log`,
+    `8: within ${W_CLOSE_MS / 60_000} min of W's item ending, its boundary closes (quietly, or as its workspace is settled), as the agent records or its state dir gone`,
     open.length === 0 && said,
-    `open: ${open.join(",") || "none"}; said: ${said}; ${Math.round((Date.now() - endedAt) / 1000)} s after the end`
+    `open: ${open.join(",") || "none"}; state dir there: ${existsSync(state)}; decisions: ${JSON.stringify(decisions.slice(-3))}; ${Math.round((Date.now() - endedAt) / 1000)} s after the end`
   );
 };
 
@@ -990,16 +987,16 @@ const run = async (kit: Kit) => {
   const [i0, i1, ...rest] = idle as [Delegated, Delegated, ...Delegated[]];
   await reopens(kit, fleet, home, i0, i1);
   // Before the next restart, which gives every boundary its quiet time again.
-  await waiterCloses(kit, fleet, w, waiterEnded);
+  await waiterCloses(kit, fleet, home, w, waiterEnded);
 
   // 6. A restart after the closes opens none of them.
-  const line = await restart(fleet);
+  const startup = await restart(fleet);
   await Bun.sleep(5000);
   const reopenedByStart = await stillOpen(fleet, rest);
   kit.check(
     `6: after another agent restart, none of the ${rest.length} closed workspaces has a boundary`,
     reopenedByStart.length === 0,
-    `${reopenedByStart.map((one) => one.tag).join(",") || "none"}; ${line}`
+    `${reopenedByStart.map((one) => one.tag).join(",") || "none"}; start-up pass: ${JSON.stringify(startup)}`
   );
 };
 

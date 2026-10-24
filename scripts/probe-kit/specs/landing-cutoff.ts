@@ -72,7 +72,7 @@
  *
  *   bun scripts/probe-kit/run.ts landing-cutoff
  */
-import { readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import {
   mkdir,
   readdir,
@@ -91,6 +91,7 @@ import {
 import { readRecord } from "../../../packages/core/src/state-file";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
@@ -107,12 +108,15 @@ const GONE_MS = 10_000;
 /** The agent's words for a sandbox the host stopped (boundary-host.ts). */
 const RESTARTED = "was changed on the host";
 /**
- * The agent's words for a boundary it ended on purpose: closed for a folder
- * gone or quiet (boundary.ts), an older one closed, or the workspace
- * archived or kept with its boundary closed (workspace.ts).
+ * The agent's decisions that end a boundary on purpose (boundary.ts
+ * `BoundaryDecision`): closed quiet, an older one closed, or closed for good
+ * as the workspace is archived or kept with its boundary closed.
  */
-const CLOSED =
-  /, so its boundary [\d, ]+ (is|and its \d+ judge\(s\) are) closed|: its older boundary .* closed|: archived[;,]|its boundary is closed/;
+const CLOSED_ON_PURPOSE: readonly string[] = [
+  "quiet-closed",
+  "older-closed",
+  "closed-for-good",
+];
 /** How long the first mock LFS server holds an answer it gives. */
 const SLOW_MS = 4000;
 /** A process's entry in `/proc`. */
@@ -709,11 +713,17 @@ const run = async (kit: Kit) => {
             (line) =>
               line.includes(workspace.slice(0, 8)) && line.includes(RESTARTED)
           );
-      /** Every line the agent said of this workspace. */
+      /** Every line the agent said of this workspace: words for a failing check's detail. */
       const told = async () =>
         (await fleet.logs("agent"))
           .split("\n")
           .filter((line) => line.includes(`[workspace] ${workspace}:`));
+      /** Whether the agent recorded ending a boundary of this workspace on purpose ({@link CLOSED_ON_PURPOSE}), or its state dir is gone with an archive. */
+      const closedByAgent = async () =>
+        !existsSync(join(home, ".cawco", "workspaces", workspace)) ||
+        (await decisionsOf(home, workspace)).some((one) =>
+          CLOSED_ON_PURPOSE.includes(one.decision)
+        );
       /** The hub's own record of the workspace: `held` or `archived` once it closed it on its machine. */
       const stateOf = () =>
         fleet.query<{ state: string }>(
@@ -722,16 +732,16 @@ const run = async (kit: Kit) => {
         )[0]?.state ?? "gone";
       /**
        * Once no sandbox runs: whether its boundary was closed on purpose, the
-       * hub's record settled (`held`, `archived`) or the agent saying it
-       * closed it ({@link CLOSED}), within a minute of the item's end: the
+       * hub's record settled (`held`, `archived`) or the agent recording it
+       * closed it ({@link closedByAgent}), within a minute of the item's end: the
        * hub settles a workspace whose item ended and that nothing holds.
        */
       const closedOnPurpose = () =>
         until(
-          `${tag}'s workspace settled or its boundary said closed`,
+          `${tag}'s workspace settled or its boundary recorded closed`,
           async () =>
             ["held", "archived"].includes(stateOf()) ||
-            (await told()).some((line) => CLOSED.test(line)) ||
+            (await closedByAgent()) ||
             undefined,
           Boolean,
           60_000

@@ -6224,7 +6224,7 @@ export class SessionSupervisor {
         // project's folder the hub moved away): every boundary this agent
         // holds is checked for a narrowed access.
         if (delta.recheck) {
-          recheckNarrowed("a project's folder moved").catch(() => undefined);
+          recheckNarrowed("folder-moved").catch(() => undefined);
         }
         if (delta.items.length > 0 || delta.reconverge) {
           console.info(
