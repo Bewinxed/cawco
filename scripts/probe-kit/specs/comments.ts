@@ -12086,6 +12086,36 @@ const footSettled = async (read: () => Promise<FootRead | null>) => {
   return last;
 };
 
+/**
+ * The sheet stands as the well's foot sheet and the lift it starts has
+ * begun: the page's scroll moved off its top, or, on an app's shell, its
+ * scroll container's. Every foot page starts at 0 with its line under where
+ * the sheet stands, so a read before this is a read before the lift.
+ */
+const footPlaced = (kind: FootKind, read: FootRead | null) =>
+  !!read?.sheet?.isSheet &&
+  (kind === "inner" ? (read.inner?.scrollTop ?? 0) > 0 : read.scrollY > 0);
+
+/**
+ * The reading once the sheet stands placed and its lift has begun
+ * ({@link footPlaced}), then once that scroll has ended
+ * ({@link footSettled}); never earlier, however slow the machine. A sheet
+ * that never lifts the page is read as it stands after the wait, for the
+ * check to say so.
+ */
+const footLanded = async (
+  kind: FootKind,
+  read: () => Promise<FootRead | null>
+) => {
+  await until(
+    "the foot sheet placed and the page lifted",
+    read,
+    (now) => footPlaced(kind, now),
+    15_000
+  ).catch(() => null);
+  return await footSettled(read);
+};
+
 /** Pin above the sheet, the target inside the frame's viewport. */
 const clearOfSheet = (read: FootRead | null) =>
   !!read?.pill &&
@@ -12348,7 +12378,7 @@ const footCompose = async (rig: FootRig, engine: string) => {
     .locator(COMPOSE)
     .waitFor({ timeout: 8000 })
     .catch(() => undefined);
-  const composing = await footSettled(() =>
+  const composing = await footLanded(kind, () =>
     footRead(phone, frame, COMPOSE, DRAFT_FACE)
   );
   footClear(rig, "(i)", "the new comment's composer", composing);
@@ -12405,7 +12435,7 @@ const footThread = async (rig: FootRig, number: number) => {
     .locator(card)
     .waitFor({ timeout: 8000 })
     .catch(() => undefined);
-  const reading = await footSettled(() =>
+  const reading = await footLanded(rig.kind, () =>
     footRead(phone, frame, card, `g[data-pin="${number}"] [data-face]`)
   );
   footClear(rig, "(ii)", `pin ${number}'s thread`, reading);
