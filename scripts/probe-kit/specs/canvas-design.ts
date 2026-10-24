@@ -143,6 +143,7 @@ import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
+import { reachOf } from "../reach";
 import { shaped } from "../words";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
@@ -3751,6 +3752,8 @@ const BOUNCE = [390, 1440, 680, 390] as const;
 
 /** The head's fit as drawn: its width against what it holds, Close whole and pressable, and the controls standing and folded (each folded one by the names its controls carry). */
 interface FitRead {
+  /** The controls standing, More and Close, any of whose boxes lies past the head's: each by its key and its box's ends. */
+  boxesOut: string[];
   client: number;
   closeHit: string;
   closeWhole: boolean;
@@ -3772,7 +3775,21 @@ const FIT_READ = (): FitRead => {
     box.y + box.height / 2
   );
   const keyOf = (one: Element) => (one as HTMLElement).dataset.headItem ?? "";
+  const boxesOut = [
+    ...head.querySelectorAll<HTMLElement>(
+      ":scope > [data-head-item]:not([hidden]), :scope > [data-slot=more], :scope > [data-slot=close]"
+    ),
+  ]
+    .filter((one) => {
+      const at = one.getBoundingClientRect();
+      return at.left < edge.left - 0.5 || at.right > edge.right + 0.5;
+    })
+    .map((one) => {
+      const at = one.getBoundingClientRect();
+      return `${one.dataset.headItem ?? one.dataset.slot} ${Math.round(at.left)}–${Math.round(at.right)} in ${Math.round(edge.left)}–${Math.round(edge.right)}`;
+    });
   return {
+    boxesOut,
     w: pane.offsetWidth,
     client: head.clientWidth,
     scroll: head.scrollWidth,
@@ -3864,6 +3881,46 @@ async function moreEntries(page: Page): Promise<string[]> {
     .waitFor({ state: "detached", timeout: 5000 })
     .catch(() => undefined);
   return entries;
+}
+
+/** The kit's reach reader's line (reach.ts `reachOf`) for the control named `name`: `ok` or `short` first, each side's reach after; null where none stands. */
+const reachLine = (all: string, name: string): string | null =>
+  all
+    .split("\n")
+    .find((line) => line.split("\t")[4] === JSON.stringify(name)) ?? null;
+
+/** Close's reach, and New canvas's where it stands: in the head, or folded into More (opened to read it at rest, and shut), as the kit's reach reader reads them. */
+async function reaches(page: Page) {
+  const head = await page.evaluate(reachOf);
+  const close = reachLine(head, "Close");
+  const standing = reachLine(head, "New canvas");
+  if (standing) {
+    return { close, create: `the head: ${standing}` };
+  }
+  await page
+    .locator("[data-bench-pane] [data-slot=side-head] > [data-slot=more]")
+    .click();
+  await page
+    .locator("[data-slot=dropdown-menu-content]")
+    .waitFor({ timeout: 5000 });
+  // Read at rest: the menu's entrance (a scale) finished, its rows at their
+  // own size.
+  await page.evaluate(() => {
+    for (const run of document
+      .querySelector("[data-slot=dropdown-menu-content]")
+      ?.getAnimations({ subtree: true }) ?? []) {
+      if (Number.isFinite(run.effect?.getComputedTiming().endTime)) {
+        run.finish();
+      }
+    }
+  });
+  const folded = reachLine(await page.evaluate(reachOf), "New canvas");
+  await page.keyboard.press("Escape");
+  await page
+    .locator("[data-slot=dropdown-menu-content]")
+    .waitFor({ state: "detached", timeout: 5000 })
+    .catch(() => undefined);
+  return { close, create: folded ? `More: ${folded}` : null };
 }
 
 /** A check that the head holds its controls, Close stands whole and pressable, and every folded control is in More, read now. */
@@ -3962,9 +4019,11 @@ async function bounceLeg(
   stage: Stage,
   engine: "chromium" | "webkit",
   kind: "component" | "preview",
-  picks: boolean
+  picks: boolean,
+  view: "desk" | "phone"
 ): Promise<void> {
-  const page = await kit.page("desk", { theme: "light", engine });
+  const touch = view === "phone";
+  const page = await kit.page(view, { theme: "light", engine });
   await page.setViewportSize({ width: 1920, height: 844 });
   await page.route(`${stage.base}/__cawco/ping`, (route) =>
     route.fulfill({
@@ -3983,7 +4042,7 @@ async function bounceLeg(
     })
     .then(() => true)
     .catch(() => false);
-  const config = `${engine}, ${kind === "component" ? "component canvas" : "plain preview"}, ${picks ? "Send standing" : "no Send"}`;
+  const config = `${engine}${touch ? " under a finger" : ""}, ${kind === "component" ? "component canvas" : "plain preview"}, ${picks ? "Send standing" : "no Send"}`;
   if (!ready) {
     kit.check(`B: ${config}: the head draws`, false, "never drew");
     await page.close();
@@ -3997,14 +4056,49 @@ async function bounceLeg(
       (one) =>
         !one.names.some((name) => more.some((entry) => entry.startsWith(name)))
     );
+    const shared =
+      read.closeWhole &&
+      read.closeHit === "Close" &&
+      (read.folded.length === 0 || read.more) &&
+      missing.length === 0;
+    if (!touch) {
+      kit.check(
+        `B: ${config}, ${leg}, at ${read.w}: the head holds its controls (scrollWidth ${read.scroll} ≤ clientWidth ${read.client}), Close whole and pressed at its centre, every folded control in More`,
+        read.scroll <= read.client && shared,
+        JSON.stringify({ ...read, moreEntries: more, missing })
+      );
+      return;
+    }
+    // Under a finger the head's scrollWidth is not read: `touch-hit`'s 44px
+    // area is a ::after placed absolutely about its control, so it counts
+    // toward its ancestors' scrollable overflow by design, and Close's
+    // reach past the head's end makes the head's scrollWidth 7.5px more
+    // than its box (it never scrolls, so that draws nothing;
+    // touch-sideways holds that nothing scrolls sideways for it). What a
+    // person sees and presses is read instead: every control's box inside
+    // the head's, and a 44px reach on Close and on New canvas, the control
+    // that folds first, where it stands.
+    // Zoomed to fit (a canvas's picture of the panel), a control is drawn
+    // smaller than its own size and so is its area: its reach is read at a
+    // zoom of 1 alone.
+    const zoom = await page.evaluate(() => {
+      const pane = document.querySelector("[data-bench-pane]") as HTMLElement;
+      return pane.getBoundingClientRect().width / pane.offsetWidth;
+    });
+    const reach =
+      Math.abs(zoom - 1) < 0.01
+        ? await reaches(page)
+        : {
+            close: "ok\tread at a zoom of 1 alone",
+            create: ": ok\tread at a zoom of 1 alone",
+          };
     kit.check(
-      `B: ${config}, ${leg}, at ${read.w}: the head holds its controls (scrollWidth ${read.scroll} ≤ clientWidth ${read.client}), Close whole and pressed at its centre, every folded control in More`,
-      read.scroll <= read.client &&
-        read.closeWhole &&
-        read.closeHit === "Close" &&
-        (read.folded.length === 0 || read.more) &&
-        missing.length === 0,
-      JSON.stringify({ ...read, moreEntries: more, missing })
+      `B: ${config}, ${leg}, at ${read.w}: every control's box inside the head's, Close whole and pressed at its centre, every folded control in More, and a 44px reach on Close and on New canvas (${reach.create?.split(":")[0] ?? "not found"})`,
+      shared &&
+        read.boxesOut.length === 0 &&
+        !!reach.close?.startsWith("ok\t") &&
+        !!reach.create?.includes(": ok\t"),
+      JSON.stringify({ ...read, moreEntries: more, missing, reach })
     );
   };
   await holds("fresh");
@@ -4014,13 +4108,15 @@ async function bounceLeg(
   await page.close();
 }
 
-/** B in Chromium and WebKit, for a component canvas and a plain preview, with Send standing and without. */
+/** B in Chromium and WebKit, under a mouse and a finger, for a component canvas and a plain preview, with Send standing and without. */
 async function bounces(kit: Kit, bench: string, stage: Stage): Promise<void> {
-  for (const engine of ["chromium", "webkit"] as const) {
-    for (const kind of ["component", "preview"] as const) {
-      for (const picks of [true, false]) {
-        // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-        await bounceLeg(kit, bench, stage, engine, kind, picks);
+  for (const view of ["desk", "phone"] as const) {
+    for (const engine of ["chromium", "webkit"] as const) {
+      for (const kind of ["component", "preview"] as const) {
+        for (const picks of [true, false]) {
+          // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+          await bounceLeg(kit, bench, stage, engine, kind, picks, view);
+        }
       }
     }
   }

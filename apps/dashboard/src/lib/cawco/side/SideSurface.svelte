@@ -441,10 +441,14 @@
        the well's left edge. -->
   <!-- mark-line: its icons are controls at the head's end, each its own
        button, not marks set beside the title -->
+  <!-- Stacked over what stands under it (`relative z-1`): a control's 44px
+       area under a finger reaches past the head's foot, and the well, placed
+       after it (`relative`), took that strip's presses (The 44 Touch Rule;
+       canvas-design B read Close's reach below as 6 of its 7px). -->
   <header
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
-    class="flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-5 coarse:data-fitted:hit-gap-x-space-5"
+    class="relative z-1 flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-5 coarse:data-fitted:hit-gap-x-space-5"
     bind:this={head}
   >
     {#if switcher}

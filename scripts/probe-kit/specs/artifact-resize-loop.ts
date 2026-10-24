@@ -1185,6 +1185,25 @@ const PLAN_STEPS = [
 const TODO_WRITE = "mcp__cawco__todo_write";
 const PLAN_RING = '[data-slot="lift"] [data-tray-chip]';
 
+/** Gives `session` a plan of {@link PLAN_STEPS} through the mock model's todo_write (`marker` its own, once): its ring stands in the tray row. */
+export const planOn = async (
+  fleet: KitFleet,
+  session: string,
+  marker: string
+): Promise<void> => {
+  asks.set(marker, {
+    name: TODO_WRITE,
+    input: { steps: PLAN_STEPS },
+  });
+  await fleet.send(session, `PROBE-CALL:${marker}`);
+  await until(
+    `the todo_write call (${marker})`,
+    () => answered.get(marker),
+    Boolean,
+    180_000
+  );
+};
+
 /**
  * The owner, on his iPhone: "the preview sheet should cover the composer
  * and the chip row, lost space". A session with a plan, its ring a chip in
@@ -1207,17 +1226,7 @@ export const runPhoneSheetLeaves = async (
   // Each engine's session its own markers: an answered marker is answered for good.
   const [planned, shown] = engine === "webkit" ? ["21", "22"] : ["23", "24"];
   const session = await fleet.spawn("claude", "Plan chips", fleet.repo);
-  asks.set(planned, {
-    name: TODO_WRITE,
-    input: { steps: PLAN_STEPS },
-  });
-  await fleet.send(session, `PROBE-CALL:${planned}`);
-  await until(
-    `the todo_write call (${planned})`,
-    () => answered.get(planned),
-    Boolean,
-    180_000
-  );
+  await planOn(fleet, session, planned);
   const page = await kit.page("phone", {
     engine,
     init: [heldBack, sheetReader],

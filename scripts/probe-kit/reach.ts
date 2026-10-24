@@ -179,7 +179,11 @@ export function reachOf(): string {
           up: [cx, r.top - d],
           down: [cx, r.bottom + d],
         }[side] as [number, number];
-        return x < 0 || y < 0 || x >= innerWidth || y >= innerHeight
+        // A press takes a 1px area about its point, so one within a pixel
+        // of the window's edge is at the page's edge: Chromium's phone view
+        // answered no element at all 0.5px inside its right edge
+        // (canvas-design B, Close at the window's end).
+        return x < 0 || y < 0 || x > innerWidth - 1 || y > innerHeight - 1
           ? undefined
           : document.elementFromPoint(x, y);
       };

@@ -7,6 +7,7 @@
  * styles, the page's doc (`window.cawcoArtifact.doc`) and the hub's reads.
  *
  *   bun scripts/probe-kit/run.ts decision-pages
+ *   DECISION_PAGES=a PROBE_ENGINE=webkit bun scripts/probe-kit/run.ts decision-pages
  *
  * (a) A page of three decisions (one in a Section) and every media piece
  *     built (Image, Diagram, Canvas, Preview, Dials) draws in the panel's
@@ -4149,6 +4150,11 @@ const run = async (kit: Kit) => {
     for (const theme of ["light", "dark"] as const) {
       await mediaLeg(on, view, theme);
     }
+  }
+  // `DECISION_PAGES=a`: (a) and (d) alone, as `PROBE_ENGINE` runs them on
+  // each engine.
+  if (process.env.DECISION_PAGES === "a") {
+    return;
   }
   await facesLeg(on, await frameWith(on.desk, 3), "a program's page");
   await dialChecks(on, await frameWith(on.desk, 3));
