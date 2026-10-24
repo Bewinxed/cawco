@@ -7368,8 +7368,10 @@ const copyApart = async (file: string, copy: string): Promise<void> => {
  * boundary starts with no sandbox of the workspace running (its first start,
  * a start after a reboot, a replacement once the one before is stopped),
  * never beside an older generation still running in the clone at a handover
- * ({@link launch}); and as a clone is cut, right after git made it
- * (workspace.ts `createWorkspace`), so a cut cut short before its boundary
+ * ({@link launch}); and as a clone is cut, right after `git clone` made it
+ * and before any other git runs in it (clone.ts `prepareClone`, whose fetch
+ * starts a background repack that deletes loose objects), so a cut cut short
+ * before its boundary
  * leaves no husk sharing the source's objects. On macOS only there, where
  * git's local clone links the source's objects too and each copy is an APFS
  * clone ({@link copyApart}).

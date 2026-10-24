@@ -772,7 +772,12 @@ export const createWorkspace = async (
       join(state, "create.json"),
       JSON.stringify({ path } satisfies CreateRecord)
     );
-    const base = await prepareClone(repoRoot, path, authed, known);
+    // git linked the source's object files into the clone (`--local`); each
+    // gets its own inode as git makes it, before the clone's first git command
+    // (prepareClone), so a cut cut short later (an agent's restart) leaves
+    // nothing linked to the source, whose place's boundary would deny every
+    // linked file. On macOS each copy is an APFS clone, so it costs no space.
+    const base = await prepareClone(repoRoot, path, authed, known, ownInodes);
     // The origin it was cut from, as this host read it from the source: the
     // one URL an archive refreshes the base from ({@link refreshBase}).
     await writeStateFile(
@@ -782,12 +787,6 @@ export const createWorkspace = async (
         origin: await plain(path, "remote", "get-url", "origin"),
       } satisfies CreateRecord)
     );
-    // git linked the source's object files into the clone (`--local`); each
-    // gets its own inode now, before the long fetch and checkout, so a cut
-    // cut short there (an agent's restart) leaves nothing linked to the
-    // source, whose place's boundary would deny every linked file. On macOS
-    // each copy is an APFS clone, so it costs no space.
-    await ownInodes(path);
     if (cut) {
       await fetchCut(path, id, base, cut, authed);
     }

@@ -138,13 +138,21 @@ export const fetchDefaultBranch = async (
  * remote now — so a workspace starts where that branch is at the moment it
  * is cut, whatever the source last fetched — with `origin/HEAD` naming it
  * ({@link fetchDefaultBranch}, `known` passed on). Answers that branch's
- * name. A clone that cannot be set up is deleted again.
+ * name. A clone that cannot be set up is deleted again. `own`, when given,
+ * runs on the clone the moment `git clone` returns, before any other git
+ * runs in it: the fetch here starts a detached `git maintenance run --auto`
+ * (git-fetch(1) `--auto-maintenance`, "enabled by default"), whose geometric
+ * repack, git 2.54's default strategy, packs the loose objects the clone
+ * linked from the source and deletes their files (git-repack(1) `-d`: "run
+ * git prune-packed to remove redundant loose object files") while `own`
+ * would still be copying them.
  */
 export const prepareClone = async (
   source: string,
   dir: string,
   run: GitRunner = git,
-  known?: string
+  known?: string,
+  own?: (dir: string) => Promise<unknown>
 ): Promise<string> => {
   const remote = await run(source, "remote", "get-url", "origin");
   await run(
@@ -157,6 +165,7 @@ export const prepareClone = async (
     dir
   );
   try {
+    await own?.(dir);
     const copied = await run(
       dir,
       "for-each-ref",

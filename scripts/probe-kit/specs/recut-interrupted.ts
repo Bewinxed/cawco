@@ -24,6 +24,12 @@
  *     files before `zz-hold.bin` at the path, and no file in its
  *     `.git/objects` sharing an inode with the repository's (the husks of
  *     2026-10-23 held 4,342, which broke cockpit's Caw: place-deny-bound).
+ *     The source holds 150 loose objects more as it is cut, and the fleet's
+ *     git repacks geometrically after every fetch (git 2.54's default, which
+ *     on 2026-10-24 deleted loose objects under the cut's copy and failed
+ *     every create on the owner's Mac): the cut still reaches its checkout,
+ *     the clone's loose objects packed and `git fsck --connectivity-only`
+ *     passing.
  * (2) The agent is SIGKILLed, and its checkout with it, as a service stop
  *     ends the whole group; the husk stands. The agent starts again, and its
  *     start-up pass clears the cut its last process left under way, and says
@@ -270,11 +276,32 @@ const reached = async (
   );
 };
 
+/** How many loose objects the repository at `dir` holds (`git count-objects`). */
+const looseIn = async (dir: string, home: string): Promise<number> =>
+  Number.parseInt(
+    await Bun.$`git -C ${dir} count-objects`
+      .env({ ...process.env, HOME: home })
+      .quiet()
+      .nothrow()
+      .text(),
+    10
+  );
+
+/** 150 loose objects more in the source, as a run of small fetches leaves them; answers how many it holds now. */
+const plantLoose = async (scene: Scene): Promise<number> => {
+  await Bun.$`sh -c ${'for i in $(seq 150); do echo "loose $i" | git hash-object -w --stdin; done'}`
+    .cwd(scene.repoRoot)
+    .env({ ...process.env, HOME: scene.home })
+    .quiet();
+  return await looseIn(scene.repoRoot, scene.home);
+};
+
 /** (1) and (2): a cut stopped in its checkout, the agent killed, its own cut cleared at its start, and the kept handoff delivered. */
 const cutShortPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const { fleet, workspace } = scene;
   const arm = join(fleet.sandbox, "hold-armed");
   const hit = join(fleet.sandbox, "hold-hit");
+  const loose = await plantLoose(scene);
   await writeFile(arm, "");
   const handed = await scene.handOff(SHORT);
   const held = await until(
@@ -315,6 +342,30 @@ const cutShortPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(1) the cut held in its checkout shares no object file's inode with the repository it was cut from (on macOS each an APFS clone)",
     listed > 0 && shared.length === 0,
     `${listed} object files, ${shared.length} sharing an inode${shared.length > 0 ? `: ${shared.slice(0, 3).join(", ")}` : ""}`
+  );
+  // The source held 150 loose objects more as the clone was cut; the clone's
+  // fetch then started a geometric repack, which packs and deletes them. The
+  // cut gave each its own inode before that fetch (clone.ts `prepareClone`
+  // `own`), so none was gone under the copy, and the clone's store is whole.
+  const repacked = await until(
+    "the clone's maintenance packed its loose objects",
+    () => looseIn(workspace.path, scene.home),
+    (count) => count === 0,
+    60_000
+  ).catch(() => looseIn(workspace.path, scene.home));
+  const fsck =
+    await Bun.$`git -c maintenance.auto=false -C ${workspace.path} fsck --connectivity-only`
+      .env({ ...process.env, HOME: scene.home })
+      .quiet()
+      .nothrow();
+  kit.check(
+    "(1) with 150 loose objects more in the source, the cut is made though the clone's fetch repacks them away: it reaches its checkout, the clone's loose objects packed, none sharing an inode, and git fsck --connectivity-only passes",
+    held !== undefined &&
+      loose >= 150 &&
+      repacked === 0 &&
+      shared.length === 0 &&
+      fsck.exitCode === 0,
+    `source ${loose} loose objects; clone ${repacked} loose after its maintenance, ${shared.length} sharing an inode; fsck exit ${fsck.exitCode} ${fsck.stderr.toString().trim().slice(0, 300)}`
   );
 
   await fleet.stop("agent", "SIGKILL");
@@ -588,6 +639,13 @@ const setUp = async (kit: Kit): Promise<Scene> => {
       '[filter "probe-hold"]',
       `\tsmudge = "if [ -e '${arm}' ]; then echo $PPID > '${hit}'; while [ -e '${arm}' ]; do sleep 0.2; done; fi; cat"`,
       "\tclean = cat",
+      // git 2.54's auto maintenance: a geometric repack after every fetch
+      // that packs and deletes loose objects (git 2.54 at 100 of them; -1
+      // runs it every time, so an older git does it too).
+      "[maintenance]",
+      "\tstrategy = geometric",
+      '[maintenance "geometric-repack"]',
+      "\tauto = -1",
       "",
     ].join("\n")
   );
@@ -599,7 +657,8 @@ const setUp = async (kit: Kit): Promise<Scene> => {
     "zz-hold.bin filter=probe-hold\n"
   );
   await writeFile(join(src, "zz-hold.bin"), `${HELD_TEXT}\n`);
-  await Bun.$`sh -c ${"git init -q -b main && git add -A && git commit -qm 'First commit'"}`
+  // The source keeps its loose objects: its own maintenance never runs.
+  await Bun.$`sh -c ${"git init -q -b main && git config maintenance.auto false && git add -A && git commit -qm 'First commit'"}`
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
