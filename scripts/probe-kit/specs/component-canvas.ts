@@ -24,7 +24,8 @@
  *    CSS transitions); its timeline scrubs the engine's own animations and
  *    a tuned duration goes to the artifact as `tuned`.
  * 5. A dial on `--radius` sets every frame's computed `border-radius`.
- * 6. A declared edge is drawn from one frame's box to the other's.
+ * 6. A declared edge is drawn from just outside one frame's box to just
+ *    outside the other's, standing on neither.
  * 7. A story with no doc comment is reported `unnamed`.
  * 8. Sections load one states file at a time: the far one's modules are
  *    requested only once the canvas is moved to it.
@@ -522,27 +523,26 @@ async function svelteKit(kit: Kit, stage: Stage): Promise<void> {
       toBox: to?.toJSON(),
     };
   });
-  const onEdge = (
+  // Each end stands just clear of its frame's left side (runtime.ts
+  // `EDGE_CLEAR`, 4px at zoom 1), level with the frame, never on it: a
+  // frame's picture holds none of the canvas's lines.
+  const besideLeft = (
     point: { x: number; y: number } | undefined,
     box: DOMRect | undefined
   ) =>
     !!point &&
     !!box &&
-    point.x >= box.x - 2 &&
-    point.x <= box.x + box.width + 2 &&
-    point.y >= box.y - 2 &&
-    point.y <= box.y + box.height + 2 &&
-    (Math.abs(point.x - box.x) < 3 ||
-      Math.abs(point.x - (box.x + box.width)) < 3 ||
-      Math.abs(point.y - box.y) < 3 ||
-      Math.abs(point.y - (box.y + box.height)) < 3);
+    point.x <= box.x - 1 &&
+    point.x >= box.x - 8 &&
+    point.y >= box.y &&
+    point.y <= box.y + box.height;
   kit.check(
-    "6: the declared edge is drawn from Primary's frame box to Quiet's",
+    "6: the declared edge is drawn from just outside Primary's frame box to just outside Quiet's, standing on neither",
     !!edge &&
       edge.from?.includes("|Primary|rest") === true &&
       edge.to?.includes("|Quiet|rest") === true &&
-      onEdge(edge.start, edge.fromBox as DOMRect) &&
-      onEdge(edge.end, edge.toBox as DOMRect),
+      besideLeft(edge.start, edge.fromBox as DOMRect) &&
+      besideLeft(edge.end, edge.toBox as DOMRect),
     JSON.stringify(edge)
   );
 

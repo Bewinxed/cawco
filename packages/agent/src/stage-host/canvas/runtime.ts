@@ -2556,12 +2556,12 @@ export function boot(options: BootOptions): void {
       path.setAttribute(
         "d",
         [
-          `M${a.x} ${fromY}`,
+          `M${a.x - EDGE_CLEAR} ${fromY}`,
           `H${x + turn}`,
           `Q${x} ${fromY} ${x} ${fromY + down * turn}`,
           `V${toY - down * turn}`,
           `Q${x} ${toY} ${x + turn} ${toY}`,
-          `H${b.x}`,
+          `H${b.x - EDGE_CLEAR}`,
         ].join(" ")
       );
       path.classList.add("cawco-edge", `cawco-edge-${line.kind}`);
@@ -3039,5 +3039,13 @@ const EDGE_LANE = 7;
 const EDGE_TURN = 7;
 const EDGE_LABEL_GAP = 7;
 const EDGE_LABEL_LINE = 16;
+/**
+ * How far clear of a frame's side an edge starts and its arrow's tip ends,
+ * px: the move's 2px stroke and its arrow (the marker's tip 1.6px past the
+ * path's end) never stand on the frame, so a frame's picture, taken by its
+ * own rect, holds none of the canvas's lines (a review read the tip at
+ * every frame's left edge as a stray speck).
+ */
+const EDGE_CLEAR = 4;
 const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/;
 const REDUCED_QUERY = /prefers-reduced-motion/;
