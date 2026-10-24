@@ -2319,7 +2319,20 @@ function keepCaught(within: string): void {
       );
       let looked = 0;
       const look = () => {
-        if (run.playState === "finished" || run.playState === "idle") {
+        // The page took its element out as the run ended (a row that
+        // leaves): a run with nowhere to draw is over, and its `finished`
+        // may never settle.
+        if (
+          (run.effect as KeyframeEffect | null)?.target?.isConnected === false
+        ) {
+          done({ ended: true });
+          return;
+        }
+        if (run.playState === "idle") {
+          done({ ended: false, why: "cancelled before its end" });
+          return;
+        }
+        if (run.playState === "finished") {
           return;
         }
         looked += 1;
