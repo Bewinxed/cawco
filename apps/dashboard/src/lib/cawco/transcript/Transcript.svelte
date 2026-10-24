@@ -57,7 +57,6 @@
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import { frameSize } from "../frame-observer";
-  import { animateApart } from "../motion/apart";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
@@ -854,22 +853,19 @@
    */
   let sliding = 0;
 
-  /** A slide on `node`, its cut apart from its travel (motion/apart), each counted for as long as it runs. */
+  /** A slide on `node`, counted for as long as it runs. */
   function startSlide(
     node: HTMLElement,
     keyframes: Keyframe[],
     options: KeyframeAnimationOptions
   ): void {
-    for (const part of animateApart(node, keyframes, {
-      id: SLIDE,
-      ...options,
-    })) {
-      sliding += 1;
-      const settled = () => {
-        sliding -= 1;
-      };
-      part.finished.then(settled, settled);
-    }
+    sliding += 1;
+    const settled = () => {
+      sliding -= 1;
+    };
+    node
+      .animate(keyframes, { id: SLIDE, ...options })
+      .finished.then(settled, settled);
   }
 
   /**
@@ -909,14 +905,19 @@
         running.cancel();
       }
     }
+    // The cut is a slide of its own on the travel's timing: an effect that
+    // cuts and moves dies with its renderer once carrySlides' move displaces
+    // it (house/no-clip-with-move).
+    startSlide(
+      node,
+      [{ translate: `0 ${delta}px` }, { translate: "0 0" }],
+      timing
+    );
     startSlide(
       node,
       [
-        {
-          translate: `0 ${delta}px`,
-          clipPath: `inset(${gained}px ${open} ${open})`,
-        },
-        { translate: "0 0", clipPath: `inset(0px ${open} ${open})` },
+        { clipPath: `inset(${gained}px ${open} ${open})` },
+        { clipPath: `inset(0px ${open} ${open})` },
       ],
       timing
     );

@@ -25,6 +25,11 @@
  *    pane's own line, the composer's), never in a toast that leaves on a
  *    timer (DESIGN.md, The Work Outlives Its Surface Rule). The one toast
  *    the dashboard keeps is a delete's Undo (config/undo.ts), on `toast(`.
+ *  - an @keyframes (a stylesheet's, a `<style>`'s) that cuts (`clip-path`)
+ *    and moves (`transform`, `translate`, `scale`, `rotate`): Chromium kills
+ *    the renderer once a later move displaces such an effect
+ *    (scripts/lint/design/clip-move.mjs, which holds scripts to the same).
+ *    Read whole, not by line: a block spans lines.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
@@ -74,7 +79,58 @@ const outs = await Promise.all(
       .quiet()
   )
 );
+/** Each @keyframes in `text` that cuts and moves: its line and its head. */
+const KEYFRAMES = /@(?:-webkit-)?keyframes\s+[^{]+\{/g;
+const CUT = /(?<![\w-])clip-path\s*:/;
+const MOVE = /(?<![\w-])(?:transform|translate|scale|rotate)\s*:/;
+function cutsAndMoves(text: string): { head: string; line: number }[] {
+  const hits: { head: string; line: number }[] = [];
+  for (const head of text.matchAll(KEYFRAMES)) {
+    let depth = 1;
+    let at = head.index + head[0].length;
+    while (depth > 0 && at < text.length) {
+      if (text[at] === "{") {
+        depth += 1;
+      } else if (text[at] === "}") {
+        depth -= 1;
+      }
+      at += 1;
+    }
+    const body = text.slice(head.index + head[0].length, at);
+    if (CUT.test(body) && MOVE.test(body)) {
+      hits.push({
+        head: head[0].slice(0, -1).trim(),
+        line: text.slice(0, head.index).split("\n").length,
+      });
+    }
+  }
+  return hits;
+}
+const styled = (
+  await Bun.$`git ls-files -co --exclude-standard -- apps/dashboard/src`
+    .cwd(ROOT)
+    .quiet()
+    .text()
+)
+  .split("\n")
+  .filter((file) => file.endsWith(".css") || file.endsWith(".svelte"));
+const keyframeHits = (
+  await Promise.all(
+    styled.map(async (file) =>
+      cutsAndMoves(await Bun.file(resolve(ROOT, file)).text()).map(
+        (hit) => `${file}:${hit.line}: ${hit.head}`
+      )
+    )
+  )
+).flat();
+
 let found = 0;
+if (keyframeHits.length > 0) {
+  found += keyframeHits.length;
+  console.log(
+    `an @keyframes never cuts (clip-path) and moves (transform, translate, scale, rotate) at once: animate the cut as its own effect on the same timing:\n${keyframeHits.map((hit) => `  ${hit}`).join("\n")}`
+  );
+}
 for (const [i, rule] of RULES.entries()) {
   const out = outs[i] as (typeof outs)[number];
   const lines = out.stdout.toString().trim();
@@ -89,7 +145,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

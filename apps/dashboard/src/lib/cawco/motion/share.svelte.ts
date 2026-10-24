@@ -19,7 +19,6 @@
  * starts moved onto the source, cut to the source's box around its `anchor`
  * (the part of it that is the source), and travels home as the cut opens.
  */
-import { animateApart } from "./apart";
 import { CURVE, dur, motionOk } from "./curves.svelte";
 
 interface Departure {
@@ -111,7 +110,7 @@ const FLIGHT = "share-flight";
  * flight, which goes on as it was.
  */
 export function carry(within: Element, by: number): void {
-  // A flight is one or two animations (its cut apart, motion/apart): each target carried once.
+  // A flight is one or two effects (its move and its cut): each target carried once.
   const carried = new Set<Element>();
   for (const flight of within.getAnimations({ subtree: true })) {
     const effect = flight.effect as KeyframeEffect | null;
@@ -257,7 +256,10 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
       from.source.style.visibility = "";
     }
   };
-  let frames: Keyframe[];
+  // A flight is its effects on one timing: what it moves, and what cuts it,
+  // never one effect that does both (house/no-clip-with-move): a tab's slide
+  // over a flight that cut and moved took the renderer down.
+  const effects: Keyframe[][] = [];
   if (mode === "grow") {
     // The source's box laid over the anchor, their starts and middles lined
     // up, in the destination's own coordinates.
@@ -268,38 +270,44 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     const top = part.top - to.top + (part.height - from.rect.height) / 2;
     const right = to.width - left - from.rect.width;
     const bottom = to.height - top - from.rect.height;
-    frames = [
-      {
-        transform: `translate(${from.rect.left - to.left - left}px, ${from.rect.top - to.top - top}px)`,
-        clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px round ${from.radius})`,
-      },
-      {
-        transform: "none",
-        clipPath: `inset(0px 0px 0px 0px round ${getComputedStyle(node).borderRadius})`,
-      },
-    ];
+    effects.push(
+      [
+        {
+          transform: `translate(${from.rect.left - to.left - left}px, ${from.rect.top - to.top - top}px)`,
+        },
+        { transform: "none" },
+      ],
+      [
+        {
+          clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px round ${from.radius})`,
+        },
+        {
+          clipPath: `inset(0px 0px 0px 0px round ${getComputedStyle(node).borderRadius})`,
+        },
+      ]
+    );
   } else if (mode === "clip") {
     const top = from.rect.top - to.top;
     const left = from.rect.left - to.left;
     const bottom = to.bottom - from.rect.bottom;
     const right = to.right - from.rect.right;
-    frames = [
+    effects.push([
       {
         clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px round ${from.radius})`,
         opacity: 0.6,
       },
       { clipPath: "inset(0px 0px 0px 0px round 0px)", opacity: 1 },
-    ];
+    ]);
   } else {
     const sy = from.rect.height / to.height;
     const sx = uniform ? sy : from.rect.width / to.width;
-    frames = [
+    effects.push([
       {
         transformOrigin: "0 0",
         transform: `translate(${from.rect.left - to.left}px, ${from.rect.top - to.top}px) scale(${sx}, ${sy})`,
       },
       { transformOrigin: "0 0", transform: "none" },
-    ];
+    ]);
     // Scaled by its height, a destination wider for its height than its
     // source would start out wider than the source; its inline end is cut
     // back to the source's width, so the flight starts on the source's box
@@ -309,15 +317,15 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
       const rtl = getComputedStyle(node).direction === "rtl";
       const cut = rtl ? `0 0 0 ${spare}px` : `0 ${spare}px 0 0`;
       const radius = getComputedStyle(node).borderRadius;
-      frames[0].clipPath = `inset(${cut} round ${from.radius})`;
-      frames[1].clipPath = `inset(0px 0px 0px 0px round ${radius})`;
+      effects.push([
+        { clipPath: `inset(${cut} round ${from.radius})` },
+        { clipPath: `inset(0px 0px 0px 0px round ${radius})` },
+      ]);
     }
   }
-  const runs = animateApart(node, frames, {
-    id: FLIGHT,
-    duration: ms,
-    easing,
-  });
+  const runs = effects.map((frames) =>
+    node.animate(frames, { id: FLIGHT, duration: ms, easing })
+  );
   Promise.allSettled(runs.map((run) => run.finished)).then(reveal);
 }
 

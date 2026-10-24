@@ -41,7 +41,6 @@
  * table and is `position: relative`.
  */
 import { watchRendered } from "#lib/utils/rendered.js";
-import { animateApart } from "./apart";
 import {
   dur,
   ease,
@@ -266,7 +265,7 @@ export function tableReflow(options: {
   /** The rows, each carrying its list key in `data-key`. */
   rows: string;
 }) {
-  /** What each element is doing now (its cut apart, motion/apart), so a newer reflow replaces it. */
+  /** What each element is doing now (a move, and a cut of its own), so a newer reflow replaces it. */
   const running = new WeakMap<Element, Animation[]>();
   const stop = (element: Element) => {
     for (const animation of running.get(element) ?? []) {
@@ -275,11 +274,14 @@ export function tableReflow(options: {
   };
   const play = (
     element: Element,
-    frames: Keyframe[],
+    effects: Keyframe[][],
     opts: KeyframeAnimationOptions
   ) => {
     stop(element);
-    running.set(element, animateApart(element, frames, opts));
+    running.set(
+      element,
+      effects.map((frames) => element.animate(frames, opts))
+    );
   };
 
   const rowOf = (host: HTMLElement, key: string | null) =>
@@ -303,7 +305,7 @@ export function tableReflow(options: {
       }
       play(
         row,
-        [{ transform: `translateY(${dy}px)` }, { transform: "none" }],
+        [[{ transform: `translateY(${dy}px)` }, { transform: "none" }]],
         timing(ease("--ease-in-out"))
       );
     }
@@ -363,22 +365,28 @@ export function tableReflow(options: {
     for (const row of run) {
       const offset = layoutTop(row, host) - start;
       const height = row.offsetHeight;
-      const frames: Keyframe[] = [];
+      // The rise and the opening are two effects on one timing: one that
+      // cuts and moves dies with its renderer once another move displaces it
+      // (house/no-clip-with-move).
+      const rise: Keyframe[] = [];
+      const cut: Keyframe[] = [];
       for (let i = 0; i <= STEPS; i += 1) {
         const e = easeInOut(i / STEPS);
-        const frame: Keyframe = {
+        rise.push({
           offset: i / STEPS,
           transform: `translateY(${(prev * (1 - e)).toFixed(2)}px)`,
           opacity: e,
-        };
+        });
         if (next) {
           const open = size + (next.dy - prev) * (1 - e);
           const shown = Math.min(height, Math.max(0, open - offset));
-          frame.clipPath = `inset(0 0 ${(height - shown).toFixed(2)}px 0)`;
+          cut.push({
+            offset: i / STEPS,
+            clipPath: `inset(0 0 ${(height - shown).toFixed(2)}px 0)`,
+          });
         }
-        frames.push(frame);
       }
-      play(row, frames, timing("linear"));
+      play(row, next ? [rise, cut] : [rise], timing("linear"));
     }
   };
 

@@ -1142,8 +1142,11 @@
   }
 
   /**
-   * The check or the triangle taking the dot's place: drawn in from its
-   * leading edge over --dur-pop as it grows from 0.6.
+   * The check or the triangle taking the dot's place: it grows from 0.6 over
+   * --dur-pop (`slotIn`, on the glyph) as it is drawn in from its leading
+   * edge (`slotCut`, on the glyph's inside), two effects on one timing: one
+   * effect that cuts and moves dies with its renderer once another move
+   * displaces it (house/no-clip-with-move).
    */
   function slotIn(_node: Element, ends: boolean): TransitionConfig {
     if (!(ends && motionOk.current)) {
@@ -1156,8 +1159,17 @@
     return {
       duration: dur("--dur-pop"),
       easing: easeOut,
-      css: (t, u) =>
-        `transform: scale(${(0.6 + 0.4 * t).toFixed(3)}); clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
+      css: (t) => `transform: scale(${(0.6 + 0.4 * t).toFixed(3)})`,
+    };
+  }
+  function slotCut(_node: Element, ends: boolean): TransitionConfig {
+    if (!(ends && motionOk.current)) {
+      return { duration: 0 };
+    }
+    return {
+      duration: dur("--dur-pop"),
+      easing: easeOut,
+      css: (_t, u) => `clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
     };
   }
   function slotOut(_node: Element): TransitionConfig {
@@ -1327,7 +1339,12 @@
           in:slotIn={tone === "done" || tone === "failed"}
           out:slotOut
         >
-          {@render glyph(tone)}
+          <span
+            class="grid place-items-center"
+            in:slotCut={tone === "done" || tone === "failed"}
+          >
+            {@render glyph(tone)}
+          </span>
         </span>
       {/key}
     </span>

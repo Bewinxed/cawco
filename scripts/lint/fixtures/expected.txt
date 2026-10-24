@@ -21,3 +21,6 @@ scripts/lint/fixtures/design/planted.ts:7:36 design/no-arbitrary-values
 scripts/lint/fixtures/design/planted.ts:7:47 design/no-unknown-classes
 scripts/lint/fixtures/design/planted.ts:10:3 house/no-raw-duration-read
 scripts/lint/fixtures/design/planted.svelte:33:10 design/no-raw-svg-colors
+scripts/lint/fixtures/design/planted.ts:12:30 house/no-clip-with-move
+scripts/lint/fixtures/design/planted.ts:15:3 house/no-clip-with-move
+scripts/lint/fixtures/design/planted.ts:17:3 house/no-clip-with-move
