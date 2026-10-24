@@ -896,6 +896,13 @@ const watchHost = async (
           console.info(
             `[workspace] ${id}: its boundary ${held.pid} says: ${text}`
           );
+          // Each restart the host says it records first (its `restarts`
+          // file); the agent's record of it follows, from that record.
+          recordHostRestarts(id, held).catch((error: unknown) => {
+            console.warn(
+              `[workspace] ${id}: its boundary ${held.pid}'s restarts could not be recorded: ${error instanceof Error ? error.message : String(error)}`
+            );
+          });
         }
       },
       exit: (exitCode, signal, pid) => {
@@ -927,6 +934,58 @@ const watchHost = async (
     },
     afterSeq
   );
+};
+
+/** The file in a generation's dir where its srt host records each restart of its sandbox (boundary-host.ts `RESTARTS_FILE`). */
+const HOST_RESTARTS_FILE = "restarts.json";
+
+/**
+ * Records each restart of generation `held`'s sandbox its srt host recorded
+ * ({@link HOST_RESTARTS_FILE}) that workspace `id`'s decisions do not hold
+ * yet, as a `host-restarted` decision ({@link BoundaryDecision}).
+ */
+const recordHostRestarts = async (
+  id: string,
+  held: Pick<Held, "form" | "gen" | "pid">
+): Promise<void> => {
+  const text = await readFile(
+    join(generationDir(id, held.gen), HOST_RESTARTS_FILE),
+    "utf8"
+  ).catch(() => "[]");
+  let restarts: unknown;
+  try {
+    restarts = JSON.parse(text);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(restarts)) {
+    return;
+  }
+  const known = new Set(
+    (await readDecisions(id)).flatMap((one) =>
+      one.decision === "host-restarted" && one.gen === held.gen
+        ? [one.hostAt]
+        : []
+    )
+  );
+  for (const one of restarts as ({
+    at?: unknown;
+    inner?: unknown;
+    path?: unknown;
+  } | null)[]) {
+    if (!one || typeof one.at !== "number" || known.has(one.at)) {
+      continue;
+    }
+    known.add(one.at);
+    // biome-ignore lint/performance/noAwaitInLoops: each restart recorded in its order
+    await recordDecision(id, {
+      ...decided(held),
+      decision: "host-restarted",
+      hostAt: one.at,
+      inner: typeof one.inner === "number" ? one.inner : null,
+      path: typeof one.path === "string" ? one.path : "",
+    });
+  }
 };
 
 /** What a boundary host exits with when the folder it holds is gone (boundary-host.ts `GONE_STATUS`). */
@@ -1059,6 +1118,10 @@ const restartUnasked = async (
     console.warn(
       `[workspace] ${id}: its boundary ${held.pid} ended unasked again within ${UNASKED_RESTART_MS / 1000}s of being started again, so it is left down; the workspace's next session starts it`
     );
+    await recordDecision(id, {
+      ...decided({ form: now?.form, gen: held.gen, pid: held.pid }),
+      decision: "left-down",
+    });
     return;
   }
   unaskedAt.set(id, Date.now());
@@ -1069,6 +1132,16 @@ const restartUnasked = async (
   console.info(
     `[workspace] ${id}: its boundary ${held.pid} is started again as ${fresh.pid}`
   );
+  const record = await readHeld(id).catch(() => undefined);
+  await recordDecision(id, {
+    ...decided({ form: now?.form, gen: held.gen, pid: held.pid }),
+    decision: "restarted-unasked",
+    to: decided({
+      form: record?.form,
+      gen: record?.gen ?? "",
+      pid: fresh.pid,
+    }),
+  });
 };
 
 /**
@@ -2549,6 +2622,14 @@ export type NarrowCause =
  *   ({@link closeQuietly}).
  * - `closed-for-good`: every generation closed with what still ran in its
  *   clone, the workspace going or settled ({@link stopWorkspaceBoundary}).
+ * - `host-restarted`: its srt host stopped its sandbox, with everything in
+ *   it, and started it again, a path it guards (`path`) changed on the host
+ *   (boundary-host.ts `guard`), as the host records it ({@link
+ *   recordHostRestarts}); `inner` the init of the sandbox it stopped.
+ * - `restarted-unasked`: the boundary ended with nothing of the agent's
+ *   ending it, and was started again (`to`, {@link restartUnasked}).
+ * - `left-down`: it ended unasked again within {@link UNASKED_RESTART_MS}
+ *   of being started again, and is left down.
  */
 export type BoundaryDecision =
   | (DecidedBoundary & {
@@ -2594,7 +2675,27 @@ export type BoundaryDecision =
       readonly at: number;
       readonly closed: readonly DecidedBoundary[];
       readonly decision: "closed-for-good";
-    };
+    }
+  | (DecidedBoundary & {
+      readonly agent: number;
+      readonly at: number;
+      readonly decision: "host-restarted";
+      /** When the host restarted it, by its own clock (ms since the epoch): what tells one restart from another. */
+      readonly hostAt: number;
+      readonly inner: number | null;
+      readonly path: string;
+    })
+  | (DecidedBoundary & {
+      readonly agent: number;
+      readonly at: number;
+      readonly decision: "restarted-unasked";
+      readonly to: DecidedBoundary;
+    })
+  | (DecidedBoundary & {
+      readonly agent: number;
+      readonly at: number;
+      readonly decision: "left-down";
+    });
 
 /** A {@link BoundaryDecision} as its decider writes it: the agent and the time are added. */
 type Deciding = BoundaryDecision extends infer One
@@ -2649,18 +2750,24 @@ const recordDecision = (id: string, entry: Deciding): Promise<void> => {
   return settled;
 };
 
+/** Workspace `id`'s decisions as recorded ({@link DECISIONS_FILE}), oldest first; none when there are none or they do not parse. */
+const readDecisions = async (id: string): Promise<BoundaryDecision[]> => {
+  const text = await readFile(join(stateDir(id), DECISIONS_FILE), "utf8").catch(
+    () => "[]"
+  );
+  try {
+    const read: unknown = JSON.parse(text);
+    return Array.isArray(read) ? (read as BoundaryDecision[]) : [];
+  } catch {
+    return [];
+  }
+};
+
 /** {@link recordDecision}'s write itself: the list read, `entry` added, written whole. */
 const appendDecision = async (id: string, entry: Deciding): Promise<void> => {
   const path = join(stateDir(id), DECISIONS_FILE);
-  const text = await readFile(path, "utf8").catch(() => "[]");
-  let before: unknown;
-  try {
-    before = JSON.parse(text);
-  } catch {
-    before = [];
-  }
   const all = [
-    ...(Array.isArray(before) ? before : []),
+    ...(await readDecisions(id)),
     { ...entry, agent: process.pid, at: Date.now() },
   ].slice(-DECISIONS_KEPT);
   await writeWhole(path, `${JSON.stringify(all)}\n`, 0o644);

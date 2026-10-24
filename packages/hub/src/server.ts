@@ -672,6 +672,7 @@ import { byId as handledIds } from "./handles";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
+import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import { createHubTools } from "./hub-tools";
@@ -32319,6 +32320,11 @@ export const createServer = (
           ) {
             const fault = `${message.verb} refused: this connection is not machine ${message.machineId}'s registered one; register first`;
             console.warn(`[hub] ${fault}`);
+            recordHubEvent({
+              kind: "frame-refused",
+              machineId: message.machineId,
+              verb: message.verb,
+            });
             sendFrame(ws, refusalFrame(message, fault));
             return;
           }

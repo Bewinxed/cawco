@@ -53,6 +53,7 @@ import { pageOrigin } from "@cawco/core/browser-gate";
 import { httpProof, sameMac, socketProof } from "@cawco/core/machine-key";
 import { Elysia, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
+import { recordHubEvent } from "./hub-record";
 import { HUB_SELF_HEADER, isHubSelf } from "./hub-self";
 import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
 
@@ -638,6 +639,13 @@ export const createHubAuth = ({
     console.warn(
       `[hub-auth] refused ${caller.kind} ${request.method} ${path}${caller.kind === "session" ? ` (session ${caller.instanceId ?? "unknown"})` : ""}`
     );
+    recordHubEvent({
+      kind: "request-refused",
+      caller: caller.kind,
+      machineId: caller.kind === "machine" ? caller.machineId : null,
+      method: request.method,
+      path,
+    });
     return refusal(caller, request.method, path);
   };
 
@@ -847,6 +855,11 @@ export const createHubAuth = ({
         ? `[hub-auth] machine ${entry.machineId} (${entry.hostname ?? "no hostname"}, ${entry.address ?? "no address"}) connected through its SSH add's forward before proving the key the add gave it: held, unlisted, until it proves it`
         : `[hub-auth] machine ${entry.machineId} (${entry.hostname ?? "no hostname"}, ${entry.address ?? "no address"}) waits to be admitted`
     );
+    recordHubEvent({
+      kind: "admission-held",
+      machineId: entry.machineId,
+      quiet: Boolean(entry.quiet),
+    });
     changed();
   };
 

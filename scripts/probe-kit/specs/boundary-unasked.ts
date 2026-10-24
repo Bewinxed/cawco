@@ -14,9 +14,10 @@
  * same pid), checked by its command line, and kills it with SIGKILL: nothing
  * of the agent's ended it.
  *
- * - u1. The agent says the boundary ended unasked and starts again, then
- *   that it is started again; the record names a new generation whose
- *   process is alive.
+ * - u1. The agent records the boundary started again unasked
+ *   (`restarted-unasked`, agent boundary.ts `BoundaryDecision`), its record
+ *   names a new generation whose process is alive, the one the decision
+ *   names.
  * - u2. The old process and the delegate's background sleep are gone within
  *   10 s of the restart (on macOS the start stops what answers to the old
  *   generation's name, which outlives its runner there).
@@ -24,8 +25,8 @@
  *   restart, and no "boundary is not running" refusal since the kill (the
  *   executor waits for the new boundary, then runs through it).
  * - u4. Killed again within 60 s of that restart, the boundary is left
- *   down, said ("ended unasked again within 60s"): its record still names
- *   the same generation and its process stays dead, not started in a loop.
+ *   down, as the agent records (`left-down`): its record still names the
+ *   same generation and its process stays dead, not started in a loop.
  * - u5. The delegate is let finish; its item ends done (nothing to land).
  *
  *   bun scripts/probe-kit/run.ts boundary-unasked
@@ -40,6 +41,7 @@ import {
 } from "../../../packages/core/src/signal";
 import { readRecord } from "../../../packages/core/src/state-file";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
@@ -50,10 +52,6 @@ const SLEEP = ["sleep", "7315"];
 const RAN = "RAN-ok";
 /** The executor's refusal when no boundary runs (agent boundary.ts `stoppedLine`). */
 const STOPPED = "boundary is not running";
-/** The agent's words (boundary.ts `restartUnasked`). */
-const RESTARTING = "ended unasked while its record stands, so it starts again";
-const RESTARTED = "is started again as";
-const LEFT_DOWN = "ended unasked again within";
 /** A process's entry in `/proc` (Linux) — macOS is read with `ps`. */
 const PID = /^\d+$/;
 /** How long an ended boundary's processes get to be gone. */
@@ -225,11 +223,9 @@ const run = async (kit: Kit) => {
     readRecord<{ gen: string; pid: number }>(
       join(home, ".cawco", "workspaces", workspace, "boundary.json")
     ).catch(() => undefined);
-  const said = async () =>
-    (await fleet.logs("agent"))
-      .split("\n")
-      .filter((line) => line.includes(`[workspace] ${workspace}:`));
-  const saidSince = async (from: number) => (await said()).slice(from);
+  /** The agent's decisions of the workspace's boundary since `from` (ms since the epoch). */
+  const decidedSince = async (from: number) =>
+    (await decisionsOf(home, workspace)).filter((one) => one.at >= from);
 
   // u1–u3: killed once
   const old = await until("its boundary's record", held, Boolean, 60_000);
@@ -242,28 +238,28 @@ const run = async (kit: Kit) => {
     );
     return;
   }
-  const linesBefore = (await said()).length;
+  const decidedBefore = Date.now();
   const stoppedBefore = seen.stopped;
   signal(listedPid(old.pid), "SIGKILL");
-  const restartedLine = await until(
+  const restarted = await until(
     "the agent starts it again",
     async () =>
-      (await saidSince(linesBefore)).find((line) => line.includes(RESTARTED)),
+      (await decidedSince(decidedBefore)).find(
+        (one) => one.decision === "restarted-unasked" && one.gen === old.gen
+      ),
     Boolean,
     60_000
   ).catch(() => undefined);
   const restartedAt = Date.now();
   const fresh = await held();
   check(
-    "u1: killed unasked, the boundary is started again: the agent says so, and its record names a new generation whose process is alive",
-    Boolean(restartedLine) &&
-      (await saidSince(linesBefore)).some((line) =>
-        line.includes(RESTARTING)
-      ) &&
+    "u1: killed unasked, the boundary is started again: the agent records it, and its record names the new generation the decision names, its process alive",
+    restarted?.decision === "restarted-unasked" &&
       fresh !== undefined &&
       fresh.gen !== old.gen &&
+      restarted.to.gen === fresh.gen &&
       isAlive(listedPid(fresh.pid)),
-    `old: gen ${old.gen}, pid ${old.pid} (${oldArgv.slice(0, 120)}); new: ${JSON.stringify(fresh)}\n${(await saidSince(linesBefore)).join("\n") || "the agent said nothing of it"}`
+    `old: gen ${old.gen}, pid ${old.pid} (${oldArgv.slice(0, 120)}); new: ${JSON.stringify(fresh)}; decided since the kill: ${JSON.stringify(await decidedSince(decidedBefore))}`
   );
   const gone = await until(
     "the old boundary and the sleep gone",
@@ -293,24 +289,27 @@ const run = async (kit: Kit) => {
   const second = await held();
   const elapsed = Date.now() - restartedAt;
   if (second && (await isBoundaryProcess(second.pid)) && elapsed < 50_000) {
-    const linesAgain = (await said()).length;
+    const decidedAgain = Date.now();
     signal(listedPid(second.pid), "SIGKILL");
     const leftDown = await until(
       "the agent leaves it down",
       async () =>
-        (await saidSince(linesAgain)).find((line) => line.includes(LEFT_DOWN)),
+        (await decidedSince(decidedAgain)).find(
+          (one) => one.decision === "left-down" && one.gen === second.gen
+        ),
       Boolean,
       20_000
     ).catch(() => undefined);
     await Bun.sleep(5000);
     const after = await held();
+    const since = await decidedSince(decidedAgain);
     check(
-      "u4: killed again within 60 s of its restart, the boundary is left down, said: its record names the same generation and its process stays dead",
-      Boolean(leftDown) &&
+      "u4: killed again within 60 s of its restart, the boundary is left down, as the agent records: its record names the same generation and its process stays dead",
+      leftDown !== undefined &&
         after?.gen === second.gen &&
         !isAlive(listedPid(second.pid)) &&
-        !(await saidSince(linesAgain)).some((line) => line.includes(RESTARTED)),
-      `${leftDown ?? "nothing said of it"}; record ${JSON.stringify(after)}`
+        !since.some((one) => one.decision === "restarted-unasked"),
+      `decided since the second kill: ${JSON.stringify(since)}; record ${JSON.stringify(after)}`
     );
   } else {
     check(

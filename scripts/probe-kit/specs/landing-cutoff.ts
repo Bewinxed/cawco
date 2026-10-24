@@ -31,7 +31,7 @@
  *   lands in the hub's LFS store (its `tmp` dir), the spec replaces the
  *   clone's `.git/config` on the host with the same bytes (a new inode, as
  *   any host write makes), standing in for whatever else may stop a sandbox
- *   mid-push. The agent's log says the sandbox restarted. The cut-off push
+ *   mid-push. The agent records the sandbox restarted (`host-restarted`). The cut-off push
  *   (137) is reported, not tried again (hub landing.ts `CUT_OFF`): main is
  *   read once after it, and the item ends done saying it landed when main
  *   holds its commit, else failed saying the push was cut off and main does
@@ -59,7 +59,7 @@
  *   sandbox's outer bwrap and init (the generation's `sandbox` file,
  *   `OUTER INNER …`) and the sleep's host pid, then replaces the clone's
  *   `.git/config` on the host (a new inode), which drops its protected bind.
- *   The agent says the sandbox restarted; within 10 s the old init, the old
+ *   The agent records the sandbox restarted; within 10 s the old init, the old
  *   outer bwrap and the sleep are gone (boundary-host.ts `kill`, sandbox-end.ts
  *   `endSandbox`: the init before the outer, never by `--die-with-parent`
  *   alone); a new sandbox runs, its init another
@@ -105,8 +105,6 @@ const SLEEP: Partial<Record<Tag, string[]>> = {
 };
 /** How long a sandbox's processes get to be gone once it was ended. */
 const GONE_MS = 10_000;
-/** The agent's words for a sandbox the host stopped (boundary-host.ts). */
-const RESTARTED = "was changed on the host";
 /**
  * The agent's decisions that end a boundary on purpose (boundary.ts
  * `BoundaryDecision`): closed quiet, an older one closed, or closed for good
@@ -501,7 +499,7 @@ const guardRestart = async (armed: Armed) => {
       // and the host's guard restarts the sandbox.
       await replaceInPlace(armed.config);
       return await until(
-        "F's restart said",
+        "F's restart recorded",
         async () => (await armed.restarts()).at(said),
         Boolean,
         60_000
@@ -706,13 +704,22 @@ const run = async (kit: Kit) => {
       const clone = where?.path ?? "";
       const config = join(clone, ".git", "config");
       const inners = () => innersOf(workspace);
-      const restarts = async () =>
-        (await fleet.logs("agent"))
-          .split("\n")
-          .filter(
-            (line) =>
-              line.includes(workspace.slice(0, 8)) && line.includes(RESTARTED)
-          );
+      /**
+       * Each restart of the workspace's sandbox its srt host made for a
+       * guarded path changed on the host, as the agent records it
+       * (`host-restarted`, agent boundary.ts `BoundaryDecision`), by the
+       * host's own time. Kept as each is read: an archive takes the
+       * workspace's state dir, its decisions with it.
+       */
+      const restartsSeen = new Map<number, string>();
+      const restarts = async () => {
+        for (const one of await decisionsOf(home, workspace)) {
+          if (one.decision === "host-restarted") {
+            restartsSeen.set(one.hostAt, JSON.stringify(one));
+          }
+        }
+        return [...restartsSeen.values()];
+      };
       /** Every line the agent said of this workspace: words for a failing check's detail. */
       const told = async () =>
         (await fleet.logs("agent"))
@@ -776,7 +783,11 @@ const run = async (kit: Kit) => {
       steps[tag].armed = true;
       const row = await until(
         `${tag}'s item ended`,
-        itemOf,
+        async () => {
+          // Read at each look, before its archive can take them.
+          await restarts();
+          return itemOf();
+        },
         (one) => ["done", "failed", "cancelled"].includes(one.state),
         600_000
       );
@@ -864,9 +875,9 @@ const run = async (kit: Kit) => {
       uploadsBefore
     );
     check(
-      "B: the host replaced the clone's .git/config mid-push, and the agent says the sandbox restarted",
+      "B: the host replaced the clone's .git/config mid-push, and the agent records the sandbox restarted",
       b.inode.after !== b.inode.before && b.restarted.length > 0,
-      `inode ${b.inode.before} -> ${b.inode.after}\n${b.restarted.join("\n") || "no restart said"}`
+      `inode ${b.inode.before} -> ${b.inode.after}\n${b.restarted.join("\n") || "no restart recorded"}`
     );
     const bMain = await onMain("B");
     check(
@@ -948,7 +959,7 @@ const run = async (kit: Kit) => {
     const f = await delegate("F", guardRestart);
     const fEnded = endedWhole(f.hooked, Boolean);
     check(
-      "F: a guard's restart: the agent says the sandbox restarted, its old init, outer bwrap and background sleep are gone within 10 s, and a new sandbox runs",
+      "F: a guard's restart: the agent records the sandbox restarted, its old init, outer bwrap and background sleep are gone within 10 s, and a new sandbox runs",
       fEnded.ok,
       fEnded.said
     );

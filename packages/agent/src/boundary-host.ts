@@ -245,6 +245,14 @@ const denies = JSON.parse(readFileSync(deniesFile, "utf8")) as Deny[];
 const placeFile = join(process.cwd(), "sandbox");
 /** `<state>/guarded`: the running sandbox's protected binds, which the executor checks before every command. */
 const guardedFile = join(process.cwd(), "guarded");
+/**
+ * `<state>/restarts.json`: each restart of the sandbox for a guarded path
+ * changed on the host, `{at, path, inner}`, oldest first, written before the
+ * line saying it, which the agent records it from (boundary.ts
+ * `recordHostRestarts`).
+ */
+const restartsFile = join(process.cwd(), "restarts.json");
+const restarts: { at: number; inner: number | null; path: string }[] = [];
 const lstatOf = (path: string): Stats | undefined => {
   try {
     return lstatSync(path);
@@ -966,10 +974,16 @@ for (;;) {
     }
     await finish({ status });
   }
-  // On stdout, as a line: the keeper drains stderr unread, and the agent
-  // says each line its host says after the sandbox is ready (`watchHost` in
-  // boundary.ts), so a restart, which ends everything in the workspace, is
-  // in its log.
+  // Recorded, then said on stdout, as a line: the keeper drains stderr
+  // unread, and the agent says each line its host says after the sandbox is
+  // ready (`watchHost` in boundary.ts), so a restart, which ends everything
+  // in the workspace, is in its log and its record.
+  restarts.push({
+    at: Date.now(),
+    inner: current?.inner ?? null,
+    path: String(lost),
+  });
+  writeStateFileSync(restartsFile, `${JSON.stringify(restarts)}\n`);
   console.log(
     `cawco: ${lost} was changed on the host, which drops its protection inside the sandbox, so the sandbox ${current?.inner} was stopped with everything in it and starts again`
   );

@@ -729,6 +729,23 @@ jsonl() { bun -e "const t = await Bun.stdin.text(); const d = t.split('\n').filt
 # What machine $1's agent holds now, as it records it (agent agent-state.ts, agent-state.json in CawCo's data dir): $2 a
 # JS function of the record, printed. Its log says the same for people; a proof reads this.
 agent_state() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/agent-state.json 2> /dev/null || true' | json "$2"; }
+# What the hub recorded it held or refused (hub hub-record.ts, hub-record.json beside its database), oldest first, each
+# with its time (ms): a machine held for an Admit, a frame refused "register first", a request the gate refused (what a
+# machine's agent hears as a 401). $1 a JS function of the list, printed. Its log says the same for people.
+hub_record() { as_user "$hubc" sh -c 'cat /home/cawco/.local/share/cawco/hub-record.json 2> /dev/null || echo "[]"' | json "$1"; }
+# The hub's record of kind $1 since epoch seconds $2, for machine $3 when given, as one line of JSON.
+hub_recorded() { hub_record "d => JSON.stringify(d.filter(e => e.kind === '$1' && e.at >= $2 * 1000${3:+ && e.machineId === '$3'}))"; }
+# Every request the hub's gate refused since epoch seconds $1, as its record says (hub_record), one line of JSON ("[]":
+# none). A control first: a request the gate must refuse (a Bearer that names no session, on a route only the owner
+# reaches) is sent and found recorded, so an empty list is the record read as it is written, never a record not kept.
+# Every control request's path starts /api/stage2-record-control and is left out of the list.
+hub_refusals_since() {
+  local path="/api/stage2-record-control-$RANDOM$RANDOM"
+  as_user "$hubc" curl -sS -o /dev/null -H "Authorization: Bearer stage2-record-control" "http://127.0.0.1:3456$path" || true
+  wait_until 10 '[[ "$(hub_record "d => d.some(e => e.kind === '"'request-refused'"' && e.path === '"'$path'"')")" == true ]]' \
+    || { echo "the hub's record holds no refusal of the control request $path: $(hub_record 'd => JSON.stringify(d.slice(-5))')" >&2; return 1; }
+  hub_record "d => JSON.stringify(d.filter(e => e.kind === 'request-refused' && e.at >= $1 * 1000 && !e.path.startsWith('/api/stage2-record-control')))"
+}
 machine_id() { hub_api /api/agents | json "d => d.find(a => a.hostname === '$1')?.machineId"; }
 build_version() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.build?.version"; }
 phase() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.phase"; }
@@ -960,7 +977,7 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
 settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-for-hub|waiting-sessions)$ ]]; }
 export PROOF_RUNNER
-export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl agent_state machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed \
+export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl agent_state hub_record hub_recorded hub_refusals_since machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
@@ -1418,7 +1435,7 @@ ssh_add_said() {
 # to be admitted", no row), the machine online, its first register proved the add's key (no hold at all), and two of
 # its heartbeats taken, none refused.
 ssh_add_joins() {
-  local c=$1 name=$2 user=$3 ip=$4 since job state id refused rows done_ms
+  local c=$1 name=$2 user=$3 ip=$4 since job state id refused rows done_ms held
   need_hub
   since=$(date +%s)
   job=$(hub_api /api/machines/ssh -X POST -H 'content-type: application/json' -d "{\"target\":\"$user@$ip\"}" | json 'd => d.id')
@@ -1437,19 +1454,20 @@ ssh_add_joins() {
   [[ -n $id ]] || { echo "ASSERTION FAILED: no machine named $name on the hub"; ssh_add_said "$c" "$user" "$job"; return 1; }
   echo "$id" > "$rigdir/ssh-id-$name"
   ssh_start_after "$done_ms" "$id" "$name"
-  if hub_journal "$since" | grep -F "machine $id (" | grep -q "waits to be admitted"; then
-    echo "ASSERTION FAILED: the hub held $user@$ip for an Admit"; ssh_add_said "$c" "$user" "$job"; return 1
+  held=$(hub_recorded admission-held "$since" "$id")
+  if [[ "$(json 'd => d.some(e => !e.quiet)' <<< "$held")" == true ]]; then
+    echo "ASSERTION FAILED: the hub held $user@$ip for an Admit: $held"; ssh_add_said "$c" "$user" "$job"; return 1
   fi
   rows=$(hub_api /api/machines/waiting | json 'd => d.length')
   [[ $rows == 0 ]] || { echo "ASSERTION FAILED: $rows machine(s) wait to be admitted: $(hub_api /api/machines/waiting)"; return 1; }
   [[ "$(hub_api "/api/agents/$id" | json 'd => d.status')" == online ]] || { echo "ASSERTION FAILED: $name is not online"; ssh_add_said "$c" "$user" "$job"; return 1; }
-  if hub_journal "$since" | grep -F "machine $id (" | grep -q "held, unlisted"; then
-    echo "ASSERTION FAILED: $name's agent registered without the add's key and was held for the add (no Admit row, but its first register proved nothing)"
+  if [[ "$(json 'd => d.some(e => e.quiet)' <<< "$held")" == true ]]; then
+    echo "ASSERTION FAILED: $name's agent registered without the add's key and was held for the add (no Admit row, but its first register proved nothing): $held"
     ssh_add_said "$c" "$user" "$job"; return 1
   fi
   two_beats_taken hub_api "$id" "$done_ms" || { hub_journal "$since" | grep -F "$id" | tail -n 20; return 1; }
-  refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
-  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: $refused of $name's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 20; return 1; }
+  refused=$(hub_recorded frame-refused "$since" "$id")
+  [[ $refused == "[]" ]] || { echo "ASSERTION FAILED: $name's frames were refused \"register first\": $refused"; hub_journal "$since" | grep -F "$id" | tail -n 20; return 1; }
   [[ "$(hub_api "/api/agents/$id" | json 'd => d.status')" == online ]]
 }
 ssh_adds_at_once() {
@@ -1463,10 +1481,11 @@ fleet_denials_known() { [[ "$(as_added "$1" "$2" sh -c 'cat "$1" 2> /dev/null ||
 # reaches it by, the add's own (config.json `hubUrl`, cli joined-hub.ts): niftybot and uwucloud, added over SSH on
 # 2026-10-22, recorded none, so their agents took themselves for not the machine's own and refused every sync. The
 # fleet's sidecar in its Claude dir (~/.claude/cawco-fleet.json, agent denied-tools.ts), which every spawn reads before
-# it starts anything, holds the fleet's deniedTools; its agent says it synced from the hub and never that it refused a
-# sync; and the hub's row has its last delta acknowledged (`fleetSync`, hub fleet-sync.ts).
+# it starts anything, holds the fleet's deniedTools; its agent records the hub's sync it took (agent-state.json
+# `fleetSync`, agent session.ts `FLEET_DELTA`); and the hub's row has its last delta acknowledged (`fleetSync`, hub
+# fleet-sync.ts), which a refused sync never is.
 ssh_fleet_synced() {
-  local c=$1 name=$2 user=$3 home=$5 sidecar="$5/.claude/cawco-fleet.json" joined reached journal fault
+  local c=$1 name=$2 user=$3 home=$5 sidecar="$5/.claude/cawco-fleet.json" joined reached synced fault
   joined=$(as_added "$c" "$user" sh -c 'cat "$1" 2> /dev/null || true' sh "$home/.config/cawco/config.json" | json 'd => d.hubUrl ?? ""')
   reached=$(hub_api "/api/machines/ssh/$(cat "$rigdir/ssh-add-$name.job")" | json 'd => d.hubUrl')
   [[ -n $reached && $joined == "$reached" ]] \
@@ -1476,14 +1495,11 @@ ssh_fleet_synced() {
     added_agent_journal "$c" "$user" | grep -F "[fleet]" | tail -n 10
     return 1
   }
-  journal=$(added_agent_journal "$c" "$user")
-  grep -qF "[fleet] sync from the hub" <<< "$journal" || { echo "ASSERTION FAILED: $name's agent never says it synced from the hub"; grep -F "[fleet]" <<< "$journal" | tail -n 20; return 1; }
-  if grep -qE "not this machine's agent|sync from the hub refused" <<< "$journal"; then
-    echo "ASSERTION FAILED: $name's agent refused the hub's fleet sync"; grep -E "not this machine's agent|sync from the hub refused" <<< "$journal" | tail -n 5; return 1
-  fi
+  synced=$(as_added "$c" "$user" sh -c 'cat "$1" 2> /dev/null || true' sh "$home/.local/share/cawco/agent-state.json" | json 'd => JSON.stringify(d.fleetSync ?? null)')
+  [[ "$(json 'd => typeof d?.rev === "number"' <<< "$synced")" == true ]] || { echo "ASSERTION FAILED: $name's agent records no sync from the hub: $synced"; added_agent_journal "$c" "$user" | grep -F "[fleet]" | tail -n 20; return 1; }
   fault=$(hub_api "/api/agents/$(cat "$rigdir/ssh-id-$name")" | json 'd => d.fleetSync?.state === "acked" ? "" : JSON.stringify(d.fleetSync ?? null)')
   [[ -z $fault ]] || { echo "ASSERTION FAILED: the hub's row has $name's last delta not acknowledged: $fault"; return 1; }
-  echo "$name's agent: $(grep -F "[fleet] sync from the hub" <<< "$journal" | tail -n 1)"
+  echo "$name's agent took the hub's sync: $synced"
 }
 # The session asked for a second after the add said done (ssh_start_after) runs: the hub took the start, and its row
 # reads running within 90 s (the hub marks a machine online only once its welcome, which carries the fleet's denials,
@@ -1540,21 +1556,16 @@ ssh_preview() {
   }
   echo "the hub's preview port $port for $id answers: preview of $name"
 }
-# Nothing either added machine asked the hub since the adds began was refused: the hub's journal has no
-# `[hub-auth] refused` (the gate's line for every request it refuses, hub-auth.ts), and neither machine's agent
-# journal says a call to the hub "answered 401" (what the gate answers a request without the machine's proof).
+# Nothing either added machine asked the hub since the adds began was refused: the hub's record of what its gate
+# refused (hub_refusals_since: every request it refuses, hub-auth.ts, a 401 or 403 to whoever asked, either machine's
+# agent among them) holds none since then.
 ssh_no_refusals() {
   need_hub
-  local since refused c user said bad=0
+  local since refused
   since=$(cat "$rigdir/ssh-adds-since")
-  refused=$(hub_journal "$since" | grep -F "[hub-auth] refused" || true)
-  [[ -z $refused ]] || { echo "ASSERTION FAILED: the hub refused requests since the adds:"; echo "$refused" | tail -n 20; bad=1; }
-  for pair in "$sshrootc root" "$sshuserc cawco"; do
-    read -r c user <<< "$pair"
-    said=$(added_agent_journal "$c" "$user" "$since" | grep -F "answered 401" || true)
-    [[ -z $said ]] || { echo "ASSERTION FAILED: the agent of $user on $c was answered 401:"; echo "$said" | tail -n 20; bad=1; }
-  done
-  (( bad == 0 ))
+  refused=$(hub_refusals_since "$since") || return 1
+  [[ $refused == "[]" ]] || { echo "ASSERTION FAILED: the hub refused requests since the adds: $refused"; hub_journal "$since" | grep -F "[hub-auth]" | tail -n 20; return 1; }
+  echo "the hub's gate refused no request since the adds, as its record says"
 }
 # Install now on the added machine applies the new build: the machine is offered it, its download from the hub goes
 # through the add's forward with the machine's proof, a helper applies it, and nothing it asked the hub meanwhile was
@@ -1571,8 +1582,8 @@ ssh_install_now() {
     added_agent_journal "$c" "$user" "$since" | grep -E "\[update\]|401" | tail -n 20
     return 1
   }
-  said=$(added_agent_journal "$c" "$user" "$since" | grep -F "answered 401" || true)
-  [[ -z $said ]] || { echo "ASSERTION FAILED: through its update $name's agent was answered 401:"; echo "$said" | tail -n 10; return 1; }
+  said=$(hub_refusals_since "$since") || return 1
+  [[ $said == "[]" ]] || { echo "ASSERTION FAILED: through $name's update the hub refused requests: $said"; added_agent_journal "$c" "$user" "$since" | grep -E "\[update\]|401" | tail -n 10; return 1; }
 }
 ssh_install_now_both() {
   need_hub
@@ -1581,8 +1592,8 @@ ssh_install_now_both() {
   use_feed next
   learn > /dev/null
   on_both ssh_install_now
-  refused=$(hub_journal "$since" | grep -F "[hub-auth] refused" || true)
-  [[ -z $refused ]] || { echo "ASSERTION FAILED: the hub refused requests through the updates:"; echo "$refused" | tail -n 10; return 1; }
+  refused=$(hub_refusals_since "$since") || return 1
+  [[ $refused == "[]" ]] || { echo "ASSERTION FAILED: the hub refused requests through the updates: $refused"; return 1; }
 }
 export -f hub_journal ssh_trust as_added added_agent_journal ssh_sign_in_before on_both last_seen two_beats_taken \
   ssh_start_after ssh_add_said ssh_add_joins ssh_adds_at_once fleet_denials_known ssh_fleet_synced ssh_session_ran \
@@ -1595,10 +1606,10 @@ rig_sshadd() {
   setup "sign root on sshroot and the user on sshuser in to a CawCo account before their adds" ssh_sign_in_before
   setup_done
   check "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused" ssh_adds_at_once 1200
-  check "each added machine has had its first fleet sync: its install recorded the hub it joined, the fleet sidecar in its Claude dir holds the fleet's deniedTools, its agent says it synced from the hub and refused none, and the hub's row says no sync that did not land" "on_both ssh_fleet_synced" 300 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
+  check "each added machine has had its first fleet sync: its install recorded the hub it joined, the fleet sidecar in its Claude dir holds the fleet's deniedTools, its agent records the hub's sync it took, and the hub's row says no sync that did not land" "on_both ssh_fleet_synced" 300 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
   check "a session asked for a second after each add said done runs" "on_both ssh_session_ran" 300 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
   check "that session's preview on each added machine answers through the hub" "on_both ssh_preview" 300 "a session asked for a second after each add said done runs"
-  check "nothing either added machine asked the hub was refused: no [hub-auth] refused in the hub's journal since the adds, no answered 401 in either agent's journal" ssh_no_refusals 120 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
+  check "nothing either added machine asked the hub was refused: none in the hub's record of what its gate refused since the adds" ssh_no_refusals 120 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
   check "Install now on each added machine applies the new build, its download through the add's forward with the machine's proof, nothing refused" ssh_install_now_both 900 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
 }
 
@@ -1624,8 +1635,8 @@ admitted_heartbeats() {
   echo "waiting to be admitted: $waiting"
   id=$(json 'd => d[0].machineId' <<< "$waiting")
   [[ -n $id ]]
-  refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
-  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: while held, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
+  refused=$(hub_recorded frame-refused "$since" "$id")
+  [[ $refused == "[]" ]] || { echo "ASSERTION FAILED: while held, the machine's frames were refused \"register first\": $refused"; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
   owner_api "/api/machines/waiting/$id/admit" -X POST > /dev/null
   wait "$joining" || rc=$?
   cat "$out"
@@ -1634,8 +1645,8 @@ admitted_heartbeats() {
   [[ "$(owner_api "/api/agents/$id" | json 'd => d.status')" == online ]]
   admitted_ms=$(now_ms)
   two_beats_taken owner_api "$id" "$admitted_ms" || { hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
-  refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
-  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: after the Admit, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
+  refused=$(hub_recorded frame-refused "$since" "$id")
+  [[ $refused == "[]" ]] || { echo "ASSERTION FAILED: after the Admit, the machine's frames were refused \"register first\": $refused"; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
   [[ "$(owner_api "/api/agents/$id" | json 'd => d.status')" == online ]]
 }
 export -f owner_api admitted_heartbeats

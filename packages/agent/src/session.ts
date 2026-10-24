@@ -135,6 +135,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
+import { detach } from "@cawco/core/detach";
 import { measureMemoryRoom } from "@cawco/core/machine-room";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -145,6 +146,7 @@ import {
 } from "@cawco/core/sessiond";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { Effect } from "effect";
+import { recordAgentState } from "./agent-state";
 import { withFiles } from "./attachments";
 import {
   type Boundary,
@@ -6237,6 +6239,17 @@ export class SessionSupervisor {
             `[fleet] sync from the hub: rev ${delta.rev}, ${delta.items.length} item(s)${delta.full ? " (all it holds)" : ""}${delta.welcome ? ", its welcome" : ""}${delta.reconverge ? ", converging every item" : ""}`
           );
         }
+        // Every delta taken, as the hub hears it acknowledged.
+        detach(
+          recordAgentState("fleetSync", {
+            full: Boolean(delta.full),
+            items: delta.items.length,
+            reconverge: Boolean(delta.reconverge),
+            rev: delta.rev,
+            welcome: Boolean(delta.welcome),
+          }),
+          "fleet sync record"
+        );
         this.#convergeSoon();
         return { rev: delta.rev } satisfies FleetAck;
       }

@@ -18,6 +18,14 @@ export const AGENT_STATE_FILE = "agent-state.json";
 export type HubHere = "hub-says" | "loopback" | "own-address";
 
 export interface AgentState {
+  /** The hub's last fleet sync this agent took (session.ts `FLEET_DELTA`): its revision, how many items, and whether it held all, was the welcome, or converges every item. */
+  readonly fleetSync?: {
+    readonly full: boolean;
+    readonly items: number;
+    readonly reconverge: boolean;
+    readonly rev: number;
+    readonly welcome: boolean;
+  };
   /** How this computer's loopback serves the hub (hub-loopback.ts). */
   readonly hubLoopback?: {
     /** The dashboard's port here (`local`) and on the hub (`hub`); null when nothing is carried. */
