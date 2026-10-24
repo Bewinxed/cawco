@@ -68,6 +68,7 @@ import type {
 } from "@cawco/core";
 import {
   ACCOUNT_READ,
+  ARTIFACT_ORIGIN,
   ASK_USER_QUESTION,
   BOUNDARY_RELAUNCH,
   CAWCO_ENV,
@@ -1043,6 +1044,36 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
     };
   }
 }
+
+/**
+ * The person's message sent into a running turn as Claude Code's send-now:
+ * "`'now'` with `origin: { kind: "human" }`: on Claude Code v2.1.286 or
+ * later, work that can continue in the background moves there, and Claude
+ * reads the message in the same turn. Work that can move includes shell
+ * commands, subagents, and MCP tool calls. On v2.1.287 or later it also
+ * includes WebFetch and WebSearch calls. When Claude is only writing a
+ * response, or the work it is running can't move, Claude Code interrupts
+ * the turn instead" (code.claude.com/docs/en/agent-sdk/typescript,
+ * SDKUserMessage `priority`). A moved shell command answers "Command was
+ * moved to the background (ID: …) so that a message that arrived while it
+ * was running can reach you; it was not interrupted" and its own output
+ * follows when it ends (Claude Code 2.1.309).
+ */
+const SEND_NOW = { priority: "now", origin: { kind: "human" } } as const;
+
+/** The tools whose running call Claude Code moves aside for a send-now ({@link SEND_NOW}). */
+const MOVES_ASIDE: ReadonlySet<string> = new Set([
+  "Bash",
+  "PowerShell",
+  "Agent",
+  "Task",
+  "WebFetch",
+  "WebSearch",
+]);
+
+/** Whether a running call of `tool` moves aside for a send-now: {@link MOVES_ASIDE}, or any MCP tool's. */
+const movesAside = (tool: string): boolean =>
+  MOVES_ASIDE.has(tool) || tool.startsWith("mcp__");
 
 /** The CLI's shell tools: a command one runs is cut with its process. */
 const SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "PowerShell"]);
@@ -2131,6 +2162,13 @@ class ClaudeSession implements HarnessSession {
    * ({@link #cutCommands}).
    */
   readonly #commands = new Map<string, { command: string; taskId?: string }>();
+  /**
+   * The main thread's tool calls running now, by `tool_use` id, with the
+   * tool's name: from their `tool_use` until their `tool_result` (their
+   * own, or the one a call moved aside answers with) or the turn's end.
+   * What decides whether a send reaches the turn now ({@link #waitsForCalls}).
+   */
+  readonly #calls = new Map<string, string>();
   /** Where the CLI keeps its temp files ({@link tempRootOf}). */
   readonly #tempRoot: string;
   /**
@@ -2875,10 +2913,11 @@ class ClaudeSession implements HarnessSession {
     return true;
   }
 
-  /** Keeps {@link #commands} from the main thread's frames. */
+  /** Keeps {@link #commands} and {@link #calls} from the main thread's frames. */
   #trackCommands(message: SDKMessage): void {
     if (message.type === "result") {
       this.#commands.clear();
+      this.#calls.clear();
       return;
     }
     if (message.type === "system" && message.subtype === "task_started") {
@@ -2898,6 +2937,11 @@ class ClaudeSession implements HarnessSession {
       return;
     }
     for (const block of message.message.content) {
+      if (block.type === "tool_use") {
+        this.#calls.set(block.id, block.name);
+      } else if (block.type === "tool_result") {
+        this.#calls.delete(block.tool_use_id);
+      }
       const command = (block as { input?: { command?: unknown } }).input
         ?.command;
       if (
@@ -2910,6 +2954,35 @@ class ClaudeSession implements HarnessSession {
         this.#commands.delete(block.tool_use_id);
       }
     }
+  }
+
+  /**
+   * Why `message`, sent into the running turn, waits for the running tool
+   * calls' own end rather than reaching the model now; undefined when it
+   * goes now. It goes now ({@link SEND_NOW}) only when it is the person's
+   * own words and every call the turn is running is one Claude Code moves
+   * aside for it: with anything else running, or the model writing, or an
+   * ask open, Claude Code would interrupt the turn instead, which CawCo
+   * never asks of it.
+   */
+  #waitsForCalls(message: SentMessage): string | undefined {
+    const { origin } = message;
+    if (!(
+      origin.kind === "human" ||
+      (origin.kind === "system" && origin.name === ARTIFACT_ORIGIN)
+    )) {
+      return "it is not the person's own words";
+    }
+    if (this.#calls.size === 0) {
+      return "no tool call is running";
+    }
+    if (this.#permissions.size > 0) {
+      return "an ask is open";
+    }
+    const fixed = [...this.#calls.values()].filter((name) => !movesAside(name));
+    return fixed.length > 0
+      ? `${fixed.join(", ")} cannot move aside`
+      : undefined;
   }
 
   /**
@@ -3379,15 +3452,28 @@ class ClaudeSession implements HarnessSession {
     // finished: the CLI stores it unread and answers with an empty result
     // (measured, agent SDK 0.3.284: `num_turns 0`, `duration_api_ms 0`), so a
     // hand-off, report or rule reply landing then was never read.
+    // Into a running turn, the person's words reach the model now when every
+    // call it runs moves aside for them ({@link SEND_NOW}); anything else
+    // is read at those calls' own end, never by cutting the turn.
+    const waits = this.#waitsForCalls(message);
+    if (this.#calls.size > 0) {
+      console.info(
+        `[claude] ${this.instanceId}: send ${message.uuid} ${waits ? `waits for the running call's own end: ${waits}` : `reaches the turn now: ${[...this.#calls.values()].join(", ")} move aside for it`}`
+      );
+    }
     const outgoing = withExtras(
-      { ...(message as unknown as SDKUserMessage), shouldQuery: undefined },
+      {
+        ...(message as unknown as SDKUserMessage),
+        shouldQuery: undefined,
+        ...(waits ? {} : SEND_NOW),
+      },
       extras.attachments,
       extras.images
     );
     this.#delivery.set(message.uuid, Promise.withResolvers<void>());
     this.#unread.add(message.uuid);
     // Into a running turn the CLI queues it and says `started` when it is
-    // read (measured 2.1.280), at the running tool call's end.
+    // read (measured 2.1.280).
     this.#ctx.busy(true);
     this.#turn.start();
     this.#input.push(outgoing);

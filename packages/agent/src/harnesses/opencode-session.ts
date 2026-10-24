@@ -787,15 +787,6 @@ export class OpencodeSession implements HarnessSession {
   /** The kind of each inbox item, by id, so a delivered send is read and a compaction is not. */
   readonly #inbox = new Map<string, string>();
   /**
-   * The turn's tool calls running, by id, from `session.tool.called` until
-   * their success or failure. A send waits behind them: OpenCode delivers
-   * its inbox at the next step. A send that meets one moves the session's
-   * blocking calls to the background ({@link #moveToBackground}).
-   */
-  readonly #running = new Set<string>();
-  /** A {@link #moveToBackground} request is in flight. */
-  #movingToBackground = false;
-  /**
    * The session's work running in the background ({@link #backgrounded}),
    * by job: a shell command (`shell:<shellID>`) or a subagent
    * (`subagent:<child session id>`), until its completion note
@@ -1146,11 +1137,12 @@ export class OpencodeSession implements HarnessSession {
         if (event.data.item.type === "synthetic") {
           this.#backgroundEnded(event.data.item.payload.metadata);
         }
-        // Any send behind a running tool call — the person's, a hand-off, a
-        // report, a rule's reply — would wait for its end.
-        if (event.data.item.type === "user" && this.#running.size > 0) {
-          this.#moveToBackground();
-        }
+        // A send behind a running tool call is delivered at that call's end.
+        // OpenCode's own move to the background (`POST
+        // /api/session/:id/background`) tells the model "User requested that
+        // active blocking work be moved to the background" (OpenCode 2.0.29,
+        // and its dev branch's packages/core/src/session.ts `background`), so
+        // CawCo never asks it.
         break;
       case "session.inbox.delivered": {
         // The model is given the send now: it is read. A compaction or a
@@ -1295,11 +1287,6 @@ export class OpencodeSession implements HarnessSession {
       case "session.tool.called":
         this.#toolInputs.set(event.data.id, event.data.input);
         this.#toolUse(event.data.assistantMessageID, event.data.id);
-        this.#running.add(event.data.id);
-        // A call that starts while a send waits in the inbox would hold it.
-        if ([...this.#inbox.values()].includes("user")) {
-          this.#moveToBackground();
-        }
         break;
       case "session.tool.progress":
         this.#toolProgress(
@@ -1312,7 +1299,6 @@ export class OpencodeSession implements HarnessSession {
       case "session.tool.success":
       case "session.tool.failed": {
         const { id, assistantMessageID } = event.data;
-        this.#running.delete(id);
         if (event.type === "session.tool.success") {
           this.#backgrounded(event.data.metadata);
         }
@@ -1552,43 +1538,9 @@ export class OpencodeSession implements HarnessSession {
 
   /** A turn ended on the server: its blocks drawn, its result, and the held sends go. */
   /**
-   * Moves the session's blocking tool calls to the background so a send
-   * waiting in the inbox is delivered at once (`POST
-   * /api/session/:id/background`, OpenCode 2.0.28: "Move active foreground
-   * backgroundable tools for this session into background observation. Idle
-   * requests are a no-op."). A moved shell call returns "Command moved to the
-   * background" and keeps running; OpenCode adds a note with its output to
-   * the session when it ends. A call OpenCode cannot move (a file read) runs
-   * on; a refusal is logged and the send waits for the call's end.
-   */
-  #moveToBackground(): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared in the request's finally, which the checker doesn't follow
-    if (this.#movingToBackground) {
-      return;
-    }
-    this.#movingToBackground = true;
-    const calls = [...this.#running].join(", ");
-    this.#client.session
-      .background({ sessionID: this.#opencodeSessionId() })
-      .then(
-        () =>
-          console.info(
-            `[opencode] ${this.instanceId}: a send waits behind tool call(s) ${calls}: asked OpenCode to move them to the background`
-          ),
-        (error: unknown) =>
-          console.warn(
-            `[opencode] ${this.instanceId}: a send waits behind tool call(s) ${calls}, and moving them to the background was refused: ${errorText(error)}`
-          )
-      )
-      .finally(() => {
-        this.#movingToBackground = false;
-      });
-  }
-
-  /**
    * A tool call that answered while its work runs on in the background:
-   * OpenCode 2.0's shell tool called with `background: true`, or a shell
-   * command or subagent moved there ({@link #moveToBackground}), answers
+   * OpenCode 2.0's shell tool called with `background: true`, or a subagent
+   * it started there, answers
    * with `status: "running"` and the job's id in its result's metadata
    * (`shellID`, or the subagent's `sessionID`).
    */
@@ -1689,7 +1641,6 @@ export class OpencodeSession implements HarnessSession {
   #turnEnded(closing?: TurnClosing): void {
     this.#turnRevision += 1;
     this.#busy = false;
-    this.#running.clear();
     this.#ctx.busy(false);
     if (this.#compacting) {
       this.#compacting = undefined;

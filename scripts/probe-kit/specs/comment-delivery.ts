@@ -57,11 +57,11 @@
  *    stand on the page as a whole again, written back on its body, and the
  *    session is told nothing new of them.
  * 12. The owner's report: a project's session makes a decision page and
- *    runs a long command. A pin on its card, and no Send: the delivery
- *    joins the turn at the command's own end, beside its whole result, the
- *    command never moved to the background or cut for it (a turn CawCo did
- *    not stop runs to its end, turn-not-cut); the journal says it went. A
- *    reply during the next long command joins
+ *    runs a long command. A pin on its card, and no Send: a few seconds on
+ *    the delivery joins the turn as the person's send-now, Claude Code
+ *    moving the command aside in its own words (not interrupted, naming no
+ *    one; turn-not-cut), and the command runs on to its own end; the
+ *    journal says it went. A reply during the next long command joins
  *    the same way, with only the new words. A pick on the same page waits
  *    for Send: nothing reaches the session until the page's own Send at its
  *    foot (decisions/host Decisions.svelte), which counts it; the panel's
@@ -270,19 +270,35 @@ const BUSY_MARK = "PROBE-BUSY-WORK";
 const BUSY_SLEEPS = [45, 30] as const;
 /** What each long command prints as it ends: its own result, which the model is given whole. */
 const sleptLine = (seconds: number) => `PROBE-SLEPT-${seconds}`;
-/** What a command moved to the background, or cut short, answers in place of its own result. */
-const NOT_ITS_OWN =
-  /moved to the background|backgrounded by user|doesn't want to proceed|Request interrupted/;
-/** The request answering a long command came at its end, with its own whole result beside what joined it. */
-const atOwnEnd = (request: Seen, endsAt: number, seconds: number): boolean =>
+/** What would name the person for something they did not do. */
+const BLAME =
+  /backgrounded by user|manually backgrounded|doesn't want to proceed|Request interrupted/;
+/** Claude Code's own words for a command it moved aside so a message could reach the model (2.1.309). */
+const MOVED_FOR_MESSAGE =
+  "so that a message that arrived while it was running can reach you; it was not interrupted";
+/** Where a moved command's output goes, as its moved result names it. */
+const OUTPUT_FILE = /Output is being written to: (\S+?)\.(?:\s|$)/;
+/** The request a delivery joined came within the comments' reach of `sentAt`, the running command moved aside in Claude Code's own words, naming no one. */
+const joinedEarly = (request: Seen, sentAt: number): boolean =>
   request.afterTool &&
-  request.at >= endsAt &&
-  request.at - endsAt <= MARK_TO_MODEL_MS &&
-  request.last.includes(sleptLine(seconds)) &&
-  !NOT_ITS_OWN.test(request.last);
-/** {@link atOwnEnd}'s reading, in words. */
-const ownEndWords = (request: Seen, endsAt: number, seconds: number): string =>
-  `${request.at - endsAt} ms after the command's end, afterTool ${request.afterTool}, its own result ${request.last.includes(sleptLine(seconds))}, not its own ${NOT_ITS_OWN.exec(request.last)?.[0] ?? "no"}`;
+  request.at - sentAt <= MARK_TO_MODEL_MS &&
+  request.last.includes(MOVED_FOR_MESSAGE) &&
+  !BLAME.test(request.body);
+/** {@link joinedEarly}'s reading, in words. */
+const joinedWords = (request: Seen, sentAt: number): string =>
+  `${request.at - sentAt} ms after it was written, afterTool ${request.afterTool}, moved aside ${request.last.includes(MOVED_FOR_MESSAGE)}, blames ${BLAME.exec(request.body)?.[0] ?? "no one"}`;
+/** Whether the command a request says was moved aside wrote its own result, `seconds`' slept line, to its output file. */
+const ownOutput = async (request: Seen, seconds: number): Promise<boolean> => {
+  const file = OUTPUT_FILE.exec(request.last)?.[1];
+  if (!file) {
+    return false;
+  }
+  return (
+    await Bun.file(file)
+      .text()
+      .catch(() => "")
+  ).includes(sleptLine(seconds));
+};
 const BUSY_PIN_WORDS = "how does this even work";
 const BUSY_REPLY_WORDS = "and what's the best practice?";
 const BUSY_NOTICE = `The person commented on the page "${BUSY_PAGE}"`;
@@ -1137,11 +1153,12 @@ const oldPageAnchorChecks = async (on: On, frame: Frame) => {
  * 12. The owner's report (2026-10-23: "when i add comments u don't seem to
  * pick it up", a pin and a reply on the orchestrator's decision page while
  * it worked): a project's session makes a decision page, then runs a long
- * command. The person pins a card, and presses no Send: the delivery joins
- * the turn at that command's own end, beside its whole result, and the
- * command is never moved to the background or cut for it; the hub's
- * journal says it went. The person's reply while the next long command
- * runs joins the same way, with only the new words. A pick on the
+ * command. The person pins a card, and presses no Send: a few seconds on,
+ * the delivery joins the turn as the person's send-now (agent claude.ts
+ * `SEND_NOW`), Claude Code moving the running command aside in its own
+ * words, not interrupted and naming no one; the hub's journal says it
+ * went. The person's reply while the next long command runs joins the same
+ * way, with only the new words. Each command runs on to its own end. A pick on the
  * page waits for Send: nothing of it reaches the session until the page's
  * own Send, which counts it, the head standing none. 13: the session asleep, a reply on its pin wakes
  * it, the delivery its turn's first message.
@@ -1210,16 +1227,16 @@ const busyDecisionChecks = async (
     20_000
   ).catch(() => false);
 
-  // A pin on the card, and no Send: it joins the turn at the command's end.
+  // A pin on the card, and no Send: it joins the turn in seconds, the
+  // command moved aside for it.
   const before = busyTurn.heard.length;
   await pinWith(on, frame, "#decision-how", 1, BUSY_PIN_WORDS);
   const pinnedAt = Date.now();
-  const firstEnds = busyTurn.issued[0] + BUSY_SLEEPS[0] * 1000;
   const boundary = await until(
     "the request answering the long command",
     () => busyTurn.heard.at(before),
     Boolean,
-    Math.max(0, firstEnds - Date.now()) + MARK_TO_MODEL_MS + 10_000
+    MARK_TO_MODEL_MS + 10_000
   ).catch(() => undefined);
   const pinned = numbered((await docOf(frame)).pins, 1);
   const offered = await sendCount(tab);
@@ -1233,17 +1250,17 @@ const busyDecisionChecks = async (
     `%${BUSY_NOTICE.replaceAll('"', "%")}%`
   );
   kit.check(
-    "12: a pin on a working session's decision page, no Send pressed or standing: it joins the turn at the running command's own end, beside its whole result, carrying the pin's words and id; the command is never moved to the background or cut for it",
+    "12: a pin on a working session's decision page, no Send pressed or standing: a few seconds on it joins the turn, the running command moved aside in Claude Code's own words (not interrupted, naming no one), carrying the pin's words and id",
     busy === true &&
       offered === null &&
       !!boundary &&
-      atOwnEnd(boundary, firstEnds, BUSY_SLEEPS[0]) &&
+      joinedEarly(boundary, pinnedAt) &&
       boundary.all.includes(BUSY_NOTICE) &&
       boundary.all.includes(wroteLine(BUSY_PIN_WORDS)) &&
       boundary.all.includes(`- Pin: ${pinned?.id}`) &&
       rows.length === 1 &&
       rows[0].state !== "failed",
-    `busy ${String(busy)}; Send ${String(offered)}; boundary ${boundary ? `${boundary.at - pinnedAt} ms after the pin, ${ownEndWords(boundary, firstEnds, BUSY_SLEEPS[0])}` : "never"}; rows ${JSON.stringify(rows)}; heard ${boundary?.last.slice(0, 500) ?? "-"}`
+    `busy ${String(busy)}; Send ${String(offered)}; boundary ${boundary ? joinedWords(boundary, pinnedAt) : "never"}; rows ${JSON.stringify(rows)}; heard ${boundary?.last.slice(0, 500) ?? "-"}`
   );
   // What the scratch fleet records of that request (Seen.last) is the
   // tool's whole answer, the words that joined it beside it: a spec that
@@ -1277,12 +1294,14 @@ const busyDecisionChecks = async (
   ).catch(() => undefined);
   const beforeReply = busyTurn.heard.length;
   const repliedAt = await replyOn(tab, frame, 1, BUSY_REPLY_WORDS);
-  const secondEnds = (busyTurn.issued[1] ?? 0) + BUSY_SLEEPS[1] * 1000;
   const next = await until(
     "the request answering the second long command",
-    () => busyTurn.heard.at(beforeReply),
+    () =>
+      busyTurn.heard
+        .slice(beforeReply)
+        .find((request) => request.last.includes(BUSY_NOTICE)),
     Boolean,
-    Math.max(0, secondEnds - Date.now()) + MARK_TO_MODEL_MS + 10_000
+    MARK_TO_MODEL_MS + 10_000
   ).catch(() => undefined);
   const repliedRows = fleet.query<{ state: string }>(
     "SELECT state FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
@@ -1290,15 +1309,35 @@ const busyDecisionChecks = async (
     `%${BUSY_NOTICE.replaceAll('"', "%")}%`
   );
   kit.check(
-    "12: the reply, written while the next command runs, joins the turn by itself at that command's own end, beside its whole result, with only the new words",
+    "12: the reply, written while the next command runs, joins the turn by itself a few seconds on, that command moved aside in Claude Code's own words, with only the new words",
     !!next &&
-      atOwnEnd(next, secondEnds, BUSY_SLEEPS[1]) &&
+      joinedEarly(next, repliedAt) &&
       next.last.includes(BUSY_NOTICE) &&
       next.last.includes(wroteLine(BUSY_REPLY_WORDS)) &&
       !next.last.includes(wroteLine(BUSY_PIN_WORDS)) &&
       repliedRows.length === 2 &&
       repliedRows.every((row) => row.state !== "failed"),
-    `next ${next ? `${next.at - repliedAt} ms after the reply, ${ownEndWords(next, secondEnds, BUSY_SLEEPS[1])}` : "never"}; rows ${JSON.stringify(repliedRows)}; heard ${next?.last.slice(0, 500) ?? "-"}`
+    `next ${next ? joinedWords(next, repliedAt) : "never"}; rows ${JSON.stringify(repliedRows)}; heard ${next?.last.slice(0, 500) ?? "-"}`
+  );
+
+  // Both long commands ran on to their own end, moved aside or not.
+  await Bun.sleep(
+    Math.max(
+      0,
+      Math.max(...busyTurn.issued.map((at, n) => at + BUSY_SLEEPS[n] * 1000)) +
+        2000 -
+        Date.now()
+    )
+  );
+  const outputs = await Promise.all(
+    [boundary, next].map((request, n) =>
+      request ? ownOutput(request, BUSY_SLEEPS[n]) : false
+    )
+  );
+  kit.check(
+    "12: each command moved aside ran on to its own end, its own result in its output",
+    outputs.every(Boolean),
+    JSON.stringify(outputs)
   );
 
   // A pick on the same page waits for Send.
