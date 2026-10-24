@@ -43,6 +43,8 @@
   /** Each slab's width and its row's, as laid out: where its strip can stand. */
   const wells = $state<Record<string, number>>({});
   const rows = $state<Record<string, number>>({});
+  /** A later message's clock at the row's end: the strip stops short of it. */
+  const clocks = $state<Record<string, number>>({});
   let stripW = $state(0);
   /** The strip's gap from the well's edge, --space-2, read once from the tokens. */
   let gap = $state(7);
@@ -58,9 +60,12 @@
     stripW = node.offsetWidth;
   });
   const beside = (id: string) =>
-    !touch &&
     (wells[id] ?? 0) > 0 &&
-    (wells[id] ?? 0) + gap + stripW <= (rows[id] ?? 0);
+    (wells[id] ?? 0) +
+      gap +
+      stripW +
+      (clocks[id] ? gap + (clocks[id] ?? 0) : 0) <=
+      (rows[id] ?? 0);
 </script>
 
 <div
@@ -90,33 +95,50 @@
       {/if}
       <div
         data-slot="slab"
-        class={["relative", i > 0 && "mt-space-1"]}
+        class={["relative", i > 0 && "mt-space-1 pe-(--clock-room)"]}
+        style:--clock-room={i > 0 ? `${clocks[part.id] ?? 0}px` : undefined}
         {@attach frameSize<HTMLElement>((node) => {
           rows[part.id] = node.clientWidth;
         })}
       >
+        <!-- The well as wide as its words, up to the measure; a later
+             message of the run keeps the row's end for its clock. -->
         <div
-          class={failed ? "w-full" : "w-fit max-w-full"}
+          class={[failed ? "w-full" : "w-fit", "max-w-full"]}
           {@attach frameSize<HTMLElement>((node) => {
             wells[part.id] = node.offsetWidth;
           })}
         >
           <Well data-selected={selected === part.id || undefined}>
-            {#if i > 0}
-              <Who grouped name="You" timestamp={part.at} you />
-            {/if}
             <MessageBody said source={part.content} />
             {#if part.failed}
               <Recovery reason={part.failed} />
             {/if}
           </Well>
+          {#if !failed && touch}
+            <!-- The handle on the well's outer bottom corner, at rest. -->
+            <div class="flex justify-end mt-space-1">
+              <Handle open={sheetOpen && i === 0} />
+            </div>
+          {/if}
         </div>
-        {#if !failed && touch}
-          <!-- The handle at the well's outer bottom corner, at rest. -->
-          <div class="flex justify-end mt-space-1">
-            <Handle class="-me-space-1" open={sheetOpen && i === 0} />
+        {#if i > 0}
+          <!-- A later message's clock at the row's end, level with its
+               first line, where the first message's stands on the "You"
+               line. -->
+          <div
+            class="absolute end-0 top-space-2"
+            {@attach frameSize<HTMLElement>((node) => {
+              clocks[part.id] = node.offsetWidth;
+            })}
+          >
+            <Who grouped name="You" timestamp={part.at} you />
           </div>
-        {:else if !failed && beside(part.id)}
+        {/if}
+        {#if failed || touch}
+          <!-- No strip: a failed send's recovery is at rest in its well,
+               and a touch screen has the handle on the well's corner. -->
+        {:else if beside(part.id)}
           <!-- On the well's open side, on its last line. -->
           <div
             class="absolute bottom-space-1 start-(--strip-x)"
@@ -125,7 +147,7 @@
           >
             <Strip />
           </div>
-        {:else if !failed}
+        {:else}
           <!-- No open side: under the well at its end, in room of its own. -->
           <div class="flex justify-end mt-space-1">
             <div {@attach measureStrip}><Strip /></div>

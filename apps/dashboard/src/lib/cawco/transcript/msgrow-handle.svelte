@@ -17,8 +17,9 @@
 <script lang="ts">
   /**
    * A touch screen's way to a message's actions, where nothing hovers: one
-   * 24px handle (menu-dots) standing at rest, its finger's 44px area the
-   * kit's, opening the kit's bottom sheet with Copy, Edit and Fork from here
+   * handle (menu-dots) standing at rest, the kit's ghost `icon-sm` with its
+   * 16px glyph as MessageRow's actions are, its finger's 44px area the
+   * kit's (`touch-hit`), opening the kit's bottom sheet with Copy, Edit and Fork from here
    * as the kit's rows, 44px each under a finger.
    */
   import { Button } from "#lib/components/ui/button/index.js";
@@ -51,7 +52,7 @@
         aria-label="Message actions"
         class={extra}
         data-slot="handle"
-        size="icon-xs"
+        size="icon-sm"
         variant="ghost"
       >
         <IconMore aria-hidden="true" />

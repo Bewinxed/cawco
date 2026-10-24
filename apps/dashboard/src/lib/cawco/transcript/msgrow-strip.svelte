@@ -3,7 +3,8 @@
    * The message's actions as one small strip, for the drawings that keep a
    * glyph per message (A on the speaker line, B on the well's open side):
    * Copy message, Edit message, Fork from here, in that order, each the
-   * kit's ghost `icon-xs` (24px) with its tooltip and its name. It fades in
+   * kit's ghost `icon-sm` with its 16px glyph, as MessageRow's action row
+   * draws them today, with its tooltip and its name. It fades in
    * over --dur-control under the pointer, for keyboard focus inside it, and
    * where its turn is marked hovered; it takes its own room, so showing it
    * changes paint only.
@@ -32,7 +33,7 @@
   {#each acts as act (act.label)}
     <Tip label={act.label}>
       {#snippet children(tip)}
-        <Button {...tip} aria-label={act.label} size="icon-xs" variant="ghost">
+        <Button {...tip} aria-label={act.label} size="icon-sm" variant="ghost">
           <act.icon aria-hidden="true" data-box />
         </Button>
       {/snippet}
