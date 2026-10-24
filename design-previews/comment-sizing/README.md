@@ -12,9 +12,12 @@ bun design-previews/comment-sizing/capture/capture.ts            # remake parts.
 ```
 
 - **Option**: A, beside the comment (what main ships: two fifths of the well,
-  280 to 480px, PinFloat's placement); B, a 320px card at most min(400px, 40%)
-  of the well tall, a thread that needs more handed to Comments at 400px (500px
-  on a pane 1680px or wider), a phone opening it in its row of the list; C, a
+  280 to 480px, PinFloat's placement); B, a 320px card at most min(480px, 50%)
+  of the well tall (our call: the report's min(400px, 40%) was under what a
+  three-entry one-line exchange needs, so B never drew its card), a thread
+  whose whole exchange needs more handed to Comments at 400px (500px on a pane
+  1680px or wider), a phone's short one a drawer and its long one its row of
+  the list; C, a
   280px composer card, every thread in a panel at the pane's end, 400px to start,
   dragged from 300px to half the pane, in the list's place, a phone's a drawer.
 - **Comment**: the owner's case (comment 3 near the foot of the page, a

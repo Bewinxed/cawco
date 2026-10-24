@@ -24,8 +24,13 @@ const SCREENS = {
 };
 /** B: the card's width (c-pin-card-short-w). */
 const B_CARD_W = 320;
-/** B: the card's tallest, min(400px, 40%) of the well (c-pin-card-short-max). */
-const B_CAP = { px: 400, share: 0.4 };
+/**
+ * B: the card's tallest, min(480px, 50%) of the well. Our call, not the
+ * report's min(400px, 40%) (c-pin-card-short-max): that cap was under what a
+ * three-entry one-line exchange needs as a card (344px), so B sent every
+ * thread to Comments and never drew the small card it is named for.
+ */
+const B_CAP = { px: 480, share: 0.5 };
 /** B and C: the rail holding one thread (c-comments-thread-w), 500px on a pane 1680px or wider (c-comments-thread-wide-w). */
 const THREAD_W = 400;
 const THREAD_WIDE_W = 500;
@@ -77,7 +82,7 @@ const motionOk = () =>
 
 const RULES = {
   a: "Every comment opens next to what it is about, two fifths of the page area wide (280 to 480px), as tall as the room from its pin to the foot. On a phone it is a drawer at the bottom. This is what ships today.",
-  b: "A comment opens in a 320px card next to what it is about, at most 400px or two fifths of the page area tall. One that needs more opens in Comments instead, which widens to 400px to hold it. On a phone it opens in its row of the Comments list.",
+  b: "A comment opens in a 320px card next to what it is about, at most 480px or half the page area tall. One that needs more opens in Comments instead, which widens to 400px to hold it. On a phone a short one is a drawer at the bottom and a long one opens in its row of the Comments list.",
   c: "A new comment is written in a 280px card next to its spot. Every thread opens in a panel on the right, as tall as the page area, 400px to start, dragged anywhere from 300px to half the pane, in place of the Comments list. On a phone it is a drawer at the bottom.",
 };
 
@@ -165,10 +170,18 @@ const layoutOf = () => {
   let stands = "none";
   if (composing) {
     stands = "compose";
+  } else if (thread && state.option === "b") {
+    // B: a thread whose whole exchange fits the card's cap stays a card
+    // (a phone's drawer); a longer one goes to Comments (a phone's row).
+    const fits = !needsRail(phone);
+    if (phone) {
+      stands = fits ? "sheet" : "row";
+    } else {
+      stands = fits ? "card" : "rail";
+    }
   } else if (thread) {
     stands = {
       a: phone ? "sheet" : "card",
-      b: phone ? "row" : "card",
       c: phone ? "bottom" : "panel",
     }[state.option];
   }
@@ -197,6 +210,7 @@ const scaleOf = (screen) => {
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the frame in one reading order: the head, the page and its pills, the float, then what stands beside or under the page for each option
 function build() {
+  delete els.frame.dataset.needs;
   const look = layoutOf();
   const { screen, phone, stands } = look;
   const s = scaleOf(screen);
@@ -210,7 +224,6 @@ function build() {
   frame.dataset.case = state.case;
   frame.dataset.screen = state.screen;
   frame.dataset.stands = stands;
-  delete frame.dataset.needs;
 
   const head = document.createElement("div");
   head.className = "pane-head";
@@ -371,7 +384,7 @@ function build() {
   } else {
     let width = 0;
     let content = null;
-    if (stands === "panel" || (stands === "card" && needsRail())) {
+    if (stands === "panel" || stands === "rail") {
       const threadW = screen.w >= WIDE_PANE ? THREAD_WIDE_W : THREAD_W;
       width = stands === "panel" ? panelWidth(screen.w) : threadW;
       content = held("beside");
@@ -396,13 +409,6 @@ function build() {
       body.append(side);
     }
   }
-  if (float && stands === "card" && side?.querySelector("[data-holds]")) {
-    // B handed the thread to the rail: no card over the page.
-    float.remove();
-    float = null;
-    frame.dataset.stands = "rail";
-  }
-
   frame.append(head, body);
   built = {
     look,
@@ -433,16 +439,16 @@ function build() {
 }
 let sizes = null;
 
-/** B: a thread whose whole exchange needs more than its card's tallest goes to the rail. Measured on the card at its width, nothing capping it. */
-function needsRail() {
-  if (state.option !== "b") {
-    return false;
-  }
+/** B's card's tallest in a well `wellH` tall. */
+const bCap = (wellH) => Math.min(B_CAP.px, B_CAP.share * wellH);
+
+/** B: whether the whole exchange needs more than the card's tallest, measured on the card (a phone's drawer) at its width, nothing capping it. */
+function needsRail(phone) {
   const screen = SCREENS[state.screen];
   const wellH = screen.h - HEAD_H;
-  const probe = floatShell("float");
+  const probe = floatShell(phone ? "float-sheet" : "float");
   probe.append(threadParts(true));
-  probe.style.cssText = `position: absolute; visibility: hidden; inset-block-start: 0; inset-inline-start: 0; --float-w: ${B_CARD_W}px; --float-max: none;`;
+  probe.style.cssText = `position: absolute; visibility: hidden; inset-block: 0 auto; inset-inline-start: 0; --float-w: ${B_CARD_W}px; --float-max: none; max-block-size: none;`;
   const host = document.createElement("div");
   host.className = "pin-room";
   host.style.cssText = `inline-size: ${screen.w}px; block-size: ${wellH}px; position: fixed; inset: 0; visibility: hidden;`;
@@ -451,7 +457,7 @@ function needsRail() {
   const room = probe.querySelector("[data-pin-room]");
   const natural = probe.offsetHeight - room.clientHeight + room.scrollHeight;
   host.remove();
-  const cap = Math.min(B_CAP.px, B_CAP.share * wellH);
+  const cap = bCap(wellH);
   els.frame.dataset.needs = `${Math.round(natural)}/${Math.round(cap)}`;
   return natural > cap;
 }
@@ -682,7 +688,7 @@ function layout() {
     const box = inWell(target);
     const cap =
       state.option === "b" && !look.composing
-        ? Math.min(B_CAP.px, B_CAP.share * size.h)
+        ? bCap(size.h)
         : Number.POSITIVE_INFINITY;
     for (let pass = 0; pass < 3; pass += 1) {
       const place = placeOf({
@@ -704,6 +710,10 @@ function layout() {
     }
   } else if (float) {
     float.style.setProperty("--float-max", "calc(100% - 2 * var(--space-2))");
+    if (state.option === "b" && !look.composing) {
+      // B's drawer stops at its card's tallest, not the drawer's 70%.
+      float.style.maxBlockSize = `${bCap(size.h)}px`;
+    }
     float.style.setProperty("--float-origin", "bottom center");
     float.style.setProperty(
       "--sheet-pb",
@@ -923,9 +933,16 @@ function threadReadout() {
     bottom: "a drawer at the bottom",
   }[els.frame.dataset.stands];
   const size = `${Math.round(box.width / built.s)} × ${Math.round(box.height / built.s)}`;
-  return h <= roomH
-    ? `In ${where} (${size}): the agent's reply, ${h}px of text, reads whole in a ${roomH}px room.`
-    : `In ${where} (${size}): the agent's reply is ${h}px of text in a ${roomH}px room, ${h - roomH}px of it a scroll away.`;
+  const read =
+    h <= roomH
+      ? `In ${where} (${size}): the agent's reply, ${h}px of text, reads whole in a ${roomH}px room.`
+      : `In ${where} (${size}): the agent's reply is ${h}px of text in a ${roomH}px room, ${h - roomH}px of it a scroll away.`;
+  if (state.option !== "b") {
+    return read;
+  }
+  const [need, cap] = (els.frame.dataset.needs ?? "0/0").split("/");
+  const went = Number(need) > Number(cap) ? "goes to Comments" : "stays a card";
+  return `${read} B's cap is our call, not the report's: a card holds at most min(480px, half the page area), ${cap}px here; this exchange needs ${need}px, so it ${went}.`;
 }
 
 function readout() {

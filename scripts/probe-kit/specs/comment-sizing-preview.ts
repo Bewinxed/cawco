@@ -310,7 +310,7 @@ function readFrame(): Read {
 
 const why = (option: Option, read: Read): string => {
   if (read.stands === "card") {
-    return `the card's tallest is the room ${read.floatSide === "above" ? "above what it is about" : "from its pin to the well's foot"}${option === "b" ? ", capped at min(400px, 40% of the well)" : ""}`;
+    return `the card's tallest is the room ${read.floatSide === "above" ? "above what it is about" : "from its pin to the well's foot"}${option === "b" ? ", capped at min(480px, 50% of the well)" : ""}`;
   }
   if (read.stands === "sheet" || read.stands === "bottom") {
     return "the drawer stops at its share of the well, the page lifted above it";
@@ -542,20 +542,61 @@ async function motionLeg(
     }
     await landed(page);
   }
-  // B's short exchange: three one-line entries against its card's tallest.
-  await load(page, base, "b", "short", "desk");
-  const short = await page.evaluate(() => {
-    const frame = document.querySelector<HTMLElement>('[data-slot="frame"]');
-    return {
-      stands: frame?.dataset.stands ?? "",
-      needs: frame?.dataset.needs ?? "",
-    };
-  });
-  const [need, cap] = short.needs.split("/").map(Number);
-  kit.check(
-    `${engine}: B's short exchange (three one-line entries) needs ${need}px as a card against its ${cap}px tallest on the desk (min(400px, 40% of an 856px well)), and stands ${need > cap ? "in Comments" : "in the card"}`,
-    short.stands === (need > cap ? "rail" : "card")
-  );
+}
+
+/**
+ * B's cap, set by its definition (a short exchange stays a card, a long one
+ * goes to Comments): min(480px, 50% of the well). The three-entry one-line
+ * exchange stands as the card (a phone's drawer) whole, its entries not
+ * scrolling; the 185-word thread goes to Comments (a phone's row); the
+ * readout names the cap as our call.
+ */
+async function capLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  engine: Engine,
+  screen: ScreenName
+): Promise<void> {
+  const phone = screen === "phone";
+  for (const which of ["short", "long"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time on one page
+    await load(page, base, "b", which, screen);
+    const read = await page.evaluate(() => {
+      const frame = document.querySelector<HTMLElement>('[data-slot="frame"]');
+      const room = frame?.querySelector<HTMLElement>(
+        '[data-slot="pin-card"] [data-pin-room]'
+      );
+      return {
+        stands: frame?.dataset.stands ?? "",
+        needs: frame?.dataset.needs ?? "",
+        scrolls: room ? room.scrollHeight - room.clientHeight : null,
+        readout:
+          document.querySelector('[data-slot="readout"]')?.textContent ?? "",
+      };
+    });
+    const [need, cap] = read.needs.split("/").map(Number);
+    const named = read.readout.includes("B's cap is our call");
+    if (which === "short") {
+      const want = phone ? "sheet" : "card";
+      kit.check(
+        `${engine} ${screen} B short: the three-entry one-line exchange needs ${need}px, within the card's ${cap}px cap (min(480px, 50% of the well)), so it stays ${phone ? "a drawer" : "a card"} (${read.stands}), its entries whole (${read.scrolls}px of scroll), and the readout names the cap as our call`,
+        read.stands === want &&
+          need <= cap &&
+          read.scrolls !== null &&
+          read.scrolls <= 1 &&
+          named,
+        read.readout
+      );
+    } else {
+      const want = phone ? "row" : "rail";
+      kit.check(
+        `${engine} ${screen} B long: the 185-word thread needs ${need}px, over the card's ${cap}px cap, so it goes to Comments (${read.stands}), and the readout names the cap as our call`,
+        read.stands === want && need > cap && named,
+        read.readout
+      );
+    }
+  }
 }
 
 async function dragLeg(
@@ -698,6 +739,7 @@ const spec: Spec = {
           await page.evaluate(() => localStorage.clear());
           await boxesLeg(kit, page, base, engine, screen);
           await pageWidthLeg(kit, page, engine, shape.window);
+          await capLeg(kit, page, base, engine, screen);
           if (screen === "window") {
             await motionLeg(kit, page, base, engine);
             await reloadLeg(kit, page, base, engine);
