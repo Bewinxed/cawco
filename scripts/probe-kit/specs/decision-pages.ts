@@ -3172,7 +3172,12 @@ const facesIn = (frame: Frame) =>
       fallback: widthIn(fallback),
       loaded: [...document.fonts]
         .filter((face) => face.status === "loaded")
-        .map((face) => `${face.family} ${face.unicodeRange.slice(0, 14)}`),
+        // Gecko gives a face's family quoted (`"Figtree Variable"`), Blink
+        // and WebKit bare: the name, whichever.
+        .map(
+          (face) =>
+            `${face.family.replace(/^"|"$/g, "")} ${face.unicodeRange.slice(0, 14)}`
+        ),
     };
   });
 
