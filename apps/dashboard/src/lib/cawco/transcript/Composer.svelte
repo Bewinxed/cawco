@@ -54,7 +54,6 @@
 <script lang="ts">
   import type { AvailableCommand } from "@cawco/core/fleet";
   import { questionsOf } from "@cawco/core/question";
-  import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
@@ -2783,44 +2782,12 @@
         )
       : null
   );
-  /**
-   * The parked ask can fold to its bar: a question, or a connect ask (its
-   * sign-in waits on the person in another tab, as a question waits on
-   * them).
-   */
-  const askParks = $derived(!!(askQuestions || ask?.request.connectAsk));
+  /** The parked ask can fold to its bar: a question. */
+  const askParks = $derived(!!askQuestions);
   /** The parked ask is one the reader minimized here. */
   const minimized = $derived(
     !!(ask && askParks && minimizedAsks.has(ask.request.requestId))
   );
-  /** What a minimized connect ask's bar says: its wait while the provider's page is open, else who asks for what. */
-  const connectBar = $derived.by(() => {
-    const connect = ask?.request.connectAsk;
-    if (!(ask && connect && fleet)) {
-      return null;
-    }
-    return fleet.connectSignIns.of(ask.request.requestId).stage === "waiting"
-      ? askWords.signingIn(connect.server)
-      : askWords.connectBar(ask.asker, connect.server);
-  });
-  /**
-   * The connect ask parked here last: one that leaves while minimized never
-   * folds, so what this device kept of its sign-in goes as it leaves.
-   */
-  let parkedConnect: string | null = null;
-  $effect(() => {
-    const id = ask?.request.connectAsk ? ask.request.requestId : null;
-    untrack(() => {
-      if (
-        parkedConnect &&
-        parkedConnect !== id &&
-        parkedConnect !== drawnAsk?.request.requestId
-      ) {
-        fleet?.connectSignIns.forget(parkedConnect);
-      }
-      parkedConnect = id;
-    });
-  });
   /** The ask the composer grows into: the parked one, unless it is minimized. */
   const grownAsk = $derived(minimized ? null : ask);
   /** The minimized question's bar. */
@@ -2995,23 +2962,6 @@
 
   /** Answered, dismissed or withdrawn: back into the pill. */
   async function foldAsk(turn: number): Promise<void> {
-    // A connect ask whose sign-in landed (the fleet read its server signed
-    // in, which the hub says before it settles the ask) holds a beat in the
-    // card, connected and as whom, before it folds; minimized, it is still
-    // parked and folds at once.
-    const connected =
-      !minimized && drawnAsk?.request.connectAsk
-        ? drawnAsk.request.requestId
-        : null;
-    if (connected && fleet?.connectSignIns.of(connected).stage === "done") {
-      await new Promise((done) => setTimeout(done, dur("--dur-hold")));
-      if (turn !== askTurn) {
-        return;
-      }
-    }
-    if (connected) {
-      fleet?.connectSignIns.forget(connected);
-    }
     askShown = false;
     askRaised = false;
     const shape = askShape;
@@ -3380,7 +3330,6 @@
            grown shape (grown.ts's halo, z 1): brought back, the card grows over
            the bar as it fades. -->
       {@const [first] = askQuestions ?? []}
-      {@const connect = ask.request.connectAsk}
       <div
         class="absolute inset-0 flex items-box-end pb-c-tray-gap pointer-events-none"
         in:askedIn
@@ -3388,9 +3337,7 @@
       >
         <button
           data-slot="asked-chip"
-          aria-label={connect
-            ? askWords.showConnectAsk(ask.asker, connect.server)
-            : `Show the question from ${ask.asker}: ${first?.question ?? ""}`}
+          aria-label={`Show the question from ${ask.asker}: ${first?.question ?? ""}`}
           class={chipVariants({
             variant: "tray",
             class:
@@ -3410,7 +3357,7 @@
           </span>
           <span
             class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
-            >{connectBar ?? first?.question ?? first?.header}</span
+            >{first?.question ?? first?.header}</span
           >
           {#if ask.more > 0}
             <span data-slot="num" class="num flex-none font-normal"
@@ -3434,7 +3381,8 @@
       {/key}
     {/if}
     {#if planRing}
-      <!-- The plan's chip, at the tray row's trailing end, standing on the
+      <!-- The plan's chip (and before it, while a connect card stands open in
+           the transcript, its "1 needs you"), at the tray row's trailing end, standing on the
            tray's line: the step off the panel the delegate chips stand on.
            The slot spans the row, so the plan the chip opens (PlanPane)
            stands over the row across the composer's width; only the chip
@@ -3443,7 +3391,10 @@
         data-slot="progress-slot"
         class="absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
       >
-        <div class="flex pointer-events-auto" {@attach measureRing}>
+        <div
+          class="flex items-end gap-space-2 pointer-events-auto"
+          {@attach measureRing}
+        >
           {@render planRing()}
         </div>
       </div>

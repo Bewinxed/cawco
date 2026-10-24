@@ -39,8 +39,18 @@ export type Row =
     }
   | { kind: "tools"; key: string; messages: Message[] }
   | { kind: "question"; key: string; message: Message }
-  /** A `connect_ask` call once answered: its record line (ConnectRow). */
-  | { kind: "connect"; key: string; message: Message; answer: ConnectAnswer }
+  /**
+   * A `connect_ask` call: its card while the person is asked (ConnectCard),
+   * the same row its record once answered (`answer`). Keyed by the call, so
+   * the card that stood at the tail before the call's message landed
+   * (`message` null) is the row the call becomes.
+   */
+  | {
+      kind: "connect";
+      key: string;
+      message: Message | null;
+      answer: ConnectAnswer | null;
+    }
   | { kind: "subagent"; key: string; branch: SubagentState; spawn: Message }
   /** A `delegate` / `start_session` call: the fleet session it spawned, as a fold. */
   | { kind: "delegate"; key: string; message: Message }
@@ -416,21 +426,78 @@ const isToolMsg = (m: Message): boolean =>
 const isQuestionMsg = (m: Message): boolean =>
   isToolMsg(m) && m.metadata?.toolName === ASK_USER_QUESTION;
 
+/** The key a connect ask's row has from its first moment: its call's. */
+const connectKey = (call: string): string => `c:${call}`;
+
 /**
- * A connect ask's call, answered: what its result says, read back (core
- * connect-ask.ts). A call refused or still waiting is no record, and stays
- * a tool row.
+ * A card that stood at the tail ahead of its call keeps its key once the
+ * call lands, so it is the same row in the call's place, not a new one: a
+ * harness that names no call to the hub (OpenCode) parks its ask by request
+ * id alone, and its card is drawn under that until the call's message comes.
+ * By session, the key a tail card was drawn under, until a call takes it;
+ * then by the call's own key, the key its row keeps.
  */
-const connectRecordOf = (m: Message): ConnectAnswer | null => {
+const tailKeys = new Map<string, string>();
+const keptKeys = new Map<string, string>();
+
+/**
+ * A connect ask's call as its own row: waiting on the person (no answer
+ * yet), or answered, what its result says read back (core connect-ask.ts).
+ * A call refused or withdrawn is no record, and stays a tool row (null).
+ */
+const connectRowOf = (m: Message): Extract<Row, { kind: "connect" }> | null => {
   if (!(isToolMsg(m) && isConnectAskTool(m.metadata?.toolName))) {
     return null;
   }
+  const own = connectKey(m.toolCallId ?? m.id);
   const server = m.metadata?.toolInput?.server;
   const result = m.metadata?.toolResult;
-  return typeof server === "string" && typeof result === "string"
-    ? connectAnswerOf(server.trim(), result)
-    : null;
+  const waiting = typeof result !== "string" || result === "";
+  const tail = waiting ? tailKeys.get(m.instanceId) : undefined;
+  if (tail && !keptKeys.has(own)) {
+    keptKeys.set(own, tail);
+    tailKeys.delete(m.instanceId);
+  }
+  const key = keptKeys.get(own) ?? own;
+  if (waiting) {
+    return m.metadata?.toolStatus === "error"
+      ? null
+      : { kind: "connect", key, message: m, answer: null };
+  }
+  const answer =
+    typeof server === "string" ? connectAnswerOf(server.trim(), result) : null;
+  return answer ? { kind: "connect", key, message: m, answer } : null;
 };
+
+/**
+ * The connect ask waiting on the person in `session` (one at a time, hub
+ * connect-asks.ts), when no row of `rows` is its call's: its card stands at
+ * the tail, where the call it parks is, keyed as that call's row will be.
+ * Null when there is none, or its call has its row.
+ */
+function connectTail(
+  session: SessionState,
+  rows: Row[]
+): Extract<Row, { kind: "connect" }> | null {
+  const ask = session.pending.find((request) => request.connectAsk);
+  if (!ask) {
+    return null;
+  }
+  const drawn = rows.some(
+    (row) =>
+      row.kind === "connect" &&
+      row.answer === null &&
+      (!ask.toolUseId || row.key === connectKey(ask.toolUseId))
+  );
+  if (drawn) {
+    return null;
+  }
+  const key = connectKey(ask.toolUseId ?? `ask:${ask.requestId}`);
+  if (!ask.toolUseId) {
+    tailKeys.set(session.instanceId, key);
+  }
+  return { kind: "connect", key, message: null, answer: null };
+}
 
 /**
  * A hand-off that spawned a session of its own. A plain `handoff` addresses a
@@ -752,9 +819,9 @@ function ownRow(
   if (isQuestionMsg(m)) {
     return { kind: "question", key: `q:${keyOf(m, i)}`, message: m };
   }
-  const answer = connectRecordOf(m);
-  if (answer) {
-    return { kind: "connect", key: `c:${keyOf(m, i)}`, message: m, answer };
+  const connect = connectRowOf(m);
+  if (connect) {
+    return connect;
   }
   if (isDelegateMsg(m)) {
     return { kind: "delegate", key: `d:${keyOf(m, i)}`, message: m };
@@ -819,7 +886,7 @@ function foldRange(
         run.length < callsPerRow &&
         isToolMsg(messages[i]) &&
         !isQuestionMsg(messages[i]) &&
-        !connectRecordOf(messages[i]) &&
+        !connectRowOf(messages[i]) &&
         !isDelegateMsg(messages[i]) &&
         !branchOf(messages[i], subagents)
       ) {
@@ -1526,9 +1593,15 @@ export function buildRowsFrom(
   return {
     rows: [
       ...drawn.rows,
-      ...tailRows(session, content, tool, gen, new Set(ahead), {
-        ...drawn.voices,
-      }),
+      ...tailRows(
+        session,
+        content,
+        tool,
+        connectTail(session, drawn.rows),
+        gen,
+        new Set(ahead),
+        { ...drawn.voices }
+      ),
     ],
     memo: {
       rows,
@@ -1927,6 +2000,7 @@ function tailRows(
   session: SessionState,
   content: LiveContent | null,
   tool: SessionState["currentTool"],
+  connect: Row | null,
   gen: number,
   ahead: Set<string>,
   voices: Voices
@@ -1960,12 +2034,17 @@ function tailRows(
   // row arriving, not this one changing its words. It is the call before its
   // message lands; once the message is in, the call's own line in its run is
   // this row, settled, and drawing both showed the same call twice.
-  if (tool) {
+  // A connect ask whose call has no row yet stands where the call is: it is
+  // the call in flight, when that is the connect ask's.
+  if (tool && !(connect && isConnectAskTool(tool.name))) {
     rows.push({
       kind: "livetool",
       key: `tool:${tool.toolId}`,
       glance: tool,
     });
+  }
+  if (connect) {
+    rows.push(connect);
   }
   rows.push(...waiting.filter((row) => !ahead.has(row.key)));
   for (const row of rows) {

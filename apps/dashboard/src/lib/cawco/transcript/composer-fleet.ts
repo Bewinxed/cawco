@@ -2,7 +2,7 @@
  * What a composer in the app reads of the fleet, and the parts a
  * conversation's composer shows: the live store and its reads, a queued
  * message's lift, a harness's refusal and its relaunch, `/mcp auth`'s
- * sign-in, a connect ask's sign-in, the hub seam, and the delegate tray, the ask it grows into, the
+ * sign-in, the hub seam, and the delegate tray, the ask it grows into, the
  * minimized question's face, the recall wheel, the canvas, the skill chips
  * and the suggestion chips. Every composer in the app is handed it
  * (Composer `fleet`), so each part is in its first frame. Composer imports
@@ -28,7 +28,6 @@ import CawFace from "../home/CawFace.svelte";
 import { hubSeam } from "../hub-live";
 import SkillChip from "../SkillChip.svelte";
 import { CanvasRoom } from "./canvas-room.svelte";
-import { connectSignIns } from "./connect-sign-ins.svelte";
 import DelegateTray from "./DelegateTray.svelte";
 import {
   asBubble,
@@ -60,7 +59,6 @@ export const composerFleet = {
   SkillChip,
   SuggestionChips,
   cawco,
-  connectSignIns,
   forgetRelaunch,
   harnessBlockOf,
   hubSeam,

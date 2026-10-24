@@ -3,21 +3,23 @@
  * fleet's MCP servers that signs in with OAuth (Configure › MCP, hub
  * fleet-mcp.ts), so its tools reach the session. The ask parks as the
  * session's `permission_request` for {@link CONNECT_ASK_TOOL}, carrying the
- * server, the reason, the provider's page and the access it offers
- * ({@link ConnectAskFrame}), so it stands on the session's composer, in
- * Needs you and on the phone as every ask does, and the call waits.
+ * server, the reason, the provider's page and the access it signs in with
+ * ({@link ConnectAskFrame}), so it stands as a card in the session's
+ * transcript at the call, in Needs you and on the phone, and the call waits.
  *
  * Connect is the hub's own sign-in for that server (`POST
- * /api/fleet/mcp/:name/sign-in`, the access picked): the hub keeps the
+ * /api/fleet/mcp/:name/sign-in`, with the ask's access): the hub keeps the
  * credential, sealed, and every session with the server gets its tools.
  * The sign-in landing ({@link ConnectAsks.signedIn}) answers every call
  * waiting on that server with as whom and with what access; Not now
- * answers it with the person's words. A server the hub is signed in to
+ * answers it as declined. A server the hub is signed in to
  * already is answered at once. A session has one connect ask open at a
  * time; one whose session ends before it is answered is withdrawn, and the
  * call refused. A waiting call ends with the hub that held it.
  */
 import type {
+  ConnectAccess,
+  ConnectAccessSet,
   ConnectAnswer,
   ConnectAskFrame,
   Envelope,
@@ -58,6 +60,25 @@ interface Waiter {
   server: string;
 }
 
+/**
+ * The access an ask signs in with: a reconnect's held one; else the one the
+ * agent named, when the server offers it; else the server's one, or
+ * read-only of two (the least that lets an agent work, CawCo's own call);
+ * null when the server names no scopes.
+ */
+const accessOf = (
+  offers: readonly ConnectAccessSet[],
+  named: ConnectAccess | undefined,
+  held: ConnectAccess | null
+): ConnectAccess | null => {
+  if (held) {
+    return held;
+  }
+  const offered = (access: ConnectAccess | undefined) =>
+    offers.find((offer) => offer.access === access)?.access;
+  return offered(named) ?? offered("read") ?? offers[0]?.access ?? null;
+};
+
 /** The server `asked` names among `servers`, matched without regard to case; throws the sentence the agent reads. */
 const serverNamed = (asked: string, servers: readonly string[]): string => {
   const found = servers.find(
@@ -84,7 +105,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
     /** Parks `actor`'s connect ask and waits for the person's answer. */
     async ask(
       actor: InstanceRow,
-      input: { reason: string; server: string },
+      input: { access?: ConnectAccess; reason: string; server: string },
       toolUseId?: string
     ): Promise<ConnectAnswer> {
       const server = serverNamed(input.server, deps.servers(actor));
@@ -104,12 +125,13 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
         );
       }
       const requestId = crypto.randomUUID();
-      const held = facts.ended ? facts.held : null;
       const ask: ConnectAskFrame = {
+        access: accessOf(
+          facts.offers,
+          input.access,
+          facts.ended ? facts.held : null
+        ),
         again: facts.ended,
-        held,
-        // Asked again with its access held: the access is not asked again.
-        offers: held ? [] : facts.offers,
         reason: input.reason,
         server,
         url: facts.url,
@@ -134,7 +156,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
           harness: actor.harness,
           requestKind: "tool",
           toolName: CONNECT_ASK_TOOL,
-          input: { ...input, server },
+          input: { reason: input.reason, server, access: ask.access },
           connectAsk: ask,
           ...(toolUseId ? { toolUseId } : {}),
         },
@@ -231,6 +253,12 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
               .max(REASON_MAX)
               .describe(
                 'One sentence they read: what you need it for, e.g. "Import the Settings page design from Figma."'
+              ),
+            access: z
+              .enum(["read", "write"])
+              .optional()
+              .describe(
+                "What you need to do there: read (look only) or write (change things too). Ask for read unless the work changes something there."
               ),
           },
           async (input) => {

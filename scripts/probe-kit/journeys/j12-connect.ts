@@ -1,30 +1,36 @@
 /**
  * J12, an agent asks the person to sign in to a service it needs (a connect
- * ask, hub connect-asks.ts), and the person signs in from that ask. On a
- * scratch fleet, against a local OAuth provider (mcp-oauth-mock.ts: a
- * consent page, a token endpoint naming the person by an ID token, and an
- * MCP server behind it), on Claude Code, OpenCode and pi in turn, each
- * with a fleet MCP server of its own on that provider:
+ * ask, hub connect-asks.ts), and the person signs in from that ask: a card in
+ * the conversation at the point it was asked, which becomes the record of
+ * it where it stands. On a scratch fleet, against a local OAuth provider
+ * (mcp-oauth-mock.ts: a consent page, a token endpoint naming the person by
+ * an ID token, and an MCP server behind it), on Claude Code, OpenCode and pi
+ * in turn, each with a fleet MCP server of its own on that provider:
  *
- *  1. The agent calls `connect_ask`; the ask stands on the session's message
- *     box with its reason, the provider's address and the access as a
- *     choice, read-only pressed.
- *  2. Not now, with the person's words on Other: the agent's call returns
- *     them, and the transcript's record line says not connected with them.
- *  3. Asked again: the provider's tab closed early, the hub refusing to
- *     start (the server switched off), and, on one harness a leg (each in
- *     turn), the session's machine offline (its agent frozen until the hub
- *     loses it) each show their fault on the ask, and each recovers.
- *  4. Connect runs the provider's sign-in in a tab of its own (Allow on its
- *     consent page): the card holds "Connected as …", folds, and the
- *     agent's call returns "Connected … as …, read-only"; the hub asked the
- *     provider for the read scope alone; the record line stands.
+ *  1. The agent calls `connect_ask`; the ask stands as a card in the
+ *     transcript at its call's row, under the message that asked for it,
+ *     never on the message box: Caw&Co to the server, what read-only access
+ *     reads and can't do, the provider's address, who keeps the sign-in.
+ *     "1 needs you" at the tray row's end brings the card into view.
+ *  2. Not now: the agent's call returns it, and the card becomes the record
+ *     line, "not connected · Not now", in the same row.
+ *  3. Asked again: the provider's tab closed early and the hub refusing to
+ *     start (the server switched off) each take the card's centre in the
+ *     error formula with Try again (and the hub's words under Show details);
+ *     a reload keeps the refusal on the card in its row; on one harness a
+ *     leg (each in turn) the session's machine offline (its agent frozen
+ *     until the hub loses it) holds Try again and Not now, and each recovers.
+ *  4. Try again opens the provider's page in a tab of its own; a reload while
+ *     it is open keeps the card waiting on it; Allow on its consent page:
+ *     the card holds "Connected as …", then becomes the record in its row,
+ *     and the agent's call returns "Connected … as …, read-only"; the hub
+ *     asked the provider for the read scope alone.
  *  5. The agent calls the service's tool through the connection.
  *  6. The provider ends the kept sign-in: the agent's next call meets it, the
  *     hub's renewal is refused, and the record line turns to sign-in
- *     expired; the agent asks again, the ask is a reconnect with the access
- *     held ("Read-only, as before."), and the reconnect asks for the read
- *     scope again.
+ *     expired in its row; the agent asks again, a reconnect card with the
+ *     access held ("Read-only, as before."), and the reconnect asks for the
+ *     read scope again.
  *
  * Run it narrowed as the connect ask's proof is: Chromium and WebKit, the
  * phone and the desk.
@@ -55,7 +61,6 @@ import {
 const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 const IDENTITY = "probe@example.test";
 const REASON = "Import the release notes from Tray Docs.";
-const WORDS = "use the PDF I attached";
 const DOC_TOOL = {
   name: "read_doc",
   description: "Read a document.",
@@ -94,8 +99,6 @@ const ASK_NAME = new RegExp(
   `^(${literal(askWords.connectAskFrom(""))}|${literal(askWords.reconnectAskFrom(""))})`
 );
 const RECONNECT_NAME = new RegExp(`^${literal(askWords.reconnectAskFrom(""))}`);
-const READ_ONLY = new RegExp(literal(askWords.readOnly));
-const READ_WRITE = new RegExp(literal(askWords.readWrite));
 
 /** A message part's words: a string, or the text of its blocks. */
 const wordsOf = (content: unknown): string => {
@@ -205,9 +208,54 @@ const respond = (seen: Seen): Reply => {
     : offered(seen, step, server, "read_doc", {});
 };
 
-/** The session's message box, grown into the connect ask. */
+/** The connect ask's card, wherever it stands. */
 const card = (page: Page): Locator =>
   page.getByRole("region", { name: ASK_NAME }).filter({ visible: true });
+
+/** `words`, each `\u0000` in it any run of words: a sentence with a name in it. */
+const sentence = (words: string): RegExp =>
+  new RegExp(words.split("\u0000").map(literal).join(".+"));
+
+/**
+ * Where the card stands: its transcript row's key (the call's row, rows.ts),
+ * whether the message box holds it, and whether its row comes after the
+ * row of the message that asked for it (`asked`, that message's opening
+ * words) in the transcript's order. Read by order, not by boxes: on a phone
+ * the turn's message can stand pinned over the rows under it.
+ */
+async function placeOf(
+  page: Page,
+  asked: string
+): Promise<{ row: string | null; inComposer: boolean; below: boolean }> {
+  return await card(page)
+    .first()
+    .evaluate((node, words) => {
+      const row = node.closest("[data-row^='c:']");
+      const said = [...document.querySelectorAll("[data-row] p")]
+        .filter((one) => one.textContent?.trim().startsWith(words))
+        .at(-1)
+        ?.closest("[data-row]");
+      return {
+        row: row?.getAttribute("data-row") ?? null,
+        inComposer: !!node.closest(
+          "[data-slot='composer'], [data-slot='lift']"
+        ),
+        below:
+          !!(said && row) &&
+          [...document.querySelectorAll("[data-row]")].indexOf(row as Element) >
+            [...document.querySelectorAll("[data-row]")].indexOf(
+              said as Element
+            ),
+      };
+    }, asked);
+}
+
+/** The words of transcript row `id`: the record the card became, in place. */
+const rowText = (page: Page, id: string): Promise<string> =>
+  page
+    .locator(`[data-row="${id}"]`)
+    .innerText()
+    .catch(() => "");
 
 /** The machine's word on `server` for `harness`: applied, needs-auth, … */
 function appliedOn(
@@ -296,14 +344,43 @@ async function walkOne(
   const { fleet, page, base } = leg;
   const mock = provider as McpOauthMock;
   let n = 0;
+  /** The last message's own words: the line the card stands under. */
+  let asked = "";
   const message = (verb: "ask" | "use") => {
     n += 1;
-    return `PROBE-CONNECT ${leg.id}-${server}-${n} ${verb} ${server} Carry on with the release.`;
+    asked = `PROBE-CONNECT ${leg.id}-${server}-${n} ${verb}`;
+    return `${asked} ${server} Carry on with the release.`;
   };
-  const connectButton = () =>
-    card(page).getByRole("button", { name: askWords.connect, exact: true });
-  const notNow = () =>
-    card(page).getByRole("button", { name: askWords.notNow, exact: true });
+  const button = (name: string) =>
+    card(page).getByRole("button", { name, exact: true });
+  const connectButton = () => button(askWords.connect(server));
+  const tryAgain = () => button(configureWords.tryAgain);
+  const notNow = () => button(askWords.notNow);
+  const needsYou = () =>
+    page
+      .getByRole("button", {
+        name: new RegExp(`^${literal(askWords.connectNeedsYou(1))}`),
+      })
+      .filter({ visible: true });
+  /** The card stands in the transcript under the message that asked, and nothing of it on the message box. */
+  const placed = async (what: string): Promise<string> => {
+    const place = await eventually(
+      `${what} in the transcript under the message that asked`,
+      () => placeOf(page, asked),
+      (now) => now.row !== null && now.below && !now.inComposer
+    );
+    expect(
+      `${what} stands in a connect ask's row: its call's, or the one the call takes on landing`,
+      place.row?.startsWith("c:") === true,
+      place
+    );
+    expect(
+      "the message box has not grown into it, nor parked it on its bar",
+      (await page.locator("[data-slot='asked-chip']").count()) === 0,
+      "a bar over the message box"
+    );
+    return place.row ?? "";
+  };
 
   let id = "";
   await leg.step(
@@ -329,65 +406,91 @@ async function walkOne(
       )
   );
 
-  // 1 and 2: the ask, then Not now with his words.
+  // 1 and 2: the card at its turn, then Not now.
+  let row = "";
   await leg.step(
     `${harness}: the agent asks to connect ${server}`,
     () => fleet.send(id, message("ask")),
     async () => {
-      await shows(card(page), "the connect ask on the message box", 120_000);
-      await shows(card(page).getByText(REASON), "the agent's reason");
+      await shows(card(page), "the connect card", 120_000);
+      row = await placed("the connect card");
+      await shows(
+        card(page).getByText(askWords.connectTitle(server), { exact: true }),
+        "who connects to what"
+      );
+      await shows(
+        card(page).getByText(askWords.readReach, { exact: true }),
+        "what read-only access reads and can't do"
+      );
       const text = (await card(page).textContent()) ?? "";
       const address = new URL("/authorize", mock.url).href;
       expect(
-        `the provider's address (${address}) stands whole on the ask`,
+        `the provider's address (${address}) stands whole on the card`,
         text.includes(address),
         text.slice(0, 400)
       );
-      const readOnly = card(page).getByRole("radio", {
-        name: READ_ONLY,
-      });
-      const readWrite = card(page).getByRole("radio", {
-        name: READ_WRITE,
-      });
-      await shows(readOnly, "Read-only, a choice of access");
-      await shows(readWrite, "Read & write, a choice of access");
-      expect(
-        "read-only is pressed",
-        (await readOnly.getAttribute("aria-checked")) === "true" &&
-          (await readWrite.getAttribute("aria-checked")) === "false",
-        "read & write pressed"
-      );
       await shows(
         card(page).getByText(askWords.connectReach(server)),
-        "what the grant reaches and for how long"
+        "who keeps the sign-in, and for how long"
+      );
+      expect(
+        "no access to pick: the card connects with what the agent asked",
+        (await card(page).getByRole("radio").count()) === 0,
+        "a choice on the card"
       );
     }
   );
   await leg.step(
-    `${harness}: Not now, with words on Other`,
+    `${harness}: "1 needs you" brings the card into view`,
     async () => {
-      await card(page).getByRole("radio", { name: "Other" }).click();
+      // The transcript read back to its top, as a person scrolls away
+      // (no wheel on a phone's WebKit): the card is out of view.
       await card(page)
-        .getByRole("textbox", { name: askWords.yourAnswerTo(REASON) })
-        .fill(WORDS);
-      await notNow().click();
+        .first()
+        .evaluate((node) => {
+          let scroller = node.parentElement;
+          while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
+            scroller = scroller.parentElement;
+          }
+          scroller?.scrollTo({ top: 0 });
+        });
+      await needsYou().click();
     },
+    () =>
+      eventually(
+        "the card in view",
+        () =>
+          card(page)
+            .first()
+            .evaluate((node) => {
+              const box = node.getBoundingClientRect();
+              return box.bottom > 0 && box.top < window.innerHeight;
+            }),
+        Boolean
+      )
+  );
+  await leg.step(
+    `${harness}: Not now`,
+    () => notNow().click(),
     async () => {
-      await gone(card(page), "the connect ask");
-      const heard = `Heard: ${connectAnsweredWords({ outcome: "declined", server, words: WORDS })}`;
+      await gone(card(page), "the connect card");
+      const heard = `Heard: ${connectAnsweredWords({ outcome: "declined", server, words: "" })}`;
       await shows(
         page.getByText(heard),
         `the agent hearing “${heard}”`,
         60_000
       );
-      await shows(
-        page.getByText(askWords.recordNotConnected(server), { exact: true }),
-        "the record line, not connected"
+      const record = await eventually(
+        "the card's row, become the record",
+        () => rowText(page, row),
+        (words) => words.includes(askWords.recordNotConnected(server))
       );
-      await shows(
-        page.getByText(`· “${WORDS}”`, { exact: true }),
-        "his words on the record line"
+      expect(
+        "the record says Not now",
+        record.includes(`· ${askWords.notNow}`),
+        record
       );
+      await gone(needsYou(), "the needs-you chip");
     }
   );
 
@@ -395,8 +498,12 @@ async function walkOne(
   await leg.step(
     `${harness}: the agent asks again`,
     () => fleet.send(id, message("ask")),
-    () => shows(card(page), "the connect ask again", 120_000)
+    async () => {
+      await shows(card(page), "the connect card again", 120_000);
+      row = await placed("the card asked again");
+    }
   );
+  const failedNext = sentence(askWords.connectFailedNext("\u0000"));
   await leg.step(
     `${harness}: the provider's tab is closed before it finishes`,
     async () => {
@@ -406,32 +513,26 @@ async function walkOne(
     async () => {
       await shows(
         card(page).getByText(askWords.connectTabClosed(server)),
-        "the tab closed, said on the ask",
+        "what happened, in the card's centre",
         15_000
       );
       await shows(
-        card(page).getByRole("button", { name: configureWords.tryAgain }),
-        configureWords.tryAgain
+        card(page).getByText(failedNext),
+        "what is safe, and the way on"
       );
-      expect(
-        "Connect is free again",
-        await connectButton().isEnabled(),
-        "disabled"
-      );
+      expect("Try again is free", await tryAgain().isEnabled(), "disabled");
     }
   );
   await leg.step(
     `${harness}: the hub refuses to start it (the server switched off)`,
     async () => {
       await putServer(fleet, server, false);
-      await card(page)
-        .getByRole("button", { name: configureWords.tryAgain })
-        .click();
+      await tryAgain().click();
     },
     async () => {
       await shows(
         card(page).getByText(askWords.connectRefused(server)),
-        "the refusal, said on the ask"
+        "the refusal, in the card's centre"
       );
       await card(page)
         .getByRole("button", { name: shellWords.showDetails })
@@ -443,6 +544,20 @@ async function walkOne(
     },
     { refused: true }
   );
+  await leg.step(
+    `${harness}: the page reloads`,
+    () => page.reload({ waitUntil: "domcontentloaded" }),
+    async () => {
+      await shows(card(page), "the card after the reload", 120_000);
+      await shows(
+        card(page).getByText(askWords.connectRefused(server)),
+        "the refusal, kept through the reload"
+      );
+      // A reload draws the card at its call's own key: the record is read
+      // in that row from here.
+      row = await placed("the card after the reload");
+    }
+  );
   if (offline) {
     await leg.step(
       `${harness}: the session's machine goes offline`,
@@ -453,13 +568,13 @@ async function walkOne(
       async () => {
         await shows(
           card(page).getByText(askWords.connectOffline),
-          "the machine offline, said on the ask",
+          "the machine offline, said on the card",
           LOST_MS
         );
         expect(
-          "Connect and Not now wait while it is offline",
-          (await connectButton().isDisabled()) && (await notNow().isDisabled()),
-          "a peer is live"
+          "Try again and Not now wait while it is offline",
+          (await tryAgain().isDisabled()) && (await notNow().isDisabled()),
+          "a control is live"
         );
       },
       { hubDown: true }
@@ -477,8 +592,8 @@ async function walkOne(
           LOST_MS
         );
         await eventually(
-          "Connect live again",
-          () => connectButton().isEnabled(),
+          "Try again live again",
+          () => tryAgain().isEnabled(),
           Boolean,
           60_000
         );
@@ -487,15 +602,33 @@ async function walkOne(
     );
   }
 
-  // 4: Connect, read-only.
-  let signedInAt = 0;
+  // 4: Connect, read-only, through a reload while the provider's page is open.
+  let tab: Page | null = null;
   await leg.step(
-    `${harness}: the server is switched on again, and Connect signs in on the provider's page`,
+    `${harness}: the server is switched on again, Try again opens the provider's page, and the page reloads`,
     async () => {
       await putServer(fleet, server, true);
-      const tab = await pressOpening(page, connectButton());
-      await allow(tab);
+      tab = await pressOpening(page, tryAgain());
+      // The provider's page is up in its tab before the reload: the press
+      // sends the tab there once the hub has started the sign-in.
+      await tab.waitForURL((url) => url.pathname === "/authorize", {
+        timeout: 30_000,
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
     },
+    async () => {
+      await shows(card(page), "the card after the reload", 120_000);
+      await shows(
+        card(page).getByText(askWords.connectWaiting(server)),
+        "the card still waiting on the provider's page",
+        30_000
+      );
+    }
+  );
+  let signedInAt = 0;
+  await leg.step(
+    `${harness}: Allow on the provider's page`,
+    () => allow(tab as unknown as Page),
     async () => {
       await shows(
         card(page).getByText(askWords.connectedAs(IDENTITY)),
@@ -503,7 +636,7 @@ async function walkOne(
         30_000
       );
       signedInAt = Date.now();
-      await gone(card(page), "the connect ask, folded");
+      await gone(card(page), "the connect card, become the record");
       expect(
         "the hub asked the provider for the read scope alone",
         mock.asked.at(-1) === "docs.read",
@@ -515,15 +648,15 @@ async function walkOne(
         `the agent hearing “${heard}”`,
         60_000
       );
-      await shows(
-        page.getByText(askWords.recordConnectedAs(server, IDENTITY), {
-          exact: true,
-        }),
-        "the record line, connected as whom"
+      const record = await eventually(
+        "the card's row, become the record",
+        () => rowText(page, row),
+        (words) => words.includes(askWords.recordConnectedAs(server, IDENTITY))
       );
-      await shows(
-        page.getByText(`· ${askWords.recordReadOnly}`, { exact: true }),
-        "the record line's access"
+      expect(
+        "the record says the access",
+        record.includes(`· ${askWords.recordReadOnly}`),
+        record
       );
     }
   );
@@ -581,12 +714,14 @@ async function walkOne(
       mock.expire();
       await fleet.send(id, message("use"));
     },
-    () =>
-      shows(
-        page.getByText(askWords.recordExpired, { exact: false }).first(),
-        "the record line, sign-in expired",
+    async () => {
+      await eventually(
+        "the record line, sign-in expired, in the card's row",
+        () => rowText(page, row),
+        (words) => words.includes(askWords.recordExpired),
         120_000
-      )
+      );
+    }
   );
   await leg.step(
     `${harness}: the agent asks to reconnect`,
@@ -594,8 +729,13 @@ async function walkOne(
     async () => {
       await shows(
         page.getByRole("region", { name: RECONNECT_NAME }),
-        "a reconnect ask",
+        "a reconnect card",
         120_000
+      );
+      row = await placed("the reconnect card");
+      await shows(
+        card(page).getByText(askWords.reconnectTitle(server), { exact: true }),
+        "reconnect, who to what"
       );
       await shows(
         card(page).getByText(askWords.asBefore(askWords.readOnly)),
@@ -606,17 +746,10 @@ async function walkOne(
   await leg.step(
     `${harness}: Reconnect`,
     async () => {
-      const tab = await pressOpening(
-        page,
-        card(page).getByRole("button", {
-          name: askWords.reconnect,
-          exact: true,
-        })
-      );
-      await allow(tab);
+      await allow(await pressOpening(page, button(askWords.reconnect(server))));
     },
     async () => {
-      await gone(card(page), "the reconnect ask, folded", 60_000);
+      await gone(card(page), "the reconnect card, become the record", 60_000);
       expect(
         "the reconnect asked the provider for the read scope again",
         mock.asked.at(-1) === "docs.read",

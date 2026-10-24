@@ -84,11 +84,13 @@
   import TaskPane from "./tasks/TaskPane.svelte";
   import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
+  import ConnectNeedsChip from "./transcript/ConnectNeedsChip.svelte";
   import {
     ComposerDraft,
     paneDrafts,
   } from "./transcript/composer-draft.svelte";
   import { composerFleet } from "./transcript/composer-fleet";
+  import { connectSignIns } from "./transcript/connect-sign-ins.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
@@ -174,6 +176,19 @@
       planOpen = true;
     }
   });
+  /**
+   * The connect asks standing open as cards in this transcript, until the
+   * hub has signed in for one: the chip at the tray row's end leads back to
+   * them (ConnectNeedsChip).
+   */
+  const connectsOpen = $derived(
+    (cawco.session(viewId)?.pending ?? []).flatMap((request) =>
+      request.connectAsk &&
+      connectSignIns.of(request.requestId).stage !== "done"
+        ? [{ asker: agentName, server: request.connectAsk.server }]
+        : []
+    )
+  );
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
@@ -1127,7 +1142,7 @@
       parkedRoom = next.parked;
     },
     get planRing() {
-      return planProgressNow ? planRing : undefined;
+      return planProgressNow || connectsOpen.length > 0 ? planRing : undefined;
     },
   };
 
@@ -1148,6 +1163,7 @@
 <!-- The composer's two slots, drawn by whichever composer is writing to this
      conversation: the one below on a desk, the deck's on a phone. -->
 {#snippet planRing()}
+  <ConnectNeedsChip asks={connectsOpen} instanceId={viewId} />
   {#if planProgressNow}
     <PlanRing
       done={planProgressNow.done}

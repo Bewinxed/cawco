@@ -293,8 +293,11 @@ export async function signIn(base: string, name: string): Promise<void> {
   const post = async (path: string, body?: object) => {
     const response = await fetch(`${base}${path}`, {
       method: "POST",
-      headers: JSON_TYPE,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      // A JSON type names a body: a sign-in started with none sends none,
+      // as Configure's Sign in does.
+      ...(body === undefined
+        ? {}
+        : { headers: JSON_TYPE, body: JSON.stringify(body) }),
     });
     if (!response.ok) {
       throw new Error(

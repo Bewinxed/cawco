@@ -12,6 +12,12 @@ import { getContext, setContext } from "svelte";
 import type { HubState } from "./client.svelte";
 
 export interface HubSeam {
+  /**
+   * Whether a session's machine is offline, said by a states file's
+   * stand-in; the live client leaves it out, and a reader takes the
+   * session's own row (`isStale`).
+   */
+  readonly machineOffline?: boolean;
   /** A read of the hub's REST (`GET <path>`), its JSON answer or its refusal. */
   read: <T>(path: string) => Promise<T>;
   /** The connection to the hub. */

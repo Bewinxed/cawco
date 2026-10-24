@@ -79,9 +79,10 @@
   import Behind from "./Behind.svelte";
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
-  import ConnectRow from "./ConnectRow.svelte";
+  import ConnectCard from "./ConnectCard.svelte";
   import { compactionMarkComing } from "./compaction-mark";
   import { paneDrafts } from "./composer-draft.svelte";
+  import { connectReveal } from "./connect-sign-ins.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import Latest from "./Latest.svelte";
@@ -3983,6 +3984,31 @@
     });
   });
 
+  // The "1 needs you" chip pressed: the open connect card comes into view,
+  // and its Connect takes the keys once it is drawn there.
+  $effect(() => {
+    if (!(connectReveal.has(session.instanceId) && active)) {
+      return;
+    }
+    untrack(() => {
+      connectReveal.delete(session.instanceId);
+      const index = renderedRows.findLastIndex(
+        (row) => row.kind === "connect" && row.answer === null
+      );
+      if (index < 0) {
+        return;
+      }
+      list?.scrollToIndex(index, { align: "center", smooth: true });
+      const { key } = renderedRows[index];
+      requestAnimationFrame(() => {
+        document
+          .querySelector(`[data-row="${CSS.escape(key)}"]`)
+          ?.querySelector<HTMLElement>("[data-connect]")
+          ?.focus({ preventScroll: true });
+      });
+    });
+  });
+
   // The delegate tray's news: a delegate started, finished or failed (polite),
   // or has a question for the reader (assertive, cleared once it is said).
   let trayAlert = $state("");
@@ -4233,7 +4259,12 @@
             {:else if row.kind === "question"}
               <QuestionCard asker={agentName} message={row.message} />
             {:else if row.kind === "connect"}
-              <ConnectRow answer={row.answer} />
+              <ConnectCard
+                answer={row.answer}
+                asker={agentName}
+                instanceId={session.instanceId}
+                message={row.message}
+              />
             {:else if row.kind === "harness"}
               <SystemLine
                 disclosed={disclosureAt(session.instanceId, row.key)}

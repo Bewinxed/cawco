@@ -1664,8 +1664,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/ConnectAccess`.
-    public enum ConnectAccess: OpenEnum {
+    /// `#/components/schemas/ConnectAskFrameAccess`.
+    public enum ConnectAskFrameAccess: OpenEnum {
         case read
         case write
         /// A value this app does not know: a newer hub's.

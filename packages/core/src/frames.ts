@@ -477,25 +477,20 @@ export interface ConnectAccessSet {
  * {@link CONNECT_ASK_TOOL} carrying this beside the tool's input. Connect
  * starts the hub's sign-in (`POST /api/fleet/mcp/:name/sign-in` with its
  * `requestId` and `access`) in a tab of its own; the hub keeps the
- * credential, and its sign-in landing answers the call. Not now declines it
- * with the person's words.
+ * credential, and its sign-in landing answers the call. Not now declines it.
  *
- * The accounts the hub keeps for a server would stand beside `offers` as a
- * list to pick from; the hub keeps one sign-in per server today.
+ * It stands as a card in the session's transcript at the call that asked
+ * it, and that card becomes the call's record once it is answered.
  */
 export interface ConnectAskFrame {
   /**
-   * Asked again: the server's sign-in ended (`auth.ended`), and the access
-   * picked then is held (`held`), not offered.
+   * The access Connect asks the provider for: the one the agent named, a
+   * reconnect's held from the sign-in that ended, or the server's one; null
+   * for a server that names no scopes.
    */
+  access: ConnectAccess | null;
+  /** Asked again: the server's sign-in ended (`auth.ended`), its access held. */
   again: boolean;
-  /** The access the last sign-in was made with: a reconnect's, kept. */
-  held: ConnectAccess | null;
-  /**
-   * The access offered: two (`read`, then `write`) are a choice; one is the
-   * scopes it asks for, said; none, a server that names no scopes.
-   */
-  offers: ConnectAccessSet[];
   /** One sentence: why the session needs it. */
   reason: string;
   /** The fleet MCP server, as Configure › MCP names it. */

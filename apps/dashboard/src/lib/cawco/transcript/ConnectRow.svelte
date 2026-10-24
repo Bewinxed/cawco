@@ -1,11 +1,11 @@
 <script lang="ts">
   /**
-   * What the transcript keeps of a connect ask once it has settled, where
+   * What a connect ask's card (ConnectCard) becomes once it has settled, where
    * the agent's turn goes on: a row in the tool rows' own recipe (ToolGroup:
    * the 2px rail, the glyph in the rail cell, the words at the text column,
    * the muted mono tail), so it reads as one more thing the turn did.
-   * Connected says as whom and with what access; not connected keeps the
-   * Other line's words; a kept sign-in that later lapsed (the fleet reads
+   * Connected says as whom and with what access; not connected says Not
+   * now (or the words an answer carried); a kept sign-in that later lapsed (the fleet reads
    * the server's sign-in ended) changes it in place to sign-in expired, and
    * back once someone signs in again. Its tail is the MCP server's name,
    * which opens the MCP page. Its words are the call's answer, read back

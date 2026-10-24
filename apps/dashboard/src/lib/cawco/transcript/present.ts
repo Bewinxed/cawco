@@ -20,13 +20,18 @@ export function routedToParent(request: { routedTo?: string }): boolean {
 
 /**
  * The asks a session's own composer parks: every pending ask but the ones
- * routed to its parent. The composer's stack draws exactly these, and the
- * transcript leaves out the rows of the calls they gate, so a parked ask is
- * drawn once, the composer grown into it, until it is answered and its row
- * is drawn.
+ * routed to its parent, and a connect ask, which is a card in the
+ * transcript at its call (ConnectCard). The composer's stack draws exactly
+ * these, and the transcript leaves out the rows of the calls they gate, so
+ * a parked ask is drawn once, the composer grown into it, until it is
+ * answered and its row is drawn.
  */
-export function parkedAsks<T extends { routedTo?: string }>(pending: T[]): T[] {
-  return pending.filter((request) => !routedToParent(request));
+export function parkedAsks<
+  T extends { routedTo?: string; connectAsk?: unknown },
+>(pending: T[]): T[] {
+  return pending.filter(
+    (request) => !(routedToParent(request) || request.connectAsk)
+  );
 }
 
 /**

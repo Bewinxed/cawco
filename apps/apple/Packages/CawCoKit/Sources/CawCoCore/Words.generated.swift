@@ -868,7 +868,7 @@ public enum Words {
 
         public static let stillWaiting = "The agent is still waiting; try Take over again."
 
-        /// A connect ask (hub connect-asks.ts): the card's title, as a screen reader names it, first asked and asked again once its sign-in ended.
+        /// A connect ask (hub connect-asks.ts), the card in the transcript at the call that asked: its name, as a screen reader names it, first asked and asked again once its sign-in ended.
         public static func connectAskFrom(who: String) -> String {
             "Connect ask from \(who)"
         }
@@ -880,10 +880,42 @@ public enum Words {
         /// A connect ask, as Needs you names its kind.
         public static let connectAsk = "Connect ask"
 
-        /// Its yes, first asked and asked again, and its no, and while each goes.
-        public static let connect = "Connect"
+        /// The card's head: who connects to what.
+        public static func connectTitle(server: String) -> String {
+            "Connect \(server) to Caw&Co"
+        }
 
-        public static let reconnect = "Reconnect"
+        public static func reconnectTitle(server: String) -> String {
+            "Reconnect \(server) to Caw&Co"
+        }
+
+        /// What the sign-in reads and can't do, by the access it asks for.
+        public static let readReach = "Reads what you can see there. Can't change anything."
+
+        public static let writeReach = "Reads and changes what you can there."
+
+        /// A reconnect's access, held from the last sign-in.
+        public static func asBefore(access: String) -> String {
+            "\(access), as before."
+        }
+
+        public static let readOnly = "Read-only"
+
+        public static let readWrite = "Read & write"
+
+        /// Who keeps the sign-in, and for how long.
+        public static func connectReach(server: String) -> String {
+            "The hub keeps the sign-in for the fleet: every session with \(server) gets it until you remove it on the MCP page. No agent sees a password."
+        }
+
+        /// Its yes, first asked and asked again, and its no, and while each goes.
+        public static func connect(server: String) -> String {
+            "Connect \(server)"
+        }
+
+        public static func reconnect(server: String) -> String {
+            "Reconnect \(server)"
+        }
 
         public static let notNow = "Not now"
 
@@ -893,61 +925,55 @@ public enum Words {
             "Signing in to \(server)…"
         }
 
-        /// The access it offers as a choice, read-only first.
-        public static let readOnly = "Read-only"
-
-        public static let readWrite = "Read & write"
-
-        /// A reconnect's access, held from the last sign-in.
-        public static func asBefore(access: String) -> String {
-            "\(access), as before."
-        }
-
-        /// What Connect reaches, and for how long.
-        public static func connectReach(server: String) -> String {
-            "The hub keeps the sign-in for the fleet: every session with \(server) gets it until you remove it on the MCP page. No agent sees a password."
-        }
-
-        /// Over the pair while the provider's page is open.
+        /// Under the address while the provider's page is open.
         public static func connectWaiting(server: String) -> String {
             "Finish in the \(server) tab. This card waits for it."
         }
 
-        /// The beat in the card once the hub has signed in, before it folds.
+        /// The beat in the card once the hub has signed in, before it becomes the record.
         public static func connectedAs(who: String) -> String {
             "Connected as \(who)"
         }
 
         public static let connected = "Connected"
 
-        /// Why a sign-in did not come back, over Connect.
+        /// A sign-in that did not come back, in the card's centre, in the error formula: what happened, then what is safe and the way on.
         public static func connectTabClosed(server: String) -> String {
-            "The \(server) tab closed before it finished."
+            "The \(server) tab closed before the sign-in finished."
         }
 
         public static func connectRefused(server: String) -> String {
-            "Couldn't start the \(server) sign-in. Try again starts it again; Show details has what the hub said."
+            "Couldn't start the \(server) sign-in."
         }
 
         public static func connectPageExpired(server: String) -> String {
             "\(server)'s sign-in page expired before it finished."
         }
 
-        /// Under the pair while the session's machine is offline.
+        public static func connectFailedNext(who: String) -> String {
+            "Nothing was connected, and \(who) is still waiting. Try again opens the sign-in again."
+        }
+
+        public static func connectRefusedNext(who: String) -> String {
+            "Nothing was connected, and \(who) is still waiting. Show details has what the hub said; Try again starts it again."
+        }
+
+        /// Not now, refused on its way: what refused it goes after.
+        public static let cantSendAnswer = "Couldn't send that answer."
+
+        /// While the session's machine is offline.
         public static let connectOffline = "Machine offline — can't connect yet."
 
-        /// The minimized ask's bar, and its name.
-        public static func connectBar(who: String, server: String) -> String {
-            "\(who) asks to connect \(server)"
+        /// The chip at the tray row's end while a card stands open above.
+        public static func connectNeedsYou(n: Int) -> String {
+            "\(n) needs you"
         }
 
         public static func showConnectAsk(who: String, server: String) -> String {
             "Show the connect ask from \(who): \(server)"
         }
 
-        public static let minimizeConnectAsk = "Minimize connect ask"
-
-        /// The line the transcript keeps once it settled, in the tool row's form: connected, as whom and with what access; not connected, with the person's words; and a kept sign-in that later lapsed.
+        /// The line the card becomes once it settled, in the tool row's form: connected, as whom and with what access; not connected; and a kept sign-in that later lapsed.
         public static func recordConnected(server: String) -> String {
             "Connected \(server)"
         }

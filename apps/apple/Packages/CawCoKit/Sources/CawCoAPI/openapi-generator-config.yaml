@@ -48,7 +48,7 @@ typeOverrides:
     CommandAckStage: OpenEnums.CommandAckStage
     CommentAttachmentKind: OpenEnums.CommentAttachmentKind
     ComponentDocTypes: OpenEnums.ComponentDocTypes
-    ConnectAccess: OpenEnums.ConnectAccess
+    ConnectAskFrameAccess: OpenEnums.ConnectAskFrameAccess
     ConnectionAuth: OpenEnums.ConnectionAuth
     ConnectionState: OpenEnums.ConnectionState
     ConnectionTransport: OpenEnums.ConnectionTransport
