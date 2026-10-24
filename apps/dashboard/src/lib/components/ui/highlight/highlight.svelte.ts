@@ -83,6 +83,8 @@ type Axis = "x" | "y" | "xy";
 const REACH = 8;
 /** How far a row is drawn from where it lands before it counts as on its way. */
 const CARRIED = 0.5;
+/** How near (device pixels) an edge is to a grid line to count as on it. */
+const ON_GRID = 0.01;
 /** Frames the rows stand still before a pointer that never moved is aimed again. */
 const STILL = 3;
 /** A scroll this soon (ms) after a wheel, a key or a touch is the reader's own. */
@@ -337,17 +339,23 @@ export function highlight(options: HighlightOptions) {
       // On the device-pixel grid, as the row's own box is painted: a layer
       // placed by a fractional translate draws its 1px edge across two
       // pixels, a soft line beside the row's crisp one (a card at x 1026.3
-      // drew the frame's brand edge at 73%).
-      const snap = (v: number) =>
-        Math.round(v * window.devicePixelRatio) / window.devicePixelRatio;
-      const left = snap(rect.left - slid.x);
-      const top = snap(rect.top - slid.y);
+      // drew the frame's brand edge at 73%). Each edge goes outward, the
+      // start down and the end up, so the layer covers the whole row:
+      // rounded each to the nearest, a row on a half pixel (a message well,
+      // 0.5px in) had both edges taken inward and its ghost drew a pixel
+      // narrower. An edge already on the grid, give or take a float's
+      // residue (`ON_GRID`), stays where it is.
+      const ratio = window.devicePixelRatio;
+      const start = (v: number) => Math.floor(v * ratio + ON_GRID) / ratio;
+      const end = (v: number) => Math.ceil(v * ratio - ON_GRID) / ratio;
+      const left = start(rect.left - slid.x);
+      const top = start(rect.top - slid.y);
       const at = toLocal(left, top);
       return {
         x: at.x,
         y: at.y,
-        w: (snap(rect.right - slid.x) - left) / at.sx,
-        h: (snap(rect.bottom - slid.y) - top) / at.sy,
+        w: (end(rect.right - slid.x) - left) / at.sx,
+        h: (end(rect.bottom - slid.y) - top) / at.sy,
       };
     };
     const boxOf = (row: HTMLElement): Box | undefined => {

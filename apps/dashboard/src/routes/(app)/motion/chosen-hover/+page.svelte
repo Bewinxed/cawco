@@ -12,7 +12,8 @@
    * (`?control=files` stands the page on that project's file, shallowly, as
    * the project page does, so the first chip reads current), a chosen
    * option chip that is a button, and the split's handle (its drag's
-   * `data-active` the probe sets).
+   * `data-active` the probe sets), and two rows on a half pixel under a
+   * list's ghost and pill (`data-probe="half"`).
    */
   import { CAPABILITIES_NONE } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
@@ -29,6 +30,7 @@
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -102,6 +104,8 @@
   const noop = () => undefined;
 
   let markdown = $state("");
+  /** The half-pixel rows' chosen one. */
+  let halfPicked = $state(0);
 
   // The model list's catalogue: one machine reporting two Claude models.
   // Stood once, in the browser: the board never comes over a bench's hub.
@@ -246,6 +250,25 @@
       data-chosen
       type="button"><span>Chosen</span></button
     >
+  </section>
+  <!-- Rows on a half pixel, as a message well sits (`ms-(--well-x)`, 0.5px
+       in, and as far down): the list's ghost and pill cover each whole. -->
+  <section class="w-c-bench-field-w min-w-0" data-probe="half">
+    <div
+      class="flex flex-col"
+      {@attach highlight({ rows: "button", selected: '[aria-pressed="true"]' })}
+    >
+      {#each ["First", "Second"] as name, i (name)}
+        <button
+          aria-pressed={halfPicked === i}
+          class="ms-(--well-x) mt-(--well-x) px-space-3 py-space-2 rounded-sm text-start"
+          onclick={() => {
+            halfPicked = i;
+          }}
+          type="button">{name}</button
+        >
+      {/each}
+    </div>
   </section>
   <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="split">
     <Resizable.PaneGroup direction="horizontal">
