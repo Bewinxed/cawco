@@ -70,6 +70,7 @@ import {
   settle,
   type Theme,
 } from "../kit";
+import { pagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -491,22 +492,8 @@ const dropPin = async (page: Page): Promise<void> => {
     // after this one see its pill as it stands once sent.
     await until(
       "the comment delivered by itself",
-      () =>
-        frame.evaluate(() =>
-          Object.values(
-            (
-              window as unknown as {
-                cawcoArtifact: {
-                  doc: {
-                    getMap: (n: string) => { toJSON: () => object };
-                  };
-                };
-              }
-            ).cawcoArtifact.doc
-              .getMap("pins")
-              .toJSON() as Record<string, { sentAt?: string }>
-          ).every((pin) => !!pin.sentAt)
-        ),
+      async () =>
+        Object.values(await pagePins(frame)).every((pin) => !!pin.sentAt),
       Boolean,
       20_000
     ).catch(() => false);

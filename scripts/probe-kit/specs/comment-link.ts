@@ -76,6 +76,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { pagePins } from "../pins";
 import { freePort, publishBuild, serveUnder } from "../socket-served";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
@@ -223,21 +224,6 @@ const overlayLink = (frame: Frame): Promise<string> =>
     off();
     return state;
   });
-
-/** The pins in the page's own doc, by id. */
-const pagePins = (frame: Frame) =>
-  frame.evaluate(
-    () =>
-      (
-        window as unknown as {
-          cawcoArtifact: {
-            doc: { getMap: (n: string) => { toJSON: () => object } };
-          };
-        }
-      ).cawcoArtifact.doc
-        .getMap("pins")
-        .toJSON() as Record<string, { thread: { text: string }[] }>
-  );
 
 const pageFrame = async (page: Page): Promise<Frame> =>
   (await until(

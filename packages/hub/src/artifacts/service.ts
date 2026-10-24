@@ -73,15 +73,21 @@ import {
   type Pin,
   pinAsks,
   pinDelivery,
-  pinHeard,
   pinSaid,
   pinUnsent,
+  readPin,
+  readPins,
   SEND_CONTROLS,
   type SendBody,
   seeChanges,
   seenOf,
+  seePin,
+  stampHeard,
   type ThreadEntry,
   unheardEntries,
+  writeDelivery,
+  writeEntry,
+  writeResolve,
 } from "@cawco/core/comments";
 import {
   type DecisionCard,
@@ -2306,11 +2312,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     docs.transact(id, "hub", (live) => {
-      const pins = live.getMap("pins");
       for (const pin of owed) {
-        const now = pins.get(pin.id) as Pin | undefined;
+        const now = readPin(live, pin.id);
         if (now) {
-          pins.set(pin.id, pinHeard(now, pin, at));
+          stampHeard(live, now, pin, at);
         }
       }
     });
@@ -2323,13 +2328,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): { pin: Pin; row: ArtifactRow } => {
     const handle = pinId.length >= HANDLE_MIN && pinId.length < 36;
     for (const row of answerable(instance)) {
-      const pins = docs.doc(row.id).getMap("pins");
+      const doc = docs.doc(row.id);
       const pin =
-        (pins.get(pinId) as Pin | undefined) ??
+        readPin(doc, pinId) ??
         (handle
-          ? (Object.values(pins.toJSON() as Record<string, Pin>).find((one) =>
-              one.id.startsWith(pinId)
-            ) as Pin | undefined)
+          ? [...readPins(doc).values()].find((one) => one.id.startsWith(pinId))
           : undefined);
       if (pin) {
         return { pin, row };
@@ -2565,9 +2568,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ...pictureChanges(was.files, now.program.files),
       ];
     }
-    const anchors = Object.values(
-      docs.doc(id).getMap("pins").toJSON() as Record<string, Pin>
-    ).flatMap((pin) =>
+    const anchors = [...readPins(docs.doc(id)).values()].flatMap((pin) =>
       "selector" in pin.anchor && !pin.anchor.frames?.length
         ? [pin.anchor.selector]
         : []
@@ -3334,9 +3335,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * with every group, moved ones too, by id.
    */
   const marksOwed = (doc: Doc) => {
-    const pins = Object.values(
-      doc.getMap("pins").toJSON() as Record<string, Pin>
-    );
+    const pins = [...readPins(doc).values()];
     const pinned = new Set(pins.map((pin) => pin.ink));
     const ink = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
     return {
@@ -3368,11 +3367,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const at = new Date().toISOString();
     const went = new Map(strokes.map((group) => [group.id, group]));
     docs.transact(id, "hub", (live) => {
-      const livePins = live.getMap("pins");
       for (const pin of sent) {
-        const now = livePins.get(pin.id) as Pin | undefined;
+        const now = readPin(live, pin.id);
         if (now) {
-          livePins.set(pin.id, pinHeard(now, pin, at));
+          stampHeard(live, now, pin, at);
         }
       }
       const ink = live.getMap("ink");
@@ -3458,11 +3456,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const at = new Date().toISOString();
     docs.transact(id, "hub", (live) => {
-      const livePins = live.getMap("pins");
       for (const pin of owed) {
-        const now = livePins.get(pin.id) as Pin | undefined;
+        const now = readPin(live, pin.id);
         if (now) {
-          livePins.set(pin.id, { ...now, notSent: { at, why } });
+          writeDelivery(live, pin.id, {
+            ...(now.sentAt ? { sentAt: now.sentAt } : {}),
+            ...(now.heard ? { heard: now.heard } : {}),
+            notSent: { at, why },
+          });
         }
       }
     });
@@ -3699,7 +3700,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         promotedAt: at,
         session: instance.id,
       }),
-      "pins.json": promotedJson(doc.getMap("pins").toJSON()),
+      "pins.json": promotedJson(Object.fromEntries(readPins(doc))),
       "ink.json": promotedJson(doc.getMap("ink").toJSON()),
     };
     if (row.kind === "page") {
@@ -5068,9 +5069,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const meta = doc.getMap("meta");
     const state = stateOf(doc);
     const { sentAt } = metaOf(doc);
-    const pins = Object.values(
-      doc.getMap("pins").toJSON() as Record<string, Pin>
-    ).sort((a, b) => a.number - b.number);
+    const pins = [...readPins(doc).values()].sort(
+      (a, b) => a.number - b.number
+    );
     const asking = pins.filter(pinAsks);
     const facts: ArtifactFacts = {
       ...picksFacts(row, state),
@@ -5301,9 +5302,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const picksAwaiting = unread.filter(
       ({ key, seq }) => key in state && seq <= row.deliveredSeq
     ).length;
-    const pins = Object.values(
-      doc.getMap("pins").toJSON() as Record<string, Pin>
-    ).filter((pin) => !pin.resolvedAt).length;
+    const pins = [...readPins(doc).values()].filter(
+      (pin) => !pin.resolvedAt
+    ).length;
     const { asked, made } = picksMade(choicesAsked(row), state);
     const picks =
       asked > 0
@@ -6706,9 +6707,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
           ...(doc.getMap("ink").toJSON() as Record<string, InkGroup>),
         };
-        const pins = Object.values(
-          doc.getMap("pins").toJSON() as Record<string, Pin>
-        )
+        const pins = [...readPins(doc).values()]
           .filter((pin) =>
             query.filter === "all"
               ? true
@@ -6771,12 +6770,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ...(asks ? { asks: true as const } : {}),
       };
       // An answer means everything before it was heard (core `pinHeard`).
-      const before = pinHeard(pin, pin, entry.at);
-      docs.transact(row.id, "hub", (doc) =>
-        doc
-          .getMap("pins")
-          .set(pin.id, { ...before, thread: [...before.thread, entry] })
-      );
+      docs.transact(row.id, "hub", (doc) => {
+        stampHeard(doc, pin, pin, entry.at);
+        writeEntry(doc, pin.id, entry);
+      });
       if (asks) {
         deps.pinAsked(row.id, text);
       }
@@ -6796,31 +6793,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): { link: string; number: number; pin: string; resolvedAt: string } => {
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       const at = new Date().toISOString();
-      const thread = text
-        ? [
-            ...pin.thread,
-            {
+      const said =
+        text && pin.thread.length < COMMENT_LIMITS.entries
+          ? {
               id: crypto.randomUUID(),
               by: "agent" as const,
               text,
               at,
-            },
-          ].slice(-COMMENT_LIMITS.entries)
-        : pin.thread;
+            }
+          : undefined;
       // The agent's resolve is an answer: the person's next look takes it in (core `newAnswer`).
       const resolved: Pin = {
         ...pin,
-        thread,
+        thread: said ? [...pin.thread, said] : pin.thread,
         resolvedAt: at,
         resolvedBy: "agent",
       };
       // The agent's own resolve is not the person's to tell it of.
-      docs.transact(row.id, "hub", (doc) =>
-        doc.getMap("pins").set(pin.id, {
-          ...resolved,
-          ...(pin.heard === undefined ? {} : { heard: pinSaid(resolved) }),
-        })
-      );
+      docs.transact(row.id, "hub", (doc) => {
+        if (said) {
+          writeEntry(doc, pin.id, said);
+        }
+        writeResolve(doc, pin.id, { at, by: "agent" });
+        if (pin.heard !== undefined) {
+          writeDelivery(doc, pin.id, {
+            ...(pin.sentAt ? { sentAt: pin.sentAt } : {}),
+            ...(pin.notSent ? { notSent: pin.notSent } : {}),
+            heard: pinSaid(resolved),
+          });
+        }
+      });
       return {
         pin: pin.id,
         number: pin.number,
@@ -6931,10 +6933,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             changes.items.map((item) => item.anchor)
           );
         }
-        const pins = live.getMap("pins");
-        for (const [pinId, pin] of [...pins.entries()] as [string, Pin][]) {
+        for (const pin of readPins(live).values()) {
           if (newAnswer(pin)) {
-            pins.set(pinId, { ...pin, seenAt: at });
+            seePin(live, pin.id, at);
           }
         }
       });

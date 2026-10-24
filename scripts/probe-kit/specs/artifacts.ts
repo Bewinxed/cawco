@@ -158,6 +158,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { writePagePins } from "../pins";
 import { shaped } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -1805,31 +1806,21 @@ const promoteChecks = async ({
   const pageFrame = await (
     await page.locator('iframe[title="Preview"]').elementHandle()
   )?.contentFrame();
-  await pageFrame?.evaluate(() => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: {
-            getMap: (n: string) => { set: (k: string, v: object) => void };
-          };
-        };
-      }
-    ).cawcoArtifact;
-    const now = new Date().toISOString();
-    const id = crypto.randomUUID();
-    doc.getMap("pins").set(id, {
-      id,
+  const pinnedAt = new Date().toISOString();
+  if (pageFrame) {
+    await writePagePins(pageFrame, {
+      id: crypto.randomUUID(),
       number: 1,
       kind: "comment",
       by: "person",
-      at: now,
+      at: pinnedAt,
       anchor: { selector: "h1", source: null, text: "Pick a hero" },
       elements: [],
       thread: [
-        { id: crypto.randomUUID(), by: "person", text: "Bigger", at: now },
+        { id: crypto.randomUUID(), by: "person", text: "Bigger", at: pinnedAt },
       ],
     });
-  });
+  }
   await until(
     "the pin in comment_read",
     () =>

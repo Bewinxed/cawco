@@ -63,6 +63,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { pagePins } from "../pins";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
@@ -290,22 +291,7 @@ const mode = async (page: Page, frame: Frame, key: "V" | "C") => {
 };
 
 /** The pins as the page's doc holds them. */
-const pinsOf = (frame: Frame) =>
-  frame.evaluate(() => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: { getMap: (name: string) => { toJSON: () => unknown } };
-        };
-      }
-    ).cawcoArtifact;
-    return Object.values(
-      doc.getMap("pins").toJSON() as Record<
-        string,
-        { number: number; thread: { sentAt?: string }[] }
-      >
-    );
-  });
+const pinsOf = async (frame: Frame) => Object.values(await pagePins(frame));
 
 /** (a) A comment written, sent, delivered, its thread opened and replied to: no pick, no Send; a Decisions tab note no Send either. */
 const commentLeg = async (

@@ -14,7 +14,7 @@
  * replaced by one snapshot.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
-import { honourDeletions } from "@cawco/core/comments";
+import { honourDeletions, splitWholePins } from "@cawco/core/comments";
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import { mapsOf } from "@cawco/core/doc-maps";
 import {
@@ -36,7 +36,13 @@ export const MAPS = [
   "state",
   "ink",
   "moved",
+  // A pin's parts, each its own key (core comments.ts `PIN_MAPS`).
   "pins",
+  "places",
+  "resolves",
+  "looks",
+  "deliveries",
+  "entries",
   // Deleted pins' tombstones (core comments.ts `goneOf`): a deletion no later write undoes.
   "gone",
   "comments",
@@ -263,6 +269,19 @@ export const createArtifactDocs = (deps: {
         keep(id, entry, update, origin, changed);
       }
     });
+    // A doc written while each pin was one whole value is split into its
+    // parts once, here, as the hub's own update: kept in the log like any
+    // other, so every client joining reads the parts, and the next load
+    // finds nothing to split.
+    let whole = 0;
+    doc.transact(() => {
+      whole = splitWholePins(doc);
+    }, "hub");
+    if (whole > 0) {
+      console.log(
+        `[artifacts] ${id}: ${whole} pin(s) written whole are kept in their parts now`
+      );
+    }
     // A pin deleted on any device stays deleted here: a write that reached
     // the hub before its tombstone (a page placing its pins on a stale load,
     // a delivery's stamp, an agent's reply) is undone as the tombstone lands,

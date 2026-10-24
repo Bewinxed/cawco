@@ -1,7 +1,7 @@
 /**
  * Pins and their threads on an artifact (Projects spec §5.7 "Comments on
  * previews", §5.10; tsk-3): every mark the person makes on an artifact is a
- * numbered pin in the doc's `pins` map. An annotation stands on a stroke
+ * numbered pin in its doc, written in parts (below). An annotation stands on a stroke
  * group's ink (core ink.ts); a comment stands on the element the person
  * tapped in Comment mode, or on ink by the radial menu's Comment, and carries
  * a thread the person and the agent both write. A comment is written whole,
@@ -29,7 +29,16 @@
  * it again. A mark on the page as a whole stands on its body ({@link wholePage}),
  * which every revision has: it never waits there.
  *
- * Every entry is a plain JSON value in its map.
+ * A pin is written across several maps, each of its parts its own key, so
+ * concurrent writes to one pin all survive the merge (a Yjs map keeps one
+ * value per key): its head in `pins` (id, number, kind, when, by whom), its
+ * place in `places` (anchor, elements, point, ink, moved), its resolve in
+ * `resolves`, the person's last look in `looks`, the hub's delivery stamps
+ * in `deliveries`, and each entry of its thread in `entries` under
+ * `<pin>:<entry>` ({@link PIN_MAPS}). A reply, a resolve and an anchor move
+ * made at once on two devices all land. Readers read the whole pin
+ * ({@link readPin}, {@link readPins}); writers write its parts.
+ * Every value is plain JSON.
  *
  * A person's reply to a pin, a resolve or reopen, and a delete, is one write
  * on the artifact's doc, whoever asks ({@link replyToPin}, {@link resolvePin},
@@ -38,13 +47,13 @@
  * `cawco:resolve` and `cawco:delete`).
  *
  * A delete is a tombstone, not an absence: the pin's id goes into the doc's
- * `gone` map ({@link buryPin}) as it leaves `pins`. A Yjs map's delete
+ * `gone` map ({@link buryPin}) as its parts leave the pin maps. A Yjs map's delete
  * removes only the writes it has seen, so a write made where the delete
  * hadn't arrived yet (a page placing its pins on a stale load, the hub
  * stamping a delivery, an agent's reply, another device) would stand the pin
  * up again when the two meet. Every doc that holds pins (the page's, the
- * pane's, the hub's) lets go of a pin its `gone` names whenever either map
- * changes ({@link honourDeletions}), so a deletion made anywhere, while any
+ * pane's, the hub's) lets go of a pin its `gone` names whenever a pin map
+ * or `gone` changes ({@link honourDeletions}), so a deletion made anywhere, while any
  * link is down, wins every merge, and every copy converges on "deleted".
  */
 
@@ -330,6 +339,259 @@ export interface Pin {
   thread: ThreadEntry[];
 }
 
+/** A pin's head (`pins`): what it is, written once as it is made. */
+export type PinHead = Pick<Pin, "at" | "by" | "id" | "kind" | "number">;
+
+/** Where a pin stands (`places`): moved by the page as its anchor finds its element again, or by the person placing it again. */
+export type PinPlace = Pick<
+  Pin,
+  "anchor" | "elements" | "ink" | "movedAt" | "point"
+>;
+
+/** A pin's resolve (`resolves`): when, and by whom; none while it is open. */
+export interface PinResolve {
+  at: string;
+  by: "person" | "agent";
+}
+
+/** The hub's stamps of a pin's deliveries (`deliveries`), the hub's alone. */
+export type PinDelivery = Pick<Pin, "heard" | "notSent" | "sentAt">;
+
+/**
+ * The maps a pin is written across ({@link Pin}'s parts): `pins` its head,
+ * `places` where it stands, `resolves` its resolve, `looks` the person's
+ * last look (`seenAt`), `deliveries` the hub's stamps, `entries` its
+ * thread, one key per entry (`<pin>:<entry>`).
+ */
+export const PIN_MAPS = [
+  "pins",
+  "places",
+  "resolves",
+  "looks",
+  "deliveries",
+  "entries",
+] as const;
+
+/** An entry's key in `entries`: its pin's id and its own. */
+export const entryKey = (pin: string, entry: string): string =>
+  `${pin}:${entry}`;
+
+/** The pin an `entries` key belongs to. */
+const entryPin = (key: string): string => key.slice(0, key.indexOf(":"));
+
+const headsOf = (doc: MapDoc) => doc.getMap("pins") as DocMap<PinHead>;
+const placesOf = (doc: MapDoc) => doc.getMap("places") as DocMap<PinPlace>;
+const resolvesOf = (doc: MapDoc) =>
+  doc.getMap("resolves") as DocMap<PinResolve>;
+const looksOf = (doc: MapDoc) => doc.getMap("looks") as DocMap<string>;
+const deliveriesOf = (doc: MapDoc) =>
+  doc.getMap("deliveries") as DocMap<PinDelivery>;
+const entriesOf = (doc: MapDoc) => doc.getMap("entries") as DocMap<ThreadEntry>;
+
+/** Oldest first: by when it was said, then by id. */
+const byAt = (a: ThreadEntry, b: ThreadEntry) =>
+  a.at.localeCompare(b.at) || a.id.localeCompare(b.id);
+
+/** Each pin's thread, oldest first, by pin id. */
+const threadsOf = (doc: MapDoc): Map<string, ThreadEntry[]> => {
+  const threads = new Map<string, ThreadEntry[]>();
+  for (const [key, entry] of entriesOf(doc).entries()) {
+    const pin = entryPin(key);
+    threads.set(pin, [...(threads.get(pin) ?? []), entry]);
+  }
+  for (const thread of threads.values()) {
+    thread.sort(byAt);
+  }
+  return threads;
+};
+
+/** Pin `head` whole, from its parts in `doc` and its thread. */
+const assemble = (
+  doc: MapDoc,
+  head: PinHead,
+  thread: ThreadEntry[]
+): Pin | undefined => {
+  const place = placesOf(doc).get(head.id);
+  if (!place) {
+    return;
+  }
+  const resolve = resolvesOf(doc).get(head.id);
+  const seenAt = looksOf(doc).get(head.id);
+  return {
+    ...head,
+    ...place,
+    ...(resolve ? { resolvedAt: resolve.at, resolvedBy: resolve.by } : {}),
+    ...(seenAt ? { seenAt } : {}),
+    ...deliveriesOf(doc).get(head.id),
+    thread,
+  };
+};
+
+/** Pin `id` whole, as its parts stand in `doc`; undefined when it has no head or no place. */
+export const readPin = (doc: MapDoc, id: string): Pin | undefined => {
+  const head = headsOf(doc).get(id);
+  if (!head) {
+    return;
+  }
+  const prefix = entryKey(id, "");
+  const thread = [...entriesOf(doc).entries()]
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([, entry]) => entry)
+    .sort(byAt);
+  return assemble(doc, head, thread);
+};
+
+/** Every pin of `doc`, whole, by id. */
+export const readPins = (doc: MapDoc): Map<string, Pin> => {
+  const threads = threadsOf(doc);
+  const pins = new Map<string, Pin>();
+  for (const head of headsOf(doc).values()) {
+    const pin = assemble(doc, head, threads.get(head.id) ?? []);
+    if (pin) {
+      pins.set(pin.id, pin);
+    }
+  }
+  return pins;
+};
+
+/** Pin `pin` written whole into `doc`, each part its own key: a new pin, or one brought back (a refused comment sent again). */
+export function writePin(doc: MapDoc, pin: Pin): void {
+  const {
+    thread,
+    anchor: _anchor,
+    elements: _elements,
+    ink: _ink,
+    movedAt: _movedAt,
+    point: _point,
+    resolvedAt,
+    resolvedBy,
+    seenAt,
+    sentAt,
+    heard,
+    notSent,
+    ...head
+  } = pin;
+  doc.transact(() => {
+    headsOf(doc).set(pin.id, head);
+    placesOf(doc).set(pin.id, placeOf(pin));
+    if (resolvedAt) {
+      resolvesOf(doc).set(pin.id, {
+        at: resolvedAt,
+        by: resolvedBy ?? "person",
+      });
+    }
+    if (seenAt) {
+      looksOf(doc).set(pin.id, seenAt);
+    }
+    if (sentAt || heard || notSent) {
+      deliveriesOf(doc).set(pin.id, {
+        ...(sentAt ? { sentAt } : {}),
+        ...(heard ? { heard } : {}),
+        ...(notSent ? { notSent } : {}),
+      });
+    }
+    for (const entry of thread) {
+      entriesOf(doc).set(entryKey(pin.id, entry.id), entry);
+    }
+  });
+}
+
+/** Where pin `pin` stands, as its place in `places` keeps it. */
+export const placeOf = (pin: Pin): PinPlace => ({
+  anchor: pin.anchor,
+  elements: pin.elements,
+  ...(pin.ink ? { ink: pin.ink } : {}),
+  ...(pin.movedAt ? { movedAt: pin.movedAt } : {}),
+  ...(pin.point ? { point: pin.point } : {}),
+});
+
+/** Where pin `id` stands now: the page's anchor found again, moved aside, or placed again by the person. */
+export function placePin(doc: MapDoc, id: string, place: PinPlace): void {
+  doc.transact(() => placesOf(doc).set(id, place));
+}
+
+/** One entry of pin `pin`'s thread written: the agent's reply, or an entry stamped sent. */
+export function writeEntry(doc: MapDoc, pin: string, entry: ThreadEntry): void {
+  doc.transact(() => entriesOf(doc).set(entryKey(pin, entry.id), entry));
+}
+
+/** Pin `pin` resolved by `by` at `at`, or reopened (`null`). */
+export function writeResolve(
+  doc: MapDoc,
+  pin: string,
+  resolve: PinResolve | null
+): void {
+  doc.transact(() => {
+    if (resolve) {
+      resolvesOf(doc).set(pin, resolve);
+    } else {
+      resolvesOf(doc).delete(pin);
+    }
+  });
+}
+
+/** The hub's stamps of pin `pin`'s deliveries, as they stand now (none: let go). */
+export function writeDelivery(
+  doc: MapDoc,
+  pin: string,
+  delivery: PinDelivery
+): void {
+  doc.transact(() => {
+    if (delivery.sentAt || delivery.heard || delivery.notSent) {
+      deliveriesOf(doc).set(pin, delivery);
+    } else {
+      deliveriesOf(doc).delete(pin);
+    }
+  });
+}
+
+/**
+ * Pin `current` as the session heard pin `sent` at `at`, written into
+ * `doc` ({@link pinHeard}): its delivery stamped, and each of the person's
+ * entries that went unchanged stamped sent, entry by entry.
+ */
+export function stampHeard(
+  doc: MapDoc,
+  current: Pin,
+  sent: Pin,
+  at: string
+): void {
+  const heard = pinHeard(current, sent, at);
+  doc.transact(() => {
+    writeDelivery(doc, current.id, {
+      ...(heard.sentAt ? { sentAt: heard.sentAt } : {}),
+      ...(heard.heard ? { heard: heard.heard } : {}),
+    });
+    const was = new Map(current.thread.map((entry) => [entry.id, entry]));
+    for (const entry of heard.thread) {
+      if (entry.sentAt && !was.get(entry.id)?.sentAt) {
+        writeEntry(doc, current.id, entry);
+      }
+    }
+  });
+}
+
+/**
+ * Converts a doc written before pins were split into parts (each pin one
+ * whole value in `pins`, its thread inside it) into its parts, once, as
+ * the hub loads it: every pin's head, place, resolve, look, stamps and
+ * every entry of its thread kept, nothing a person wrote dropped. Answers
+ * how many pins it converted.
+ */
+export function splitWholePins(doc: MapDoc): number {
+  const whole = [...(doc.getMap("pins") as DocMap<Pin>).values()].filter(
+    (value) => Array.isArray((value as Partial<Pin>).thread)
+  );
+  if (whole.length > 0) {
+    doc.transact(() => {
+      for (const pin of whole) {
+        writePin(doc, pin);
+      }
+    });
+  }
+  return whole.length;
+}
+
 /**
  * Whether pin `pin` holds an answer the person hasn't looked at: an agent's
  * entry in its thread, or the agent's resolve, newer than his last look
@@ -355,9 +617,8 @@ export const pinAsks = (pin: Pin): boolean => {
 
 /** Pin `pin` as looked at, at `at`: what {@link newAnswer} reads it by. */
 export function seePin(doc: MapDoc, pin: string, at: string): void {
-  const held = pinsOf(doc).get(pin);
-  if (held && (held.seenAt ?? "") < at) {
-    doc.transact(() => pinsOf(doc).set(pin, { ...held, seenAt: at }));
+  if (headsOf(doc).has(pin) && (looksOf(doc).get(pin) ?? "") < at) {
+    doc.transact(() => looksOf(doc).set(pin, at));
   }
 }
 
@@ -524,7 +785,7 @@ const entryProblem = (entry: unknown): string | null => {
   return null;
 };
 
-/** Why a pin may not be kept; null when it may. */
+/** Why a pin, read whole ({@link readPin}), may not be kept; null when it may. */
 export function pinProblem(value: unknown): string | null {
   if (!(
     isObject(value) &&
@@ -548,24 +809,54 @@ export function pinProblem(value: unknown): string | null {
   return null;
 }
 
+/** Why a pin's head is not one: its parts are its own keys, never inside it. */
+const headProblem = (head: unknown): string | null =>
+  isObject(head) &&
+  typeof head.id === "string" &&
+  typeof head.number === "number" &&
+  !("thread" in head) &&
+  !("anchor" in head)
+    ? null
+    : "A pin's head is its id, number, kind, when and by whom; its place, resolve and thread are their own keys.";
+
+/** Why an `entries` key and its value don't belong together: the key names its pin and the entry's own id. */
+const entryKeyProblem = (key: string, entry: unknown): string | null =>
+  isObject(entry) &&
+  typeof entry.id === "string" &&
+  key.endsWith(`:${entry.id}`)
+    ? null
+    : "An entry is kept under its pin's id and its own.";
+
 /**
- * Why a person's change from `before` to `after` (the doc's pins, by id) may
- * not be kept; null when it may. The person writes pins and their own
- * entries; the agent's entries are the agent's (comment_reply), so a person's
- * change keeps every one of them as it was. A pin `gone` names is deleted,
+ * Why a person's change of a doc's pins, `before` to `after`, may not be
+ * kept; null when it may. Each part is its own key ({@link PIN_MAPS}): a
+ * head holds no place or thread, and an entry stands under its pin's id and
+ * its own. The agent's entries are the agent's (comment_reply), so a
+ * person's change keeps every one of them as it was. A pin `gone` names is deleted,
  * whatever the change wrote of it: the doc lets it go ({@link honourDeletions}),
  * so it is not read.
  */
-export function pinsProblem(
-  before: Map<string, unknown>,
-  after: Map<string, unknown>,
-  gone: ReadonlyMap<string, unknown>
-): string | null {
-  const standing = [...after].filter(([id]) => !gone.has(id));
-  if (standing.length > COMMENT_LIMITS.pins) {
+export function pinsProblem(before: MapDoc, after: MapDoc): string | null {
+  const gone = goneOf(after);
+  const standing = (id: string) => !gone.has(id);
+  for (const head of headsOf(after).values()) {
+    const problem = headProblem(head);
+    if (problem) {
+      return problem;
+    }
+  }
+  for (const [key, entry] of entriesOf(after).entries()) {
+    const problem = entryKeyProblem(key, entry);
+    if (problem) {
+      return problem;
+    }
+  }
+  const pins = [...readPins(after).values()].filter((pin) => standing(pin.id));
+  if (pins.length > COMMENT_LIMITS.pins) {
     return `An artifact keeps at most ${COMMENT_LIMITS.pins} pins.`;
   }
-  for (const [id, pin] of standing) {
+  const was = readPins(before);
+  for (const pin of pins) {
     const problem = pinProblem(pin);
     if (problem) {
       return problem;
@@ -576,12 +867,12 @@ export function pinsProblem(
           .filter((entry) => entry.by === "agent")
           .map((entry) => JSON.stringify(entry))
       );
-    const now = agents((pin as Pin).thread);
-    const was = agents((before.get(id) as Pin | undefined)?.thread);
-    if ([...now].some((entry) => !was.has(entry))) {
+    const now = agents(pin.thread);
+    const then = agents(was.get(pin.id)?.thread);
+    if ([...now].some((entry) => !then.has(entry))) {
       return "The agent's replies are written by comment_reply, not by the page.";
     }
-    if ([...was].some((entry) => !now.has(entry))) {
+    if ([...then].some((entry) => !now.has(entry))) {
       return "The agent's replies stay in their thread.";
     }
   }
@@ -719,8 +1010,6 @@ const entryId = (): string => {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 };
 
-const pinsOf = (doc: MapDoc) => doc.getMap("pins") as DocMap<Pin>;
-
 /** The doc's tombstones: each deleted pin's id, and when it was deleted. */
 export const goneOf = (doc: MapDoc) => doc.getMap("gone") as DocMap<string>;
 
@@ -734,37 +1023,54 @@ export function buryPin(doc: MapDoc, id: string, at: string): void {
     if (!gone.has(id)) {
       gone.set(id, at);
     }
-    pinsOf(doc).delete(id);
+    letGo(doc, [id]);
   });
 }
+
+/** Every part of pins `ids` let go of `doc`: their heads, places, resolves, looks, stamps and entries. */
+const letGo = (doc: MapDoc, ids: readonly string[]): void => {
+  const buried = new Set(ids);
+  for (const name of PIN_MAPS) {
+    const map = doc.getMap(name);
+    for (const key of [...map.keys()]) {
+      if (buried.has(name === "entries" ? entryPin(key) : key)) {
+        map.delete(key);
+      }
+    }
+  }
+};
 
 /** The origin of the writes {@link honourDeletions} makes. */
 export const HONOUR_ORIGIN = "gone";
 
 /**
  * From now on, `doc` lets go of every pin its tombstones name, whenever
- * `pins` or `gone` changes (a merge from the device, the hub or another
+ * a pin map or `gone` changes (a merge from the device, the hub or another
  * view), and of any it holds now: a write that stood a deleted pin up again
  * is undone in the next transaction. Returns the watch's end.
  */
 export function honourDeletions(doc: MapDoc): () => void {
-  const pins = pinsOf(doc);
   const gone = goneOf(doc);
+  const maps = PIN_MAPS.map((name) => doc.getMap(name));
   const sweep = () => {
-    const buried = [...pins.keys()].filter((id) => gone.has(id));
-    if (buried.length > 0) {
-      doc.transact(() => {
-        for (const id of buried) {
-          pins.delete(id);
-        }
-      }, HONOUR_ORIGIN);
+    const held = PIN_MAPS.some((name) =>
+      [...doc.getMap(name).keys()].some((key) =>
+        gone.has(name === "entries" ? entryPin(key) : key)
+      )
+    );
+    if (held) {
+      doc.transact(() => letGo(doc, [...gone.keys()]), HONOUR_ORIGIN);
     }
   };
-  pins.observe(sweep);
+  for (const map of maps) {
+    map.observe(sweep);
+  }
   gone.observe(sweep);
   sweep();
   return () => {
-    pins.unobserve(sweep);
+    for (const map of maps) {
+      map.unobserve(sweep);
+    }
     gone.unobserve(sweep);
   };
 }
@@ -815,7 +1121,7 @@ export function replyToPin(
   pin: string,
   said: Said
 ): string | null {
-  const held = pinsOf(doc).get(pin);
+  const held = readPin(doc, pin);
   if (!held) {
     return "This pin is gone from the page, so the reply wasn't kept.";
   }
@@ -826,9 +1132,7 @@ export function replyToPin(
   if (typeof entry === "string") {
     return entry;
   }
-  doc.transact(() =>
-    pinsOf(doc).set(pin, { ...held, thread: [...held.thread, entry] })
-  );
+  writeEntry(doc, pin, entry);
   return null;
 }
 
@@ -856,7 +1160,7 @@ export function commentOn(
   said: Said,
   id: string = entryId()
 ): Pin | string {
-  const pins = pinsOf(doc);
+  const pins = headsOf(doc);
   if (pins.size >= COMMENT_LIMITS.pins) {
     return `A page keeps ${COMMENT_LIMITS.pins} comments, so this one wasn't kept. Delete one, then comment again.`;
   }
@@ -878,7 +1182,7 @@ export function commentOn(
     ...(target.point ? { point: target.point } : {}),
     thread: [entry],
   };
-  doc.transact(() => pins.set(pin.id, pin));
+  writePin(doc, pin);
   return pin;
 }
 
@@ -891,21 +1195,15 @@ export function resolvePin(
   pin: string,
   resolved: boolean
 ): string | null {
-  const held = pinsOf(doc).get(pin);
-  if (!held) {
+  if (!headsOf(doc).has(pin)) {
     return `This pin is gone from the page, so it wasn't ${resolved ? "resolved" : "reopened"}.`;
   }
-  const { resolvedAt: _was, resolvedBy: _by, ...rest } = held;
   const at = new Date().toISOString();
   // His own resolve or reopen is a look: whatever the agent answered there is seen.
-  doc.transact(() =>
-    pinsOf(doc).set(
-      pin,
-      resolved
-        ? { ...rest, resolvedAt: at, resolvedBy: "person", seenAt: at }
-        : { ...rest, seenAt: at }
-    )
-  );
+  doc.transact(() => {
+    writeResolve(doc, pin, resolved ? { at, by: "person" } : null);
+    looksOf(doc).set(pin, at);
+  });
   return null;
 }
 
@@ -917,16 +1215,16 @@ export function resolvePin(
  * it, from any device, stands it up again.
  */
 export function deletePin(doc: MapDoc, pin: string): string | null {
-  const pins = pinsOf(doc);
-  const held = pins.get(pin);
-  if (!held) {
+  const places = placesOf(doc);
+  const held = places.get(pin);
+  if (!(held && headsOf(doc).has(pin))) {
     return "This pin is gone from the page already, so there was nothing to delete.";
   }
   if (goneOf(doc).size >= COMMENT_LIMITS.gone) {
     return `A page keeps track of ${COMMENT_LIMITS.gone.toLocaleString()} deleted comments, so this one wasn't deleted. Resolve it instead.`;
   }
-  const shared = [...pins.values()].some(
-    (other) => other.id !== pin && !!held.ink && other.ink === held.ink
+  const shared = [...places.entries()].some(
+    ([other, place]) => other !== pin && !!held.ink && place.ink === held.ink
   );
   doc.transact(() => {
     buryPin(doc, pin, new Date().toISOString());

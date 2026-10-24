@@ -18,7 +18,7 @@
  * Built into the overlay's bundle as text (core preview-proxy.ts
  * `bundleOverlay`), and started from it as a blob (artifact.ts).
  */
-import { honourDeletions } from "@cawco/core/comments";
+import { honourDeletions, readPins } from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
   RESYNC_MS,
@@ -358,7 +358,7 @@ const connect = () => {
  */
 const refused = (reason: string) => {
   const refusedCopy = kept;
-  const pins = doc.getMap("pins").toJSON();
+  const pins = Object.fromEntries(readPins(doc));
   replaceDoc(generation + 1);
   post({ type: "refused", generation, pins, reason });
   (refusedCopy?.clearData() ?? Promise.resolve())

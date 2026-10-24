@@ -74,12 +74,13 @@ import { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
-import { wroteLine } from "../../../packages/core/src/comments";
+import { type Pin, wroteLine } from "../../../packages/core/src/comments";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, pressIn, type Spec, settle } from "../kit";
+import { writePagePins } from "../pins";
 import { shaped } from "../words";
 import {
   docOf,
@@ -391,17 +392,9 @@ const ownImages = (request: Seen): number => {
   return (request.body.match(IMAGE_BLOCK)?.length ?? 0) - before;
 };
 
-type Pins = Record<string, Record<string, unknown>>;
+type Pins = Record<string, Pin>;
 const numbered = (pins: Pins, number: number) =>
-  Object.values(pins).find((pin) => pin.number === number) as
-    | (Record<string, unknown> & {
-        heard?: string;
-        id: string;
-        resolvedAt?: string;
-        sentAt?: string;
-        thread: { by: string; sentAt?: string; text: string }[];
-      })
-    | undefined;
+  Object.values(pins).find((pin) => pin.number === number);
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 /** The Comments rail (DESIGN.md, The Comments rail). */
@@ -1031,61 +1024,44 @@ const linkDownChecks = async (on: On, frame: Frame) => {
 const oldPageAnchorChecks = async (on: On, frame: Frame) => {
   const { kit } = on;
   const before = heard.length;
-  const ids = await frame.evaluate(
-    ({ numbers }) => {
-      const main = document.querySelector("main");
-      const r = main?.getBoundingClientRect();
-      const { doc } = (
-        window as unknown as {
-          cawcoArtifact: {
-            doc: {
-              getMap: (n: string) => { set: (k: string, v: unknown) => void };
-              transact: (f: () => void) => void;
-            };
-          };
-        }
-      ).cawcoArtifact;
-      const at = new Date().toISOString();
-      const made = numbers.map((number, i) => ({
-        id: crypto.randomUUID(),
-        number,
-        kind: "comment",
-        anchor: {
-          selector: "body > main:nth-of-type(1)",
-          source: null,
-          text: "Words the page said in a state long gone.",
-          box: {
-            x: Math.round(r?.x ?? 0),
-            y: Math.round((r?.y ?? 0) + scrollY),
-            w: Math.round(r?.width ?? 0),
-            h: Math.round(r?.height ?? 0),
-          },
-        },
-        at,
-        by: "person",
-        elements: [],
-        point: { x: 0.9, y: 0.2 + i * 0.1 },
-        thread: [
-          {
-            id: crypto.randomUUID(),
-            by: "person",
-            text: `An old page comment ${number}.`,
-            at,
-            sentAt: at,
-          },
-        ],
-        sentAt: at,
-        ...(i === 0 ? { movedAt: at } : {}),
-      }));
-      doc.transact(() => {
-        for (const pin of made) {
-          doc.getMap("pins").set(pin.id, pin);
-        }
-      });
-      return made.map((pin) => pin.id);
+  const r = await frame.evaluate(() => {
+    const box = document.querySelector("main")?.getBoundingClientRect();
+    return {
+      x: Math.round(box?.x ?? 0),
+      y: Math.round((box?.y ?? 0) + scrollY),
+      w: Math.round(box?.width ?? 0),
+      h: Math.round(box?.height ?? 0),
+    };
+  });
+  const at = new Date().toISOString();
+  const made: Pin[] = [OLD_PINS[0], OLD_PINS[1]].map((number, i) => ({
+    id: crypto.randomUUID(),
+    number,
+    kind: "comment",
+    anchor: {
+      selector: "body > main:nth-of-type(1)",
+      source: null,
+      text: "Words the page said in a state long gone.",
+      box: r,
     },
-    { numbers: [OLD_PINS[0], OLD_PINS[1]] }
-  );
+    at,
+    by: "person",
+    elements: [],
+    point: { x: 0.9, y: 0.2 + i * 0.1 },
+    thread: [
+      {
+        id: crypto.randomUUID(),
+        by: "person",
+        text: `An old page comment ${number}.`,
+        at,
+        sentAt: at,
+      },
+    ],
+    sentAt: at,
+    ...(i === 0 ? { movedAt: at } : {}),
+  }));
+  await writePagePins(frame, ...made);
+  const ids = made.map((pin) => pin.id);
   const stood = await until(
     "both old page pins standing on the body",
     () => docOf(frame),

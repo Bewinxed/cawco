@@ -40,7 +40,10 @@ import {
   goneOf,
   isSendControl,
   type MarkPictures,
+  PIN_MAPS,
   type Pin,
+  readPins,
+  writePin,
 } from "@cawco/core/comments";
 import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
 import type { MapDoc } from "@cawco/core/doc-maps";
@@ -277,7 +280,7 @@ mirror.getMap("state").observe((event) => {
   watchers?.state(new Set([...event.keysChanged]), !event.transaction.local);
 });
 mirror.getMap("meta").observe(() => watchers?.meta());
-for (const name of ["ink", "moved", "pins"]) {
+for (const name of ["ink", "moved", ...PIN_MAPS]) {
   mirror.getMap(name).observe((event) => {
     watchers?.ink();
     if (name !== "moved" && event.transaction.local) {
@@ -378,7 +381,7 @@ const keepRefused = () => {
   }
   const { pins, why } = refusing;
   refusing = null;
-  const held = mirror.getMap("pins");
+  const held = readPins(mirror);
   const gone = goneOf(mirror);
   const at = new Date().toISOString();
   // One the hub holds deleted was deleted, not lost: it is not kept aside.
@@ -662,7 +665,7 @@ export const artifact = {
     const { notSent: _why, ...again } = pin;
     refusedPins = refusedPins.filter((one) => one.id !== id);
     storeRefused();
-    mirror.transact(() => mirror.getMap("pins").set(id, again));
+    writePin(mirror, again);
     return true;
   },
 

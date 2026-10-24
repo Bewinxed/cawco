@@ -16,11 +16,12 @@ import {
   generatedId,
   type MarkPicture,
   type PageAnchor,
-  type Pin,
   type PinnedElement,
   type PreviewMode,
   pinUnsent,
   previewMode,
+  readPin,
+  readPins,
   replyToPin,
   resolvePin,
 } from "@cawco/core/comments";
@@ -496,7 +497,7 @@ function tellPagePins() {
   }
   post("cawco:page-pins", {
     pins: [
-      ...(linked ? [] : Object.values(artifact.doc().getMap("pins").toJSON())),
+      ...(linked ? [] : [...readPins(artifact.doc()).values()]),
       // The hub refused these: each carries its reason (`notSent`).
       ...refused,
     ],
@@ -2535,7 +2536,7 @@ function groupPicture(id: string): Promise<string | null> {
 /** A pin's picture: its ink's, or the page round its element at its point. */
 function pinPicture(id: string): Promise<string | null> {
   const crop = pins.cropOf(id);
-  const pin = (artifact.doc().getMap("pins") as DocMap<Pin>).get(id);
+  const pin = readPin(artifact.doc(), id);
   if (pin?.ink) {
     return groupPicture(pin.ink);
   }
@@ -2549,7 +2550,7 @@ function pinPicture(id: string): Promise<string | null> {
  */
 async function markPictures(): Promise<MarkPicture[]> {
   const doc = artifact.doc();
-  const all = [...(doc.getMap("pins") as DocMap<Pin>).values()];
+  const all = [...readPins(doc).values()];
   const owed = all.filter(pinUnsent).sort((a, b) => a.number - b.number);
   const pinned = new Set(all.map((pin) => pin.ink));
   const loose = [...(doc.getMap("ink") as DocMap<InkGroup>).values()].filter(
@@ -2655,7 +2656,7 @@ async function personWrite(
   const error = write(pin);
   // The pin as this page holds it now (null once deleted): a host drawing it
   // from the page (its own doc doesn't hold it yet) draws it again from this.
-  const now = (artifact.doc().getMap("pins") as DocMap<Pin>).get(pin) ?? null;
+  const now = readPin(artifact.doc(), pin) ?? null;
   post(result, error ? { pin, ok: false, error, now } : { pin, ok: true, now });
 }
 
@@ -2843,9 +2844,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       pins.track(id);
       paint();
       // The open thread's element and what holds it, for its card's chain line.
-      const pin = id
-        ? (artifact.doc().getMap("pins") as DocMap<Pin>).get(id)
-        : undefined;
+      const pin = id ? readPin(artifact.doc(), id) : undefined;
       const el =
         pin && "selector" in pin.anchor ? locate(pin.anchor)?.el : undefined;
       if (id && el) {

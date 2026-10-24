@@ -280,7 +280,12 @@ import type { Frame, Locator, Page, WebSocketRoute } from "playwright-core";
 import { PNG } from "pngjs";
 import { applyUpdate, Doc } from "yjs";
 import { readWithin } from "../../../packages/core/src/bounded";
-import type { Pin } from "../../../packages/core/src/comments";
+import {
+  type PageAnchor,
+  PIN_MAPS,
+  type Pin,
+  readPins,
+} from "../../../packages/core/src/comments";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { pinName } from "../../../packages/core/src/pin-name";
@@ -299,6 +304,7 @@ import {
   settle,
   VIEWS,
 } from "../kit";
+import { writePagePins } from "../pins";
 import {
   docOf,
   dragFromIcon,
@@ -478,17 +484,9 @@ const setUp = async (kit: Kit): Promise<On> => {
   return { call, cdp, fleet, kit, page: desk, said, session };
 };
 
-type Pins = Record<string, Record<string, unknown>>;
+type Pins = Record<string, Pin>;
 const pinNumbered = (pins: Pins, number: number) =>
-  Object.values(pins).find((pin) => pin.number === number) as
-    | (Record<string, unknown> & {
-        anchor: Record<string, unknown> & {
-          source?: { file?: string; line?: number };
-        };
-        id: string;
-        thread: { by: string; sentAt?: string; text: string }[];
-      })
-    | undefined;
+  Object.values(pins).find((pin) => pin.number === number);
 
 /**
  * Until the page has heard the pane's mode: the overlay's layer takes the
@@ -1123,7 +1121,8 @@ const commentChecks = async (on: On, frame: Frame) => {
     (all) => !!pinNumbered(all, 1),
     10_000
   ).catch(() => ({}) as Pins);
-  const pin = pinNumbered(pins, 1);
+  const pin = pinNumbered(pins, 1) as
+    (Pin & { anchor: PageAnchor }) | undefined;
   const closed = await composer
     .waitFor({ state: "detached", timeout: 5000 })
     .then(() => true)
@@ -7123,7 +7122,8 @@ const insertChecks = async (on: On) => {
           };
         }
       ).cawcoArtifact;
-      const pins = doc.getMap("pins");
+      // Where a pin stands is its place (core comments.ts PIN_MAPS).
+      const places = doc.getMap("places");
       const marks = [...document.querySelectorAll<HTMLElement>("h2, img")];
       return ids.map((id) => {
         // The pill's tail corner, on its point (DESIGN.md, A pin's pill).
@@ -7152,7 +7152,7 @@ const insertChecks = async (on: On) => {
           on:
             (mark instanceof HTMLImageElement ? mark.alt : mark?.textContent) ??
             null,
-          moved: !!pins.get(id)?.movedAt,
+          moved: !!places.get(id)?.movedAt,
         };
       });
     },
@@ -10397,37 +10397,22 @@ const pageOnlyChecks = async (on: On, id: string) => {
 };
 
 /** A comment's pin written straight into the page's doc, as a page can: its one entry `text`. */
-const writePin = (frame: Frame, number: number, text: string) =>
-  frame.evaluate(
-    ({ n, words }) => {
-      const { doc } = (
-        window as unknown as {
-          cawcoArtifact: {
-            doc: {
-              getMap: (name: string) => {
-                set: (k: string, v: unknown) => void;
-              };
-            };
-          };
-        }
-      ).cawcoArtifact;
-      // A pin's id as the overlay mints one (a UUID): the pane hears only those (wire.ts `previewPinId`).
-      const id = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-      const at = new Date().toISOString();
-      doc.getMap("pins").set(id, {
-        id,
-        number: n,
-        kind: "comment",
-        anchor: { selector: "#one", source: null, text: "The first paragraph" },
-        at,
-        by: "person",
-        elements: [],
-        thread: [{ id: `${id}-1`, by: "person", text: words, at }],
-      });
-      return id;
-    },
-    { n: number, words: text }
-  );
+const writePin = async (frame: Frame, number: number, text: string) => {
+  // A pin's id as the overlay mints one (a UUID): the pane hears only those (wire.ts `previewPinId`).
+  const id = `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
+  const at = new Date().toISOString();
+  await writePagePins(frame, {
+    id,
+    number,
+    kind: "comment",
+    anchor: { selector: "#one", source: null, text: "The first paragraph" },
+    at,
+    by: "person",
+    elements: [],
+    thread: [{ id: `${id}-1`, by: "person", text, at }],
+  });
+  return id;
+};
 
 /** Pin `n`'s row in the rail: its "Not sent" line and its Try again, as drawn. */
 const notSentRow = async (on: On, n: number) => {
@@ -10891,7 +10876,7 @@ const hubHolds = (on: On, id: string) => {
       applyUpdate(doc, update);
     }
     return {
-      pins: doc.getMap("pins").toJSON() as Pins,
+      pins: Object.fromEntries(readPins(doc)) as Pins,
       gone: doc.getMap("gone").toJSON() as Record<string, string>,
     };
   } finally {
@@ -10899,25 +10884,39 @@ const hubHolds = (on: On, id: string) => {
   }
 };
 
-/** Whether the page's doc holds pin `pin`, holds its tombstone, and draws its pill. */
+/** Whether the page's doc holds any part of pin `pin`, holds its tombstone, and draws its pill. */
 const pageHolds = (frame: Frame, pin: string) =>
-  frame.evaluate((id) => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: { getMap: (name: string) => { has: (key: string) => boolean } };
-        };
-      }
-    ).cawcoArtifact;
-    return {
-      pin: doc.getMap("pins").has(id),
-      gone: doc.getMap("gone").has(id),
-      drawn:
-        document.querySelectorAll(
-          `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin-id="${CSS.escape(id)}"]`
-        ).length > 0,
-    };
-  }, pin);
+  frame.evaluate(
+    ({ id, names }) => {
+      const { doc } = (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: {
+              getMap: (name: string) => {
+                has: (key: string) => boolean;
+                keys: () => IterableIterator<string>;
+              };
+            };
+          };
+        }
+      ).cawcoArtifact;
+      return {
+        pin: names.some((name) =>
+          name === "entries"
+            ? [...doc.getMap(name).keys()].some((key) =>
+                key.startsWith(`${id}:`)
+              )
+            : doc.getMap(name).has(id)
+        ),
+        gone: doc.getMap("gone").has(id),
+        drawn:
+          document.querySelectorAll(
+            `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin-id="${CSS.escape(id)}"]`
+          ).length > 0,
+      };
+    },
+    { id: pin, names: [...PIN_MAPS] }
+  );
 
 /** The page's doc's link to the hub now (overlay artifact.ts `Link`). */
 const pageLink = (frame: Frame) =>

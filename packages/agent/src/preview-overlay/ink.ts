@@ -44,6 +44,7 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
+  readPins,
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
@@ -415,7 +416,7 @@ export function startInk(deps: InkDeps): Ink {
       doc,
       ink: doc.getMap("ink") as DocMap<InkGroup>,
       moved: doc.getMap("moved") as DocMap<InkGroup>,
-      pins: doc.getMap("pins") as DocMap<Pin>,
+      pins: readPins(doc),
     };
   };
 

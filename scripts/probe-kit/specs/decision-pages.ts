@@ -95,6 +95,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { pagePins } from "../pins";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
@@ -192,8 +193,8 @@ interface Doc {
   >;
 }
 
-const docOf = (frame: Frame): Promise<Doc> =>
-  frame.evaluate(() => {
+const docOf = async (frame: Frame): Promise<Doc> => {
+  const maps = await frame.evaluate(() => {
     const { doc } = (
       window as unknown as {
         cawcoArtifact: {
@@ -203,10 +204,11 @@ const docOf = (frame: Frame): Promise<Doc> =>
     ).cawcoArtifact;
     return {
       ink: doc.getMap("ink").toJSON(),
-      pins: doc.getMap("pins").toJSON(),
       state: doc.getMap("state").toJSON(),
-    } as Doc;
+    } as Omit<Doc, "pins">;
   });
+  return { ...maps, pins: (await pagePins(frame)) as Doc["pins"] };
+};
 
 /** A press in Comment opens the comment's composer; its words, then Comment, write the pin (DESIGN.md, Placing a comment). */
 const writeComment = async (desk: Page, words: string) => {

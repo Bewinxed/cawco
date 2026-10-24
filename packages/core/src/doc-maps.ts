@@ -38,7 +38,8 @@ export interface MapDoc {
 /**
  * The maps a page's overlay reads and writes, kept on the page by its
  * mirror: the decision state and the doc's meta, the ink, its moved groups,
- * the pins, their tombstones, and the person's looks at what changed.
+ * the pins in their parts (comments.ts `PIN_MAPS`), their tombstones, and
+ * the person's looks at what changed.
  */
 export const MIRRORED_MAPS = [
   "state",
@@ -46,6 +47,11 @@ export const MIRRORED_MAPS = [
   "ink",
   "moved",
   "pins",
+  "places",
+  "resolves",
+  "looks",
+  "deliveries",
+  "entries",
   "gone",
   "seen",
 ] as const;

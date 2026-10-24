@@ -122,6 +122,8 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import { type Pin, writePin } from "../../../packages/core/src/comments";
+import type { MapDoc } from "../../../packages/core/src/doc-maps";
 import { PAGE_SILENT_MS } from "../../../packages/core/src/preview-reach";
 import type {
   CanvasMap,
@@ -2897,7 +2899,7 @@ async function unreachedLeg(
 }
 
 /** A pin as the overlay writes one: open, on the page's body. */
-const pinOf = (number: number, at: string) => ({
+const pinOf = (number: number, at: string): Pin => ({
   id: `00000000-0000-4000-8000-00000000000${number}`,
   number,
   kind: "comment",
@@ -2932,10 +2934,8 @@ async function serveDoc(
   const yws = Bun.resolveSync("y-websocket", DASHBOARD);
   // The dashboard's own yjs (the probe kit depends on none): the part of it this serves with.
   const Y = (await import(Bun.resolveSync("yjs", DASHBOARD))) as {
-    Doc: new () => {
-      getMap: (name: string) => { set: (key: string, value: unknown) => void };
+    Doc: new () => MapDoc & {
       on: (event: "update", run: (update: Uint8Array) => void) => void;
-      transact: (run: () => void) => void;
     };
   };
   type YDoc = InstanceType<typeof Y.Doc>;
@@ -3011,7 +3011,7 @@ async function serveDoc(
       for (const { doc } of docs.values()) {
         doc.transact(() => {
           for (let number = 1; number <= count; number += 1) {
-            doc.getMap("pins").set(pinOf(number, at).id, pinOf(number, at));
+            writePin(doc, pinOf(number, at));
           }
         });
       }

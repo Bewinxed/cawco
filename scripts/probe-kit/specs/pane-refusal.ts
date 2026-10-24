@@ -18,13 +18,24 @@
  *   thread, unsent, with the hub's reason and Try again, kept on the device. Try again lands it on
  *   the hub beside the agent's answer, the row's reason goes, and the hub's
  *   doc holds nothing pending.
+ * - (w) A doc the hub kept with each pin one whole value (as every doc stored
+ *   before pins were written in parts): the hub, started again, keeps it in
+ *   its parts as it loads it, and comment_read reads the pin as it was.
  *
  *   bun scripts/probe-kit/run.ts pane-refusal
  */
 import type { Page, WebSocketRoute } from "playwright-core";
 import { messageAuth, WebsocketProvider } from "y-websocket";
-import { Doc } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
+import {
+  deletePin,
+  type Pin,
+  pinDelivered,
+  readPins,
+  writePin,
+} from "../../../packages/core/src/comments";
 import { commentWords } from "../../../packages/core/src/words/comments";
+import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -36,6 +47,8 @@ const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const RAIL = '[data-slot="comment-rail"]';
 /** The pane's own link to the doc, through the dashboard's relay (artifact-doc.ts). */
 const PANE_SOCKET = /\/ws\/artifact\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/;
+const PAGE_HTML =
+  "<!doctype html><html><body><main><h1>Refusal</h1><p>A page to pin.</p></main></body></html>";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const asks = new Map<string, { input: object; name: string }>();
@@ -140,13 +153,10 @@ const joinHub = async (
   };
 };
 
-/** The hub's doc as a fresh client reads it: its pins, and whether anything waits there unintegrated. */
+/** The hub's doc as a fresh client reads it: its pins, whole, and whether anything waits there unintegrated. */
 const hubDoc = async (fleet: KitFleet, session: string, artifact: string) => {
   const client = await joinHub(fleet, session, artifact);
-  const pins = client.doc.getMap("pins").toJSON() as Record<
-    string,
-    { thread: { by: string; text: string }[] }
-  >;
+  const pins = Object.fromEntries(readPins(client.doc));
   const pending =
     client.doc.store.pendingStructs !== null ||
     client.doc.store.pendingDs !== null;
@@ -154,7 +164,7 @@ const hubDoc = async (fleet: KitFleet, session: string, artifact: string) => {
   return { pins, pending };
 };
 
-const personPin = (id: string, number: number, words: string) => {
+const personPin = (id: string, number: number, words: string): Pin => {
   const at = new Date().toISOString();
   return {
     id,
@@ -185,18 +195,14 @@ const legH = async (
   const bad = crypto.randomUUID();
   const after = crypto.randomUUID();
   // An entry past its bound (core comments.ts `COMMENT_LIMITS.text`).
-  writer.doc
-    .getMap("pins")
-    .set(bad, personPin(bad, 7, "PROBE-TOO-LONG ".repeat(4000)));
+  writePin(writer.doc, personPin(bad, 7, "PROBE-TOO-LONG ".repeat(4000)));
   await until(
     "(h) the hub's refusal",
     () => writer.refusals[0],
     Boolean,
     15_000
   ).catch(() => undefined);
-  writer.doc
-    .getMap("pins")
-    .set(after, personPin(after, 8, "PROBE-AFTER-REFUSAL"));
+  writePin(writer.doc, personPin(after, 8, "PROBE-AFTER-REFUSAL"));
   await Bun.sleep(3000);
   const stood = writer.link.wsconnected;
   const closed = writer.closes.length;
@@ -204,7 +210,7 @@ const legH = async (
   writer.leave();
   const fresh = await joinHub(fleet, session, artifact);
   const good = crypto.randomUUID();
-  fresh.doc.getMap("pins").set(good, personPin(good, 9, "PROBE-FRESH-WRITE"));
+  writePin(fresh.doc, personPin(good, 9, "PROBE-FRESH-WRITE"));
   const landed = await until(
     "(h) a fresh client's write on the hub",
     async () => (await hubDoc(fleet, session, artifact)).pins[good],
@@ -227,7 +233,7 @@ const legH = async (
   );
   // The fresh pin goes again, so the pane's leg reads one comment.
   const tidy = await joinHub(fleet, session, artifact);
-  tidy.doc.getMap("pins").delete(good);
+  deletePin(tidy.doc, good);
   await Bun.sleep(1000);
   tidy.leave();
 };
@@ -466,9 +472,137 @@ const notSentLines = (page: Page) =>
 /** Pin 1's id on the hub. */
 const pinOne = async (fleet: KitFleet, session: string, artifact: string) => {
   const { pins } = await hubDoc(fleet, session, artifact);
-  return Object.entries(pins).find(
-    ([, pin]) => (pin as unknown as { number: number }).number === 1
-  )?.[0];
+  return Object.values(pins).find((pin) => pin.number === 1)?.id;
+};
+
+/** The updates the hub keeps for `artifact`, in order. */
+const storedUpdates = (fleet: KitFleet, artifact: string) =>
+  fleet.query<{ update: Uint8Array }>(
+    'SELECT "update" FROM artifact_updates WHERE artifact_id = ? ORDER BY seq',
+    artifact
+  );
+
+/** A doc of the updates the hub keeps for `artifact`. */
+const storedDoc = (fleet: KitFleet, artifact: string) => {
+  const doc = new Doc();
+  for (const { update } of storedUpdates(fleet, artifact)) {
+    applyUpdate(doc, update);
+  }
+  return doc;
+};
+
+/** The hub stopped and started again, the agent joined to it again. */
+const restartHub = async (fleet: KitFleet) => {
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+};
+
+/**
+ * (w) A doc the hub kept before pins were written in parts, each pin one
+ * whole value in `pins` with its thread inside it (as every doc stored
+ * before this holds them): the hub, started again, keeps it in its parts
+ * as it loads it, in its own update in the log, and comment_read reads the
+ * pin as it was, nothing of it lost.
+ */
+const legW = async (kit: Kit, fleet: KitFleet, session: string) => {
+  const made = await callIn(fleet, session, CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this older page: pin anything that reads wrong",
+    name: "whole-pins",
+    html: PAGE_HTML,
+  });
+  const artifact = made.match(ANSWERED_ID)?.[1];
+  if (!artifact) {
+    kit.check("(w) the older page is made", false, made.slice(0, 400));
+    return;
+  }
+  await fleet.stop("hub");
+  // The pin as a doc stored before kept it: whole, answered, resolved by the agent, looked at, delivered.
+  const doc = storedDoc(fleet, artifact);
+  const had = encodeStateVector(doc);
+  const said = personPin(crypto.randomUUID(), 1, "PROBE-WHOLE-COMMENT");
+  const answeredAt = new Date(Date.parse(said.at) + 1000).toISOString();
+  const whole: Pin = {
+    ...pinDelivered(
+      {
+        ...said,
+        thread: [
+          ...said.thread,
+          {
+            id: crypto.randomUUID(),
+            by: "agent",
+            text: "PROBE-WHOLE-ANSWER",
+            at: answeredAt,
+          },
+        ],
+      },
+      answeredAt
+    ),
+    resolvedAt: answeredAt,
+    resolvedBy: "agent",
+    seenAt: answeredAt,
+  };
+  doc.getMap("pins").set(whole.id, whole);
+  // Kept as the hub keeps an update (db/artifacts.ts `append`): next in the log, and the artifact's seq moved to it.
+  const seq =
+    (fleet.query<{ seq: number }>(
+      "SELECT seq FROM artifacts WHERE id = ?",
+      artifact
+    )[0]?.seq ?? 0) + 1;
+  fleet.write(
+    'INSERT INTO artifact_updates (artifact_id, seq, "update") VALUES (?, ?, unhex(?))',
+    artifact,
+    seq,
+    Buffer.from(encodeStateAsUpdate(doc, had)).toString("hex")
+  );
+  fleet.write("UPDATE artifacts SET seq = ? WHERE id = ?", seq, artifact);
+  doc.destroy();
+  await restartHub(fleet);
+  const read = await until(
+    "(w) the whole pin through comment_read",
+    async () =>
+      (
+        await fleet.api<CommentRead>(
+          `/api/instances/${session}/artifacts/comments?artifact=${artifact}&filter=all`
+        )
+      ).artifacts[0]?.pins.find((one) => one.id === whole.id),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  const lost = Object.entries(whole)
+    .filter(
+      ([key, value]) =>
+        JSON.stringify((read as Record<string, unknown> | undefined)?.[key]) !==
+        JSON.stringify(value)
+    )
+    .map(([key]) => key);
+  // Kept in the log in its parts: the next load finds nothing whole to split.
+  const kept = await until(
+    "(w) the pin's parts in the hub's log",
+    () => {
+      const now = storedDoc(fleet, artifact);
+      const head = now.getMap("pins").get(whole.id) as
+        Record<string, unknown> | undefined;
+      const entries = [...now.getMap("entries").keys()].filter((key) =>
+        key.startsWith(`${whole.id}:`)
+      ).length;
+      const pin = readPins(now).get(whole.id);
+      now.destroy();
+      return head && !("thread" in head) && entries === 2 && pin
+        ? { head: Object.keys(head), entries, thread: pin.thread.length }
+        : undefined;
+    },
+    Boolean,
+    15_000
+  ).catch(() => undefined);
+  kit.check(
+    "(w) a doc stored with each pin whole is kept in its parts once the hub loads it, in the hub's log: comment_read reads the pin as it was (its thread, the agent's resolve, the look, the delivery), nothing lost",
+    !!read && lost.length === 0 && !!kept,
+    `comment_read: ${read ? `differs in ${lost.join(", ") || "nothing"}` : "no pin"}; in the log: ${kept ? JSON.stringify(kept) : "not in parts within 15 s"}`
+  );
 };
 
 const run = async (kit: Kit) => {
@@ -488,7 +622,7 @@ const run = async (kit: Kit) => {
     does: "judge",
     ask: "Judge this page: pin anything that reads wrong",
     name: "pane-refusal",
-    html: "<!doctype html><html><body><main><h1>Refusal</h1><p>A page to pin.</p></main></body></html>",
+    html: PAGE_HTML,
   });
   const artifact = made.match(ANSWERED_ID)?.[1];
   if (!artifact) {
@@ -497,11 +631,12 @@ const run = async (kit: Kit) => {
   }
   const seed = await joinHub(fleet, session, artifact);
   const pin = crypto.randomUUID();
-  seed.doc.getMap("pins").set(pin, personPin(pin, 1, "PROBE-PERSON-COMMENT"));
+  writePin(seed.doc, personPin(pin, 1, "PROBE-PERSON-COMMENT"));
   await Bun.sleep(1000);
   seed.leave();
   await legH(kit, fleet, session, artifact);
   await legP(kit, fleet, session, artifact);
+  await legW(kit, fleet, session);
 };
 
 export default { name: "pane-refusal", run } satisfies Spec;

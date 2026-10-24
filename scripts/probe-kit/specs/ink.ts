@@ -56,6 +56,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CDPSession, Frame, Page, Request } from "playwright-core";
+import { PIN_MAPS } from "../../../packages/core/src/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, traceMain } from "../frames";
 import {
@@ -69,6 +70,7 @@ import {
   settle,
 } from "../kit";
 import { emulateMotion } from "../motion";
+import { pinsOf } from "../pins";
 
 /** The owner's test-map page, as he marked it (2026-10-16). */
 export const TEST_MAP = readFileSync(
@@ -392,28 +394,29 @@ export const strokeOver = async (
   return { from, to };
 };
 
-/** The page's doc's maps as JSON. */
-export const docOf = (frame: Frame) =>
-  frame.evaluate(() => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: { getMap: (n: string) => { toJSON: () => object } };
-        };
-      }
-    ).cawcoArtifact;
-    return {
-      ink: doc.getMap("ink").toJSON() as Record<
-        string,
-        Record<string, unknown>
-      >,
-      moved: doc.getMap("moved").toJSON() as Record<string, unknown>,
-      pins: doc.getMap("pins").toJSON() as Record<
-        string,
-        Record<string, unknown>
-      >,
-    };
-  });
+/** The page's doc's maps as JSON, its pins assembled from their parts. */
+export const docOf = async (frame: Frame) => {
+  const maps = await frame.evaluate(
+    (names) => {
+      const { doc } = (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: { getMap: (n: string) => { toJSON: () => object } };
+          };
+        }
+      ).cawcoArtifact;
+      return Object.fromEntries(
+        names.map((name) => [name, doc.getMap(name).toJSON()])
+      ) as Record<string, Record<string, unknown>>;
+    },
+    ["ink", "moved", ...PIN_MAPS]
+  );
+  return {
+    ink: maps.ink as Record<string, Record<string, unknown>>,
+    moved: maps.moved as Record<string, unknown>,
+    pins: pinsOf(maps),
+  };
+};
 
 /** The overlay's shadow root in a frame: the icon, the menu, their animations. */
 const chromeOf = (frame: Frame) =>

@@ -5,6 +5,7 @@ import {
   goneOf,
   honourDeletions,
   type Pin,
+  readPins,
   replyToPin,
   resolvePin,
   type Said,
@@ -138,9 +139,7 @@ const viewOf = (doc: Doc): ArtifactView => {
   const meta = doc.getMap("meta");
   const gone = goneOf(doc);
   // One its tombstone names is deleted, though a merge wrote it a moment ago.
-  const pins = Object.values(
-    doc.getMap("pins").toJSON() as Record<string, Pin>
-  ).filter((pin) => !gone.has(pin.id));
+  const pins = [...readPins(doc).values()].filter((pin) => !gone.has(pin.id));
   const changes = (meta.get("changes") as ArtifactChanges | undefined) ?? null;
   return {
     changes,
@@ -221,9 +220,9 @@ export interface RefusedEntries {
  * (overlay artifact.ts `keepRefused`), or deleted.
  */
 const lostEntries = (pins: Record<string, Pin>, doc: Doc): RefusedEntries[] => {
-  const held = doc.getMap("pins");
+  const held = readPins(doc);
   return Object.values(pins).flatMap((pin) => {
-    const now = held.get(pin.id) as Pin | undefined;
+    const now = held.get(pin.id);
     if (!now) {
       return [];
     }
@@ -420,7 +419,7 @@ export function joinArtifact(
     const said = reason.trim() || "The hub didn't keep it.";
     refusing = {
       why: ENDS_SENTENCE.test(said) ? said : `${said}.`,
-      pins: from.getMap("pins").toJSON() as Record<string, Pin>,
+      pins: Object.fromEntries(readPins(from)),
     };
     // Out of y-websocket's own message handling first.
     queueMicrotask(again);

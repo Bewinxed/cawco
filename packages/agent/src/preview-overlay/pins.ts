@@ -55,10 +55,13 @@ import {
   type Pin,
   type PinnedElement,
   pinUnsent,
+  placeOf,
+  placePin,
+  readPins,
   goneOf as tombstonesOf,
   wholePage,
+  writePin,
 } from "@cawco/core/comments";
-import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
@@ -390,7 +393,8 @@ export function startPins(deps: PinsDeps): Pins {
     "position:fixed;left:0;top:0;z-index:2147483646;overflow:visible;pointer-events:none;margin:0;padding:0;border:0";
   document.documentElement.append(fixed);
 
-  const pinsMap = () => artifact.doc().getMap("pins") as DocMap<Pin>;
+  /** The page's pins as its doc holds them, each whole (core `readPins`). */
+  const pinsMap = () => readPins(artifact.doc());
   /**
    * Pin `id`'s thread opened in the host, carrying the pin as this page
    * holds it: a host whose own doc doesn't hold it yet (it reaches the
@@ -868,12 +872,13 @@ export function startPins(deps: PinsDeps): Pins {
       return;
     }
     const at = new Date().toISOString();
-    artifact.doc().transact(() => {
+    const doc = artifact.doc();
+    doc.transact(() => {
       for (const pin of found) {
-        pins.set(pin.id, pin);
+        placePin(doc, pin.id, placeOf(pin));
       }
       for (const pin of aside) {
-        pins.set(pin.id, { ...pin, movedAt: at });
+        placePin(doc, pin.id, { ...placeOf(pin), movedAt: at });
       }
     });
   };
@@ -1243,10 +1248,8 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
 
-  const write = (pin: Pin) => {
-    const doc = artifact.doc();
-    doc.transact(() => pinsMap().set(pin.id, pin));
-  };
+  /** A new pin written whole (its head, place and thread its own keys). */
+  const write = (pin: Pin) => writePin(artifact.doc(), pin);
 
   /** Where the viewport's `x`, `y` is on `el`'s box, as fractions; 0 along an extent it has none of (a body whose content is all fixed). */
   const pointOn = (el: Element, x: number, y: number) => {
@@ -1346,9 +1349,8 @@ export function startPins(deps: PinsDeps): Pins {
       if (!pin) {
         return;
       }
-      const { movedAt: _moved, ink: _ink, ...rest } = pin;
-      write({
-        ...rest,
+      // Its place alone: a resolve or a reply written meanwhile stands.
+      placePin(artifact.doc(), id, {
         anchor: deps.anchorOf(el),
         elements: [deps.describe(el)],
         point: pointOn(el, x, y),

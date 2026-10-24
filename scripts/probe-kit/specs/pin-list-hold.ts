@@ -36,9 +36,11 @@
  *    page writes after it is in the list.
  */
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
+import type { Pin } from "../../../packages/core/src/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { writePagePins } from "../pins";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
@@ -380,45 +382,30 @@ const pinned = async (at: At): Promise<HubPin[]> => {
       !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
         .cawcoArtifact?.doc
   );
-  await frame.evaluate(() => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: {
-            getMap: (n: string) => { set: (k: string, v: object) => void };
-            transact: (f: () => void) => void;
-          };
-        };
-      }
-    ).cawcoArtifact;
-    const pin = (number: number, selector: string, text: string) => ({
-      id: `probe-pin-${number}`,
-      number,
-      kind: "comment",
-      anchor: { selector, text },
-      at: new Date().toISOString(),
-      by: "person",
-      elements: [],
-      point: { x: 0.5, y: 0.5 },
-      thread: [
-        {
-          id: `probe-entry-${number}`,
-          by: "person",
-          text: `Pin ${number}`,
-          at: new Date().toISOString(),
-        },
-      ],
-    });
-    doc.transact(() => {
-      const pins = doc.getMap("pins");
-      pins.set(
-        "probe-pin-1",
-        pin(1, "#here", "The paragraph pin 1 stands on.")
-      );
-      pins.set("probe-pin-2", pin(2, "#gone-two", "A card the page dropped"));
-      pins.set("probe-pin-3", pin(3, "#gone-three", "Another card it dropped"));
-    });
+  const pinAt = (number: number, selector: string, text: string): Pin => ({
+    id: `probe-pin-${number}`,
+    number,
+    kind: "comment",
+    anchor: { selector, source: null, text },
+    at: new Date().toISOString(),
+    by: "person",
+    elements: [],
+    point: { x: 0.5, y: 0.5 },
+    thread: [
+      {
+        id: `probe-entry-${number}`,
+        by: "person",
+        text: `Pin ${number}`,
+        at: new Date().toISOString(),
+      },
+    ],
   });
+  await writePagePins(
+    frame,
+    pinAt(1, "#here", "The paragraph pin 1 stands on."),
+    pinAt(2, "#gone-two", "A card the page dropped"),
+    pinAt(3, "#gone-three", "Another card it dropped")
+  );
   const moved = await until(
     "the overlay moving pins 2 and 3 aside",
     () => hubPins(at),
@@ -693,34 +680,27 @@ const rejoined = async (at: At) => {
     10_000
   ).catch(() => null);
   const frame = await pageFrame(page);
-  await frame.evaluate(() => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: {
-            getMap: (n: string) => { set: (k: string, v: object) => void };
-          };
-        };
-      }
-    ).cawcoArtifact;
-    doc.getMap("pins").set("probe-pin-4", {
-      id: "probe-pin-4",
-      number: 4,
-      kind: "comment",
-      anchor: { selector: "#here", text: "The paragraph pin 1 stands on." },
-      at: new Date().toISOString(),
-      by: "person",
-      elements: [],
-      point: { x: 0.2, y: 0.5 },
-      thread: [
-        {
-          id: "probe-entry-4",
-          by: "person",
-          text: "Pin 4",
-          at: new Date().toISOString(),
-        },
-      ],
-    });
+  await writePagePins(frame, {
+    id: "probe-pin-4",
+    number: 4,
+    kind: "comment",
+    anchor: {
+      selector: "#here",
+      source: null,
+      text: "The paragraph pin 1 stands on.",
+    },
+    at: new Date().toISOString(),
+    by: "person",
+    elements: [],
+    point: { x: 0.2, y: 0.5 },
+    thread: [
+      {
+        id: "probe-entry-4",
+        by: "person",
+        text: "Pin 4",
+        at: new Date().toISOString(),
+      },
+    ],
   });
   const after = await until(
     "pin 4 in the pane's list",

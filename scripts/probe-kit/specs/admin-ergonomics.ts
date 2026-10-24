@@ -396,10 +396,7 @@ const run = async (kit: Kit) => {
   await until(
     "the pin's words in the doc",
     () => docOf(frame),
-    (now) =>
-      Object.values(now.pins).some(
-        (pin) => (pin.thread as unknown[] | undefined)?.length === 1
-      ),
+    (now) => Object.values(now.pins).some((pin) => pin.thread.length === 1),
     5000
   );
   await page.keyboard.press("Escape");

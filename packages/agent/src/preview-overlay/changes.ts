@@ -16,8 +16,7 @@
  * (`cawco:step-change`). A press on a washed element in Interact mode is a
  * look at it (`cawco:change-pressed`).
  */
-import type { PageAnchor, Pin } from "@cawco/core/comments";
-import type { DocMap } from "@cawco/core/doc-maps";
+import { type PageAnchor, readPins } from "@cawco/core/comments";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
 
@@ -130,7 +129,7 @@ export function startChanges(deps: ChangesDeps): Changes {
 
   /** The stops in page order: each change with the pins in, holding or inside it; each other pin; changes not on the page last. */
   function tellStops() {
-    const pins = artifact.doc().getMap("pins") as DocMap<Pin>;
+    const pins = readPins(artifact.doc());
     const stops: Stop[] = anchors.map((anchor) => ({
       anchors: [anchor],
       el: elementOf(anchor),

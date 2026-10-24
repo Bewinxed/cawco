@@ -35,7 +35,7 @@ import {
   goneProblem,
   isSendControl,
   type MarkPictures,
-  type Pin,
+  PIN_MAPS,
   pinsProblem,
   SEND_CONTROLS,
   type SendBody,
@@ -62,16 +62,7 @@ import {
   writeSyncStep2,
   writeUpdate,
 } from "y-protocols/sync";
-import {
-  applyUpdate,
-  ContentAny,
-  Doc,
-  decodeUpdate,
-  encodeStateAsUpdate,
-  getItem,
-  Item,
-  Map as YMap,
-} from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, Map as YMap } from "yjs";
 import {
   type ArtifactClient,
   type ArtifactDocs,
@@ -229,8 +220,8 @@ const filesProblem = (
     : null;
 };
 
-/** The maps a person's ink, pins, deleted pins and looks write, on any artifact (core ink.ts, comments.ts). */
-const INK_MAPS = ["ink", "moved", "pins", "gone", "seen"];
+/** The maps a person's ink, pins (each in its parts, core `PIN_MAPS`), deleted pins and looks write, on any artifact (core ink.ts, comments.ts). */
+const INK_MAPS: string[] = ["ink", "moved", ...PIN_MAPS, "gone", "seen"];
 
 /** Why the ink, moved groups, pins, deleted pins and looks in `trial`, `doc` after a person's update, may not be kept; null when they may. */
 const inkMapsProblem = (doc: Doc, trial: Doc): string | null => {
@@ -241,11 +232,7 @@ const inkMapsProblem = (doc: Doc, trial: Doc): string | null => {
       [...trial.getMap("moved").entries()]
     ) ??
     goneProblem(new Map(doc.getMap("gone").entries()), gone) ??
-    pinsProblem(
-      new Map(doc.getMap("pins").entries()),
-      new Map(trial.getMap("pins").entries()),
-      gone
-    ) ??
+    pinsProblem(doc, trial) ??
     seenProblem(new Map(trial.getMap("seen").entries()))
   );
 };
@@ -315,51 +302,12 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
 };
 
 /** Why `update` from a person's client may not be applied to `doc`, or null. */
-/**
- * Why `update` would lose the person's words: an entry of theirs one of its
- * comments carried that the merged doc holds not, because another write to
- * the same comment won the merge (a map keeps one value per key, the write
- * of the client with the higher id: a pane that had not heard the agent's
- * answer replied over it). Kept, the words would be gone unsaid; refused,
- * the writer keeps them aside and sends them again. A comment deleted
- * meanwhile is not read.
- */
-const crossedProblem = (trial: Doc, update: Uint8Array): string | null => {
-  const pins = trial.getMap("pins");
-  for (const struct of decodeUpdate(update).structs) {
-    if (!(struct instanceof Item && struct.content instanceof ContentAny)) {
-      continue;
-    }
-    let held: Item;
-    try {
-      held = getItem(trial.store, struct.id) as Item;
-    } catch {
-      continue;
-    }
-    if (!(held.deleted && held.parent === pins && held.parentSub)) {
-      continue;
-    }
-    const wrote = struct.content.arr.at(-1) as Pin | undefined;
-    const now = pins.get(held.parentSub) as Pin | undefined;
-    if (!(now && Array.isArray(wrote?.thread))) {
-      continue;
-    }
-    const has = new Set(now.thread.map((entry) => entry.id));
-    if (
-      wrote.thread.some((entry) => entry.by === "person" && !has.has(entry.id))
-    ) {
-      return `Your words in comment ${now.number} crossed another write to it, so they weren't kept.`;
-    }
-  }
-  return null;
-};
-
 export const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
   const trial = new Doc();
   try {
     applyUpdate(trial, encodeStateAsUpdate(doc));
     applyUpdate(trial, update);
-    return stateProblem(doc, trial) ?? crossedProblem(trial, update);
+    return stateProblem(doc, trial);
   } catch {
     return "That is not a Yjs update.";
   } finally {

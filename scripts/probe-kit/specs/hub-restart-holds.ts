@@ -44,6 +44,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
+import { writePin } from "../../../packages/core/src/comments";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate } from "../gate";
@@ -395,7 +396,7 @@ const legA = async (legs: Legs) => {
   await until("(a) the page's doc joined", () => link.synced, Boolean, 30_000);
   const at = new Date().toISOString();
   const before = heard.length;
-  doc.getMap("pins").set(pin, {
+  writePin(doc, {
     id: pin,
     number: 1,
     kind: "comment",

@@ -32,6 +32,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
+import { type Pin, writePin } from "../../../packages/core/src/comments";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -95,7 +96,7 @@ const pinPage = (): string =>
   ).join("")}</main></body></html>`;
 
 /** A pin as the preview overlay writes it: the element under it whole, its anchor, its point, its thread. */
-const pinOf = (n: number, url: string) => {
+const pinOf = (n: number, url: string): Pin => {
   const at = new Date(Date.now() - (PIN_COUNT - n) * 60_000).toISOString();
   const selector = `main > section.card:nth-of-type(${n}) > button.btn.primary`;
   const text = `Save ${n}`;
@@ -153,7 +154,7 @@ const pinOf = (n: number, url: string) => {
         ? [
             {
               id: crypto.randomUUID(),
-              by: "person",
+              by: "person" as const,
               text: "And the hover is still blue.",
               at,
             },
@@ -356,9 +357,8 @@ const seedArtifacts = async (probe: Probe, orch: Session) => {
     pinOf(i + 1, `http://127.0.0.1${route}`)
   );
   await writeDoc(probe, orch.id, pinnedId, (doc) => {
-    const map = doc.getMap("pins");
     for (const pin of pins) {
-      map.set(pin.id, pin);
+      writePin(doc, pin);
     }
   });
   // The session answers every third pin, as comment_reply writes it.

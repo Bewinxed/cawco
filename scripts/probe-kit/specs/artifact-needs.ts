@@ -397,10 +397,7 @@ const ownTab = async (
 const inDoc = async (
   page: Page,
   write: (doc: {
-    getMap: (name: string) => {
-      get: (key: string) => Record<string, unknown> | undefined;
-      set: (key: string, value: object) => void;
-    };
+    getMap: (name: string) => { set: (key: string, value: unknown) => void };
     transact: (change: () => void) => void;
   }) => void
 ): Promise<void> => {
@@ -524,26 +521,27 @@ const pins = async (at: At, session: string, id: string) => {
   );
   await inDoc(page, (doc) => {
     const now = new Date().toISOString();
-    doc.transact(() =>
+    // A pin in its parts (core comments.ts PIN_MAPS): head, place, first entry.
+    doc.transact(() => {
       doc.getMap("pins").set("probe-pin-1", {
         id: "probe-pin-1",
         number: 1,
         kind: "comment",
-        anchor: { selector: "#line-1", text: "Its schedule line." },
         at: now,
         by: "person",
+      });
+      doc.getMap("places").set("probe-pin-1", {
+        anchor: { selector: "#line-1", text: "Its schedule line." },
         elements: [],
         point: { x: 0.5, y: 0.5 },
-        thread: [
-          {
-            id: "probe-entry-1",
-            by: "person",
-            text: "Say when it runs.",
-            at: now,
-          },
-        ],
-      })
-    );
+      });
+      doc.getMap("entries").set("probe-pin-1:probe-entry-1", {
+        id: "probe-entry-1",
+        by: "person",
+        text: "Say when it runs.",
+        at: now,
+      });
+    });
   });
   // Comments go to the session by themselves after their quiet: no Send, nothing unsent.
   await Bun.sleep(4500);
@@ -975,14 +973,19 @@ const pinAsks = async (
           id: `probe-pin-${n}`,
           number: n,
           kind: "comment",
-          anchor: { selector: `#${line}` },
           at: now,
           by: "person",
+        });
+        doc.getMap("places").set(`probe-pin-${n}`, {
+          anchor: { selector: `#${line}` },
           elements: [],
           point: { x: 0.5, y: 0.5 },
-          thread: [
-            { id: `probe-entry-${n}`, by: "person", text: words, at: now },
-          ],
+        });
+        doc.getMap("entries").set(`probe-pin-${n}:probe-entry-${n}`, {
+          id: `probe-entry-${n}`,
+          by: "person",
+          text: words,
+          at: now,
         });
       }
     });
@@ -1044,24 +1047,14 @@ const pinAsks = async (
 
   // The person answers it: the row goes.
   page = await ownTab(at, id);
-  await inDoc(page, (doc) => {
-    const marks = doc.getMap("pins");
-    const pin = marks.get("probe-pin-2") as { thread: object[] };
-    doc.transact(() =>
-      marks.set("probe-pin-2", {
-        ...pin,
-        thread: [
-          ...pin.thread,
-          {
-            id: "probe-entry-2b",
-            by: "person",
-            text: "In the morning.",
-            at: new Date().toISOString(),
-          },
-        ],
-      })
-    );
-  });
+  await inDoc(page, (doc) =>
+    doc.getMap("entries").set("probe-pin-2:probe-entry-2b", {
+      id: "probe-entry-2b",
+      by: "person",
+      text: "In the morning.",
+      at: new Date().toISOString(),
+    })
+  );
   const cleared = await lineIs(fleet, id, null);
   kit.check(
     "the person's reply on the asking pin answers it: the row leaves Needs you",
@@ -1111,24 +1104,14 @@ const pinAsks = async (
   );
 
   const quietFrom = phone.pushed.length;
-  await inDoc(page, (doc) => {
-    const marks = doc.getMap("pins");
-    const pin = marks.get("probe-pin-3") as { thread: object[] };
-    doc.transact(() =>
-      marks.set("probe-pin-3", {
-        ...pin,
-        thread: [
-          ...pin.thread,
-          {
-            id: "probe-entry-3b",
-            by: "person",
-            text: "The team.",
-            at: new Date().toISOString(),
-          },
-        ],
-      })
-    );
-  });
+  await inDoc(page, (doc) =>
+    doc.getMap("entries").set("probe-pin-3:probe-entry-3b", {
+      id: "probe-entry-3b",
+      by: "person",
+      text: "The team.",
+      at: new Date().toISOString(),
+    })
+  );
   const two = await lineIs(fleet, id, artifactWords.newAnswers(2));
   kit.check(
     "the person replies to one of the three: the row's count is 2",
@@ -1159,17 +1142,11 @@ const pinAsks = async (
     })
   );
   await inDoc(page, (doc) => {
-    const marks = doc.getMap("pins");
-    const pin = marks.get("probe-pin-4") as object;
     const now = new Date().toISOString();
-    doc.transact(() =>
-      marks.set("probe-pin-4", {
-        ...pin,
-        resolvedAt: now,
-        resolvedBy: "person",
-        seenAt: now,
-      })
-    );
+    doc.transact(() => {
+      doc.getMap("resolves").set("probe-pin-4", { at: now, by: "person" });
+      doc.getMap("looks").set("probe-pin-4", now);
+    });
   });
   const resolved = await lineIs(fleet, id, artifactWords.newAnswerOn(2));
   kit.check(
@@ -1179,17 +1156,11 @@ const pinAsks = async (
   );
   // The last one resolved too, so the legs after this find the lane as they left it.
   await inDoc(page, (doc) => {
-    const marks = doc.getMap("pins");
-    const pin = marks.get("probe-pin-2") as object;
     const now = new Date().toISOString();
-    doc.transact(() =>
-      marks.set("probe-pin-2", {
-        ...pin,
-        resolvedAt: now,
-        resolvedBy: "person",
-        seenAt: now,
-      })
-    );
+    doc.transact(() => {
+      doc.getMap("resolves").set("probe-pin-2", { at: now, by: "person" });
+      doc.getMap("looks").set("probe-pin-2", now);
+    });
   });
   await lineIs(fleet, id, null);
   await page.close();
@@ -1253,14 +1224,19 @@ const pinAsksFall = async (
           id: `fall-pin-${n}`,
           number: n,
           kind: "comment",
-          anchor: { selector: "#head" },
           at: now,
           by: "person",
+        });
+        doc.getMap("places").set(`fall-pin-${n}`, {
+          anchor: { selector: "#head" },
           elements: [],
           point: { x: 0.5, y: 0.5 },
-          thread: [
-            { id: `fall-entry-${n}`, by: "person", text: `Mark ${n}`, at: now },
-          ],
+        });
+        doc.getMap("entries").set(`fall-pin-${n}:fall-entry-${n}`, {
+          id: `fall-entry-${n}`,
+          by: "person",
+          text: `Mark ${n}`,
+          at: now,
         });
       }
     });
@@ -1274,24 +1250,14 @@ const pinAsksFall = async (
   await reply("fall-pin-1", "Bigger or the same?");
   await reply("fall-pin-2", "Left or centred?");
   await reply("fall-pin-3", "Keep the rule under it?");
-  await inDoc(page, (doc) => {
-    const marks = doc.getMap("pins");
-    const pin = marks.get("fall-pin-3") as { thread: object[] };
-    doc.transact(() =>
-      marks.set("fall-pin-3", {
-        ...pin,
-        thread: [
-          ...pin.thread,
-          {
-            id: "fall-entry-3b",
-            by: "person",
-            text: "Keep it.",
-            at: new Date().toISOString(),
-          },
-        ],
-      })
-    );
-  });
+  await inDoc(page, (doc) =>
+    doc.getMap("entries").set("fall-pin-3:fall-entry-3b", {
+      id: "fall-entry-3b",
+      by: "person",
+      text: "Keep it.",
+      at: new Date().toISOString(),
+    })
+  );
   const answeredAt = Date.now();
   const burstLine = `${artifactWords.unsent(1)} · ${artifactWords.newAnswers(2)}`;
   const two = await lineIs(fleet, id, burstLine);
@@ -1327,17 +1293,14 @@ const pinAsksFall = async (
   const zeroFrom = phone.pushed.length;
   const clearedSince = Date.now() - 1000;
   await inDoc(page, (doc) => {
-    const marks = doc.getMap("pins");
     const now = new Date().toISOString();
     doc.transact(() => {
       for (const n of [1, 2]) {
-        const pin = marks.get(`fall-pin-${n}`) as { thread: object[] };
-        marks.set(`fall-pin-${n}`, {
-          ...pin,
-          thread: [
-            ...pin.thread,
-            { id: `fall-entry-${n}b`, by: "person", text: "Yes.", at: now },
-          ],
+        doc.getMap("entries").set(`fall-pin-${n}:fall-entry-${n}b`, {
+          id: `fall-entry-${n}b`,
+          by: "person",
+          text: "Yes.",
+          at: now,
         });
       }
     });

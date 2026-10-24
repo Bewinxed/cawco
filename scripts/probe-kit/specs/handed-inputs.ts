@@ -53,6 +53,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { writePagePins } from "../pins";
 
 const RUN = crypto.randomUUID().slice(0, 8);
 const TAG_A = `PROBE-HANDED-A-${RUN}`;
@@ -379,32 +380,18 @@ const pinned = async (
       !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
         .cawcoArtifact?.doc
   );
-  await frame.evaluate(
-    ({ id, words }) => {
-      const { doc } = (
-        window as unknown as {
-          cawcoArtifact: {
-            doc: {
-              getMap: (n: string) => { set: (k: string, v: object) => void };
-            };
-          };
-        }
-      ).cawcoArtifact;
-      const at = new Date().toISOString();
-      doc.getMap("pins").set(id, {
-        id,
-        number: 1,
-        kind: "comment",
-        anchor: { selector: "#here", text: "the paragraph" },
-        at,
-        by: "person",
-        elements: [],
-        point: { x: 0.5, y: 0.5 },
-        thread: [{ id: `${id}-1`, by: "person", text: words, at }],
-      });
-    },
-    { id: PIN_ID, words: PIN_WORDS }
-  );
+  const at = new Date().toISOString();
+  await writePagePins(frame, {
+    id: PIN_ID,
+    number: 1,
+    kind: "comment",
+    anchor: { selector: "#here", source: null, text: "the paragraph" },
+    at,
+    by: "person",
+    elements: [],
+    point: { x: 0.5, y: 0.5 },
+    thread: [{ id: `${PIN_ID}-1`, by: "person", text: PIN_WORDS, at }],
+  });
   await until(
     "the hub holding the pin",
     () =>
