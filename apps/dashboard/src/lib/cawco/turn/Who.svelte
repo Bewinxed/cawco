@@ -23,6 +23,7 @@
    * 14 − 9 = 5 cannot split evenly, so the glyph landed 2px from one edge and
    * 3px from the other and read visibly off-centre. 18 − 12 = 6 splits 3/3.
    */
+  import type { Snippet } from "svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconAgent, IconUser } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
@@ -38,7 +39,13 @@
     working = false,
     noteLive = false,
     shown = false,
+    actions,
+    end,
   }: {
+    /** Controls on the speaker line, before its clock: the message's own actions. */
+    actions?: Snippet;
+    /** A control after the clock, at the line's end: a touch screen's handle to them. */
+    end?: Snippet;
     you?: boolean;
     /**
      * The turn in flight: a pane's own face for its speaker (`voice`) draws
@@ -158,13 +165,21 @@
       ]}>{note}</span
     >
   {/if}
+  {#if actions}
+    <span data-slot="who-actions" class="ms-auto flex items-center" data-box
+      >{@render actions()}</span
+    >
+  {/if}
   {#if validAt}
     <time
       data-slot="when"
-      data-after-note={note || undefined}
+      data-after-note={note || (actions ? "" : undefined)}
       data-shown={shown || undefined}
-      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
+      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 group-hover/turn:opacity-100 group-data-hovered/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
+  {/if}
+  {#if end}
+    {@render end()}
   {/if}
 </h2>
