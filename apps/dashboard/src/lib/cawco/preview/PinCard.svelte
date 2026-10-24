@@ -33,7 +33,7 @@
    * by a press on the page. Delete is asked in the card itself.
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
-  import { tick, untrack } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -87,7 +87,10 @@
     onclose,
     onfind,
     ondraft,
+    activity,
   }: {
+    /** What changed on the page since he looked, for this comment, over the reply (option B of guiding him after a reply). */
+    activity?: Snippet;
     pin: Pin;
     /** What it stands on, in words (core pin-name.ts). */
     name: string;
@@ -565,6 +568,7 @@
   data-slot="foot"
   class="flex shrink-0 flex-col gap-space-2"
 >
+  {@render activity?.()}
   {#if sent && session}
     <!-- Who has the comment, as its status, never as a reply: "Sent to" the
          session's chip, and while the session is on it "· working on it"
