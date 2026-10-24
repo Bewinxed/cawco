@@ -1892,6 +1892,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return row;
   };
 
+  /**
+   * Artifact `id` for the person's change from session `panelId`'s panel
+   * (its thumbnail, a sheet's Save, Verify), with the session that holds
+   * it, which the change is made as: one the panel {@link sees}, refused as
+   * not there otherwise. The person acts there, as their Send does
+   * (preview-routes.ts); a session's own tools keep to {@link own}, so no
+   * agent changes another session's artifact.
+   */
+  const panelHeld = (
+    panelId: string,
+    id: string
+  ): { owner: InstanceRow; row: ArtifactRow } => {
+    const row = db.get(id);
+    const owner = row ? holder(row) : undefined;
+    if (!(row && owner && sees(sessionOf(panelId), row))) {
+      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+    }
+    return { owner, row };
+  };
+
   /** The sessions above `writer`: its parent, that one's parent, up to the top. */
   const above = (writer: InstanceRow): Set<string> => {
     const up = new Set<string>();
@@ -5652,7 +5672,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         single: boolean;
       }
     ): ArtifactThumbnail => {
-      const row = own(sessionOf(instanceId), id);
+      const { row } = panelHeld(instanceId, id);
       if (row.kind === "canvas") {
         throw new ArtifactRefusal(
           409,
@@ -6135,20 +6155,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The person's Save in a sheet's inspector, or its story buttons: the
-     * same write as the session's `artifact_update`, owed to the session.
+     * The person's Save in a sheet's inspector, or its story buttons, from
+     * any panel that sees it ({@link panelHeld}): the same write as its
+     * session's `artifact_update`, owed to that session.
      */
     sheetWrite: (
       instanceId: string,
       id: string,
       change: SheetChange
     ): Promise<ArtifactRead> =>
-      writeSheet(own(sessionOf(instanceId), id), change, "person"),
+      writeSheet(panelHeld(instanceId, id).row, change, "person"),
 
-    /** The panel's Verify on a component canvas: a round asked for its session, whose verdict reaches that session. */
+    /** The panel's Verify on a component canvas, from any panel that sees it ({@link panelHeld}): a round asked for the canvas's session, whose verdict reaches that session. */
     verifyFor: (instanceId: string, id: string): Promise<string> => {
-      const session = sessionOf(instanceId);
-      return askVerify(session, own(session, id));
+      const { owner, row } = panelHeld(instanceId, id);
+      return askVerify(owner, row);
     },
 
     /** `design_map`: the session's workspace's components, paged, or one component's card (agent stage.ts `stageComponents`). */

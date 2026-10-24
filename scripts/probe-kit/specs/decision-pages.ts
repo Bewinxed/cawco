@@ -106,7 +106,11 @@
  *     dashboard's Send on the parent's session each reach the page (the
  *     delegate's artifact_read holds the picks, the delegate is told); a
  *     session outside the tree is refused the Send and the doc socket with
- *     today's words.
+ *     today's words. With the rail's foot sheet open (a 507px pane at the
+ *     desk, and 390), on Chromium and WebKit, the page's frame ends where the
+ *     sheet begins, Send's box is clear of the sheet's, and a press at its
+ *     centre sends. The page's thumbnail from the parent's panel is kept; an
+ *     outsider's is refused with today's words.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -3535,6 +3539,23 @@ const noticeOf = (id: string) =>
 /** The refusal a panel of a session outside the tree hears. */
 const NO_SUCH_ARTIFACT = "This session has no such artifact.";
 
+/** More's Comments entry, its count after it. */
+const COMMENTS_ITEM = /^Comments/;
+/** The Comments rail opened from the panel's head: its Comments, else More's Comments where the head has no room for it. */
+const railOpen = async (page: Page) => {
+  const toggle = page.locator(`${PANE} button[data-slot="comments"]`).first();
+  if (await toggle.isVisible().catch(() => false)) {
+    await toggle.click();
+  } else {
+    await page.locator(`${PANE} [data-slot="more"]`).first().click();
+    await page.getByRole("menuitem", { name: COMMENTS_ITEM }).click();
+  }
+  await page
+    .locator('[data-slot="comment-rail"]')
+    .waitFor({ timeout: 10_000 })
+    .catch(() => undefined);
+};
+
 /**
  * (q) A delegate's page in its parent's panel is the parent's to read,
  * comment on and send: the delegate (spawned with `parent`) publishes a
@@ -3591,7 +3612,7 @@ const panelOfTreeLeg = async (on: On) => {
   }
 
   // The rail, from the head's Comments: read, never refused.
-  await shown.locator(`${PANE} button[data-slot="comments"]`).first().click();
+  await railOpen(shown);
   const rail = shown.locator('[data-slot="comment-rail"]');
   const railState = (): Promise<{ read: boolean; failed: string | null }> =>
     rail
@@ -3682,35 +3703,116 @@ const panelOfTreeLeg = async (on: On) => {
       )
       .filter((each) => each.body.includes(noticeOf(made.id))).length;
 
-  // A pick sent by the page's own Send, pressed in the parent's panel, the
-  // rail shut first: in a pane under 640px it is the well's foot sheet,
-  // which stands over the page's foot.
-  await shown.locator(`${PANE} button[data-slot="comments"]`).first().click();
-  await rail
-    .waitFor({ state: "detached", timeout: 5000 })
-    .catch(() => undefined);
-  await mode(shown, frame, "V");
-  await pressIn(frame, '[data-option="lean"] >> nth=0');
-  await until(
-    "the lean pick on the hub",
-    delegateRead,
-    (read) => (read.state.shape?.options ?? []).includes("lean"),
-    10_000
-  ).catch(() => null);
-  await pressIn(frame, "[data-send]");
-  const footSent = await until(
-    "the delegate told of the page's own Send",
-    async () => notices(),
-    (count) => count >= 1,
-    20_000
-  ).catch(notices);
-  const afterFoot = await delegateRead();
-  kit.check(
-    "(q) the page's own Send in the parent's panel reaches the page: the delegate's artifact_read holds the pick and the delegate is told",
-    footSent >= 1 &&
-      JSON.stringify(afterFoot.state.shape?.options) === '["lean"]',
-    JSON.stringify({ footSent, state: afterFoot.state })
-  );
+  // The page's own Send, pressed with the rail open: in a pane under 640px
+  // (this desk's split is 507px) the rail is the well's foot sheet, and the
+  // page's frame ends where it begins, so Send stands clear of it.
+  const told = { count: 0 };
+  const sendClear = async (page: Page, inFrame: Frame, label: string) => {
+    const engine = page.context().browser()?.browserType().name() ?? "?";
+    const sheetBox = page.locator('[data-slot="rail-sheet"]');
+    await sheetBox.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    await settle(page, 400);
+    const boxes = await page.evaluate((at) => {
+      const box = (el: Element | null | undefined) => {
+        const r = el?.getBoundingClientRect();
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      };
+      return {
+        frame: box(document.querySelector(at)),
+        sheet: box(document.querySelector('[data-slot="rail-sheet"]')),
+      };
+    }, FRAME);
+    // The page's own box, read by the engine across the frame's origin.
+    const sendBox = await inFrame
+      .locator("[data-send]")
+      .boundingBox({ timeout: 5000 })
+      .catch(() => null);
+    const read = {
+      ...boxes,
+      send: sendBox
+        ? { x: sendBox.x, y: sendBox.y, w: sendBox.width, h: sendBox.height }
+        : null,
+    };
+    const { frame: framed, send, sheet } = read;
+    const clear =
+      !!send &&
+      !!sheet &&
+      !!framed &&
+      (send.y + send.h <= sheet.y + 0.5 ||
+        send.x + send.w <= sheet.x ||
+        send.x >= sheet.x + sheet.w) &&
+      framed.y + framed.h <= sheet.y + 0.5;
+    // A new pick, so Send has something to send, then a press at its centre.
+    const next =
+      ((await delegateRead()).state.shape?.options ?? [])[0] === "lean"
+        ? "broad"
+        : "lean";
+    await mode(page, inFrame, "V");
+    await pressIn(inFrame, `[data-option="${next}"] >> nth=0`);
+    await until(
+      `the ${next} pick on the hub`,
+      delegateRead,
+      (held) => (held.state.shape?.options ?? []).includes(next),
+      10_000
+    ).catch(() => null);
+    const pressed = await pressIn(inFrame, "[data-send]").then(
+      () => "pressed",
+      (error: Error) => error.message.split("\n")[0] ?? "refused"
+    );
+    const want = told.count + 1;
+    const now = await until(
+      "the delegate told of the page's own Send",
+      async () => notices(),
+      (count) => count >= want,
+      20_000
+    ).catch(notices);
+    told.count = now;
+    const after = await delegateRead();
+    kit.check(
+      `(q) ${engine} ${label}: with the Comments rail's foot sheet open, the page's frame ends where the sheet begins, Send's box clear of the sheet's, and a press at Send's centre sends: the delegate's artifact_read holds the pick and the delegate is told`,
+      clear &&
+        pressed === "pressed" &&
+        now >= want &&
+        JSON.stringify(after.state.shape?.options) === JSON.stringify([next]),
+      JSON.stringify({ ...read, pressed, told: now, picked: after.state.shape })
+    );
+  };
+  await sendClear(shown, frame, "desk (507px pane)");
+  for (const [engine, view] of [
+    ["chromium", "phone"],
+    ["webkit", "desk"],
+    ["webkit", "phone"],
+  ] as const) {
+    const page = await kit.page(view, { engine, theme: "light" });
+    page.on("pageerror", (error) =>
+      on.said.push(`(q) ${engine} ${view}: ${String(error)}`)
+    );
+    await open(page, `${base}/session/${writer}`, '[data-slot="pane"]');
+    const inFrame = await until(
+      `the delegate's page in the parent's panel, ${engine} ${view}`,
+      async () => {
+        const at = await frameAt(page, FRAME);
+        return (await countIn(at, "#decision-shape")) > 0 ? at : null;
+      },
+      Boolean,
+      60_000
+    ).catch(() => null);
+    if (inFrame) {
+      await railOpen(page);
+      await sendClear(
+        page,
+        inFrame,
+        view === "phone" ? "phone (390)" : "desk (507px pane)"
+      );
+    } else {
+      kit.check(
+        `(q) ${engine} ${view}: the delegate's page in the parent's panel`,
+        false,
+        "no frame"
+      );
+    }
+    await page.close();
+  }
 
   // A pick sent by the dashboard's Send on the parent's session.
   await pressIn(frame, '[data-option="soon"] >> nth=0');
@@ -3735,19 +3837,21 @@ const panelOfTreeLeg = async (on: On) => {
       },
       [instance, made.id] as const
     );
+  const shapeNow = (await delegateRead()).state.shape?.options;
   const panelSend = await postSend(writer);
   const panelTold = await until(
     "the delegate told of the parent's Send",
     async () => notices(),
-    (count) => count >= 2,
+    (count) => count > told.count,
     20_000
   ).catch(notices);
   const afterPanel = await delegateRead();
   kit.check(
     "(q) the dashboard's Send on the parent's session reaches the page: 200, the delegate's artifact_read holds both picks and the delegate is told again",
     panelSend.status === 200 &&
-      panelTold >= 2 &&
-      JSON.stringify(afterPanel.state.shape?.options) === '["lean"]' &&
+      panelTold > told.count &&
+      JSON.stringify(afterPanel.state.shape?.options) ===
+        JSON.stringify(shapeNow) &&
       JSON.stringify(afterPanel.state.pace?.options) === '["soon"]',
     JSON.stringify({
       panelSend: { ...panelSend, text: panelSend.text.slice(0, 200) },
@@ -3781,6 +3885,46 @@ const panelOfTreeLeg = async (on: On) => {
       closed?.code === 4404 &&
       closed.reason === NO_SUCH_ARTIFACT,
     JSON.stringify({ outsiderSend, outsiderSocket })
+  );
+
+  // The screen's thumbnail, kept from the parent's panel as the pane keeps
+  // one; an outsider's refused with today's words.
+  const picture = new PNG({ width: 4, height: 4 });
+  picture.data.fill(200);
+  const png = PNG.sync.write(picture).toString("base64");
+  const putThumbnail = (instance: string) =>
+    shown.evaluate(
+      async ([who, id, light]) => {
+        const response = await fetch(
+          `/api/instances/${who}/artifacts/${id}/thumbnail`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ light, dark: null, single: true }),
+          }
+        );
+        return { status: response.status, text: await response.text() };
+      },
+      [instance, made.id, png] as const
+    );
+  const thumbKept = await putThumbnail(writer);
+  const served = await fetch(
+    `${fleet.base}/api/artifacts/${made.id}/thumbnail/light`
+  );
+  const servedPng = served.ok
+    ? Buffer.from(await served.arrayBuffer()).toString("base64")
+    : `${served.status}`;
+  kit.check(
+    "(q) a thumbnail from the parent's panel is kept: 200, and the page's thumbnail is that picture",
+    thumbKept.status === 200 && servedPng === png,
+    JSON.stringify({ thumbKept, served: served.status })
+  );
+  const outsiderThumbnail = await putThumbnail(outsider);
+  kit.check(
+    "(q) a session outside the tree is refused the page's thumbnail, 404, with today's words",
+    outsiderThumbnail.status === 404 &&
+      outsiderThumbnail.text === artifactToolWords.noArtifact(made.id),
+    JSON.stringify(outsiderThumbnail)
   );
   await shown.close();
 };

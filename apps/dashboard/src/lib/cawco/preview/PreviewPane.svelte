@@ -1770,25 +1770,39 @@
   /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
   let listFilter = $state<"open" | "resolved">("open");
   let listScroll = $state(0);
-  /** The rail as the well's foot sheet, while it stands. */
-  let railEl = $state<HTMLElement | null>(null);
+  /**
+   * The foot sheet's height while it stands, px: the page's frame ends
+   * where it begins, so the page's own foot (a decision page's Send) stays
+   * above it and the page scrolls in what is left. 0 while none stands.
+   */
+  let railSheetH = $state(0);
+  const measureRailSheet = (node: HTMLElement) => {
+    const read = () => {
+      railSheetH = node.offsetHeight;
+    };
+    read();
+    const watch = frameObserver(read);
+    watch.observe(node);
+    return () => {
+      watch.disconnect();
+      railSheetH = 0;
+    };
+  };
   /**
    * What the host's chrome covers of the page, told to its overlay
-   * (`cawco:covered`, the page's viewport px): on a phone, the rail at the
-   * well's foot, or the thread or the composer standing there. A pin the
-   * pane opens is brought out from under them (pins.ts `reveal`). Told again
-   * as either resizes, and as nothing once neither stands.
+   * (`cawco:covered`, the page's viewport px): on a phone, the thread or the
+   * composer standing at the well's foot (the rail's foot sheet covers
+   * nothing: the frame ends where it begins). A pin the pane opens is
+   * brought out from under them (pins.ts `reveal`). Told again as either
+   * resizes, and as nothing once neither stands.
    */
   $effect(() => {
     const frame = iframe;
-    const sheetRail = listOpen && railSheet && !railAway ? railEl : null;
     const sheetCard = floatSheet ? (cardFloat ?? composerFloat ?? null) : null;
     if (!(frame && connected)) {
       return;
     }
-    const covering = [sheetRail, sheetCard].filter(
-      (el): el is HTMLElement => !!el
-    );
+    const covering = [sheetCard].filter((el): el is HTMLElement => !!el);
     if (covering.length === 0) {
       post({ type: "cawco:covered", boxes: [] });
       return;
@@ -2684,13 +2698,10 @@
           preview.thumbnailRevision = preview.revision;
           preview.thumbnailWanted = false;
           // The hub keeps it as the artifact's latest picture: Files' cards
-          // draw it. A canvas keeps its own, and another session's artifact
-          // this panel shows (its delegation tree's, not in its list) is
-          // that session's to keep.
-          if (
-            preview.artifact.kind !== "canvas" &&
-            (preview.artifacts?.includes(preview.artifact.id) ?? true)
-          ) {
+          // draw it, whichever panel took it: its own or its delegation
+          // tree's (the hub keeps it as the artifact's session's). A canvas
+          // keeps its own.
+          if (preview.artifact.kind !== "canvas") {
             keepThumbnail(instanceId, preview.artifact.id, shot).catch(
               (error: unknown) => {
                 console.error("The page's thumbnail was not kept", error);
@@ -3610,7 +3621,6 @@
     <div
       class="flex flex-none min-h-0 overflow-hidden"
       data-slot="rail-beside"
-      bind:this={railEl}
       in:railIn
       out:railOut
     >
@@ -3783,8 +3793,10 @@
         data-ready={!current || loaded || undefined}
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
           undefined}
-        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+        data-comments-sheet={railSheetH > 0 || undefined}
+        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w) data-comments-sheet:h-(--frame-h)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
+        style:--frame-h={`calc(100% - ${railSheetH}px)`}
         allow="clipboard-write"
         inert={!current}
         onerror={() => arrived(key)}
@@ -4113,7 +4125,7 @@
     <div
       class="absolute inset-x-0 bottom-0 z-2 flex max-h-3/5"
       data-slot="rail-sheet"
-      bind:this={railEl}
+      {@attach measureRailSheet}
     >
       {@render railOf("sheet")}
     </div>

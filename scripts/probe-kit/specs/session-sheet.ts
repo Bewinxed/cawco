@@ -138,6 +138,15 @@
  *     asked in place ("Remove never-drawn?", Cancel and Remove canvas);
  *     its confirm takes the canvas out of the session's artifacts.
  *
+ * A delegate's sheet in its parent's panel (the person's change there, as
+ * their Send is):
+ *
+ * 26. A delegate of the first session makes a component canvas on the card;
+ *     from the first session's panel a sheet's Save lands (the delegate's
+ *     artifact_read reads it) and Verify answers; a session outside the tree
+ *     is refused both, 404, with today's words; the first session's own
+ *     artifact_update of it is still refused as the delegate's.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -1076,6 +1085,130 @@ async function centredLegs(
 }
 
 /** Leg 25: a canvas whose page never comes stands on the cover no longer than its stage is given. */
+/** The title the parent's panel saves into its delegate's sheet (leg 26). */
+const PARENT_TITLE = "Saved from the parent's panel";
+
+/**
+ * 26. A delegate's sheet in its parent's panel is the person's to change
+ * there, as their Send is (artifacts/service.ts `panelHeld`): a delegate of
+ * the session (spawned with `parent`, in its folder) makes a component canvas
+ * on the card, and from the session's panel, as the panel calls them, a
+ * sheet's Save lands (the delegate's `artifact_read` of story One reads the
+ * title saved) and Verify answers its sentence; a session outside the tree
+ * is refused both with today's words. The session's own tools still change
+ * nothing of the delegate's: its `artifact_update` of the canvas is refused
+ * as the delegate's.
+ */
+async function treeSheetLeg(
+  kit: Kit,
+  call: (
+    n: string,
+    name: string,
+    input: object,
+    who?: string
+  ) => Promise<string>,
+  spawn: (title: string, extra: object) => Promise<string>,
+  base: string,
+  session: string
+): Promise<void> {
+  const delegate = await spawn("Card delegate", {
+    parent: { instanceId: session },
+  });
+  const outsider = await spawn("Card outsider", {});
+  const made = await call(
+    "26",
+    "mcp__cawco__artifact_create",
+    {
+      kind: "component",
+      name: "delegate-cards",
+      file: STORY,
+      does: "judge",
+      ask: "Judge the delegate's card in each of its states",
+    },
+    delegate
+  );
+  const sheet = made.match(ID)?.[1];
+  if (!sheet) {
+    kit.check("26: the delegate's sheet is made", false, short(made));
+    return;
+  }
+  const desk = await panelPage(kit, base, session, "desk", "light");
+  /** A POST from the dashboard's page, as session `who`'s panel makes it. */
+  const panelPost = (who: string, act: string, body: object) =>
+    desk.evaluate(
+      async ([at, payload]) => {
+        const response = await fetch(at, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: payload,
+        });
+        return { status: response.status, text: await response.text() };
+      },
+      [
+        `/api/instances/${who}/artifacts/${sheet}/${act}`,
+        JSON.stringify(body),
+      ] as const
+    );
+  const save = {
+    args: { story: "One", values: { title: PARENT_TITLE } },
+  };
+  const saved = await panelPost(session, "sheet", save);
+  const readBack = await until(
+    "the saved title in the delegate's read",
+    () =>
+      call(
+        `26r${Date.now() % 100_000}`,
+        "mcp__cawco__artifact_read",
+        { id: sheet, detail: "story", story: "One" },
+        delegate
+      ),
+    (said) => said.includes(PARENT_TITLE),
+    60_000
+  ).catch(() => "");
+  kit.check(
+    "26: a sheet's Save from the parent's panel lands: 200, and the delegate's artifact_read of One reads the title saved",
+    saved.status === 200 && readBack.includes(PARENT_TITLE),
+    `${saved.status} ${short(saved.text).slice(0, 200)}; read: ${short(readBack).slice(0, 200)}`
+  );
+  const verified = await panelPost(session, "verify", {});
+  const verdict = (() => {
+    try {
+      return (JSON.parse(verified.text) as { verify?: string }).verify ?? "";
+    } catch {
+      return "";
+    }
+  })();
+  kit.check(
+    "26: Verify from the parent's panel answers its sentence (200)",
+    verified.status === 200 && verdict.length > 0,
+    `${verified.status} ${short(verified.text).slice(0, 300)}`
+  );
+  const refused = artifactToolWords.noArtifact(sheet);
+  const outsiderSave = await panelPost(outsider, "sheet", save);
+  const outsiderVerify = await panelPost(outsider, "verify", {});
+  kit.check(
+    "26: a session outside the tree is refused the sheet's Save and Verify, 404, with today's words",
+    outsiderSave.status === 404 &&
+      outsiderSave.text === refused &&
+      outsiderVerify.status === 404 &&
+      outsiderVerify.text === refused,
+    JSON.stringify({ outsiderSave, outsiderVerify }).slice(0, 400)
+  );
+  // The session's own tools still change nothing of its delegate's.
+  const update = await call("26u", "mcp__cawco__artifact_update", {
+    id: sheet,
+    args: { story: "One", values: { title: "From the parent's tools" } },
+  });
+  kit.check(
+    "26: the session's own artifact_update of its delegate's sheet is refused as the delegate's",
+    update.includes(
+      artifactToolWords.othersArtifact("", "").split("'s: ").at(-1) ?? "-"
+    ),
+    short(update)
+  );
+  await desk.close();
+}
+
 async function neverDrawnLeg(
   kit: Kit,
   call: (n: string, name: string, input: object) => Promise<string>,
@@ -1396,6 +1529,13 @@ const run = async (kit: Kit) => {
   await panelLegs(kit, call, await fleet.dashboard(), session);
   await centredLegs(kit, await fleet.dashboard(), session);
   await neverDrawnLeg(kit, call, await fleet.dashboard(), session);
+  await treeSheetLeg(
+    kit,
+    call,
+    (title, extra) => fleet.spawn("claude", title, fleet.repo, extra),
+    await fleet.dashboard(),
+    session
+  );
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
   async function scopedAndStyled(kitId: string | undefined): Promise<void> {
