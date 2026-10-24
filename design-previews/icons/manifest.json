@@ -1,12 +1,12 @@
 {
-  "id": "bare-icons-2026-10-24-b",
+  "id": "bare-icons-2026-10-24-c",
   "title": "Solar icons without their containers",
   "decisions": [
     {
       "id": "status",
-      "question": "Status glyphs: bare?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
-      "recommended": "bare",
+      "question": "Status glyphs: bare, and in which cut?",
+      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass; the i and ! are the weakest at 16px. The third option draws the whole row in the line cut, one stroke weight. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "recommended": "line",
       "candidates": [
         {
           "id": "today",
@@ -22,7 +22,7 @@
         {
           "id": "bare",
           "label": "Without its container",
-          "result": "The same glyphs, discs gone, grown to fill the box at Solar's stroke.",
+          "result": "Discs gone; Needs you and Sleeping stay filled, so the row reads uneven.",
           "items": [
             {
               "label": "Status rows, in their inks",
@@ -30,14 +30,26 @@
               "after": "img/status-bare-0.svg"
             }
           ]
+        },
+        {
+          "id": "line",
+          "label": "The whole row in Solar's line cut",
+          "result": "Every status in the line cut, one weight; Idle and Stopped lose their fill.",
+          "items": [
+            {
+              "label": "Status rows, in their inks",
+              "before": "img/status-today-0.svg",
+              "after": "img/status-line-0.svg"
+            }
+          ]
         }
       ]
     },
     {
       "id": "configure",
-      "question": "Configure rail: bare, tiles off?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
-      "recommended": "bare",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass; the i and ! are the weakest at 16px. The third option draws the whole row in the line cut, one stroke weight. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "recommended": "line",
       "candidates": [
         {
           "id": "today",
@@ -53,7 +65,7 @@
         {
           "id": "bare",
           "label": "Without its container",
-          "result": "No tiles, no discs: each glyph alone in its hue.",
+          "result": "No tiles; the bare four read lighter than the filled shield and bolt.",
           "items": [
             {
               "label": "Configure rail",
@@ -61,14 +73,26 @@
               "after": "img/configure-bare-0.svg"
             }
           ]
+        },
+        {
+          "id": "line",
+          "label": "The whole row in Solar's line cut",
+          "result": "Every row in the line cut, one weight; MCP's plug head is an outline.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "before": "img/configure-today-0.svg",
+              "after": "img/configure-line-0.svg"
+            }
+          ]
         }
       ]
     },
     {
       "id": "menus",
-      "question": "Menus and tabs: bare?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
-      "recommended": "bare",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass; the i and ! are the weakest at 16px. The third option draws the whole row in the line cut, one stroke weight. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "recommended": "line",
       "candidates": [
         {
           "id": "today",
@@ -84,12 +108,24 @@
         {
           "id": "bare",
           "label": "Without its container",
-          "result": "The same glyphs without their squares.",
+          "result": "Squares gone; Fork reads lighter than the filled pencil and split view.",
           "items": [
             {
               "label": "Session and tab menus",
               "before": "img/menus-today-0.svg",
               "after": "img/menus-bare-0.svg"
+            }
+          ]
+        },
+        {
+          "id": "line",
+          "label": "The whole row in Solar's line cut",
+          "result": "Every row in the line cut, one weight; Rename's pencil is an outline.",
+          "items": [
+            {
+              "label": "Session and tab menus",
+              "before": "img/menus-today-0.svg",
+              "after": "img/menus-line-0.svg"
             }
           ]
         }
@@ -98,7 +134,7 @@
     {
       "id": "chips",
       "question": "Delegate chips: sprite without its tile?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "bare",
       "candidates": [
         {
@@ -129,7 +165,7 @@
     {
       "id": "canvas",
       "question": "Canvas tools: bare?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "bare",
       "candidates": [
         {
@@ -160,7 +196,7 @@
     {
       "id": "others",
       "question": "Everything else: bare?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "bare",
       "candidates": [
         {
@@ -191,7 +227,7 @@
     {
       "id": "tree",
       "question": "Session rows: keep the sprite's tile?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "today",
       "candidates": [
         {
@@ -222,7 +258,7 @@
     {
       "id": "clock",
       "question": "Clock: keep its face?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "today",
       "candidates": [
         {
@@ -253,7 +289,7 @@
     {
       "id": "server",
       "question": "Server: keep its box?",
-      "bar": "Day on the left, night on the right, at the real size; hold a picture to see today's.",
+      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
       "recommended": "today",
       "candidates": [
         {
