@@ -16,8 +16,17 @@
  *     second part's line nothing stands empty: the line's own drawn row
  *     starts at the seam;
  *  2. under the pointer (a finger: at rest, its handle) the second part's
- *     actions show on that line, covering neither message's words;
- *  3. no console error.
+ *     actions show on that line, covering neither message's words, and
+ *     moving no text (the second message's first line and its part line
+ *     within 0.5px);
+ *  3. a mouse's layout is a finger's: on each engine, the first message's
+ *     last line to the second part's line is the same at 1440 with a fine
+ *     pointer and at 390 with a coarse one, measured from the line box and
+ *     from the last run of glyphs alike (the owner's host read, glyphs to
+ *     line, gave 11px with a mouse against 7px line box to line with a
+ *     finger: the difference is the line's half-leading under the glyphs,
+ *     in both, not room above the row);
+ *  4. no console error.
  *
  *   bun scripts/probe-kit/run.ts web caw-thread-run
  */
@@ -53,12 +62,20 @@ interface Seam {
     top: number;
   } | null;
   clock: { bottom: number; opacity: string; text: string; top: number } | null;
+  /**
+   * The first message's last run of words, its own box's foot: the font's
+   * content area, which stands the line's half-leading above the line box's
+   * foot (Figtree at 14px on a 24px line: 17px of glyphs, 3.5px each side).
+   */
+  lastGlyphs: number;
   /** The first message's last line box, its foot. */
   lastLine: number;
   /** The second part's line: its box, and its clock's. */
   line: { bottom: number; top: number } | null;
   /** The well's padding at the foot of the first part, px. */
   padFoot: number;
+  /** The page's pointer, as its media says. */
+  pointer: "fine" | "coarse" | "none";
   /** The hairline between the parts: its top. */
   seam: number;
   /** The second part's first line box: its top. */
@@ -113,8 +130,17 @@ function seamOf(texts: { first: string; second: string }): Seam | null {
   document.body.append(probe);
   const token = probe.getBoundingClientRect().height;
   probe.remove();
+  const runs = lines(firstWords);
+  let pointer: Seam["pointer"] = "none";
+  if (matchMedia("(pointer: fine)").matches) {
+    pointer = "fine";
+  } else if (matchMedia("(pointer: coarse)").matches) {
+    pointer = "coarse";
+  }
   return {
-    lastLine: Math.max(...lines(firstWords).map((r) => r.bottom)),
+    pointer,
+    lastGlyphs: runs.at(-1)?.bottom ?? Number.NaN,
+    lastLine: Math.max(...runs.map((r) => r.bottom)),
     padFoot: Number.parseFloat(getComputedStyle(wellOne).paddingBottom),
     seam: wellTwo.getBoundingClientRect().top,
     line: box(line),
@@ -138,12 +164,18 @@ function seamOf(texts: { first: string; second: string }): Seam | null {
 
 const EDGE = 0.75;
 
+/** What a leg measured at rest: from the first message's last line box, and its last run of glyphs, to the second part's line. */
+interface Figures {
+  glyphsToLine: number;
+  lineToLine: number;
+}
+
 async function leg(
   kit: Kit,
   base: string,
   threadId: string,
   one: (typeof LEGS)[number]
-): Promise<string[]> {
+): Promise<{ errors: string[]; figures: Figures | null }> {
   const page: Page = await kit.page(one.view, {
     theme: "light",
     engine: one.engine,
@@ -186,9 +218,14 @@ async function leg(
       JSON.stringify(rest)
     );
     await page.close();
-    return errors;
+    return { errors, figures: null };
   }
   const { line } = rest;
+  kit.check(
+    `${one.label}: the page's pointer is ${one.touch ? "coarse (a finger)" : "fine (a mouse)"}`,
+    rest.pointer === (one.touch ? "coarse" : "fine"),
+    rest.pointer
+  );
   kit.check(
     `${one.label}: at rest the second message has its own line in the run, its clock shown (${rest.clock?.text})`,
     !!rest.clock && rest.clock.opacity === "1" && rest.clock.text !== "",
@@ -215,6 +252,15 @@ async function leg(
     await settle(page, 400);
   }
   const shown = await page.evaluate(seamOf, { first: FIRST, second: SECOND });
+  if (!one.touch) {
+    kit.check(
+      `${one.label}: showing the actions moves no text: the second message's first line and its part line stand where they stood (${((shown?.secondTop ?? 0) - rest.secondTop).toFixed(2)}px, ${((shown?.line?.top ?? 0) - line.top).toFixed(2)}px)`,
+      !!shown?.line &&
+        Math.abs(shown.secondTop - rest.secondTop) <= 0.5 &&
+        Math.abs(shown.line.top - line.top) <= 0.5,
+      JSON.stringify({ rest: rest.secondTop, shown: shown?.secondTop })
+    );
+  }
   kit.check(
     `${one.label}: ${one.touch ? "at rest a finger has its handle" : "under the pointer the actions show"} on the second part's line, covering neither message's words`,
     !!shown?.actions &&
@@ -224,7 +270,13 @@ async function leg(
     JSON.stringify(shown)
   );
   await page.close();
-  return errors.map((error) => `${one.label}: ${error}`);
+  return {
+    errors: errors.map((error) => `${one.label}: ${error}`),
+    figures: {
+      lineToLine: line.top - rest.lastLine,
+      glyphsToLine: line.top - rest.lastGlyphs,
+    },
+  };
 }
 
 const spec: Spec = {
@@ -279,8 +331,26 @@ const spec: Spec = {
       JSON.stringify(said.messages.map((one) => one.author))
     );
     const errors: string[] = [];
+    const figures = new Map<string, Figures | null>();
     for (const one of LEGS) {
-      errors.push(...(await leg(kit, base, thread?.id ?? "", one)));
+      const read = await leg(kit, base, thread?.id ?? "", one);
+      errors.push(...read.errors);
+      figures.set(one.label, read.figures);
+    }
+    // A mouse's layout and a finger's are one: the first message's last
+    // line to the second part's line is the same with either, measured from
+    // its line box or from its glyphs (the glyphs stand the line's
+    // half-leading higher, in both).
+    for (const engine of ["chromium", "webkit"] as const) {
+      const mouse = figures.get(`${engine} 1440`);
+      const finger = figures.get(`${engine} 390`);
+      kit.check(
+        `${engine}: with a mouse the first message's last line stands as far from the second part's line as with a finger (line box ${mouse?.lineToLine.toFixed(2)} / ${finger?.lineToLine.toFixed(2)}px, glyphs ${mouse?.glyphsToLine.toFixed(2)} / ${finger?.glyphsToLine.toFixed(2)}px)`,
+        !!(mouse && finger) &&
+          Math.abs(mouse.lineToLine - finger.lineToLine) <= 0.5 &&
+          Math.abs(mouse.glyphsToLine - finger.glyphsToLine) <= 0.5,
+        JSON.stringify({ mouse, finger })
+      );
     }
     kit.check(
       `no console error on any page: ${errors.length}`,
