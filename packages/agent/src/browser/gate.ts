@@ -30,7 +30,12 @@
  * session, tracing or interception at the browser's level). Chromium's
  * tracing records the whole browser whichever page asks, so a page's trace
  * starts only while no other workspace has a connection or a page here, and
- * one running is cut, its data dropped, as another arrives. The shield cuts
+ * one running is cut, its data dropped, as another arrives. Every page a
+ * session owns carries its owner on every request it makes (core
+ * `GATED_PAGE_HEADER`, set on the page by the gate's watch as the page
+ * becomes the session's, before it first loads anything): the hub files a
+ * session such a page starts from the dashboard as that session's check,
+ * nested under it. The shield cuts
  * every connection with {@link SHIELD_CLOSE} and refuses new ones with its
  * sentence until it opens again; a workspace whose boundary ends for good
  * has its connections cut and its pages closed. A connection holds its
@@ -49,6 +54,7 @@ import {
   SHIELD_CLOSE_WORDS,
   SHIELD_WORDS,
 } from "@cawco/core/browser";
+import { GATED_PAGE_HEADER } from "@cawco/core/browser-gate";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -123,6 +129,16 @@ const OWN_PAGE =
 
 /** The ids the gate gives its own calls on a connection: far above any agent's. */
 const GATE_IDS = 2_000_000_000;
+
+/**
+ * How long a page's first load, or an agent's navigation of it, waits for
+ * the page to carry its owner's mark ({@link Gate.marked}): the watch
+ * attaches to a new tab's page within milliseconds.
+ */
+const MARK_WAIT_MS = 3000;
+
+/** The page a new target opens on, before the gate takes it to the one asked for. */
+const BLANK = "about:blank";
 
 /** The largest message either side sends: a full-page screenshot runs to megabytes. */
 const MAX_MESSAGE = 512 * 1024 * 1024;
@@ -360,6 +376,8 @@ interface Watch {
   done: boolean;
   ready: Promise<void>;
   socket?: WebSocket;
+  /** The gate's calls on it, once it is open: a page's mark goes on its session here. */
+  wire?: Wire;
 }
 
 export class Gate {
@@ -373,6 +391,12 @@ export class Gate {
   readonly #tabPage = new Map<string, string>();
   readonly #tabSessions = new Map<string, string>();
   readonly #windows = new Map<number, string>();
+  /** Each page's session on the watch, by the page's target id. */
+  readonly #pageSessions = new Map<string, string>();
+  /** Each page marked with its owner (or being), and the call that marks it. */
+  readonly #marks = new Map<string, { done: Promise<void>; owner: string }>();
+  /** What waits for a page's mark that is not under way yet. */
+  readonly #markWaits = new Map<string, Set<() => void>>();
   #watch: Watch | undefined;
 
   constructor(deps: GateDeps) {
@@ -611,6 +635,111 @@ export class Gate {
     this.#save();
     this.#arrived(id);
     this.#changed(targetId);
+    this.#mark(targetId);
+  }
+
+  /**
+   * Puts page `page`'s owner on every request it makes from now on
+   * (`GATED_PAGE_HEADER`), on the watch's session of it, once the page is
+   * owned and the watch holds it; whatever waits for the mark goes on as it
+   * lands, or fails.
+   */
+  #mark(page: string): void {
+    const owner = this.ownerOf(page);
+    const session = this.#pageSessions.get(page);
+    const wire = this.#watch?.wire;
+    if (!(owner && session && wire) || this.#marks.get(page)?.owner === owner) {
+      return;
+    }
+    const done = wire
+      .call("Network.enable", {}, session)
+      .then(() =>
+        wire.call(
+          "Network.setExtraHTTPHeaders",
+          { headers: { [GATED_PAGE_HEADER]: owner } },
+          session
+        )
+      )
+      .then(
+        () => undefined,
+        (error: unknown) =>
+          console.warn(
+            `[browser] ${this.key}: page ${page} of ${owner} was not marked as its: ${String(error)}`
+          )
+      )
+      .finally(() => {
+        for (const go of this.#markWaits.get(page) ?? []) {
+          go();
+        }
+        this.#markWaits.delete(page);
+      });
+    this.#marks.set(page, { owner, done });
+  }
+
+  /**
+   * Resolves once page `page` carries its owner's mark ({@link #mark}), or
+   * after `ms` without it: a load waits for it, never past that.
+   */
+  async marked(page: string, ms = MARK_WAIT_MS): Promise<void> {
+    await readWithin(ms, (signal) => this.#markOf(page, signal));
+  }
+
+  /** Page `page`'s mark landing: the one under way, else the next one. */
+  #markOf(page: string, signal: AbortSignal): Promise<void> {
+    const held = this.#marks.get(page);
+    if (held) {
+      return held.done;
+    }
+    return new Promise((resolve) => {
+      let waits = this.#markWaits.get(page);
+      if (!waits) {
+        waits = new Set();
+        this.#markWaits.set(page, waits);
+      }
+      const go = () => {
+        waits?.delete(go);
+        resolve();
+      };
+      waits.add(go);
+      signal.addEventListener("abort", go, { once: true });
+    });
+  }
+
+  /**
+   * Takes a page an agent opened on {@link BLANK} to the address it asked
+   * for, once the page carries its owner's mark: its first request is
+   * marked, its dashboard socket among them.
+   */
+  async load(page: string, url: string): Promise<void> {
+    await this.marked(page);
+    const session = this.#pageSessions.get(page);
+    const wire = this.#watch?.wire;
+    if (session && wire) {
+      await wire.call("Page.navigate", { url }, session);
+      return;
+    }
+    const browser = await this.#browserUrl(false);
+    const socket = await dial(browser);
+    const once = new Wire(socket);
+    socket.onmessage = (event) => {
+      const message = parse(said(event.data as string));
+      if (message) {
+        once.answered(message);
+      }
+    };
+    socket.onclose = () => once.ended();
+    try {
+      const attached = await once.call("Target.attachToTarget", {
+        targetId: page,
+        flatten: true,
+      });
+      const sessionId = text(attached.sessionId);
+      if (sessionId) {
+        await once.call("Page.navigate", { url }, sessionId);
+      }
+    } finally {
+      socket.close();
+    }
   }
 
   /**
@@ -665,6 +794,12 @@ export class Gate {
   #gone(targetId: string): void {
     this.#infos.delete(targetId);
     this.#tabPage.delete(targetId);
+    this.#pageSessions.delete(targetId);
+    this.#marks.delete(targetId);
+    for (const go of this.#markWaits.get(targetId) ?? []) {
+      go();
+    }
+    this.#markWaits.delete(targetId);
     if (this.#owners.targets[targetId]) {
       delete this.#owners.targets[targetId];
       this.#save();
@@ -680,6 +815,7 @@ export class Gate {
       this.own(page, owner);
     }
     this.#changed(tab);
+    this.#mark(page);
   }
 
   /** Ownership of `targetId` (and the tab holding it) changed: each connection shows what it may now see. */
@@ -722,6 +858,7 @@ export class Gate {
         return;
       }
       const wire = new Wire(socket);
+      watch.wire = wire;
       socket.onmessage = (event) => {
         const message = parse(said(event.data as string));
         if (message && !wire.answered(message)) {
@@ -733,6 +870,10 @@ export class Gate {
         if (this.#watch === watch) {
           this.#watch = undefined;
           this.#tabSessions.clear();
+          // A mark lives on the watch's session of its page: gone with it,
+          // and put on again as the next watch attaches.
+          this.#pageSessions.clear();
+          this.#marks.clear();
           // Its connections still open: watched again, so each new tab is
           // still known (a browser that stopped refuses it, and theirs end).
           if (this.#links.size > 0) {
@@ -834,6 +975,7 @@ export class Gate {
       ? this.#tabSessions.get(message.sessionId)
       : undefined;
     if (tab && info.type === "page") {
+      this.#pageSessions.set(info.targetId, session);
       this.learn(info);
       this.#holds(tab, info.targetId);
     }
@@ -843,6 +985,8 @@ export class Gate {
     const watch = this.#watch;
     this.#watch = undefined;
     this.#tabSessions.clear();
+    this.#pageSessions.clear();
+    this.#marks.clear();
     if (watch) {
       // One still opening closes as it opens.
       watch.done = true;
@@ -877,6 +1021,13 @@ class Link {
   readonly #attached = new Set<string>();
   /** Sessions on Chromium's connection that are the agent's. */
   readonly #sessions = new Set<string>();
+  /** The target each of the agent's sessions is attached to. */
+  readonly #sessionTargets = new Map<string, string>();
+  /**
+   * The address each of the agent's `Target.createTarget` calls asked for,
+   * by call: the page opens blank, and goes there once it is marked.
+   */
+  readonly #goes = new Map<number, string>();
   /** The agent's calls whose answers the gate reads or narrows. */
   readonly #asked = new Map<number, Cdp>();
   /** Sessions the agent traces on now. */
@@ -979,6 +1130,15 @@ class Link {
     }
     if (!message.sessionId && (await this.#answeredHere(message))) {
       return;
+    }
+    // A load of one of its pages goes once the page carries its owner's
+    // mark (Gate `marked`), so the page's first request is marked.
+    const target =
+      message.method === "Page.navigate" && message.sessionId
+        ? this.#sessionTargets.get(message.sessionId)
+        : undefined;
+    if (target) {
+      await this.#gate.marked(target);
     }
     this.#up?.send(JSON.stringify(message));
   }
@@ -1128,10 +1288,17 @@ class Link {
           this.#shown.clear();
         }
         return false;
-      case "Target.createTarget":
-        message.params = { ...params, newWindow: true };
+      case "Target.createTarget": {
+        // Opened blank, and taken where it was asked once marked (Gate
+        // `load`): a page is the agent's from its first request.
+        const url = text(params.url);
+        if (url && url !== BLANK) {
+          this.#goes.set(message.id ?? 0, url);
+        }
+        message.params = { ...params, url: BLANK, newWindow: true };
         this.#asked.set(message.id ?? 0, message);
         return false;
+      }
       case "Target.createBrowserContext":
       case "Target.getTargets":
       case "Target.getBrowserContexts":
@@ -1201,8 +1368,12 @@ class Link {
     const child = text(params.sessionId);
     if (child && message.method === "Target.attachedToTarget") {
       this.#sessions.add(child);
+      if (isInfo(params.targetInfo)) {
+        this.#sessionTargets.set(child, params.targetInfo.targetId);
+      }
     } else if (child && message.method === "Target.detachedFromTarget") {
       this.#sessions.delete(child);
+      this.#sessionTargets.delete(child);
     }
     this.#send(data);
   }
@@ -1254,6 +1425,7 @@ class Link {
     if (!(session && this.#sessions.delete(session))) {
       return;
     }
+    this.#sessionTargets.delete(session);
     if (target) {
       this.#attached.delete(target);
     }
@@ -1275,6 +1447,7 @@ class Link {
       return;
     }
     this.#sessions.add(session);
+    this.#sessionTargets.set(session, info.targetId);
     this.#attached.add(info.targetId);
     this.#send(data);
   }
@@ -1313,8 +1486,19 @@ class Link {
     switch (asked.method) {
       case "Target.createTarget": {
         const id = text(result.targetId);
+        const url = this.#goes.get(asked.id ?? 0);
+        this.#goes.delete(asked.id ?? 0);
         if (id) {
           this.#gate.own(id, this.workspace);
+          if (url) {
+            this.#gate
+              .load(id, url)
+              .catch((error: unknown) =>
+                console.warn(
+                  `[browser] ${this.#gate.key}: a page of workspace ${this.workspace} did not open ${url}: ${String(error)}`
+                )
+              );
+          }
         }
         return;
       }

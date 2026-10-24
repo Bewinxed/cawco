@@ -10,7 +10,10 @@
    *   none: Caw at 80 over "What's next for <project>?", the project's
    *   starters as chips under him, then the earlier threads as every list
    *   draws a conversation (SessionRow). A chip puts its words in the
-   *   composer; nothing is sent. A row shows that thread here.
+   *   composer; nothing is sent. A row shows that thread here. With any
+   *   thread archived, the list is Earlier and Archived, the kit's
+   *   segmented filter: an archived thread's row brings it back from its
+   *   menu (ThreadMenu), and the panel never opens on one.
    * - Its head is his name over his line, New thread, and the way to open
    *   the thread as a tab. His name opens his lead session's card, the card
    *   a session tab's hover opens (SessionDetails), where his harness and
@@ -19,7 +22,7 @@
    *   in place, the composer staying where it is. Ask Caw (the head's
    *   button, the views bar's "+") shows a new thread here (`lead.fresh`).
    */
-  import { CAW_DENIED_TOOLS, type HarnessKind } from "@cawco/core";
+  import { CAW_DENIED_TOOLS, type HarnessKind, threadWords } from "@cawco/core";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { cawco, threadsOf } from "#lib/cawco/client.svelte.js";
@@ -35,6 +38,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -61,17 +69,29 @@
   // --- the thread on show -----------------------------------------------------
 
   const threads = $derived(threadsOf(projectId));
+  /** The threads you have not archived, newest first: what the panel opens on and lists. */
+  const unarchived = $derived(
+    threads.filter((each) => each.archivedAt === undefined)
+  );
+  /** The threads you archived, newest first: the list's Archived side, where each comes back. */
+  const archived = $derived(
+    threads.filter((each) => each.archivedAt !== undefined)
+  );
   /**
-   * The thread on show: the newest when the panel opens; null, a new one.
-   * `fresh`: New thread was chosen, so a newest arriving later does not
-   * take its place.
+   * The thread on show: the newest you have not archived when the panel
+   * opens; null, a new one. `fresh`: New thread was chosen, so a newest
+   * arriving later does not take its place.
    */
   let threadId = $state<string | null>(
-    untrack(() => threadsOf(projectId)[0]?.id ?? null)
+    untrack(
+      () =>
+        threadsOf(projectId).find((each) => each.archivedAt === undefined)
+          ?.id ?? null
+    )
   );
   let fresh = $state(false);
   $effect(() => {
-    const newest = threads[0]?.id;
+    const newest = unarchived[0]?.id;
     if (newest && threadId === null && !fresh) {
       threadId = newest;
     }
@@ -91,8 +111,19 @@
   );
   /** The project's threads past the one on show, newest first. */
   const earlier = $derived(
-    threads.filter((each) => each.id !== threadId).slice(0, 5)
+    unarchived.filter((each) => each.id !== threadId).slice(0, 5)
   );
+  /**
+   * Which of the thread list's two sides shows: Earlier, or Archived while
+   * there is anything archived. The last one brought back leaves Earlier.
+   */
+  let side = $state<"earlier" | "archived">("earlier");
+  const listed = $derived(
+    side === "archived" && archived.length > 0 ? archived : earlier
+  );
+  /** A side's label: its count only above 0 (The Earned Count Rule). */
+  const sideLabel = (name: string, count: number) =>
+    count > 0 ? `${name} ${count}` : name;
   // Ask Caw asked for new work: a thread not yet started, its composer
   // taking the caret (CawLead.newThread), whether the panel was drawn then
   // or opens with it.
@@ -227,15 +258,40 @@
      list draws a conversation with. A press shows it here; a press that
      opens a tab (a modifier, the middle button) still does. -->
 {#snippet under()}
-  {#if earlier.length > 0}
+  {#if earlier.length > 0 || archived.length > 0}
     <section
       data-slot="earlier"
-      aria-label="Earlier threads"
+      aria-label={threadWords.listLabel}
       class="mt-space-4 flex flex-col gap-space-1 text-start"
     >
-      <h3 class="type-meta px-space-2 font-medium text-ink-muted">Earlier</h3>
-      <ul class="m-0 list-none p-0">
-        {#each earlier as each (each.id)}
+      {#if archived.length > 0}
+        <!-- Earlier and Archived, the kit's segmented filter, the count only
+             above 0: an archived thread comes back from its row's menu. -->
+        <div class="px-space-2">
+          <Tabs
+            onValueChange={(next) => {
+              side = next as "earlier" | "archived";
+            }}
+            size="compact"
+            value={side}
+            values={["earlier", "archived"]}
+          >
+            <TabsList aria-label={threadWords.listLabel}>
+              <TabItem label={threadWords.earlier} value="earlier" />
+              <TabItem
+                label={sideLabel(threadWords.archived, archived.length)}
+                value="archived"
+              />
+            </TabsList>
+          </Tabs>
+        </div>
+      {:else}
+        <h3 class="type-meta px-space-2 font-medium text-ink-muted">
+          {threadWords.earlier}
+        </h3>
+      {/if}
+      <ul class="m-0 list-none p-0" data-thread-list={side}>
+        {#each listed as each (each.id)}
           {@const row = cawco.instanceIndex.byId.get(threadTabId(each.id))}
           <li
             onclickcapture={(event) => {
@@ -308,11 +364,11 @@
     </div>
     <div class="flex flex-none gap-space-1">
       {#if threadId}
-        <Tip label="New thread">
+        <Tip label={threadWords.newThread}>
           {#snippet children(tip)}
             <Button
               {...tip}
-              aria-label="New thread"
+              aria-label={threadWords.newThread}
               press="pressable"
               icon={IconPlus}
               onclick={() => choose(null)}

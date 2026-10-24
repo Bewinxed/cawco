@@ -1134,6 +1134,26 @@ export interface SessionCommands {
   skills: string[];
 }
 
+/**
+ * Who started a session, stamped by the hub as it starts from who asked,
+ * never from what the start carried: `person`, a person's own start (the
+ * New session form, a move); `delegate`, a `delegate` call (a work item,
+ * a routine's run and a design check among them); `caw`, a project's Caw
+ * and what his turns start; `check`, an agent's `start_session`, a start
+ * from a page in an agent's own browser, and the hub's own workers. Only a
+ * person's sessions stand at a project's top in the rails; every other one
+ * nests under the session that started it.
+ */
+export type SessionOrigin = "person" | "delegate" | "caw" | "check";
+
+/** Every {@link SessionOrigin}, in the order the type names them. */
+export const SESSION_ORIGINS = [
+  "person",
+  "delegate",
+  "caw",
+  "check",
+] as const satisfies readonly SessionOrigin[];
+
 export interface InstanceRow {
   /**
    * The account the session runs on (`instances.account_id`): placed once as
@@ -1213,6 +1233,11 @@ export interface InstanceRow {
   machineId: string;
   model?: string | null;
   /**
+   * Who started it ({@link SessionOrigin}), as the hub stamped it at its
+   * start. A row the hub sends always has it.
+   */
+  origin?: SessionOrigin;
+  /**
    * The account a person moved it to that it moves to at its next launch,
    * as the hub keeps it (its `owed_moves`), until the move lands: what it
    * waits on, its turn's end, the background work its process holds ending,
@@ -1232,7 +1257,12 @@ export interface InstanceRow {
    * last spawn, switch or `init`. Null on a session that has never said.
    */
   permissionMode?: string | null;
-  /** Set when the session was started from a project page. */
+  /**
+   * Its one project, written by the hub as it started: the project it was
+   * started in, its parent's for a delegate, Caw's work or a check, else
+   * the project whose place holds its folder most closely. Null when none
+   * does. The rails list a session under this project and no other.
+   */
   projectId?: string | null;
   /**
    * The toolset it runs in, when its spawn named one (a project's Caw is
@@ -1923,6 +1953,7 @@ export * from "./words/skills";
 export * from "./words/spawn";
 export * from "./words/spend";
 export * from "./words/tailnet";
+export * from "./words/threads";
 export * from "./words/transcript";
 export * from "./words/updates";
 export * from "./words/views";

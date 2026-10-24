@@ -35,7 +35,7 @@ import {
   machineLabel,
   mcpWords,
   presenceWords,
-  projectsFor,
+  projectAt as projectHolding,
   questionsOf,
   STREAM_RELAY_WORDS,
   tailnetWords,
@@ -50,6 +50,7 @@ import {
   type HubState,
   isFailed,
   isStale,
+  type ProjectRow,
 } from "../client.svelte";
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence, machineSync, syncNotice } from "../convergence";
@@ -80,7 +81,7 @@ import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
 import { threadIdOf, threadTabId } from "../thread-tabs";
-import { hasParent, rooted, tree } from "../tree";
+import { rooted, standsAlone, tree } from "../tree";
 import { askNaming } from "./ask-naming";
 import { choices } from "./choices.svelte";
 
@@ -654,13 +655,17 @@ export const machineName = (machineId: string): string => {
  */
 const WORKSPACE_ID = /-[0-9a-f]{8}$/;
 
-/** The project that holds the folder, else its leaf without a workspace id. */
+/**
+ * The project whose place holds the folder most closely (core `projectAt`),
+ * else its leaf without a workspace id: what a stored transcript, which has
+ * no row to name its project, is named by.
+ */
 export function projectOf(
   machineId: string,
   cwd: string | null | undefined
 ): string {
   const folder = cwd ?? "";
-  const [project] = projectsFor(cawco.projects, { machineId, cwd: folder });
+  const project = projectHolding(cawco.projects, { machineId, cwd: folder });
   return (
     project?.name ??
     (folder.split("/").filter(Boolean).pop() ?? "").replace(WORKSPACE_ID, "")
@@ -668,17 +673,28 @@ export function projectOf(
 }
 
 /**
- * The project a row is named by: that of the session at the top of its
- * chain of parents (tree.ts `topsIn`), as the rail places it. Named by its
- * own machine and folder, a delegate in a worktree or on another machine
- * named no project, or another one.
+ * The project a row lists in: its tree's, the one the hub wrote on the
+ * session at the top of its chain of parents (tree.ts `topsIn`), as the
+ * rail places it; undefined while that session has none.
+ */
+export function rowProject(row: BoardRow): ProjectRow | undefined {
+  const top = topsIn(cawco.instanceIndex.byId)(row);
+  return top.projectId
+    ? cawco.projects.find((project) => project.id === top.projectId)
+    : undefined;
+}
+
+/**
+ * The project a row is named by ({@link rowProject}), else the folder of
+ * the session at the top of its chain.
  */
 export function projectOfRow(row: BoardRow): string {
+  const project = rowProject(row);
+  if (project) {
+    return project.name;
+  }
   const top = topsIn(cawco.instanceIndex.byId)(row);
-  return (
-    projectsFor(cawco.projects, top)[0]?.name ??
-    projectOf(top.machineId, top.cwd)
-  );
+  return projectOf(top.machineId, top.cwd);
 }
 
 /** A project as a row names it: its name and the hue its mark wears in the rail. */
@@ -696,12 +712,22 @@ export function projectAt(
   cwd: string | null | undefined
 ): ProjectMarking | null {
   const folder = cwd ?? "";
-  const [project] = projectsFor(cawco.projects, { machineId, cwd: folder });
+  const project = projectHolding(cawco.projects, { machineId, cwd: folder });
   if (project) {
     return { name: project.name, hue: markHue(folderOf(project)) };
   }
   const name = projectOf(machineId, cwd);
   return name ? { name, hue: markHue(folder) } : null;
+}
+
+/** A row's project with its mark's hue ({@link rowProject}), else its top's place's. */
+export function projectMarkOfRow(row: BoardRow): ProjectMarking | null {
+  const project = rowProject(row);
+  if (project) {
+    return { name: project.name, hue: markHue(folderOf(project)) };
+  }
+  const top = topsIn(cawco.instanceIndex.byId)(row);
+  return projectAt(top.machineId, top.cwd);
 }
 
 /** "machine · project". */
@@ -900,12 +926,15 @@ export function endedUnseen(row: BoardRow): boolean {
 const enteredWorking = new Map<string, number>();
 
 /**
- * Work another session started: a row whose parent the fleet still holds
- * (tree.ts `hasParent`). The one test the Delegates switch and the tabs'
- * counts both read.
+ * Work another session started: a delegate, Caw's work or an agent's
+ * check, which only ever nests under the session that started it (tree.ts
+ * `standsAlone`), or any session under a parent the fleet holds. The one
+ * test the Delegates switch and the tabs' counts both read.
  */
 export const isDelegate = (row: BoardRow): boolean =>
-  hasParent(row, (id) => cawco.instanceIndex.byId.has(id));
+  !standsAlone(row) ||
+  (!!row.parentInstanceId &&
+    cawco.instanceIndex.byId.has(row.parentInstanceId));
 
 /** The rail's delegates switch, kept: work handed off is listed only on request. */
 const listed = (row: BoardRow): boolean => rail.delegates || !isDelegate(row);
@@ -1160,8 +1189,6 @@ class Home {
   readonly needs = $derived.by<NeedsItem[]>(() => {
     const asks: NeedsItem[] = cawco.blocked.map((item) => {
       const row = cawco.instanceIndex.byId.get(item.instanceId);
-      // The project is the top of its chain's, as the rail places it (`projectOfRow`).
-      const top = row ? topsIn(cawco.instanceIndex.byId)(row) : undefined;
       const questions = questionsOf(item.request.toolName, item.request.input);
       // An ask a project's Caw made is his thread's (his question, a project
       // setting, a memory proposal he asked about): the card opens the thread.
@@ -1188,10 +1215,9 @@ class Home {
         machineId: item.machineId,
         title,
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
-        project: projectAt(
-          top?.machineId ?? item.machineId,
-          top ? top.cwd : item.cwd
-        ),
+        project: row
+          ? projectMarkOfRow(row)
+          : projectAt(item.machineId, item.cwd),
         machine: {
           name: machineName(item.machineId),
           os:
@@ -1401,7 +1427,6 @@ class Home {
       .filter((need) => !(need.parked || notices.seen.has(need.notNow)))
       .map((need) => {
         const row = cawco.instanceIndex.byId.get(need.instanceId);
-        const top = row ? topsIn(cawco.instanceIndex.byId)(row) : undefined;
         const machine = cawco.machines.find(
           (one) => one.machineId === need.machineId
         );
@@ -1423,7 +1448,7 @@ class Home {
           raisedAt: need.raisedAt,
           href: need.href,
           place: row ? placeOfRow(row) : machineName(need.machineId),
-          project: top ? projectAt(top.machineId, top.cwd) : null,
+          project: row ? projectMarkOfRow(row) : null,
           machine: {
             name: machineName(need.machineId),
             os: machine?.os ?? "",
@@ -1539,9 +1564,7 @@ class Home {
     if (rail.delegates) {
       return all;
     }
-    const kept = new Set(
-      rooted(all, (id) => cawco.instanceIndex.byId.has(id)).map((row) => row.id)
-    );
+    const kept = new Set(rooted(all).map((row) => row.id));
     return all.filter((row) => kept.has(row.id) || isFailed(row));
   }
 
@@ -1686,11 +1709,10 @@ class Home {
       ...cawco.blocked.map((item) => item.instanceId),
     ]);
     const rows = cawco.listedRows.filter((row) => !shown.has(row.id));
-    const known = (id: string) => cawco.instanceIndex.byId.has(id);
     // What the Delegates switch means in every home list (WorkTabs
     // `rowsOf`): off, a delegate is held only under a parent the list holds
     // too, in that parent's tree; on, every one is held, under its parent.
-    return (rail.delegates ? rows : rooted(rows, known)).sort(
+    return (rail.delegates ? rows : rooted(rows)).sort(
       (a, b) => lastAt(b) - lastAt(a) || compareIds(a.id, b.id)
     );
   });

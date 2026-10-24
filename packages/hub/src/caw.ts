@@ -585,6 +585,7 @@ export interface CawDeps {
     DbShape,
     | "addThreadMessage"
     | "allThreads"
+    | "archiveThread"
     | "bookCawTurn"
     | "createThread"
     | "dropLeadTurn"
@@ -953,6 +954,7 @@ export const createCaw = ({
       lastAt: thread.updatedAt.getTime(),
       setup: thread.setup,
       status: statusOf(thread.id),
+      ...(thread.archivedAt ? { archivedAt: thread.archivedAt.getTime() } : {}),
     };
   };
 
@@ -2638,6 +2640,26 @@ export const createCaw = ({
      * again. What rode with your words (pictures, pastes, files) goes with
      * them again, as the message kept it. Answers the thread.
      */
+    /**
+     * Archives one of the project's threads (`archived`), or brings it back:
+     * the rails leave an archived thread and the sessions under it out, and
+     * a new message in it brings it back. Every dashboard hears the thread
+     * as it stands then.
+     */
+    archive(
+      projectId: string,
+      threadId: string,
+      archived: boolean
+    ): ThreadSummary {
+      threadIn(projectId, threadId);
+      const thread = db.archiveThread(threadId, archived ? new Date() : null);
+      if (!thread) {
+        return refuse(404, "This thread is not on this hub any more.");
+      }
+      upsert(thread);
+      return summaryOf(thread);
+    },
+
     wakeAgain(projectId: string, threadId: string): ThreadSummary {
       const thread = threadIn(projectId, threadId);
       if (wakingAgain.has(threadId) || statusOf(threadId) === "working") {
@@ -3630,6 +3652,22 @@ export const cawRoutes = (caw: Caw) =>
         }
       }
     )
+    // Archive a thread: the rails leave it and what it started out; a new
+    // message in it, or Unarchive, brings it back.
+    .post("/api/projects/:id/threads/:threadId/archive", ({ params }) => {
+      try {
+        return caw.archive(params.id, params.threadId, true);
+      } catch (error) {
+        return answer(error);
+      }
+    })
+    .post("/api/projects/:id/threads/:threadId/unarchive", ({ params }) => {
+      try {
+        return caw.archive(params.id, params.threadId, false);
+      } catch (error) {
+        return answer(error);
+      }
+    })
     // Try again on a not-woken note: Caw woken with the words he has not read.
     .post("/api/projects/:id/threads/:threadId/wake", ({ params }) => {
       try {

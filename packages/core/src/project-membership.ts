@@ -1,8 +1,15 @@
 /**
- * Which projects a session lists in: one rule, read by the rail (the
- * dashboard's project tree) and by the hub (the sessions it stops before a
- * project is forgotten, and the delete it refuses while one still runs), so
- * the two never disagree about whose a session is.
+ * Whose a session is: one project, its own. The hub writes a session's
+ * `projectId` as it starts (a delegate, Caw's work and a check take their
+ * parent's), and every reader reads that one field: the rail, the home, the
+ * hub's stops before a project is forgotten. Nothing walks outward from a
+ * session's folder to find more projects, so a project whose checkout holds
+ * another's (one at the home folder) never takes the other's sessions.
+ *
+ * What has no row to read a project from (a machine's stored transcript, a
+ * session started with no project) is placed once, by its folder: the
+ * deepest place on its machine that holds it ({@link projectAt}). The hub's
+ * migration that gave every older row its project used the same rule.
  */
 
 /** A place a project has: a folder on one machine. */
@@ -19,19 +26,6 @@ export interface MemberProject {
   places: MemberPlace[];
   /** Its primary checkout's id; null while it has none. */
   primaryPlaceId: string | null;
-}
-
-/** Where a session runs, and the project it was started under, if any. */
-export interface MemberLocation {
-  cwd: string;
-  machineId: string;
-  projectId?: string | null;
-}
-
-/** A folder on one machine. */
-interface Spot {
-  machineId: string;
-  path: string;
 }
 
 const TRAILING_SLASH = /\/+$/;
@@ -51,116 +45,36 @@ export const primaryPlaceOf = <P extends MemberProject>(
   project.places.find((place) => place.id === project.primaryPlaceId);
 
 /**
- * Where an owned row counts from: the owner's place on the row's machine that
- * holds the row's folder (the deepest), else the owner's primary checkout,
- * else the row's own folder.
+ * The project whose place on `machineId` holds `cwd` most closely: the
+ * deepest such place, the oldest project where two share it. Undefined when
+ * no place holds it. A place at the home folder holds everything under it,
+ * so it is chosen only where no deeper project's place does.
  */
-function homeOf(owner: MemberProject, row: MemberLocation): Spot {
-  const cwd = folder(row.cwd);
-  const primary = primaryPlaceOf(owner);
-  let home: Spot = primary
-    ? { machineId: primary.machineId, path: folder(primary.path) }
-    : { machineId: row.machineId, path: cwd };
-  let depth = -1;
-  for (const place of owner.places) {
-    const path = folder(place.path);
-    if (
-      place.machineId === row.machineId &&
-      contains(path, cwd) &&
-      path.length > depth
-    ) {
-      home = { machineId: place.machineId, path };
-      depth = path.length;
-    }
-  }
-  return home;
-}
-
-/** Each machine's folders that are places, and the oldest project at each. */
-type PlaceIndex<P extends MemberProject> = Map<string, Map<string, P>>;
-
-/**
- * The place index of each projects list, built the first time a list is
- * asked about. Both readers replace their list whole whenever a project or a
- * place changes, so a list's index never goes stale. Rebuilt per ask, the
- * index was a pass over every place of every project per row, which held the
- * page for hundreds of milliseconds at a time on a fleet with many sessions.
- */
-const indexes = new WeakMap<readonly MemberProject[], PlaceIndex<never>>();
-
-function placeIndex<P extends MemberProject>(
-  projects: readonly P[]
-): PlaceIndex<P> {
-  const held = indexes.get(projects) as PlaceIndex<P> | undefined;
-  if (held) {
-    return held;
-  }
-  const index: PlaceIndex<P> = new Map();
+export function projectAt<P extends MemberProject>(
+  projects: readonly P[],
+  at: { cwd: string; machineId: string }
+): P | undefined {
+  const cwd = folder(at.cwd);
+  let best: { depth: number; project: P } | undefined;
   for (const project of projects) {
     for (const place of project.places) {
-      let oldest = index.get(place.machineId);
-      if (!oldest) {
-        oldest = new Map();
-        index.set(place.machineId, oldest);
+      if (place.machineId !== at.machineId) {
+        continue;
       }
       const path = folder(place.path);
-      const previous = oldest.get(path);
-      if (!previous || older(project, previous)) {
-        oldest.set(path, project);
+      if (!contains(path, cwd)) {
+        continue;
+      }
+      if (
+        !best ||
+        path.length > best.depth ||
+        (path.length === best.depth && older(project, best.project))
+      ) {
+        best = { project, depth: path.length };
       }
     }
   }
-  indexes.set(projects, index as PlaceIndex<never>);
-  return index;
-}
-
-/** Every folder that holds `path` (`contains`), the folder itself first, then outward. */
-function holders(path: string): string[] {
-  const out = [path];
-  for (let i = path.length - 1; i > 0; i -= 1) {
-    if (path[i] === "/") {
-      out.push(path.slice(0, i));
-    }
-  }
-  if (path.startsWith("/") && !out.includes("/")) {
-    out.push("/");
-  }
-  return out;
-}
-
-/**
- * Explicit ownership wins; then every project with a place on the row's
- * machine whose folder holds the row's, deepest first. Ambiguous folders
- * belong to their oldest project.
- */
-export function projectsFor<P extends MemberProject>(
-  projects: readonly P[],
-  row: MemberLocation
-): P[] {
-  const owner = projects.find((project) => project.id === row.projectId);
-  const at: Spot = owner
-    ? homeOf(owner, row)
-    : { machineId: row.machineId, path: folder(row.cwd) };
-  const oldest = placeIndex(projects).get(at.machineId);
-  if (!oldest) {
-    return owner ? [owner] : [];
-  }
-  // Each project once, at the deepest of its places that holds the folder.
-  const depth = new Map<string, { project: P; depth: number }>();
-  for (const path of holders(at.path)) {
-    const project = oldest.get(path);
-    if (!project || (owner && (path === at.path || project.id === owner.id))) {
-      continue;
-    }
-    const held = depth.get(project.id);
-    if (!held || path.length > held.depth) {
-      depth.set(project.id, { project, depth: path.length });
-    }
-  }
-  const claimed = [...depth.values()]
-    .sort((a, b) => b.depth - a.depth)
-    .map((held) => held.project);
-  return owner ? [owner, ...claimed] : claimed;
+  return best?.project;
 }
 
 /** A session row as the tree reads it: its id and the one it is a delegate of. */
@@ -171,9 +85,7 @@ export interface MemberTreeRow {
 
 /**
  * The session at the top of a row's chain of parents, over every row known
- * (a cycle stops where it closes). A row lists in the projects of its top,
- * whatever machine and folder it runs on itself: a delegate started on
- * another machine, in a worktree there, still lists with its parent.
+ * (a cycle stops where it closes): the row a tree is listed by.
  */
 export function topsIn<T extends MemberTreeRow>(
   byId: ReadonlyMap<string, T>

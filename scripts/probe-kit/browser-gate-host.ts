@@ -17,6 +17,7 @@
 import type { BrowserKey } from "../../packages/core/src/browser";
 
 const browsers = await import("../../packages/agent/src/browser/browsers");
+const doors = await import("../../packages/agent/src/browser/door");
 const gates = await import("../../packages/agent/src/browser/gate");
 const { readBrowser } = await import("../../packages/agent/src/browser/state");
 
@@ -36,6 +37,8 @@ interface Command {
   hidden?: boolean;
   id: number;
   key?: BrowserKey;
+  /** A session's own door's project (`door`). */
+  project?: string;
   verb: string;
   workspace?: string;
 }
@@ -89,6 +92,22 @@ const act = async (command: Command): Promise<unknown> => {
       return null;
     case "forget":
       return gateFor(command.key).forget(command.workspace ?? "");
+    // A session's own door, as the agent makes one for a session outside
+    // every workspace (door.ts): its gate's address and its token.
+    case "door": {
+      const { config } = await doors.browserDoor(
+        command.workspace ?? "",
+        command.project
+      );
+      const read = JSON.parse(await Bun.file(config).text()) as {
+        wsEndpoint: string;
+        wsHeaders: string;
+      };
+      return {
+        endpoint: read.wsEndpoint,
+        headers: JSON.parse(read.wsHeaders) as Record<string, string>,
+      };
+    }
     default:
       throw new Error(`${command.verb} is no verb of this host`);
   }

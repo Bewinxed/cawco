@@ -20,7 +20,7 @@
 </script>
 
 <script lang="ts">
-  import { commonWords, transcriptWords } from "@cawco/core";
+  import { commonWords, threadWords, transcriptWords } from "@cawco/core";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -164,7 +164,7 @@
     const ctx = contextOf(id);
     const thread = cawco.threadOf(id);
     const { label, named } = isThreadTab(id)
-      ? { label: thread?.title ?? "New thread", named: true }
+      ? { label: thread?.title ?? threadWords.newThread, named: true }
       : sessionName(id, servedNames);
     const activity = cawco.activityOf(id);
     const failed = row ? isFailed(row) : false;

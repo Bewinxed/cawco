@@ -7,9 +7,12 @@
  * refused while any of them still runs, so no client can orphan a session by
  * forgetting its project.
  *
- * A session lists in a project by the rail's own rule (core
- * project-membership): the projects of the session at the top of its chain
- * of parents. It may still run while its process may be alive: starting,
+ * A project's sessions are the rows whose one project it is (core
+ * project-membership: the hub writes a session's `projectId` as it starts,
+ * a delegate's its parent's), never a session whose folder another
+ * project's checkout merely holds: forgetting a project at the home folder
+ * stops none of a project's under it. A session may still run while its
+ * process may be alive: starting,
  * running, `unknown` (its machine went away with it running: the hub writes
  * that at the disconnect, and the process lives on in the machine's keeper),
  * asleep in the middle of a turn, or ended on request but not yet confirmed
@@ -26,14 +29,9 @@
  *   an `endIntent` and no `endConfirmedAt`). Once that stop is recorded the
  *   session no longer blocks the delete: it stops when its machine is back.
  */
-import {
-  type ProjectStopFrame,
-  projectsFor,
-  type SessionPulse,
-  topsIn,
-} from "@cawco/core";
+import type { ProjectStopFrame, SessionPulse } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
-import { checkoutOf, type DbShape } from "./db";
+import type { DbShape } from "./db";
 import type { HubLifetimeShape } from "./lifetime";
 
 type Row = ReturnType<DbShape["sessionOwnership"]>[number];
@@ -113,22 +111,9 @@ export const createProjectStops = (ports: {
   const blocks = (row: Row): boolean =>
     mayRun(row) && (ports.online(row.machineId) || !row.endIntent);
 
-  /** Every session that lists in the project, running or not. */
-  const members = (projectId: string): Row[] => {
-    // As the dashboard reads them (GET /api/projects): with the primary named.
-    const projects = ports.db.listProjects().map((project) => ({
-      ...project,
-      primaryPlaceId: checkoutOf(project)?.id ?? null,
-    }));
-    const rows = ports.db.sessionOwnership();
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const topOf = topsIn(byId);
-    return rows.filter((row) =>
-      projectsFor(projects, topOf(row)).some(
-        (project) => project.id === projectId
-      )
-    );
-  };
+  /** Every session whose project it is, running or not. */
+  const members = (projectId: string): Row[] =>
+    ports.db.sessionOwnership().filter((row) => row.projectId === projectId);
 
   const spawned = (row: Row) => row.spawnedAt?.getTime() ?? 0;
 

@@ -89,6 +89,12 @@ export interface ThreadHearing {
 /** A thread as the project's list and the `thread.upsert` frame carry it. */
 export interface ThreadSummary {
   /**
+   * When you archived it, ms epoch: the rails leave it and the sessions
+   * under it out, and the project's thread list keeps it under Archived.
+   * Absent while it is not archived; a new message in it brings it back.
+   */
+  archivedAt?: number;
+  /**
    * While his turn has read your words here and not yet answered them: what
    * he says in plain text after that send in his session is posted here as
    * his reply when the turn ends, so the thread draws it as he writes it.

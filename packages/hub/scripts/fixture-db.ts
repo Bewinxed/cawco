@@ -105,6 +105,7 @@ function seedSessions(db: HubDb, projects: string[]): Seeded[] {
       cwd: fixturePath(`/home/dev/src/${projectId}`),
       sessionId: crypto.randomUUID(),
       harness: pick(HARNESSES),
+      origin: parent ? "delegate" : "person",
       projectId,
       ...(parent ? { parentInstanceId: parent.id, canDelegate: false } : {}),
       title: pick(WORDS),

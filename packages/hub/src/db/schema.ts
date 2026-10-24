@@ -858,6 +858,17 @@ export const instances = sqliteTable("instances", {
    * a person started. Whether it is delegated work is {@link workItemId}'s.
    */
   parentInstanceId: text("parent_instance_id"),
+  /**
+   * Who started it (core `SessionOrigin`), stamped once as its row opens
+   * from who asked for the start, never from the start's payload: `person`,
+   * `delegate`, `caw` or `check`. Only a person's sessions stand at the top
+   * of a project in the rails; the rest nest under their parent, and one
+   * whose work item has ended is listed a day, asleep or not.
+   */
+  origin: text("origin")
+    .$type<import("@cawco/core").SessionOrigin>()
+    .notNull()
+    .default("person"),
   /** The delegating tool call, so the parent transcript can render the round trip. */
   parentToolUseId: text("parent_tool_use_id"),
   /**
@@ -4549,6 +4560,11 @@ export const projectThreads = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
     /** When its newest message was added. */
     updatedAt: timestamp("updated_at").notNull(),
+    /**
+     * When you archived it: the rails leave it and the sessions under it
+     * out. Null while it is not; any new message in it clears it.
+     */
+    archivedAt: timestamp("archived_at"),
   },
   (table) => [index("project_threads_project").on(table.projectId)]
 );

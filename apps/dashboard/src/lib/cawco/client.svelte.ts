@@ -910,12 +910,20 @@ const THREAD_DOING: Record<ThreadSummary["status"], Activity> = {
  * the rail lists, nests under and orders it by, and what its tab is named
  * from. Read with the fleet, kept by `thread.upsert` frames.
  */
-const threadRows = $derived.by(() =>
+const allThreadRows = $derived.by(() =>
   state.projects.flatMap((project) =>
     (state.threads[project.id] ?? []).map((thread) =>
       threadRowOf(thread, project)
     )
   )
+);
+/**
+ * The threads the lists show: every one you have not archived. An archived
+ * one, and the sessions its turns started, stand in no list; its tab still
+ * opens it (`instanceIndex` keeps every thread).
+ */
+const threadRows = $derived(
+  allThreadRows.filter((row) => !threadOf(row.id)?.archivedAt)
 );
 /** Each thread by its id, for what a `thread:` tab or row asks of it. */
 const threadsById = $derived.by(
@@ -932,7 +940,9 @@ const threadOf = (id: string): ThreadSummary | undefined => {
   return threadId ? threadsById.get(threadId) : undefined;
 };
 /** The same rows looked up by id and by session, threads among them, rebuilt once per change. */
-const instanceIndex = $derived(indexInstances([...instances, ...threadRows]));
+const instanceIndex = $derived(
+  indexInstances([...instances, ...allThreadRows])
+);
 const runningInstances = $derived(instances.filter(isLive));
 /**
  * What a list shows running: sessions (a lead is its threads, thread-tabs.ts
@@ -6884,6 +6894,26 @@ export async function wakeThread(
     `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/wake`,
     json("POST", {})
   );
+}
+
+/**
+ * Archives one of a project's threads (`archived`), or brings it back: the
+ * rails leave an archived thread and the sessions under it out, and the
+ * project's thread list keeps it under Archived. The hub's answer is the
+ * thread as it stands, adopted unless a frame moved it since.
+ */
+export async function archiveThread(
+  projectId: string,
+  threadId: string,
+  archived: boolean
+): Promise<ThreadSummary> {
+  const mark = readLeaves();
+  const thread = await askHub<ThreadSummary>(
+    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/${archived ? "archive" : "unarchive"}`,
+    json("POST", {})
+  );
+  keepThread(thread, mark);
+  return thread;
 }
 
 /** "Ask Caw for a view": a new thread with your words, Caw woken to draft it. */

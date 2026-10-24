@@ -45,6 +45,7 @@ import type {
   SessionEffort,
   SessionEndIntent,
   SessionLimits,
+  SessionOrigin,
   SessionTooling,
   SkillFile,
   StoppedCommands,
@@ -350,7 +351,12 @@ export interface MovedHere {
   moved: string;
   stayed?: string;
 }
-export type BoardInstanceRow = PublicInstanceRow;
+/**
+ * A board row: a {@link PublicInstanceRow}, and whether its work item is
+ * live (null: it runs none), which the board reads to list it and never
+ * sends.
+ */
+export type BoardInstanceRow = PublicInstanceRow & { workLive: boolean | null };
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
 export type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -452,17 +458,39 @@ export interface SettledInstance {
 /** How long a session that stopped moving stays in the listings the rails read. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+/** A folder's trailing slashes, which {@link DbShape.projectHolding} reads past. */
+const TRAILING_SLASHES = /\/+$/;
+
 /**
- * The listings' one clock-bound rule, for a row already read: running or
- * asleep, or moved within {@link STALE_AFTER_MS}. A row the board keeps
- * leaves it by this as the listing's own query would drop it, with no write.
+ * Whether a sleeping row stays listed however long it sleeps: a person's
+ * session and Caw's are conversations to pick back up; a delegate's or a
+ * check's only while its work item is live (`workLive`). One whose item has
+ * ended (or that has none) is history, listed {@link STALE_AFTER_MS} after
+ * it last moved, as a stopped row is.
+ */
+const sleepKeeps = (row: {
+  origin: SessionOrigin;
+  workLive: boolean | null;
+}): boolean =>
+  row.origin === "person" || row.origin === "caw" || row.workLive === true;
+
+/**
+ * The listings' one clock-bound rule, for a row already read: running,
+ * asleep where its sleep keeps it ({@link sleepKeeps}), or moved within
+ * {@link STALE_AFTER_MS}. A row the board keeps leaves it by this as the
+ * listing's own query would drop it, with no write.
  */
 export const listedAt = (
-  row: { status: string; updatedAt: Date },
+  row: {
+    origin: SessionOrigin;
+    status: string;
+    updatedAt: Date;
+    workLive: boolean | null;
+  },
   now: number
 ): boolean =>
   row.status === "running" ||
-  row.status === "sleeping" ||
+  (row.status === "sleeping" && sleepKeeps(row)) ||
   row.updatedAt.getTime() > now - STALE_AFTER_MS;
 /** The span of a usage bucket stored before quarters (`usage_buckets.span_ms`). */
 const HOUR_MS = 60 * 60 * 1000;
@@ -661,6 +689,14 @@ export interface DbShape {
     answer: "accepted" | "dismissed",
     projectId?: string
   ) => void;
+  /**
+   * Archives a thread (`at`) or brings it back (null); the thread as it
+   * stands then, or undefined when there is none.
+   */
+  readonly archiveThread: (
+    id: string,
+    at: Date | null
+  ) => ThreadRow | undefined;
   /** Artifacts and their documents' update logs (artifacts/). */
   readonly artifacts: ArtifactsDb;
   /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
@@ -669,6 +705,12 @@ export interface DbShape {
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
   /** Each project page's arrangement of blocks (blocks.ts). */
   readonly blocks: BlocksDb;
+  /**
+   * Rows by id as the board reads them, listed or not: the ancestors a
+   * listed row nests under, which the board carries with it. Never one the
+   * listings never show (discarded, being deleted, a removed machine's).
+   */
+  readonly boardAncestors: (ids: string[]) => BoardInstanceRow[];
   /** Books what one Caw turn cost, to the thread that woke it (null: none did). */
   readonly bookCawTurn: (turn: {
     harness: string;
@@ -1423,6 +1465,13 @@ export interface DbShape {
     cwd: MachinePath;
     sessionId?: string;
     harness: HarnessKind;
+    /**
+     * Who started it (core `SessionOrigin`), from who asked: written as the
+     * row opens and never after, so a restart, wake or relaunch of a row
+     * keeps the one it opened with.
+     */
+    origin: SessionOrigin;
+    /** Its project; a row that has one keeps it, whatever a later start names. */
     projectId?: string;
     parentInstanceId?: string;
     parentToolUseId?: string;
@@ -1596,6 +1645,15 @@ export interface DbShape {
   readonly projectAttempts: (projectId: string) => WorkItemRow[];
   /** The oldest project whose checkouts are of `remote` (normalised). */
   readonly projectByRemote: (remote: string) => ProjectRow | undefined;
+  /**
+   * The project whose place on `machineId` holds `cwd` most closely (core
+   * `projectAt`, the rule migration 0309 placed every older row by): the
+   * deepest place, the oldest project where two share it. Undefined: none.
+   */
+  readonly projectHolding: (
+    machineId: string,
+    cwd: string
+  ) => string | undefined;
   /** A session's "make this a project" offer, answered or not (project-offers.ts). */
   readonly projectOffer: (instanceId: string) => ProjectOfferRow | undefined;
   /** The project's repository on a machine, as the last workspace cut there recorded it. */
@@ -2981,7 +3039,19 @@ const make = async (path: string): Promise<DbShape> => {
     commands: _commands,
     ...publicColumns
   } = getTableColumns(instances);
-  const boardColumns = publicColumns;
+  /**
+   * The board's rows: each with whether its work item is live (starting or
+   * running), which decides whether a delegate's or a check's sleep keeps it
+   * listed ({@link listedAt}). Null on a row that runs no work item.
+   */
+  const boardColumns = {
+    ...publicColumns,
+    workLive: sql<
+      boolean | null
+    >`CASE WHEN ${instances.workItemId} IS NULL THEN NULL ELSE EXISTS (SELECT 1 FROM ${workItems} WHERE ${workItems.id} = ${instances.workItemId} AND ${workItems.state} IN ('starting', 'running')) END`.mapWith(
+      (value: number | null) => (value === null ? null : value === 1)
+    ),
+  };
   const {
     tooling: _ownTooling,
     commands: _ownCommands,
@@ -3159,6 +3229,12 @@ const make = async (path: string): Promise<DbShape> => {
   );
   db.$client.run(
     "CREATE TEMP TRIGGER IF NOT EXISTS instance_deleted AFTER DELETE ON main.instances BEGIN INSERT INTO instance_changes (id) VALUES (old.id); END"
+  );
+  // A work item ending moves its session's row on the board as a write to
+  // the row would: whether the session's sleep keeps it listed is the
+  // item's ({@link listedAt}).
+  db.$client.run(
+    "CREATE TEMP TRIGGER IF NOT EXISTS work_item_state AFTER UPDATE OF state ON main.work_items WHEN old.state IS NOT new.state BEGIN INSERT INTO instance_changes (id) VALUES (new.instance_id); END"
   );
   const takeChanges = db.$client.prepare<{ id: string }, []>(
     "DELETE FROM instance_changes RETURNING id"
@@ -5099,6 +5175,7 @@ const make = async (path: string): Promise<DbShape> => {
       cwd,
       sessionId,
       harness,
+      origin,
       projectId,
       parentInstanceId,
       parentToolUseId,
@@ -5171,6 +5248,7 @@ const make = async (path: string): Promise<DbShape> => {
           cwd,
           sessionId: cleanSessionId,
           harness,
+          origin,
           projectId,
           parentInstanceId,
           parentToolUseId,
@@ -5245,7 +5323,13 @@ const make = async (path: string): Promise<DbShape> => {
             // A start with no conversation to resume begins one from nothing.
             ...(cleanSessionId ? {} : { modelUsageSeen: {} }),
             harness,
-            ...(projectId ? { projectId } : {}),
+            // One project per session, written as it first opened: a later
+            // start of the row gives it one only while it has none.
+            ...(projectId
+              ? {
+                  projectId: sql`COALESCE(${instances.projectId}, ${projectId})`,
+                }
+              : {}),
             ...(parentInstanceId ? { parentInstanceId } : {}),
             ...(parentToolUseId ? { parentToolUseId } : {}),
             // A re-issued spawn's title never replaces the owner's name.
@@ -5705,12 +5789,39 @@ const make = async (path: string): Promise<DbShape> => {
       // directory as the machine resolved it (`~` expanded). Every later `init`
       // carries wherever the CLI has since `cd`'d to, which is not where the
       // session lives.
+      const before = db
+        .select({
+          sessionId: instances.sessionId,
+          projectId: instances.projectId,
+          machineId: instances.machineId,
+          parentInstanceId: instances.parentInstanceId,
+        })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get();
+      // A row its start found no project for, and whose folder only its
+      // machine could resolve (a `~` start), is placed by that folder now:
+      // the place holding it most closely, once. A session under a parent
+      // keeps its parent's, none included.
+      const placed =
+        cwd &&
+        before &&
+        before.sessionId === null &&
+        before.projectId === null &&
+        before.parentInstanceId === null
+          ? store.projectHolding(before.machineId, cwd)
+          : undefined;
       db.update(instances)
         .set({
           sessionId,
           ...(cwd
             ? {
                 cwd: sql`CASE WHEN ${instances.sessionId} IS NULL THEN ${cwd} ELSE ${instances.cwd} END`,
+              }
+            : {}),
+          ...(placed
+            ? {
+                projectId: sql`COALESCE(${instances.projectId}, ${placed})`,
               }
             : {}),
           ...(tooling ? { tooling } : {}),
@@ -7294,6 +7405,47 @@ const make = async (path: string): Promise<DbShape> => {
             .where(and(listedInstances(), inArray(instances.id, ids)))
             .all()
             .map(asListed),
+    boardAncestors: (ids) =>
+      ids.length === 0
+        ? []
+        : db
+            .select(boardColumns)
+            .from(instances)
+            .where(
+              and(
+                inArray(instances.id, ids),
+                eq(instances.machineRemoved, false),
+                ne(instances.status, "discarded"),
+                or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
+              )
+            )
+            .all()
+            .map(asListed),
+    projectHolding: (machineId, cwd) => {
+      const at = cwd.replace(TRAILING_SLASHES, "") || "/";
+      const base = sql`rtrim(${projectPlaces.path}, '/')`;
+      return db
+        .select({ projectId: projectPlaces.projectId })
+        .from(projectPlaces)
+        .innerJoin(projects, eq(projects.id, projectPlaces.projectId))
+        .where(
+          and(
+            eq(projectPlaces.machineId, machineId),
+            ne(projectPlaces.kind, "hub"),
+            or(
+              sql`${base} = ${at}`,
+              sql`substr(${at}, 1, length(${base}) + 1) = ${base} || '/'`
+            )
+          )
+        )
+        .orderBy(
+          desc(sql`length(${base})`),
+          asc(projects.createdAt),
+          asc(projects.id)
+        )
+        .limit(1)
+        .get()?.projectId;
+    },
     takeChangedInstances: () => [
       ...new Set(takeChanges.all().map((row) => row.id)),
     ],
@@ -8165,6 +8317,13 @@ const make = async (path: string): Promise<DbShape> => {
         .get()?.thread,
     thread: (id) =>
       db.select().from(projectThreads).where(eq(projectThreads.id, id)).get(),
+    archiveThread: (id, at) =>
+      db
+        .update(projectThreads)
+        .set({ archivedAt: at })
+        .where(eq(projectThreads.id, id))
+        .returning()
+        .get(),
     threadMessages: (threadId) =>
       withTasks(
         db
@@ -8262,6 +8421,8 @@ const make = async (path: string): Promise<DbShape> => {
           .set({
             updatedAt:
               at.getTime() > before.updatedAt.getTime() ? at : before.updatedAt,
+            // A new message brings an archived thread back.
+            archivedAt: null,
           })
           .where(eq(projectThreads.id, threadId))
           .returning()

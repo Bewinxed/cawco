@@ -90,6 +90,7 @@ import type {
   SessionEndIntent,
   SessionLimits,
   SessionMessage,
+  SessionOrigin,
   SessionPulse,
   SessionTooling,
   SkillFile,
@@ -394,7 +395,11 @@ import {
   type BrowserHandedBackFrame,
   isBrowserKey,
 } from "@cawco/core/browser";
-import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
+import {
+  crossSiteRefusal,
+  GATED_PAGE_HEADER,
+  pageOrigin,
+} from "@cawco/core/browser-gate";
 import {
   CANVAS_LIMITS,
   CANVAS_SCREEN_CLOSE,
@@ -536,6 +541,7 @@ import {
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
+import { withAncestors } from "./board-ancestors";
 import { bodyLimitRefusal } from "./body-limits";
 import { briefingsObserve } from "./briefings";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
@@ -927,6 +933,7 @@ import {
   blockWords,
   createWorkItems,
   type ItemPlacement,
+  isHubParent,
   isLive,
   LEAF_DELEGATE_REFUSAL,
   outputsFolder,
@@ -7845,6 +7852,7 @@ export const createServer = (
       cwd: row.cwd,
       sessionId: row.sessionId ?? undefined,
       harness: row.harness,
+      origin: row.origin,
       kind: row.kind ?? undefined,
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
@@ -15077,10 +15085,54 @@ export const createServer = (
     return undefined;
   };
 
+  /**
+   * Who a start is (core `SessionOrigin`), as its row records it: what its
+   * caller asked it as, and `caw` for one a project's Caw started, whatever
+   * tool he started it with. A person's start is a person's.
+   */
+  const originOfStart = (
+    asked: SessionOrigin,
+    parentInstanceId: string | undefined
+  ): SessionOrigin => {
+    if (asked === "person" || !parentInstanceId) {
+      return asked;
+    }
+    const [parent] = db.getInstancesByIds([parentInstanceId]);
+    return parent?.role === "lead" ? "caw" : asked;
+  };
+
+  /**
+   * The one project a start's row opens in: its parent's, whatever started
+   * it under one (a delegate, Caw's work, a check, a person's start under a
+   * session), none included, since it is listed under that parent; else
+   * the project the start names; else the project whose place on its
+   * machine holds its folder most closely (core `projectAt`). Undefined:
+   * none holds it.
+   */
+  const projectOfStart = (
+    parentInstanceId: string | undefined,
+    named: string | undefined,
+    machineId: string,
+    cwd: string
+  ): string | undefined => {
+    const [parent] = parentInstanceId
+      ? db.getInstancesByIds([parentInstanceId])
+      : [];
+    if (parent) {
+      return parent.projectId ?? undefined;
+    }
+    if (named && db.project(named)) {
+      return named;
+    }
+    return db.projectHolding(machineId, cwd);
+  };
+
   /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
   const issueSpawn = (
     machineId: string,
     asked: NamedSpawn,
+    /** Who asked for it: what its row's origin is (`originOfStart`). */
+    by: SessionOrigin,
     workItemId?: string,
     fallbackMode?: string | null,
     placedAhead?: { accountId?: string }
@@ -15094,7 +15146,19 @@ export const createServer = (
     if ("refusal" in settled) {
       throw new WorkItemRefusal(400, settled.refusal);
     }
-    const { payload } = settled;
+    const { parentInstanceId } = peekParent(settled.payload);
+    const origin = originOfStart(by, parentInstanceId);
+    // Its machine is handed the project its row opens in, as every revive
+    // hands it the row's (`revivePayloadOf`).
+    const payload = {
+      ...settled.payload,
+      projectId: projectOfStart(
+        parentInstanceId,
+        settled.payload.projectId,
+        machineId,
+        settled.payload.cwd
+      ),
+    };
     const placed = spawnPlacement(machineId, payload, workItemId, placedAhead);
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
@@ -15105,6 +15169,7 @@ export const createServer = (
       cwd: payload.cwd,
       sessionId: peekResume(payload),
       harness: payload.harness,
+      origin,
       projectId: payload.projectId,
       title: payload.title,
       kind: peekKind(payload),
@@ -15147,6 +15212,7 @@ export const createServer = (
   const relaySpawn = async (
     machineId: string,
     asked: NamedSpawn,
+    by: SessionOrigin,
     fallbackMode?: string
   ): Promise<{ code: number; message: string } | undefined> => {
     const payload = await piDefaultFor(machineId, asked);
@@ -15155,14 +15221,14 @@ export const createServer = (
     }
     const { requestId } = payload;
     if (!requestId) {
-      issueSpawn(machineId, payload, undefined, fallbackMode);
+      issueSpawn(machineId, payload, by, undefined, fallbackMode);
       return;
     }
     const reply = await awaitStart(
       machineId,
       payload.instanceId,
       requestId,
-      () => issueSpawn(machineId, payload, undefined, fallbackMode)
+      () => issueSpawn(machineId, payload, by, undefined, fallbackMode)
     );
     switch (reply.kind) {
       case "unanswered":
@@ -15191,6 +15257,8 @@ export const createServer = (
   const spawnSession = async (
     machineId: string,
     payload: SpawnPayload,
+    /** Who asked for it: what its row's origin is (`originOfStart`). */
+    by: SessionOrigin,
     fallbackMode?: string
   ): Promise<MachinePath> => {
     const named = namedSpawn(payload);
@@ -15209,6 +15277,7 @@ export const createServer = (
     const refused = await relaySpawn(
       machineId,
       named,
+      by,
       fallbackMode ??
         (parentInstanceId
           ? resolveDelegatePermissionMode(listed, parentInstanceId)
@@ -15236,6 +15305,8 @@ export const createServer = (
     machineId: string,
     asked: NamedSpawn,
     kind: InstanceKind,
+    /** Who it is (core `SessionOrigin`): a continuation's, its source's; a summariser, the hub's own check. */
+    origin: SessionOrigin,
     fallbackMode?: string,
     /** The work item its row names from its first listing on: a continuation's, taken on from its source. */
     workItemId?: string
@@ -15255,7 +15326,17 @@ export const createServer = (
     if ("refusal" in settled) {
       throw new Error(settled.refusal);
     }
-    const { payload } = settled;
+    // Its machine is handed the project its row opens in, as every revive
+    // hands it the row's (`revivePayloadOf`).
+    const payload = {
+      ...settled.payload,
+      projectId: projectOfStart(
+        peekParent(settled.payload).parentInstanceId,
+        settled.payload.projectId,
+        machineId,
+        settled.payload.cwd
+      ),
+    };
     const placed = placedOrRefused(machineId, payload);
     const requestId = crypto.randomUUID();
     // A start under an id that ran before: what it was handed and never read
@@ -15266,6 +15347,7 @@ export const createServer = (
       machineId,
       cwd: payload.cwd,
       harness: payload.harness,
+      origin,
       projectId: payload.projectId,
       title: payload.title,
       kind,
@@ -16026,6 +16108,8 @@ export const createServer = (
           spawnedBy: { instanceId: source.instanceId },
         },
         "summariser",
+        // The hub's own worker over the source's words, never a person's.
+        "check",
         // The hub's own worker, which nobody watches: it never parks on a
         // permission prompt.
         mode
@@ -17428,6 +17512,8 @@ export const createServer = (
         source?.harness === request.target.harness ? source.chosenEffort : null
       ),
       request.target.scratch ? "scratch" : "mainline",
+      // It goes on with its source's work, as whoever started that.
+      source?.origin ?? "person",
       request.target.fallbackPermissionMode,
       // Its row names the source's item before its process lists its tools,
       // so its first turn has finish_item; the item moves to it before its
@@ -17778,6 +17864,8 @@ export const createServer = (
       cwd: payload.cwd,
       sessionId: row.sessionId ?? undefined,
       harness: row.harness,
+      // A restore opens no row: the one it has keeps its origin.
+      origin: row.origin ?? "person",
       projectId: row.projectId ?? undefined,
       kind: row.kind === "scratch" ? "scratch" : "mainline",
       permissionMode: settled.permissionMode,
@@ -17997,18 +18085,60 @@ export const createServer = (
       } else {
         boardBase.delete(id);
       }
+      boardAncestorRows.delete(id);
       boardMoved.add(id);
     }
+  };
+  /**
+   * Ancestors of listed rows the board does not keep (stopped, failed or
+   * gone from the listing a day ago), as the database last gave them, by
+   * id; null for an id it has no row for. A change to one drops it here
+   * ({@link refreshBoard}), and it is read again when a row still nests
+   * under it.
+   */
+  const boardAncestorRows = new Map<string, BoardInstanceRow | null>();
+  /** Rows by id for the board's ancestors: the board's own first, then the database's. */
+  const boardRowsByIds = (ids: string[]): Map<string, BoardInstanceRow> => {
+    const out = new Map<string, BoardInstanceRow>();
+    const unread: string[] = [];
+    for (const id of ids) {
+      const kept = boardBase.get(id) ?? boardAncestorRows.get(id);
+      if (kept) {
+        out.set(id, kept);
+      } else if (!boardAncestorRows.has(id)) {
+        unread.push(id);
+      }
+    }
+    if (unread.length > 0) {
+      const read = new Map(
+        db.boardAncestors(unread).map((row) => [row.id, row] as const)
+      );
+      for (const id of unread) {
+        const row = read.get(id) ?? null;
+        boardAncestorRows.set(id, row);
+        if (row) {
+          out.set(id, row);
+        }
+      }
+    }
+    return out;
   };
   const boardRows = () => {
     refreshBoard();
     const now = Date.now();
-    const listed: BoardInstanceRow[] = [];
+    const shown: BoardInstanceRow[] = [];
     for (const row of boardBase.values()) {
       if (row.kind !== "summariser" && listedAt(row, now)) {
-        listed.push(row);
+        shown.push(row);
       }
     }
+    // Each listed row comes with the sessions it nests under, and one whose
+    // chain names a session the hub no longer has is not listed at all
+    // (board-ancestors.ts). Whether its work item is live was read to list
+    // it, and goes no further.
+    const listed = withAncestors(shown, boardRowsByIds, isHubParent).map(
+      ({ workLive: _workLive, ...row }) => row
+    );
     // The move a person asked of each session that it still owes, off its
     // one record (`owedMoves`, read here from the database: the board is
     // first read before that is declared). A move of the hub's own
@@ -18101,6 +18231,12 @@ export const createServer = (
     null;
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
   const dashboardDevices = new Map<AuthSocket, string | null>();
+  /**
+   * Each dashboard socket opened from a page in an agent's own browser, by
+   * its id: the gate id its DevTools gate marked the page with (core
+   * `GATED_PAGE_HEADER`), a workspace's or a session's.
+   */
+  const gatedPages = new Map<string, string>();
   /**
    * Each artifact tab's socket the hub admitted (`ARTIFACT_SESSION_PATH`),
    * by its id, and its paired device as {@link dashboardDevices} keeps a
@@ -18519,7 +18655,7 @@ export const createServer = (
       if (chosen) {
         db.chooseMode(machineId, payload.harness ?? "claude", chosen);
       }
-      await spawnSession(machineId, payload);
+      await spawnSession(machineId, payload, "person");
     },
     send: (envelope) => {
       deliverSend(envelope);
@@ -23123,7 +23259,17 @@ export const createServer = (
     // A session's project's catalog: its own types shadow the fleet's.
     types: (projectId?: string | null) => projectTypes.typesFor(projectId),
     placeAhead: placeItem,
-    spawn: issueSpawn,
+    // A `delegate` call's session (a routine's run and a design check's
+    // verifier among them); Caw's, when he made the call.
+    spawn: (machineId, payload, workItemId, fallbackMode, placed) =>
+      issueSpawn(
+        machineId,
+        payload,
+        "delegate",
+        workItemId,
+        fallbackMode,
+        placed
+      ),
     // A person's words to Caw that went to his thread were taken: its wake
     // carries them to him (caw.ts `personSent`).
     send: (envelope) =>
@@ -23477,8 +23623,9 @@ export const createServer = (
         projectStarters.threadAnswered(payload.threadId);
       }
     },
+    // Caw's own session, and what his turns start.
     spawn: async (machineId, payload, mode) => {
-      await spawnSession(machineId, payload, mode);
+      await spawnSession(machineId, payload, "caw", mode);
     },
     // Turning Caw off stops what he started the way a forget stops a
     // project's sessions: each row confirmed as its machine ends it.
@@ -23643,8 +23790,9 @@ export const createServer = (
     send: (envelope) => {
       deliverSend(envelope);
     },
+    // Its triage: the hub's own reader of a stuck session, never a person's.
     spawn: async (machineId, payload, mode) => {
-      await spawnSession(machineId, payload, mode);
+      await spawnSession(machineId, payload, "check", mode);
     },
     stop: (instanceId) =>
       endSession(instanceId, "stop", {
@@ -24035,6 +24183,8 @@ export const createServer = (
         spawnedBy: { instanceId: row.id },
       },
       "mainline",
+      // It goes on with the row's work, as whoever started that.
+      row.origin ?? "person",
       row.permissionMode ?? undefined
     );
     plans.copySteps(row.id, instanceId);
@@ -25053,10 +25203,20 @@ export const createServer = (
       if (!resolveCanDelegate(requester)) {
         throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
       }
-      const { fallbackPermissionMode, ...payload } = envelope.payload;
+      const { fallbackPermissionMode, ...asked } = envelope.payload;
+      // The agent's check, nested under the agent whatever its call named.
+      const { parentToolUseId } = peekParent(asked);
+      const payload: SpawnPayload = {
+        ...asked,
+        parent: {
+          instanceId: requester.id,
+          ...(parentToolUseId ? { toolUseId: parentToolUseId } : {}),
+        },
+      };
       return spawnSession(
         envelope.machineId || requester.machineId,
         payload,
+        "check",
         fallbackPermissionMode
       );
     },
@@ -27413,6 +27573,58 @@ export const createServer = (
   };
 
   /**
+   * The session that owns the page a dashboard socket was opened from, when
+   * an agent's browser opened it (`gatedPages`): the session whose gate id
+   * it is, or the session of its workspace's live item (else its newest).
+   */
+  const gatedOwner = (ws: HubSocket): string | undefined => {
+    const gate = gatedPages.get(ws.id);
+    if (!gate) {
+      return;
+    }
+    const [own] = db.getInstancesByIds([gate]);
+    if (own) {
+      return own.id;
+    }
+    const items = db.workItemsIn(gate);
+    return (items.find((item) => isLive(item.state)) ?? items[0])?.instanceId;
+  };
+
+  /**
+   * Who a dashboard's start is, as its row opens: a page an agent opened in
+   * its browser starts that agent's check, nested under it ({@link
+   * gatedOwner}); every other start here is the person's, under the parent
+   * it names, if any. Its project as {@link projectOfStart} gives it. A row
+   * that exists (`known`) keeps the origin and parent it opened with.
+   */
+  const dashboardStartOf = (
+    ws: HubSocket,
+    message: Envelope,
+    known: boolean,
+    cwd: string
+  ): {
+    origin: SessionOrigin;
+    parent: ReturnType<typeof peekParent>;
+    projectId: string | undefined;
+  } => {
+    const checker = known ? undefined : gatedOwner(ws);
+    const origin: SessionOrigin = checker ? "check" : "person";
+    const parent = checker
+      ? { parentInstanceId: checker }
+      : peekParent(message.payload);
+    return {
+      origin,
+      parent,
+      projectId: projectOfStart(
+        parent.parentInstanceId,
+        peek(message.payload, "projectId"),
+        message.machineId,
+        cwd
+      ),
+    };
+  };
+
+  /**
    * A dashboard's start, from its permission mode on: launch directory,
    * account, the row, and the start itself ({@link sendDashboardStart}).
    */
@@ -27482,6 +27694,16 @@ export const createServer = (
       noteFreshStart(before);
     }
     noteRespawn(message.instanceId, message.requestId, message.payload);
+    const start = dashboardStartOf(
+      ws,
+      message,
+      before !== undefined,
+      payload.cwd
+    );
+    const { origin, parent } = start;
+    // A row keeps the project it opened in; its machine is handed that one,
+    // as every revive hands it the row's (`revivePayloadOf`).
+    const projectId = before?.projectId ?? start.projectId;
     // Brought back by the operator: nothing of the stop is left to carry.
     db.openInstance({
       id: message.instanceId,
@@ -27489,7 +27711,8 @@ export const createServer = (
       cwd: payload.cwd,
       sessionId: peekResume(message.payload),
       harness: payload.harness,
-      projectId: peek(message.payload, "projectId"),
+      origin,
+      projectId,
       title: peek(message.payload, "title"),
       kind: peekKind(message.payload),
       permissionMode: settled.permissionMode,
@@ -27498,11 +27721,14 @@ export const createServer = (
       // the spawning tools from it, and the hub reads its row for every
       // other answer about it (who may spawn, its memory role, a restore).
       canDelegate: payload.canDelegate,
-      ...peekParent(message.payload),
+      ...parent,
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
-    sendDashboardStart(ws, message, message.instanceId, payload);
+    sendDashboardStart(ws, message, message.instanceId, {
+      ...payload,
+      projectId,
+    });
     // A conversation that starts here: its first turn is its name.
     if (!peekResume(message.payload)) {
       awaitingFirstTurn.add(message.instanceId);
@@ -35493,6 +35719,12 @@ export const createServer = (
             return;
           }
           dashboardDevices.set(ws, caller.device?.id ?? null);
+          // A page an agent opened in its project's browser: what it starts
+          // is that agent's check (`startFromDashboard`).
+          const gatedBy = ws.headers[GATED_PAGE_HEADER];
+          if (gatedBy) {
+            gatedPages.set(ws.id, gatedBy);
+          }
           if (hubAuth.mode() === "pairing") {
             sendFrame(ws, {
               verb: "frames",
@@ -35674,6 +35906,7 @@ export const createServer = (
           closeLine(ws);
           dashboardDevices.delete(ws);
           dashboardClients.delete(ws.id);
+          gatedPages.delete(ws.id);
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command
           // ack both die with the socket that asked for them.

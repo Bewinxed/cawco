@@ -132,6 +132,7 @@
     sessionAct,
   } from "./session-acts.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
+  import ThreadMenu from "./ThreadMenu.svelte";
   import { isThreadTab } from "./thread-tabs";
   import AccountDot from "./usage/AccountDot.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
@@ -632,8 +633,15 @@
   </div>
 {/snippet}
 
-{#if thread}
-  <!-- A thread takes no session commands; archive is on the row. -->
+{#if thread && instance?.projectId}
+  <!-- A thread takes no session commands: its own menu opens it and
+       archives it (ThreadMenu). -->
+  <ThreadMenu id={instance.id} projectId={instance.projectId}>
+    {#snippet children(trigger)}
+      {@render body(trigger)}
+    {/snippet}
+  </ThreadMenu>
+{:else if thread}
   {@render body({})}
 {:else if instance && isSessionRow(instance)}
   <LiveSessionMenu asker={asks} {instance} {onarchive} onrename={editTitle}>

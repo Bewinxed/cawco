@@ -74,6 +74,7 @@ const run = async (kit: Kit): Promise<void> => {
         machineId: MACHINE,
         cwd: "/scratch" as never,
         harness: "claude",
+        origin: "person",
         kind: "sdk" as never,
         permissionMode: "default",
         sessionId: `${id}-session`,

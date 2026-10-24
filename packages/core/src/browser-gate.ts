@@ -58,6 +58,16 @@ export const pageOrigin = (
   headers: Record<string, string | undefined>
 ): string | undefined => headers[PAGE_ORIGIN_HEADER] ?? headers.origin;
 
+/**
+ * What every request from a page an agent opened in its project's browser
+ * carries (the agent's DevTools gate sets it on the page as the page becomes
+ * the agent's: `Network.setExtraHTTPHeaders`, which Chromium puts on a
+ * WebSocket's handshake too from 151): the gate id that owns the page, a
+ * workspace's or a session's own. A session the page starts from the
+ * dashboard is that agent's check, nested under it, never the person's.
+ */
+export const GATED_PAGE_HEADER = "x-cawco-gated-by";
+
 /** The headers a relay that passed the gate removes before it goes on: the hop behind it is not the page's origin. */
 export const BROWSER_HEADERS = [
   "origin",

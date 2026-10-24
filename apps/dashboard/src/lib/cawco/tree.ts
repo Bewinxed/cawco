@@ -19,7 +19,8 @@
  * a parent turning from context to a listed row, or back, keeps its place.
  */
 
-import { type MemberTreeRow, topsIn } from "@cawco/core";
+import { type MemberTreeRow, type SessionOrigin, topsIn } from "@cawco/core";
+import { isThreadTab } from "./thread-tabs";
 
 export type TreeRow = MemberTreeRow;
 
@@ -190,28 +191,27 @@ export function tree<T extends TreeRow>(
 }
 
 /**
- * Whether a row is a delegate of a session that exists: its parent is a row
- * `held` knows. A delegate whose parent is gone (its transcript deleted, its
- * row aged off the board) is nobody's delegate, a top-level session, so no
- * list leaves it out for want of a parent: the one rule for every list that
- * lists work by its parent (the Delegates switch).
+ * Whether a row may stand at the top of a list: a session a person started
+ * (its `origin`, which the hub stamps as it starts), or a thread with a
+ * project's Caw (thread-tabs.ts). It still hangs under a parent the list
+ * holds (a start that named one). Every other session (a delegate, Caw's
+ * work, an agent's check) only ever nests under the session that started
+ * it: one whose parent no list holds stands nowhere, never at the top.
  */
-export const hasParent = (
-  row: TreeRow,
-  held: (id: string) => boolean
-): boolean => !!row.parentInstanceId && held(row.parentInstanceId);
+export const standsAlone = (
+  row: TreeRow & { origin?: SessionOrigin }
+): boolean => isThreadTab(row.id) || (row.origin ?? "person") === "person";
 
 /**
- * The rows of `rows` that hang from a root the list holds: a top-level row,
- * or a child whose whole chain of parents is in `rows` too. What a list
- * shows when it does not list work other sessions started on its own (the
- * Delegates switch off): a delegate under a listed parent stays in its
- * parent's tree, folded there with the parent's count; one whose parent
- * the list does not hold is left out, not lifted in as a context chain.
+ * The rows of `rows` that hang from a top the list holds: a row that
+ * stands alone ({@link standsAlone}) with no parent in `rows`, or a row
+ * whose chain of parents in `rows` ends at one. A delegate under a listed
+ * parent stays in its parent's tree, folded there with the parent's count;
+ * one whose chain leaves the list, or ends at no top, is left out, never
+ * promoted.
  */
-export function rooted<T extends TreeRow>(
-  rows: T[],
-  held: (id: string) => boolean
+export function rooted<T extends TreeRow & { origin?: SessionOrigin }>(
+  rows: T[]
 ): T[] {
   const byId = new Map(rows.map((row) => [row.id, row]));
   const kept = new Map<string, boolean>();
@@ -220,9 +220,10 @@ export function rooted<T extends TreeRow>(
     if (known !== undefined) {
       return known;
     }
-    const parentId = hasParent(row, held) ? row.parentInstanceId : null;
-    const parent = parentId ? byId.get(parentId) : undefined;
-    let keep = !parentId;
+    const parent = row.parentInstanceId
+      ? byId.get(row.parentInstanceId)
+      : undefined;
+    let keep = !parent && standsAlone(row);
     if (parent && !seen.has(parent.id)) {
       seen.add(row.id);
       keep = keeps(parent, seen);

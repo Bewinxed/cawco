@@ -167,6 +167,7 @@ typeOverrides:
     RuleWatch: OpenEnums.RuleWatch
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
+    SessionOrigin: OpenEnums.SessionOrigin
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState

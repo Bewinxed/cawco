@@ -11404,6 +11404,176 @@
         }
       }
     },
+    "/api/projects/{id}/threads/{threadId}/archive": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdThreadsByThreadIdArchive",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdThreadsByThreadIdArchive 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdThreadsByThreadIdArchive 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdThreadsByThreadIdArchive 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdThreadsByThreadIdArchive 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdThreadsByThreadIdArchive 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdThreadsByThreadIdArchive 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/threads/{threadId}/unarchive": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdThreadsByThreadIdUnarchive",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/threads/{threadId}/wake": {
       "post": {
         "parameters": [
@@ -28273,6 +28443,9 @@
               "modelUsageSeen": {
                 "type": "object"
               },
+              "origin": {
+                "$ref": "#/components/schemas/SessionOrigin"
+              },
               "parentInstanceId": {
                 "type": [
                   "null",
@@ -28364,6 +28537,7 @@
               "launchDir",
               "machineId",
               "model",
+              "origin",
               "parentInstanceId",
               "parentToolUseId",
               "permissionMode",
@@ -28511,6 +28685,9 @@
             "modelUsageSeen": {
               "type": "object"
             },
+            "origin": {
+              "$ref": "#/components/schemas/SessionOrigin"
+            },
             "owedMove": {
               "type": "object",
               "properties": {
@@ -28624,6 +28801,7 @@
             "launchDir",
             "machineId",
             "model",
+            "origin",
             "parentInstanceId",
             "parentToolUseId",
             "permissionMode",
@@ -40101,6 +40279,10 @@
         "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
         "type": "object",
         "properties": {
+          "archivedAt": {
+            "description": "When you archived it, ms epoch: the rails leave it and the sessions\nunder it out, and the project's thread list keeps it under Archived.\nAbsent while it is not archived; a new message in it brings it back.",
+            "type": "number"
+          },
           "hearing": {
             "$ref": "#/components/schemas/ThreadHearing",
             "description": "While his turn has read your words here and not yet answered them: what\nhe says in plain text after that send in his session is posted here as\nhis reply when the turn ends, so the thread draws it as he writes it.\nAbsent otherwise."
@@ -46896,6 +47078,16 @@
           "snapshot",
           "start",
           "started"
+        ]
+      },
+      "SessionOrigin": {
+        "description": "Who started a session, stamped by the hub as it starts from who asked,\nnever from what the start carried: `person`, a person's own start (the\nNew session form, a move); `delegate`, a `delegate` call (a work item,\na routine's run and a design check among them); `caw`, a project's Caw\nand what his turns start; `check`, an agent's `start_session`, a start\nfrom a page in an agent's own browser, and the hub's own workers. Only a\nperson's sessions stand at a project's top in the rails; every other one\nnests under the session that started it.",
+        "type": "string",
+        "enum": [
+          "caw",
+          "check",
+          "delegate",
+          "person"
         ]
       },
       "MachinePath": {
@@ -57493,6 +57685,10 @@
               "string"
             ]
           },
+          "origin": {
+            "$ref": "#/components/schemas/SessionOrigin",
+            "description": "Who started it ({@link SessionOrigin}), as the hub stamped it at its\nstart. A row the hub sends always has it."
+          },
           "owedMove": {
             "description": "The account a person moved it to that it moves to at its next launch,\nas the hub keeps it (its `owed_moves`), until the move lands: what it\nwaits on, its turn's end, the background work its process holds ending,\nor its machine connected again. Absent when it owes none.",
             "type": "object",
@@ -57531,7 +57727,7 @@
             ]
           },
           "projectId": {
-            "description": "Set when the session was started from a project page.",
+            "description": "Its one project, written by the hub as it started: the project it was\nstarted in, its parent's for a delegate, Caw's work or a check, else\nthe project whose place holds its folder most closely. Null when none\ndoes. The rails list a session under this project and no other.",
             "type": [
               "null",
               "string"

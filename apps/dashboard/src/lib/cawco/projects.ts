@@ -1,8 +1,9 @@
 import { primaryPlaceOf } from "@cawco/core/project-membership";
 import type { ProjectPlace, ProjectRow } from "./client.svelte";
 
-/* Which projects a row lists in is core's `projectsFor` (project-membership):
-   the rail and the hub's forget read the one rule. */
+/* A session lists in one project, the `projectId` the hub wrote on it
+   (core project-membership): the rail and the hub's forget read that one
+   field. */
 
 /** The project's primary checkout; undefined while it has none (only its folder on the hub). */
 export const checkoutOf = (project: ProjectRow): ProjectPlace | undefined =>

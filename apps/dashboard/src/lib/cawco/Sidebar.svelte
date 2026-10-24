@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel, projectsFor, sidebarWords, topsIn } from "@cawco/core";
+  import { machineLabel, sidebarWords, topsIn } from "@cawco/core";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
    * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:
@@ -88,7 +88,7 @@
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
   import { inLists, isThreadTab } from "./thread-tabs";
-  import { rooted, tree } from "./tree";
+  import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
@@ -254,70 +254,82 @@
     })
   );
 
-  const projectsOf = (row: BoardRow): string[] =>
-    projectsFor(cawco.projects, row).map((project) => project.id);
-
+  /**
+   * Every row the lists hold, as they hold it: a session Caw's work started
+   * under the thread it works for (thread-tabs.ts `inLists`), the threads
+   * you have not archived among them.
+   */
+  const railRows = $derived(
+    new Map(cawco.listedRows.map((row) => [row.id, row] as const))
+  );
+  const topOf = $derived(topsIn(railRows));
+  /** The top a row's tree stands under, when it stands in the rail at all. */
+  const placedTop = (row: BoardRow): BoardRow | undefined => {
+    const top = topOf(row);
+    return standsAlone(top) ? top : undefined;
+  };
   /**
    * Every project's sessions, live and resting, as the rail lists them, in
    * one pass over what runs and what rests: a turn ending re-reads each row
    * once, where testing each project against every row read them all once
-   * per project. A delegate is work the reader handed off — six of them
-   * under one session is six rows about one thing — so it hangs in its
-   * parent's tree, folded into the parent's count until opened. With the
-   * Delegates switch off, a delegate whose parent the project does not list
-   * is left out (tree.ts `rooted`): "Not running" is where those pile up by
-   * the hundred.
+   * per project. A project's top is what a person started there: the
+   * sessions they started and the threads with its Caw they have not
+   * archived (tree.ts `standsAlone`). Everything else (a delegate, Caw's work,
+   * an agent's check) hangs in the tree of the session that started it,
+   * folded into that one's count until opened, and stands nowhere else: one
+   * whose chain ends at no top (its parent gone, its thread archived) is in
+   * no project's list.
    *
-   * A row lists in the projects of the session at the top of its chain of
-   * parents (tree.ts `topsIn`, over every row the rail knows), whatever
-   * machine and folder it runs on itself. Placed by its own, a delegate
-   * started on another machine has that machine's id and a worktree path
-   * there: no project on its parent's machine claimed it, so it stood apart
-   * from its parent or in no list, and the switch then dropped it for want
-   * of a parent in its list. A row with no parent the rail knows is its own
-   * top, and lists by its own project, machine and folder.
+   * A tree lists in the one project the hub wrote on its top
+   * (`projectId`), whatever machine and folder each row under it runs on: a
+   * delegate in a worktree on another machine still lists with its parent,
+   * and a session is never listed under a project whose folder merely holds
+   * its own. Every row of a tree comes with the chain it hangs from (the hub
+   * sends each listed row's ancestors), so no row stands at a project's top
+   * for want of its parent there: a parent at rest that is no list's row of
+   * its own (stopped before it had a conversation) is drawn for it.
    */
-  const topOf = $derived.by(() =>
-    topsIn(new Map([...running, ...notRunning].map((row) => [row.id, row])))
-  );
   const listed = $derived.by(() => {
-    const lists = new Map<string, { live: BoardRow[]; resting: BoardRow[] }>();
+    const lists = new Map<
+      string,
+      { live: BoardRow[]; resting: BoardRow[]; held: Set<string> }
+    >();
     const listOf = (id: string) => {
       let list = lists.get(id);
       if (!list) {
-        list = { live: [], resting: [] };
+        list = { live: [], resting: [], held: new Set() };
         lists.set(id, list);
       }
       return list;
     };
-    const liveIds = new Set<string>();
+    const liveIds = new Set(running.map((row) => row.id));
+    /** Puts a row in its project's list, live or resting, with every row it hangs from. */
+    const place = (row: BoardRow): void => {
+      const top = placedTop(row);
+      if (!top?.projectId) {
+        return;
+      }
+      const list = listOf(top.projectId);
+      const seen = new Set<string>();
+      for (
+        let at: BoardRow | undefined = row;
+        at && !seen.has(at.id) && !list.held.has(at.id);
+        at = at.parentInstanceId ? railRows.get(at.parentInstanceId) : undefined
+      ) {
+        seen.add(at.id);
+        list.held.add(at.id);
+        (liveIds.has(at.id) ? list.live : list.resting).push(at);
+        if (at === top) {
+          break;
+        }
+      }
+    };
     for (const row of running) {
-      liveIds.add(row.id);
-      for (const id of projectsOf(topOf(row))) {
-        listOf(id).live.push(row);
-      }
+      place(row);
     }
-    // A row both running and resting belongs to the same projects either
-    // way, so it is left out of every resting list it would join.
     for (const row of notRunning) {
-      if (liveIds.has(row.id)) {
-        continue;
-      }
-      for (const id of projectsOf(topOf(row))) {
-        listOf(id).resting.push(row);
-      }
-    }
-    if (!rail.delegates) {
-      for (const [id, { live, resting }] of lists) {
-        const kept = new Set(
-          rooted([...live, ...resting], (parent) =>
-            cawco.instanceIndex.byId.has(parent)
-          ).map((row) => row.id)
-        );
-        lists.set(id, {
-          live: live.filter((row) => kept.has(row.id)),
-          resting: resting.filter((row) => kept.has(row.id)),
-        });
+      if (!liveIds.has(row.id)) {
+        place(row);
       }
     }
     return lists;
