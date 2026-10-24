@@ -126,14 +126,14 @@ const OBJECT_PATH = /^\/lfs\/objects\/([0-9a-f]{64})$/;
 const D_BYTES = 1_048_576;
 /** E's first command: the sha256 of the large file its checkout holds, as one line. */
 const READ_E =
-  "printf 'LARGE-D-SHA %s\\n' \"$(sha256sum large-d.bin | cut -d' ' -f1)\"";
+  "printf 'LARGE-D-SHA %s\\n' \"$(shasum -a 256 large-d.bin | cut -d' ' -f1)\"";
 /** That line, as E's command printed it. */
 const SHA_SAID = /LARGE-D-SHA [0-9a-f]{64}/;
 
 /** The shell that commits a large file `name` of `bytes` copies of `char`, its object in the clone's store. */
 const largeFile = (name: string, bytes: number, char: string): string[] => [
   `head -c ${bytes} /dev/zero | tr '\\0' ${char} > obj`,
-  'oid=$(sha256sum obj | cut -d" " -f1)',
+  'oid=$(shasum -a 256 obj | cut -d" " -f1)',
   "size=$(wc -c < obj)",
   'mkdir -p ".git/lfs/objects/$(echo $oid | cut -c1-2)/$(echo $oid | cut -c3-4)"',
   'mv obj ".git/lfs/objects/$(echo $oid | cut -c1-2)/$(echo $oid | cut -c3-4)/$oid"',

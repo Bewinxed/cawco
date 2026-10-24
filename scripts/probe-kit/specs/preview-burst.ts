@@ -53,19 +53,15 @@
  *   bun scripts/probe-kit/run.ts preview-burst
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import http2 from "node:http2";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { PREVIEW_WHY_META } from "../../../packages/core/src/index";
+import {
+  processArgs,
+  processLineage,
+} from "../../../packages/core/src/process-identity";
 import type { RenderReport } from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
@@ -826,17 +822,16 @@ const respond = (request: Seen): Reply => {
 };
 
 /** The relay of preview `instanceId`'s bridge: the process whose arguments end in its socket. */
-const relayOf = (instanceId: string): number | null => {
+const relayOf = async (instanceId: string): Promise<number | null> => {
   const ending = `/${instanceId}.sock`;
-  for (const entry of readdirSync("/proc")) {
-    let argv: string[] = [];
-    try {
-      argv = readFileSync(`/proc/${entry}/cmdline`, "utf8").split("\0");
-    } catch {
-      // Not a process, or gone as it was read.
-    }
-    if (argv.some((one) => one.endsWith(ending))) {
-      return Number(entry);
+  const pids = (await processLineage())
+    .map((row) => row.pid)
+    .sort((a, b) => a - b);
+  for (const pid of pids) {
+    // biome-ignore lint/performance/noAwaitInLoops: lowest pid first, stopping at the first match
+    const args = await processArgs(pid);
+    if (args?.argv.some((one) => one.endsWith(ending))) {
+      return pid;
     }
   }
   return null;
@@ -914,7 +909,7 @@ async function realJoin(kit: Kit): Promise<void> {
     .then(() => true)
     .catch(() => false);
   await page.close();
-  const relay = relayOf(session);
+  const relay = await relayOf(session);
   const target =
     modules.find((one) => one.includes("Card.svelte")) ?? modules[0];
   const seen = new Set<number>();
