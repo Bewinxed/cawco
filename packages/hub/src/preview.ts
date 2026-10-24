@@ -416,7 +416,8 @@ export interface PreviewListenerDeps {
   /**
    * Whether origin `key` serves an artifact by its id: the origin that
    * serves it ({@link originOf}); a session's origin also another session's
-   * artifact its panel shows (its delegation tree's), a project's page
+   * artifact its panel or one of its decision pages' Canvas and Preview
+   * pieces shows (its delegation tree's), a project's page
    * excepted; and a project's origin also its project's canvases, which its
    * pages' Canvas pieces show inside them.
    */

@@ -13986,11 +13986,18 @@ export const createServer = (
         return true;
       }
       // Another session's artifact its delegation tree's session shows in
-      // its own panel: served on that panel's origin while it shows it. A
+      // its own panel, or as a Canvas or Preview piece of a decision page of
+      // its own: served on that panel's origin while it shows it. A
       // project's page keeps to its project's origin.
       if (
         !pageProject(artifactId) &&
-        previewTargets.get(key)?.artifact.id === artifactId
+        (previewTargets.get(key)?.artifact.id === artifactId ||
+          db.artifacts
+            .ofInstance(key)
+            .some(
+              (page) =>
+                page.kind === "page" && artifacts.pageShows(page.id, artifactId)
+            ))
       ) {
         return true;
       }

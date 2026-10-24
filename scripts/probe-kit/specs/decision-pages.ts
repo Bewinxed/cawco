@@ -93,6 +93,11 @@
  *     reports none, the gap between two frames), no animation a switch
  *     started is left going, and once the presses are done nothing runs
  *     on: no frame asked for, no animation.
+ * (p) A page shows its delegation tree's artifacts as its own: the writer's
+ *     page whose Canvas and Preview name its delegate's canvas and dev
+ *     server preview publishes and draws both (the canvas's box in its doc,
+ *     the dev server live on its embed origin); a page naming the canvas of
+ *     a session outside the tree is refused, 422, with today's words.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -102,6 +107,7 @@ import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { HOUSE_FACES } from "../../../packages/core/src/house-faces";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { pageReach } from "../decision-embeds";
@@ -3266,6 +3272,238 @@ here = Option("here", "Here", "As it runs now.", true, [live], "Nothing new to t
 there = Option("there", "Elsewhere", "Somewhere new.", false, [], "A move to make first.")
 live = Preview("${site}", "The site as it runs")`;
 
+/** A page of one card whose options show `sketch` (a Canvas) and `live` (a Preview). */
+const treePage = (
+  sketch: string,
+  live: string
+) => `root = Decisions("Pick the delegate's look", [look])
+look = Decision("look", "Which look does the page take?", [drawn, running], "The delegate made both.", [sketch])
+drawn = Option("drawn", "As drawn", "The delegate's sketch.", true, [], "Not yet built.")
+running = Option("running", "As it runs", "The delegate's dev server.", false, [live], "Built in a hurry.")
+sketch = Canvas("${sketch}", "The delegate's sketch")
+live = Preview("${live}", "The delegate's site")`;
+
+/** What the delegate's dev server says. */
+const TREE_SITE = "The delegate's site";
+
+/**
+ * (p) A decision page shows its delegation tree's artifacts as its own: a
+ * delegate of the writer (spawned with `parent`, in the same project) makes
+ * a canvas with a box drawn on it and a preview of its own dev server, and
+ * the writer's page whose Canvas and Preview name them publishes and draws
+ * them in the writer's panel: the canvas's frame on the page's origin with
+ * the delegate's box in its doc, and the dev server live on its embed
+ * origin, as a Preview of a component canvas is. A canvas of a session of
+ * the project outside the tree is still refused, 422, with today's words.
+ */
+const treeMediaLeg = async (on: On) => {
+  const { base, fleet, kit, projectId, writer } = on;
+  const dir = join(fleet.sandbox, "launch-site");
+  const delegate = await fleet.spawn("claude", "Launch delegate", dir, {
+    projectId,
+    parent: { instanceId: writer },
+  });
+  const outsider = await fleet.spawn("claude", "Launch outsider", dir, {
+    projectId,
+  });
+  const made = (who: string) => (body: object) =>
+    fleet.api<{ id: string }>(`/api/instances/${who}/artifacts`, body);
+  // The delegate's canvas, empty first, then drawn once its screen is up in
+  // the delegate's own panel, as `publish` draws the writer's.
+  const own = await kit.page("desk", { theme: "light" });
+  await open(own, `${base}/session/${delegate}`, '[data-slot="pane"]');
+  const sketch = await made(delegate)({
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw over this sketch",
+    name: "delegate-sketch",
+  });
+  await until(
+    "the delegate's canvas screen in its panel",
+    async () =>
+      countIn(
+        await frameAt(own, 'iframe[title="Canvas"]'),
+        ".excalidraw canvas"
+      ),
+    (count) => count > 0,
+    120_000
+  );
+  const box = await fetch(
+    `${fleet.base}/api/instances/${delegate}/artifacts/${sketch.id}`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        elements: [
+          {
+            type: "rectangle",
+            id: "delegate-box",
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 80,
+            label: { text: "Delegate box" },
+          },
+        ],
+      }),
+    }
+  );
+  kit.check(
+    "(p) the delegate's canvas is drawn on its own screen",
+    box.ok,
+    (await box.text()).slice(0, 300)
+  );
+  await own.close();
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        `<!doctype html><html><body><h1>${TREE_SITE}</h1></body></html>`,
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  const site = await made(delegate)({
+    kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
+    name: "delegate-site",
+    port: server.port,
+    machine: MACHINE,
+  });
+  const page = await made(writer)({
+    kind: "page",
+    does: "pick",
+    ask: "Pick the delegate's look",
+    name: "delegate-look",
+    program: treePage(sketch.id, site.id),
+  }).then(
+    (answer) => answer,
+    (error: Error) => ({ id: "", said: error.message })
+  );
+  const rows = fleet.query<{ id: string; instance_id: string }>(
+    "SELECT id, instance_id FROM artifacts WHERE id IN (?, ?)",
+    sketch.id,
+    site.id
+  );
+  kit.check(
+    "(p) the writer's page whose Canvas and Preview name its delegate's canvas and preview publishes, and both stay the delegate's",
+    !!page.id &&
+      rows.length === 2 &&
+      rows.every((row) => row.instance_id === delegate),
+    JSON.stringify({ page, rows })
+  );
+  if (!page.id) {
+    server.stop(true);
+    return;
+  }
+  const shown = await kit.page("desk", { theme: "light" });
+  shown.on("pageerror", (error) => on.said.push(`(p): ${String(error)}`));
+  await open(shown, `${base}/session/${writer}`, '[data-slot="pane"]');
+  const frame = await until(
+    "the delegate's page in the writer's panel",
+    async () => {
+      const at = await frameAt(shown, FRAME);
+      return (await countIn(at, "#decision-look")) > 0 ? at : null;
+    },
+    Boolean,
+    60_000
+  ).catch(() => null);
+  if (!frame) {
+    kit.check("(p) the page draws in the writer's panel", false, "no frame");
+    await shown.close();
+    server.stop(true);
+    return;
+  }
+  const drawnIn = () =>
+    frame.evaluate(
+      ([id, siteId]) => {
+        const canvas = document.querySelector<HTMLIFrameElement>(
+          `iframe[src*="/__cawco/canvas/${id}/"]`
+        );
+        const doc = (
+          canvas?.contentWindow as unknown as {
+            cawcoCanvasDoc?: {
+              getArray: (name: string) => {
+                toArray: () => { get: (key: string) => unknown }[];
+              };
+            };
+          } | null
+        )?.cawcoCanvasDoc;
+        return {
+          canvas:
+            !!canvas?.contentDocument?.querySelector(".excalidraw canvas"),
+          elements: (doc?.getArray("elements").toArray() ?? []).map(
+            (one) => (one.get("el") as { id?: string } | undefined)?.id ?? ""
+          ),
+          site:
+            document.querySelector<HTMLIFrameElement>(
+              `#decision-look iframe[data-cawco-artifact="${siteId}"]`
+            )?.src ?? "",
+          gone: document.querySelectorAll(
+            "#decision-look [data-slot=media-gone]"
+          ).length,
+        };
+      },
+      [sketch.id, site.id] as const
+    );
+  const drawn = await until(
+    "the delegate's canvas drawn in the page",
+    drawnIn,
+    (seen) => seen.canvas && seen.elements.includes("delegate-box"),
+    30_000
+  ).catch(drawnIn);
+  kit.check(
+    "(p) the delegate's canvas is drawn in the writer's page, on the page's origin, its box in the canvas's doc",
+    drawn.canvas && drawn.elements.includes("delegate-box"),
+    JSON.stringify(drawn)
+  );
+  // An embed out of view gets no animation frames: the option's in view.
+  await frame
+    .locator('#decision-look [data-option="running"]')
+    .scrollIntoViewIfNeeded();
+  const live = await until(
+    "the delegate's dev server live in the page",
+    async () => wordsAt(shown, (await drawnIn()).site),
+    (words) => words === TREE_SITE,
+    30_000
+  ).catch(() => "");
+  const after = await drawnIn();
+  kit.check(
+    "(p) the delegate's preview is live in the writer's page, on an origin of its own",
+    live === TREE_SITE &&
+      after.gone === 0 &&
+      new URL(after.site || "http://x").port !== new URL(frame.url()).port,
+    JSON.stringify({ live, src: after.site, gone: after.gone })
+  );
+  await shown.close();
+  server.stop(true);
+
+  const theirs = await made(outsider)({
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
+    name: "outsider-sketch",
+  });
+  const refused = await made(writer)({
+    kind: "page",
+    does: "pick",
+    ask: "Pick the outsider's look",
+    name: "outsider-look",
+    program: treePage(theirs.id, site.id),
+  }).then(
+    (answer) => `kept ${JSON.stringify(answer)}`,
+    (error: Error) => error.message
+  );
+  kit.check(
+    "(p) a page naming the canvas of a session outside the tree is refused, 422, with today's words",
+    refused.includes(
+      `: 422 ${artifactToolWords.noMediaArtifact("Canvas", theirs.id)}`
+    ),
+    refused.slice(0, 400)
+  );
+};
+
 /** What the crash leg's fresh dev server says. */
 const FRESH_SITE = "The fresh site";
 
@@ -3963,6 +4201,7 @@ const run = async (kit: Kit) => {
   await interviewShape(on);
   await glyphLeg(on);
   await burstLeg(on);
+  await treeMediaLeg(on);
   kit.check(
     "the pages said no error",
     on.said.length === 0,

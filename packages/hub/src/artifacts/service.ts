@@ -1957,16 +1957,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const viewable = (instance: InstanceRow, asked: string): ArtifactRow => {
     const id = whole(instance, asked);
     const row = db.get(id);
-    if (
-      row &&
-      (row.instanceId === instance.id ||
-        row.madeBy === instance.id ||
-        inTree(instance, row))
-    ) {
+    if (row && sees(instance, row)) {
       return row;
     }
     throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
   };
+
+  /**
+   * Whether `instance` may show and read `row` without changing it: its
+   * own, one it made, or another session's of its delegation tree
+   * ({@link inTree}). The one rule for a look ({@link viewable}) and for
+   * what a decision page's Canvas and Preview pieces show ({@link mediaHeld}).
+   */
+  const sees = (instance: InstanceRow, row: ArtifactRow): boolean =>
+    row.instanceId === instance.id ||
+    row.madeBy === instance.id ||
+    inTree(instance, row);
 
   /**
    * Page `id` of the session's own project, whoever wrote it: a later
@@ -2686,19 +2692,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * The artifacts a program's Canvas and Preview pieces name, each one of
-   * the panel owner's of the kind it shows: refused, every reason at once,
-   * when one is not.
+   * The artifacts a program's Canvas and Preview pieces name, each one the
+   * panel owner sees ({@link sees}: its own or its delegation tree's) of
+   * the kind it shows: refused, every reason at once, when one is not.
    */
   const mediaHeld = (owner: InstanceRow, program: BuiltProgram) => {
     const problems = program.read.artifacts.flatMap(({ component, id }) => {
       const held = db.get(id);
       const kinds: ArtifactKind[] =
         component === "Canvas" ? ["canvas"] : ["page", "preview", "component"];
-      if (!held || held.instanceId !== owner.id) {
-        return [
-          `${component}("${id}"): this session's panel has no artifact ${id}.`,
-        ];
+      if (!(held && sees(owner, held))) {
+        return [artifactToolWords.noMediaArtifact(component, id)];
       }
       return kinds.includes(held.kind)
         ? []
@@ -2714,6 +2718,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           : `The program has ${problems.length} problems:\n- ${problems.join("\n- ")}`
       );
     }
+  };
+
+  /**
+   * Artifact `id` as decision page `page` shows it now: one its session
+   * sees ({@link sees}), as {@link mediaHeld} let it in; a project's page
+   * whose session is gone, another such page. Undefined once the hub no
+   * longer holds it.
+   */
+  const mediaSeen = (
+    page: ArtifactRow,
+    id: string
+  ): ArtifactRow | undefined => {
+    const shown = db.get(id);
+    const owner = holder(page);
+    if (!shown) {
+      return undefined;
+    }
+    const seen = owner
+      ? sees(owner, shown)
+      : page.instanceId === null && shown.instanceId === null;
+    return seen ? shown : undefined;
   };
 
   /**
@@ -5928,13 +5953,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const media: Record<string, { kind: ArtifactKind; name: string } | null> =
         {};
       for (const { id: shown } of readKept(program).artifacts) {
-        const shownRow = db.get(shown);
-        media[shown] =
-          shownRow && shownRow.instanceId === row?.instanceId
-            ? { kind: shownRow.kind, name: shownRow.name }
-            : null;
+        const shownRow = row && mediaSeen(row, shown);
+        media[shown] = shownRow
+          ? { kind: shownRow.kind, name: shownRow.name }
+          : null;
       }
       return { hash: pageHash(program), media };
+    },
+
+    /**
+     * Whether decision page `pageId` shows artifact `id` as a Canvas or
+     * Preview piece its session sees ({@link mediaSeen}): its origin then
+     * serves that artifact inside it, a delegate's as its own.
+     */
+    pageShows: (pageId: string, id: string): boolean => {
+      const page = db.get(pageId);
+      return !!page && mediaOf(page).includes(id) && !!mediaSeen(page, id);
     },
 
     /**
