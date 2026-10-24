@@ -1,7 +1,7 @@
 /**
  * What a session is told of what it started and leaks (agent leak-watch.ts),
- * and what the session that delegated it is told when it takes no word (hub
- * server.ts `tellLeak`). Sent to sessions only: the app draws none of it, so
+ * and what the session that delegated it is told of a climb in memory when
+ * it takes no word (hub server.ts `tellLeak`). Sent to sessions only: the app draws none of it, so
  * it is not written into it (scripts/words-swift.ts).
  */
 export const leakWords = {
@@ -27,7 +27,12 @@ export const leakWords = {
     const it = count === 1 ? "it" : "them";
     return `${count === 1 ? "A process" : `${count} processes`} this session started ${count === 1 ? "is" : "are"} ${leakWords.leftBehind} ${it} ended, and CawCo leaves ${it} running: ${named}${more > 0 ? ` and ${more} more` : ""}, ${where}. End ${it} if nothing needs ${it}, and fix what started ${it} so it does not leave ${it} behind.`;
   },
-  /** An ended delegate's leak, told to the session that delegated it. */
+  /**
+   * An ended delegate's process climbing in memory, told to the session that
+   * delegated it. What an ended delegate left running is never told: its
+   * workspace's settle ends it, or keeps it for an artifact that shows it
+   * (hub work-items.ts `settle`).
+   */
   delegateLeft: (
     title: string,
     item: string,

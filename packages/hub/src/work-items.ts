@@ -69,6 +69,7 @@ import type {
   WorkspaceHolding,
   WorkspaceRef,
   WorkspaceUnlanded,
+  WorkspaceWorkEnd,
 } from "@cawco/core";
 import {
   byPerson,
@@ -85,6 +86,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_WORK_END,
   handoffMarker,
   holdingWords,
   INPUTS_LIMIT_BYTES,
@@ -3996,6 +3998,8 @@ export const createWorkItems = ({
       handedOver(workspace)
     );
     settleFailures.delete(workspace.id);
+    workEndedFor.delete(workspace.id);
+    workEndFailures.delete(workspace.id);
     if (closed.held) {
       return { kind: "held", held: closed.held };
     }
@@ -4013,6 +4017,95 @@ export const createWorkItems = ({
     return { kind: "retired", carry: closed.carry };
   };
 
+  /** The ended items, each with its end, whose sessions' work each workspace's settle last ended ({@link endLeftWork}): once per set, not per sweep. */
+  const workEndedFor = new Map<string, string>();
+
+  /** The last failure each workspace's {@link endLeftWork} logged: one line per change, not per sweep. */
+  const workEndFailures = new Map<string, string>();
+
+  /**
+   * A WORKSPACE WHOSE ITEMS HAVE ALL ENDED RUNS NOTHING BUT WHAT A LANDING
+   * RUNS OR AN ARTIFACT SHOWS. Settled while an awake session of its items is
+   * all that holds it (`hold`, {@link sessionsHold}), its machine ends what
+   * those sessions left running in its boundary (core
+   * {@link CONTROL_WORKSPACE_WORK_END}: agent boundary.ts `endSessionWork`,
+   * as an interrupt and a stop do), once per set of ended items; the
+   * boundary and the sessions run on, so a handoff resumes one there. Not
+   * while its landing runs (`finishing`), an artifact shows what it serves
+   * ({@link previewedBy}: once the artifact goes, the next settle ends it),
+   * a project's folder is inside it ({@link placesIn}), or a message or
+   * continuation is on its way to one of its sessions (its new turn's work
+   * is not left work). Why: a done delegate stays awake for its idle sleep
+   * (half an hour) so a handoff finds it warm, and until it slept what its
+   * commands left ran on; on 2026-10-24 its parent was told to end three
+   * pids it left, already gone by the time it looked.
+   */
+  const endLeftWork = (
+    workspace: WorkspaceRow,
+    items: readonly WorkItemRow[],
+    hold: string
+  ): void => {
+    if (
+      workspace.stageFor ||
+      items.some((item) => finishing.has(item.id)) ||
+      previewedBy(workspace) ||
+      placesIn(workspace)
+    ) {
+      return;
+    }
+    const sessions = new Set(items.map((item) => item.instanceId));
+    if (
+      [...sessions].some((id) => sendWakes(id)) ||
+      items.some((item) => continuing.has(item.id)) ||
+      db
+        .continuationRows()
+        .some(
+          (row) =>
+            CONTINUING.has(row.stage) && sessions.has(row.sourceInstanceId)
+        )
+    ) {
+      return;
+    }
+    const awake = db
+      .getInstancesByIds([...sessions])
+      .filter((row) => row.status === "running")
+      .map((row) => row.id);
+    const ended = items
+      .map((item) => `${item.id}@${item.endedAt?.getTime() ?? 0}`)
+      .sort()
+      .join(" ");
+    if (awake.length === 0 || workEndedFor.get(workspace.id) === ended) {
+      return;
+    }
+    workEndedFor.set(workspace.id, ended);
+    const machine = machineName(workspace.machineId);
+    console.log(
+      `[workspaces] ${workspace.id} on ${machine}: ${workWords.workEnding(awake, hold)}`
+    );
+    const asked: WorkspaceWorkEnd = { id: workspace.id, instanceIds: awake };
+    detach(
+      call(workspace.machineId, CONTROL_WORKSPACE_WORK_END, [asked]).then(
+        () => {
+          workEndFailures.delete(workspace.id);
+        },
+        (error: unknown) => {
+          // Asked again at the next settle.
+          if (workEndedFor.get(workspace.id) === ended) {
+            workEndedFor.delete(workspace.id);
+          }
+          const reason = error instanceof Error ? error.message : String(error);
+          if (workEndFailures.get(workspace.id) !== reason) {
+            console.warn(
+              `[workspaces] ${workspace.id} on ${machine}: ${workWords.workNotEnded(reason)}`
+            );
+          }
+          workEndFailures.set(workspace.id, reason);
+        }
+      ),
+      `end left work ${workspace.id}`
+    );
+  };
+
   /**
    * THE end of a workspace's life (schema.ts `WorkspaceState`). An active
    * delegate's workspace whose items have all ended is closed on its machine
@@ -4020,9 +4113,11 @@ export const createWorkItems = ({
    * archived when its clone holds nothing that is nowhere else, held with
    * what it holds otherwise. A hold defers it to the event that ends the hold
    * (its session asleep or ended, the artifact gone), or the sweep's next
-   * look (workspace-retire.ts). Its sessions are not ended: each is asleep or
-   * gone already, and a handoff to one goes on in a clone cut again
-   * ({@link recut}). A gate workspace goes with its source.
+   * look (workspace-retire.ts); held only by its awake sessions, what they
+   * left running there ends meanwhile ({@link endLeftWork}). Its sessions are
+   * not ended: each is asleep or gone already, and a handoff to one goes on
+   * in a clone cut again ({@link recut}). A gate workspace goes with its
+   * source.
    */
   const settle = async (id: string): Promise<Settled> => {
     const [workspace] = db.workspacesNamed(id);
@@ -4040,6 +4135,7 @@ export const createWorkItems = ({
     }
     const hold = holdOf(workspace, items);
     if (hold) {
+      endLeftWork(workspace, items, hold);
       return { kind: "deferred", hold };
     }
     const machine = machineName(workspace.machineId);

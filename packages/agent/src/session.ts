@@ -82,6 +82,7 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_WORK_END,
   type ContinuationReadOptions,
   cacheHit,
   type DeliveryMark,
@@ -125,6 +126,7 @@ import {
   WITHDRAW_PERMISSION,
   type WorkspaceRef,
   withWorktreeLine,
+  workWords,
   worstFleetState,
 } from "@cawco/core";
 import {
@@ -1393,6 +1395,7 @@ export class SessionSupervisor {
     } else if (
       control?.method === CONTROL_WORKSPACE_ARCHIVE ||
       control?.method === CONTROL_WORKSPACE_DISCARD ||
+      control?.method === CONTROL_WORKSPACE_WORK_END ||
       control?.method === CONTROL_WORKSPACE_BUNDLE ||
       control?.method === CONTROL_WORKSPACE_AT
     ) {
@@ -5037,21 +5040,25 @@ export class SessionSupervisor {
 
   /**
    * Ends everything session `instanceId` left running in a workspace
-   * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it
-   * leaves nothing of its running, on every harness. Its workspace is the
-   * one its last start or attach here ran it in, else the one whose clone
-   * holds its directory (`cwd` as its stop names it, or as it was started
-   * here). Said in the log; a reading that fails is said, and the interrupt
-   * or stop goes on.
+   * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it, or
+   * the settle of a workspace whose items have all ended
+   * ({@link endFinishedWork}), leaves nothing of its running, on every
+   * harness. Its workspace is `named` when the hub names it, else the one
+   * its last start or attach here ran it in, else the one whose clone holds
+   * its directory (`cwd` as its stop names it, or as it was started here).
+   * Said in the log; a reading that fails is said, and the interrupt or stop
+   * goes on.
    */
   async #endWork(
     instanceId: string,
-    why: "interrupted" | "stopped",
-    cwd?: string
+    why: "interrupted" | "stopped" | "finished",
+    cwd?: string,
+    named?: string
   ): Promise<void> {
     try {
       const dir = cwd ?? this.#resumable.get(instanceId)?.cwd;
       const workspace =
+        named ??
         this.#placed.get(instanceId)?.workspace ??
         (dir ? (await cloneHolding(dir))?.id : undefined);
       // Stopped before its first launch: the session id its workspace's cut
@@ -5062,7 +5069,7 @@ export class SessionSupervisor {
       const { ended, left } = await endSessionWork(instanceId, workspace);
       if (ended.length > 0) {
         console.info(
-          `[agent] ${instanceId}: ${why}, so what it left running in its workspace ended: pid ${ended.join(", ")}${left.length > 0 ? `; pid ${left.join(", ")} still ran after SIGKILL` : ""}`
+          `[agent] ${workWords.workEnded(instanceId, why, ended, left)}`
         );
       }
     } catch (error) {
@@ -5070,6 +5077,34 @@ export class SessionSupervisor {
         `${instanceId}: ${why}, but what it left running in its workspace could not be read, so it was not ended: ${errorText(error)}`
       );
     }
+  }
+
+  /**
+   * What the sessions `instanceIds` of workspace `workspace`'s ended items
+   * left running there ends ({@link #endWork}, `finished`), the hub's word as
+   * it settles the workspace (core {@link CONTROL_WORKSPACE_WORK_END}). Each
+   * runs in its session's lane, so a send or control the hub sent that
+   * session before it is handled first, and one after it waits for it.
+   */
+  endFinishedWork(
+    workspace: string,
+    instanceIds: readonly string[]
+  ): Promise<void> {
+    return Promise.all(
+      instanceIds.map((instanceId) => {
+        const run = (this.#queues.get(instanceId) ?? Promise.resolve()).then(
+          () => this.#endWork(instanceId, "finished", undefined, workspace)
+        );
+        this.#queues.set(instanceId, run);
+        // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup, as dispatch's own lanes do
+        void run.then(() => {
+          if (this.#queues.get(instanceId) === run) {
+            this.#queues.delete(instanceId);
+          }
+        });
+        return run;
+      })
+    ).then(() => undefined);
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stop settles carried, sessiond-held and discarded custody with the same receipt

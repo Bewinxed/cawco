@@ -1,11 +1,13 @@
 /**
- * What a delegate starts in its workspace and leaks, the delegate is told,
- * and nothing is stopped (agent leak-watch.ts on a workspace's boundary,
- * boundary.ts `sandboxOf`; hub server.ts `tellLeak`). leak-notice proves it
- * for a session's own processes; this is the boundary's half. On a scratch
- * fleet (real hub, agent and sessiond; Claude Code against the mock model),
- * boundaries included: it delegates, so it runs on the host, outside every
- * workspace.
+ * What a delegate starts in its workspace and leaks, the delegate is told
+ * while its item is live, and nothing is stopped (agent leak-watch.ts on a
+ * workspace's boundary, boundary.ts `sandboxOf`); once its item has ended,
+ * what it left running there ends (hub work-items.ts `endLeftWork`, agent
+ * boundary.ts `endSessionWork`) and its parent is told of no leftover (hub
+ * server.ts `tellLeak`). leak-notice proves the watcher for a session's own
+ * processes; this is the boundary's half. On a scratch fleet (real hub,
+ * agent and sessiond; Claude Code against the mock model), boundaries
+ * included: it delegates, so it runs on the host, outside every workspace.
  *
  * The agent's leak threshold is {@link THRESHOLD_GIB} GiB
  * (`CAWCO_LEAK_MEMORY_GIB`). The delegate runs three commands in its
@@ -25,22 +27,28 @@
  *
  * Then it rests (`wait_item`), its item live, as a delegate waiting on its
  * runs does; told of the leftover it rests again, and told of the leak it
- * ends its item blocked, the leaking process still climbing.
+ * ends its item blocked, the leaking process still climbing and its
+ * background command still running, so its session stays awake.
  *
  * - (w1) Within {@link LEFT_WAIT_MS} the delegate reads that a process it
  *   started is still running after what started it ended, naming
  *   `sleep 600.0961` and its workspace.
  * - (w2) Within {@link MEMORY_WAIT_MS} it reads that a process it started
  *   is leaking memory, naming `leak-probe-W` and its workspace.
- * - (w3) With its item ended (it takes no message now), the session that
- *   delegated it reads the leak's next height instead, naming the delegate's
- *   item and `leak-probe-W` (hub server.ts `tellLeak`).
- * - (w4) Both processes are still running.
+ * - (w4) Within {@link ENDED_WAIT_MS} of its item's end, `sleep 600.0961`
+ *   and `leak-probe-W` are gone while the workspace's boundary still runs on
+ *   the keeper and the session was not stopped, and the agent's log says
+ *   the session `finished`, naming the leaker's pid among those it ended.
  * - (w5) The browser ran with its crash handlers, which ended with it, and
  *   no session read a leftover naming a crash handler, nor did the agent's
  *   log say one: on main every browser launch in a workspace was told as "2
  *   processes this session started are still running after the process
  *   that started them ended".
+ * - (w6) The session that delegated it read no leftover of its delegate's
+ *   (on 2026-10-24 a parent was told to end three pids a done delegate
+ *   left). What its parent reads of an ended delegate's climbing process
+ *   (the old (w3)) is ended-item-work's (a2): there a preview keeps the
+ *   leaking server running after its item ends, as nothing does here.
  *
  *   bun scripts/probe-kit/run.ts leak-notice-workspace
  */
@@ -48,6 +56,7 @@ import { realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { browserExecutable } from "../../../packages/agent/src/capabilities";
+import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   isAlive,
@@ -56,11 +65,13 @@ import {
 } from "../../../packages/core/src/signal";
 import { leakWords } from "../../../packages/core/src/words/leaks";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 const THRESHOLD_GIB = 0.25;
 const MEMORY_WAIT_MS = 180_000;
 const LEFT_WAIT_MS = 90_000;
+/** How soon after its item's end what the delegate left running is gone: the hub's settle, then its machine's SIGTERM, grace and SIGKILL (agent boundary.ts `WORK_GRACE_MS`). */
+const ENDED_WAIT_MS = 15_000;
 const TAG = "PROBE-LEAK-WS";
 const LEAKER = "leak-probe-W";
 const LEFTOVER = "600.0961";
@@ -214,6 +225,84 @@ const toldWith = (seen: readonly Seen[], words: readonly string[]) =>
   seen.find((request) => words.every((word) => request.last.includes(word)))
     ?.last;
 
+/**
+ * (w4) What the delegate left running, read from its item's end: gone
+ * within {@link ENDED_WAIT_MS}, the boundary read as it stood when the last
+ * of it went, and the agent's line that ended it.
+ */
+const endedCheck = async (
+  kit: Kit,
+  fleet: KitFleet,
+  of: {
+    delegate: string;
+    item: string;
+    leakerPids: readonly number[];
+    workspace: string;
+  }
+): Promise<void> => {
+  const endedAt = await until(
+    "the delegate's item ended",
+    () =>
+      fleet.query<{ ended_at: number | null }>(
+        "SELECT ended_at FROM work_items WHERE id = ?",
+        of.item
+      )[0]?.ended_at,
+    (at) => typeof at === "number",
+    MEMORY_WAIT_MS
+  ).catch(() => undefined);
+  const gone = await until(
+    "the delegate's leftovers ended",
+    async () => {
+      const [leakers, leftovers] = await Promise.all([
+        pidsOf(LEAKER),
+        pidsOf(`sleep ${LEFTOVER}`),
+      ]);
+      return {
+        running: [...leakers, ...leftovers].filter((pid) =>
+          isAlive(listedPid(pid))
+        ),
+        boundary: (await fleet.heldProcs()).some(({ procId }) =>
+          isBoundaryOf(procId, of.workspace)
+        ),
+        at: Date.now(),
+      };
+    },
+    (now) => now.running.length === 0,
+    ENDED_WAIT_MS + 30_000
+  ).catch(() => undefined);
+  const seconds =
+    gone && typeof endedAt === "number"
+      ? (gone.at - endedAt) / 1000
+      : Number.NaN;
+  const status = fleet.instance(of.delegate)?.status;
+  const finishedLine = await until(
+    "the agent's line that the delegate finished",
+    async () =>
+      (await fleet.logs("agent"))
+        .split("\n")
+        .find(
+          (line) =>
+            line.includes(
+              `${of.delegate}: finished, so what it left running`
+            ) && of.leakerPids.some((pid) => line.includes(String(pid)))
+        ),
+    (line) => line !== undefined,
+    10_000
+  ).catch(() => undefined);
+  const left = gone
+    ? `gone ${seconds.toFixed(1)} s after the item ended, the boundary ${gone.boundary ? "running" : "gone"}`
+    : `still running: ${LEAKER} ${(await pidsOf(LEAKER)).join(", ") || "none"}, sleep ${LEFTOVER} ${(await pidsOf(`sleep ${LEFTOVER}`)).join(", ") || "none"}`;
+  kit.check(
+    "(w4) within 15 s of its item's end the delegate's leftover and leaking processes are gone, its boundary still runs, its session was not stopped, and the agent's log says it finished, naming the leaker's pid",
+    gone !== undefined &&
+      seconds <= ENDED_WAIT_MS / 1000 &&
+      gone.boundary &&
+      (status === "running" || status === "sleeping") &&
+      finishedLine !== undefined,
+    `${left}; session ${status}; leaker pids ${of.leakerPids.join(", ") || "none seen"}; ${finishedLine ?? "no agent line saying it finished"}`
+  );
+};
+
 const spec: Spec = {
   name: "leak-notice-workspace",
   host: "its delegate's commands run in a workspace boundary",
@@ -246,14 +335,17 @@ const spec: Spec = {
       projectId: project.id,
     });
     try {
-      const item = await fleet.api<{ workItemId: string }>("/api/work-items", {
-        parentInstanceId: parent,
-        title: "Leak in a workspace",
-        prompt: `${TAG}: run the commands.`,
-        harness: "claude",
-        model: "claude-haiku-4-5",
-        cwd: repo,
-      });
+      const item = await fleet.api<{ instanceId: string; workItemId: string }>(
+        "/api/work-items",
+        {
+          parentInstanceId: parent,
+          title: "Leak in a workspace",
+          prompt: `${TAG}: run the commands.`,
+          harness: "claude",
+          model: "claude-haiku-4-5",
+          cwd: repo,
+        }
+      );
       const workspace = await until(
         "the delegate's workspace",
         () =>
@@ -282,38 +374,19 @@ const spec: Spec = {
         Boolean,
         MEMORY_WAIT_MS
       ).catch(() => undefined);
+      // Its pids while it runs, as the agent's line names those it ended.
+      const leakerPids = await pidsOf(LEAKER);
       check(
         "(w2) the delegate reads that a process it started in its workspace is leaking memory, naming it and the workspace",
         !!memoryTold?.includes(where),
         memoryTold ?? "no such message"
       );
-      const parentTold = await until(
-        "the parent told of its ended delegate's leak",
-        () =>
-          toldWith(fleet.seen, [
-            leakWords.yourDelegate,
-            leakWords.leaking,
-            LEAKER,
-          ]),
-        Boolean,
-        MEMORY_WAIT_MS
-      ).catch(() => undefined);
-      check(
-        "(w3) with the delegate's item ended, the session that delegated it reads the leak instead, naming the item and the process",
-        !!parentTold?.includes(item.workItemId.slice(0, 8)),
-        parentTold ??
-          `no such message; the delegate ${ended ? "ended its item" : "never ended its item"}`
-      );
-      const [leakers, leftovers] = await Promise.all([
-        pidsOf(LEAKER),
-        pidsOf(`sleep ${LEFTOVER}`),
-      ]);
-      check(
-        "(w4) both processes are still running",
-        leakers.some((pid) => isAlive(listedPid(pid))) &&
-          leftovers.some((pid) => isAlive(listedPid(pid))),
-        `${LEAKER}: ${leakers.join(", ") || "none"}; sleep ${LEFTOVER}: ${leftovers.join(", ") || "none"}`
-      );
+      await endedCheck(kit, fleet, {
+        delegate: item.instanceId,
+        item: item.workItemId,
+        leakerPids,
+        workspace: workspace ?? "",
+      });
       // The browser command's output, from the file Claude Code writes a background command's into.
       const outputs = () => [
         ...new Set(
@@ -346,6 +419,16 @@ const spec: Spec = {
         "(w5) a browser run in the workspace for 35 s had its crash handlers, they ended with it, and no session read a leftover naming one nor did the agent's log",
         running > 0 && after === 0 && !handlerTold && logged.length === 0,
         `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}${browsed ? "" : ` (no output reached BROWSER-DONE among ${outputs().length} background outputs)`}; ${handlerTold ? `the session was told: ${handlerTold}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? `no [leaks] line naming ${INSTALL}` : logged.join(" | ").slice(0, 400)}`
+      );
+      const parentLeft = fleet.seen.find(
+        (request) =>
+          request.last.includes(leakWords.yourDelegate) &&
+          request.last.includes(leakWords.leftBehind)
+      )?.last;
+      check(
+        "(w6) the session that delegated it read no leftover of its delegate's",
+        parentLeft === undefined,
+        parentLeft?.slice(0, 600) ?? "none read"
       );
     } finally {
       const probes = await Promise.all([

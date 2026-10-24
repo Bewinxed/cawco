@@ -33,6 +33,12 @@
  * a machine whose keeper has no cgroups is out of its tree from its first
  * instant, and is not seen.
  *
+ * A delegate whose work item has ended takes no word, and is never told of a
+ * leftover: what its session left running in its workspace ends as the hub
+ * settles that workspace (hub work-items.ts `endLeftWork`), or is kept while
+ * an artifact shows it. Its parent is told of a climb in memory alone (hub
+ * server.ts `tellLeak`).
+ *
  * The same reading says which children are working (agent awake.ts holds
  * idle sleep off for them): a child whose processes, itself aside, used at
  * least {@link WORKING_SHARE} of one core since the reading before. A run a
