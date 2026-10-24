@@ -128,7 +128,6 @@ export function echoBeat(): Attachment<HTMLElement> {
       rendered = on;
       schedule();
     });
-    ({ rendered } = watching);
     const sync = () => {
       pending = 0;
       if (!(moving && rendered)) {

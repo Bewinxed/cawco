@@ -28,6 +28,19 @@ import type { Attachment } from "svelte/attachments";
  * `request()` asks for the answer in the next frame with nothing resized:
  * the other things a site hears (a scroll, rows arriving, the window) share
  * its one frame.
+ *
+ * `first`, when given, takes a target's first report inside the delivery
+ * itself, for a box mounting: the frame it mounts in has laid it out and not
+ * painted, so what it reads there costs no layout of its own, and what it
+ * writes is in that frame's paint. Read as it mounted instead, in the effect
+ * that mounted it, every measure laid the page out again between the writes
+ * of the same flush (a turn's Working tab arriving in the rail: its folder
+ * tabs, its list's pill, a dozen layouts in one frame). It writes only what
+ * resizes no box an observer watches (an overlay drawn inside the box, an
+ * absolute layer under its rows), so the delivery has nothing left to report.
+ * Every first report of one delivery comes in one call, so a site that
+ * observes many boxes with one observer reads them all before it writes
+ * any. A target it took is not answered again for that report.
  */
 export interface FrameObserver {
   disconnect: () => void;
@@ -66,10 +79,14 @@ export function frameObserver(
   options: {
     /** Inside the delivery, reading only: what `answer` writes in the next frame. */
     read?: (entries: readonly ResizeObserverEntry[]) => void;
+    /** Targets' first reports, inside the delivery, all of one delivery together: their mounts' measures and what they draw from them. */
+    first?: (entries: readonly ResizeObserverEntry[]) => void;
   } = {}
 ): FrameObserver {
   let frame = 0;
   const changed = new Set<Element>();
+  /** Targets whose first report has come (`first`). */
+  const reported = new WeakSet<Element>();
   const request = () => {
     if (frame === 0) {
       frame = requestAnimationFrame(() => {
@@ -83,10 +100,23 @@ export function frameObserver(
   // biome-ignore lint/style/noRestrictedGlobals: the one ResizeObserver the rule allows, deferring every answer to the next frame
   const observer = new ResizeObserver((entries) => {
     options.read?.(entries);
+    const firsts: ResizeObserverEntry[] = [];
+    let asked = false;
     for (const entry of entries) {
-      changed.add(entry.target);
+      if (options.first && !reported.has(entry.target)) {
+        firsts.push(entry);
+      } else {
+        changed.add(entry.target);
+        asked = true;
+      }
+      reported.add(entry.target);
     }
-    request();
+    if (firsts.length > 0) {
+      options.first?.(firsts);
+    }
+    if (asked) {
+      request();
+    }
   });
   return {
     observe: (target, how) => observer.observe(target, how),

@@ -126,7 +126,7 @@ export function tickingClock(running: () => boolean): Clock {
         inView = entry.isIntersecting;
       });
       seen.observe(node);
-      drawn = watching.rendered;
+      drawn = true;
       return () => {
         drawn = false;
         inView = false;

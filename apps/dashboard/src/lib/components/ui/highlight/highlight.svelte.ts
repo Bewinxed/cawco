@@ -256,13 +256,13 @@ export function highlight(options: HighlightOptions) {
       look,
     } = options;
     // The list isolates, so the layers at -1 stand under its rows and over
-    // nothing outside it.
+    // nothing outside it. Unpositioned, it is the layers' containing block
+    // by the sheet's own default for `[data-highlight]` (design.css), which a
+    // list's own position outranks: read here as it mounted, its computed
+    // style restyled the page between the writes of the flush that mounted it.
     container.dataset.highlight = "";
     const ownIsolate = !container.classList.contains("isolate");
     container.classList.add("isolate");
-    if (getComputedStyle(container).position === "static") {
-      container.style.position = "relative";
-    }
     const looks = highlightVariants({ look });
     const ghost = layer("highlight-ghost", looks.ghost());
     const trail = layer("highlight-trail", looks.trail());
@@ -952,7 +952,14 @@ export function highlight(options: HighlightOptions) {
     // A resize moves every row at once: the layers follow without a glide,
     // on the next frame, so placing them (which can toggle a scrollbar on a
     // scrolling list) never resizes the list inside its own observer.
-    const sizes = frameObserver(() => onResize());
+    // Its first report places the pill, inside the delivery: the frame the
+    // list mounts in has laid it out and not painted, so the selected row is
+    // read there at no layout of its own and the pill is in that frame's
+    // paint. The pill is an absolute layer under the rows: placing it
+    // resizes nothing an observer watches.
+    const sizes = frameObserver(() => onResize(), {
+      first: () => syncPill(false),
+    });
     const onResize = () => {
       forgetScroll();
       if (skipped) {
@@ -1071,8 +1078,6 @@ export function highlight(options: HighlightOptions) {
       skipped = !on;
       onResize();
     });
-    skipped = !watching.rendered;
-    syncPill(false);
 
     // A list that measures its rows moves the layers each time it does: the
     // ghost glides to the row under the pointer now (or its own row, or

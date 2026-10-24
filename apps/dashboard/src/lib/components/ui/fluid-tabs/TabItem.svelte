@@ -1,3 +1,47 @@
+<script lang="ts" module>
+  import {
+    type FrameObserver,
+    frameObserver,
+  } from "#lib/cawco/frame-observer.js";
+  import type { FoldMeasure } from "./fold-memory";
+
+  /** A folder tab's measure and what it draws from it, by its box. */
+  interface Folded {
+    measure: () => FoldMeasure;
+    take: (measure: FoldMeasure) => void;
+  }
+  const folded = new Map<Element, Folded>();
+  /**
+   * One size observer for every folder tab. Every tab it reports is read,
+   * then every one drawn: read and drawn a tab at a time, each tab's new
+   * shape laid the page out again for the next tab's read.
+   */
+  let foldSizes: FrameObserver | undefined;
+  const measureAll = (targets: Iterable<Element>) => {
+    const read: [Folded, FoldMeasure][] = [];
+    for (const target of targets) {
+      const tab = folded.get(target);
+      if (tab) {
+        read.push([tab, tab.measure()]);
+      }
+    }
+    for (const [tab, measure] of read) {
+      tab.take(measure);
+    }
+  };
+  const watchFold = (el: Element, tab: Folded): (() => void) => {
+    folded.set(el, tab);
+    foldSizes ??= frameObserver(measureAll, {
+      first: (entries) => measureAll(entries.map((entry) => entry.target)),
+    });
+    foldSizes.observe(el);
+    return () => {
+      folded.delete(el);
+      foldSizes?.unobserve(el);
+    };
+  };
+</script>
+
 <script lang="ts">
   /**
    * One segment. The item draws nothing of its own state — the track's
@@ -15,11 +59,10 @@
   import type { Component, Snippet } from "svelte";
   import { untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { HALF } from "#lib/cawco/motion/hang-shape.js";
   import { cn } from "#lib/utils.js";
   import { restRank, useList, useTabs } from "./context.svelte";
-  import { type FoldMeasure, rememberFoldBox } from "./fold-memory";
+  import { rememberFoldBox } from "./fold-memory";
   import { type FoldPose, foldPath, restPose, taperStops } from "./fold-path";
 
   /** How long a box holds still before its measure is kept, ms (a resize settling). */
@@ -160,11 +203,11 @@
     if (!(el && folder)) {
       return;
     }
-    const read = () => {
+    const measure = (): FoldMeasure => {
       const style = getComputedStyle(el);
       const px = (name: string) =>
         Number.parseFloat(style.getPropertyValue(name)) || 0;
-      const now: FoldMeasure = {
+      return {
         box: {
           width: el.offsetWidth,
           height: el.offsetHeight,
@@ -179,17 +222,22 @@
           ease: px("--tab-rim-taper-ease") || 1,
         },
       };
+    };
+    const take = (now: FoldMeasure) => {
       measured = now;
       clearTimeout(keep);
       keep = setTimeout(() => rememberFoldBox(value, now), KEEP_AFTER);
     };
-    // Read now, and a change in the next frame (frameObserver): the tab's
-    // shape is drawn from it.
-    read();
-    const sizes = frameObserver(read);
-    sizes.observe(el);
+    // Measured as the frame it mounts in has laid it out, inside its size
+    // observer's first report (frameObserver `first`): the shape is in that
+    // frame's paint, and is an overlay inside the tab, so drawing it resizes
+    // nothing an observer watches. Measured here as it mounted, in the
+    // effect, it laid the page out between the writes of the flush that
+    // mounted it (a turn's Working tab arriving in the rail: 29ms of layout
+    // at 4x for its two tabs). A change after that, in the next frame.
+    const unwatch = watchFold(el, { measure, take });
     return () => {
-      sizes.disconnect();
+      unwatch();
       clearTimeout(keep);
     };
   });
