@@ -7,8 +7,10 @@
    * A change of phase is a crossfade inside the row: the outgoing face fades
    * out on top while the incoming one fades in, and the row's height tweens
    * from one to the other (--dur-pop, --ease-in-out: this is movement on
-   * screen, not an entrance). Measured before and after the change, never
-   * from a ResizeObserver, so nothing here writes layout in an observer.
+   * screen, not an entrance). Its heights are the ones frames laid out, read
+   * in its size observers' deliveries: before the change, the row's last;
+   * after it, the incoming face's first, where the tween starts from the
+   * height the row is held at, so starting it resizes nothing there.
    *
    * The row is ONE generation of the tail (see `rows.ts`). When the answer
    * lands as its message, that message keeps this row's key (`keepLive`) and
@@ -19,6 +21,7 @@
    * generation, if the turn goes on, arrives as a row of its own.
    */
   import { untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import MessageBody from "../MessageBody.svelte";
@@ -89,51 +92,80 @@
   let tweening = $state(false);
   /** The row as the last flush drew it — what a leaving face keeps showing. */
   let drawn = untrack(() => row);
-  /** The height the row had when its phase changed, until the tween reads it. */
+  /** The height the row had when its phase changed, held on it until the tween takes it. */
   let from: number | null = null;
   /**
-   * The row's height as the last frame laid it out, from its size observer's
-   * reports (read inside the delivery, on the layout that frame did): the
-   * height the change starts from, the one on screen. Read off the row as the
-   * phase changed instead, in the update that changed it, it laid the page
-   * out between that update's writes. Null until a frame has laid it out: a
-   * row whose phase changes before its first frame (it arrives and its answer
-   * starts in one turn of the stream) is read off the page as it was, so its
-   * tween is the one it always had.
+   * The row's height and rail as the last frame laid it out, from its size
+   * observer's reports (read inside the delivery, on the layout and style
+   * that frame did): what the change starts from, as it is on screen. Read
+   * off the row as the phase changed instead, in the update that changed it,
+   * they laid the page out between that update's writes (a reply arriving:
+   * 47ms of layout at 4x in its frame, decision-pages (o)). Null until a
+   * frame has laid it out.
    */
   let drawnHeight: number | null = null;
+  let drawnRail: Rail | null = null;
+  /**
+   * A change of phase waiting for the row's first frame: a row whose phase
+   * changes before it is drawn (it arrives and its answer starts in one turn
+   * of the stream) changes as that frame has drawn it. Its first frame shows
+   * the face it arrived with, whole: where the change's crossfade and tween
+   * start.
+   */
+  let waiting = false;
+  /** Bumped when the row's first frame has drawn it, so a waiting change goes on. */
+  let laidOut = $state(0);
   $effect(() => {
     const el = box;
     if (!el) {
       return;
     }
-    const sized = frameObserver(() => undefined, {
-      read: (entries) => {
-        for (const entry of entries) {
-          drawnHeight = entry.borderBoxSize[0]?.blockSize ?? drawnHeight;
+    const sized = frameObserver(
+      () => {
+        if (waiting) {
+          waiting = false;
+          laidOut += 1;
         }
       },
-    });
+      {
+        read: (entries) => {
+          for (const entry of entries) {
+            drawnHeight = entry.borderBoxSize[0]?.blockSize ?? drawnHeight;
+          }
+          drawnRail = railNow(el);
+        },
+      }
+    );
     sized.observe(el);
     return () => sized.disconnect();
   });
 
   $effect.pre(() => {
     const next = row;
+    // biome-ignore lint/complexity/noVoid: a change that waited for the row's first frame goes on.
+    void laidOut;
     untrack(() => {
       const current = faces.at(-1) as Face;
       const phase = phaseOf(next);
       if (phase !== current.phase) {
         const moving = !!box && motionOk.current && !!ledger?.watched;
+        if (moving && drawnHeight === null) {
+          waiting = true;
+          return;
+        }
         serial += 1;
-        if (moving && box) {
-          from = drawnHeight ?? box.getBoundingClientRect().height;
+        if (moving && box && drawnHeight !== null) {
+          // Held at the height on screen until the incoming face's first
+          // report says where it ends (`tweenTo`).
+          from = drawnHeight;
+          box.style.blockSize = `${from}px`;
+          tweening = true;
           faces = [
             {
               ...current,
               leaving: drawn,
               entering: false,
-              rail: railNow(box),
+              rail: drawnRail,
             },
             { id: serial, phase, leaving: null, entering: true, rail: null },
           ];
@@ -147,36 +179,57 @@
     });
   });
 
-  $effect(() => {
-    // biome-ignore lint/complexity/noVoid: the tween is armed by the faces changing.
-    void faces.length;
-    untrack(() => {
-      if (from === null || !box) {
-        return;
-      }
-      const start = from;
-      from = null;
-      const end = box.getBoundingClientRect().height;
-      if (Math.abs(end - start) < 0.5) {
-        return;
-      }
-      const style = getComputedStyle(box);
-      tweening = true;
-      box
-        .animate([{ blockSize: `${start}px` }, { blockSize: `${end}px` }], {
-          duration: dur("--dur-pop"),
-          easing: style.getPropertyValue("--ease-in-out"),
-        })
-        .finished.then(
-          () => {
-            tweening = false;
-          },
-          () => {
-            tweening = false;
-          }
-        );
+  /**
+   * The tween from the held height to the incoming face's, started inside
+   * that face's first report: the frame has laid it out whole, so its height
+   * costs no layout and is the one it ends at, and the row stands at the
+   * tween's first height already, so starting it resizes nothing there.
+   * Read in the update that changed the faces instead, the face's height
+   * laid the page out between that update's writes, and it was read before
+   * its words were drawn: the tween ended 24px short (39.84px of 63.84px),
+   * and the row snapped the rest as it ended.
+   */
+  function tweenTo(end: number, easing: string): void {
+    const el = box;
+    if (from === null || !el) {
+      return;
+    }
+    const start = from;
+    from = null;
+    if (Math.abs(end - start) >= 0.5) {
+      el.animate([{ blockSize: `${start}px` }, { blockSize: `${end}px` }], {
+        duration: dur("--dur-pop"),
+        easing,
+      }).finished.then(
+        () => {
+          tweening = false;
+        },
+        () => {
+          tweening = false;
+        }
+      );
+    } else {
+      tweening = false;
+    }
+    el.style.blockSize = "";
+  }
+  /** An incoming face's size observer: its first report starts the tween, read with every site's reads and written after them (frameObserver). */
+  const entered: Attachment<HTMLElement> = (node) => {
+    const sized = frameObserver(() => undefined, {
+      first: (entries) => {
+        const end = entries[0]?.borderBoxSize[0]?.blockSize ?? 0;
+        const easing = box
+          ? getComputedStyle(box).getPropertyValue("--ease-in-out")
+          : "";
+        return () => {
+          tweenTo(end, easing);
+          sized.disconnect();
+        };
+      },
     });
-  });
+    sized.observe(node);
+    return () => sized.disconnect();
+  };
 
   function settle(face: Face, event: AnimationEvent): void {
     if (event.target !== event.currentTarget) {
@@ -264,6 +317,7 @@
       onanimationend={(event) => settle(face, event)}
       style:--rail-gap={face.rail?.gap}
       style:--rail-head={face.rail?.head}
+      {@attach face.entering ? entered : undefined}
     >
       {@render body(face.leaving ?? row, face.phase)}
     </div>
