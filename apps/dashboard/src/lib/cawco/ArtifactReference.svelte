@@ -3,7 +3,8 @@
    * An artifact named in written words (`[name](cawco:artifact/<id>)`, core
    * references.ts), drawn as its chip: the inline chip (ui/chip `inline`)
    * with its kind's glyph as its mark and its name as the dashboard holds it
-   * now. Pressed, it comes to the front of its session's panel
+   * now. Pressed, it comes to the front of the panel of the session whose
+   * conversation it stands in, else of its own session's
    * (reference-open.svelte.ts).
    */
   import type { ArtifactKind } from "@cawco/core";
@@ -20,8 +21,10 @@
   import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
   import { refusals } from "./refusals.svelte";
+  import { sessionHere } from "./session-here";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
+  const here = sessionHere();
 
   /** Each kind's glyph, as Files and Go to draw it. */
   const GLYPH: Record<ArtifactKind, Component> = {
@@ -39,7 +42,7 @@
   const refKey = $derived(`ref:${id}:top`);
   async function press(): Promise<void> {
     const key = refKey;
-    const refused = await openReference(id, { top: true });
+    const refused = await openReference(id, { top: true }, here?.());
     if (refused) {
       refusals.set(key, { reason: refused });
     } else {

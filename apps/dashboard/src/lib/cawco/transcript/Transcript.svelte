@@ -60,6 +60,7 @@
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
+  import { provideSessionHere } from "../session-here";
   import { readJson, writeJson } from "../storage";
   import { isThreadTab } from "../thread-tabs";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
@@ -156,6 +157,7 @@
   } = $props();
 
   setContext("cawco:machine", () => session.machineId);
+  provideSessionHere(() => session.instanceId);
 
   /** One transcript, on screen, being read: `focused` follows `visible`. */
   const isFocused = $derived(focused ?? visible);

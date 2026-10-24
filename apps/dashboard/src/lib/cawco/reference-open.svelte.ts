@@ -1,6 +1,7 @@
 /**
  * A press on an artifact's chip, a pin's or a decision card's (core
- * references.ts): the artifact comes to the front of its session's panel
+ * references.ts): the artifact comes to the front of the panel of the
+ * session whose conversation the chip stands in, else of its own session's
  * (the hub's show, which every view of that panel follows, the phone's
  * sheet too), and the pane holding it opens it at the place the chip names
  * once its page is ready (artifact-names.svelte.ts `askOpen`). In an
@@ -30,14 +31,19 @@ const ownTab = (id: string, at: OpenAt): string => {
 };
 
 /**
- * Artifact `id` opened in the panel at `at`. Answers the hub's refusal in
- * the error formula, for the chip that was pressed to say beside itself
- * with Try again (never a toast: DESIGN.md, The Work Outlives Its Surface
- * Rule), or null once it opened.
+ * Artifact `id` opened in the panel at `at`: the panel of `here`, the
+ * session whose conversation the chip was pressed in (session-here.ts),
+ * where there is one, so it opens on the session on screen (the hub shows
+ * one there that session owns, made, or its delegation tree holds); else
+ * the panel of the session it belongs to. Answers the hub's refusal in the
+ * error formula, for the chip that was pressed to say beside itself with
+ * Try again (never a toast: DESIGN.md, The Work Outlives Its Surface Rule),
+ * or null once it opened.
  */
 export async function openReference(
   id: string,
-  at: OpenAt
+  at: OpenAt,
+  here?: string
 ): Promise<string | null> {
   const named = artifactNamed(id);
   if (!named) {
@@ -47,16 +53,17 @@ export async function openReference(
     await goto(ownTab(id, at));
     return null;
   }
+  const session = here ?? named.instanceId;
   askOpen(id, at);
   // Already in front: the pane opens the place where the page stands, with no show to load it again.
-  const panel = cawco.previews[named.instanceId];
+  const panel = cawco.previews[session];
   if (panel?.state === "open" && panel.artifact.id === id) {
-    revealPreview(named.instanceId);
+    revealPreview(session);
     return null;
   }
   try {
-    await showArtifact(named.instanceId, id);
-    revealPreview(named.instanceId);
+    await showArtifact(session, id);
+    revealPreview(session);
     return null;
   } catch (error) {
     return `${named.name} was not opened: ${failureClause(error)}. The panel stays as it was.`;

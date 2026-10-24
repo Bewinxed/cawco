@@ -16,8 +16,10 @@
   import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
   import { refusals } from "./refusals.svelte";
+  import { sessionHere } from "./session-here";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
+  const here = sessionHere();
 
   const named = $derived(decisionReference(id));
   const picked = $derived.by(() => {
@@ -44,7 +46,11 @@
       return;
     }
     const key = refKey;
-    const refused = await openReference(named.artifact, { card: named.card });
+    const refused = await openReference(
+      named.artifact,
+      { card: named.card },
+      here?.()
+    );
     if (refused) {
       refusals.set(key, { reason: refused });
     } else {
