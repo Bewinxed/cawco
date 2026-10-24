@@ -3134,6 +3134,18 @@
    * Each of these sizes is read as its box mounts, and a change in the next
    * frame (frameSize).
    */
+  /**
+   * The ground under an open layer (the dock's `layer-ground`): the
+   * transcript's recess, solid up to the layer's foot, then dissolving over
+   * the rest of its height (`space-8`) under the layer.
+   */
+  /** It reaches down to the pane's foot, under the dock's own. */
+  const GROUND_BOTTOM = "calc(-1 * var(--dock-foot, 0px))";
+  /** As tall as the foot, the composer and the step to the layer, and its dissolve. */
+  const GROUND_H =
+    "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--space-8))";
+  const LAYER_GROUND =
+    "linear-gradient(to top, var(--surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--surface-recess-clear))";
   let panel = $state(0);
   const measurePanel = frameSize<HTMLElement>((node) => {
     panel = node.clientHeight;
@@ -3233,7 +3245,26 @@
     ? undefined
     : "calc(var(--space-4) + var(--safe-bottom))"}
   style:--c-composer-w={flush ? "100%" : undefined}
+  style:--layer-foot="calc({panel}px + var(--c-tray-row) + var(--space-2))"
 >
+  <!-- The ground under an open layer (the plan, the tray's shelf). Each
+       floats a `space-2` step over the tray row, and the row has no surface
+       of its own, so the transcript scrolling behind showed between the two
+       as a sliver of a line, cut by the layer's foot mid-glyph. While one is
+       open, the transcript's foot stands solid up to that foot across the
+       pane's width, the transcript's own recess as its foot fade (FootFade)
+       draws it, then dissolves over `space-8` under the layer: rows pass
+       behind the layer and the tray row as they pass behind the pill, whole
+       or not at all. It fades with the layer and moves nothing. Under
+       everything else in the dock. -->
+  <div
+    data-slot="layer-ground"
+    aria-hidden="true"
+    class="absolute inset-x-0 bottom-(--ground-bottom) -z-1 h-(--ground-h) pointer-events-none bg-(image:--layer-ground-image) opacity-0 invisible transition-fade-hide group-has-slot-plan/dock:opacity-100 group-has-slot-plan/dock:visible group-has-slot-plan/dock:transition-fade-show group-has-slot-shelf/dock:opacity-100 group-has-slot-shelf/dock:visible group-has-slot-shelf/dock:transition-fade-show"
+    style:--layer-ground-image={LAYER_GROUND}
+    style:--ground-bottom={GROUND_BOTTOM}
+    style:--ground-h={GROUND_H}
+  ></div>
   {#if offered.length > 0}
     <!-- The rest of the dock above the panel, cards stood on its bottom
          edge; the gap to the panel is the stack's own bottom padding, so its

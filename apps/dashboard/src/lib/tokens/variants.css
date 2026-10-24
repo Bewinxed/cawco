@@ -514,6 +514,7 @@
 @custom-variant slot-pin-card (&[data-slot="pin-card"]);
 @custom-variant slot-pin-room (&[data-slot="pin-room"]);
 @custom-variant slot-pip (&[data-slot="pip"]);
+@custom-variant slot-plan (&[data-slot="plan"]);
 @custom-variant slot-plan-mark (&[data-slot="plan-mark"]);
 @custom-variant slot-plan-ring (&[data-slot="plan-ring"]);
 @custom-variant slot-port (&[data-slot="port"]);
@@ -560,6 +561,7 @@
 @custom-variant slot-sheen-word (&[data-slot="sheen-word"]);
 @custom-variant slot-sheet (&[data-slot="sheet"]);
 @custom-variant slot-sheet-content (&[data-slot="sheet-content"]);
+@custom-variant slot-shelf (&[data-slot="shelf"]);
 @custom-variant slot-shell (&[data-slot="shell"]);
 @custom-variant slot-shell-content (&[data-slot="shell-content"]);
 @custom-variant slot-shell-main (&[data-slot="shell-main"]);
