@@ -24,12 +24,14 @@
     flow,
     part = "both",
     open = $bindable(false),
+    foldId,
   }: {
     flow: AddressFlow;
     part?: "link" | "fold" | "both";
     open?: boolean;
+    /** The fold's id, one for the link and the fold where they stand apart. */
+    foldId: string;
   } = $props();
-  const foldId = $props.id();
   const clipboard = hasClipboard();
   const removing = $derived(flow.step === "done");
   const failed = $derived(flow.step === "failed");
@@ -40,29 +42,10 @@
   );
 </script>
 
-<div
-  class={["grid min-w-0", part === "fold" && !open && "hidden"]}
-  data-slot={part === "fold" ? "tray-details-fold" : "tray-details"}
->
-  {#if part !== "fold"}
-    <!-- At the tray's leading edge: the ghost button's pad hangs outside it, so its words stand on the edge. -->
-    <span class="flex justify-start">
-      <Button
-        aria-controls={foldId}
-        aria-expanded={open}
-        class="-ms-space-2"
-        data-tray-details
-        label={open ? "Hide details" : "Show details"}
-        onclick={() => {
-          open = !open;
-        }}
-        size="xs"
-        tone="muted"
-        variant="ghost"
-      />
-    </span>
-  {/if}
-  {#if open && part !== "link"}
+<!-- The fold opens and closes on the house's unfold (fold.svelte), the tray's
+     box following it frame by frame (morph followUnfolds). -->
+{#snippet foldOut()}
+  {#if open}
     <div
       id={foldId}
       class="grid min-w-0 gap-space-3 pt-space-2 text-start"
@@ -127,7 +110,7 @@
             </p>
             <span class="flex flex-wrap justify-end gap-space-2">
               <Button
-                label="Keep it"
+                label="Cancel"
                 onclick={() => {
                   flow.stopping = false;
                 }}
@@ -162,4 +145,30 @@
       {/if}
     </div>
   {/if}
-</div>
+{/snippet}
+
+{#if part === "fold"}
+  {@render foldOut()}
+{:else}
+  <div class="grid min-w-0" data-slot="tray-details">
+    <!-- At the tray's leading edge: the ghost button's pad hangs outside it, so its words stand on the edge. -->
+    <span class="flex justify-start">
+      <Button
+        aria-controls={foldId}
+        aria-expanded={open}
+        class="-ms-space-2"
+        data-tray-details
+        label={open ? "Hide details" : "Show details"}
+        onclick={() => {
+          open = !open;
+        }}
+        size="xs"
+        tone="muted"
+        variant="ghost"
+      />
+    </span>
+    {#if part === "both"}
+      {@render foldOut()}
+    {/if}
+  </div>
+{/if}

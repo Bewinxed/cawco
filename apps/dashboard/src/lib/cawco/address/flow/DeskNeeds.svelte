@@ -46,9 +46,8 @@
   let rowHeight = 0;
   let opening: Source | null = null;
 
-  const shown = $derived(
-    !(flow.stopped || (flow.step === "failed" && flow.cause === "unsupported"))
-  );
+  /** Stopped, the work has no row; every other state, an unsupported network's too, stands here. */
+  const shown = $derived(!flow.stopped);
 
   function openTray(): void {
     if (rowEl) {

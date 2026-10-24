@@ -75,6 +75,7 @@
   const titleId = $props.id();
   /** Show details stands open: its link in the actions' row, its fold under it. */
   let details = $state(false);
+  const detailsId = `${titleId}-details`;
 </script>
 
 <section
@@ -85,7 +86,7 @@
   data-moment={flow.moment}
   data-step={flow.step}
   data-tray="address"
-  {@attach (node) => morph({ ms: dur("--dur-pop") })(node)}
+  {@attach (node) => morph({ ms: dur("--dur-pop"), followUnfolds: true })(node)}
 >
   <div
     style:--tray-pad="calc(var(--radius-modal) - var(--radius-lg))"
@@ -110,10 +111,7 @@
         <div aria-hidden="true" class={grabberVariants()}></div>
       {/if}
       <div class="grid min-w-0 gap-space-3" data-tray-content>
-        <div
-          class={["grid min-w-0", failed ? "gap-space-3" : "gap-space-2"]}
-          data-slot="lead"
-        >
+        <div class="grid min-w-0 gap-space-2" data-slot="lead">
           <!-- Caw on the axis: the head row's sides are equal, so his centre
              is the tray's, with ‹ or nothing before him and × after. -->
           <div
@@ -133,14 +131,8 @@
                 />
               {/if}
             </span>
-            <!-- A failure brings him down out of the head row to the
-                 centre, under × (80px), and everything centres under him. -->
-            <span
-              class={[
-                "col-2 flex justify-center",
-                failed ? "row-2 pt-space-5" : "row-1",
-              ]}
-            >
+            <!-- A failure grows him to 80 on the same top: no band opens under ×. -->
+            <span class="col-2 row-1 flex justify-center">
               <CawStill big={failed} pose={flow.pose} />
             </span>
             <span class="col-3 row-1 flex justify-end">
@@ -178,7 +170,7 @@
               <FlowObject {flow} {form} />
               {#if words.meta}
                 <p
-                  class="mark-line m-0 flex min-w-0 flex-wrap items-start gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
+                  class="mark-line m-0 flex min-w-0 items-start gap-x-space-2 type-meta text-ink-muted"
                   data-slot="meta"
                   {@attach reflow()}
                 >
@@ -194,8 +186,9 @@
                       </span>
                     {/if}
                   </span>
-                  <span class="mark-text min-w-0"
-                    ><MorphText text={words.meta.text} /></span
+                  <!-- The words wrap beside their mark, never off it: the mark stands on their first line. -->
+                  <span class="mark-text min-w-0 flex-1"
+                    ><MorphText text={words.meta.text} wrap /></span
                   >
                   {#if words.meta.action}
                     <Button
@@ -212,65 +205,91 @@
           {/key}
         </div>
         {#if form === "phone"}
-          <FlowDetails bind:open={details} {flow} />
+          <FlowDetails bind:open={details} {flow} foldId={detailsId} />
         {/if}
-        {#if primary || form === "desk"}
-          <div
-            class={[
-              form === "desk"
-                ? "flex flex-wrap items-center gap-space-2"
-                : "grid gap-space-2",
-              form === "desk" && "justify-end",
-            ]}
-            data-slot="actions"
-          >
-            {#if form === "desk"}
-              <span class="me-auto flex">
-                <FlowDetails bind:open={details} {flow} part="link" />
-              </span>
-            {/if}
-            <!-- The buttons as one group: they wrap together, never apart. -->
-            <span
-              class={form === "desk"
-                ? "ms-auto flex flex-wrap justify-end gap-space-2"
-                : "contents"}
-              data-slot="buttons"
+        <!-- The tray's foot: its actions and, on a desk, the details fold
+             under them, in one box with no gap of the column's, so the fold
+             carries its own room and folds all of it away. -->
+        <div class="grid min-w-0" data-slot="foot">
+          {#if primary || (form === "desk" && !failed)}
+            <div
+              class={[
+                form === "desk"
+                  ? "flex flex-wrap items-center gap-space-2"
+                  : "grid gap-space-2",
+                form === "desk" && "justify-end",
+              ]}
+              data-slot="actions"
             >
-              {#if words.secondary}
-                <Button
-                  data-icon={words.secondary.away ? "inline-end" : undefined}
-                  onclick={words.secondary.act}
-                  size={form === "phone" ? "lg" : "default"}
-                  variant="outline"
-                >
-                  <MorphText text={words.secondary.label} />
-                  {#if words.secondary.away}
-                    <IconExternal aria-hidden="true" />
-                  {/if}
-                </Button>
+              {#if form === "desk" && !failed}
+                <span class="me-auto flex">
+                  <FlowDetails
+                    bind:open={details}
+                    {flow}
+                    foldId={detailsId}
+                    part="link"
+                  />
+                </span>
               {/if}
-              {#if primary}
-                <!-- A failure's way out is quiet: one small outline button, no coral (§4.5). -->
-                <Button
-                  data-icon={primary.away ? "inline-end" : undefined}
-                  data-tray-primary
-                  disabled={primary.disabled}
-                  onclick={primary.act}
-                  size={primarySize}
-                  variant={primary.quiet ? "outline" : "default"}
-                >
-                  <MorphText text={primary.label} />
-                  {#if primary.away}
-                    <IconExternal aria-hidden="true" />
-                  {/if}
-                </Button>
-              {/if}
-            </span>
-          </div>
-        {/if}
-        {#if form === "desk"}
-          <FlowDetails bind:open={details} {flow} part="fold" />
-        {/if}
+              <!-- The buttons as one group: they wrap together, never apart. -->
+              <span
+                class={form === "desk"
+                  ? "ms-auto flex flex-wrap justify-end gap-space-2"
+                  : "contents"}
+                data-slot="buttons"
+              >
+                {#if words.secondary}
+                  <Button
+                    data-icon={words.secondary.away ? "inline-end" : undefined}
+                    onclick={words.secondary.act}
+                    size={form === "phone" ? "lg" : "default"}
+                    variant="outline"
+                  >
+                    <MorphText text={words.secondary.label} />
+                    {#if words.secondary.away}
+                      <IconExternal aria-hidden="true" />
+                    {/if}
+                  </Button>
+                {/if}
+                {#if primary}
+                  <!-- A failure's way out is quiet: one small outline button, no coral (§4.5). -->
+                  <Button
+                    data-icon={primary.away ? "inline-end" : undefined}
+                    data-tray-primary
+                    disabled={primary.disabled}
+                    onclick={primary.act}
+                    size={primarySize}
+                    variant={primary.quiet ? "outline" : "default"}
+                  >
+                    <MorphText text={primary.label} />
+                    {#if primary.away}
+                      <IconExternal aria-hidden="true" />
+                    {/if}
+                  </Button>
+                {/if}
+              </span>
+            </div>
+          {/if}
+          <!-- On a desk, Show details stands in the actions' row, its fold under
+               it; a failure's stands on its own row under its way out (§4.5). -->
+          {#if form === "desk" && failed}
+            <div class="grid min-w-0 pt-space-3">
+              <FlowDetails
+                bind:open={details}
+                {flow}
+                foldId={detailsId}
+                part="both"
+              />
+            </div>
+          {:else if form === "desk"}
+            <FlowDetails
+              bind:open={details}
+              {flow}
+              foldId={detailsId}
+              part="fold"
+            />
+          {/if}
+        </div>
       </div>
       {#if flow.firstLive && flow.step === "done"}
         <Confetti />

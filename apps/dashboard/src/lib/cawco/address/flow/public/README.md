@@ -52,10 +52,10 @@ Caw, the illustration, is centred on the tray's axis.
 
 The page switches Day and Night (the house theme). By night each still is the
 same day drawing on the paper rim `assets/mascot/stills/dark-ready.png`
-carries: its alpha dilated 4px at 512 (the width that matches dark-ready's
-rim best, intersection over union 0.986 against light-ready's) filled with
-the rim's own colour (243, 239, 229), the day drawing laid over it
-(`flow/caw/*-night.png`). Made here, not in Backlot: it is the day take, rimmed.
+carries, in its colour (243, 239, 229), cut wide enough to read where Caw is
+drawn: 8px at 512, one pixel at his 64px box, round every part of him, wing
+tips and props included (the drawing's alpha above 32, dilated). Made here,
+not in Backlot: it is the day take, rimmed (`flow/caw/*-night.png`).
 
 ## Caw
 
@@ -76,32 +76,35 @@ of 255 on any channel and 1.2 on average) through a cut-out call with
 `transparent: true` and no instruction, `tk_689t8aVLxt1_jA_ojCjfk`; every pose
 is an edit of that take. A take that came back on an opaque ground was cut
 out by a second call, `transparent: true` and no instruction. Each chosen
-still is moved sideways so his body's centre of mass stands on the image's
-centre, then scaled to 256px (`flow/caw/`). Every chosen take was read for
-anatomy (two wings, two feet, one beak, two eyes) before it was kept.
+still has the soft halo a take leaves round the drawing cleared (alpha under
+96 of 255), is drawn at 0.9 of its size so even a raised wing or a prop stands
+clear of the canvas's edges, its body's centre of mass on the image's centre,
+then scaled to 256px (`flow/caw/`). Every chosen take was read for anatomy
+(two wings, two feet, one beak, two eyes) before it was kept.
 
 | Moment | Still | Operation | Take |
 | --- | --- | --- | --- |
 | Start | `start.png` | wing on the right raised in a small wave | `tk_Lh_9EsTY5NmG9VDuW635o` |
-| Waiting for your sign-in | `waiting.png` | eye and beak turned up, far off | `tk_6zq-7V8OSdazXXQXDQRA8`, cut out of `tk_xZq25__jh1FzKwGg4TQWS` |
-| Waiting for your admin (Headscale) | `admin.png` | envelope added at his feet, head down to it | `tk_yUlIbqRJw6oM4IuSfK8xW`, cut out of `tk_cF3LTriba7kAWW4o2vNrO` |
+| Waiting for your sign-in | `waiting.png` | a spyglass at his eye, the wing on the right lifting it, his beak below | `tk_xdZe9twONcXPpnnZ8inwT` |
+| Waiting for your admin (Headscale) | `admin.png` | a large envelope leaning on his legs, head down to it | `tk_uYfIHsjLknnr3_3VeaTW_`, cut out of `tk_tyarPJFjcFoPRpZnUtq3q` |
 | Setup key (NetBird's Start) | `key.png` | key added crosswise in his beak tip | `tk_bUOBAwEywYVHGms25bz7N` |
-| Answers (listening) | `listen.png` | wing on the left cupped behind his head | `tk__JarFKdwBni4TyFNcbzxL` |
+| Answers (listening) | `listen.png` | head tilted, three sound lines beside it, both wings as they were | `tk_lxK6PfwZh6bIF4R5tM8-r`, cut out of `tk_Obt9H5MTRapgS4PvX3IiC` |
 | Phone, waiting | `phone.png` | phone added at his chest | `tk_Zs1BxX8g0NctuJpYJV_w1` |
-| Phone opened it | `phone-up.png` | both wings up holding the phone over his head | `tk_dbecEl2XJEgPbnloaFqQ3`, cut out of `tk_CnlUfCe15R1piBlZBBtSy` |
-| HTTPS, asking | `lock-open.png` | open padlock added by his feet | `tk_dUAkjGG-IHWzDboeGSlnt`, cut out of `tk_lFRloYd59d6l3A-QCqvkO` |
+| Phone opened it | `phone-up.png` | the wing on the left raises the phone above his head, his beak clear | `tk_AGuufj4nk7qDf0iU-_HXS` |
+| HTTPS, asking | `lock-open.png` | an open padlock as tall as his body beside him | `tk_U9eMxK3NlYZSRZBdFjRqH`, cut out of `tk_HzRcQpfvrul1MKlhfdWdr` |
 | HTTPS on | `lock-shut.png` | closed padlock added, wing tip on it | `tk_SYnHNLadX95wUd32_P0m7`, cut out of `tk_737sowHFPEbZ9o--HnbW_` |
-| Live | `live.png` | round post added under his feet, chest out | `tk_NHuDRrZls0P0UDPZoUYub`, cut out of `tk_cIpJuWABOJeLZes_g91vX` |
-| Failure | `shrug.png` | wing on the right lifted in a small shrug | `tk_PA0KPZLdqW4Xl917CbARP` |
-| Name taken | `shrug-tag.png` | the shrug, a torn luggage tag at his feet | `tk_s97dlUwBXk6HWVwlsBTDj` |
-| Signed out | `shrug-hourglass.png` | the shrug, a run-out hourglass at his feet | `tk_XXlG3e5ZQsp8RlNwaQmrd`, cut out of `tk_s81RYHdOVKfhgmUl7Zn0K` |
+| Live | `live.png` | a pennant flag raised in the wing on the right | `tk_WuMj02mR4AaQsA96oDFfJ`, cut out of `tk_lwoaQ47LSwLB2MqL7u6Re` |
+| Failure | `shrug.png` | both wings lifted to one height, tips up: a shrug | `tk_j2OrAhJfvtIZl-SqJJume`, cut out of `tk_KIRRspZG6FjM_7T7godVH` |
+| Name taken | `shrug-tag.png` | a large torn luggage tag hanging from his wing tip | `tk_zFVvO5ZW0WxGNdjJMOwbq`, cut out of `tk_esrnVofyY4rNrbOomvFPy` |
+| Signed out | `shrug-hourglass.png` | the shrug, a run-out hourglass beside him | `tk_aJfYqQK-FZUnj2jmjQ5Z_`, cut out of `tk_EacCJXTyV-z5D0r1paf7c` |
 
-Passed over in the read: `tk_Qj_odSi8knD6SmR5hTey3` (beak hidden),
-`tk_po_BW9xz-0XCMoo5r1F9j` (wing merged into the beak),
-`tk_IVQq6fxKr5ZCCaXUo9Gpl` (a brow read as a second beak),
-`tk_RxH-IUGlJo1kSw5fq4Q4f` (no beak), `tk_TLca-6JZFcKv8F35tsJ-D` (three
-wings), `tk_jYMLTfeF89aKUv07xOdaU` (no beak), `tk_Kpioxs6YI7lP02febuKC2`
-(stray boxes), `tk_kEedpi7VSZWv6XzRMN5V6` (opaque ground), and the second take
-of the rest. An earlier round written with a keep-line describing Caw
-(`tk_cgIXBojVifk_FPQXycJiX` and its siblings) was replaced whole. Each still
-has its night version beside it (Day and night, above).
+Passed over in the read: the third round's spyglass takes that hid the beak
+(`tk_qZ7ulJ4sim2F6HtVe-Wt0`, `tk_0dCWGSEJuvS7IgSfOGcE0`,
+`tk_dJYFgQLgQUkaXkmKKWnLR`), its phones over the head that hid the beak
+(`tk_2Snx0-XuF559f3E-fwAPY`, `tk_1JekkBmlBilha9_cn1gf_`), its posts that the
+canvas cut flat (`tk_M9a-RZiZkOaEwpdEHvrad`, `tk_eqChJKg-uMwN7bylIyRsO`,
+`tk_KXOjxbY9f4jmVxbnnZp_P`; Live became the flag), and the other takes of each
+pose. Earlier rounds (a keep-line describing Caw, `tk_cgIXBojVifk_FPQXycJiX`
+and its siblings; and the second round's waiting, admin, listen, phone-up,
+live, shrug, tag, padlock and hourglass, which a review found unequal wings, a
+second head, a halo, a cut post and props too small at 64px) were replaced.

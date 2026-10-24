@@ -61,31 +61,31 @@ export function failureWords(
     case "unsupported":
       return {
         title: "No word address on this network",
-        line: "ZeroTier and WireGuard alone give devices no names. Tailscale, Headscale and NetBird do: CawCo joins one as a device and your phone and laptop reach it by name. Install one here and on your phone.",
+        line: "ZeroTier and WireGuard alone give devices no names. Tailscale, Headscale and NetBird do: CawCo joins one as a device and your phone and laptop reach it by name. Install one here and on your phone, and CawCo offers the word address here.",
         button: "Check again",
       };
     case "stale-link":
       return {
         title: "The sign-in link expired",
-        line: `Nobody approved ${flow.name} within the hour. Get a new link and approve it signed in to ${domain}.`,
+        line: `Nobody approved ${flow.name} within the hour. Open a new sign-in and approve it signed in to ${domain}; CawCo goes on by itself once it's approved.`,
         button: "Open a new sign-in",
       };
     case "wrong-tailnet":
       return {
         title: `${flow.name} joined a different tailnet`,
-        line: `The link was approved on other-team.ts.net, not ${domain}. Sign in again, signed in to ${domain}.`,
+        line: `The link was approved on other-team.ts.net, not ${domain}. Open a new sign-in and approve it signed in to ${domain}; CawCo goes on by itself once it's approved there.`,
         button: "Open a new sign-in",
       };
     case "refused":
       return {
         title: `Your admin didn't approve ${flow.name}`,
-        line: `${control} turned the request down. Send the command again, or ask why.`,
+        line: `${control} turned the request down. Send your admin the command again, or ask why; CawCo goes on by itself once it's approved.`,
         button: "Open the command",
       };
     case "key-refused":
       return {
         title: "NetBird refused the key",
-        line: "It was used up, expired, or the name was refused. Make a new one-off key and paste it again.",
+        line: "It was used up, expired, or the name was refused. Make a new one-off key and paste it here; CawCo joins with it at once.",
         button: "Use a new key",
       };
     case "taken": {
@@ -100,19 +100,19 @@ export function failureWords(
     case "no-answer":
       return {
         title: `${flow.name} is on the network but doesn't answer`,
-        line: "CawCo keeps trying by itself. If it stays this way, Show details says what came back.",
+        line: "CawCo keeps trying by itself. If it stays this way, its details say what came back.",
         button: "Check now",
       };
     case "expired":
       return {
         title: `${flow.name} signed out`,
-        line: `Its key lapsed on ${dateOf(EXPIRES)}. Sign in again to bring the address back; nothing else changed.`,
+        line: `Its key lapsed on ${dateOf(EXPIRES)}; nothing else changed. Open a new sign-in and the address comes back once it's approved.`,
         button: "Open a new sign-in",
       };
     case "certs-off":
       return {
         title: "The https address stopped",
-        line: `${domain} stopped issuing certificates. ${flow.address} still works; turn HTTPS Certificates back on for the secure one.`,
+        line: `${domain} stopped issuing certificates. ${flow.address} still works. Turn HTTPS Certificates back on in DNS settings, and CawCo gets the secure address back by itself.`,
         button: "Open DNS settings",
       };
   }
@@ -205,6 +205,10 @@ export function stateWords(flow: AddressFlow, form: Form): StateWords {
         meta = { text: "Watching for certificates…", live: true };
       } else if (flow.watching === "name") {
         meta = { text: "Watching for cawco to be free…", live: true };
+      } else if (flow.cause === "no-answer") {
+        meta = { text: "Trying again in 60 s", live: true };
+      } else if (flow.cause === "stopped") {
+        meta = { text: `Checking for ${net} every 30 s`, live: true };
       } else if (flow.checkedAgain) {
         meta = { text: "Checked again: nothing changed yet", live: false };
       }
@@ -228,6 +232,16 @@ export function stateWords(flow: AddressFlow, form: Form): StateWords {
 }
 
 function phoneWords(flow: AddressFlow, form: Form): StateWords {
+  if (form === "phone" && flow.phoneOpened) {
+    // The phone's own view changes once a phone opened it: the step is done.
+    return {
+      title: `${flow.phoneOpened === "here" ? "This phone" : PEER} opened it`,
+      lines: [
+        `From now on ${flow.bareWordWorks ? flow.name : flow.long} alone works in that browser.`,
+      ],
+      primary: { label: "Done", act: () => flow.next() },
+    };
+  }
   if (form === "phone") {
     return {
       title: "Open it here, once",
@@ -259,7 +273,7 @@ function phoneWords(flow: AddressFlow, form: Form): StateWords {
       ? undefined
       : { label: "Skip for now", act: () => flow.next() },
     primary: {
-      label: opened ? "Continue" : "Done",
+      label: "Done",
       act: () => flow.next(),
     },
   };
@@ -272,14 +286,14 @@ function httpsWords(flow: AddressFlow): StateWords {
       lines: [
         `CawCo got ${flow.name}'s certificate and renews it itself. ${flow.name}/ sends you on here.`,
       ],
-      primary: { label: "Continue", act: () => flow.go("done") },
+      meta: { text: "Certificate held · renews 21 Jan 2027", live: false },
+      primary: { label: "Done", act: () => flow.go("done") },
     };
   }
   return {
     title: "Make it secure (optional)",
     lines: [
-      "Your tailnet isn't issuing certificates. In Tailscale's admin console, on the DNS page, under HTTPS Certificates, press Enable HTTPS and accept that machine names go into a public log; only an admin can.",
-      `CawCo then gets ${flow.name}'s certificate itself and renews it. ${flow.name}/ stays http, because no authority certifies a bare word; it sends you on to ${flow.secureAddress}.`,
+      `An admin turns on HTTPS Certificates on Tailscale's DNS page, which puts machine names in a public log. CawCo then gets ${flow.name}'s certificate, renews it, and sends ${flow.name}/ on to ${flow.secureAddress}.`,
     ],
     meta:
       flow.watching === "certs"
@@ -474,6 +488,10 @@ export function factsFor(flow: AddressFlow): Fact[] {
           ]
         : [
             { mark: "no", text: "HTTPS Certificates: off on the DNS page" },
+            {
+              mark: "info",
+              text: `${flow.name}/ stays http: no authority certifies a bare word`,
+            },
             {
               mark: "info",
               text: "Only an admin of the tailnet can switch it",

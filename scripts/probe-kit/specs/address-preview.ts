@@ -57,14 +57,23 @@ const FLOWS: {
       "https-on",
       "done",
     ],
-    phone: ["start", "signin", "answers", "phone", "https", "https-on", "done"],
+    phone: [
+      "start",
+      "signin",
+      "answers",
+      "phone",
+      "phone-opened",
+      "https",
+      "https-on",
+      "done",
+    ],
   },
   {
     name: "Tailscale, certificates on",
     net: "tailscale",
     certs: true,
     desk: ["start", "signin", "answers", "phone", "phone-opened", "done"],
-    phone: ["start", "signin", "answers", "phone", "done"],
+    phone: ["start", "signin", "answers", "phone", "phone-opened", "done"],
   },
   {
     name: "Headscale",
@@ -79,14 +88,22 @@ const FLOWS: {
       "phone-opened",
       "done",
     ],
-    phone: ["start", "signin", "admin", "answers", "phone", "done"],
+    phone: [
+      "start",
+      "signin",
+      "admin",
+      "answers",
+      "phone",
+      "phone-opened",
+      "done",
+    ],
   },
   {
     name: "NetBird",
     net: "netbird",
     certs: false,
     desk: ["start", "answers", "phone", "phone-opened", "done"],
-    phone: ["start", "answers", "phone", "done"],
+    phone: ["start", "answers", "phone", "phone-opened", "done"],
   },
 ];
 
@@ -105,6 +122,23 @@ const FAILURES: { cause: string; net: Net; from: string | null }[] = [
   { cause: "certs-off", net: "tailscale", from: "done" },
 ];
 
+/** WORDS.md's button verbs this flow uses (its allowlist); every other button is the details link. */
+const VERBS = [
+  "Open",
+  "Skip",
+  "Done",
+  "Use",
+  "Check",
+  "Set",
+  "Switch",
+  "Stop",
+  "Remove",
+  "Cancel",
+  "Copy",
+];
+/** A failure's what-happens-next names who moves: CawCo, or the address itself. */
+const NEXT = ["CawCo", "comes back"];
+
 /** The report's §4.8 heights, for the desk tray. */
 const REPORT: Record<string, number> = {
   start: 300,
@@ -119,6 +153,11 @@ const REPORT: Record<string, number> = {
 
 interface TrayRead {
   cawDx: number;
+  /** Caw's box's top, from the tray's: the same in every state of a form. */
+  cawTop: number;
+  /** Controls drawn in the action colour. */
+  corals: string[];
+  detailsLabel: string;
   /** Text that is not set at start, or whose words stand off the tray's leading edge. */
   edge: string[];
   /** Text under 4.5:1 against what it stands on. */
@@ -127,8 +166,14 @@ interface TrayRead {
   h: number;
   /** Icons outside a control with a border or fill behind them. */
   icons: string[];
+  labels: string[];
+  lines: string[];
+  markOff: string[];
   overlaps: string[];
   spills: string[];
+  /** Lines of running words in the state's paragraphs (not the live line or objects). */
+  stateLines: number;
+  title: string;
   w: number;
 }
 
@@ -346,8 +391,84 @@ function readTrays(): {
           );
         }
       }
+      // One coral act per tray: a control drawn in the action colour (a warm,
+      // saturated red), as its fill or its ink.
+      const coral = ([r, g, bl, a]: number[]) => {
+        if (a < 0.5) {
+          return false;
+        }
+        const max = Math.max(r, g, bl) / 255;
+        const min = Math.min(r, g, bl) / 255;
+        const sat = max === 0 ? 0 : (max - min) / max;
+        return r > g && r > bl && sat > 0.45 && max > 0.45 && g < r * 0.75;
+      };
+      const corals = [...tray.querySelectorAll<HTMLElement>("button, a")]
+        .filter((el) => el.checkVisibility())
+        .filter((el) => {
+          const cs = getComputedStyle(el);
+          return coral(rgba(cs.backgroundColor)) || coral(rgba(cs.color));
+        })
+        .map((el) => (el.textContent ?? "").trim() || name(el));
+      // The live line's mark stands on its words' first line.
+      const markOff: string[] = [];
+      for (const meta of tray.querySelectorAll("[data-slot=meta]")) {
+        const cell = meta.querySelector(".mark-cell");
+        const run = meta.querySelector(".mark-text");
+        if (!(cell && run)) {
+          continue;
+        }
+        const c = rect(cell);
+        const [first] = run.getClientRects();
+        const lineMid = first ? first.top + first.height / 2 : 0;
+        const walk = document.createTreeWalker(run, NodeFilter.SHOW_TEXT);
+        let firstLine: DOMRect | undefined;
+        for (let n = walk.nextNode(); n && !firstLine; n = walk.nextNode()) {
+          if (n.textContent?.trim()) {
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            [firstLine] = range.getClientRects();
+          }
+        }
+        const mid = firstLine ? firstLine.top + firstLine.height / 2 : lineMid;
+        if (Math.abs(c.top + c.height / 2 - mid) > 3) {
+          markOff.push(
+            `mark at ${(c.top + c.height / 2).toFixed(1)}, first line at ${mid.toFixed(1)}`
+          );
+        }
+      }
+      // Words that are the product's own buttons: their verbs, and the details link named mid-line.
+      const labels = [...tray.querySelectorAll<HTMLElement>("button")]
+        .filter((el) => el.checkVisibility())
+        .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      const detailsLabel = (
+        tray.querySelector("[data-tray-details]")?.textContent ?? ""
+      ).trim();
+      const lines = [
+        ...tray.querySelectorAll<HTMLElement>("[data-slot=state] > p"),
+      ].map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim());
+      const lineHeight = Number.parseFloat(
+        getComputedStyle(tray.querySelector("[data-slot=state] > p") ?? tray)
+          .lineHeight
+      );
+      const stateLines = [
+        ...tray.querySelectorAll<HTMLElement>(
+          "[data-slot=state] > p:not([data-slot])"
+        ),
+      ].reduce((sum, el) => sum + Math.round(rect(el).height / lineHeight), 0);
+      const cawTop = caw.top - t.top;
       return {
         frame,
+        corals,
+        markOff,
+        labels,
+        detailsLabel,
+        lines,
+        stateLines,
+        cawTop,
+        title: (
+          tray.querySelector("[data-slot=title]")?.textContent ?? ""
+        ).trim(),
         edge,
         faint,
         h: t.height,
@@ -393,6 +514,7 @@ interface PreviewApi {
   network: (net: Net) => void;
   park: (surface: Frame) => void;
   rowLine: () => string;
+  stills: () => Record<string, string>;
   theme: (scheme: "light" | "dark") => void;
 }
 
@@ -487,6 +609,7 @@ async function openPreview(
 }
 
 /** Every state at rest on every network: boxes and heights. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every rule a state is held to, read and said in one place
 async function restLegs(
   kit: Kit,
   page: Page,
@@ -504,15 +627,31 @@ async function restLegs(
     icons: [] as string[],
     edge: [] as string[],
     faint: [] as string[],
+    coral: [] as string[],
+    mark: [] as string[],
+    verbs: [] as string[],
+    cawTop: [] as string[],
+    frames: [] as string[],
+    next: [] as string[],
+    https: [] as string[],
     width: [] as string[],
     page: [] as string[],
   };
   let states = 0;
   const heightOf = new Map<string, Map<Frame, number>>();
+  /** Caw's top in each form's tray, as the first state drew it. */
+  const cawTops = new Map<string, number>();
+  const titleOf = new Map<string, string>();
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one state read whole against every rule
   const look = async (key: string, net: Net, certs: boolean, m: string) => {
     await standAt(page, net, certs, m);
     const read = await page.evaluate(readTrays);
     states += 1;
+    if (read.trays.length !== 3) {
+      rules.frames.push(
+        `${key} ${m}: ${read.trays.map((t) => t.frame).join(", ") || "no tray"}`
+      );
+    }
     const heights = new Map<Frame, number>();
     for (const tray of read.trays) {
       heights.set(tray.frame, tray.h);
@@ -524,6 +663,40 @@ async function restLegs(
       rules.overlap.push(...tray.overlaps.map((s) => `${at}: ${s}`));
       rules.icons.push(...tray.icons.map((s) => `${at}: ${s}`));
       rules.edge.push(...tray.edge.map((s) => `${at}: ${s}`));
+      if (tray.corals.length > 1) {
+        rules.coral.push(`${at}: ${tray.corals.join(" + ")}`);
+      }
+      rules.mark.push(...tray.markOff.map((s) => `${at}: ${s}`));
+      for (const label of tray.labels) {
+        const first = label.split(" ")[0] ?? "";
+        if (!(label === tray.detailsLabel || VERBS.includes(first))) {
+          rules.verbs.push(`${at}: "${label}"`);
+        }
+      }
+      for (const line of tray.lines) {
+        if (tray.detailsLabel && line.includes(tray.detailsLabel)) {
+          rules.verbs.push(`${at}: the details link named mid-line`);
+        }
+      }
+      const form = tray.frame === "phone" ? "phone" : "desk";
+      const top = cawTops.get(form);
+      if (top === undefined) {
+        cawTops.set(form, tray.cawTop);
+      } else if (Math.abs(top - tray.cawTop) > 0.5) {
+        rules.cawTop.push(
+          `${at}: ${tray.cawTop.toFixed(1)} (steps ${top.toFixed(1)})`
+        );
+      }
+      titleOf.set(`${key}|${m}|${tray.frame}`, tray.title);
+      if (m.startsWith("failed:")) {
+        const line = tray.lines[0] ?? "";
+        if (!NEXT.some((said) => line.includes(said))) {
+          rules.next.push(`${at}: "${line.slice(0, 60)}…"`);
+        }
+      }
+      if (m === "https" && tray.stateLines > 5) {
+        rules.https.push(`${at}: ${tray.stateLines} lines`);
+      }
       rules.faint.push(...tray.faint.map((s) => `${at}: ${s}`));
       const want = tray.frame === "phone" ? read.phoneInner : 380;
       if (Math.abs(tray.w - want) > 0.5) {
@@ -568,6 +741,16 @@ async function restLegs(
         `${engine} ${flow.name} ${form}: no two consecutive states' heights within 12px (${order.length} states)`,
         close.length === 0,
         close.map((s) => `${s.from}→${s.to} ${s.d.toFixed(1)}px`).join("; ")
+      );
+    }
+    // The phone's own view changes once a phone opened it.
+    if (
+      flow.phone.includes("phone-opened") &&
+      titleOf.get(`${flow.name}|phone|phone`) ===
+        titleOf.get(`${flow.name}|phone-opened|phone`)
+    ) {
+      rules.verbs.push(
+        `${flow.name}: the phone's sheet says "${titleOf.get(`${flow.name}|phone|phone`)}" after a phone opened it`
       );
     }
     // Settings' tray is the desk's tray: the same height at every state.
@@ -644,6 +827,41 @@ async function restLegs(
     `${engine}: every run of words in every tray stands at 4.5:1 or more against what it stands on (${states} states)`,
     rules.faint.length === 0,
     rules.faint.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: every tray has at most one control in the action colour (Done's links in ink) (${states} states)`,
+    rules.coral.length === 0,
+    rules.coral.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: every live line's mark stands on its words' first line (${states} states)`,
+    rules.mark.length === 0,
+    rules.mark.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: every button is an allowlisted verb (WORDS.md) or the details link, the link is never named mid-line, and the phone's sheet changes once a phone opened it (${states} states)`,
+    rules.verbs.length === 0,
+    rules.verbs.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: Caw stands on one top in every state of a form, failures included (${states} states)`,
+    rules.cawTop.length === 0,
+    rules.cawTop.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: every state draws its tray in all three frames, an unsupported network's too (${states} states)`,
+    rules.frames.length === 0,
+    rules.frames.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: every failure's line says what happens next (the error formula)`,
+    rules.next.length === 0,
+    rules.next.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: HTTPS says its one idea in five lines or fewer`,
+    rules.https.length === 0,
+    rules.https.join("; ")
   );
   kit.check(
     `${engine}: the desk trays stand 380 wide, the phone's sheet its 390 frame's width (${states} states)`,
@@ -946,9 +1164,195 @@ async function motionLegs(kit: Kit, page: Page, engine: Engine) {
       return out;
     }
   );
+  // Show details opens and closes on the house's unfold, the tray's box following it.
+  const details = "[data-frame=needs] [data-tray] [data-tray-details]";
+  /** Stands the details fold open or shut before a leg, whatever the last left. */
+  const detailsAt = async (open: boolean) => {
+    const now = await page.getAttribute(details, "aria-expanded");
+    if ((now === "true") !== open) {
+      await page.click(details);
+      await settled(page);
+    }
+  };
+  await motionLeg(
+    kit,
+    page,
+    engine,
+    "Show details opens (unfold)",
+    "needs",
+    async () => {
+      await standAt(page, "tailscale", false, "start");
+      await detailsAt(false);
+    },
+    () => page.click(details),
+    (at) => {
+      const [h0, h1, h2] = at.map((v) => v.h);
+      return h2 - h0 > 20 && h1 > h0 + 1 && h1 < h2 - 1
+        ? []
+        : [
+            `the box did not travel open (${at.map((v) => v.h.toFixed(1)).join("→")})`,
+          ];
+    }
+  );
+  await motionLeg(
+    kit,
+    page,
+    engine,
+    "Show details closes (unfold)",
+    "needs",
+    async () => {
+      await standAt(page, "tailscale", false, "start");
+      await api(page, "solo", "needs");
+      await settled(page);
+      await detailsAt(true);
+    },
+    () => page.click(details),
+    (at) => {
+      const [h0, h1, h2] = at.map((v) => v.h);
+      return h0 - h2 > 20 && h1 < h0 - 1 && h1 > h2 + 1
+        ? []
+        : [
+            `the box did not travel shut (${at.map((v) => v.h.toFixed(1)).join("→")})`,
+          ];
+    }
+  );
   await page.evaluate(() => {
     delete document.documentElement.dataset.atRest;
   });
+}
+
+/** The page fits whole, no sideways scroll, at every width from 320 up. */
+async function widthLegs(kit: Kit, page: Page, engine: Engine) {
+  const widths = [320, 360, 390, 400, 430, 480, 520, 560, 600, 639, 768, 1024];
+  const states: [Net, string][] = [
+    ["tailscale", "start"],
+    ["tailscale", "phone"],
+    ["tailscale", "phone-opened"],
+    ["tailscale", "https"],
+    ["tailscale", "done"],
+    ["tailscale", "failed:taken"],
+    ["tailscale", "failed:unsupported"],
+    ["netbird", "answers"],
+    ["netbird", "done"],
+  ];
+  const wide: string[] = [];
+  for (const width of widths) {
+    // biome-ignore lint/performance/noAwaitInLoops: one width at a time
+    await page.setViewportSize({ width, height: 900 });
+    for (const [net, m] of states) {
+      // biome-ignore lint/performance/noAwaitInLoops: one state at a time
+      await standAt(page, net, false, m);
+      const [scroll, inner] = await page.evaluate(() => [
+        document.documentElement.scrollWidth,
+        window.innerWidth,
+      ]);
+      if (scroll > inner) {
+        wide.push(`${width} ${net} ${m}: ${scroll}`);
+      }
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  kit.check(
+    `${engine}: the page fits whole, no sideways scroll, at ${widths.join(", ")} (${states.length} states each)`,
+    wide.length === 0,
+    wide.slice(0, 6).join("; ")
+  );
+}
+
+/**
+ * Caw's stills, read as drawn at 64px (one device pixel each): every still
+ * stands clear of its canvas's edges (nothing cut flat), and every night
+ * still's figure is ringed whole by the paper rim, wing tips included (no
+ * figure pixel beside the clear ground).
+ */
+async function stillLegs(kit: Kit, page: Page, engine: Engine) {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
+  const read = await page.evaluate(async () => {
+    const stills = (
+      window as unknown as { preview: { stills: () => Record<string, string> } }
+    ).preview.stills();
+    const RIM = [243, 239, 229];
+    const out: { cut: string[]; rim: string[]; count: number } = {
+      cut: [],
+      rim: [],
+      count: 0,
+    };
+    for (const [path, url] of Object.entries(stills)) {
+      const img = new Image();
+      img.src = url;
+      // biome-ignore lint/performance/noAwaitInLoops: one still at a time
+      await img.decode();
+      out.count += 1;
+      const canvas = document.createElement("canvas");
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      ctx.drawImage(img, 0, 0, 64, 64);
+      const { data } = ctx.getImageData(0, 0, 64, 64);
+      const at = (x: number, y: number) => (y * 64 + x) * 4;
+      let top = 64;
+      let left = 64;
+      let right = -1;
+      let bottom = -1;
+      for (let y = 0; y < 64; y += 1) {
+        for (let x = 0; x < 64; x += 1) {
+          if (data[at(x, y) + 3] > 32) {
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+          }
+        }
+      }
+      if (top < 1 || left < 1 || right > 62 || bottom > 62) {
+        out.cut.push(
+          `${path} reaches its edge (${left},${top})–(${right},${bottom})`
+        );
+      }
+      if (!path.includes("-night")) {
+        continue;
+      }
+      const isRim = (i: number) =>
+        Math.abs(data[i] - RIM[0]) +
+          Math.abs(data[i + 1] - RIM[1]) +
+          Math.abs(data[i + 2] - RIM[2]) <
+        60;
+      let bare = 0;
+      for (let y = 1; y < 63; y += 1) {
+        for (let x = 1; x < 63; x += 1) {
+          const i = at(x, y);
+          if (data[i + 3] < 200 || isRim(i)) {
+            continue;
+          }
+          const clear = [
+            at(x - 1, y),
+            at(x + 1, y),
+            at(x, y - 1),
+            at(x, y + 1),
+          ].some((n) => data[n + 3] < 32);
+          if (clear) {
+            bare += 1;
+          }
+        }
+      }
+      if (bare > 0) {
+        out.rim.push(`${path}: ${bare} figure pixels touch the clear ground`);
+      }
+    }
+    return out;
+  });
+  kit.check(
+    `${engine}: every one of Caw's ${read.count} stills stands clear of its canvas's edges at 64px`,
+    read.cut.length === 0,
+    read.cut.join("; ")
+  );
+  kit.check(
+    `${engine}: every night still's figure, wing tips included, is ringed by a paper rim at least one pixel wide at 64px`,
+    read.rim.length === 0,
+    read.rim.join("; ")
+  );
 }
 
 /** The work outlives its surface: parked in its row, kept across a reload, ended only by Stop. */
@@ -1041,9 +1445,11 @@ const spec: Spec = {
       for (const engine of engines) {
         // biome-ignore lint/performance/noAwaitInLoops: one engine's browser at a time
         const { page, errors } = await openPreview(kit, url, engine);
+        await widthLegs(kit, page, engine);
         await restLegs(kit, page, engine, "light");
         await restLegs(kit, page, engine, "dark");
         await api(page, "theme", "light");
+        await stillLegs(kit, page, engine);
         await motionLegs(kit, page, engine);
         await parkLegs(kit, page, engine);
         kit.check(

@@ -36,6 +36,12 @@
   import { rowLine } from "./flow-words";
   import PhoneSheet from "./PhoneSheet.svelte";
 
+  /** Caw's stills, by file: the probe reads them as drawn at 64px. */
+  const STILLS = import.meta.glob<string>("./caw/*.png", {
+    eager: true,
+    query: "?url",
+    import: "default",
+  });
   const flow = new AddressFlow();
   flow.restore();
   if (!flow.started && flow.step === "start" && !flow.stopped) {
@@ -89,6 +95,7 @@
       fail: (cause: Cause) => flow.fail(cause),
       rowLine: () => rowLine(flow).text,
       theme: (scheme: "light" | "dark") => theme.set(scheme),
+      stills: () => STILLS,
       network: (network: Network) => flow.switchNetwork(network, flow.moment),
       certsAtJoin: (on: boolean) => {
         flow.certsAtJoin = on;
@@ -109,7 +116,7 @@
 <svelte:window {onkeydown} />
 
 <div
-  class="grid min-h-dvh content-start gap-space-6 bg-surface-page p-space-6"
+  class="grid min-h-dvh grid-cols-1 content-start gap-space-6 bg-surface-page p-space-6"
   data-preview="address"
 >
   <header class="grid max-w-c-measure gap-space-4" data-slot="bar">
@@ -213,19 +220,21 @@
     class="flex flex-wrap items-start gap-x-space-8 gap-y-space-6"
     data-slot="frames"
   >
-    <figure class="m-0 grid content-start gap-space-3">
+    <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
       <figcaption class="type-meta text-ink-muted">
         Desk · Needs you, onboarding
       </figcaption>
       <DeskNeeds bind:this={needs} {flow} />
     </figure>
-    <figure class="m-0 grid min-w-c-connect-w flex-1 content-start gap-space-3">
+    <figure
+      class="m-0 grid min-w-0 grow basis-c-connect-w grid-cols-1 content-start gap-space-3"
+    >
       <figcaption class="type-meta text-ink-muted">
         Desk · Configure › Devices
       </figcaption>
       <DeskSettings bind:this={settings} {flow} />
     </figure>
-    <figure class="m-0 grid content-start gap-space-3">
+    <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
       <figcaption class="type-meta text-ink-muted">Phone · 390</figcaption>
       <PhoneSheet bind:this={phone} {flow} />
     </figure>

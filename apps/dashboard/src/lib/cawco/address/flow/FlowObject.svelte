@@ -75,7 +75,7 @@
   </div>
 {:else if flow.step === "answers"}
   <p
-    class="m-0 min-w-0 rounded-well border border-border-well bg-surface-well px-space-3 py-space-4 text-start type-title font-mono whitespace-nowrap text-ink-strong select-all"
+    class="m-0 min-w-0 rounded-well border border-border-well bg-surface-well px-space-3 py-space-4 text-start type-title font-mono wrap-anywhere text-ink-strong select-all"
     data-slot="answers-address"
   >
     {flow.address}
@@ -86,7 +86,7 @@
   <!-- The QR at §4.2's 160: proposed; the token moves to 160 if picked (proposed.ts). -->
   <div
     style:--c-address-qr={PROPOSED_QR}
-    class="relative grid min-w-0"
+    class="@container relative grid min-w-0"
     data-slot="phone-object"
   >
     {#if flow.phoneOpened}
@@ -112,18 +112,22 @@
     {/if}
   </div>
 {:else if flow.step === "https" && flow.certs}
-  <p
-    class="mark-line m-0 flex min-w-0 items-center justify-start gap-space-2"
+  <!-- The secure address, as the answering address stands: its lock beside
+       the well, the glyph alone. -->
+  <div
+    class="mark-line flex min-w-0 items-center gap-space-2"
     data-slot="secure-address"
   >
     <IconLock
       aria-label="Secure"
       class="size-icon-md flex-none text-status-done-ink"
     />
-    <code class="min-w-0 type-code whitespace-nowrap text-ink-strong select-all"
-      >{flow.secureAddress}</code
+    <p
+      class="m-0 min-w-0 flex-1 rounded-well border border-border-well bg-surface-well px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-ink-strong select-all"
     >
-  </p>
+      {flow.secureAddress}
+    </p>
+  </div>
 {:else if flow.step === "done"}
   <div class="grid min-w-0 gap-space-3">
     <!-- The address, named once, large and mono: Open beside it, and Copy
@@ -133,7 +137,7 @@
       data-slot="live-address"
     >
       <code
-        class="min-w-0 flex-1 type-title font-mono whitespace-nowrap text-ink-strong select-all"
+        class="min-w-0 flex-1 type-title font-mono wrap-anywhere text-ink-strong select-all"
         >{flow.address}</code
       >
       <span class="flex flex-none gap-space-1">
@@ -200,12 +204,14 @@
             {/key}
           </span>
           <span class="mark-text min-w-0"><Words text={mark.text} /></span>
+          <!-- In ink, not coral: Done's own button is the tray's one coral act. -->
           {#if mark.action}
             <Button
               data-box
               data-icon={mark.action.away ? "inline-end" : undefined}
               onclick={mark.action.act}
               size="xs"
+              tone="quiet"
               variant="link"
             >
               <span>{mark.action.label}</span>
