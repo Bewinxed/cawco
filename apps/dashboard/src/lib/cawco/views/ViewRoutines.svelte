@@ -112,7 +112,6 @@
     IconHourglass,
     IconNeedsYou,
     IconPause,
-    IconPauseCircle,
     IconPin,
     IconPlay,
     IconShield,
@@ -418,7 +417,7 @@
   const LEAD = {
     on: { glyph: IconClock, said: words.leadOn },
     event: { glyph: IconHook, said: words.leadEvent },
-    paused: { glyph: IconPauseCircle, said: words.leadPaused },
+    paused: { glyph: IconPause, said: words.leadPaused },
     expiring: { glyph: IconHourglass, said: words.leadExpiring },
   } as const;
   const DAY = 86_400_000;

@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Solar has no bare check — check-read is a double tick, which reads as "read" in a menu or checkbox.
+  // A tick as one stroke, so it can draw itself along its path (pathLength 1, animate-check-draw):
+  // Solar's bare `check` is a filled outline in two halves, which cannot.
   // Drawn like Plus.svelte: 24px grid, 1.5 linear stroke, round caps.
   import type { SVGAttributes } from "svelte/elements";
 

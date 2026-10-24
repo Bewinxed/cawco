@@ -11,7 +11,7 @@
   import {
     IconChevronDown,
     IconDot,
-    IconMinusCircle,
+    IconNeutral,
     IconSuccess,
   } from "#lib/icons.js";
   import type { AddressTray, Fact } from "./tray.svelte";
@@ -121,7 +121,7 @@
                     class="size-icon-md text-status-done-ink"
                   />
                 {:else if fact.mark === "no"}
-                  <IconMinusCircle
+                  <IconNeutral
                     aria-label="No"
                     class="size-icon-md text-ink-muted"
                   />

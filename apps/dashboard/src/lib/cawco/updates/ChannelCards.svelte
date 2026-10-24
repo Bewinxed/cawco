@@ -16,6 +16,7 @@
   import lightStable from "#lib/assets/caw/channel-stable.png";
   import darkStable from "#lib/assets/caw/channel-stable-dark.png";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { IconTick } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { displayVersion } from "./model";
 
@@ -144,27 +145,11 @@
               amount: 2,
             }}
           >
-            <svg
+            <IconTick
               data-slot="check"
               aria-hidden="true"
-              class="size-icon-md flex-none self-center fill-none"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              viewBox="0 0 20 20"
-            >
-              <circle
-                cx="10"
-                cy="10"
-                r="10"
-                class="fill-selected-bg stroke-none"
-              ></circle>
-              <path
-                d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                class="stroke-selected-icon dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-ghost"
-                pathLength="1"
-                stroke-width="1.8"
-              ></path>
-            </svg>
+              class="size-icon-md flex-none self-center text-selected-icon dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-ghost"
+            />
             <span>The fleet follows {card.name}</span>
           </span>
         {/if}

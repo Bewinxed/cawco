@@ -1,0 +1,280 @@
+{
+  "id": "bare-icons-2026-10-24",
+  "title": "Icons without their containers",
+  "decisions": [
+    {
+      "id": "subagent",
+      "question": "Subagents: is the drawn branch right?",
+      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
+      "recommended": "drawn",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Today (in its container)",
+          "result": "What ships now: the branch inside a grey rounded square.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "after": "img/subagent-today-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/subagent-today-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn",
+          "result": "The same branch, bare and full size; lighter than its filled neighbours.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "before": "img/subagent-today-context.svg",
+              "after": "img/subagent-drawn-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/subagent-today-sizes.svg",
+              "after": "img/subagent-drawn-sizes.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fork",
+      "question": "Fork: is the drawn branch right?",
+      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
+      "recommended": "drawn",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Today (in its container)",
+          "result": "What ships now: the branch inside a grey rounded square.",
+          "items": [
+            {
+              "label": "Session menu",
+              "after": "img/fork-today-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/fork-today-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn",
+          "result": "Subagents' branch turned up, bare; the pair still reads as one family.",
+          "items": [
+            {
+              "label": "Session menu",
+              "before": "img/fork-today-context.svg",
+              "after": "img/fork-drawn-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/fork-today-sizes.svg",
+              "after": "img/fork-drawn-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "git-fork",
+          "label": "Solar's git fork",
+          "result": "Solar's own bare fork, no drawing; reads as git more than as a session.",
+          "items": [
+            {
+              "label": "Session menu",
+              "before": "img/fork-today-context.svg",
+              "after": "img/fork-git-fork-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/fork-today-sizes.svg",
+              "after": "img/fork-git-fork-sizes.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "terminal",
+      "question": "Command-line tools: is the drawn prompt right?",
+      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
+      "recommended": "drawn",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Today (in its container)",
+          "result": "What ships now: </> inside a grey rounded square.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "after": "img/terminal-today-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/terminal-today-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn",
+          "result": "A bare prompt and cursor (>_), from Solar's boxed one; lighter than its neighbours.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "before": "img/terminal-today-context.svg",
+              "after": "img/terminal-drawn-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/terminal-today-sizes.svg",
+              "after": "img/terminal-drawn-sizes.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "question": "MCP servers: is the drawn plug right?",
+      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
+      "recommended": "drawn",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Today (in its container)",
+          "result": "What ships now: a plug on a grey disc.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "after": "img/mcp-today-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/mcp-today-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn",
+          "result": "The plug alone: solid head, cable at half ink. Holds its weight.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "before": "img/mcp-today-context.svg",
+              "after": "img/mcp-drawn-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/mcp-today-sizes.svg",
+              "after": "img/mcp-drawn-sizes.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spend",
+      "question": "Spend: is the drawn dollar right?",
+      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
+      "recommended": "drawn",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Today (in its container)",
+          "result": "What ships now: a dollar on a grey coin.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "after": "img/spend-today-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/spend-today-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn",
+          "result": "The dollar sign alone, its bar at half ink; lighter than the coin.",
+          "items": [
+            {
+              "label": "Configure rail",
+              "before": "img/spend-today-context.svg",
+              "after": "img/spend-drawn-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/spend-today-sizes.svg",
+              "after": "img/spend-drawn-sizes.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "info",
+      "question": "Info: is the drawn “i” right?",
+      "bar": "Each picture is day over night at the real size; hold one to see today's icon.",
+      "recommended": "drawn-full",
+      "candidates": [
+        {
+          "id": "today",
+          "label": "Today (in its container)",
+          "result": "What ships now: an i on a grey disc.",
+          "items": [
+            {
+              "label": "Transcript note, 12px",
+              "after": "img/info-today-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/info-today-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn, stem at half ink",
+          "result": "Bare i, split like Solar's bare ! (dot full, stem half); faint at 12px.",
+          "items": [
+            {
+              "label": "Transcript note, 12px",
+              "before": "img/info-today-context.svg",
+              "after": "img/info-drawn-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/info-today-sizes.svg",
+              "after": "img/info-drawn-sizes.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn-full",
+          "label": "Drawn, all full ink",
+          "result": "The same i with its stem in full ink; reads better small, loses the duotone.",
+          "items": [
+            {
+              "label": "Transcript note, 12px",
+              "before": "img/info-today-context.svg",
+              "after": "img/info-drawn-full-context.svg"
+            },
+            {
+              "label": "16 · 20 · 24",
+              "before": "img/info-today-sizes.svg",
+              "after": "img/info-drawn-full-sizes.svg"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -26,7 +26,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconGlobe, IconJev, IconRules } from "#lib/icons.js";
+  import { IconGlobe, IconJev, IconRules, IconTick } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -370,27 +370,11 @@
               <LiveDot data-pulse data-slot="dot" size="row" tone="muted" />
               <span>Finishing the connection with OpenRouter…</span>
             {:else if phase === "connected" && openrouter?.connectedAt}
-              <svg
+              <IconTick
                 aria-hidden="true"
-                class="size-icon-md flex-none self-center fill-none"
+                class="size-icon-md flex-none self-center text-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
                 data-slot="check"
-                viewBox="0 0 20 20"
-              >
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="10"
-                  class="fill-status-done-bg stroke-none"
-                ></circle>
-                <path
-                  d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
-                  pathLength="1"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.8"
-                ></path>
-              </svg>
+              />
               <span
                 >Connected {formatDistanceToNow(
                   new Date(openrouter.connectedAt)
@@ -506,27 +490,11 @@
             }}
           >
             {#if jev?.typesafe}
-              <svg
+              <IconTick
                 aria-hidden="true"
-                class="size-icon-md flex-none self-center fill-none"
+                class="size-icon-md flex-none self-center text-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
                 data-slot="check"
-                viewBox="0 0 20 20"
-              >
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="10"
-                  class="fill-status-done-bg stroke-none"
-                ></circle>
-                <path
-                  d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
-                  pathLength="1"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.8"
-                ></path>
-              </svg>
+              />
               <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
               <span

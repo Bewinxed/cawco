@@ -76,8 +76,8 @@ const NO_SCREEN =
 /** The panel's canvas: its one iframe, on the stage over the panel's well (dashboard canvas/). */
 const PANEL_CANVAS =
   '[data-slot="canvas-stage"][data-canvas-stages-docked] iframe';
-/** A path of Solar's pen-new-square, the canvas's glyph in the menu. */
-const CANVAS_GLYPH = "M1 12C1 6.81455";
+/** A path of Solar's bare pen, the canvas's glyph in the menu. */
+const CANVAS_GLYPH = "M20.8487 8.71306";
 
 const RECT = /^(\S+) rectangle "([^"]*)" at (-?\d+),(-?\d+) (\d+)×(\d+)$/gm;
 const ARROW = /^arrow (\S+)(?: "[^"]*")?: (\S+) → (\S+)$/m;
@@ -2617,7 +2617,7 @@ const created = async (
     CANVAS_GLYPH
   );
   kit.check(
-    "1: the panel's menu lists the canvas with its glyph (pen-new-square)",
+    "1: the panel's menu lists the canvas with its glyph (pen)",
     (await row.count()) === 1 &&
       glyph &&
       (await row.locator('[data-slot="row-name"]').textContent()) === "flow",

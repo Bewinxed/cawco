@@ -42,7 +42,11 @@ export type SectionSlug = ConfigSlug;
 /**
  * The component for each Solar name a section is drawn with. A name the
  * definition gains that is not here throws as this module loads, so every
- * page says so at once rather than one rail row drawing nothing.
+ * page says so at once rather than one rail row drawing nothing. The names
+ * are core's ids, which the native app's `Glyph` reads too; what each draws
+ * here is the bare glyph (DESIGN.md, The Bare Glyph Rule), so a contained
+ * Solar name (`plug-circle-…`) draws its glyph alone until the app moves
+ * with it.
  */
 const GLYPHS: Record<string, Component> = {
   "shield-check-bold-duotone": IconRules,

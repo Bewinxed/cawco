@@ -10,10 +10,10 @@
    * closes. A machine it adds has its row in this list once it checks in.
    */
   import {
-    IconAddCircleLine as Add,
+    IconAddLine as Add,
     IconSuccess as Check,
     IconChevronDown as Down,
-    IconServerSquare as Server,
+    IconServerAlt as Server,
   } from "#lib/icons.js";
   import { connect } from "../connect/installs.svelte";
   import { machineRowRadius } from "./machine-rows";

@@ -11,7 +11,8 @@
  * An entry of its own: the dev server pre-bundles it as one module apart
  * from the icons (the dashboard's vite.config.ts `optimizeDeps.include`),
  * and only what draws a mark loads it. The decision host, which bundles the
- * barrel's icons with Solar alone (core decision-host.ts), never meets it.
+ * barrel's icons with Solar and the drawn glyphs alone (core
+ * decision-host.ts), never meets it.
  */
 // biome-ignore lint/performance/noBarrelFile: the brand marks' one module, every consumer imports a mark from here
 export { default as SvgCerebras } from "~icons/logos/cerebras-icon?raw";

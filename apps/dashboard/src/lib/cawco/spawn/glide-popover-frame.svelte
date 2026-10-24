@@ -13,7 +13,7 @@
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
   import {
     IconChevronDown as Down,
-    IconServerSquare as Server,
+    IconServerAlt as Server,
   } from "#lib/icons.js";
   import LifetimeChip from "./LifetimeChip.svelte";
   import { machineRowRadius } from "./machine-rows";

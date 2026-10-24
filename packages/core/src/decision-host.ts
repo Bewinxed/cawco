@@ -76,6 +76,15 @@ const rawImports: Bun.BunPlugin = {
 /** A compiled component's import of the Svelte runtime: `import 'svelte/…'` or `from 'svelte/…'`, either quote. */
 const SVELTE_IMPORT = /(\bfrom |\bimport )["'](svelte\/[^"']+)["']/g;
 
+/**
+ * The glyphs the house draws itself (packages/icons drawn.ts, the `cawco`
+ * collection the dashboard's vite.config.ts names), read from the source
+ * as the host's own files are: a dependency on `@cawco/icons` would make
+ * the dashboard's dev server load the icon barrel outside Vite for SSR.
+ */
+const DRAWN_ICONS_FILE = new URL("../../icons/src/drawn.ts", import.meta.url)
+  .pathname;
+
 /** The core package's own folder: unplugin-icons finds its icon sets (`@iconify-json/*`) from it. */
 const CORE_DIR = new URL("../", import.meta.url).pathname;
 
@@ -90,13 +99,17 @@ const CORE_DIR = new URL("../", import.meta.url).pathname;
  * first build only.
  */
 async function iconsPlugin(): Promise<Bun.BunPlugin> {
-  const [{ default: icons }, { compile }] = await Promise.all([
+  const [{ default: icons }, { compile }, { DRAWN_ICONS }] = await Promise.all([
     import("unplugin-icons"),
     import("svelte/compiler"),
+    import(DRAWN_ICONS_FILE) as Promise<{
+      DRAWN_ICONS: Record<string, string>;
+    }>,
   ]);
   return iconIdsOnly(
     icons.bun({
       collectionsNodeResolvePath: CORE_DIR,
+      customCollections: { cawco: DRAWN_ICONS },
       compiler: {
         extension: "js",
         compiler: (svg: string) => {

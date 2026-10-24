@@ -9,6 +9,7 @@ import {
 } from "@cawco/core/browser-gate";
 import { unlayeredRules } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
+import { DRAWN_ICONS } from "@cawco/icons/drawn";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -25,6 +26,17 @@ import {
 import { groupsAsCombinators } from "./group-selectors.ts";
 import { publicOrigin } from "./public-origin.js";
 import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
+
+/**
+ * unplugin-icons' options, for the app's build and for the optimizer's
+ * bundle of the icon barrel alike: Svelte components, and the glyphs CawCo
+ * draws itself as the `cawco` collection (`~icons/cawco/<name>`,
+ * @cawco/icons drawn.ts) beside Solar's.
+ */
+const ICONS = {
+  compiler: "svelte",
+  customCollections: { cawco: DRAWN_ICONS },
+} as const;
 
 /**
  * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
@@ -463,7 +475,7 @@ export default defineConfig(({ command }) => {
         // is not the dashboard's).
         csrf: { trustedOrigins: ["*"] },
       }),
-      Icons({ compiler: "svelte" }),
+      Icons(ICONS),
     ],
     server: {
       // The dashboard's port everywhere (core `CAWCO_LOCAL_DASHBOARD_PORT`).
@@ -534,7 +546,7 @@ export default defineConfig(({ command }) => {
        */
       // The brand marks (`@cawco/icons/marks`) are a module of their own, loaded by what draws one.
       include: ["@cawco/icons", "@cawco/icons/marks"],
-      rolldownOptions: { plugins: [IconsBundled({ compiler: "svelte" })] },
+      rolldownOptions: { plugins: [IconsBundled(ICONS)] },
       // svelte-streamdown, svelte-sonner and vaul-svelte are compiled like the
       // app's own components, so their stylesheets pass through
       // streamdownOverlayOwn and vendorComponentSheets in dev as in the build:

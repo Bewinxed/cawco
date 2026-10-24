@@ -21,6 +21,8 @@ site/wrangler.jsonc
 site/scripts/deploy.mjs
 # Pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
 scripts/probe-kit/fixtures/
+# Pictures for the owner's review pages, drawn by a script, never shipped.
+design-previews/*/img/
 
 # Languages Biome never formatted here.
 *.md

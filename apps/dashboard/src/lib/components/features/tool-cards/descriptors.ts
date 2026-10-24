@@ -77,7 +77,12 @@ export interface ToolFamily {
   one: string;
 }
 
-/** This client's component for each Solar glyph the core module names. */
+/**
+ * This client's component for each Solar glyph the core module names. The
+ * names are the ids both clients share; the web draws each bare (DESIGN.md,
+ * The Bare Glyph Rule), so a contained name (`question-circle-…`) draws its
+ * glyph alone until the native app moves with it.
+ */
 const GLYPHS: Record<string, Component> = {
   "code-square-bold-duotone": IconToolTerminal,
   "document-text-bold-duotone": IconToolRead,

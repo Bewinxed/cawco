@@ -8,6 +8,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./drawn": {
+      "types": "./src/drawn.ts",
+      "default": "./src/drawn.ts"
+    },
     "./marks": {
       "types": "./src/marks.ts",
       "default": "./src/marks.ts"

@@ -3,7 +3,7 @@ import {
   IconCpu as Cpu,
   IconLaptopAlt as Laptop,
   IconMonitor as Monitor,
-  IconServerSquare as Server,
+  IconServerAlt as Server,
 } from "#lib/icons.js";
 
 // biome-ignore lint/performance/noBarrelFile: public entry point for the machine row, consumed under the shadcn-svelte convention
