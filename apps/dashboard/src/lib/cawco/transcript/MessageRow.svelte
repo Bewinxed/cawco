@@ -475,8 +475,9 @@
   );
   /**
    * The message is chosen while its strip holds the keyboard's focus, while
-   * it is being edited, or while its sheet is open: its well wears the
-   * selection pill's wash, in its own contour (Well).
+   * it is being edited, or while its sheet is open: the transcript's
+   * selection pill stands under its well, in its contour (Transcript's
+   * `highlight`, Well).
    */
   const selected = $derived(
     (stripFocused && strip) || editing || (sheetOpen && strip)

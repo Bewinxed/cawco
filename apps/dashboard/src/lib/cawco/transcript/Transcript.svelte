@@ -42,6 +42,7 @@
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
@@ -3997,7 +3998,12 @@
     {/if}
   </div>
 
-  <!-- The list's own box: what the pin reads virtua's container off. -->
+  <!-- The list's own box: what the pin reads virtua's container off. The
+       reader's chosen message (its strip holding the keyboard's focus, its
+       edit open, its sheet open) wears the selection pill under its well, in
+       the well's four corners (MessageRow, Well; The Concentric Rule), and
+       the pill glides to the next one chosen. No ghost: under the pointer a
+       message shows its strip. -->
   <div
     data-transcript-shown={shown || undefined}
     data-slot="listing"
@@ -4006,6 +4012,11 @@
     bind:this={listing}
     style:padding-top={spare ? `${spare}px` : undefined}
     {@attach wholeHeight}
+    {@attach highlight({
+      rows: '[data-slot="well"]',
+      selected: '[data-slot="well"][data-selected]',
+      ghost: false,
+    })}
   >
     <Virtualizer
       bufferSize={buffer}

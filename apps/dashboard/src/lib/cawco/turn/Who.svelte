@@ -67,6 +67,9 @@
      * screen (the name stays for a screen reader, so every turn is still a
      * heading that says who). What is left — the clock, or the note in its
      * place — floats into the end of the turn's first line and adds no height.
+     * The reader's later message in a run has a line of its own for it (its
+     * part line, MessageRow), and there the clock stands at rest: the line
+     * says when that message was sent, never stands empty.
      */
     grouped?: boolean;
     name: string;
@@ -187,7 +190,8 @@
       data-slot="when"
       data-after-note={note || (actions ? "" : undefined)}
       data-shown={shown || undefined}
-      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
+      data-part={(grouped && you) || undefined}
+      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 data-part:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}

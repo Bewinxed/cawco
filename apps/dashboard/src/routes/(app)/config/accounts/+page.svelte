@@ -87,16 +87,17 @@
           </header>
           <!-- Flat rows on the section's own surface, as the live list draws
                them: the rows' hairlines are the only rule. -->
-          <ul
-            aria-labelledby="provider-{group.provider}"
-            class="m-0 flex min-w-0 list-none flex-col p-0"
-            data-flip="box"
-            {@attach highlight({ rows: ".link" })}
-          >
-            {#each group.accounts as account (account.id)}
-              <AccountListRow {account} />
-            {/each}
-          </ul>
+          <div class="min-w-0" {@attach highlight({ rows: ".link" })}>
+            <ul
+              aria-labelledby="provider-{group.provider}"
+              class="m-0 flex min-w-0 list-none flex-col p-0"
+              data-flip="box"
+            >
+              {#each group.accounts as account (account.id)}
+                <AccountListRow {account} />
+              {/each}
+            </ul>
+          </div>
         </section>
       {/each}
     </div>

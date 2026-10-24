@@ -21,7 +21,14 @@
  *
  * All three layers are drawn under the rows (the container isolates, they
  * sit at z-index -1), measured from the rows' own rects and radii, and move
- * by their place (`place`), width and height only.
+ * by their place (`place`), width and height only. They stand in the
+ * container's shadow root, beside a `<slot>` that draws its own children as
+ * they were: the list's children are its own still, so no child walk of a
+ * consumer's (`firstElementChild`, `children`, a `> *` rule) ever meets them,
+ * and they take no part in the list's layout. A container is a shadow host
+ * (a `div`, `nav`, `section`, …; a `ul` stands inside one). Nothing observes
+ * the list's own box for size (its frame line), so a list whose height is written
+ * from inside a ResizeObserver loops none.
  *
  * Rows can move under a pointer that stays still — one closes and the rest
  * slide over. The browser says so with a `pointerover` on whatever is under
@@ -36,46 +43,126 @@
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { watchRendered } from "#lib/utils/rendered.js";
-import { tv } from "#lib/utils.js";
 
 /**
- * The layers' recipe. Every layer is drawn under the rows (the list
- * isolates, the layers sit at -1, so a row's text and icons are always above
- * them) and placed from measured client rects, which are physical: each
- * anchors to the physical top-left corner the measurements are taken from
- * and moves by `--hl-x` and `--hl-y`, shown by `--hl-show`.
+ * The layers' recipe, the sheet every container's shadow root adopts (one
+ * sheet, shared). Every layer is drawn under the rows (the list isolates, the
+ * layers sit at -1, so a row's text and icons are always above them) and
+ * placed from measured client rects, which are physical: each anchors to the
+ * physical top-left corner the measurements are taken from and moves by
+ * `--hl-x` and `--hl-y`, shown by `--hl-show`. Written as CSS over the
+ * tokens: the page's utilities do not reach into a shadow root, and the
+ * tokens' custom properties do.
  *
  * - The ghost is the one hover fill. Where nothing hovers (a touch screen:
  *   a tap fires a synthetic mousemove and no mouseleave, so a ghost would
  *   park on the last tap as a second selection) there is none, unless the
  *   rows' own highlight drives it (`data-follow`). It fades in place over
  *   --dur-control; gliding (`data-glide`), it moves 80ms on --ease-in-out.
+ *   Unseen (`data-unseen`), it still marks the row it is on (`data-ghosted`)
+ *   and is not drawn: folder tabs draw their own hover.
  * - The pill is the selection, the apricot wash its row's selected ink
  *   stands on; gliding, it moves 120ms on --ease-drawer. The trail is the
  *   old selection fading where it was (`data-fade`). With less motion a
  *   selection that moves cross-fades (`data-swap`) over --dur-fade.
- * - `card`: a grid of icon cards (DESIGN.md, Channel cards), whose pill is
- *   the channel card's selection frame, 1px brand-solid over the recess at
- *   the card's own radius, drawn over the card's border and fill and under
- *   its face (CardFace).
+ * - `card` (the host's `data-highlight`): a grid of icon cards (DESIGN.md,
+ *   Channel cards), whose pill is the channel card's selection frame, 1px
+ *   brand-solid over the recess at the card's own radius, drawn over the
+ *   card's border and fill and under its face (CardFace).
  */
-export const highlightVariants = tv({
-  slots: {
-    ghost:
-      "pointer-events-none absolute top-0 left-0 -z-1 hidden translate-x-(--hl-x) translate-y-(--hl-y) bg-surface-hover opacity-(--hl-show) [transition:--hl-show_var(--dur-control)_var(--ease-out)] data-follow:block motion-safe:data-glide:[transition:--hl-x_var(--dur-ghost)_var(--ease-in-out),--hl-y_var(--dur-ghost)_var(--ease-in-out),width_var(--dur-ghost)_var(--ease-in-out),height_var(--dur-ghost)_var(--ease-in-out),--hl-show_var(--dur-control)_var(--ease-out)] hover-hover:block",
-    pill: "pointer-events-none absolute top-0 left-0 -z-1 translate-x-(--hl-x) translate-y-(--hl-y) bg-selected-bg opacity-(--hl-show) data-swap:[transition:--hl-show_var(--dur-fade)_var(--ease-out)] motion-safe:data-glide:not-data-swap:[transition:--hl-x_var(--dur-control)_var(--ease-drawer),--hl-y_var(--dur-control)_var(--ease-drawer),width_var(--dur-control)_var(--ease-drawer),height_var(--dur-control)_var(--ease-drawer)]",
-    trail:
-      "pointer-events-none absolute top-0 left-0 -z-1 translate-x-(--hl-x) translate-y-(--hl-y) bg-selected-bg opacity-(--hl-show) data-fade:[transition:--hl-show_var(--dur-control)_var(--ease-out)] data-fade:data-swap:[transition:--hl-show_var(--dur-fade)_var(--ease-out)]",
-  },
-  variants: {
-    look: {
-      card: {
-        pill: "z-1 box-border border border-brand-solid bg-surface-recess",
-        trail: "z-1 box-border border border-brand-solid bg-surface-recess",
-      },
-    },
-  },
-});
+const LAYERS = `
+[data-slot^="highlight-"] {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  translate: var(--hl-x) var(--hl-y);
+  opacity: var(--hl-show);
+  background-color: var(--color-selected-bg);
+}
+[data-slot="highlight-ghost"] {
+  display: none;
+  background-color: var(--color-surface-hover);
+  transition: --hl-show var(--dur-control) var(--ease-out);
+}
+@media (hover: hover) {
+  [data-slot="highlight-ghost"] {
+    display: block;
+  }
+}
+[data-slot="highlight-ghost"][data-follow] {
+  display: block;
+}
+[data-slot="highlight-ghost"][data-unseen] {
+  display: none;
+}
+[data-slot="highlight-pill"][data-swap] {
+  transition: --hl-show var(--dur-fade) var(--ease-out);
+}
+[data-slot="highlight-trail"][data-fade] {
+  transition: --hl-show var(--dur-control) var(--ease-out);
+}
+[data-slot="highlight-trail"][data-fade][data-swap] {
+  transition: --hl-show var(--dur-fade) var(--ease-out);
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="highlight-ghost"][data-glide] {
+    transition:
+      --hl-x var(--dur-ghost) var(--ease-in-out),
+      --hl-y var(--dur-ghost) var(--ease-in-out),
+      width var(--dur-ghost) var(--ease-in-out),
+      height var(--dur-ghost) var(--ease-in-out),
+      --hl-show var(--dur-control) var(--ease-out);
+  }
+  [data-slot="highlight-pill"][data-glide]:not([data-swap]) {
+    transition:
+      --hl-x var(--dur-control) var(--ease-drawer),
+      --hl-y var(--dur-control) var(--ease-drawer),
+      width var(--dur-control) var(--ease-drawer),
+      height var(--dur-control) var(--ease-drawer);
+  }
+}
+[data-highlight-frame] {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  height: 1px;
+}
+:host([data-highlight="card"]) :is([data-slot="highlight-pill"], [data-slot="highlight-trail"]) {
+  z-index: 1;
+  box-sizing: border-box;
+  border: var(--border-width) solid var(--color-brand-solid);
+  background-color: var(--color-surface-recess);
+}
+`;
+
+/** The layers' one sheet, made the first time a list asks for it. */
+let layersSheet: CSSStyleSheet | null = null;
+const sheetOfLayers = (): CSSStyleSheet => {
+  if (!layersSheet) {
+    layersSheet = new CSSStyleSheet();
+    layersSheet.replaceSync(LAYERS);
+  }
+  return layersSheet;
+};
+
+/**
+ * The container's shadow root, holding the layers and the `<slot>` that
+ * draws its children. A shadow root stays once made: a list attached again
+ * (its options changed) finds its own.
+ */
+const rootOf = (container: HTMLElement): ShadowRoot => {
+  const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
+  if (!root.adoptedStyleSheets.includes(sheetOfLayers())) {
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheetOfLayers()];
+  }
+  if (!root.querySelector("slot")) {
+    root.append(document.createElement("slot"));
+  }
+  return root;
+};
 
 type Axis = "x" | "y" | "xy";
 
@@ -116,8 +203,12 @@ export interface HighlightOptions {
    * its anti-aliased edge, and glides back out from under it.
    */
   covered?: string;
-  /** `false` for a pill alone, under a list that an outer ghost covers. */
-  ghost?: boolean;
+  /**
+   * `false` for a pill alone, under a list that an outer ghost covers;
+   * `"unseen"` for a ghost that marks its row (`data-ghosted`) and is not
+   * drawn, under rows that draw their own hover (folder tabs).
+   */
+  ghost?: boolean | "unseen";
   /** A row attribute that says which row is hovered, instead of the pointer. */
   hovered?: string;
   /**
@@ -164,9 +255,8 @@ const cornersOf = (style: CSSStyleDeclaration): string => {
   return across === down ? across : `${across} / ${down}`;
 };
 
-const layer = (slot: string, className: string) => {
+const layer = (slot: string) => {
   const span = document.createElement("span");
-  span.className = className;
   span.dataset.slot = slot;
   span.setAttribute("aria-hidden", "true");
   return span;
@@ -282,19 +372,34 @@ export function highlight(options: HighlightOptions) {
     // by the sheet's own default for `[data-highlight]` (design.css), which a
     // list's own position outranks: read here as it mounted, its computed
     // style restyled the page between the writes of the flush that mounted it.
-    container.dataset.highlight = "";
+    container.dataset.highlight = look ?? "";
     const ownIsolate = !container.classList.contains("isolate");
     container.classList.add("isolate");
-    const looks = highlightVariants({ look });
-    const ghost = layer("highlight-ghost", looks.ghost());
-    const trail = layer("highlight-trail", looks.trail());
-    const pill = layer("highlight-pill", looks.pill());
+    const ghost = layer("highlight-ghost");
+    const trail = layer("highlight-trail");
+    const pill = layer("highlight-pill");
     // A ghost the rows' own highlight drives (a menu's arrow keys) shows on
     // a touch screen too; a ghost the pointer drives does not.
     if (hovered) {
       ghost.dataset.follow = "";
     }
-    container.prepend(...(withGhost ? [ghost] : []), trail, pill);
+    if (withGhost === "unseen") {
+      ghost.dataset.unseen = "";
+    }
+    /**
+     * What the highlight hears the list's size and rendering by: a line as
+     * wide as the list and 1px tall, in its shadow root. Never the list's
+     * own box: a list whose height is written from inside a ResizeObserver
+     * (virtua writes the transcript's from its own) resizes an observed
+     * ancestor after its depth was delivered, and WebKit reports a
+     * "ResizeObserver loop". The line's size moves only with the list's
+     * width, or as the list is rendered or skipped.
+     */
+    const line = document.createElement("span");
+    line.dataset.highlightFrame = "";
+    line.setAttribute("aria-hidden", "true");
+    // First in the shadow root, before the slot: drawn under the children.
+    rootOf(container).prepend(line, ...(withGhost ? [ghost] : []), trail, pill);
 
     /**
      * A point on screen in the container's padding box, scroll included, in
@@ -931,7 +1036,13 @@ export function highlight(options: HighlightOptions) {
     container.addEventListener("keydown", onInput, passive);
     container.addEventListener("scroll", onScroll, passive);
 
-    const watch = new MutationObserver(() => {
+    const watch = new MutationObserver((records) => {
+      // A row moved without a size of its own changing: a list's padding, or
+      // a virtual list's rows placed by their inline style (virtua's `top`).
+      // The layers follow, without a glide, in the next frame.
+      if (records.some((record) => record.attributeName === "style")) {
+        toRealign();
+      }
       // A row under the ghost can come to cover it (a tab chosen under
       // the pointer), or stop covering it.
       if (covered && ghostRow) {
@@ -975,9 +1086,11 @@ export function highlight(options: HighlightOptions) {
         "data-active",
         "data-highlighted",
         "data-selected",
+        "style",
       ],
     });
-    // A resize moves every row at once: the layers follow without a glide,
+    // A resize moves every row at once (heard on the frame line, as wide as
+    // the list): the layers follow without a glide,
     // on the next frame, so placing them (which can toggle a scrollbar on a
     // scrolling list) never resizes the list inside its own observer.
     // Its first report places the pill, inside the delivery: the frame the
@@ -1004,7 +1117,7 @@ export function highlight(options: HighlightOptions) {
         ghostBox = box;
       }
     };
-    sizes.observe(container);
+    sizes.observe(line);
     /**
      * Each layer onto its row's box as it stands now, where that is anywhere
      * else at all (`moved`: a residue under `same`'s half pixel is still a
@@ -1102,7 +1215,7 @@ export function highlight(options: HighlightOptions) {
     // conversation) has no layout to measure, and measuring it would lay it
     // out: the layers wait, and are placed afresh, without a glide, the
     // frame it is rendered again.
-    const watching = watchRendered(container, (on) => {
+    const watching = watchRendered(line, (on) => {
       skipped = !on;
       onResize();
     });
@@ -1146,6 +1259,7 @@ export function highlight(options: HighlightOptions) {
       sizes.disconnect();
       watching.stop();
       ghostRow?.removeAttribute("data-ghosted");
+      line.remove();
       ghost.remove();
       trail.remove();
       pill.remove();

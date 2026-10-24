@@ -892,36 +892,40 @@
          page of it too. -->
     <!-- The app's places, first: one compact block, no heading over it. -->
     <Sidebar.Group pad="rail">
-      <Sidebar.Menu aria-label="Places" gap="tight" {@attach highlight(PILL)}>
-        <Sidebar.MenuItem>
-          <!-- The board is the place while it is on screen; with a
-               conversation open, its row is the one selection. -->
-          <Sidebar.MenuButton
-            isActive={path.startsWith("/session") && activeSession === null}
-            row="nav"
-          >
-            {#snippet child({ props })}
-              <a href="/session" {...props} class="{props.class} mark-line">
-                <span class={SLOT} data-box><IconBox class={SLOT_GLYPH} /></span
-                >
-                <span>Fleet</span>
-              </a>
-            {/snippet}
-          </Sidebar.MenuButton>
-          {#if fleetCount}
-            <!-- A status count keeps its status pair whatever the row does:
-                 the kit's active and hover inks are for a plain count, and
-                 on the live fill the active one reads 3.3:1. -->
-            <Sidebar.MenuBadge
-              data-blocked={cawco.blockedCount > 0 || undefined}
-              data-flip="pop box"
-              tone="live"
+      <!-- The pill's host: a list is a `ul`, which holds no layers of its own. -->
+      <div {@attach highlight(PILL)}>
+        <Sidebar.Menu aria-label="Places" gap="tight">
+          <Sidebar.MenuItem>
+            <!-- The board is the place while it is on screen; with a
+                 conversation open, its row is the one selection. -->
+            <Sidebar.MenuButton
+              isActive={path.startsWith("/session") && activeSession === null}
+              row="nav"
             >
-              <MorphText text={String(fleetCount)} />
-            </Sidebar.MenuBadge>
-          {/if}
-        </Sidebar.MenuItem>
-      </Sidebar.Menu>
+              {#snippet child({ props })}
+                <a href="/session" {...props} class="{props.class} mark-line">
+                  <span class={SLOT} data-box
+                    ><IconBox class={SLOT_GLYPH} /></span
+                  >
+                  <span>Fleet</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+            {#if fleetCount}
+              <!-- A status count keeps its status pair whatever the row does:
+                   the kit's active and hover inks are for a plain count, and
+                   on the live fill the active one reads 3.3:1. -->
+              <Sidebar.MenuBadge
+                data-blocked={cawco.blockedCount > 0 || undefined}
+                data-flip="pop box"
+                tone="live"
+              >
+                <MorphText text={String(fleetCount)} />
+              </Sidebar.MenuBadge>
+            {/if}
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+      </div>
     </Sidebar.Group>
     <Home markedElsewhere={(id) => treeRows.has(id)} variant="rail" />
 
@@ -1007,143 +1011,142 @@
               : sidebarWords.noProjects}
           </p>
         {:else}
-          <Sidebar.Menu
-            gap="tight"
-            {@attach highlight(PILL)}
-            {@attach holdWhileInside("rail:")}
-          >
-            {#each orderedProjects as project (project.id)}
-              {@const runningCount = runningIn(project)}
-              {@const expanded = !folderPrefs.collapsed(project.id)}
-              {@const href = `/project/${project.id}`}
-              {@const here = path === href || path.startsWith(`${href}/`)}
-              <li
-                class="group/menu-item relative"
-                data-flip="box"
-                data-sidebar="menu-item"
-                data-slot="sidebar-menu-item"
-              >
-                <FolderMenu
-                  cwd={folderOf(project)}
-                  oncollapseothers={() => collapseOthers(project.id)}
-                  onnew={() => newSession({ projectId: project.id })}
-                  {project}
+          <div {@attach highlight(PILL)}>
+            <Sidebar.Menu gap="tight" {@attach holdWhileInside("rail:")}>
+              {#each orderedProjects as project (project.id)}
+                {@const runningCount = runningIn(project)}
+                {@const expanded = !folderPrefs.collapsed(project.id)}
+                {@const href = `/project/${project.id}`}
+                {@const here = path === href || path.startsWith(`${href}/`)}
+                <li
+                  class="group/menu-item relative"
+                  data-flip="box"
+                  data-sidebar="menu-item"
+                  data-slot="sidebar-menu-item"
                 >
-                  <Sidebar.MenuButton isActive={here} row="list">
-                    {#snippet child({ props })}
-                      <!-- The row is the link to the project's page. Its
-                           mark says what is running in it, as a session's
-                           says its delegates, and is the switch that folds
-                           its sessions, as a session's mark folds its
-                           delegates; its press never reaches the link. Under
-                           a finger the switch reaches sideways to the name,
-                           the row's own gap (`row="list"`), as a session
-                           row's does. -->
-                      <a
-                        {href}
-                        {...props}
-                        aria-current={here ? "page" : undefined}
-                        class="{props.class} mark-line"
-                        style:--mark-hit-gap="var(--space-3)"
-                      >
-                        <ProjectMark
-                          count={runningCount}
-                          hue={markHue(folderOf(project))}
-                          name={project.name}
-                          ontoggle={() => toggle(project)}
-                          open={expanded}
-                        />
-                        <span
-                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
-                          >{project.name}
-                          {#if runningCount > 0}
-                            <span class="sr-only">, {runningCount} running</span
-                            >
-                          {/if}</span
-                        >
-                      </a>
-                    {/snippet}
-                  </Sidebar.MenuButton>
-                </FolderMenu>
-                <!-- A forget asked from this row's menu, under it. -->
-                <div
-                  data-slot="sidebar-forget"
-                  class="contents"
-                  style:--ask-indent="var(--space-1)"
-                  style:--ask-end="var(--space-1)"
-                  style:--fault-indent="var(--space-2)"
-                  style:--fault-end="var(--space-2)"
-                >
-                  <ForgetProjectTray
-                    at={forgetAtRail(project.id)}
-                    parks
-                    projectId={project.id}
-                  />
-                </div>
-
-                <!-- Its sessions hang under it the way a session's delegates
-                     hang under theirs: on a rail that leaves the project's
-                     mark, each row joined to it by its own arm, opening and
-                     folding with the same motion (motion/branch). Every
-                     level of the tree steps in by the rail's own measure
-                     (app.css .kit-nest), so a session under a project and a
-                     delegate under a session are set in alike. -->
-                {#if expanded}
-                  {@const lists = splitOf(project)}
-                  {@const front = lists.older.some(
-                    (row) => row.id === activeSession
-                  )}
-                  <ul
-                    data-nest
-                    class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
-                    data-flip-anchor
-                    data-sidebar="menu-sub"
-                    data-slot="sidebar-menu-sub"
-                    in:branch={LEAD_TREE}
-                    out:branch={LEAD_TREE}
-                    {@attach nestFrom("[data-tree-mark]", LEAD)}
+                  <FolderMenu
+                    cwd={folderOf(project)}
+                    oncollapseothers={() => collapseOthers(project.id)}
+                    onnew={() => newSession({ projectId: project.id })}
+                    {project}
                   >
-                    {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
-                      {@render subRow(node, "projects")}
-                    {/each}
-                    <!-- Its older trees are built only while they are out:
-                         a project keeps hundreds. -->
-                    {@render olderRows(
-                      project.id,
-                      lists.older.length,
-                      failedIn(lists.older),
-                      front,
-                      olderOut(project.id, front, "projects")
-                        ? branches(lists.older, `rail:${project.id}:older`)
-                        : NO_TREES,
-                      "projects"
-                    )}
-                    {#if lists.older.length + lists.recent.length === 0}
-                      <Sidebar.MenuSubItem data-flip>
-                        <Sidebar.MenuSubButton
-                          data-branch-item
-                          onclick={(event: MouseEvent) =>
-                            newSession(
-                              { projectId: project.id },
-                              event.currentTarget as HTMLElement
-                            )}
-                          row="compact"
-                          tone="muted"
+                    <Sidebar.MenuButton isActive={here} row="list">
+                      {#snippet child({ props })}
+                        <!-- The row is the link to the project's page. Its
+                             mark says what is running in it, as a session's
+                             says its delegates, and is the switch that folds
+                             its sessions, as a session's mark folds its
+                             delegates; its press never reaches the link. Under
+                             a finger the switch reaches sideways to the name,
+                             the row's own gap (`row="list"`), as a session
+                             row's does. -->
+                        <a
+                          {href}
+                          {...props}
+                          aria-current={here ? "page" : undefined}
+                          class="{props.class} mark-line"
+                          style:--mark-hit-gap="var(--space-3)"
                         >
+                          <ProjectMark
+                            count={runningCount}
+                            hue={markHue(folderOf(project))}
+                            name={project.name}
+                            ontoggle={() => toggle(project)}
+                            open={expanded}
+                          />
                           <span
-                            data-slot="sidebar-row-lead"
-                            class={SLOT}
-                            data-box><IconPlus class="size-icon-sm" /></span
+                            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
+                            >{project.name}
+                            {#if runningCount > 0}
+                              <span class="sr-only"
+                                >, {runningCount} running</span
+                              >
+                            {/if}</span
                           >
-                          <span>No sessions — start one</span>
-                        </Sidebar.MenuSubButton>
-                      </Sidebar.MenuSubItem>
-                    {/if}
-                  </ul>
-                {/if}
-              </li>
-            {/each}
-          </Sidebar.Menu>
+                        </a>
+                      {/snippet}
+                    </Sidebar.MenuButton>
+                  </FolderMenu>
+                  <!-- A forget asked from this row's menu, under it. -->
+                  <div
+                    data-slot="sidebar-forget"
+                    class="contents"
+                    style:--ask-indent="var(--space-1)"
+                    style:--ask-end="var(--space-1)"
+                    style:--fault-indent="var(--space-2)"
+                    style:--fault-end="var(--space-2)"
+                  >
+                    <ForgetProjectTray
+                      at={forgetAtRail(project.id)}
+                      parks
+                      projectId={project.id}
+                    />
+                  </div>
+
+                  <!-- Its sessions hang under it the way a session's delegates
+                       hang under theirs: on a rail that leaves the project's
+                       mark, each row joined to it by its own arm, opening and
+                       folding with the same motion (motion/branch). Every
+                       level of the tree steps in by the rail's own measure
+                       (app.css .kit-nest), so a session under a project and a
+                       delegate under a session are set in alike. -->
+                  {#if expanded}
+                    {@const lists = splitOf(project)}
+                    {@const front = lists.older.some(
+                      (row) => row.id === activeSession
+                    )}
+                    <ul
+                      data-nest
+                      class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
+                      data-flip-anchor
+                      data-sidebar="menu-sub"
+                      data-slot="sidebar-menu-sub"
+                      in:branch={LEAD_TREE}
+                      out:branch={LEAD_TREE}
+                      {@attach nestFrom("[data-tree-mark]", LEAD)}
+                    >
+                      {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
+                        {@render subRow(node, "projects")}
+                      {/each}
+                      <!-- Its older trees are built only while they are out:
+                           a project keeps hundreds. -->
+                      {@render olderRows(
+                        project.id,
+                        lists.older.length,
+                        failedIn(lists.older),
+                        front,
+                        olderOut(project.id, front, "projects")
+                          ? branches(lists.older, `rail:${project.id}:older`)
+                          : NO_TREES,
+                        "projects"
+                      )}
+                      {#if lists.older.length + lists.recent.length === 0}
+                        <Sidebar.MenuSubItem data-flip>
+                          <Sidebar.MenuSubButton
+                            data-branch-item
+                            onclick={(event: MouseEvent) =>
+                              newSession(
+                                { projectId: project.id },
+                                event.currentTarget as HTMLElement
+                              )}
+                            row="compact"
+                            tone="muted"
+                          >
+                            <span
+                              data-slot="sidebar-row-lead"
+                              class={SLOT}
+                              data-box><IconPlus class="size-icon-sm" /></span
+                            >
+                            <span>No sessions — start one</span>
+                          </Sidebar.MenuSubButton>
+                        </Sidebar.MenuSubItem>
+                      {/if}
+                    </ul>
+                  {/if}
+                </li>
+              {/each}
+            </Sidebar.Menu>
+          </div>
         {/if}
       </Sidebar.Group>
     {:else}

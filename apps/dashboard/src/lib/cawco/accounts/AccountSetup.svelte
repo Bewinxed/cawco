@@ -798,69 +798,72 @@
 {/snippet}
 
 {#snippet choiceRows(rows: ProviderChoice[], group: string)}
-  <ul
-    data-slot="choices"
-    aria-labelledby="pick-{group}"
-    class="m-0 flex list-none flex-col p-0"
+  <div
     {@attach highlight({ rows: "[data-choice]:not([aria-disabled='true'])" })}
   >
-    {#each rows as row (keyOf(row))}
-      {@const free = runsOn(row.harnesses).length > 0}
-      {@const label = choiceLabel(row)}
-      {#snippet button(props: Record<string, unknown>)}
-        <button
-          data-choice
-          {...props}
-          aria-disabled={free ? undefined : "true"}
-          class="select-none mark-line grid min-h-c-btn-h-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:opacity-50"
-          onclick={(event) => {
-            if (free) {
-              choose(
-                row,
-                event.currentTarget.querySelector<HTMLElement>(
-                  '[data-slot="ptile"]'
-                )
-              );
-            }
-          }}
-          style:--choice-cols="var(--c-mark) minmax(0, 1fr) var(--icon-md)"
-          type="button"
-        >
-          <span
-            data-slot="ptile"
-            class="grid size-c-mark flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
-            data-box><ProviderMark provider={row.provider} /></span
+    <ul
+      data-slot="choices"
+      aria-labelledby="pick-{group}"
+      class="m-0 flex list-none flex-col p-0"
+    >
+      {#each rows as row (keyOf(row))}
+        {@const free = runsOn(row.harnesses).length > 0}
+        {@const label = choiceLabel(row)}
+        {#snippet button(props: Record<string, unknown>)}
+          <button
+            data-choice
+            {...props}
+            aria-disabled={free ? undefined : "true"}
+            class="select-none mark-line grid min-h-c-btn-h-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:opacity-50"
+            onclick={(event) => {
+              if (free) {
+                choose(
+                  row,
+                  event.currentTarget.querySelector<HTMLElement>(
+                    '[data-slot="ptile"]'
+                  )
+                );
+              }
+            }}
+            style:--choice-cols="var(--c-mark) minmax(0, 1fr) var(--icon-md)"
+            type="button"
           >
-          <span
-            data-slot="plabel"
-            class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-row"
-            >{label}</span
-          >
-          <span
-            data-slot="chev"
-            aria-hidden="true"
-            class="flex text-ink-subtle"
-            data-box><IconChevronRight class="size-icon-md" /></span
-          >
-        </button>
-      {/snippet}
-      <li class="[li+&]:border-t [li+&]:border-t-border-hairline">
-        {#if free}
-          {@render button({})}
-        {:else}
-          <Tip
-            label={words.noMachineRuns(
-              row.harnesses.map((one) => accountsWords.harnesses[one])
-            )}
-          >
-            {#snippet children(props)}
-              {@render button(props)}
-            {/snippet}
-          </Tip>
-        {/if}
-      </li>
-    {/each}
-  </ul>
+            <span
+              data-slot="ptile"
+              class="grid size-c-mark flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
+              data-box><ProviderMark provider={row.provider} /></span
+            >
+            <span
+              data-slot="plabel"
+              class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-row"
+              >{label}</span
+            >
+            <span
+              data-slot="chev"
+              aria-hidden="true"
+              class="flex text-ink-subtle"
+              data-box><IconChevronRight class="size-icon-md" /></span
+            >
+          </button>
+        {/snippet}
+        <li class="[li+&]:border-t [li+&]:border-t-border-hairline">
+          {#if free}
+            {@render button({})}
+          {:else}
+            <Tip
+              label={words.noMachineRuns(
+                row.harnesses.map((one) => accountsWords.harnesses[one])
+              )}
+            >
+              {#snippet children(props)}
+                {@render button(props)}
+              {/snippet}
+            </Tip>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  </div>
 {/snippet}
 
 {#snippet signIn()}

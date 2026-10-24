@@ -861,11 +861,9 @@
           id="{uid}-attachments-scroll"
           in:reveal
           {@attach measured("attachments", "[data-files-row]")}
+          {@attach highlight({ rows: "[data-files-row]" })}
         >
-          <ul
-            class="relative pb-space-6"
-            {@attach highlight({ rows: "[data-files-row]" })}
-          >
+          <ul class="relative pb-space-6">
             {#each attachmentHits as file (file.id)}
               <!-- Every row stands on one grid with the heads: its mark
                    centred in one 28px lead column, so every name starts on

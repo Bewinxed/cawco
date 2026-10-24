@@ -12,11 +12,13 @@
   let { label, children }: { label: string; children: Snippet } = $props();
 </script>
 
-<ul
-  aria-label={label}
-  class="flex list-none flex-col gap-space-row p-0 my-0 -mx-space-2"
-  {@attach highlight({ rows: '[data-slot="row"]' })}
-  {@attach reflow()}
->
-  {@render children()}
-</ul>
+<!-- The ghost's host: the list is a `ul`, which holds no layers of its own. -->
+<div class="-mx-space-2" {@attach highlight({ rows: '[data-slot="row"]' })}>
+  <ul
+    aria-label={label}
+    class="flex list-none flex-col gap-space-row p-0 my-0"
+    {@attach reflow()}
+  >
+    {@render children()}
+  </ul>
+</div>

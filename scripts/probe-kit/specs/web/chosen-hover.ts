@@ -239,7 +239,12 @@ function readBackground(
 ): Promise<Read | null> {
   return page.evaluate(
     ([sel, pse]) => {
-      const el = document.querySelector(sel);
+      // A highlight's layers stand in its list's shadow root.
+      const el =
+        document.querySelector(sel) ??
+        [...document.querySelectorAll("[data-highlight]")]
+          .map((host) => host.shadowRoot?.querySelector(sel))
+          .find((one) => !!one);
       if (!el) {
         return null;
       }
@@ -326,7 +331,9 @@ async function readHovered(
   const ghostShown = await page.evaluate((other) => {
     const row = document.querySelector(other);
     const list = row?.closest("[data-highlight]");
-    const ghost = list?.querySelector(':scope > [data-slot="highlight-ghost"]');
+    const ghost = list?.shadowRoot?.querySelector(
+      '[data-slot="highlight-ghost"]'
+    );
     if (!ghost) {
       return null;
     }
@@ -810,7 +817,7 @@ async function checkHalf(kit: Kit, bench: string): Promise<void> {
             const rowEl = document.querySelector(row);
             const layerEl = document
               .querySelector(`${row.split(" ")[0]} [data-highlight]`)
-              ?.querySelector(`:scope > [data-slot="${slot}"]`);
+              ?.shadowRoot?.querySelector(`[data-slot="${slot}"]`);
             if (!(rowEl && layerEl)) {
               return null;
             }

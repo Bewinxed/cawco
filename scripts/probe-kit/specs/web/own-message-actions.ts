@@ -24,14 +24,15 @@
  *     Edit and Fork from here where the message offers each, each what a
  *     press at its centre lands on; it meets none of the words, the clock,
  *     the well or the next turn; showing it moves no turn;
- *  3. (mouse) in the run each part has its own line with its clock, and its
- *     strip on that line shows for that part alone;
+ *  3. at rest every later part of the run has its own line with its clock
+ *     shown, never an empty line; (mouse) its strip on that line shows for
+ *     that part alone;
  *  4. (finger) no strip; the handle stands at rest on the speaker line, and
  *     a press opens the sheet "Message" with Copy, Edit and Fork from here,
  *     each row 44px;
  *  5. (desk) the keyboard reaches the strip by Tab alone: it shows, covers
- *     nothing, the well is chosen and its surface is the selection pill's
- *     wash in its four corners (a run's middle part: square at top and
+ *     nothing, the well is chosen and the transcript's selection pill stands
+ *     under it in its four corners (a run's middle part: square at top and
  *     foot), the focus
  *     ring on the button its own radius; Enter copies, Edit opens with the
  *     focus in its field, Esc cancels;
@@ -84,6 +85,8 @@ const COST =
   "Sending goes back to this message and replaces everything after it in the conversation.";
 
 const STRIP = "[data-message-actions]";
+/** WebKit's word for a ResizeObserver whose answer resized what it watched. */
+const LOOP = /ResizeObserver loop/;
 const TURN = 'section[data-slot="turn"]';
 const ALL = [
   transcriptWords.copyMessage,
@@ -422,6 +425,34 @@ async function restLeg(kit: Kit, page: Page, label: string, text: string) {
     !!at && Math.abs(at.band) <= 1 && inside === 0,
     JSON.stringify({ band: at?.band, inside })
   );
+  if (at?.part) {
+    // A run's part line says when its message was sent, at rest: its clock
+    // shown (or the note standing in its place), never an empty line.
+    const line = await turnOf(page, text)
+      .locator('[data-slot="part-line"]')
+      .evaluate((el) => {
+        const said = [
+          ...el.querySelectorAll<HTMLElement>(
+            'time[data-slot="when"], [data-slot="note"]'
+          ),
+        ].map((one) => ({
+          text: one.textContent?.trim() ?? "",
+          opacity: getComputedStyle(one).opacity,
+          drawn: one.getClientRects().length > 0,
+        }));
+        return {
+          clock: said.some(
+            (one) => one.text !== "" && one.opacity === "1" && one.drawn
+          ),
+          said,
+        };
+      });
+    kit.check(
+      `${label}: at rest ${name}'s part line holds its clock, shown; it never stands empty`,
+      line.clock,
+      JSON.stringify(line.said)
+    );
+  }
 }
 
 /** Under the pointer: the strip on the speaker line, what it holds, covering nothing, moving nothing. */
@@ -592,6 +623,11 @@ async function phoneLeg(kit: Kit, page: Page, label: string) {
 
 /** A row's four corners and its container's, as drawn, and the gap between their edges at each. In the page. */
 function contour(args: { row: string; layer?: string }) {
+  /** A layer of the highlight whose host `args.layer` names: in its shadow root. */
+  const layerOf = (at: string) =>
+    document
+      .querySelector(at)
+      ?.shadowRoot?.querySelector('[data-slot="highlight-ghost"]') ?? null;
   const r = (el: Element) => {
     const s = getComputedStyle(el);
     return [
@@ -615,7 +651,7 @@ function contour(args: { row: string; layer?: string }) {
     }
   }
   const own = r(row);
-  const layer = args.layer ? document.querySelector(args.layer) : null;
+  const layer = args.layer ? layerOf(args.layer) : null;
   if (!host) {
     return { own, host: null, layer: layer ? r(layer) : null, corners: [] };
   }
@@ -658,6 +694,50 @@ const concentric = (
     (c) => Math.abs(c.inner - Math.max(0, c.outer - c.inset)) <= EDGE
   );
 
+/** The chosen well of the person's turn saying `wanted`, the transcript's pill and the focus ring. In the page. */
+function chosen(wanted: string) {
+  const corners = (el: Element) => {
+    const style = getComputedStyle(el);
+    return [
+      style.borderTopLeftRadius,
+      style.borderTopRightRadius,
+      style.borderBottomRightRadius,
+      style.borderBottomLeftRadius,
+    ].map((one) => Number.parseFloat(one) || 0);
+  };
+  const edges = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return [r.left, r.top, r.right, r.bottom];
+  };
+  const turn = [
+    ...document.querySelectorAll<HTMLElement>(
+      'section[data-slot="turn"][data-you]'
+    ),
+  ].find(
+    (t) => t.querySelector("[data-lift-words]")?.textContent?.trim() === wanted
+  );
+  const well = turn?.querySelector<HTMLElement>('[data-slot="well"]');
+  // The transcript's selection pill, in its list's shadow root.
+  const pill = document
+    .querySelector('[data-slot="listing"]')
+    ?.shadowRoot?.querySelector<HTMLElement>('[data-slot="highlight-pill"]');
+  const held = document.activeElement ?? document.body;
+  if (!(well && pill)) {
+    return null;
+  }
+  return {
+    selected: well.hasAttribute("data-selected"),
+    well: corners(well),
+    pill: corners(pill),
+    shown: getComputedStyle(pill).opacity,
+    // Its fill steps aside for the pill under it.
+    fill: getComputedStyle(well, "::before").backgroundColor,
+    boxes: [...edges(well), ...edges(pill)],
+    ring: getComputedStyle(held).outlineStyle,
+    ringRadius: corners(held),
+  };
+}
+
 /** The keyboard: Tab to the strip, the pill under the chosen well in its contour, Enter copies and edits, Esc cancels. */
 async function keyboardLeg(kit: Kit, page: Page, label: string, run: Page) {
   for (const [where, text] of [
@@ -673,47 +753,7 @@ async function keyboardLeg(kit: Kit, page: Page, label: string, run: Page) {
     const presses = await tabTo(where, text, transcriptWords.copyMessage);
     await settle(where, 400);
     const at = await where.evaluate(measure, text);
-    const marks = await where.evaluate((wanted) => {
-      const turn = [
-        ...document.querySelectorAll<HTMLElement>(
-          'section[data-slot="turn"][data-you]'
-        ),
-      ].find(
-        (t) =>
-          t.querySelector("[data-lift-words]")?.textContent?.trim() === wanted
-      );
-      const well = turn?.querySelector<HTMLElement>('[data-slot="well"]');
-      const corners = (style: CSSStyleDeclaration | null) =>
-        style
-          ? [
-              style.borderTopLeftRadius,
-              style.borderTopRightRadius,
-              style.borderBottomRightRadius,
-              style.borderBottomLeftRadius,
-            ].map((one) => Number.parseFloat(one) || 0)
-          : null;
-      // The pill's wash, as the page resolves the token.
-      const swatch = document.createElement("i");
-      swatch.style.background = "var(--selected-bg)";
-      document.body.append(swatch);
-      const wash = getComputedStyle(swatch).backgroundColor;
-      swatch.remove();
-      const surface = well ? getComputedStyle(well, "::before") : null;
-      const held = document.activeElement as HTMLElement | null;
-      return {
-        selected: well?.hasAttribute("data-selected") ?? false,
-        well: corners(well ? getComputedStyle(well) : null),
-        pill: corners(surface),
-        wash: surface?.backgroundColor === wash,
-        covers:
-          surface?.position === "absolute" &&
-          surface.left === "0px" &&
-          surface.right === "0px" &&
-          surface.bottom === "0px",
-        ring: held ? getComputedStyle(held).outlineStyle : "none",
-        ringRadius: corners(held ? getComputedStyle(held) : null),
-      };
-    }, text);
+    const marks = await where.evaluate(chosen, text);
     const name =
       text === LONG ? "the 40-word line" : `the run's middle "${text}"`;
     kit.check(
@@ -732,18 +772,28 @@ async function keyboardLeg(kit: Kit, page: Page, label: string, run: Page) {
         words: at?.words,
       })
     );
+    // The pill covers the well whole, its edges at most a pixel out (each
+    // edge snapped outward to the device grid, highlight `placeOf`).
+    const [wl, wt, wr, wb, pl, pt, pr, pb] = marks?.boxes ?? [];
+    const covers =
+      !!marks &&
+      pl <= wl + 0.01 &&
+      pt <= wt + 0.01 &&
+      pr >= wr - 0.01 &&
+      pb >= wb - 0.01 &&
+      wl - pl <= 1 &&
+      wt - pt <= 1 &&
+      pr - wr <= 1 &&
+      pb - wb <= 1;
     const square =
-      text === LONG
-        ? true
-        : marks.well?.[0] === 0 &&
-          marks.well?.[1] === 0 &&
-          marks.well?.[2] === 0 &&
-          marks.well?.[3] === 0;
+      text === LONG ? true : marks?.well.every((one) => one === 0) === true;
     kit.check(
-      `${label} (keyboard): ${name}'s well is chosen: its surface is the selection pill's wash, covering it, in its four corners (${marks.well?.join("/")}px${text === LONG ? "" : ", square where the run opens it"}); the focus ring stands on the button`,
-      marks.selected &&
-        marks.wash &&
-        marks.covers &&
+      `${label} (keyboard): ${name}'s well is chosen: the transcript's selection pill stands under it, covering it to the pixel, in its four corners (${marks?.well.join("/")}px${text === LONG ? "" : ", square where the run opens it"}); the focus ring stands on the button`,
+      !!marks &&
+        marks.selected &&
+        marks.shown === "1" &&
+        marks.fill === "rgba(0, 0, 0, 0)" &&
+        covers &&
         JSON.stringify(marks.pill) === JSON.stringify(marks.well) &&
         square &&
         marks.ring !== "none",
@@ -876,8 +926,7 @@ async function contourLeg(kit: Kit, page: Page, label: string, touch: boolean) {
     await settle(page, 300);
     const read = await page.evaluate(contour, {
       row: '[data-slot="context-menu-content"][data-state="open"] [data-menu-item]',
-      layer:
-        '[data-slot="context-menu-content"][data-state="open"] [data-slot="highlight-ghost"]',
+      layer: '[data-slot="context-menu-content"][data-state="open"]',
     });
     kit.check(
       `${label}: the hover ghost under a context menu's first item takes its corners, the menu's radius less its inset (${JSON.stringify(read?.corners)})`,
@@ -913,8 +962,8 @@ async function contourLeg(kit: Kit, page: Page, label: string, touch: boolean) {
         const card = list?.closest<HTMLElement>(
           '[data-slot="popover-content"]'
         );
-        const ghost = list?.querySelector<HTMLElement>(
-          ':scope > [data-slot="highlight-ghost"]'
+        const ghost = list?.shadowRoot?.querySelector<HTMLElement>(
+          '[data-slot="highlight-ghost"]'
         );
         const corners = (el: Element | null | undefined) => {
           if (!el) {
@@ -1061,6 +1110,12 @@ const spec: Spec = {
     }
     await forkLeg(kit, base, fleet, source, errors);
     await rewindLeg(kit, base, fleet, source, errors);
+    const loops = errors.filter((one) => LOOP.test(one));
+    kit.check(
+      `no "ResizeObserver loop" on any page, the WebKit 1440 session page with the transcript's highlight among them: ${loops.length}`,
+      loops.length === 0,
+      loops.join(" | ")
+    );
     kit.check(
       `no console error on any page: ${errors.length}`,
       errors.length === 0,
