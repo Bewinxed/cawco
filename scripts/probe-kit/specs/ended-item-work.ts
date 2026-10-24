@@ -22,6 +22,9 @@
  *   first hold it reads, hub work-items.ts `holdOn`).
  * - (a2) The parent reads the server's climb in memory, naming A's item and
  *   the server, as A takes no word (the old leak-notice-workspace (w3)).
+ * - (a2b) The parent's person's transcript draws that as CawCo's notice
+ *   row, its line naming A's item, never as their own message (core
+ *   transcript-rules.ts `cawcoRow`; the old leak-notice-workspace (w3b)).
  * - (a3) The parent reads no leftover of A's.
  * - (a4) Once the artifact is deleted, the server is gone within a sweep's
  *   minute, and the agent's log says A finished, naming the server's pid.
@@ -524,6 +527,32 @@ const spec: Spec = {
         "(a2) with A's item ended, its parent reads that its server is leaking memory, naming the item and the server",
         !!climbed?.includes(a.workItemId.slice(0, 8)),
         climbed?.slice(0, 600) ?? "no such message"
+      );
+      // What the parent's person sees of it: CawCo's notice row, its line
+      // naming the delegate's item, never their own message.
+      const parentRows = (
+        await fleet.api<{
+          blocks: {
+            content: string;
+            metadata?: { notice?: string; noteTitle?: string };
+            type: string;
+          }[];
+        }>(`/api/instances/${parent}/transcript?limit=400`)
+      ).blocks.filter((block) =>
+        block.content.includes(leakWords.yourDelegate)
+      );
+      check(
+        "(a2b) the parent's transcript draws it as CawCo's notice, its line saying the process leaks in A's item, never as the person's message",
+        parentRows.length > 0 &&
+          parentRows.every(
+            (block) =>
+              block.type === "ui.system_note" &&
+              block.metadata?.notice === "leak" &&
+              !!block.metadata.noteTitle?.endsWith(" in Serve a page")
+          ),
+        JSON.stringify(
+          parentRows.map((block) => ({ type: block.type, ...block.metadata }))
+        )
       );
       const deleted = await fetch(
         `${fleet.base}/api/instances/${parent}/artifacts/${artifact}`,
