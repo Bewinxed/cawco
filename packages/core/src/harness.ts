@@ -313,6 +313,17 @@ export const ARTIFACT_ORIGIN = "artifact";
 export const ARTIFACT_RESPONSES = "artifact_responses";
 
 /**
+ * The `ui.system_note` subtype of a notice: a message CawCo put into the
+ * session's conversation for its agent, on a `system` origin no other row
+ * reads (a leak, a carry-on, a wake, a restart). `noteTitle` is its line
+ * (core words/notices.ts `noticeLine`), `content` the text the agent read,
+ * `notice` its kind. The person's transcript draws it as one quiet CawCo
+ * row that opens to that text, a run of them with no turn between as one;
+ * never as the person's message (transcript-rules.ts `sendRow`).
+ */
+export const CAWCO_NOTICE = "cawco_notice";
+
+/**
  * The `system` origin name of the hub's word on the person's answer to a
  * post the session asked to make on someone else's repository (hub
  * upstream-asks.ts): denied and nothing posted, or approved and what GitHub
@@ -388,6 +399,15 @@ export const LIMIT_REACHED = "limit_reached";
  * word, a message it reads (hub server.ts `tellSession`). Nothing is stopped.
  */
 export const LEAK_FOUND = "leak_found";
+
+/**
+ * What a {@link LEAK_FOUND} frame found, as the facts its row's line is
+ * made of (the frame's `leak`; core words/notices.ts): how many processes
+ * were left running, or which process climbs in memory and how high.
+ */
+export type LeakFound =
+  | { kind: "left"; count: number }
+  | { kind: "memory"; command: string; resident: string };
 
 /**
  * A session ended, and the containers its work started were stopped with it
@@ -869,12 +889,16 @@ export type NeutralOrigin =
       body?: string;
     }
   /**
-   * CawCo's own word, not the user's and not another session's: today, a rule
-   * that fired. `name` is what fired it, e.g. `rule:Honest caveat`. Kept apart
-   * from `peer` so a transcript can say who is really talking — a model that
-   * mistakes a rule for the user apologises to nobody.
+   * CawCo's own word, not the user's and not another session's: a rule that
+   * fired, a leak, a wake, a carry-on. `name` is its kind, e.g. `leak` or
+   * `rule:Honest caveat`. Kept apart from `peer` so a transcript can say who
+   * is really talking — a model that mistakes a rule for the user apologises
+   * to nobody. `line` is what the person's transcript says of it in one line
+   * (core words/notices.ts), written where it is made; the agent never reads
+   * it. A transcript draws a `system` send as CawCo's, never as the person's
+   * message ({@link CAWCO_NOTICE}).
    */
-  | { kind: "system"; name?: string };
+  | { kind: "system"; name?: string; line?: string };
 
 export interface NeutralAssistantMessage {
   /**

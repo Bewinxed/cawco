@@ -136,6 +136,11 @@ export interface BlockMetadata {
   /** A task notification's Task `tool_use_id` — folds the note into its branch. */
   noteTaskToolId?: string;
   noteTitle?: string;
+  /**
+   * A notice's kind, its `system` origin's name ({@link import("./harness").CAWCO_NOTICE}):
+   * `leak`, `limit`, `work-item`, `routine:<id>`.
+   */
+  notice?: string;
   numTurns?: number;
   /** Its display name, as the sender's host asserted it. */
   peerName?: string;

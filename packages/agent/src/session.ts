@@ -95,6 +95,7 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   isGitUrl,
   LEAK_FOUND,
+  type LeakFound,
   LIMIT_REACHED,
   type LimitHolder,
   lastErrorKindOf,
@@ -902,8 +903,8 @@ export class SessionSupervisor {
     watchLeaks({
       targetOf: (procId, pid) => this.#touched(procId, pid),
       sandboxOf,
-      tell: (instanceIds, id, content) =>
-        this.#leakFound(instanceIds, id, content),
+      tell: (instanceIds, id, content, found) =>
+        this.#leakFound(instanceIds, id, content, found),
     });
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
@@ -4391,7 +4392,12 @@ export class SessionSupervisor {
    * the hub sends it as its own word. In order with what else is owed the
    * hub, and on the next connection when this one is down.
    */
-  #leakFound(instanceIds: string[], id: string, content: string): void {
+  #leakFound(
+    instanceIds: string[],
+    id: string,
+    content: string,
+    found: LeakFound
+  ): void {
     for (const instanceId of instanceIds) {
       this.#sayGone({
         kind: "frame",
@@ -4403,6 +4409,7 @@ export class SessionSupervisor {
           uuid: id,
           session_id: "",
           content,
+          leak: found,
         } as unknown as NeutralMessage,
       });
     }

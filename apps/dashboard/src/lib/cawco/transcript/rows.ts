@@ -8,6 +8,7 @@
 
 import type { AccountMove } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import { CAWCO_NOTICE } from "@cawco/core/harness";
 import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
 import type { ToolGlance } from "@cawco/core/transcript-types";
 import type { SubagentState } from "#lib/utils/flow-types.js";
@@ -108,7 +109,16 @@ export type Row =
        * it; null until that has arrived, and on every other line.
        */
       brief: string | null;
-    };
+    }
+  /**
+   * CawCo's notices to the agent (core `CAWCO_NOTICE`: a leak, a carry-on,
+   * a wake, a restart) with no turn between them, as one row
+   * ({@link noticeRunAt}): never the person's message. Its newest says what
+   * happened last, and the row opens to every one, each with the text the
+   * agent read. Keyed by its first notice, so a notice still waiting on the
+   * session is the same row once it is read.
+   */
+  | { kind: "notices"; key: string; messages: Message[] };
 
 /**
  * What an account row's lines say now, oldest first, read off their messages
@@ -192,6 +202,7 @@ function voiceOf(row: Row): Voice {
       return row.text ? "says" : "acts";
     case "compaction":
     case "account":
+    case "notices":
       return "note";
     // tools, livetool, question, subagent, delegate, thinking, stream, and
     // a harness task note: all of them the agent's run.
@@ -575,6 +586,42 @@ function accountRunAt(
   };
 }
 
+/** One of CawCo's notices to the agent (core `CAWCO_NOTICE`). */
+export const isNotice = (m: Message | undefined): m is Message =>
+  m?.type === "ui.system_note" && m.metadata?.subtype === CAWCO_NOTICE;
+
+/**
+ * A RUN OF NOTICES IS ONE ROW. CawCo's notices to the agent that stand
+ * together, nothing the session or its person said between them (only
+ * messages that paint nothing), are one row from `messages[i]`, as a run of
+ * account lines is ({@link accountRunAt}): a leak told twice and a wake read
+ * as three of the person's own messages stacked. Null at anything but a
+ * notice.
+ */
+function noticeRunAt(
+  messages: Message[],
+  i: number
+): { row: Extract<Row, { kind: "notices" }>; span: number } | null {
+  if (!isNotice(messages[i])) {
+    return null;
+  }
+  const run = [messages[i]];
+  let end = i + 1;
+  for (let j = i + 1; j < messages.length; j += 1) {
+    const m = messages[j];
+    if (isNotice(m)) {
+      run.push(m);
+      end = j + 1;
+    } else if (voiceOfMessage(m) !== "none") {
+      break;
+    }
+  }
+  return {
+    row: { kind: "notices", key: keyOf(run[0], i), messages: run },
+    span: end - i,
+  };
+}
+
 /** The branch a tool.use spawned, when it opened one — a real subagent fold. */
 const branchOf = (
   m: Message,
@@ -713,7 +760,10 @@ function foldRange(
       continue;
     }
 
-    const continued = continuedAt(messages, i) ?? accountRunAt(messages, i);
+    const continued =
+      continuedAt(messages, i) ??
+      accountRunAt(messages, i) ??
+      noticeRunAt(messages, i);
     if (continued) {
       rows.push(continued.row);
       i += continued.span;
@@ -1853,12 +1903,14 @@ function tailRows(
   const from = queuedFrom(messages);
   const waiting: Row[] = [];
   for (let i = from; i < messages.length; i += 1) {
-    waiting.push({
-      kind: "queued",
-      key: keyOf(messages[i], i),
-      message: messages[i],
-      grouped: false,
-    });
+    const message = messages[i];
+    // A notice waiting on the session is CawCo's row already, under the
+    // key it keeps once read; never the person's message waiting.
+    waiting.push(
+      isNotice(message)
+        ? { kind: "notices", key: keyOf(message, i), messages: [message] }
+        : { kind: "queued", key: keyOf(message, i), message, grouped: false }
+    );
   }
   const rows: Row[] = waiting.filter((row) => ahead.has(row.key));
   if (content) {

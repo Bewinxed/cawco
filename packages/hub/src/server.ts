@@ -270,6 +270,7 @@ import {
   joinProviders,
   type LastErrorKind,
   LEAK_FOUND,
+  type LeakFound,
   LIMIT_REACHED,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
@@ -461,6 +462,7 @@ import {
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";
+import { noticeWords } from "@cawco/core/words/notices";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
@@ -1287,6 +1289,25 @@ const LEAK_ORIGIN = "leak";
 const CONTAINERS_ORIGIN = "containers";
 /** The leaks told so far, by session and leak, most recent last: one an agent says again (after a restart) is told once. */
 const LEAKS_KEPT = 4096;
+
+/**
+ * A leak's line in the person's transcript (core words/notices.ts), from
+ * what its machine found; `by` names the delegate whose it is. None from an
+ * agent that says only words: the row says its kind's line.
+ */
+const leakLine = (
+  found: LeakFound | undefined,
+  by: string | null
+): string | undefined => {
+  switch (found?.kind) {
+    case "left":
+      return noticeWords.leftRunning(found.count, by);
+    case "memory":
+      return noticeWords.leaking(found.command, found.resident, by);
+    case undefined:
+      return;
+  }
+};
 
 /**
  * A machine's word on one carry, or the hub's when the call to the machine
@@ -3303,19 +3324,25 @@ export const createServer = (
         .join("\n")
         .trim();
     },
-    tell: (instanceId, text) => tellSession(instanceId, text, "admin"),
+    tell: (instanceId, text) =>
+      tellSession(instanceId, text, { name: "admin" }),
     // A project's Caw asks in his thread (caw.ts, made further down).
     threadOf: (actor) => lead?.askThread(actor),
   });
   /**
-   * Says something to a session, as the hub (`name` names who). `quiet`: a
-   * note its next turn reads, which starts none.
+   * Says something to a session, as the hub: `name` is the notice's kind,
+   * `line` what the person's transcript says of it in one line (core
+   * words/notices.ts; its kind's line when unset), `quiet` a note its next
+   * turn reads, which starts none. The agent reads `text` alone.
    */
   const tellSession = (
     instanceId: string,
     text: string,
-    name: string,
-    quiet = false
+    {
+      name,
+      line,
+      quiet = false,
+    }: { line?: string; name: string; quiet?: boolean }
   ) => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
@@ -3332,7 +3359,7 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: { role: "user", content: text },
           parent_tool_use_id: null,
-          origin: { kind: "system", name },
+          origin: { kind: "system", name, ...(line ? { line } : {}) },
           ...(quiet ? { shouldQuery: false } : {}),
         },
       },
@@ -3381,7 +3408,8 @@ export const createServer = (
       artifactSessions.refresh();
     },
     // A note its next turn reads: the take-over asks nothing of it.
-    tell: (instanceId, text) => tellSession(instanceId, text, "browser", true),
+    tell: (instanceId, text) =>
+      tellSession(instanceId, text, { name: "browser", quiet: true }),
     // The gate id its browser door is (agent door.ts): its workspace's,
     // else the session's own.
     workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
@@ -3505,7 +3533,8 @@ export const createServer = (
         .trim();
       return { ok: called.result.isError !== true, said };
     },
-    tell: (instanceId, text) => tellSession(instanceId, text, UPSTREAM_ORIGIN),
+    tell: (instanceId, text) =>
+      tellSession(instanceId, text, { name: UPSTREAM_ORIGIN }),
     threadOf: (actor) => lead?.askThread(actor),
   });
   // A session's forge_post (forge-posts.ts): decided and made on its
@@ -8806,12 +8835,13 @@ export const createServer = (
       return false;
     }
     const { content } = message.message;
+    let next: typeof content;
     if (typeof content === "string") {
-      message.message.content = withMovedLine(content, move);
+      next = withMovedLine(content, move);
     } else {
       const at = content.findIndex((part) => part.type === "text");
       const first = content[at];
-      message.message.content =
+      next =
         first?.type === "text"
           ? content.with(at, {
               ...first,
@@ -8822,6 +8852,12 @@ export const createServer = (
               ...content,
             ];
     }
+    // A copy: the send's record keeps the words as they were sent, so the
+    // line, which is the agent's alone, never stands in its sender's row.
+    envelope.payload = {
+      ...envelope.payload,
+      message: { ...message, message: { ...message.message, content: next } },
+    };
     const how =
       move.kind === "recut"
         ? `its clone was cut again at ${move.commit.slice(0, 9)} on ${move.branch}`
@@ -9066,6 +9102,9 @@ export const createServer = (
     if (delivery) {
       envelope.payload.delivery = delivery;
     }
+    // What was sent, as its record keeps it: the hub's line on a moved
+    // checkout goes to the agent alone ({@link toldMove}).
+    const asSent = envelope.payload;
     if (agent && !owed) {
       toldMove(envelope);
       sendFrame(agent, presenced(envelope));
@@ -9083,7 +9122,7 @@ export const createServer = (
       uuid: message.uuid,
       instanceId,
       acceptedAt: new Date(),
-      body: externalizeImages(sentFrame(envelope.payload)),
+      body: externalizeImages(sentFrame(asSent)),
       mode,
       ...(message.replaces ? { replaces: message.replaces } : {}),
       ...(accepted
@@ -9541,7 +9580,8 @@ export const createServer = (
    * line), in the same write as its new hand-off: what a machine that comes
    * back is handed again ({@link handAgain}), and what a fold or a
    * hand-back owes again, is the send as it was last handed, never as it
-   * was accepted.
+   * was accepted. Its row is still drawn from its words as sent (`body`):
+   * that line is the agent's alone.
    */
   const handReleased = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
@@ -9550,12 +9590,11 @@ export const createServer = (
   ): void => {
     const delivery = crypto.randomUUID();
     envelope.payload.delivery = delivery;
-    const told = toldMove(envelope);
+    toldMove(envelope);
     changeSend(send, {
       acceptedAt: new Date(),
       delivery,
       envelope: JSON.stringify(envelope),
-      ...(told ? { body: externalizeImages(sentFrame(envelope.payload)) } : {}),
     });
     sendFrame(agent, presenced(envelope));
   };
@@ -10398,7 +10437,11 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: { role: "user", content: endedByMoveWords(ended) },
           parent_tool_use_id: null,
-          origin: { kind: "system", name: LIMIT_ORIGIN },
+          origin: {
+            kind: "system",
+            name: LIMIT_ORIGIN,
+            line: noticeWords.movedEnded(ended.tasks.length),
+          },
         },
       },
     } satisfies Envelope<SendPayload>);
@@ -25283,7 +25326,11 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: { role: "user", content: CARRY_ON[stopped] },
           parent_tool_use_id: null,
-          origin: { kind: "system", name: LIMIT_ORIGIN },
+          origin: {
+            kind: "system",
+            name: LIMIT_ORIGIN,
+            line: noticeWords.carryOn[stopped],
+          },
         },
       },
     } satisfies Envelope<SendPayload>);
@@ -26281,7 +26328,7 @@ export const createServer = (
   const tellLeak = (
     machineId: string,
     instanceId: string,
-    said: { uuid?: unknown; content?: unknown }
+    said: { uuid?: unknown; content?: unknown; leak?: LeakFound }
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (
@@ -26320,12 +26367,15 @@ export const createServer = (
           item.workspaceId.slice(0, 8),
           said.content
         ),
-        LEAK_ORIGIN
+        { name: LEAK_ORIGIN, line: leakLine(said.leak, item.title) }
       );
       return;
     }
     console.warn(`[leak] ${row.id}: ${said.content}`);
-    tellSession(row.id, said.content, LEAK_ORIGIN);
+    tellSession(row.id, said.content, {
+      name: LEAK_ORIGIN,
+      line: leakLine(said.leak, null),
+    });
   };
 
   /**
@@ -26381,11 +26431,20 @@ export const createServer = (
           item.id.slice(0, 8),
           said.content
         ),
-        CONTAINERS_ORIGIN
+        {
+          name: CONTAINERS_ORIGIN,
+          line: noticeWords.containersStopped(item.title),
+        }
       );
       return;
     }
-    tellSession(row.id, said.content, CONTAINERS_ORIGIN);
+    tellSession(row.id, said.content, {
+      name: CONTAINERS_ORIGIN,
+      line:
+        notice === "ended"
+          ? noticeWords.containersStopped(null)
+          : noticeWords.containersUntracked,
+    });
   };
 
   /**
@@ -33737,7 +33796,11 @@ export const createServer = (
                   tellLeak(
                     message.machineId,
                     message.instanceId,
-                    frame.message as { uuid?: unknown; content?: unknown }
+                    frame.message as {
+                      uuid?: unknown;
+                      content?: unknown;
+                      leak?: LeakFound;
+                    }
                   );
                   break;
                 }

@@ -84,6 +84,7 @@
   import Latest from "./Latest.svelte";
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
+  import NoticeRun from "./NoticeRun.svelte";
   import { openAt, rowHolding } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
@@ -4083,6 +4084,8 @@
                 {row}
                 stop={stop?.key === row.key ? stop.words : undefined}
               />
+            {:else if row.kind === "notices"}
+              <NoticeRun {row} />
             {:else if row.kind === "subagent"}
               <Subagent branch={row.branch} spawn={row.spawn} />
             {:else if row.kind === "delegate"}

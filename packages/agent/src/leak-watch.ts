@@ -49,6 +49,7 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
+import type { LeakFound } from "@cawco/core/harness";
 import {
   commandLine,
   cpuTimeUsed,
@@ -291,6 +292,13 @@ const membersOf = async (
   return members;
 };
 
+/** A leak to tell: its id, the words the session reads, and what was found, for its row's line. */
+interface Told {
+  found: LeakFound;
+  id: string;
+  words: string;
+}
+
 /**
  * A climb read once more: the words to tell when it is a leak not yet told
  * at this height, else nothing.
@@ -301,7 +309,7 @@ const climbed = async (
   watching: Watching,
   limit: number,
   target: LeakTarget
-): Promise<{ id: string; words: string } | undefined> => {
+): Promise<Told | undefined> => {
   const key = keyOf(row);
   const climb = watching.climbs.get(key) ?? { readings: [], told: 0 };
   watching.climbs.set(key, climb);
@@ -327,6 +335,7 @@ const climbed = async (
   ]);
   return {
     id: `leak-memory-${key}-${height}`,
+    found: { kind: "memory", command, resident: gib(resident) },
     words: leakWords.memory(
       command,
       pid,
@@ -393,7 +402,7 @@ const leftovers = async (
   sandbox: Sandbox | undefined,
   watching: Watching,
   target: LeakTarget
-): Promise<{ id: string; words: string } | undefined> => {
+): Promise<Told | undefined> => {
   const init = sandbox && "inner" in sandbox ? sandbox : undefined;
   const idle = new Set(init?.idle);
   const now = Date.now();
@@ -443,6 +452,7 @@ const leftovers = async (
   );
   return {
     id: `leak-left-${due.map(keyOf).join(",")}`,
+    found: { kind: "left", count: due.length },
     words: leakWords.left(
       due.length,
       named.join(", "),
@@ -481,7 +491,12 @@ interface LeakOptions {
     pids: readonly number[]
   ) => Promise<Sandbox | undefined>;
   targetOf: (procId: string, pid: number) => LeakTarget;
-  tell: (instanceIds: string[], id: string, words: string) => void;
+  tell: (
+    instanceIds: string[],
+    id: string,
+    words: string,
+    found: LeakFound
+  ) => void;
 }
 
 /** One reading of the machine's process table, by pid and by parent. */
@@ -568,7 +583,12 @@ const lookAtChild = async (
       console.warn(
         `[leaks] ${child.procId}: ${found.words} (told ${child.target.instanceIds.join(", ")})`
       );
-      options.tell(child.target.instanceIds, found.id, found.words);
+      options.tell(
+        child.target.instanceIds,
+        found.id,
+        found.words,
+        found.found
+      );
     }
   }
   const cpu = await cpuSince(root, members, watching);

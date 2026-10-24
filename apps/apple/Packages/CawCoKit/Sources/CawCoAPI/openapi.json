@@ -47641,6 +47641,10 @@
           "noteTitle": {
             "type": "string"
           },
+          "notice": {
+            "description": "A notice's kind, its `system` origin's name ({@link import (\"./harness\").CAWCO_NOTICE}):\n`leak`, `limit`, `work-item`, `routine:<id>`.",
+            "type": "string"
+          },
           "numTurns": {
             "type": "number"
           },
@@ -54743,6 +54747,9 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "line": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -56997,6 +57004,9 @@
                 ]
               },
               "name": {
+                "type": "string"
+              },
+              "line": {
                 "type": "string"
               }
             },

@@ -49,6 +49,7 @@ function recordsOf(row: Row): Message[] {
     case "delegate":
       return [row.message];
     case "tools":
+    case "notices":
       return row.messages;
     case "subagent":
       return [row.spawn, ...row.branch.messages];

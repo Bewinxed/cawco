@@ -28,6 +28,7 @@
   import CompactionDivider from "./CompactionDivider.svelte";
   import Delegate from "./Delegate.svelte";
   import MessageRow from "./MessageRow.svelte";
+  import NoticeRun from "./NoticeRun.svelte";
   import { foldMessages, newestCompaction, wellRuns } from "./rows";
   import Subagent from "./Subagent.svelte";
   import Thinking from "./Thinking.svelte";
@@ -203,6 +204,8 @@
           <CompactionDivider row={r} />
         {:else if r.kind === "account"}
           <AccountMoveDivider row={r} />
+        {:else if r.kind === "notices"}
+          <NoticeRun row={r} />
         {:else if r.kind === "subagent"}
           <Subagent branch={r.branch} spawn={r.spawn} />
         {:else if r.kind === "thinking"}

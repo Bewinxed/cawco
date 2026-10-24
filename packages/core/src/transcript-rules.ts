@@ -16,6 +16,7 @@ import type {
   HarnessNote,
   NeutralAssistantMessage,
   NeutralMessage,
+  NeutralOrigin,
   NeutralStatus,
   SendRecord,
   SessionMessage,
@@ -26,6 +27,7 @@ import {
   ACCOUNT_MOVE,
   ARTIFACT_ORIGIN,
   ARTIFACT_RESPONSES,
+  CAWCO_NOTICE,
   CLI_OUTDATED,
   CONTINUATION_ORIGIN,
   CUSTODY_HELD,
@@ -60,6 +62,7 @@ import type {
   TranscriptBlock,
   TranscriptBranch,
 } from "./transcript-types";
+import { noticeLine } from "./words/notices";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
 
@@ -1972,15 +1975,18 @@ export function sendRow(
   record: SendRecord,
   sdkUuid: string | undefined = record.harnessId
 ): TranscriptBlock {
-  const { message } = record.body;
+  const { message, origin } = record.body;
   const text = transcriptUserText(message) ?? "";
-  const row = sentRow(text, message, {
+  const said = sentRow(text, message, {
     id: record.uuid,
     instanceId: record.instanceId,
     timestamp: isoOf(record.acceptedAt),
     ...(sdkUuid ? { sdkUuid } : {}),
   });
-  const { origin } = record.body;
+  const row =
+    said.type === "user" && origin && origin.kind !== "human"
+      ? { ...said, ...cawcoRow(said, origin) }
+      : said;
   invariant(
     !(origin?.kind === "system" && origin.name === ARTIFACT_ORIGIN) ||
       row.metadata?.subtype === ARTIFACT_RESPONSES,
@@ -2003,6 +2009,52 @@ export function sendRow(
     state: record.state as Exclude<SendRecord["state"], "replaced">,
     queued: record.state === "pending",
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  };
+}
+
+/**
+ * ONLY THE PERSON'S WORDS ARE THE PERSON'S MESSAGE. A send's record says who
+ * it is from (`body.origin`), from the moment it is made to a reload; a send
+ * from anyone but the person (origin `human`) that no typed row reads (an
+ * artifact notice, a rule, a report, a hand-off, an ask: {@link sentRow}) is
+ * drawn here by who sent it, never in the person's shape: another session's
+ * words as its peer row, CawCo's own as a notice ({@link CAWCO_NOTICE}),
+ * its line written where it was made, else its kind's (core
+ * words/notices.ts). What the agent read is the notice's `content`,
+ * unchanged.
+ */
+function cawcoRow(
+  said: TranscriptBlock,
+  origin: Exclude<NeutralOrigin, { kind: "human" }>
+): Pick<TranscriptBlock, "type" | "content" | "metadata"> {
+  const { images, attachments } = said.metadata ?? {};
+  const carried = {
+    ...(images ? { images } : {}),
+    ...(attachments ? { attachments } : {}),
+  };
+  if (origin.kind === "peer") {
+    return {
+      type: "user.peer",
+      content: said.content,
+      metadata: {
+        ...carried,
+        peerName: origin.name ?? "another session",
+        ...(origin.fromSession
+          ? { peerSession: origin.fromSession.slice(0, 8) }
+          : {}),
+      },
+    };
+  }
+  return {
+    type: "ui.system_note",
+    content: said.content,
+    metadata: {
+      ...carried,
+      subtype: CAWCO_NOTICE,
+      noteKind: "CawCo",
+      noteTitle: noticeLine(origin),
+      notice: origin.name ?? "",
+    },
   };
 }
 

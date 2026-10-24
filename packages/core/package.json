@@ -66,6 +66,7 @@
     "./words/routines": "./src/words/routines.ts",
     "./words/leaks": "./src/words/leaks.ts",
     "./words/turns": "./src/words/turns.ts",
+    "./words/notices": "./src/words/notices.ts",
     "./words/containers": "./src/words/containers.ts",
     "./words/spawn": "./src/words/spawn.ts",
     "./words/shell": "./src/words/shell.ts",

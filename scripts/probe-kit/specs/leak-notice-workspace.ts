@@ -35,6 +35,9 @@
  * - (w3) With its item ended (it takes no message now), the session that
  *   delegated it reads the leak's next height instead, naming the delegate's
  *   item and `leak-probe-W` (hub server.ts `tellLeak`).
+ * - (w3b) Its person's transcript draws that as CawCo's notice row, its line
+ *   naming the delegate's item, never as their own message (core
+ *   transcript-rules.ts `cawcoRow`).
  * - (w4) Both processes are still running.
  * - (w5) The browser ran with its crash handlers, which ended with it, and
  *   no session read a leftover naming a crash handler, nor did the agent's
@@ -303,6 +306,34 @@ const spec: Spec = {
         !!parentTold?.includes(item.workItemId.slice(0, 8)),
         parentTold ??
           `no such message; the delegate ${ended ? "ended its item" : "never ended its item"}`
+      );
+      // What the parent's person sees of it: CawCo's notice row, its line
+      // naming the delegate, never their own message (core
+      // transcript-rules.ts `cawcoRow`, words/notices.ts).
+      const parentBlocks = (
+        await fleet.api<{
+          blocks: {
+            content: string;
+            metadata?: { notice?: string; noteTitle?: string };
+            type: string;
+          }[];
+        }>(`/api/instances/${parent}/transcript?limit=400`)
+      ).blocks;
+      const parentRows = parentBlocks.filter((block) =>
+        block.content.includes(leakWords.yourDelegate)
+      );
+      check(
+        "(w3b) the parent's transcript draws it as CawCo's notice, its line saying the process leaks in the delegate's item, never as the person's message",
+        parentRows.length > 0 &&
+          parentRows.every(
+            (block) =>
+              block.type === "ui.system_note" &&
+              block.metadata?.notice === "leak" &&
+              !!block.metadata.noteTitle?.endsWith(" in Leak in a workspace")
+          ),
+        JSON.stringify(
+          parentRows.map((block) => ({ type: block.type, ...block.metadata }))
+        )
       );
       const [leakers, leftovers] = await Promise.all([
         pidsOf(LEAKER),

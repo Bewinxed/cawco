@@ -1904,6 +1904,7 @@ export * from "./words/machine";
 export * from "./words/made";
 export * from "./words/mcp";
 export * from "./words/memory";
+export * from "./words/notices";
 export * from "./words/offers";
 export * from "./words/pairing";
 export * from "./words/place";
