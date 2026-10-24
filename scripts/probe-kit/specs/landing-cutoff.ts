@@ -746,12 +746,10 @@ const run = async (kit: Kit) => {
           Boolean,
           60_000
         ).catch(() => false);
-      // The sandbox its session runs in: the workspace's boundary started as
-      // its clone was cut is handed over once its session's spill folder is
-      // added at the spawn (agent boundary.ts `boundaryFor`), so the one that
-      // counts is read once the session works there (its first command asked
-      // for), from the boundary the record names (an older one beside it
-      // closes at the next look).
+      // The sandbox its session runs in, read once the session works there
+      // (its first command asked for), from the boundary the record names:
+      // the one a later restart would replace (boundary-starts-once proves
+      // the cut's own is it).
       await until(
         `${tag}'s session at work in its workspace`,
         () => steps[tag].committed || undefined,

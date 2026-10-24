@@ -2035,8 +2035,10 @@ export const hookMissing = (hook: LaunchedHook): string | undefined =>
  * belongs to is the workspace's ({@link setProject}), so a workspace cut
  * before it was kept reads its project's folder from its next item on. The
  * session's `spill` folder, where its harness saves a tool result too large
- * to hand the model, is added too ({@link addSpill}): a new session's hands
- * the boundary over, its form changed with its policy.
+ * to hand the model, is added too ({@link addSpill}): the workspace's first
+ * session finds its own there already (first-session.ts, placed at the
+ * cut), and a later session's hands the boundary over, its form changed
+ * with its policy.
  */
 export const boundaryFor = async (
   workspace: WorkspaceRef | undefined,
