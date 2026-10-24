@@ -1221,7 +1221,6 @@
     display: inline flex;
     gap: var(--space-1);
     align-items: center;
-    justify-self: end;
     block-size: var(--c-btn-h-xs);
     padding-inline: var(--space-2);
     border-radius: var(--radius-xs);
@@ -1243,6 +1242,28 @@
         color: var(--ink-strong);
       }
     }
+  }
+
+  /* Closed's head is its own disclosure: its name and count, the chevron after; its ink on the titles' edge. */
+  .gtoggle {
+    gap: var(--space-2);
+    align-items: baseline;
+    margin-inline-start: calc(var(--space-2) * -1);
+    color: var(--ink-strong);
+
+    .count {
+      color: var(--ink-muted);
+      font: var(--type-meta);
+    }
+
+    .chev {
+      align-self: center;
+      color: var(--ink-muted);
+    }
+  }
+
+  .more[hidden] {
+    display: none;
   }
 
   .more {
@@ -1333,10 +1354,12 @@
     }
   }
 
+  /* A fact's pieces part by a separator element, each gap held by the flex gap, never by a space at an item's edge. */
   .fact {
+    --fact-gap: 0.35em;
     display: block flex;
     grid-column: 3;
-    gap: 0;
+    column-gap: var(--fact-gap);
     align-items: center;
     min-inline-size: 0;
     color: var(--ink-muted);
@@ -1350,8 +1373,34 @@
     .ichip {
       position: relative;
       z-index: 1;
-      margin-inline-start: var(--space-1);
     }
+
+    .fp,
+    .swap-old,
+    .swap-new {
+      display: inline flex;
+      column-gap: var(--fact-gap);
+      align-items: center;
+    }
+
+    .fp > span {
+      display: inline flex;
+      column-gap: var(--fact-gap);
+      align-items: center;
+    }
+  }
+
+  .sep {
+    color: var(--ink-subtle);
+  }
+
+  .sr-only {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .state-pill {
@@ -1448,12 +1497,9 @@
       color: var(--ink-muted);
     }
 
-    &.quiet {
-      color: var(--ink-subtle);
-
-      .track {
-        stroke-dasharray: 2 2.5;
-      }
+    /* From 7 days the wait's ring greys; no word says it (report 068af135, answer 3). */
+    &.waited {
+      color: var(--ink-muted);
     }
 
     &.dashed circle {
@@ -1468,10 +1514,6 @@
     &.gone {
       color: var(--ink-subtle);
     }
-  }
-
-  .row[data-quiet] .title {
-    color: var(--ink-muted);
   }
 
   .hl {
@@ -1697,9 +1739,12 @@
     padding-block: var(--space-6);
     text-align: start;
 
+    /* The block takes its widest part's width, so Caw's axis is the composition's own. */
     &.first {
-      align-items: stretch;
-      max-inline-size: var(--c-starters-w);
+      display: block grid;
+      justify-items: start;
+      inline-size: max-content;
+      max-inline-size: 100%;
     }
   }
 
@@ -1726,18 +1771,36 @@
 
   .caw-axis {
     display: block grid;
+    justify-self: stretch;
     justify-items: center;
     margin-block-end: var(--space-3);
+  }
+
+  /* Caw's still by day; by night the still drawn on the paper rim. */
+  .caw-still.night {
+    display: none;
+  }
+
+  :root.dark .caw-still {
+    &.day {
+      display: none;
+    }
+
+    &.night {
+      display: inline-block;
+    }
   }
 
   .starters {
     display: block grid;
     gap: var(--space-2);
-    grid-template-columns: repeat(
-      auto-fill,
-      minmax(min(100%, var(--c-starter-w)), 1fr)
-    );
+    grid-template-columns: repeat(var(--n), var(--c-starter-w));
     margin-block-start: var(--space-2);
+
+    .phone & {
+      grid-template-columns: minmax(0, 1fr);
+      justify-self: stretch;
+    }
   }
 
   .starter {
@@ -1777,7 +1840,50 @@
     padding-block: var(--space-6);
   }
 
-  /* A decision page opened in the pane: its head, the standing banner, its cards. */
+  .phone .empty.first {
+    inline-size: auto;
+  }
+
+  /* A row's long-press menu under a finger (the kit's popover recipe). */
+  .row.menu-open {
+    z-index: 3;
+  }
+
+  .rowmenu {
+    position: absolute;
+    inset-block-start: calc(100% - var(--space-1));
+    inset-inline-end: 0;
+    z-index: 3;
+    display: block grid;
+    gap: 0;
+    min-inline-size: 200px;
+    padding: 6px;
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-overlay);
+
+    .mi {
+      display: block flex;
+      gap: var(--space-2);
+      align-items: center;
+      min-block-size: var(--c-row-h);
+      padding-inline: var(--space-3);
+      border-radius: var(--radius-xs);
+      color: var(--ink-strong);
+      font: var(--type-label);
+
+      .ic {
+        color: var(--ink-muted);
+      }
+
+      &:active {
+        background: var(--surface-pressed);
+      }
+    }
+  }
+
+  /* A decision page opened in the pane: its head, the standing banner, its cards, its one act at its foot. */
   .dpage {
     display: block grid;
     gap: var(--space-4);
@@ -1830,6 +1936,30 @@
       font: var(--type-label);
       line-height: 1.6;
     }
+  }
+
+  .dfoot {
+    display: block flex;
+    justify-content: start;
+    padding-block-start: var(--space-1);
+  }
+
+  .dnote {
+    color: var(--ink-muted);
+    font: var(--type-meta);
+  }
+
+  .canvas-well {
+    display: block grid;
+    gap: var(--space-2);
+    justify-items: start;
+    align-content: center;
+    min-block-size: 240px;
+    padding: var(--space-5);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-lg);
+    background: var(--surface-well);
+    color: var(--ink-muted);
   }
 
   .dcard {

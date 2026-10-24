@@ -11,9 +11,18 @@
  * - one row per page: no page has two rows, and the groups count all 25;
  * - every row's title stands on one start edge;
  * - no glyph stands in a filled or bordered box of its own (a tile);
- * - the badge on the Decisions tab is the Open group's count, absent at 0;
- * - every switch shows its option (pressed, the thumb under it) and the
- *   stage draws that option; Night turns the page's ground dark;
+ * - the badge on the Decisions tab is the Needs you group's count, absent at 0;
+ * - every state's switch shows it; Night turns the ground dark and draws
+ *   every Caw as his night still;
+ * - the owner's journeys (reviews of 5f6b517bd and report 068af135): every
+ *   row opens its page whole, the ways forward from a closed page and a
+ *   removed picture open, Make tasks is offered only on read or ended and
+ *   has its outcome on row and page, Send stays the page's own and a press
+ *   lands on it, a phone's long press holds Not now, a long wait greys its
+ *   ring and still counts, each figure is its group's date in the house
+ *   formatter and order, Closed names its closer, search finds every card
+ *   line for any query, fact separators keep their room, and first use
+ *   stands Caw on his block's axis;
  * - each motion, on a held clock sought to 0, ½ and 1, moves its value
  *   continuously (½ strictly between the ends) and lands where 1 stood;
  * - no console error and no page error.
@@ -23,6 +32,7 @@
 import { realpathSync } from "node:fs";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import { decisionsWords } from "../../../../packages/core/src/words/decisions";
 import { scan } from "../../journeys/scan";
 import type { Engine, Kit, Spec, View } from "../../kit";
 import { kitsOwnMessage, ROOT, readMotion, stillWithin } from "../../kit";
@@ -46,51 +56,6 @@ const STATES = [
 ] as const;
 /** The states that draw the whole list, so every page is counted in its groups. */
 const WHOLE = new Set(["open2", "alldone", "many", "closed"]);
-
-/** Each switch, its options, and what the desk frame must draw for each. */
-const PICKS: {
-  group: string;
-  key: string;
-  state: string;
-  values: { value: string; drawn: string }[];
-}[] = [
-  {
-    group: "groups",
-    key: "groups",
-    state: "open2",
-    values: [
-      { value: "five", drawn: "heads:5" },
-      { value: "two", drawn: "heads:2" },
-    ],
-  },
-  {
-    group: "heard",
-    key: "heard",
-    state: "open2",
-    values: [
-      { value: "facts", drawn: "facts" },
-      { value: "pill", drawn: "pill" },
-    ],
-  },
-  {
-    group: "quiet",
-    key: "quiet",
-    state: "many",
-    values: [
-      { value: "on", drawn: "quiet" },
-      { value: "off", drawn: "no-quiet" },
-    ],
-  },
-  {
-    group: "tasks",
-    key: "tasks",
-    state: "open2",
-    values: [
-      { value: "row", drawn: "acts" },
-      { value: "page", drawn: "no-acts" },
-    ],
-  },
-];
 
 interface Motion {
   id: string;
@@ -388,30 +353,6 @@ async function boxes(kit: Kit, page: Page, tag: string, state: string) {
   }
 }
 
-function drawnRight(
-  f: NonNullable<Awaited<ReturnType<typeof frameFacts>>>,
-  drawn: string
-): boolean {
-  switch (drawn) {
-    case "heads:5":
-      return f.heads === 5;
-    case "heads:2":
-      return f.heads === 2;
-    case "facts":
-      return f.facts > 0 && f.pills === 0;
-    case "pill":
-      return f.pills > 0 && f.facts === 0;
-    case "quiet":
-      return f.quiet > 0;
-    case "no-quiet":
-      return f.quiet === 0;
-    case "acts":
-      return f.acts > 0;
-    default:
-      return f.acts === 0;
-  }
-}
-
 async function everyState(kit: Kit, page: Page, tag: string): Promise<void> {
   for (const state of STATES) {
     // biome-ignore lint/performance/noAwaitInLoops: one state at a time, each drawn and read in turn
@@ -435,52 +376,579 @@ async function everyState(kit: Kit, page: Page, tag: string): Promise<void> {
   }
 }
 
-async function everyPick(kit: Kit, page: Page, tag: string): Promise<void> {
-  for (const pick of PICKS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one switch at a time
-    await press(page, "State", pick.state);
-    for (const { value, drawn } of pick.values) {
-      // biome-ignore lint/performance/noAwaitInLoops: one option at a time
-      await press(page, pick.group, value);
-      const sw = await switchState(page, pick.group);
-      const stamped = await page.evaluate(
-        (key) => document.querySelector<HTMLElement>("#stage")?.dataset[key],
-        pick.key
+/* ---------------------------------------------- the owner's journeys */
+
+const D = '#stage [data-frame="desk"]';
+const P = '#stage [data-frame="phone"]';
+
+/** What the desk and phone panes show now: the open page, its cards, its head's figure. */
+const opened = (page: Page) =>
+  page.evaluate(() =>
+    ["desk", "phone"].map((kind) => {
+      const frame = document.querySelector(`#stage [data-frame="${kind}"]`);
+      const dpage = frame?.querySelector<HTMLElement>("[data-dpage]");
+      const meta = dpage?.querySelector("[data-meta]")?.textContent ?? "";
+      // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+      const of = /(\d+) of (\d+)/.exec(meta);
+      return {
+        name: dpage?.dataset.dpage ?? null,
+        title: dpage?.querySelector("[data-dtitle]")?.textContent ?? "",
+        cards: dpage?.querySelectorAll("[data-card]").length ?? 0,
+        claimed: of ? Number(of[2]) : null,
+        gone: dpage?.querySelectorAll("[data-gone]").length ?? 0,
+        canvas:
+          frame?.querySelector<HTMLElement>("[data-canvas]")?.dataset.canvas ??
+          null,
+      };
+    })
+  );
+
+/** Clicks a desk row's title, first opening the fold it stands in. */
+async function openRow(page: Page, name: string): Promise<string> {
+  const row = page.locator(`${D} [data-row][data-page="${name}"]`);
+  const folded = await row.evaluate((el) => Boolean(el.closest("[inert]")));
+  if (folded) {
+    const group = await row.evaluate(
+      (el) => el.closest<HTMLElement>("[data-group]")?.dataset.group ?? ""
+    );
+    await page
+      .locator(
+        `${D} [data-group="${group}"] [data-more], ${D} [data-group="${group}"] [data-fold-toggle]`
+      )
+      .first()
+      .click();
+    await stillWithin(page, "body", { ms: 3000 });
+  }
+  const title = (await row.locator("[data-title]").getAttribute("title")) ?? "";
+  await row.locator("[data-title]").click();
+  await stillWithin(page, "body", { ms: 3000 });
+  return title;
+}
+
+const back = async (page: Page) => {
+  await page.locator(`${D} [data-back]`).click();
+  await stillWithin(page, "body", { ms: 3000 });
+};
+
+/** Every row opens its page, whole: the head's figure counts the cards it draws. */
+async function everyRowOpens(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "closed");
+  const names = await page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll<HTMLElement>(`${sel} [data-row]`)].map(
+        (r) => r.dataset.page ?? ""
+      ),
+    D
+  );
+  const failed: string[] = [];
+  for (const name of names) {
+    // biome-ignore lint/performance/noAwaitInLoops: one row at a time, opened and read in turn
+    const title = await openRow(page, name);
+    const both = await opened(page);
+    const right = both.every(
+      (o) =>
+        o.name === name &&
+        o.title === title &&
+        o.cards > 0 &&
+        (o.claimed === null || o.claimed === o.cards)
+    );
+    if (!right) {
+      failed.push(`${name}: ${JSON.stringify(both)}`);
+    }
+    await back(page);
+  }
+  kit.check(
+    `${tag}: every one of the ${names.length} rows opens its page on both frames, its head's figure out of the cards it draws`,
+    names.length === PAGES && failed.length === 0,
+    failed.slice(0, 3).join(" | ")
+  );
+}
+
+/** The replaced page's way forward, the successor chip on its row, and the removed picture's canvas chip. */
+async function waysForward(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "replaced");
+  await page.locator(`${D} [data-successor]`).click();
+  await stillWithin(page, "body", { ms: 3000 });
+  const viaButton = (await opened(page))[0].name;
+  await press(page, "State", "closed");
+  await page
+    .locator(`${D} [data-row][data-page="address-setup"] [data-chip]`)
+    .click();
+  await stillWithin(page, "body", { ms: 3000 });
+  const viaChip = (await opened(page))[0].name;
+  kit.check(
+    `${tag}: "Open the new page" and the Replaced-by chip both open the successor`,
+    viaButton === "address-cawco" && viaChip === "address-cawco",
+    JSON.stringify({ viaButton, viaChip })
+  );
+  await press(page, "State", "removed");
+  const glyphs = await page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll<HTMLElement>(`${sel} [data-chip]`)].map(
+        (c) => `${c.dataset.kind}:${c.querySelector("svg")?.dataset.glyph}`
+      ),
+    D
+  );
+  await page.locator(`${D} [data-chip][data-kind="canvas"]`).first().click();
+  await stillWithin(page, "body", { ms: 3000 });
+  const [{ canvas }] = await opened(page);
+  kit.check(
+    `${tag}: a removed picture's successor chip wears the canvas glyph and opens the canvas`,
+    glyphs.length > 0 &&
+      glyphs.every((g) => g === "canvas:canvas") &&
+      canvas !== null,
+    JSON.stringify({ glyphs, canvas })
+  );
+}
+
+/** The removed-picture page: reached from its row, its group and ring kept, the news strong until opened. */
+async function removedPictures(
+  kit: Kit,
+  page: Page,
+  tag: string
+): Promise<void> {
+  await press(page, "State", "open2");
+  const read = () =>
+    page.evaluate((sel) => {
+      const row = document.querySelector(
+        `${sel} [data-row][data-page="caw-pairing-picks"]`
       );
-      const f = await frameFacts(page, "desk");
-      kit.check(
-        `${tag} ${pick.group} ${value}: the switch shows it (pressed, thumb under it) and the list draws it`,
-        sw.count === 1 &&
-          sw.value === value &&
-          sw.off < 1 &&
-          stamped === value &&
-          f !== null &&
-          drawnRight(f, drawn),
-        JSON.stringify({
-          sw,
-          stamped,
-          drawn,
-          f: f && {
-            heads: f.heads,
-            facts: f.facts,
-            pills: f.pills,
-            quiet: f.quiet,
-            acts: f.acts,
-          },
-        })
+      const fact = row?.querySelector<HTMLElement>("[data-gone-fact]");
+      const strong = getComputedStyle(
+        row?.querySelector(".fact .strong") ?? document.body
+      ).color;
+      const muted = getComputedStyle(
+        row?.querySelector(".fact") ?? document.body
+      ).color;
+      return {
+        group: row?.closest<HTMLElement>("[data-group]")?.dataset.group,
+        ring: row?.querySelector(".ring")?.getAttribute("class"),
+        leads: row?.querySelector(".fact .fp")?.contains(fact ?? null) ?? false,
+        color: fact ? getComputedStyle(fact).color : "",
+        strong,
+        muted,
+      };
+    }, D);
+  const before = await read();
+  await openRow(page, "caw-pairing-picks");
+  const [page1] = await opened(page);
+  await back(page);
+  const after = await read();
+  kit.check(
+    `${tag}: the page with removed pictures opens from its row, draws all its cards and both removed wells`,
+    page1.name === "caw-pairing-picks" &&
+      page1.cards === 6 &&
+      page1.claimed === 6 &&
+      page1.gone === 2,
+    JSON.stringify(page1)
+  );
+  kit.check(
+    `${tag}: its row keeps Sent and the sent ring, leads with the removal in ink-strong, ink-muted once opened`,
+    before.group === "sent" &&
+      (before.ring ?? "").includes("sent") &&
+      before.leads &&
+      before.color === before.strong &&
+      after.color === after.muted &&
+      after.color !== before.color,
+    JSON.stringify({ before, after })
+  );
+}
+
+/** Make tasks: offered only on read or its session ended; on the row and at the page's foot, each with its outcome. */
+async function makeTasks(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "open2");
+  const offered = await page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll(`${sel} [data-act="make-tasks"]`)].map(
+        (b) =>
+          b
+            .closest("[data-row]")
+            ?.querySelector<HTMLElement>("[data-heard-fact]")?.dataset.heardFact
+      ),
+    D
+  );
+  kit.check(
+    `${tag}: Make tasks stands only on rows read or whose session ended, never on working on it or not read yet`,
+    offered.length > 0 && offered.every((h) => h === "read" || h === "ended"),
+    JSON.stringify(offered)
+  );
+  const name = await page.evaluate(
+    (sel) =>
+      document
+        .querySelector(`${sel} [data-row][data-hover] [data-act="make-tasks"]`)
+        ?.closest<HTMLElement>("[data-row]")?.dataset.page ?? "",
+    D
+  );
+  await page
+    .locator(`${D} [data-row][data-hover] [data-act="make-tasks"]`)
+    .click();
+  await stillWithin(page, "body", { ms: 3000 });
+  const row = await page.evaluate(
+    ([sel, n]) => {
+      const r = document.querySelector(`${sel} [data-row][data-page="${n}"]`);
+      return {
+        group: r?.closest<HTMLElement>("[data-group]")?.dataset.group,
+        making: Boolean(r?.querySelector("[data-tasks] .live-dot")),
+      };
+    },
+    [D, name] as const
+  );
+  kit.check(
+    `${tag}: Make tasks on a row moves it to Decided, making tasks`,
+    row.group === "decided" && row.making,
+    JSON.stringify({ name, row })
+  );
+  await press(page, "State", "open2");
+  await openRow(page, "devtools-speed");
+  const foot = await page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll(`${sel} [data-foot] button`)].map(
+        (b) => (b as HTMLElement).dataset.pageAct
+      ),
+    D
+  );
+  await page.locator(`${D} [data-foot] [data-page-act="make-tasks"]`).click();
+  await stillWithin(page, "body", { ms: 3000 });
+  const done = await page.evaluate(
+    (sel) => ({
+      standing: document.querySelector<HTMLElement>(`${sel} [data-dpage]`)
+        ?.dataset.standing,
+      pending:
+        document
+          .querySelector(`${sel} [data-foot] [data-page-act="making"]`)
+          ?.getAttribute("aria-disabled") === "true",
+    }),
+    D
+  );
+  await openRowFromList(page, "product-md-refresh");
+  const unreadFoot = await page.locator(`${D} [data-foot]`).count();
+  kit.check(
+    `${tag}: a sent and read page's foot holds Make tasks as its one act; pressed, the page is decided and making; an unread page's foot has none`,
+    foot.length === 1 &&
+      foot[0] === "make-tasks" &&
+      done.standing === "decided" &&
+      done.pending &&
+      unreadFoot === 0,
+    JSON.stringify({ foot, done, unreadFoot })
+  );
+}
+
+async function openRowFromList(page: Page, name: string): Promise<void> {
+  await back(page);
+  await openRow(page, name);
+}
+
+/** Send stays the page's own: an Open row lands on its first pending stop. */
+async function landsOnSend(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "open2");
+  await openRow(page, "owner-presence");
+  const full = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return {
+      act: el?.dataset.pageAct ?? null,
+      inFoot: Boolean(el?.closest("[data-foot]")),
+      desk: Boolean(el?.closest('[data-frame="desk"]')),
+    };
+  });
+  await page.locator(`${D} [data-page-act="send"]`).click();
+  await stillWithin(page, "body", { ms: 3000 });
+  const sent = await page.evaluate(
+    (sel) =>
+      document
+        .querySelector(`${sel} [data-row][data-page="owner-presence"]`)
+        ?.closest<HTMLElement>("[data-group]")?.dataset.group,
+    D
+  );
+  await press(page, "State", "many");
+  await openRow(page, "github-connect");
+  const partial = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return {
+      card: el?.dataset.card ?? null,
+      pending: el?.hasAttribute("data-pending") ?? false,
+    };
+  });
+  const rows = await page.evaluate(
+    (sel) =>
+      document.querySelectorAll(`${sel} [data-row] [data-page-act="send"]`)
+        .length,
+    D
+  );
+  kit.check(
+    `${tag}: a fully picked page opens with its foot's Send focused; Send moves the row to Sent; a partly picked page opens at its first card not picked; no row carries Send`,
+    full.act === "send" &&
+      full.inFoot &&
+      full.desk &&
+      sent === "sent" &&
+      partial.card === "0" &&
+      partial.pending &&
+      rows === 0,
+    JSON.stringify({ full, sent, partial, rows })
+  );
+}
+
+/** Not now on a phone: the row's long-press menu holds it, and it moves the row. */
+async function longPress(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "open2");
+  await page.evaluate((sel) => {
+    const row = document.querySelector(
+      `${sel} [data-row][data-page="owner-presence"] [data-title]`
+    );
+    row?.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true })
+    );
+  }, P);
+  const menu = await page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll(`${sel} [data-rowmenu] [data-act]`)].map(
+        (b) => (b as HTMLElement).dataset.act
+      ),
+    P
+  );
+  await page.locator(`${P} [data-rowmenu] [data-act="not-now"]`).click();
+  await stillWithin(page, "body", { ms: 3000 });
+  const group = await page.evaluate(
+    (sel) =>
+      document
+        .querySelector(`${sel} [data-row][data-page="owner-presence"]`)
+        ?.closest<HTMLElement>("[data-group]")?.dataset.group,
+    P
+  );
+  kit.check(
+    `${tag}: a phone row's long press holds Not now, and it moves the row to Not now`,
+    menu.length === 1 && menu[0] === "not-now" && group === "later",
+    JSON.stringify({ menu, group })
+  );
+}
+
+/** From 7 days the wait greys its ring, takes no word, says its wait in the tooltip, and still counts. */
+async function longWait(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "open2");
+  const r = await page.evaluate((sel) => {
+    const row = document.querySelector<HTMLElement>(
+      `${sel} [data-row][data-page="three-designs"]`
+    );
+    const ring = row?.querySelector(".ring");
+    const fact = row?.querySelector(".fact");
+    const age = row?.querySelector<HTMLElement>("[data-age]");
+    return {
+      waited: row?.hasAttribute("data-waited") ?? false,
+      ring: ring ? getComputedStyle(ring).color : "",
+      muted: fact ? getComputedStyle(fact).color : "",
+      pieces: row?.querySelectorAll(".fact .fp").length ?? 0,
+      tip: age?.title ?? "",
+      spoken: age?.querySelector(".sr-only")?.textContent ?? "",
+      badge: document.querySelector(`${sel} [data-badge]`)?.textContent ?? "",
+      open: document.querySelector<HTMLElement>(`${sel} [data-group="open"]`)
+        ?.dataset.count,
+    };
+  }, D);
+  kit.check(
+    `${tag}: a page waiting 9 days greys its ring to ink-muted, says only what is true, tells its wait on the figure, and the badge counts it`,
+    r.waited &&
+      r.ring === r.muted &&
+      r.pieces === 2 &&
+      r.tip.startsWith("Waiting since") &&
+      r.spoken === r.tip &&
+      r.badge === "2" &&
+      r.open === "2",
+    JSON.stringify(r)
+  );
+}
+
+/** Each row's figure is the house formatter of the date that put it in its group, in the group's order. */
+async function groupDates(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "closed");
+  const r = await page.evaluate((sel) => {
+    const now = new Date(2026, 9, 24, 21, 30).getTime();
+    const house = (at: number) => {
+      const s = Math.max(0, (now - at) / 1000);
+      if (s < 60) {
+        return "now";
+      }
+      if (s < 3600) {
+        return `${Math.floor(s / 60)}m`;
+      }
+      if (s < 86_400) {
+        return `${Math.floor(s / 3600)}h`;
+      }
+      if (s < 7 * 86_400) {
+        return `${Math.floor(s / 86_400)}d`;
+      }
+      return new Date(at).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      });
+    };
+    const wrong: string[] = [];
+    for (const g of document.querySelectorAll<HTMLElement>(
+      `${sel} [data-group]`
+    )) {
+      const ats = [...g.querySelectorAll<HTMLElement>("[data-row]")].map(
+        (row) => {
+          const at = Number(row.dataset.at);
+          const shown = row.querySelector(
+            "[data-age] [aria-hidden]"
+          )?.textContent;
+          if (shown !== house(at)) {
+            wrong.push(`${row.dataset.page}: ${shown} ≠ ${house(at)}`);
+          }
+          return at;
+        }
       );
-      if (pick.values[0].value !== value) {
-        await boxes(kit, page, tag, `${pick.group}=${value}`);
-        const found = process.env.DL_QUICK ? [] : await sweep(page);
-        kit.check(
-          `${tag} ${pick.group} ${value}: nothing spills, nothing covers text`,
-          found.length === 0,
-          found.slice(0, 6).join(" | ")
+      const oldestFirst = g.dataset.group === "open";
+      for (let i = 1; i < ats.length; i += 1) {
+        if (oldestFirst ? ats[i] < ats[i - 1] : ats[i] > ats[i - 1]) {
+          wrong.push(`${g.dataset.group} out of order at ${i}`);
+        }
+      }
+    }
+    return wrong;
+  }, D);
+  kit.check(
+    `${tag}: every figure is the house formatter of its group's date, Needs you longest wait first and every other group newest first`,
+    r.length === 0,
+    r.slice(0, 4).join(" | ")
+  );
+}
+
+/** Closed names who closed each page. */
+async function closers(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "closed");
+  const r = await page.evaluate(
+    (sel) =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          `${sel} [data-group="closed"] [data-row]`
+        ),
+      ].map((row) => {
+        const actor = row.querySelector<HTMLElement>("[data-actor]");
+        return `${actor?.dataset.actor}:${actor?.querySelector("svg")?.dataset.glyph ?? "-"}`;
+      }),
+    D
+  );
+  const kinds = new Set(r.map((x) => x.split(":")[0]));
+  kit.check(
+    `${tag}: every Closed row names who closed it: its successor, Caw, its session's chip, or you`,
+    r.length === 5 &&
+      ["successor", "caw", "session", "you"].every((k) => kinds.has(k)) &&
+      r.includes("session:session") &&
+      r.includes("successor:decisions"),
+    JSON.stringify(r)
+  );
+}
+
+/** Search over every question, option, pick and note, for any query. */
+async function searchAnything(
+  kit: Kit,
+  page: Page,
+  tag: string
+): Promise<void> {
+  const field = page.locator(`${D} [data-search] input`);
+  for (const [q, must] of [
+    ["pair", "pairing-behaviour"],
+    ["Looks right", "pairing-behaviour"],
+    ["swallow", "pairing-behaviour"],
+    [decisionsWords.makeTasks, "commenting"],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one query at a time
+    await press(page, "State", "open2");
+    await field.fill(q);
+    await stillWithin(page, "body", { ms: 3000 });
+    const r = await page.evaluate(
+      ([sel, query, want]) => {
+        const lower = query.toLowerCase();
+        const rows = [
+          ...document.querySelectorAll<HTMLElement>(`${sel} [data-row]`),
+        ];
+        const bad = rows.filter((row) => {
+          const title = (
+            row.querySelector("[data-title]") as HTMLElement
+          ).title.toLowerCase();
+          const lines = [...row.querySelectorAll("[data-hit]")];
+          const linesHold = lines.every((l) =>
+            (l.textContent ?? "").toLowerCase().includes(lower)
+          );
+          return !((title.includes(lower) || lines.length > 0) && linesHold);
+        });
+        const wanted = rows.find((row) => row.dataset.page === want);
+        return {
+          rows: rows.length,
+          bad: bad.map((b) => b.dataset.page),
+          lines: wanted?.querySelectorAll("[data-hit]").length ?? 0,
+        };
+      },
+      [D, q, must] as const
+    );
+    kit.check(
+      `${tag}: search “${q}” finds rows by their cards, each with its matched card lines`,
+      r.rows > 0 && r.bad.length === 0 && r.lines > 0,
+      JSON.stringify(r)
+    );
+  }
+}
+
+/** Every fact separator keeps its room on both sides. */
+async function separators(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "open2");
+  const tight = await page.evaluate(() => {
+    const out: string[] = [];
+    for (const sep of document.querySelectorAll(
+      "#stage [data-row] .fact > .sep"
+    )) {
+      const s = sep.getBoundingClientRect();
+      const before = sep.previousElementSibling?.getBoundingClientRect();
+      const after = sep.nextElementSibling?.getBoundingClientRect();
+      const frame = sep.closest(".frame") as HTMLElement;
+      const scale = frame.getBoundingClientRect().width / frame.offsetWidth;
+      const left = before ? (s.left - before.right) / scale : 9;
+      const right = after ? (after.left - s.right) / scale : 9;
+      if (after && after.top > s.bottom) {
+        continue;
+      }
+      if (left < 2 || right < 2) {
+        out.push(
+          `${sep.closest<HTMLElement>("[data-row]")?.dataset.page}: ${left.toFixed(1)} / ${right.toFixed(1)}`
         );
       }
     }
-    await press(page, pick.group, pick.values[0].value);
-  }
+    return out;
+  });
+  kit.check(
+    `${tag}: every fact separator keeps at least 2px of room on each side`,
+    tight.length === 0,
+    tight.slice(0, 4).join(" | ")
+  );
+}
+
+/** First use: Caw on the axis of the block he heads. */
+async function firstUseAxis(kit: Kit, page: Page, tag: string): Promise<void> {
+  await press(page, "State", "first");
+  const r = await page.evaluate(() =>
+    ["desk", "phone"].map((kind) => {
+      const block = document.querySelector(
+        `#stage [data-frame="${kind}"] [data-empty="first"]`
+      );
+      const caw = [
+        ...(block?.querySelectorAll<HTMLElement>("[data-caw] img") ?? []),
+      ].find((img) => img.getBoundingClientRect().width > 0);
+      const parts = [
+        ...(block?.querySelectorAll(".etitle, .eline, .starters") ?? []),
+      ].map((el) => el.getBoundingClientRect());
+      const left = Math.min(...parts.map((p) => p.left));
+      const right = Math.max(...parts.map((p) => p.right));
+      const c = caw?.getBoundingClientRect();
+      return c ? Math.abs(c.left + c.width / 2 - (left + right) / 2) : 99;
+    })
+  );
+  const title = await page
+    .locator(`${D} [data-empty="first"] .etitle`)
+    .textContent();
+  kit.check(
+    `${tag}: first use stands Caw on the axis of the block he heads (desk and phone), and its title is no bare "nothing yet"`,
+    r.every((d) => d < 1) && title !== decisionsWords.empty,
+    JSON.stringify({ off: r, title })
+  );
 }
 
 async function night(kit: Kit, page: Page, tag: string): Promise<void> {
@@ -494,6 +962,28 @@ async function night(kit: Kit, page: Page, tag: string): Promise<void> {
     `${tag} Night: the page turns dark`,
     ground.dark && ground.scheme === "dark",
     JSON.stringify(ground)
+  );
+  const stills = async () => {
+    await press(page, "State", "first");
+    const shown = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLImageElement>("#stage img.caw-still")]
+        .filter((img) => img.getBoundingClientRect().width > 0)
+        .map((img) => img.getAttribute("src") ?? "")
+    );
+    await press(page, "State", "open2");
+    return shown;
+  };
+  const nightStills = await stills();
+  await press(page, "Theme", "light");
+  const dayStills = await stills();
+  await press(page, "Theme", "dark");
+  kit.check(
+    `${tag} Night: every Caw drawn is his night still on the paper rim, and by day his day still`,
+    nightStills.length >= 3 &&
+      nightStills.every((src) => src.endsWith("-night.png")) &&
+      dayStills.length === nightStills.length &&
+      dayStills.every((src) => src.endsWith("-day.png")),
+    JSON.stringify({ nightStills, dayStills })
   );
   const found = process.env.DL_QUICK ? [] : await sweep(page);
   kit.check(
@@ -562,7 +1052,20 @@ async function onePage(
   await page.evaluate(() => document.fonts.ready);
 
   await everyState(kit, page, tag);
-  await everyPick(kit, page, tag);
+  await everyRowOpens(kit, page, tag);
+  await waysForward(kit, page, tag);
+  await removedPictures(kit, page, tag);
+  await makeTasks(kit, page, tag);
+  await landsOnSend(kit, page, tag);
+  if (view === "phone") {
+    await longPress(kit, page, tag);
+  }
+  await longWait(kit, page, tag);
+  await groupDates(kit, page, tag);
+  await closers(kit, page, tag);
+  await searchAnything(kit, page, tag);
+  await separators(kit, page, tag);
+  await firstUseAxis(kit, page, tag);
   await night(kit, page, tag);
   if (view === "desk") {
     await inThePanel(kit, page, tag);

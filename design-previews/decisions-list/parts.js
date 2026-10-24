@@ -9,7 +9,11 @@ import { PROJECT } from "./data.js";
 import { ICONS } from "./icons.js";
 
 export const ic = (name, cls = "") =>
-  `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+  `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" data-glyph="${name}">${ICONS[name]}</svg>`;
+
+/** Caw's still, by day and by night: the night still carries the paper rim (the Caw panel preview's stills). */
+export const cawStill = (still, size) =>
+  `<img class="caw-still day" alt="" src="caw/${still}-day.png" width="${size}" height="${size}" /><img class="caw-still night" alt="" src="caw/${still}-night.png" width="${size}" height="${size}" />`;
 
 export const esc = (text) =>
   String(text)
@@ -28,11 +32,14 @@ export const btn = (
   return `<button class="${cls}" type="button"${name} ${attrs}>${icon ? ic(icon) : ""}${label ? `<span>${label}</span>` : ""}${end ? ic(end) : ""}</button>`;
 };
 
-/** The inline chip a decision page's name takes in a line (ui/chip `inline`). */
-export const pageChip = (title) =>
-  `<a class="ichip" href="#" data-chip>${ic("decisions")}<span data-slot="label">${esc(title)}</span></a>`;
+/** The glyph a named thing wears in its inline chip: a decision page, a canvas, a session. */
+const CHIP_GLYPH = { page: "decisions", canvas: "canvas", session: "session" };
 
-/** The kit's segmented groove and lifted thumb, for a two-way choice. */
+/** The inline chip a thing takes in a line of words (ui/chip `inline`); a press opens it. */
+export const chip = (title, { kind = "page", target = title } = {}) =>
+  `<a class="ichip" href="#" data-chip data-kind="${kind}" data-target="${esc(target)}">${ic(CHIP_GLYPH[kind])}<span data-slot="label">${esc(title)}</span></a>`;
+
+/** The kit's segmented groove and lifted thumb: Day and Night. */
 export const seg = (items, chosen, name, id = name) =>
   `<div class="seg" role="group" aria-label="${esc(name)}" data-seg="${esc(id)}"><span class="seg-thumb" aria-hidden="true"></span>${items
     .map(
@@ -84,7 +91,7 @@ const strip = (badge) => `<div class="strip">
 const glass = () => `<div class="glass">
   <span class="gitem" aria-label="Jump to session">${ic("search")}</span>
   <span class="gitem wide" aria-label="3 machines">${ic("server")}<span class="num">3</span></span>
-  <span class="gitem caw"><img alt="" src="caw/mark-light.png" width="24" height="24" /></span>
+  <span class="gitem caw">${cawStill("caw-idle", 24)}</span>
 </div>`;
 
 /** The project's head: its name, where it lives, then Caw, Ask Caw, Spin off and ⋯. */
@@ -94,7 +101,7 @@ const head = () => `<header class="phead">
     <p class="pline">${tux}<span class="trunc">${PROJECT.machine} · ${PROJECT.path}</span><span class="places">· ${PROJECT.places} places</span></p>
   </div>
   <div class="pacts">
-    <span class="seat"><img alt="" src="caw/mark-light.png" width="48" height="48" /></span>
+    <span class="seat">${cawStill("caw-idle", 48)}</span>
     ${btn("Ask Caw", { v: "primary" })}
     ${btn("Spin off")}
     ${btn("", { v: "ghost", icon: "more" })}
@@ -112,7 +119,7 @@ export const desk = (pane, badge) => `<div class="frame desk" data-frame="desk">
 /* ---------------------------------------------------------- the phone */
 
 export const phone = (pane) => `<div class="frame phone" data-frame="phone">
-  <header class="pbar">${btn("", { v: "ghost", icon: "sidebar" })}<span class="cawtab"><img alt="" src="caw/mark-light.png" width="24" height="24" /></span></header>
+  <header class="pbar">${btn("", { v: "ghost", icon: "sidebar" })}<span class="cawtab">${cawStill("caw-idle", 24)}</span></header>
   <div class="pscroll">
     <header class="phead phone-head">
       <div class="who">

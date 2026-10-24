@@ -1,24 +1,24 @@
 /* The preview page: what the list is for, the list in every state at Desk 1440 and Phone 390, its motion, and the critiques. */
 import { CRITIQUE } from "./critique.js";
-import { badgeOf, pane } from "./list.js";
+import { badgeOf, clearMoves, moves, pagesFor, pane, seen } from "./list.js";
 import {
   deliver,
   filterTo,
   motionOk,
   openPage,
+  reflow,
   reveal,
-  sendRow,
   toggleFold,
 } from "./motion.js";
-import { chips, desk, ic, phone, seg } from "./parts.js";
+import { chips, desk, esc, ic, phone, seg } from "./parts.js";
 
 const STATES = [
-  { value: "open2", label: "Open with 2" },
+  { value: "open2", label: "Needs you, 2" },
   { value: "alldone", label: "All done" },
-  { value: "many", label: "Many open" },
+  { value: "many", label: "Many waiting" },
   { value: "closed", label: "Closed unfolded" },
   { value: "replaced", label: "A replaced page, opened" },
-  { value: "removed", label: "A removed picture" },
+  { value: "removed", label: "Removed pictures, opened" },
   { value: "search", label: "Search with matches" },
   { value: "nomatch", label: "Search, no match" },
   { value: "loading", label: "Loading" },
@@ -26,53 +26,10 @@ const STATES = [
   { value: "first", label: "First use" },
 ];
 
-/** The four picks in the report's §8 that draw differently: the recommended one first. */
-const PICKS = [
-  {
-    name: "Groups",
-    key: "groups",
-    items: [
-      { value: "five", label: "Five", tag: "recommended" },
-      { value: "two", label: "Two" },
-    ],
-    note: "Open, Later, Sent, Decided, Closed folded; or Open and Everything else, the fact carrying the state.",
-  },
-  {
-    name: "Heard",
-    key: "heard",
-    items: [
-      { value: "facts", label: "read / working on it / not read yet", tag: "recommended" },
-      { value: "pill", label: "Sent · working" },
-    ],
-    note: "What a sent page says: the hub's own record of it, or today's pill, which is the writer session's busyness.",
-  },
-  {
-    name: "Quiet greying",
-    key: "quiet",
-    items: [
-      { value: "on", label: "On", tag: "recommended" },
-      { value: "off", label: "Off" },
-    ],
-    note: "An Open row untouched for 7 days greys its ring and says “quiet 9d”; nothing closes by itself.",
-  },
-  {
-    name: "Make tasks",
-    key: "tasks",
-    items: [
-      { value: "row", label: "On the row", tag: "recommended" },
-      { value: "page", label: "On the page only" },
-    ],
-    note: "The Sent row's act on hover or focus (drawn held on the first Sent row), or none on the row.",
-  },
-];
+/** The states that are a page opened from its row. */
+const OPENED = { replaced: "address-setup", removed: "caw-pairing-picks" };
 
-const state = {
-  state: "open2",
-  groups: "five",
-  heard: "facts",
-  quiet: "on",
-  tasks: "row",
-};
+const state = { state: "open2", page: null, canvas: null };
 
 /** The live query typed into a frame's field, or null. */
 let query = null;
@@ -83,26 +40,26 @@ const FACTS = [
   {
     fig: "6 → 2",
     title: "The badge counts the wrong thing",
-    body: "“Decisions 6” counts pages not yet sent. Four of them are stale; two are fully picked and wait only for Send. No page needs a pick today. The list's Open group is the badge.",
+    body: "“Decisions 6” counts pages not yet sent. Four of them are stale; two are fully picked and wait only for Send. No page needs a pick today. The list's Needs you group is the badge.",
   },
   {
     fig: "20 of 24",
     title: "“Sent · working” is one session being busy",
-    body: "The pill asks whether the writer session is working, and one orchestrator wrote 23 of 25 pages. Here a sent page says what the hub knows of it: read, working on it, or not read yet.",
+    body: "The pill asks whether the writer session is working, and one orchestrator wrote 23 of 25 pages. Here a sent page says what the hub knows of it: read, working on it, not read yet, or its session ended.",
   },
   {
     fig: "0",
     title: "Nothing ever reached Decided",
-    body: "Agents build from sent pages and Make tasks was never pressed, so no page says what got built. Here it is one press from a Sent row, and a decided page shows its tasks done.",
+    body: "Agents build from sent pages and Make tasks was never pressed, so no page says what got built. Here it is one press from a read Sent row or its page's foot, and a decided page shows its tasks done.",
   },
 ];
 
 const JOBS = [
-  ["Catch up on what moved while I was away", "The tab", "Open first, then Sent by last movement, each with what the agent did with it."],
+  ["Catch up on what moved while I was away", "The tab", "Needs you first, then Sent newest first by when you sent it, each with what the agent did with it."],
   ["Find the page behind something being built", "The tab", "One field over every question, option, pick and note; the matched card lines under each row."],
   ["Recall what I decided and why", "The tab", "Decided rows with their tasks; the page keeps its record."],
-  ["Put a question aside, or close it", "The tab", "Not now moves a row to Later; a replaced or withdrawn page goes to Closed and says where it went."],
-  ["Pick now, on a page an agent just wrote", "Needs you", "The tab agrees with Needs you and never competes: the same count, the same Not now."],
+  ["Put a question aside, or close it", "The tab", "Not now moves a row to Not now; a replaced, withdrawn or dropped page goes to Closed and says who closed it."],
+  ["Pick now, on a page an agent just wrote", "Needs you", "The tab agrees with Caw's Needs you and never competes: the same count, the same Not now."],
   ["Drag a map of how decisions depend", "Nowhere", "Never observed. The graph goes."],
 ];
 
@@ -114,11 +71,7 @@ const purpose = () => `<section class="pv-section pv-col" aria-labelledby="for">
 </section>`;
 
 const switches = () => `<div class="pv-switches">
-  <div class="pv-switch"><span class="pv-switch-label"><strong>State</strong> · every state the list and its pages reach</span>${chips(STATES, state.state, "State")}</div>
-  <div class="pv-picks">${PICKS.map(
-    (p) =>
-      `<div class="pv-switch"><span class="pv-switch-label"><strong>${p.name}</strong> · ${p.note}</span>${seg(p.items, state[p.key], p.name, p.key)}</div>`
-  ).join("")}</div>
+  <div class="pv-switch"><span class="pv-switch-label"><strong>State</strong> · every state the list and its pages reach; inside the frames every row opens its page</span>${chips(STATES, state.state, "State")}</div>
 </div>`;
 
 const fit = (html, w) =>
@@ -130,14 +83,14 @@ function stageHtml() {
     <div class="pv-col">${fit(desk(pane(state, false, query), badge), 1440)}</div>
     <div class="pv-col pv-stage-cap"><h3>Phone</h3><p>390 × 844 and taller · the head with ⋯ alone, the views bar docked at its foot</p></div>
     <div class="pv-col"><div class="phone-fit">${fit(phone(pane(state, true, query)), 390)}</div></div>
-    <p class="pv-col pv-data">Titles and standings are the project's 25 pages as the hub listed them; the four you called stale and the page whose cards were withdrawn stand under Closed. Ages, and the pick figures the report doesn't count, are drawn for shape. Hover or focus a row on the desk for its one act; the first Sent row (the first Open row under Many open) is drawn held. On a phone the act is in the row's long-press menu.</p>`;
+    <p class="pv-col pv-data">Titles, cards, options and recommendations are the project's 25 pages as their sources hold them; the four you called stale and the page whose cards were withdrawn stand under Closed. Dates, picks and notes are drawn for shape. On the desk hover or focus a row for its one act (the first row it is offered on is drawn held); on a phone it is in the row's long-press menu.</p>`;
 }
 
 const MOTIONS = [
   {
     id: "send",
     name: "A row changing group",
-    how: "Send on “How CawCo knows you're here”: the row slides from Open to the head of Sent while the rows it passes make room; its fact cross-blurs to “not read yet”; Open's count and the badge pop to 1.",
+    how: "Send on “How CawCo knows you're here”: the row slides from Needs you to the head of Sent while the rows it passes make room; its fact cross-blurs to “not read yet”; the counts and the badge pop to their new figures.",
     recipe: "House reflow (FLIP) · Text swap soft · Number pop-in",
     tokens: "--dur-panel 280ms on --ease-in-out; fact --dur-fade 200ms; figures --dur-morph 180ms",
   },
@@ -151,7 +104,7 @@ const MOTIONS = [
   {
     id: "search",
     name: "Search filtering",
-    how: "“pairing” lands: rows that don't match close while fading, the three that do slide up to their places, and their matched card lines grow open under them.",
+    how: "“pairing” lands: rows that don't match close while fading, the ones that do slide up to their places, and their matched card lines grow open under them.",
     recipe: "House reflow (FLIP) · Accordion expand for the card lines",
     tokens: "departures --dur-exit 160ms; survivors --dur-panel 280ms; lines --dur-reveal 240ms",
   },
@@ -172,7 +125,7 @@ const MOTIONS = [
   {
     id: "open",
     name: "Opening a page",
-    how: "The replaced page opens: its title flies from the row into the page's head; the banner and cards fade in under it.",
+    how: "The replaced page opens from its row: its title flies into the page's head; the banner and cards fade in under it.",
     recipe: "House shared-element flight (FLIP)",
     tokens: "--dur-panel 280ms on --ease-drawer; the rest --dur-fade 200ms",
   },
@@ -180,19 +133,25 @@ const MOTIONS = [
 
 const motionPanel = () => `<section class="pv-section pv-col" aria-labelledby="motion">
   <h2 class="pv-h2" id="motion">${ic("play")}Its motion</h2>
-  <p class="pv-sub">Each plays on the desk and the phone at once. Reduced motion keeps only the fades. The live dot beside “working on it” breathes on the house breath (2s), as every live dot does, only while that turn runs; the report's 1.2s loop is the spinner's clock, not a dot's.</p>
+  <p class="pv-sub">Each plays on the desk and the phone at once. Reduced motion keeps only the fades. The live dot beside “working on it” breathes on the house breath (2s), as every live dot does, only while that turn runs.</p>
   <div class="pv-motion">${MOTIONS.map(
     (m) =>
       `<div class="pv-motion-row"><div class="what"><strong>${m.name}</strong><p class="how">${m.how}</p><p class="recipe">${m.recipe}</p><p class="how">${m.tokens}</p></div><button class="btn sm" type="button" data-play="${m.id}">${ic("play")}<span>Play</span></button></div>`
   ).join("")}</div>
 </section>`;
 
-const sameDrawing = () => `<section class="pv-section pv-col" aria-labelledby="same">
-  <h2 class="pv-h2" id="same">${ic("eye")}Two picks that draw the same</h2>
-  <ul class="pv-jobs">
-    <li><span class="j">Who marks a page replaced</span><span class="w">no switch</span><span class="why">The writer's supersedes or your “Replace with…” both end in the same Closed row and the same banner on the old page.</span></li>
-    <li><span class="j">Search on the tab, or Find only</span><span class="w">no switch</span><span class="why">The field here and Find read the same index; without the field the list draws as above with no search row.</span></li>
-  </ul>
+const SETTLED = [
+  ["Groups", "Five", "Needs you, Not now, Sent, Decided, Closed folded (report 068af135, answer 7)."],
+  ["What a sent page says", "The hub's facts", "read, working on it, not read yet, or its session ended; today's “Sent · working” pill goes."],
+  ["A page waiting 7 days or more", "Its ring greys", "No word; the figure is the wait (“Waiting since 15 Oct”), and the badge still counts it."],
+  ["Make tasks", "Row and page", "On a Sent row whose send was read or whose session ended, and as the one act at a sent page's foot."],
+  ["Who marks a page replaced; search on the tab", "No switch", "Both draw the same: the Closed row and the old page's banner; one field over Find's index."],
+  ["Whether the badge stops counting past N days", "Yours", "The one line the designer leaves to you: today the badge counts every page that waits."],
+];
+
+const settled = () => `<section class="pv-section pv-col" aria-labelledby="settled">
+  <h2 class="pv-h2" id="settled">${ic("eye")}Settled, and the one line left to you</h2>
+  <ul class="pv-jobs">${SETTLED.map(([j, w, why]) => `<li><span class="j">${j}</span><span class="w">${w}</span><span class="why">${why}</span></li>`).join("")}</ul>
 </section>`;
 
 const MARK = { fixed: "done", good: "tick", open: "minus" };
@@ -244,6 +203,7 @@ function fitOne(box) {
     box.style.setProperty("--fit-h", height);
   }
 }
+
 /** Fitting writes the box's height, which the observer sees: it runs on the next frame, never inside the observer's loop. */
 const due = new Set();
 let scheduled = 0;
@@ -278,58 +238,184 @@ function fitAll(root) {
   }
 }
 
-function stamp(stage) {
-  for (const [k, v] of Object.entries(state)) {
-    stage.dataset[k] = v;
-  }
+function stamp() {
+  const stage = document.querySelector("#stage");
+  stage.dataset.state = state.state;
+  stage.dataset.page = state.page ?? "";
+  stage.dataset.canvas = state.canvas ?? "";
 }
 
 function renderStage() {
   const stage = document.querySelector("#stage");
-  stamp(stage);
+  stamp();
   stage.innerHTML = stageHtml();
   fitAll(stage);
   return stage;
 }
 
-/** Draws one frame's pane again for the state or a query, leaving the rest of the frame as it stands. */
-function drawPaneIn(frame) {
-  const isPhone = frame.dataset.frame === "phone";
-  frame.querySelector("[data-pane]").innerHTML = pane(state, isPhone, query);
-  const badge = badgeOf(state);
-  const tab = frame.querySelector('.tab.on');
-  if (tab) {
-    tab.querySelector("[data-badge]")?.remove();
-    if (badge > 0) {
-      tab.insertAdjacentHTML("beforeend", `<span class="tab-num num" data-badge>${badge}</span>`);
-    }
-  }
-  frame.querySelector("[data-pane]").style.removeProperty("position");
-}
-
 const frames = () => [...document.querySelectorAll("#stage [data-frame]")];
 
-function setState(value) {
-  state.state = value;
-  query = null;
-  const group = document.querySelector('[data-seg="State"]');
-  for (const item of group.querySelectorAll(".opt")) {
+/** Draws one frame's pane again for the state, the open page or a query, and the tab's badge with it. */
+function drawPaneIn(frame) {
+  const isPhone = frame.dataset.frame === "phone";
+  const at = frame.querySelector("[data-pane]");
+  at.innerHTML = pane(state, isPhone, query);
+  at.style.removeProperty("position");
+  const tab = frame.querySelector(".tab.on");
+  if (tab) {
+    tab.querySelector("[data-badge]")?.remove();
+    const badge = badgeOf(state);
+    if (badge > 0) {
+      tab.insertAdjacentHTML(
+        "beforeend",
+        `<span class="tab-num num" data-badge>${badge}</span>`
+      );
+    }
+  }
+}
+
+function drawAll() {
+  stamp();
+  for (const f of frames()) {
+    drawPaneIn(f);
+  }
+}
+
+function pressChip(value) {
+  for (const item of document.querySelectorAll('[data-seg="State"] .opt')) {
     item.setAttribute("aria-pressed", String(item.dataset.value === value));
   }
 }
 
-/** Puts the stage in `value` without motion, so a Play starts from it. */
+/** Puts the stage in a state, without motion, clearing what was done. */
 function standIn(value) {
-  setState(value);
+  state.state = value;
+  state.page = OPENED[value] ?? null;
+  state.canvas = null;
+  query = null;
+  clearMoves();
+  pressChip(value);
   renderStage();
 }
+
+/** Opens a page in both frames: from its row the title flies; the press lands on its first pending stop. */
+function openIn(name, from = null, cardAt = null) {
+  closeMenus();
+  seen.add(name);
+  state.page = name;
+  state.canvas = null;
+  query = null;
+  for (const f of frames()) {
+    openPage(f, name, () => drawPaneIn(f));
+  }
+  stamp();
+  const frame = from ?? frames()[0];
+  const page = pagesFor(state.state).find((p) => p.name === name);
+  let stop = null;
+  if (cardAt !== null) {
+    stop = frame.querySelector(`[data-card="${cardAt}"]`);
+  } else if (page?.standing === "open") {
+    // A fully picked page's first pending stop is its Send (report 068af135, answer 2).
+    stop =
+      frame.querySelector("[data-card][data-pending]") ??
+      frame.querySelector('[data-page-act="send"]');
+  }
+  stop?.focus({ preventScroll: !motionOk() });
+}
+
+const ACTS = {
+  "not-now": () => ({ standing: "later", age: "now" }),
+  reopen: () => ({ standing: "open", age: "now" }),
+  "make-tasks": (page) => ({
+    standing: "decided",
+    making: true,
+    decided: page.picked,
+    tasks: 0,
+    tasksDone: 0,
+    age: "now",
+  }),
+  send: () => ({
+    standing: "sent",
+    heard: "unread",
+    notSent: false,
+    quietDays: undefined,
+    age: "now",
+  }),
+};
+
+/** One of a row's acts, or the page's: the model moves, and the list reflows to it. */
+function act(kind, name) {
+  closeMenus();
+  const page = pagesFor(state.state).find((p) => p.name === name);
+  if (!(page && ACTS[kind])) {
+    return;
+  }
+  moves[name] = { ...(moves[name] ?? {}), ...ACTS[kind](page) };
+  if (state.page) {
+    if (kind === "send") {
+      state.page = null;
+    }
+    drawAll();
+    return;
+  }
+  stamp();
+  for (const f of frames()) {
+    reflow(f, () => drawPaneIn(f));
+  }
+}
+
+/* ------------------------------------------------- a phone's long press */
+
+function closeMenus() {
+  for (const menu of document.querySelectorAll("[data-rowmenu]")) {
+    menu.closest("[data-row]")?.classList.remove("menu-open");
+    menu.remove();
+  }
+}
+
+/** The row's long-press menu under a finger: its one act, as the desk's hover shows it. */
+function openMenu(row) {
+  closeMenus();
+  const source = row.querySelector(".act [data-act]");
+  const items = [
+    `<button class="mi" type="button" role="menuitem" data-open-page="${row.dataset.page}">${ic("decisions")}<span>Open page</span></button>`,
+  ];
+  if (source) {
+    items.push(
+      `<button class="mi" type="button" role="menuitem" data-act="${source.dataset.act}" data-for="${source.dataset.for}">${source.dataset.act === "not-now" ? ic("close") : ic("checks")}<span>${esc(source.textContent.trim())}</span></button>`
+    );
+  }
+  row.classList.add("menu-open");
+  row.insertAdjacentHTML(
+    "beforeend",
+    `<div class="rowmenu" role="menu" data-rowmenu aria-label="${esc(row.querySelector("[data-title]").title)}">${items.join("")}</div>`
+  );
+}
+
+let holding = 0;
+function onPointerDown(event) {
+  const row = event.target.closest('#stage [data-frame="phone"] [data-row]');
+  if (!row || event.pointerType !== "touch") {
+    return;
+  }
+  holding = setTimeout(() => openMenu(row), 500);
+}
+const cancelHold = () => clearTimeout(holding);
+
+function onContextMenu(event) {
+  const row = event.target.closest('#stage [data-frame="phone"] [data-row]');
+  if (row) {
+    event.preventDefault();
+    openMenu(row);
+  }
+}
+
+/* ------------------------------------------------------------ the plays */
 
 const PLAYS = {
   send: () => {
     standIn("open2");
-    for (const f of frames()) {
-      sendRow(f);
-    }
+    act("send", "owner-presence");
   },
   fold: () => {
     if (state.state !== "open2" && state.state !== "closed") {
@@ -341,18 +427,18 @@ const PLAYS = {
   },
   search: () => {
     standIn("open2");
-    setState("search");
+    state.state = "search";
+    pressChip("search");
+    stamp();
     for (const f of frames()) {
       filterTo(f, () => drawPaneIn(f));
     }
-    stamp(document.querySelector("#stage"));
   },
   delight: () => {
     standIn("open2");
     for (const f of frames()) {
       deliver(f, { prime: true });
     }
-    // The primed figures stand for a frame, then the last task lands.
     for (const f of frames()) {
       f.getBoundingClientRect();
       deliver(f);
@@ -360,21 +446,104 @@ const PLAYS = {
   },
   reveal: () => {
     standIn("loading");
-    setState("open2");
+    state.state = "open2";
+    pressChip("open2");
+    stamp();
     for (const f of frames()) {
       reveal(f, () => drawPaneIn(f));
     }
-    stamp(document.querySelector("#stage"));
   },
   open: () => {
     standIn("closed");
-    setState("replaced");
-    for (const f of frames()) {
-      openPage(f, "address-setup", () => drawPaneIn(f));
-    }
-    stamp(document.querySelector("#stage"));
+    openIn("address-setup");
+    state.state = "replaced";
+    pressChip("replaced");
+    stamp();
   },
 };
+
+/* ------------------------------------------------------------ the clicks */
+
+function onFrameClick(event, frame) {
+  const target = event.target;
+  if (target.closest("a")) {
+    event.preventDefault();
+  }
+  if (!target.closest("[data-rowmenu]")) {
+    closeMenus();
+  }
+  const fold = target.closest("[data-fold-toggle], [data-more]");
+  if (fold) {
+    toggleFold(frame, fold.dataset.foldToggle ?? fold.dataset.more);
+    return;
+  }
+  const rowAct = target.closest("[data-act]");
+  if (rowAct) {
+    act(rowAct.dataset.act, rowAct.dataset.for);
+    return;
+  }
+  const pageAct = target.closest("[data-page-act]");
+  if (pageAct) {
+    if (pageAct.getAttribute("aria-disabled") !== "true") {
+      act(pageAct.dataset.pageAct, pageAct.dataset.for);
+    }
+    return;
+  }
+  const chip = target.closest("[data-chip]");
+  if (chip) {
+    if (chip.dataset.kind === "page") {
+      openIn(chip.dataset.target, frame);
+    } else if (chip.dataset.kind === "canvas") {
+      state.canvas = chip.dataset.target;
+      drawAll();
+    }
+    return;
+  }
+  const successor = target.closest("[data-successor]");
+  if (successor) {
+    openIn(successor.dataset.successor, frame);
+    return;
+  }
+  if (target.closest("[data-back]")) {
+    const was = pagesFor(state.state).find((p) => p.name === state.page);
+    state.page = null;
+    if (OPENED[state.state]) {
+      state.state = was?.standing === "closed" ? "closed" : "open2";
+      pressChip(state.state);
+    }
+    drawAll();
+    return;
+  }
+  const backTo = target.closest("[data-back-to]");
+  if (backTo) {
+    state.canvas = null;
+    state.page = backTo.dataset.backTo;
+    drawAll();
+    return;
+  }
+  if (target.closest("[data-clear]")) {
+    standIn("open2");
+    return;
+  }
+  if (target.closest("[data-retry]")) {
+    standIn("loading");
+    state.state = "open2";
+    pressChip("open2");
+    stamp();
+    for (const f of frames()) {
+      reveal(f, () => drawPaneIn(f));
+    }
+    return;
+  }
+  const open = target.closest("[data-open-page]");
+  if (open) {
+    openIn(
+      open.dataset.openPage,
+      frame,
+      open.dataset.cardAt === undefined ? null : Number(open.dataset.cardAt)
+    );
+  }
+}
 
 function onClick(event) {
   const target = event.target;
@@ -386,61 +555,27 @@ function onClick(event) {
   const item = target.closest(".seg-item");
   if (item) {
     const group = item.closest(".seg");
-    const name = group.dataset.seg;
     for (const each of group.querySelectorAll(".seg-item")) {
       each.setAttribute("aria-pressed", String(each === item));
     }
     placeThumb(group);
-    if (name === "Theme") {
-      document.documentElement.classList.toggle("dark", item.dataset.value === "dark");
-      return;
-    }
-    const pick = PICKS.find((p) => p.key === name);
-    if (pick) {
-      state[pick.key] = item.dataset.value;
-      renderStage();
-    }
+    document.documentElement.classList.toggle(
+      "dark",
+      item.dataset.value === "dark"
+    );
     return;
   }
   const play = target.closest("[data-play]");
   if (play) {
-    const stage = document.querySelector("#stage");
     PLAYS[play.dataset.play]?.();
     if (motionOk()) {
-      stage.scrollIntoView({ block: "nearest" });
+      document.querySelector("#stage").scrollIntoView({ block: "nearest" });
     }
     return;
   }
   const frame = target.closest("#stage [data-frame]");
-  if (!frame) {
-    return;
-  }
-  // Inside a frame the drawing works as the tab would.
-  const foldToggle = target.closest("[data-fold-toggle], [data-more]");
-  if (foldToggle) {
-    toggleFold(frame, foldToggle.dataset.foldToggle ?? foldToggle.dataset.more);
-    return;
-  }
-  if (target.closest("[data-back]")) {
-    event.preventDefault();
-    standIn("open2");
-    return;
-  }
-  if (target.closest("[data-clear]")) {
-    event.preventDefault();
-    standIn("open2");
-    return;
-  }
-  const title = target.closest("[data-open-page]");
-  if (title || target.closest("a")) {
-    event.preventDefault();
-  }
-  if (title?.dataset.openPage === "address-setup") {
-    setState("replaced");
-    for (const f of frames()) {
-      openPage(f, "address-setup", () => drawPaneIn(f));
-    }
-    stamp(document.querySelector("#stage"));
+  if (frame) {
+    onFrameClick(event, frame);
   }
 }
 
@@ -449,29 +584,32 @@ function onInput(event) {
   if (!input) {
     return;
   }
-  const frame = input.closest("[data-frame]");
-  const kind = frame.dataset.frame;
+  const kind = input.closest("[data-frame]").dataset.frame;
   const caret = input.selectionStart;
   query = input.value;
   for (const f of frames()) {
     drawPaneIn(f);
   }
-  const again = document.querySelector(`#stage [data-frame="${kind}"] [data-search] input`);
+  const again = document.querySelector(
+    `#stage [data-frame="${kind}"] [data-search] input`
+  );
   again?.focus();
   again?.setSelectionRange(caret, caret);
 }
 
 function onKey(event) {
-  if (event.key === "Escape" && event.target.closest?.("#stage [data-search] input")) {
-    standIn("open2");
+  if (event.key === "Escape") {
+    closeMenus();
+    if (event.target.closest?.("#stage [data-search] input")) {
+      standIn("open2");
+    }
   }
-  if (
-    event.key === "/" &&
-    !event.target.closest?.("input, textarea") &&
-    document.querySelector("#stage [data-frame='desk'] [data-search] input")
-  ) {
+  const field = document.querySelector(
+    "#stage [data-frame='desk'] [data-search] input"
+  );
+  if (event.key === "/" && !event.target.closest?.("input, textarea") && field) {
     event.preventDefault();
-    document.querySelector("#stage [data-frame='desk'] [data-search] input").focus();
+    field.focus();
   }
 }
 
@@ -481,7 +619,7 @@ function page() {
       <div><p class="pv-mark"><span class="wordmark">Caw&amp;Co</span><span>· design preview</span></p>
       <h1 class="pv-title">Decisions, as a list made from what it is for</h1>
       <p class="pv-quote">“check what is the user's purpose form the list, how to make it sueful, show what matters, do a user journey using /interface-craft ux critique, allow discovery, etc... i don't want u to make the list only to find out it's just as useless, or link to stale or removed artifacts”</p>
-      <p class="pv-lede">The project's Decisions tab as one list grouped by where each page stands, with a search over every card, drawn at Desk 1440 and Phone 390 on the project's real pages. Every state is below; the four picks that draw differently each have a switch.</p></div>
+      <p class="pv-lede">The project's Decisions tab as one list grouped by where each page stands, with a search over every card, drawn at Desk 1440 and Phone 390 on the project's real pages, with the designer's answers to its critiques (report 068af135). Every state is below, and every row opens its page.</p></div>
       ${seg(
         [
           { value: "light", label: "Day" },
@@ -494,17 +632,22 @@ function page() {
     ${purpose()}
     <section class="pv-section" aria-labelledby="list-h">
       <div class="pv-col"><h2 class="pv-h2" id="list-h">${ic("decisions")}The list</h2>
-      <p class="pv-sub">Open is what waits on you, and its count is the badge on the tab. Later is what you put aside. Sent is with the agents. Decided holds the record and its tasks. Closed is folded: pages replaced or withdrawn, each saying where it went.</p>
+      <p class="pv-sub">Needs you is what waits on you, and its count is the badge on the tab. Not now is what you set aside. Sent is with the agents. Decided holds the record and its tasks. Closed is folded: pages replaced, withdrawn or dropped, each saying who closed it. Every row's figure is the date that put it in its group.</p>
       ${switches()}</div>
       <div id="stage"></div>
     </section>
     ${motionPanel()}
-    ${sameDrawing()}
+    ${settled()}
     ${critique()}`;
   renderStage();
   placeAll(root);
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
+  root.addEventListener("contextmenu", onContextMenu);
+  root.addEventListener("pointerdown", onPointerDown);
+  root.addEventListener("pointerup", cancelHold);
+  root.addEventListener("pointercancel", cancelHold);
+  root.addEventListener("pointermove", cancelHold);
   document.addEventListener("keydown", onKey);
   window.addEventListener("resize", () => {
     for (const group of root.querySelectorAll(".seg")) {

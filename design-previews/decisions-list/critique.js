@@ -11,28 +11,28 @@ export const CRITIQUE = [
     icon: "eye",
     items: [
       {
-        mark: "good",
-        text: "Focus: the eye lands on Open, the one group with a yellow glyph, and on the one strong word in it, “Not sent”. Under it 15 Sent rows read as one quiet block, so the two pages that wait are found without reading the rest.",
-      },
-      {
-        mark: "good",
-        text: "No word repeats for nothing: the writer (the same session on 23 of 25 pages) and the state pill are gone from the rows; the group head says the state once and each row says only what differs.",
+        mark: "fixed",
+        text: "Was: only one row opened a page, so the journey couldn't be walked. Every row opens its page now, drawn from the page's own cards, options and recommendations; the head's figure counts the cards it draws (the pairing page said 3 of 6 and drew 2: it draws all 6).",
       },
       {
         mark: "fixed",
-        text: "Was: Closed's “Show closed” stood in the age column, so that column was 105px on every row and a phone's titles had 184px. It stands beside the head's title now: the column is the age or the act (82px on the desk, 24px on the phone) and phone titles have 265px.",
+        text: "Was: a press on a waiting row only opened the page. It lands on the first pending stop: the first card not picked, or, with every card picked, the page's own Send at its foot, focused. No row carries a Send.",
       },
       {
         mark: "fixed",
-        text: "Was: the all-done line started 7px inside the titles' edge. It starts on it, as every title, card line and “Show 9 more sent” does.",
+        text: "Was: “4 of 4 picked ·Not sent·quiet 9d”, the spaces collapsing at the flex item's edge. Each piece and each separator is its own element on a flex gap.",
+      },
+      {
+        mark: "fixed",
+        text: "Was: Caw stood on the empty box's centre, 228px right of the block he heads. The block takes its widest part's width, and he stands on its axis on the desk and the phone.",
       },
       {
         mark: "good",
-        text: "Desk facts stand in one column across every group, so “read”, “working on it” and “not read yet” scan top to bottom like a departure board; the hover fill runs the whole row, tying title to fact across the gap between them.",
+        text: "Focus: the eye lands on Needs you, the one group with a yellow glyph, and on the one strong word in it, “Not sent”. The Sent block under it reads quiet but for the news it carries, the removed pictures in strong ink until opened.",
       },
       {
         mark: "open",
-        text: "“read” stands on 12 of 15 Sent rows. It is true and quiet, and the two rows that differ carry the news; drawn the other way (only the exceptions said) a blank would claim nothing and read as unknown.",
+        text: "“read” stands on most Sent rows. It is true and quiet, and the rows that differ carry the news; drawn the other way, a blank would claim nothing and read as unknown.",
       },
     ],
   },
@@ -42,27 +42,27 @@ export const CRITIQUE = [
     items: [
       {
         mark: "open",
-        text: "Degraded: single context (a leaf session has no sub-agent tool). Detector: impeccable detect over the folder gave 2 findings, both house rules read as faults: the warm paper ground (DESIGN.md's surface) and the 16px search field on a phone (The 16px Field Rule).",
+        text: "Degraded: single context (a leaf session has no sub-agent tool). Detector: impeccable detect over the folder gives 2 findings, both house rules read as faults: the warm paper ground (DESIGN.md's surface) and the 16px search field on a phone (The 16px Field Rule).",
+      },
+      {
+        mark: "fixed",
+        text: "Was: Make tasks on every Sent row, “working on it” and “not read yet” included. It is offered only where it can succeed: read, or its session ended (a fourth heard fact), on the row and as the one act at the page's foot, each with its drawn outcome (Decided, making tasks).",
+      },
+      {
+        mark: "fixed",
+        text: "Was: near-black Caw on near-black at Night, in the head and the first use. Every Caw is drawn from his night still on the paper rim by night.",
+      },
+      {
+        mark: "fixed",
+        text: "Was: the words. “No decisions yet” is the first-use formula now; “Withdrawn by you” is “Dropped by you”, the agent's own “Withdrawn by Caw” or its session's chip; the Open group is Needs you (it no longer meets “Open Find”); Later and put aside are Not now; “quiet 9d” is gone; the folds are Closed's own head and “9 more sent pages”.",
+      },
+      {
+        mark: "fixed",
+        text: "Was: the last movement on every row. The figure is the date that put a page in its group, in the house formatter, each group newest first and Needs you longest wait first; its tooltip and screen-reader words say what it is.",
       },
       {
         mark: "good",
-        text: "Health, Nielsen's ten on these screens: status 3, real world 4, control 3, consistency 4, error prevention 3, recognition 4, flexibility 3, minimalism 3, recovery 3, help 3: 33 of 40, against 19 for today's grid. The 3s are what only a build proves: that the hub's read and working-on-it records are kept.",
-      },
-      {
-        mark: "fixed",
-        text: "Was: TaskRing draws its finish check at 7 of 7, so a page fully picked but not sent would wear the done mark. Here a full ring means picked; the done glyph is kept for a decided page whose tasks are all done.",
-      },
-      {
-        mark: "fixed",
-        text: "Was: the report's “Search everything” and “Open <title>”. WORDS.md's button verbs make them “Open Find” and “Open the new page” (“Open Open CawCo at cawco” read twice).",
-      },
-      {
-        mark: "fixed",
-        text: "Was: “Open · 0” at all done. A count of none says nothing (The Earned Count Rule): the head stands alone over “Nothing waits on you. Agents have 17 pages; 2 are decided.”, and the badge is gone, not 0.",
-      },
-      {
-        mark: "good",
-        text: "Cognitive load: one decision point on the list (which row), the Open group never folds, and no control past the field and a fold toggle is visible until a row is pointed at.",
+        text: "Search reads every question, option, pick and note for any query, and shows the matched card lines under each row: “pair”, “Looks right”, “swallow” and “Make tasks” each find their page.",
       },
     ],
   },
@@ -71,20 +71,20 @@ export const CRITIQUE = [
     icon: "stars",
     items: [
       {
-        mark: "good",
-        text: "Simplicity, “everything else would appear as it became most relevant”: Open stands open, Sent folds past six, Closed is folded, and a row's one act shows on hover or focus only.",
+        mark: "fixed",
+        text: "Was: a page's removed pictures said only after opening it. Simplicity, “as it became most relevant”: the row leads with “2 pictures removed”, strong until he opens the page, and keeps its group and its ring.",
       },
       {
         mark: "good",
-        text: "Fluidity, “if a component … will persist in the next phase … it should remain consistent”: a sent row travels to Sent rather than vanishing, a search keeps its survivors and slides them, and a page's title flies from its row into the page's head.",
+        text: "Fluidity: a row that changes group travels to it (Send, Not now, Reopen, Make tasks all reflow the list), and a page's title flies from its row into the page's head.",
       },
       {
         mark: "good",
         text: "Delight, where frequency is low: one moment, the last task of a decided page landing (its ring closes into the done glyph). Nothing else moves for its own sake.",
       },
       {
-        mark: "fixed",
-        text: "Was: a 1.2s pulse on the working dot (the report). Every live dot breathes on the house breath (2s), on one clock, so this one does too.",
+        mark: "good",
+        text: "The least-visited room carries the same facts as the others: every Closed row says who closed it and when.",
       },
     ],
   },

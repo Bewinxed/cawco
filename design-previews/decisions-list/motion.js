@@ -140,51 +140,87 @@ export function pop(el, text) {
 
 /* ------------------------------------------------- a row changing group */
 
-/** He sends "How CawCo knows you're here": its row slides from Open to the head of Sent. */
-export function sendRow(frame) {
+/**
+ * The list redrawn for what was just done (a Send, Not now, Reopen, Make
+ * tasks): every row and head slides from where it stood (the house reflow),
+ * a fact that changed cross-blurs to its new words, and a count that changed
+ * pops in, the badge's too. A row that arrives fades in.
+ */
+export function reflow(frame, draw) {
   const list = frame.querySelector("[data-list]");
-  const row = list?.querySelector('[data-page="owner-presence"]');
-  const sent = list?.querySelector('[data-group="sent"]');
-  if (!(row && sent)) {
+  if (!list) {
+    draw();
     return;
   }
   const scale = scaleOf(list);
   const before = byKey(list);
-  sent.querySelector(".ghead").after(row);
-  row.dataset.standing = "sent";
-  row.querySelector(".ring").setAttribute("class", "ring sent");
-  row.querySelector(".act")?.remove();
-  const fact = row.querySelector("[data-fact]");
-  softSwap(fact, '<span data-heard-fact="unread">7 of 7 · not read yet</span>');
-  softSwap(row.querySelector(".age"), "now");
-  const open = list.querySelector('[data-group="open"]');
-  const counts = [
-    [open, open.querySelectorAll("[data-row]").length],
-    [sent, sent.querySelectorAll("[data-row]").length],
-  ];
-  for (const [group, n] of counts) {
-    group.dataset.count = String(n);
-    const count = group.querySelector(".ghead .count");
-    if (count) {
-      pop(count, String(n));
+  const facts = new Map(
+    [...list.querySelectorAll("[data-row]")].map((r) => [
+      r.dataset.page,
+      r.querySelector("[data-fact]").innerHTML,
+    ])
+  );
+  const counts = new Map(
+    [...list.querySelectorAll("[data-group]")].map((g) => [g.dataset.group, g.dataset.count])
+  );
+  const badge = frame.querySelector("[data-badge]")?.textContent ?? "";
+  draw();
+  const next = frame.querySelector("[data-list]");
+  if (!next) {
+    return;
+  }
+  for (const r of next.querySelectorAll("[data-row]")) {
+    const old = facts.get(r.dataset.page);
+    const fact = r.querySelector("[data-fact]");
+    if (old !== undefined && old !== fact.innerHTML) {
+      const now = fact.innerHTML;
+      fact.innerHTML = old;
+      softSwap(fact, now);
+    }
+    if (old === undefined && motionOk()) {
+      r.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: ms("--dur-pop"),
+        easing: token("--ease-out"),
+      });
     }
   }
-  const badge = frame.querySelector("[data-badge]");
-  if (badge) {
-    pop(badge, String(counts[0][1]));
+  for (const g of next.querySelectorAll("[data-group]")) {
+    if (counts.get(g.dataset.group) !== g.dataset.count) {
+      popIn(g.querySelector(".ghead .count"));
+    }
   }
-  slide(list.querySelectorAll("[data-row], .ghead"), before, scale);
-  if (!motionOk()) {
-    // Reduced motion: list changes only fade.
-    row.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: ms("--dur-fade"),
-      easing: token("--ease-out"),
-    });
+  const nowBadge = frame.querySelector("[data-badge]");
+  if (nowBadge && nowBadge.textContent !== badge) {
+    popIn(nowBadge);
   }
+  slide(next.querySelectorAll("[data-row], .ghead"), before, scale);
+}
+
+/** Number pop-in on a figure just drawn. */
+function popIn(el) {
+  if (!(el && motionOk())) {
+    return;
+  }
+  el.animate(
+    [
+      {
+        transform: `translateY(${px("--space-1")}px)`,
+        opacity: 0,
+        filter: `blur(${token("--skeleton-reveal-blur")})`,
+      },
+      { transform: "none", opacity: 1, filter: "blur(0)" },
+    ],
+    { duration: ms("--dur-morph"), easing: token("--ease-out") }
+  );
 }
 
 /* ------------------------------------------------------ a group folding */
 
+/**
+ * Closed opens and shuts under its head (the head is the disclosure, its
+ * name the label); a group's tail opens once under its reveal, which then
+ * goes, the group's rows all standing.
+ */
 export function toggleFold(frame, key) {
   const fold = frame.querySelector(`[data-fold="${key}"]`);
   if (!fold) {
@@ -193,18 +229,14 @@ export function toggleFold(frame, key) {
   const open = !fold.hasAttribute("data-open");
   fold.toggleAttribute("data-open", open);
   fold.toggleAttribute("inert", !open);
-  const toggle =
-    frame.querySelector(`[data-fold-toggle="${key}"]`) ??
-    frame.querySelector(`[data-more="${key}"]`);
-  if (toggle) {
-    toggle.setAttribute("aria-expanded", String(open));
-    const words = toggle.querySelector("span");
-    if (toggle.dataset.foldToggle) {
-      words.textContent = open ? "Hide closed" : "Show closed";
-    } else {
-      toggle.dataset.words ??= words.textContent;
-      words.textContent = open ? "Show fewer" : toggle.dataset.words;
-    }
+  const head = frame.querySelector(`[data-fold-toggle="${key}"]`);
+  if (head) {
+    head.setAttribute("aria-expanded", String(open));
+    return;
+  }
+  const more = frame.querySelector(`[data-more="${key}"]`);
+  if (more && open) {
+    more.hidden = true;
   }
 }
 
@@ -420,14 +452,15 @@ export function openPage(frame, name, drawPane) {
     ?.getBoundingClientRect();
   drawPane();
   const title = frame.querySelector("[data-dtitle]");
-  const page = frame.querySelector("[data-dpage]");
-  if (!(from && title && page)) {
+  const page = frame.querySelector("[data-dpage], [data-canvas]");
+  if (!(title && page)) {
     return;
   }
   const scale = scaleOf(title);
   const to = title.getBoundingClientRect();
   const fade = { duration: ms("--dur-fade"), easing: token("--ease-out") };
-  if (!motionOk()) {
+  // Opened from a chip or a successor there is no row to fly from: the page fades in.
+  if (!(from && motionOk())) {
     page.animate([{ opacity: 0 }, { opacity: 1 }], fade);
     return;
   }
@@ -442,7 +475,7 @@ export function openPage(frame, name, drawPane) {
     ],
     { duration: ms("--dur-panel"), easing: token("--ease-drawer") }
   );
-  for (const part of page.querySelectorAll(".dback, .dmeta, .banner, .dcard")) {
+  for (const part of page.querySelectorAll(".dback, .dmeta, .banner, .dcard, .dfoot")) {
     part.animate([{ opacity: 0 }, { opacity: 1 }], fade);
   }
 }

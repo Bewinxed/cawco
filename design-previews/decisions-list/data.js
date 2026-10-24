@@ -1,4 +1,8 @@
 /*
+ * `age` is how long ago the event that put the page in its group happened
+ * (report 068af135, answer 4): Needs you, its wait; Not now, when he chose
+ * Not now; Sent, his send; Decided, the record; Closed, the closing.
+ *
  * The project's decision pages, as the hub listed them for Cawco-Dev (report
  * 7932615d §0): 25 pages, 23 of them written by one orchestrator session, none
  * ever decided. Titles are the real pages' (decisions/<name>/ in the project's
@@ -50,8 +54,7 @@ export const PAGES = [
     standing: "later",
     cards: 10,
     picked: 3,
-    asideAgo: "1d",
-    age: "6d",
+    age: "1d",
     writer: ORCH,
   },
   // Sent, by last movement (§0: 19 sent; §7's heard facts)
@@ -82,7 +85,7 @@ export const PAGES = [
     cards: 4,
     picked: 4,
     heard: "read",
-    age: "1h",
+    age: "7d",
     writer: "Delegates in any folder",
   },
   {
@@ -111,7 +114,7 @@ export const PAGES = [
     standing: "sent",
     cards: 4,
     picked: 4,
-    heard: "read",
+    heard: "ended",
     age: "5h",
     writer: ORCH,
   },
@@ -202,7 +205,7 @@ export const PAGES = [
     cards: 9,
     picked: 9,
     heard: "read",
-    age: "5d",
+    age: "6d",
     writer: ORCH,
   },
   // Decided (§7: the record stands; one still building, one built)
@@ -237,6 +240,7 @@ export const PAGES = [
     by: "Open CawCo at cawco",
     age: "2h",
     writer: ORCH,
+    writtenBy: "Caw",
   },
   {
     name: "pairing-behaviour",
@@ -251,19 +255,21 @@ export const PAGES = [
     name: "resize-handle-pick",
     title: "The resize handle",
     standing: "closed",
-    closed: "dropped",
+    closed: "withdrawn",
     kept: 1,
     age: "2h",
     writer: ORCH,
+    by: "Orchestrate cockpit fleet work",
   },
   {
     name: "plan-steps",
     title: "How a plan shows its steps",
     standing: "closed",
     closed: "withdrawn",
-    kept: 2,
+    kept: 1,
     age: "1d",
     writer: ORCH,
+    by: "Caw",
   },
   {
     name: "tabcard-headfade",
@@ -291,76 +297,52 @@ export const ALL_SENT = {
   "owner-presence": { heard: "unread", age: "1m" },
 };
 
-/** The search the drawing runs, and what each page's cards matched. */
-export const SEARCH = {
-  query: "pairing",
-  hits: {
-    "caw-pairing-picks": [],
-    "product-md-refresh": [
-      {
-        q: "Intro",
-        a: "…no presence, no pairing, no app in TestFlight.",
-      },
-    ],
-    "pairing-behaviour": [
-      {
-        q: "Fixed from your pins: does the pairing screen look right now?",
-        a: "Looks right",
-      },
-      {
-        q: "What does Caw swallow?",
-        a: "The device, at Approve",
-        note: "your note: the swallow belongs to pairing, not the scan",
-      },
-    ],
-  },
-};
+/** The query the "Search with matches" state types. */
+export const QUERY = "pairing";
 
 export const NO_MATCH = "tray";
 
-/** The replaced page, opened: its one card as he left it (decisions/address-setup). */
-export const REPLACED = {
-  name: "address-setup",
-  title: "How should setting up the short address, cawco, work?",
-  by: "Open CawCo at cawco",
-  ago: "2h",
-  card: {
-    q: "Pick one of the four",
-    options: [
-      "One row in Settings",
-      "Caw walks you through it",
-      "Your phone proves it",
-      "Caw's steps, then your phone",
-    ],
-    chosen: 3,
-    recommended: 3,
-  },
+/** His notes on cards, by page and card (drawn for shape: the hub holds the real ones). */
+export const NOTES = {
+  "pairing-behaviour": { 0: "the swallow belongs to pairing, not the scan" },
+  "calls-to-overrule": { 1: "keep this one unless it costs a day" },
+  commenting: { 2: "Make tasks for these once the rail ships" },
+  "owner-presence": { 4: "the catch-up waits for me, not the other way round" },
 };
 
-/** A page whose pictures were removed (decisions/caw-pairing-picks). */
-export const REMOVED = {
-  name: "caw-pairing-picks",
-  title: "Caw on the pairing screen",
-  cards: [
-    {
-      q: "While the code waits, what does Caw do?",
-      gone: "Pairing flow, round 3",
+/** Pictures on a page whose canvas was removed: the piece, when, and where its design went on. */
+export const GONE = {
+  "caw-pairing-picks": {
+    total: 6,
+    0: {
+      name: "Pairing flow, round 3",
       ago: "2d",
       next: "Pairing, round 4",
       caption: "Caw waits beside the code, his badge in the QR",
-      options: ["He watches the code", "He tidies his badge"],
-      chosen: 0,
     },
-    {
-      q: "When it's approved, what does Caw do?",
-      gone: "Caw approves, take 2",
+    1: {
+      name: "Caw approves, take 2",
       ago: "2d",
       next: null,
       caption: "The approve moment, three takes",
-      options: ["He swallows the device", "He nods once"],
-      chosen: 0,
+    },
+  },
+};
+
+/** The card a withdrawn page's revision took out, as he saw it (its kept.json). */
+export const KEPT_CARDS = {
+  "plan-steps": [
+    {
+      q: "How does the plan panel show its steps?",
+      options: ["One list", "Lanes", "Crew first"],
+      rec: 0,
     },
   ],
+};
+
+/** A canvas a page names: the successor of a removed picture. */
+export const CANVASES = {
+  "Pairing, round 4": { from: "caw-pairing-picks", made: "1d" },
 };
 
 /** What the empty tab offers to ask Caw for (hub project-starters, written per project). */
