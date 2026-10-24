@@ -1192,6 +1192,18 @@ export const pinUnsent = (pin: Pin): boolean =>
   (pin.heard !== undefined && pin.heard !== pinSaid(pin));
 
 /**
+ * Whether an unsent pin is ready to go: a comment the apps' Comment mode
+ * makes by a tap before the person writes in it goes once they have (or
+ * resolved it). An annotation stands on its ink, and goes as it is. The
+ * dashboard's comments are written with their words (commentOn), so this
+ * holds back only the apps' tap pins (preview-overlay page.ts
+ * `appCommenting`): it exists until the app's commenting lands (tsk-59) and
+ * is deleted then.
+ */
+export const pinReady = (pin: Pin): boolean =>
+  pin.kind === "annotation" || pin.thread.length > 0 || !!pin.resolvedAt;
+
+/**
  * Pin `current` as the session heard pin `sent` at `at`: stamped sent, its
  * person's entries that went in `sent` stamped too when their words are
  * unchanged, and `heard` what `sent` said. Whatever the person changed since
@@ -1465,6 +1477,21 @@ export function deletePin(doc: MapDoc, pin: string): string | null {
     }
   });
   return null;
+}
+
+/**
+ * The person dismissed the apps' card of pin `pin`, which they had just made
+ * by a tap and said nothing in (no thread, no draft): the pin is taken back,
+ * as if the tap had not been made (`cawco:withdraw`). Ink it stands on stays,
+ * as it was before its Comment was picked. A pin that holds a thread, or is
+ * gone, is left alone. The apps' tap path alone writes such a pin
+ * (preview-overlay page.ts `appCommenting`): this exists until the app's
+ * commenting lands (tsk-59) and is deleted then.
+ */
+export function withdrawPin(doc: MapDoc, pin: string): void {
+  if (readPin(doc, pin)?.thread.length === 0) {
+    buryPin(doc, pin, new Date().toISOString());
+  }
 }
 
 /**

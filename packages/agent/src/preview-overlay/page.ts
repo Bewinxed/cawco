@@ -25,6 +25,7 @@ import {
   readPins,
   replyToPin,
   resolvePin,
+  withdrawPin,
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
@@ -85,6 +86,28 @@ let modeNow: PreviewMode = "interact";
 const commenting = () => modeNow === "comment";
 /** The moved pin a tap in Comment mode places again, instead of a new one. */
 let placing: string | null = null;
+
+/**
+ * The page stands in the iPhone or Mac app's web view, which comments the
+ * way its shipped build expects: a Comment-mode tap writes the pin at once
+ * and posts `cawco:pin-open` with `made`, the app's own card opens it, and a
+ * card dismissed with nothing said takes it back (`cawco:withdraw`). The
+ * app's host script (PreviewController.swift `host`) is the marker: it
+ * registers the `cawco` message handler and stands a plain object in for
+ * `window.parent` on a top-level document. The dashboard frames the page,
+ * so there `top` is never the page itself, and its composer flow runs alone.
+ *
+ * A second way of commenting, kept until the app's commenting lands
+ * (tsk-59), and deleted then with core `withdrawPin` and `pinReady`.
+ */
+const appCommenting = (): boolean =>
+  window.top === window &&
+  window.parent !== window &&
+  !!(
+    window as unknown as {
+      webkit?: { messageHandlers?: { cawco?: unknown } };
+    }
+  ).webkit?.messageHandlers?.cawco;
 /** The tag that loaded the script (core's `injectOverlay`), as the entry read it. */
 const { tag } = here;
 /** The page as it was served; a morph moves it to the revision morphed to. */
@@ -336,6 +359,7 @@ function cornersOf(el: Element, rect: DOMRect): string[] {
 /** The person's pins, drawn after the ink (pins.ts). */
 const pins: Pins = startPins({
   anchorOf,
+  appCommenting,
   chrome,
   compose: (target, elements) => composeInk(target, elements),
   describe,
@@ -1972,6 +1996,12 @@ function pressedOn(el: Element | null, clientX: number, clientY: number) {
     requestAnimationFrame(() => pinPicture(id));
     return;
   }
+  // In the app (until tsk-59): the pin written now, its card the app's.
+  if (appCommenting()) {
+    const id = pins.commentAt(el, clientX, clientY);
+    requestAnimationFrame(() => pinPicture(id));
+    return;
+  }
   startDraft(el, clientX, clientY);
 }
 
@@ -2785,6 +2815,13 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         // One the hub refused stands only in the device's keep: it goes from there.
         artifact.letGoRefused(pin) ? null : deletePin(artifact.doc(), pin)
       ),
+    // The app dismissed the card of a pin its tap just made, said nothing in it: taken back (`appCommenting`, until tsk-59).
+    "cawco:withdraw": async (message) => {
+      if (typeof message.pin === "string" && artifact.keeps()) {
+        await artifact.whenKnown();
+        withdrawPin(artifact.doc(), message.pin);
+      }
+    },
     // The composer's words: the comment written, its pin and first entry at once.
     "cawco:comment": (message) => writeDraft(message),
     // The composer closed with nothing said (Esc, a press outside, Close): nothing was written, and its pill goes.

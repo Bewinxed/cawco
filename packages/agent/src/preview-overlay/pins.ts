@@ -65,6 +65,7 @@ import {
   writePin,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
+import { pinName } from "@cawco/core/pin-name";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, rectOf } from "./frames";
@@ -133,6 +134,8 @@ export const DRAFT_PIN = "draft";
 export interface PinsDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
   anchorOf: (el: Element) => PageAnchor;
+  /** The page stands in the iPhone or Mac app, whose card opens a pin a tap writes (page.ts `appCommenting`, until tsk-59). */
+  appCommenting: () => boolean;
   chrome: InkChrome;
   /** The radial's Comment on an ink group: a comment is written on it (the page's composer opens). */
   compose: (target: DraftTarget, elements: PinnedElement[] | string[]) => void;
@@ -162,6 +165,12 @@ export interface PinsDeps {
 }
 
 export interface Pins {
+  /**
+   * The apps' Comment-mode tap (page.ts `appCommenting`, until tsk-59): a
+   * comment pinned on `el` where the viewport's `x`, `y` landed, its thread
+   * empty, and its card opened in the app (`cawco:pin-open`, `made`). Its id.
+   */
+  commentAt: (el: Element, x: number, y: number) => string;
   /** What of the page's viewport the host's chrome covers now (`cawco:covered`, the viewport's px); none when nothing does. */
   cover: (boxes: Box[]) => void;
   /**
@@ -186,8 +195,8 @@ export interface Pins {
   layer: SVGSVGElement;
   /** The pins the agent is working on (`live`) and those with an answer the person hasn't read (`unread`), each its dot. */
   marks: (live: Set<string>, unread: Set<string>) => void;
-  /** Pin `id`'s thread opened in the host (`cawco:pin-open`) by a press on the page, the pin as this page holds it with it. */
-  open: (id: string) => void;
+  /** Pin `id`'s thread opened in the host (`cawco:pin-open`) by a press on the page, the pin as this page holds it with it; `made`, for one the apps' tap just made. */
+  open: (id: string, made?: boolean) => void;
   /** A pin on an ink group: an annotation is written; a comment's composer opens on it. */
   pinInk: (
     group: InkGroup,
@@ -407,7 +416,7 @@ export function startPins(deps: PinsDeps): Pins {
    * host's only through the hub, and the page's link is down) draws the
    * thread from that, and writes its words through the page (`cawco:reply`).
    */
-  const open = (id: string) => {
+  const open = (id: string, made = false) => {
     if (id === DRAFT_PIN) {
       deps.reopenDraft();
       return;
@@ -417,6 +426,8 @@ export function startPins(deps: PinsDeps): Pins {
       id,
       // Every open the page makes is a press: the field draws no ring.
       via: "pointer",
+      // The apps' card takes a pin it just made back when dismissed unsaid (`cawco:withdraw`).
+      ...(made ? { made: true } : {}),
       ...(pin ? { pin } : {}),
     });
   };
@@ -1296,6 +1307,9 @@ export function startPins(deps: PinsDeps): Pins {
 
   /** A new pin written whole (its head, place and thread its own keys). */
   const write = (pin: Pin) => writePin(artifact.doc(), pin);
+  /** The number a new pin takes: one past the highest; a deleted pin's is never reused while a higher one stands. */
+  const nextNumber = () =>
+    Math.max(0, ...[...pinsMap().values()].map((pin) => pin.number)) + 1;
 
   /** Where the viewport's `x`, `y` is on `el`'s box, as fractions; 0 along an extent it has none of (a body whose content is all fixed). */
   const pointOn = (el: Element, x: number, y: number) => {
@@ -1369,7 +1383,40 @@ export function startPins(deps: PinsDeps): Pins {
       staleInset();
       draw();
     },
+    commentAt: (el, x, y) => {
+      const pin: Pin = {
+        id: newId(),
+        number: nextNumber(),
+        kind: "comment",
+        anchor: deps.anchorOf(el),
+        at: new Date().toISOString(),
+        by: "person",
+        elements: [deps.describe(el)],
+        point: pointOn(el, x, y),
+        thread: [],
+      };
+      write({ ...pin, title: pinName(pin) });
+      open(pin.id, true);
+      return pin.id;
+    },
     pinInk: (group, kind, elements) => {
+      // The apps' radial Comment pins the ink at once and opens its card (until tsk-59).
+      if (kind === "comment" && deps.appCommenting()) {
+        const pin: Pin = {
+          id: newId(),
+          number: nextNumber(),
+          kind,
+          anchor: group.anchor,
+          at: new Date().toISOString(),
+          by: "person",
+          elements,
+          ink: group.id,
+          thread: [],
+        };
+        write({ ...pin, title: pinName(pin) });
+        open(pin.id, true);
+        return;
+      }
       if (kind === "comment") {
         const el =
           ("selector" in group.anchor ? deps.locate(group.anchor)?.el : null) ??
@@ -1379,8 +1426,7 @@ export function startPins(deps: PinsDeps): Pins {
       }
       write({
         id: newId(),
-        number:
-          Math.max(0, ...[...pinsMap().values()].map((pin) => pin.number)) + 1,
+        number: nextNumber(),
         kind,
         anchor: group.anchor,
         at: new Date().toISOString(),

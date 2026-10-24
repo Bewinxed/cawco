@@ -41,7 +41,8 @@
  * 6. No `selection.md`, `SelectionChip` or `SelectionPopover`, and no
  *    PinList, PinDisc, `withdrawPin`, `pinReady`, `cawco:withdraw`, pin
  *    drafts, Comments popover or `c-pin-card-min`, is left in
- *    apps/dashboard/src or packages.
+ *    apps/dashboard/src or packages, but for the apps' tap path in packages
+ *    (`withdrawPin`, `pinReady`, `cawco:withdraw`; until tsk-59).
  *
  * And the owner's report (2026-10-14: the card didn't open on a new pin,
  * no delete, the whole iframe outlined):
@@ -8187,19 +8188,31 @@ const cutoverCheck = async (kit: Kit) => {
     found.split("\n").slice(0, 4).join(" | ") || "none"
   );
   // The commenting redesign's cutover: the old panel, disc, card foot and
-  // the write-before-words path are gone with what used them.
+  // the write-before-words path are gone with what used them. The
+  // write-before-words path stands for the apps alone until tsk-59 (overlay
+  // page.ts `appCommenting`, core `withdrawPin` and `pinReady`), so the
+  // dashboard is held to all of it and packages to the rest.
   const gone = (
-    await Bun.$`git grep -n -e PinList.svelte -e PinDisc -e withdrawPin -e pinReady -e cawco:withdraw -e pin-drafts -e data-pin-list-pop -e c-pin-card-min -- apps/dashboard/src packages`
+    await Bun.$`git grep -n -e PinList.svelte -e PinDisc -e withdrawPin -e pinReady -e cawco:withdraw -e pin-drafts -e data-pin-list-pop -e c-pin-card-min -- apps/dashboard/src`
       .cwd(ROOT)
       .nothrow()
       .quiet()
   ).stdout
     .toString()
     .trim();
+  const goneHere = (
+    await Bun.$`git grep -n -e PinList.svelte -e PinDisc -e pin-drafts -e data-pin-list-pop -e c-pin-card-min -- packages`
+      .cwd(ROOT)
+      .nothrow()
+      .quiet()
+  ).stdout
+    .toString()
+    .trim();
+  const left = [gone, goneHere].filter(Boolean).join("\n");
   kit.check(
-    "6: no PinList, PinDisc, withdrawPin, pinReady, cawco:withdraw, pin drafts, Comments popover or c-pin-card-min is left in apps/dashboard/src or packages",
-    gone === "",
-    gone.split("\n").slice(0, 4).join(" | ") || "none"
+    "6: no PinList, PinDisc, withdrawPin, pinReady, cawco:withdraw, pin drafts, Comments popover or c-pin-card-min is left in apps/dashboard/src, nor any but the apps' tap path in packages",
+    left === "",
+    left.split("\n").slice(0, 4).join(" | ") || "none"
   );
 };
 

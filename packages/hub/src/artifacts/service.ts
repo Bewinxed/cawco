@@ -82,6 +82,7 @@ import {
   type Pin,
   pinAsks,
   pinDelivery,
+  pinReady,
   pinSaid,
   pinStandsOn,
   pinUnsent,
@@ -3478,8 +3479,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * What of the person's marks on an artifact's doc the session has not
-   * heard: each pin, by number, and each stroke group no pin stands on;
-   * with every group, moved ones too, by id.
+   * heard: each pin ready to go (core `pinReady`, which holds back an apps'
+   * tap pin until its words are written; until tsk-59), by number, and each
+   * stroke group no pin stands on; with every group, moved ones too, by id.
    */
   const marksOwed = (doc: Doc) => {
     const pins = [...readPins(doc).values()];
@@ -3487,7 +3489,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const ink = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
     return {
       pins,
-      owed: pins.filter(pinUnsent).sort((a, b) => a.number - b.number),
+      owed: pins
+        .filter((pin) => pinUnsent(pin) && pinReady(pin))
+        .sort((a, b) => a.number - b.number),
       loose: Object.values(ink).filter(
         (group) => !(group.sentAt || pinned.has(group.id))
       ),
