@@ -68,7 +68,7 @@ import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { RELAY_URL } from "../../../packages/agent/src/proxy-relay";
 import { isAlive, signal } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { copyPath, gitInCopy } from "../copy";
+import { copyPath, gitInCopy, inCopyExists } from "../copy";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -501,7 +501,7 @@ const run = async (kit: Kit) => {
     sqlite === "1",
     `bun:sqlite query: ${sqlite ?? "unread"}`
   );
-  await checkHookCache(kit, home, clone, said);
+  await checkHookCache(kit, fleet, home, workspace, said);
   await checkEngineCache(kit, fleet, parent, repo, said);
 };
 
@@ -512,22 +512,25 @@ const run = async (kit: Kit) => {
  */
 const checkHookCache = async (
   kit: Kit,
+  fleet: Fleet,
   home: string,
-  clone: string,
+  workspace: Workspace,
   said: string
 ): Promise<void> => {
   const root = join(home, ".cawco", "workspace-cache", "impeccable", "hook");
   const kept = await Array.fromAsync(
     new Bun.Glob("*/hook.cache.json").scan({ cwd: root, onlyFiles: true })
   ).catch(() => [] as string[]);
-  const inClone = join(clone, ".impeccable", "hook.cache.json");
+  // Read in the copy, where the delegate's writes are (../copy.ts).
+  const rel = join(".impeccable", "hook.cache.json");
+  const inClone = inCopyExists(fleet, workspace, rel);
   kit.check(
     "impeccable's hook, on an Edit in the clone, keeps its cache in the workspaces' cache and none in the clone",
     after(said, "HOOK-EXIT:") === "0" &&
       kept.length > 0 &&
-      clone !== "" &&
-      !existsSync(inClone),
-    `exit ${after(said, "HOOK-EXIT:") ?? "unread"}; in ${root}: ${kept.join(", ") || "none"}; ${inClone}: ${existsSync(inClone) ? "present" : "absent"}`
+      workspace.path !== "" &&
+      !inClone,
+    `exit ${after(said, "HOOK-EXIT:") ?? "unread"}; in ${root}: ${kept.join(", ") || "none"}; ${rel} in the copy: ${inClone ? "present" : "absent"}`
   );
 };
 

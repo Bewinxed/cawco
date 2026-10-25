@@ -277,7 +277,7 @@ const callsOf = (reply: Reply): ToolCall[] => [
 const wordsOf = (
   messages: readonly { content: unknown; role: string }[]
 ): { midTurn: boolean; text: string }[] =>
-  messages.flatMap((message) => {
+  messages.flatMap((message): { midTurn: boolean; text: string }[] => {
     if (message.role !== "user" && message.role !== "system") {
       return [];
     }
