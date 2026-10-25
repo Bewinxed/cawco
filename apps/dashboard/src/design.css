@@ -981,6 +981,10 @@
 @utility grid-cols-mark-fluid {
   grid-template-columns: var(--icon-md) minmax(0, 1fr);
 }
+/* A row's 28px lead column, its mark centred there, before words that take the rest. */
+@utility grid-cols-lead-fluid {
+  grid-template-columns: var(--c-row-lead) minmax(0, 1fr);
+}
 /* The artifact masonry's row unit: one pixel, each card spanning its height. */
 @utility auto-rows-line {
   grid-auto-rows: 1px;

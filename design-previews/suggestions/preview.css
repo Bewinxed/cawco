@@ -1,0 +1,373 @@
+/* The preview's own page: its chrome on the house's tokens (house.css), the
+   captured parts left to the house's own rules. Every colour, type role,
+   space, radius and shadow is a token; the frames' widths (the page's
+   1400px, the phone's 390px) are the preview's own. */
+@layer preview {
+  html {
+    color-scheme: light;
+    background: var(--surface-recess);
+    color: var(--ink-strong);
+    -webkit-text-size-adjust: 100%;
+
+    &[data-scheme="dark"] {
+      color-scheme: dark;
+    }
+  }
+
+  /* The flip: nothing eases from the old scheme's colour. */
+  [data-flipping] *,
+  [data-flipping] *::before,
+  [data-flipping] *::after {
+    transition: none !important;
+  }
+
+  body {
+    margin: 0;
+    font: var(--type-body);
+    padding-block: var(--space-7);
+    padding-inline: max(var(--space-5), env(safe-area-inset-left))
+      max(var(--space-5), env(safe-area-inset-right));
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+
+  h1,
+  h2,
+  h3 {
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  p,
+  dd {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  code {
+    font: var(--type-code);
+    font-variant-ligatures: none;
+  }
+
+  a {
+    color: var(--link-ink);
+    text-underline-offset: var(--underline-offset);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* ---------- The page's head ---------- */
+  .page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    max-inline-size: 1400px;
+    margin-inline: auto;
+    margin-block-end: var(--space-8);
+  }
+
+  .page-words {
+    display: grid;
+    gap: var(--space-2);
+    max-inline-size: var(--c-measure);
+    min-inline-size: 0;
+
+    & h1 {
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+    }
+
+    & p {
+      color: var(--ink-muted);
+    }
+  }
+
+  .scheme {
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+
+    & button {
+      min-block-size: var(--c-btn-h-sm);
+      min-inline-size: var(--c-touch-floor);
+      padding-inline: var(--space-3);
+      border: 0;
+      border-radius: var(--radius-well);
+      background: transparent;
+      color: var(--ink-muted);
+      font: var(--type-label);
+      cursor: pointer;
+
+      &[aria-checked="true"] {
+        background: var(--surface-lift);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-raised);
+      }
+    }
+  }
+
+  /* ---------- A look's section ---------- */
+  main {
+    display: grid;
+    gap: var(--space-8);
+    max-inline-size: 1400px;
+    margin-inline: auto;
+  }
+
+  .variant {
+    display: grid;
+    gap: var(--space-6);
+    padding-block-start: var(--space-7);
+    border-block-start: 1px solid var(--border-hairline);
+    min-inline-size: 0;
+  }
+
+  .variant-head {
+    display: grid;
+    gap: var(--space-2);
+    max-inline-size: var(--c-measure);
+    min-inline-size: 0;
+
+    & h2 {
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+    }
+  }
+
+  .source {
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .trade {
+    display: grid;
+    gap: var(--space-1);
+    margin: 0;
+
+    & div {
+      display: grid;
+      grid-template-columns: 4.5rem minmax(0, 1fr);
+      gap: var(--space-2);
+    }
+
+    & dt {
+      font: var(--type-label);
+      color: var(--ink-muted);
+    }
+  }
+
+  .row {
+    display: grid;
+    gap: var(--space-3);
+    min-inline-size: 0;
+  }
+
+  .row-head {
+    font: var(--type-label);
+    color: var(--ink-muted);
+  }
+
+  .frames {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: var(--space-6);
+    min-inline-size: 0;
+  }
+
+  /* ---------- The frames: Caw's panel and an empty page ---------- */
+  .frame {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow: clip;
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+
+  .frame-desk[data-context="thread"] {
+    inline-size: min(100%, var(--c-panel-w));
+  }
+
+  .frame-desk.frame-page {
+    inline-size: min(100%, calc(var(--c-starters-w) + 2 * var(--space-7)));
+  }
+
+  .frame-phone {
+    inline-size: min(100%, 390px);
+  }
+
+  .frame-page {
+    background: var(--surface-recess);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-block-end: 1px solid var(--border-hairline);
+  }
+
+  .panel-mark {
+    inline-size: var(--c-row-lead);
+    block-size: var(--c-row-lead);
+    border-radius: var(--radius-pill);
+    object-fit: cover;
+    background: var(--surface-recess);
+  }
+
+  .panel-words {
+    display: grid;
+    min-inline-size: 0;
+
+    & strong {
+      font: var(--type-label);
+    }
+
+    & span {
+      font: var(--type-meta);
+      color: var(--ink-muted);
+    }
+  }
+
+  .thread-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding: var(--space-6) var(--space-4) var(--space-4);
+    background: var(--surface-recess);
+  }
+
+  .hero,
+  .empty {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .empty {
+    padding: var(--space-7);
+  }
+
+  .caw {
+    inline-size: var(--c-caw-hero);
+    block-size: var(--c-caw-hero);
+    margin-block-end: var(--space-3);
+    object-fit: contain;
+  }
+
+  .hero-title {
+    font: var(--type-title);
+    letter-spacing: var(--track-title);
+  }
+
+  .empty-line {
+    max-inline-size: var(--c-measure-short);
+    color: var(--ink-muted);
+  }
+
+  .hero-action {
+    inline-size: 100%;
+    min-inline-size: 0;
+    margin-block-start: var(--space-4);
+  }
+
+  /* The composer, drawn only as the place a press puts the words. */
+  .composer {
+    display: flex;
+    align-items: end;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+
+    &:has(textarea:focus) {
+      border-color: var(--border-control-strong);
+    }
+
+    & textarea {
+      flex: 1 1 auto;
+      min-inline-size: 0;
+      min-block-size: var(--c-composer-field);
+      padding-block: var(--space-2);
+      border: 0;
+      background: transparent;
+      color: var(--ink-strong);
+      font: var(--type-body);
+      field-sizing: content;
+      max-block-size: 6lh;
+      resize: none;
+      outline: none;
+      caret-color: var(--brand-solid);
+
+      &::placeholder {
+        color: var(--ink-subtle);
+      }
+
+      @media (pointer: coarse) {
+        font-size: var(--text-field-floor);
+      }
+    }
+  }
+
+  .send {
+    flex: none;
+    inline-size: var(--c-composer-field);
+    block-size: var(--c-composer-field);
+    border-radius: var(--radius-xs);
+    background: var(--action-surface), var(--action-solid);
+  }
+
+  /* ---------- States ---------- */
+  .states {
+    display: grid;
+    /* Each state at Caw's column's width, the width it stands at in his panel. */
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, var(--c-panel-w)), var(--c-panel-w))
+    );
+    gap: var(--space-5);
+    min-inline-size: 0;
+  }
+
+  .state {
+    display: grid;
+    align-content: start;
+    gap: var(--space-2);
+    margin: 0;
+    min-inline-size: 0;
+
+    & figcaption {
+      font: var(--type-meta);
+      color: var(--ink-muted);
+    }
+  }
+
+  .state-well {
+    min-inline-size: 0;
+    padding: var(--space-5) var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--surface-recess);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+}
