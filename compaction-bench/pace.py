@@ -17,6 +17,7 @@ Usage (on the host, from the bench dir):
 """
 import argparse
 import json
+import re
 import os
 import subprocess
 import sys
@@ -70,6 +71,8 @@ def main():
     ap.add_argument("--poll", type=int, default=30)
     ap.add_argument("--start-gap", type=int, default=60)
     ap.add_argument("--retry-stopped", action="store_true")
+    ap.add_argument("--retry-match", help="with --retry-stopped: only a (cut, arm) with a stopped run whose error "
+                                          "matches this regex is run again (its other stopped runs with it)")
     a = ap.parse_args(sys.argv[1:split])
     run_flags = sys.argv[split + 1:]
     accounts = a.accounts.split(",")
@@ -88,7 +91,9 @@ def main():
                 continue
             runs = a.floor_runs if (arm == "A0" and c.get("floor")) else a.runs
             done = [common.load(os.path.join(out, "runs", c["id"], arm, str(r), "result.json")) or {} for r in range(1, runs + 1)]
-            if all(d.get("status") == "done" or (d.get("status") == "stopped" and not a.retry_stopped) for d in done):
+            retry = [d for d in done if d.get("status") == "stopped" and a.retry_stopped
+                     and (not a.retry_match or re.search(a.retry_match, d.get("error") or ""))]
+            if not retry and all(d.get("status") in ("done", "stopped") for d in done):
                 continue
             jobs.append((c["id"], arm, runs))
     running = {}  # unit → (account, cut, arm)
@@ -121,7 +126,10 @@ def main():
                         if rd[x]["session"] < a.cap and inflight[x] < a.per_account)
             if ok:
                 acct = ok[0][1]
-                summ = min((s, x) for x, s in score.items() if x != acct)[1] if len(score) > 1 else acct
+                # the summariser's account must have room too; with none other under the cap, the session's own
+                # account (under it) summarises
+                room = sorted((s, x) for x, s in score.items() if x != acct and rd[x]["session"] < a.cap)
+                summ = room[0][1] if room else acct
                 cid, arm, runs = jobs.pop(0)
                 unit = f"bench-{cid}-{arm}"
                 subprocess.run(["systemctl", "--user", "reset-failed", unit], capture_output=True)
