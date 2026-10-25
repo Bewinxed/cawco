@@ -13,23 +13,6 @@
     }
     return pinUnsent(pin) ? "unsent" : "sent";
   };
-
-  /**
-   * A pill's face by its state, as tokens: its fill and its edge (the
-   * hollow ones a 2px `action-solid` ring on the raised surface). What a
-   * thread's card grows from and goes back into (PinFloat `face`).
-   */
-  export const markFace = (
-    state: PinMarkState
-  ): { edge: `--${string}`; fill: `--${string}` } => {
-    if (state === "sent") {
-      return { fill: "--action-solid", edge: "--action-solid" };
-    }
-    if (state === "resolved") {
-      return { fill: "--surface-fill-strong", edge: "--surface-fill-strong" };
-    }
-    return { fill: "--surface-raised", edge: "--action-solid" };
-  };
 </script>
 
 <script lang="ts">
@@ -49,7 +32,9 @@
    * echo three loops and then still: DESIGN.md, Status dot); gone from the
    * page, a dashed `--border-control` ring. `inline`, it stands in a line
    * of text as a chip's mark (a pin's chip, PinReference): the inline
-   * chip's line tall.
+   * chip's line tall. While its thread's card hangs from it, the pin draws
+   * its foot on the side facing the card (PinFoot, over the pill as drawn,
+   * its face left open), as the top bar's glass draws its join.
    */
   let {
     number = null,

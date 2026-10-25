@@ -309,6 +309,8 @@
 @custom-variant pad-small (&[data-pad="small"]);
 @custom-variant pane-state-collapsing (&[data-pane-state="collapsing"]);
 @custom-variant pane-state-expanding (&[data-pane-state="expanding"]);
+@custom-variant part-bridge (&[data-part="bridge"]);
+@custom-variant part-plain (&[data-part="plain"]);
 @custom-variant phase-active (&[data-phase="active"]);
 @custom-variant phase-asking (&[data-phase="asking"]);
 @custom-variant phase-done (&[data-phase="done"]);

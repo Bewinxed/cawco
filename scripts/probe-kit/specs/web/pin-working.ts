@@ -28,31 +28,56 @@
  * dot, a loop of `--breath` on `--ease-in-out`; held at 0, ½ and 1 of it
  * the dot's opacity reads 1, `--breath-floor` and 1.
  *
- * And at 1440, on Chromium and WebKit, the card is its pill grown (the
+ * And at 1440, on Chromium and WebKit, the card hangs from its pin (the
  * owner: "a gooey animation that morphs out of the comment just how the
- * caw/search/machine bar on the top right does it"), its pill near the
- * well's foot (`?at=foot`): opened and closed on the clock (the DevTools
- * Animation domain on Chromium, the page's held clock on WebKit), read at
- * 0, ¼, ½, ¾ and 1. One surface stands the whole way, opaque; at the
- * pill's end it is the pill (its box within 1px, its round corner, its
- * face's fill), at the card's the card (its box, --radius-lg, the raised
- * surface), growing (or shrinking) one way between; the thread shows only
- * once the shape has room, and is gone by half way as it goes back. Open,
- * the card stands as tall as what it holds, moved up to stand whole.
+ * caw/search/machine bar on the top right does it"; DESIGN.md, A thread
+ * beside its pin): the top bar's own HangCard and `hang`, hung beside the
+ * pin's end side from its foot (PinFoot), its pill near the well's foot
+ * (`?at=foot`). Opened and closed on the clock (the DevTools Animation
+ * domain on Chromium, the page's held clock on WebKit), read at 0, ⅒, ¼,
+ * ½, ¾ and 1 (pin-hang.ts): only translate animates on the card, nothing on
+ * the pin's foot; shut, the card stands wholly behind the cut at the pin's
+ * side; at every fraction the card's edge is on the cut and its neck runs
+ * from the pin's top to its foot within 1px; the pin's own fill never
+ * changes; early in the slide the pin and the card are one silhouette, the
+ * liquid bridge between them (the ink along the pin's middle row, on a
+ * ground of its own), and open it has drawn itself into the neck (the
+ * silhouette at the cut the pin and its flares, within 2px). Open, the card
+ * stands whole, as tall as what it holds, moved up from the pin's top.
+ *
+ * One clock with the top bar: the card's open and close run the same
+ * length and curve as the glass's own card (GlassCard, Caw's panel) on the
+ * same page. On WebKit, frame by frame through an open, the page's
+ * main-thread CPU in each frame is read (cpu.ts) and none runs over 25ms.
  *
  * And on a page that scrolls under the open card (`?at=scroll`; the owner:
- * "when scrolling the page why does this jump up and down"), by wheel
- * steps and from code, every frame read: its offset from its pill holds
- * within 1px while it is clear of the well's edges, it never steps more
- * than its pill moved plus 1.5px, and it keeps its side.
+ * "WRONG, u keep animating it as i scroll down, instead of only letting it
+ * move when it reaches the spot where it will move from one spot to the
+ * next, it should animate THEN, not animate WHILE i'm scrolling"), by wheel
+ * steps and from code, every frame read: the card's box stands still on
+ * every frame between its moves, each move one travel from the box it
+ * stood at to its next, and it keeps its side.
  *
  *   bun scripts/probe-kit/run.ts web pin-working
  */
 import type { Page } from "playwright-core";
 import { commentWords } from "../../../../packages/core/src/words/comments";
 import { readBreath } from "../../breath";
+import { pageCpu } from "../../cpu";
+import { attribute, ourWork, tell, watch, watched } from "../../frames";
 import type { Kit, Spec, View } from "../../kit";
 import { open, readMotion, THEMES } from "../../kit";
+import {
+  ground,
+  type HangSel,
+  hangChecks,
+  inkAt,
+  readHang,
+  recordStill,
+  stillChecks,
+  stillOf,
+  twoFrames,
+} from "../../pin-hang";
 
 const VIEWS_READ: { view: View; width: number }[] = [
   { view: "phone", width: 390 },
@@ -409,116 +434,50 @@ async function breath(kit: Kit, base: string): Promise<void> {
   }
 }
 
-/**
- * The card's one surface against its pill, in the page's px: how many
- * surfaces stand, the surface's box, corner, fill and opacity, the card's
- * and the pill's boxes (the pill as the bench tells the card: its MARK,
- * 20px square, where its holder stands, as the overlay tells the pane a
- * pin's mark), what the thread shows, and the face it grows from. Runs in
- * the page.
- */
-function readMorph() {
+const HANG: HangSel = {
+  card: CARD,
+  face: '[data-slot="pin-room"] > span > [data-mark]',
+  room: '[data-slot="pin-room"]',
+};
+const FRACTIONS = [0, 0.1, 0.25, 0.5, 0.75, 1];
+
+/** The card's box and the room's, for its height: whole, as tall as what it holds, moved up from its pin. Runs in the page. */
+function readStands() {
   const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
   const card = room?.querySelector<HTMLElement>('[data-slot="pin-card"]');
-  const surfaces = card?.querySelectorAll<HTMLElement>(
-    '[data-slot="pin-surface"]'
-  );
-  const surface = surfaces?.[0];
-  const body = card?.querySelector<HTMLElement>('[data-slot="pin-body"]');
-  const holder = room?.querySelector<HTMLElement>(
-    ":scope > span:has([data-mark])"
-  );
-  if (!(room && card && surface && body && holder)) {
+  const foot = room?.querySelector<HTMLElement>('[data-slot="pin-foot"]');
+  if (!(room && card && foot)) {
     return null;
   }
   const rect = (el: Element) => {
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   };
-  const told = holder.getBoundingClientRect();
-  // A colour as the screen draws it, sRGB bytes: the engine serialises an
-  // animated colour in its interpolation space and a token in its own.
-  const paint = document.createElement("canvas").getContext("2d", {
-    willReadFrequently: true,
-  });
-  const drawn = (value: string) => {
-    if (!paint) {
-      return value;
-    }
-    paint.clearRect(0, 0, 1, 1);
-    paint.fillStyle = value;
-    paint.fillRect(0, 0, 1, 1);
-    return [...paint.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(",");
-  };
-  const colour = (token: string) => {
-    const probe = document.createElement("i");
-    probe.style.color = `var(${token})`;
-    document.body.append(probe);
-    const value = getComputedStyle(probe).color;
-    probe.remove();
-    return drawn(value);
-  };
-  const shape = getComputedStyle(surface);
   return {
-    surfaces: surfaces?.length ?? 0,
-    surface: rect(surface),
-    radius: Number.parseFloat(shape.borderTopLeftRadius),
-    fill: drawn(shape.backgroundColor),
-    opacity: Number(shape.opacity) * Number(getComputedStyle(card).opacity),
-    shown: Number(getComputedStyle(body).opacity),
     card: rect(card),
-    pill: { x: told.left, y: told.top, w: 20, h: 20 },
-    pillFill: colour("--action-solid"),
-    cardFill: colour("--surface-raised"),
-    cardRadius: Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
-    ),
+    room: rect(room),
+    pin: rect(foot),
     gap: Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue("--space-2")
     ),
-    room: rect(room),
-    side: card.dataset.side ?? "",
   };
 }
-type Morph = NonNullable<ReturnType<typeof readMorph>>;
-type Rect = Morph["card"];
-
-const sameRect = (a: Rect, b: Rect, by = 1) =>
-  near(a.x, b.x, by) &&
-  near(a.y, b.y, by) &&
-  near(a.w, b.w, by) &&
-  near(a.h, b.h, by);
-const rectWords = (r: Rect) => `${r1(r.x)},${r1(r.y)} ${r1(r.w)}×${r1(r.h)}`;
-const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
-
-/** The reads at each fraction, each a step on from the last toward `to`: the box, then the corner. */
-const monotonic = (reads: Morph[], growing: boolean) =>
-  reads.every((read, i) => {
-    const before = reads[i - 1];
-    if (!before) {
-      return true;
-    }
-    const sign = growing ? 1 : -1;
-    return (
-      sign * (read.surface.w - before.surface.w) >= -0.5 &&
-      sign * (read.surface.h - before.surface.h) >= -0.5 &&
-      sign * (read.radius - before.radius) >= -0.5
-    );
-  });
 
 /**
- * The card is its pill grown (the owner: "a gooey animation that morphs
- * out of the comment just how the caw/search/machine bar on the top right
- * does it"): opened and closed on the clock (the DevTools Animation domain
- * on Chromium, the page's held clock on WebKit), read at 0, ¼, ½, ¾ and 1.
+ * The card hung from its pin, opened and closed on the clock (the DevTools
+ * Animation domain on Chromium, the page's held clock on WebKit), read at
+ * its fractions with the ink where the pin meets it (pin-hang.ts).
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each engine, the open then the close, five checks on what each read
-async function morph(kit: Kit, base: string): Promise<void> {
+async function hung(kit: Kit, base: string): Promise<void> {
   const url = `${base}/motion/pin-working`;
   for (const engine of ["chromium", "webkit"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
     const page = await kit.page("desk", { engine });
     await open(page, `${url}?at=foot`, CARD);
+    // At rest (no live dot breathing on the pin), so the whole pin room is
+    // still before each run: the card's close is held by the block that
+    // holds it as it leaves, which stands in the room, round the card.
+    await bench(page, url, "rest");
     await bench(page, url, "hide");
     await page.locator(CARD).waitFor({ state: "detached" });
     const tag = `1440 (${engine})`;
@@ -527,75 +486,50 @@ async function morph(kit: Kit, base: string): Promise<void> {
       const motion = await readMotion(
         page,
         () => bench(page, url, way === "opens" ? "show" : "hide"),
-        CARD,
+        HANG.room,
         {
           fractions: FRACTIONS,
-          read: () => page.evaluate(readMorph),
+          read: async () => {
+            await twoFrames(page);
+            const read = await page.evaluate(readHang, HANG);
+            if (!read) {
+              return null;
+            }
+            await ground(page, HANG.room, true);
+            const ink = await inkAt(page, read);
+            await ground(page, HANG.room, false);
+            return { read, ink };
+          },
         }
       );
-      const reads = motion.at.map((one) => one.value);
-      if (reads.length !== FRACTIONS.length || reads.some((one) => !one)) {
+      const reads = motion.at.flatMap((one) =>
+        one.value ? [{ fraction: one.fraction, ...one.value }] : []
+      );
+      if (reads.length !== FRACTIONS.length) {
         kit.check(
-          `${tag}: the card ${way}, read at 0, ¼, ½, ¾ and 1`,
+          `${tag}: the card ${way}, read at ${FRACTIONS.join(", ")}`,
           false,
-          JSON.stringify(reads)
+          JSON.stringify(motion.at)
         );
         continue;
       }
-      const held = reads as Morph[];
-      const first = held[0] as Morph;
-      const last = held.at(-1) as Morph;
-      const [pillEnd, cardEnd] =
-        way === "opens" ? [first, last] : [last, first];
-      kit.check(
-        `${tag}: as the card ${way}, one surface stands the whole way, opaque (${held.map((one) => `${one.surfaces}@${r1(one.opacity)}`).join(" ")}), on the house clock (${motion.by}): ${motion.runs.map((run) => `${run.name} ${run.end - run.delay}ms`).join(", ")}`,
-        held.every((one) => one.surfaces === 1 && near(one.opacity, 1, 0.001)),
-        JSON.stringify(
-          held.map((one) => ({ surfaces: one.surfaces, opacity: one.opacity }))
-        )
-      );
-      kit.check(
-        `${tag}: ${way === "opens" ? "at 0" : "at 1"} the surface is the pill: its box ${rectWords(pillEnd.surface)} against the pill's ${rectWords(pillEnd.pill)}, its corner ${r1(pillEnd.radius)}px (the pill's ${pillEnd.pill.h / 2}px), its fill the pill's face (${pillEnd.fill} against ${pillEnd.pillFill})`,
-        sameRect(pillEnd.surface, pillEnd.pill) &&
-          near(pillEnd.radius, pillEnd.pill.h / 2, 0.5) &&
-          pillEnd.fill === pillEnd.pillFill,
-        JSON.stringify(pillEnd)
-      );
-      kit.check(
-        `${tag}: ${way === "opens" ? "at 1" : "at 0"} the surface is the card: its box ${rectWords(cardEnd.surface)} against the card's ${rectWords(cardEnd.card)}, its corner ${r1(cardEnd.radius)}px (--radius-lg ${cardEnd.cardRadius}px), its fill the raised surface`,
-        sameRect(cardEnd.surface, cardEnd.card) &&
-          near(cardEnd.radius, cardEnd.cardRadius, 0.5) &&
-          cardEnd.fill === cardEnd.cardFill,
-        JSON.stringify(cardEnd)
-      );
-      kit.check(
-        `${tag}: between, the shape ${way === "opens" ? "grows" : "shrinks"} one way, box and corner (${held.map((one) => `${r1(one.surface.w)}×${r1(one.surface.h)} r${r1(one.radius)}`).join(" → ")})`,
-        monotonic(held, way === "opens"),
-        JSON.stringify(held.map((one) => one.surface))
-      );
-      const shown = held.map((one) => r1(one.shown * 100) / 100);
-      kit.check(
-        way === "opens"
-          ? `${tag}: the thread shows only once the shape has room: hidden at 0 and ¼, whole at 1 (${shown.join(" → ")})`
-          : `${tag}: the thread is gone by half way as it goes back (${shown.join(" → ")})`,
-        way === "opens"
-          ? shown[0] === 0 && shown[1] === 0 && shown[4] === 1
-          : shown[0] === 1 && shown[2] === 0 && shown[4] === 0,
-        JSON.stringify(shown)
-      );
+      hangChecks(kit, tag, way, reads, motion.runs);
       if (way === "opens") {
+        await page.waitForTimeout(400);
+        const stands = await page.evaluate(readStands);
         kit.check(
-          `${tag}: its pill near the well's foot, the card stands whole, as tall as what it holds, moved up from the pill's top (${rectWords(last.card)} in ${rectWords(last.room)}), level with its pill`,
-          last.card.y < last.pill.y - 1 &&
-            last.card.y >= last.room.y + last.gap - 0.5 &&
+          `${tag}: its pill near the well's foot, the card stands whole, as tall as what it holds, moved up from the pin's top (${stands ? `${r1(stands.card.y)}–${r1(stands.card.y + stands.card.h)} in ${r1(stands.room.y)}–${r1(stands.room.y + stands.room.h)}, the pin at ${r1(stands.pin.y)}` : "no card"}), the pin against its edge`,
+          !!stands &&
+            stands.card.y < stands.pin.y - 1 &&
+            stands.card.y >= stands.room.y + stands.gap - 0.5 &&
             near(
-              last.card.y + last.card.h,
-              last.room.y + last.room.h - last.gap,
+              stands.card.y + stands.card.h,
+              stands.room.y + stands.room.h - stands.gap,
               1
             ) &&
-            last.pill.y + 10 >= last.card.y &&
-            last.pill.y + 10 <= last.card.y + last.card.h,
-          JSON.stringify(last)
+            stands.pin.y >= stands.card.y - 0.5 &&
+            stands.pin.y + stands.pin.h <= stands.card.y + stands.card.h + 0.5,
+          JSON.stringify(stands)
         );
       }
     }
@@ -603,108 +537,227 @@ async function morph(kit: Kit, base: string): Promise<void> {
   }
 }
 
-/** Records, every frame for `ms`, the card's and its pill's boxes and the page's scroll. Runs in the page. */
-function recordScroll(ms: number) {
-  const frames: {
-    card: { y: number; h: number };
-    pill: number;
-    room: { y: number; h: number };
-    side: string;
-  }[] = [];
-  const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
-  const until = performance.now() + ms;
-  return new Promise<typeof frames>((done) => {
-    const step = () => {
-      const card = room?.querySelector<HTMLElement>('[data-slot="pin-card"]');
-      const holder = room?.querySelector(":scope > span:has([data-mark])");
-      if (room && card && holder) {
-        const c = card.getBoundingClientRect();
-        const r = room.getBoundingClientRect();
-        frames.push({
-          card: { y: c.top, h: c.height },
-          pill: holder.getBoundingClientRect().top,
-          room: { y: r.top, h: r.height },
-          side: card.dataset.side ?? "",
-        });
+/** The slide run on a hanging card while it moves: its length and curve. Runs in the page. */
+function slideOf(selector: string) {
+  const card = document.querySelector(selector);
+  const run = card
+    ?.getAnimations()
+    .find((one) =>
+      (one.effect as KeyframeEffect | null)
+        ?.getKeyframes()
+        .some((frame) => "translate" in frame)
+    );
+  return run
+    ? {
+        ms: Number(run.effect?.getComputedTiming().duration),
+        easing: (run.effect as KeyframeEffect).getTiming().easing ?? "",
       }
-      if (performance.now() < until) {
-        requestAnimationFrame(step);
-      } else {
-        done(frames);
-      }
-    };
-    requestAnimationFrame(step);
-  });
-}
-
-/** What a run of frames says of a card following its pill. */
-function followed(
-  frames: Awaited<ReturnType<typeof recordScroll>>,
-  gap: number
-) {
-  let drift = 0;
-  let step = 0;
-  let base: number | null = null;
-  for (const [i, frame] of frames.entries()) {
-    const clear =
-      frame.card.y > frame.room.y + gap + 0.5 &&
-      frame.card.y + frame.card.h < frame.room.y + frame.room.h - gap - 0.5;
-    const offset = frame.card.y - frame.pill;
-    if (clear) {
-      base ??= offset;
-      drift = Math.max(drift, Math.abs(offset - base));
-    }
-    const before = frames[i - 1];
-    if (before) {
-      step = Math.max(
-        step,
-        Math.abs(frame.card.y - before.card.y) -
-          Math.abs(frame.pill - before.pill)
-      );
-    }
-  }
-  const sides = new Set(frames.map((frame) => frame.side));
-  const moved = frames.reduce(
-    (sum, frame, i) =>
-      sum + Math.abs(frame.pill - (frames[i - 1]?.pill ?? frame.pill)),
-    0
-  );
-  return { drift, step, sides: [...sides], moved, frames: frames.length };
+    : null;
 }
 
 /**
- * Scrolling the page under an open card (the owner: "when scrolling the
- * page why does this jump up and down instead of animating its
- * position?"): by wheel steps over the page and by a scroll set from code,
- * every frame read. While the card is clear of the well's edges its offset
- * from its pill holds within 1px; at an edge it is held there, never
- * stepping more than its pill moved, plus 1.5px; it never changes side.
+ * One clock with the top bar (DESIGN.md, A card that hangs from its
+ * anchor): the thread's card opens and closes on the same length and curve
+ * as the glass's own card (GlassCard, Caw's panel, pressed open on the
+ * bench's own top bar), each read from `getAnimations()` while it moves.
  */
-async function scrollFollow(kit: Kit, base: string): Promise<void> {
+async function sameClock(kit: Kit, base: string): Promise<void> {
+  const url = `${base}/motion/pin-working`;
+  for (const engine of ["chromium", "webkit"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
+    const page = await kit.page("desk", { engine });
+    await open(page, `${url}?at=foot`, CARD);
+    await bench(page, url, "hide");
+    await page.locator(CARD).waitFor({ state: "detached" });
+    await page.waitForTimeout(1500);
+    const read = async (action: () => Promise<unknown>, selector: string) => {
+      await action();
+      return page.evaluate(
+        (sel) =>
+          new Promise<ReturnType<typeof slideOf>>((done) => {
+            const until = performance.now() + 2000;
+            const step = () => {
+              const got = (
+                window as unknown as { slideOf: typeof slideOf }
+              ).slideOf(sel);
+              if (got || performance.now() > until) {
+                done(got);
+              } else {
+                requestAnimationFrame(step);
+              }
+            };
+            step();
+          }),
+        selector
+      );
+    };
+    await page.evaluate((source) => {
+      (window as unknown as { slideOf: unknown }).slideOf = new Function(
+        `return (${source})`
+      )();
+    }, slideOf.toString());
+    const glassCard = "[data-glass-card-frame]";
+    const glassOpen = await read(
+      () => page.locator('[data-glass-opens="caw"]').first().click(),
+      glassCard
+    );
+    await page.waitForTimeout(600);
+    const glassClose = await read(
+      () => page.keyboard.press("Escape"),
+      glassCard
+    );
+    await page.waitForTimeout(600);
+    const pinOpen = await read(() => bench(page, url, "show"), CARD);
+    await page.waitForTimeout(600);
+    const pinClose = await read(() => bench(page, url, "hide"), CARD);
+    const same = (
+      a: ReturnType<typeof slideOf>,
+      b: ReturnType<typeof slideOf>
+    ) =>
+      !!(a && b) &&
+      near(a.ms, b.ms, 0.5) &&
+      a.easing.replaceAll(" ", "") === b.easing.replaceAll(" ", "");
+    const words = (one: ReturnType<typeof slideOf>) =>
+      one ? `${one.ms}ms ${one.easing}` : "none";
+    kit.check(
+      `1440 (${engine}): one clock with the top bar: the thread's card opens on the glass's card's own (${words(pinOpen)} against ${words(glassOpen)}) and closes on it (${words(pinClose)} against ${words(glassClose)}), read from getAnimations() on the same page`,
+      same(pinOpen, glassOpen) &&
+        same(pinClose, glassClose) &&
+        !same(pinOpen, pinClose),
+      JSON.stringify({ glassOpen, glassClose, pinOpen, pinClose })
+    );
+    await page.context().close();
+  }
+}
+
+/**
+ * WebKit, frame by frame through the card's slide out of its pin (the
+ * bridge drawn every frame on its clock): the page's main-thread CPU in
+ * each frame interval inside the slide (cpu.ts, the kernel's run time),
+ * none over 25ms, quoted; and, read out beside them, the frame it starts in
+ * (the card placed and first drawn), the frame it lands in (standing open,
+ * the foot plain again) and the frame the card mounted in (the thread's
+ * whole card drawn at once).
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: six opens, each frame interval sorted into the slide, its start, its landing or the mount
+async function webkitFrames(kit: Kit, base: string): Promise<void> {
+  const url = `${base}/motion/pin-working`;
+  const page = await kit.page("desk", {
+    engine: "webkit",
+    init: [watch, attribute],
+  });
+  await open(page, `${url}?at=foot`, CARD);
+  await bench(page, url, "hide");
+  await page.locator(CARD).waitFor({ state: "detached" });
+  await page.waitForTimeout(800);
+  // Each slide's start and length, as the card says it starts (motion/hang `SLIDE`).
+  await page.evaluate(() => {
+    const kept = window as unknown as { __slides: [number, number][] };
+    kept.__slides = [];
+    document.addEventListener(
+      "hang-slide",
+      (event) => {
+        const run = (event as CustomEvent<{ opens: boolean; run: Animation }>)
+          .detail;
+        if (run.opens) {
+          kept.__slides.push([
+            performance.now(),
+            Number(run.run.effect?.getComputedTiming().duration),
+          ]);
+        }
+      },
+      true
+    );
+  });
+  const cpu = await pageCpu(page);
+  const sliding: { at: number; cpu: number; ms: number; ours: number }[] = [];
+  const starting: { cpu: number; ms: number; ours: number }[] = [];
+  const landing: { cpu: number; ms: number; ours: number }[] = [];
+  const mounting: { cpu: number; ms: number; ours: number }[] = [];
+  for (let n = 0; n < 6; n += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one open at a time, each from rest
+    const recording = await cpu.record();
+    await tell(page, { rafs: [], calls: [], tap: -1, cadence: true });
+    await page.waitForTimeout(100);
+    const pressed = await page.evaluate(() => performance.now());
+    await bench(page, url, "show");
+    await page.waitForTimeout(700);
+    const seen = await watched(page);
+    await tell(page, { cadence: false });
+    const ran = await recording.stop();
+    const [start, length] = await page.evaluate(
+      () =>
+        (window as unknown as { __slides: [number, number][] }).__slides.at(
+          -1
+        ) ?? [0, 0]
+    );
+    const frames = seen.rafs;
+    for (const [k, t] of frames.slice(1).entries()) {
+      const from = frames[k] as number;
+      const interval = {
+        ms: t - from,
+        cpu: ran.between(from, t),
+        ours: ourWork(seen.calls, from, t).ms,
+      };
+      if (from >= start && t <= start + length) {
+        sliding.push({ at: from - start, ...interval });
+      } else if (from < start + length && t > start + length && from >= start) {
+        landing.push(interval);
+      } else if (from < start && t > start) {
+        starting.push(interval);
+      } else if (from <= pressed && t > pressed) {
+        mounting.push(interval);
+      }
+    }
+    await bench(page, url, "hide");
+    await page.waitForTimeout(500);
+  }
+  const sorted = [...sliding].sort((a, b) => b.cpu - a.cpu);
+  const median = (values: number[]) =>
+    [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+  const [worst] = sorted;
+  const [mounted] = [...mounting].sort((a, b) => b.cpu - a.cpu);
+  const [started] = [...starting].sort((a, b) => b.cpu - a.cpu);
+  const [landed] = [...landing].sort((a, b) => b.cpu - a.cpu);
+  kit.check(
+    `1440 (webkit): through 6 slides of the card out of its pin (${sliding.length} frame intervals from each slide's start to its end, the bridge drawn in each), the page's main-thread CPU per frame: median ${r1(median(sliding.map((one) => one.cpu)))}ms, heaviest ${worst ? `${r1(worst.cpu)}ms in ${r1(worst.ms)}ms at +${r1(worst.at)}ms (our code ${r1(worst.ours)}ms)` : "none"}, none over 25ms. Beside them: the frame each slide starts in (the card placed and first drawn out from behind its cut), at most ${started ? `${r1(started.cpu)}ms of CPU in ${r1(started.ms)}ms (our code ${r1(started.ours)}ms)` : "no frame read"}; the frame each lands in (the card standing open, the foot drawn plain again), at most ${landed ? `${r1(landed.cpu)}ms in ${r1(landed.ms)}ms (our code ${r1(landed.ours)}ms)` : "no frame read"}; and the frame the card mounted in, ${mounted ? `${r1(mounted.cpu)}ms (our code ${r1(mounted.ours)}ms)` : "no frame read"}`,
+    sliding.length > 10 && (worst?.cpu ?? 0) <= 25,
+    JSON.stringify(sorted.slice(0, 4))
+  );
+  await page.context().close();
+}
+
+/**
+ * Scrolling the page under an open card (the owner: "WRONG, u keep
+ * animating it as i scroll down, instead of only letting it move when it
+ * reaches the spot where it will move from one spot to the next, it should
+ * animate THEN, not animate WHILE i'm scrolling"): by wheel steps and by a
+ * scroll set from code, every frame read (pin-hang.ts `stillOf`).
+ */
+async function scrollStill(kit: Kit, base: string): Promise<void> {
   const url = `${base}/motion/pin-working`;
   for (const engine of ["chromium", "webkit"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
     const page = await kit.page("desk", { engine });
     await open(page, `${url}?at=scroll`, CARD);
-    await page.waitForTimeout(400);
-    const gap = await page.evaluate(() =>
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--space-2")
-      )
-    );
+    await page.waitForTimeout(600);
     const pageBox = await page
       .locator('[data-slot="bench-page"]')
       .boundingBox();
     const tag = `1440 (${engine})`;
     for (const how of ["wheel", "code"] as const) {
-      const recording = page.evaluate(recordScroll, 1600);
+      const recording = page.evaluate(recordStill, {
+        ms: 2200,
+        card: CARD,
+        room: HANG.room,
+      });
       if (how === "wheel" && pageBox) {
         // biome-ignore lint/performance/noAwaitInLoops: the wheel, then a scroll from code, each read on its own
         await page.mouse.move(pageBox.x + pageBox.width - 40, pageBox.y + 200);
-        for (const dy of [120, 120, 120, 120, -120, -120, 200, 200]) {
+        for (const dy of [120, 120, 120, 120, -120, -120, -200, 200]) {
           // biome-ignore lint/performance/noAwaitInLoops: one wheel step a frame or so apart, as a hand gives them
           await page.mouse.wheel(0, dy);
-          await page.waitForTimeout(60);
+          await page.waitForTimeout(90);
         }
       } else {
         await page.evaluate(async () => {
@@ -717,19 +770,12 @@ async function scrollFollow(kit: Kit, base: string): Promise<void> {
             }
             // biome-ignore lint/performance/noAwaitInLoops: one scroll a frame, in order
             await new Promise((done) => requestAnimationFrame(done));
-            await new Promise((done) => setTimeout(done, 40));
+            await new Promise((done) => setTimeout(done, 120));
           }
         });
       }
-      const read = followed(await recording, gap);
-      kit.check(
-        `${tag}: scrolled by ${how === "wheel" ? "wheel steps" : "code"} (the pill travelled ${r1(read.moved)}px over ${read.frames} frames), the card follows its pill: its offset from it holds within 1px while clear of the edges (${r1(read.drift)}px), it never steps more than the pill moved plus 1.5px (${r1(read.step)}px over), and it keeps its side (${read.sides.join(", ")})`,
-        read.frames > 10 &&
-          read.drift <= 1 &&
-          read.step <= 1.5 &&
-          read.sides.length === 1,
-        JSON.stringify(read)
-      );
+      stillChecks(kit, tag, how, stillOf(await recording));
+      await page.waitForTimeout(400);
     }
     await page.context().close();
   }
@@ -741,8 +787,10 @@ const spec: Spec = {
     const base = await kit.bench();
     await boxes(kit, base);
     await breath(kit, base);
-    await morph(kit, base);
-    await scrollFollow(kit, base);
+    await hung(kit, base);
+    await sameClock(kit, base);
+    await webkitFrames(kit, base);
+    await scrollStill(kit, base);
   },
 };
 

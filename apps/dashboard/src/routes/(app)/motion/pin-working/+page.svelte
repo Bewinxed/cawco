@@ -8,8 +8,9 @@
    * the agent to work, lands its reply, or sets it at rest, so the pin-working
    * probe reads where the mark stands, where the reply lands, and the dot's
    * one breath. `?at=foot` stands the pill near the well's foot, and `hide`
-   * and `show` close and open the card again, so the probe reads it grow
-   * out of its pill and rise to stand whole.
+   * and `show` close and open the card again, so the probe reads it slide
+   * out of its pin's foot and stand whole; `?at=scroll` puts the pill on a
+   * page that scrolls under the card.
    */
   import { accountsWords } from "@cawco/core";
   import type { Pin, ThreadEntry } from "@cawco/core/comments";
@@ -17,10 +18,7 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
-  import PinMark, {
-    markFace,
-    markState,
-  } from "#lib/cawco/preview/PinMark.svelte";
+  import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
 
   const AT = "2026-10-23T09:00:00.000Z";
@@ -111,15 +109,20 @@
   const at = new URLSearchParams(globalThis.location?.search ?? "").get("at");
   /** How far the bench's page is scrolled, px (`?at=scroll`). */
   let scrolled = $state(0);
+  /** The pill's width as drawn: as wide as its figures (PinMark `data-wide`), as the overlay tells a pin's mark. */
+  let markW = $state(20);
+  const measureMark = frameSize<HTMLElement>((node) => {
+    markW = node.offsetWidth;
+  });
   /** The pill's box in the well, as the page reports a pin's mark. */
   const MARK = $derived.by(() => {
     if (at === "foot") {
-      return { x: 24, y: Math.max(72, roomH - 64), w: 20, h: 20 };
+      return { x: 24, y: Math.max(72, roomH - 64), w: markW, h: 20 };
     }
     if (at === "scroll") {
-      return { x: 24, y: 360 - scrolled, w: 20, h: 20 };
+      return { x: 24, y: 360 - scrolled, w: markW, h: 20 };
     }
-    return { x: 24, y: 72, w: 20, h: 20 };
+    return { x: 24, y: 72, w: markW, h: 20 };
   });
 </script>
 
@@ -132,7 +135,7 @@
     <button data-bench="rest" onclick={bench.rest} type="button">Rest</button>
   </header>
   <div
-    class="@container relative min-h-0 flex-auto bg-surface-raised"
+    class="@container relative isolate min-h-0 flex-auto overflow-clip bg-surface-raised"
     data-slot="pin-room"
     {@attach measureRoom}
   >
@@ -151,9 +154,10 @@
       </div>
     {/if}
     <span
-      class="absolute start-(--mark-x) top-(--mark-y)"
+      class="absolute start-(--mark-x) top-(--mark-y) flex"
       style:--mark-x="{MARK.x}px"
       style:--mark-y="{MARK.y}px"
+      {@attach measureMark}
     >
       <PinMark
         dot={live ? "live" : null}
@@ -164,13 +168,14 @@
     </span>
     {#if shown}
       <PinFloat
-        face={markFace(markState(pin))}
+        dot={live}
         label="Comment {pin.number}"
         mark={MARK}
         pin={pin.number}
         room={{ w: roomW, h: roomH }}
         sheet={phone.current || coarse.current}
         slot="pin-card"
+        tail="bottom-start"
       >
         <PinCard
           agentName={accountsWords.harnesses.claude}

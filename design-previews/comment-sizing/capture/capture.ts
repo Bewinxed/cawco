@@ -7,14 +7,18 @@
  * It serves the dashboard with its own dev server (against a stand-in hub
  * that answers nothing), loads stage.js into a page of it (the dashboard's
  * app.css, then Stage.svelte mounting PinCard, CommentRail,
- * CommentComposer, PinMark, PinFloat, the kit's Button and split handle
- * with the preview's fixtures), and writes:
+ * CommentComposer, PinMark, the kit's Button and split handle with the
+ * preview's fixtures), and writes the parts below; then it builds the live
+ * card (live-card/: the dashboard's own PinFloat and its stylesheet, by
+ * apps/dashboard/scripts/comment-card.vite.ts), which the preview plays as
+ * the float over the page, never a capture of it. It writes:
  *
  * - `parts.js`: each part's markup as the component drew it;
  * - `house.css`: the dashboard's stylesheet cut to the rules those parts
  *   reach (every token, layer, keyframe and property kept), its faces'
  *   `url()`s pointing at `fonts/`;
- * - `fonts/`: the faces the parts drew in.
+ * - `fonts/`: the faces the parts drew in;
+ * - `live-card/card.js`, `live-card/card.css`: the live card.
  */
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -295,6 +299,18 @@ try {
   console.log(
     `captured ${Object.keys(read.parts).length} parts, ${(css.length / 1024).toFixed(0)} KB of CSS, ${read.fonts.length} faces`
   );
+  const built = Bun.spawnSync(
+    [
+      join(DASHBOARD, "node_modules", ".bin", "vite"),
+      "build",
+      "--config",
+      "scripts/comment-card.vite.ts",
+    ],
+    { cwd: DASHBOARD, stdout: "inherit", stderr: "inherit" }
+  );
+  if (built.exitCode !== 0) {
+    throw new Error(`the live card's build exited ${built.exitCode}`);
+  }
 } finally {
   await browser.close();
   vite.kill();

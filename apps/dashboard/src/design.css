@@ -1003,6 +1003,22 @@
 @utility clip-block-start {
   clip-path: inset(0 -100vw -100vw);
 }
+/* A box clipped at its left or right edge only: a card hanging beside its
+   anchor's end or start side (HangCard `from`), which slides out sideways
+   from behind that edge while its shadow spills past the others. */
+@utility clip-left {
+  clip-path: inset(-100vw -100vw -100vw 0);
+}
+@utility clip-right {
+  clip-path: inset(-100vw 0 -100vw -100vw);
+}
+/* An SVG filter's flood in a house ink (PinFoot's bridge: its edge, its surface). */
+@utility flood-border-control {
+  flood-color: var(--border-control);
+}
+@utility flood-surface-raised {
+  flood-color: var(--surface-raised);
+}
 /* The connection band shut: up behind its fold's top edge by its own height
    and the air over it (`--band-air`, its block-start margin), so it starts
    wholly behind the clip and its foot stays on the fold's foot, the page's
