@@ -241,6 +241,9 @@ audience = Decision("audience", "Who is the page for?", [teams, solo], "Teams ru
 teams = Option("teams", "Teams", "Each seat a person.", true, [], "Solo builders read past it.")
 solo = Option("solo", "Solo builders", "One person, many machines.", false, [], "Teams look elsewhere.")`;
 
+/** A revision that rewords one decision and drops a media piece: the later legs read the page as it leaves. */
+const REWORD = `host = Decision("host", "Where does the launch page run?", [hub, edge], "It ships with the hub today.", [sketch, tune], ["stack"])`;
+
 const MOCKUP = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Motion</title>
 <style>body{margin:0;font:16px system-ui}.box{margin:16px;padding:16px;border-radius:12px;background:#eee}
 @media (prefers-reduced-motion:no-preference){.box{animation:slide 4s ease-out infinite}}
@@ -2408,7 +2411,11 @@ const insertAhead = async (on: On, first: string) => {
 
 /** (c) the page live in the tab: its Send picks bar clear of the dock and the foot fade. */
 const liveBarChecks = async (on: On) => {
-  const { kit, projectId } = on;
+  const { fleet, kit, projectId } = on;
+  await fleet.api(
+    `/api/instances/${on.writer}/artifacts/${on.page}/statements`,
+    { statements: REWORD }
+  );
   const tab = await kit.page("desk", { theme: "light" });
   // The page live in the tab: its Send picks bar stands above the docked
   // composer and above the foot fade's dissolve over it (FootFade), so no

@@ -221,10 +221,6 @@
         >{words.notSent}</span
       >
     {/if}
-    {@render sep()}
-    <span class="whitespace-nowrap"
-      >{words.picked(page.picked, page.cards)}</span
-    >
     {#if page.notes > 0}
       <span class="whitespace-nowrap">{words.notes(page.notes)}</span>
     {/if}
