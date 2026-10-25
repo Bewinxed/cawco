@@ -100,7 +100,6 @@
   import { cardWidthIn, placeUnder } from "./hang-place";
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
-  import { rebuildScheduler } from "./scheduler.svelte";
   import { type StatusTone, sessionStatusOf } from "./session-status";
   import { noNativeDrag, pressTab } from "./tab-drag.svelte";
   import { warm } from "./warm.svelte";
@@ -1432,7 +1431,6 @@
           if (movedTo?.x === event.clientX && movedTo.y === event.clientY) {
             return;
           }
-          rebuildScheduler.prepare(tab.id);
           if (!chosen) {
             warm.reach(leaf.id, tab.id);
           }
@@ -1637,7 +1635,6 @@
                 }
               }}
               onmousedown={middleDown}
-              onpointerdown={() => rebuildScheduler.prepare(tab.id)}
               value={tab.id}
             >
               {#snippet lead()}

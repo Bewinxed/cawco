@@ -1,9 +1,10 @@
 /**
  * The rebuild scheduler: how several transcripts share one screen.
  *
- * A transcript that nobody is looking at reads its session only when its
- * turn comes round here, at the slow tier (the freeze in `Transcript.svelte`
- * holds between turns). A transcript the reader IS looking at rebuilds its
+ * A transcript on screen that nobody is working in reads its session only
+ * when its turn comes round here, at the slow tier (the freeze in
+ * `Transcript.svelte` holds between turns); one put away reads it only when
+ * its tab is reached for (`reachOnly`). A transcript the reader IS looking at rebuilds its
  * rows on every streamed frame, which is what makes a live turn feel live.
  * The grid introduces a third case: a pane that is genuinely on screen but is
  * not the one being worked in.
@@ -47,12 +48,9 @@ import { untrack } from "svelte";
 const CADENCE = 250;
 
 /**
- * How many rounds a hidden pane sits out between turns. Our choice: every
- * fourth, so a pane nobody can see keeps up at 1Hz — enough that the switch
- * to it usually finds nothing left to fold, and a quarter of the cost of a
- * pane that is on screen. A hidden pane rebuilds warm rather than freezing
- * because the switch is what used to pay for everything it missed, in the
- * one flush that had to paint at once.
+ * How many rounds a hidden pane's one-off work ({@link rebuildScheduler.once})
+ * sits out between turns. Our choice: every fourth, a quarter of the cost of
+ * a pane that is on screen.
  */
 const HIDDEN_EVERY = 4;
 
@@ -65,6 +63,25 @@ interface Registrant {
   /** Cheap state summary; a rebuild is skipped unless this changed. */
   fingerprint: () => string;
   last: string;
+  /**
+   * Rebuilt only when its tab is reached for ({@link rebuildScheduler.prepare}),
+   * never on a turn: a transcript put away.
+   *
+   * A pane put away is skipped (PaneLeaf `.pane-hidden`, `content-visibility:
+   * hidden`), and Chromium lays out nothing in it until it is shown or laid
+   * out warm: every row a rebuild there took out stayed held by its list's
+   * layout (virtua's container's inline items, a `LayoutBlockFlow` each),
+   * its whole subtree with it, until the pane was laid out again. A busy
+   * session's tab left hidden held more for as long as it streamed
+   * (tab-return's detached leg: +98 divs and +196 text nodes over thirty
+   * switches, all from the busy tab's list, all let go once it was shown).
+   * So a hidden pane changes nothing while it is away; its rows catch up as
+   * the reader reaches for its tab (warm.svelte.ts `catchUp`: a pointer on
+   * the tab, the keyboard's focus on it or beside it), and a switch that
+   * comes with no reach, or before the catch-up, catches up behind its
+   * first paint (Transcript's `hold`).
+   */
+  reachOnly: boolean;
   tier: Tier;
 }
 
@@ -89,7 +106,7 @@ function tick(): void {
   for (let i = 0; i < ids.length; i += 1) {
     const id = ids[(cursor + i) % ids.length];
     const entry = registry.get(id);
-    if (!entry) {
+    if (!entry || entry.reachOnly) {
       continue;
     }
     if (entry.tier === "hidden" && !hiddenToo) {
@@ -126,7 +143,8 @@ export const rebuildScheduler = {
   /**
    * Take a turn in the rotation. Called by a transcript that is not focused —
    * on screen beside the one being read, or hidden behind it; the returned
-   * function gives the turn back.
+   * function gives the turn back. A hidden one takes no turn: it waits for
+   * its tab's reach (`reachOnly`).
    *
    * The first fingerprint is recorded rather than acted on: the pane has just
    * built its rows, or is about to catch up on its own account, so a rebuild
@@ -153,6 +171,7 @@ export const rebuildScheduler = {
       fingerprint,
       bump,
       last: untrack(fingerprint),
+      reachOnly: tier === "hidden",
       tier,
     };
     registry.set(id, entry);
@@ -186,6 +205,7 @@ export const rebuildScheduler = {
     const entry: Registrant = {
       fingerprint: () => "due",
       last: "",
+      reachOnly: false,
       tier,
       bump: () => {
         leave();
