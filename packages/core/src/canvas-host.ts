@@ -6,7 +6,7 @@
  * `buildOverlay`) and its stylesheet (`SHEETS`) compiled by Lightning CSS
  * (page-css.ts): the standalone binary carries both prebuilt under
  * `canvas/` (`build-binary.ts`), and a source checkout builds them on first
- * request. Excalidraw's fonts stand beside them at `canvas/fonts/`, so the
+ * request, on a thread of its own (host-build.ts). Excalidraw's fonts stand beside them at `canvas/fonts/`, so the
  * page asks nothing of any other origin (`window.EXCALIDRAW_ASSET_PATH`);
  * its UI face is inlined into the sheet (`INLINED_FONTS`).
  *
@@ -20,6 +20,7 @@ import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { HOST_PLUGINS } from "./canvas-host-plugins";
+import { hostFiles } from "./host-build";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -129,17 +130,6 @@ export async function canvasHostAssets(
 
 const LEADING_SLASHES = /^\/+/;
 
-let built: Promise<Map<string, Blob>> | undefined;
-
-/** The page's built files by name, built once per process; a failure clears the slot so the next request retries. */
-const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= buildCanvasHost().catch((error: unknown) => {
-    built = undefined;
-    throw error;
-  });
-  return built;
-};
-
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
   js: "text/javascript; charset=utf-8",
@@ -198,6 +188,6 @@ export async function canvasHostFile(path: string): Promise<Response | null> {
     const file = Bun.file(join(fontsDir(), name.slice("fonts/".length)));
     return (await file.exists()) ? found(file, name, immutable) : null;
   }
-  const output = (await bundle()).get(name);
+  const output = (await hostFiles("canvas")).get(name);
   return output ? found(output, name, "no-store") : null;
 }

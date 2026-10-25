@@ -1283,25 +1283,26 @@ export type ShowStep = "open" | "reach" | "publish" | "shown wait";
 /**
  * Runs step `step` of a show of `artifact` in session `panel`'s panel, and
  * says it in the journal when it took longer than {@link SLOW_SHOW_STEP_MS},
- * with the step, the artifact and the time.
+ * with the step, the artifact and the time. `counts` leaves out an outcome
+ * whose own answer says why it took long: a wait no view answered is the
+ * known "no dashboard is showing this session", which the show answers.
  */
 export const timedShowStep = async <T>(
   step: ShowStep,
   artifact: Pick<ArtifactRow, "id" | "kind" | "name">,
   panel: string | null,
-  run: () => T | Promise<T>
+  run: () => T | Promise<T>,
+  counts: (value: T) => boolean = () => true
 ): Promise<T> => {
   const started = performance.now();
-  try {
-    return await run();
-  } finally {
-    const ms = Math.round(performance.now() - started);
-    if (ms > SLOW_SHOW_STEP_MS) {
-      console.warn(
-        artifactToolWords.showStepSlow(labelOf(artifact), step, ms, panel)
-      );
-    }
+  const value = await run();
+  const ms = Math.round(performance.now() - started);
+  if (ms > SLOW_SHOW_STEP_MS && counts(value)) {
+    console.warn(
+      artifactToolWords.showStepSlow(labelOf(artifact), step, ms, panel)
+    );
   }
+  return value;
 };
 
 /** The person's marks on artifact `row` found no session holding it: the journal says they stay owed. */
@@ -3413,8 +3414,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (owns && meta.get(HANDED) === true) {
       docs.transact(row.id, "hub", () => meta.delete(HANDED));
     }
-    const shown = await timedShowStep("shown wait", row, panel, () =>
-      shownBy(row.id, published.revision)
+    const shown = await timedShowStep(
+      "shown wait",
+      row,
+      panel,
+      () => shownBy(row.id, published.revision),
+      (waited) => waited.kind === "answered"
     );
     let ack: ShownAck;
     switch (shown.kind) {

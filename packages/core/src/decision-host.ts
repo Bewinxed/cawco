@@ -11,7 +11,7 @@
  * design layer, then minified and lowered by Lightning CSS (page-css.ts), as
  * the canvas host is built (canvas-host.ts): the standalone binary carries it
  * prebuilt under `decision/` (`build-binary.ts`), and a source checkout builds
- * it on first request.
+ * it on first request, on a thread of its own (host-build.ts).
  *
  * Paths, on every preview origin: `/__cawco/decision/<file>`, the bundle's
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
@@ -31,6 +31,7 @@ import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
+import { hostFiles } from "./host-build";
 import { houseFaceSheet } from "./house-faces";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
@@ -349,7 +350,7 @@ export async function decisionHostAssets(
 
 const LEADING_SLASHES = /^\/+/;
 
-/** The host's files and DialKit's, the faces and the icon, by name: what a source checkout serves (decision-host-worker.ts builds them). */
+/** The host's files and DialKit's, the faces and the icon, by name: what a source checkout serves (host-build.ts builds them on a thread of its own). */
 export async function buildHostFiles(): Promise<Map<string, Blob>> {
   const [files, dials, faces, icon] = await Promise.all([
     buildDecisionHost(),
@@ -364,64 +365,6 @@ export async function buildHostFiles(): Promise<Map<string, Blob>> {
     ...[...dials].map(([name, text]) => [name, new Blob([text])] as const),
   ]);
 }
-
-/** One built file as the build's thread hands it over: its bytes moved, not copied. */
-export interface HostFile {
-  bytes: ArrayBuffer;
-  name: string;
-  type: string;
-}
-
-/** What the build's thread answers: every file, or why the build failed. */
-export type HostBuilt = { files: HostFile[] } | { error: string };
-
-const WORKER_URL = new URL("./decision-host-worker.ts", import.meta.url);
-
-let built: Promise<Map<string, Blob>> | undefined;
-
-/**
- * The host's files by name, built once per process on a thread of its own,
- * so the hub's event loop serves every other request while it runs: on the
- * hub's own thread Svelte's compiler, Tailwind and the faces' woff2
- * subsetting held it in blocks of up to 900 ms (sampled with bun:jsc), and
- * every read the hub answered waited behind them. A failure clears the slot
- * so the next request retries.
- */
-const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= new Promise<Map<string, Blob>>((done, fail) => {
-    const worker = new Worker(WORKER_URL);
-    const end = () => worker.terminate();
-    worker.onmessage = (event: MessageEvent<HostBuilt>) => {
-      end();
-      const answer = event.data;
-      if ("error" in answer) {
-        fail(new Error(answer.error));
-        return;
-      }
-      done(
-        new Map(
-          answer.files.map(({ name, bytes, type }) => [
-            name,
-            new Blob([bytes], { type }),
-          ])
-        )
-      );
-    };
-    worker.onerror = (event) => {
-      end();
-      fail(
-        new Error(
-          `The decision host's build thread failed: ${event.message || "no reason given"}`
-        )
-      );
-    };
-    worker.postMessage(null);
-  }).catch((error: unknown) => {
-    built = undefined;
-    throw error;
-  });
-  return built;
-};
 
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
@@ -460,7 +403,7 @@ export async function decisionHostFile(path: string): Promise<Response | null> {
       return null;
     }
   }
-  const output = (await bundle()).get(name);
+  const output = (await hostFiles("decision")).get(name);
   return output
     ? new Response(output, {
         headers: { "content-type": typeOf(name), "cache-control": cache },

@@ -29,7 +29,8 @@
  * thread, Svelte's compiler, Tailwind and the house faces' subsetting held
  * its event loop in blocks of up to 900 ms (sampled with bun:jsc), and a
  * reload landing then took 1.2 s; the build now runs on a thread of its
- * own. The released binary serves the host prebuilt (`standalone`).
+ * own (core host-build.ts). The released binary serves the host prebuilt
+ * (`standalone`).
  *
  * Then the hub's show of a decision page (`POST …/artifacts/<id>/show`, the
  * panel's Show and artifact_show), made with the session's panel on another
@@ -38,9 +39,17 @@
  * 3. with no view open it answers that none is showing the session, within
  *    SHOWN_WAIT_MS and OPEN_BUDGET_MS more: the show's own work (the open,
  *    the publish) costs at most that; with the session's page open in a
- *    browser it answers opened within VIEWED_BUDGET_MS; the hub's journal
- *    names the bare show's shown wait, its artifact and its time (a step
- *    over SLOW_SHOW_STEP_MS), and nothing of the viewed one.
+ *    browser it answers opened within VIEWED_BUDGET_MS. The hub's journal
+ *    names a step over SLOW_SHOW_STEP_MS with its artifact and its time:
+ *    nothing of either of those (a wait no view answered is the known "no
+ *    dashboard is showing this session", which the show's answer says), and
+ *    the shown wait of a third show whose view answered LATE_ACK_MS late.
+ *
+ * 4. the run's first component canvas (the hub building its host, core
+ *    canvas-host.ts on host-build.ts's thread): its tab mounts and reloads
+ *    within the same budgets, draws Excalidraw, and the hub answers every
+ *    read within HUB_STALL_MS. On the hub's own thread its build held reads
+ *    31-88 ms where a canvas with its host built read 4-7 ms.
  *
  *   bun scripts/probe-kit/run.ts artifact-tab-cold
  */
@@ -57,6 +66,8 @@ import { type Engine, type Kit, open, type Spec } from "../kit";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';
+/** A canvas's frame (CanvasStages), standing over the pane's slot. */
+const CANVAS_FRAME = 'iframe[title="Canvas"]';
 
 /**
  * Navigation start to the frame in the document on a first visit. Our call,
@@ -80,6 +91,9 @@ const VIEWED_BUDGET_MS = 1000;
  * answers in under 10 ms; the build on the hub's thread held reads 123-900 ms.
  */
 const HUB_STALL_MS = 100;
+
+/** How late leg 3's view says it has the third show on screen: past SLOW_SHOW_STEP_MS, inside VIEWED_BUDGET_MS. */
+const LATE_ACK_MS = 500;
 
 /** What the decision page's frame draws once its host has loaded. */
 const QUESTION = "Which word reads right?";
@@ -108,7 +122,9 @@ const recordFrame = () => {
   const record = window as unknown as { __frameAt: number | null };
   record.__frameAt = null;
   const observer = new MutationObserver(() => {
-    if (document.querySelector('iframe[title="Preview"]')) {
+    if (
+      document.querySelector('iframe[title="Preview"], iframe[title="Canvas"]')
+    ) {
       record.__frameAt = performance.now();
       observer.disconnect();
     }
@@ -285,6 +301,38 @@ const run = async (kit: Kit) => {
     await decision.tab.context().close();
   }
 
+  // 4. The run's first component canvas, its host built on first request.
+  const canvas = await fleet.api<{ id: string }>(at, {
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
+    name: "cold-canvas",
+  });
+  await fleet.api<{ id: string }>(at, {
+    kind: "preview",
+    does: "try",
+    ask: "Try the front folder",
+    name: "cold-canvas-front",
+    dir: join(kit.out, "chromium", "front"),
+  });
+  const canvasDrawn = (tab: Page) =>
+    tab
+      .frameLocator(CANVAS_FRAME)
+      .first()
+      .locator(".excalidraw")
+      .first()
+      .isVisible()
+      .catch(() => false);
+  const drawing = await visit("chromium", canvas.id, canvasDrawn);
+  kit.check(
+    `chromium: 4: the run's first canvas tab mounts its frame within ${FIRST_BUDGET_MS} ms on a first visit (${drawing.first} ms) and within ${RELOAD_BUDGET_MS} ms on reload (${drawing.reload} ms), draws Excalidraw, and the hub answers every read within ${HUB_STALL_MS} ms meanwhile (slowest ${drawing.slowest} ms)`,
+    timely(drawing.first, drawing.reload) &&
+      drawing.page &&
+      drawing.slowest < HUB_STALL_MS,
+    JSON.stringify(drawing, ["first", "reload", "page", "slowest"])
+  );
+  await drawing.tab.context().close();
+
   // 3. The hub's show of a decision page, with the panel on another artifact.
   const showPage = async (name: string) => {
     const shownPage = await fleet.api<{ id: string }>(at, {
@@ -316,27 +364,32 @@ const run = async (kit: Kit) => {
   const viewer = await kit.page("desk");
   await open(viewer, `${base}/session/${session}`, FRAME);
   const viewed = await showPage("show-viewed");
+  // The view says it has the next show on screen LATE_ACK_MS late.
+  await viewer.route("**/artifacts/*/shown", async (route) => {
+    await Bun.sleep(LATE_ACK_MS);
+    await route.continue();
+  });
+  const late = await showPage("show-late");
+  await viewer.unroute("**/artifacts/*/shown");
   kit.check(
-    `3: a show of a decision page answers within ${SHOWN_WAIT_MS} + ${OPEN_BUDGET_MS} ms with no view open (${bare.ms} ms, not opened), and opened within ${VIEWED_BUDGET_MS} ms with the session's page open (${viewed.ms} ms)`,
+    `3: a show of a decision page answers within ${SHOWN_WAIT_MS} + ${OPEN_BUDGET_MS} ms with no view open (${bare.ms} ms, not opened), opened within ${VIEWED_BUDGET_MS} ms with the session's page open (${viewed.ms} ms), and opened when that view answers ${LATE_ACK_MS} ms late (${late.ms} ms)`,
     !bare.answer.opened &&
       bare.ms < SHOWN_WAIT_MS + OPEN_BUDGET_MS &&
       viewed.answer.opened &&
-      viewed.ms < VIEWED_BUDGET_MS,
-    JSON.stringify({ bare, viewed })
+      viewed.ms < VIEWED_BUDGET_MS &&
+      late.answer.opened,
+    JSON.stringify({ bare, viewed, late })
   );
-  // The bare show's wait outlasted SLOW_SHOW_STEP_MS: the journal names it.
   const steps = (await fleet.logs("hub"))
     .split("\n")
     .filter((line) => line.includes("its show's"));
-  const journal = steps.filter(
-    (line) =>
-      line.includes(`${bare.id} (page`) && line.includes("shown wait took")
-  );
+  const of = (shownPage: { id: string }) =>
+    steps.filter((line) => line.includes(`${shownPage.id} (page`));
+  const lateWait = of(late).filter((line) => line.includes("shown wait took"));
   kit.check(
-    `3: the hub's journal names the bare show's slow step: its shown wait, the artifact and the time (over ${SLOW_SHOW_STEP_MS} ms), and no step of the viewed show`,
-    journal.length > 0 &&
-      !steps.some((line) => line.includes(`${viewed.id} (page`)),
-    JSON.stringify(journal)
+    `3: the hub's journal names the late show's shown wait, its artifact and its time (over ${SLOW_SHOW_STEP_MS} ms), and no step of the bare show (no view answered) nor of the viewed one`,
+    lateWait.length > 0 && of(bare).length === 0 && of(viewed).length === 0,
+    JSON.stringify({ late: lateWait, bare: of(bare), viewed: of(viewed) })
   );
 };
 
