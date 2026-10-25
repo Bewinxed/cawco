@@ -90,8 +90,9 @@ Then two steps, both scripts beside this README:
    light pixels (and the neutral mid-grey a fringe can start with at its
    outer edge) no deeper than 12px (a pale prop keeps its inside). It then
    clears the violet ground left in small pockets (a patch under 400px of
-   light pixels tinted blue over red, as between a wing and the body) and the
-   soft halo under alpha 96.
+   light pixels tinted blue over red, as between a wing and the body, or of
+   violet, as a boxed edit leaves at its seam) and the soft halo under alpha
+   96.
 2. **Set** (`still.py clean.png caw/<pose>.png caw/<pose>-night.png`): drawn
    at 0.9 of its size so even a raised wing or a prop stands clear of the
    canvas's edges, its centre of mass on the vertical axis, its lowest pixel
@@ -105,7 +106,7 @@ feet, one beak, the large eye and the small second eye) and for its prop at
 | Moment | Still | Operation | Take |
 | --- | --- | --- | --- |
 | Start | `start.png` | wing on the right raised in a small wave | `tk_Lh_9EsTY5NmG9VDuW635o` |
-| Waiting for your sign-in | `waiting.png` | the wing on the left raised, a short spyglass gripped in its tip beside his head, pointing out away from his face, the eyes and beak clear | `tk_C_bkfSOaDaz0qVW9YIbWx`, cut out of `tk_ZzaAHdU-GCeRVPEpFt3dy` |
+| Waiting for your sign-in | `waiting.png` | the wing on the left raised, a telescoping spyglass in its tip (two stepped sections, a dark lens ring and blue glass at the far end) pointing up and away from his face, the eyes and beak clear | `tk_-2oLr5n68t28gYo6fgxna`, cut out of `tk_XhN2KDBEDKEfb9nDKEOCd`, a boxed edit of the sixth round's `tk_ZzaAHdU-GCeRVPEpFt3dy` |
 | Waiting for your admin (Headscale) | `admin.png` | a sealed envelope as tall as his legs beside his feet, both wings spread at full size | `tk_IWIJ1Ztgq5HboaC03trRI`, cut out of `tk_tPqt_rXB4bM797tfCxuCE` |
 | Setup key (NetBird's Start) | `key.png` | key added crosswise in his beak tip | `tk_bUOBAwEywYVHGms25bz7N` |
 | Answers (listening) | `listen.png` | head tilted, three sound lines beside it, both wings as they were | `tk_lxK6PfwZh6bIF4R5tM8-r`, cut out of `tk_Obt9H5MTRapgS4PvX3IiC` |
@@ -124,7 +125,7 @@ open, as a small shrug." and adds the prop:
 | --- | --- | --- | --- |
 | Client stopped | `shrug-plug.png` | a big unplugged power plug hanging on its cord from the wing tip | `tk_Y5k2WWfv5SI-13KXKyPWe`, cut out of `tk_sg27DA3pNkgrKhn8r7-Du` |
 | Unsupported network | `shrug-sign.png` | a signpost with two blank arrow boards beside his feet, all in a very thick black outline | `tk_TAF1q3ykp3xLLNzvRvmUj`, cut out of `tk_tIRW0EEoY-2VK-B5yK2n1` |
-| Sign-in link expired | `shrug-chain.png` | three big links from the wing tip in a very thick outline, the bottom one snapped open but still on the chain | `tk_7iWOqULn-l702HhKs6muH`, cut out of `tk_74IrxdQvEPO-QVEhR6rji` |
+| Sign-in link expired | `shrug-chain.png` | three big links from the wing tip in a very thick outline, the bottom one broken open with a wide gap, still on the chain | `tk_naWf2L6gPvMxisiNTA_kh`, cut out of `tk_wINUCk7AogR5hAbgXGSmN`, a boxed edit of the sixth round's `tk_74IrxdQvEPO-QVEhR6rji` |
 | Another tailnet | `shrug-map.png` | a big unfolded map beside his feet, a vermilion dashed line winding to an X | `tk_flbuuxUg8rTWt3jYsWwsR`, cut out of `tk_etp6RHQtW8669pB0fUCC0` |
 | Admin refused | `shrug-envelope.png` | admin's envelope beside his feet, clear of the wing, a vermilion cross stamped on it | `tk_QT13mHZzGIDUm11bicD9k`, cut out of `tk_uTZ7gwboimz1QN-ERb1W_` |
 | Key refused | `shrug-key.png` | a big key standing beside his feet, its bow as wide as his head, the shaft snapped in two | `tk_ydDJMc4ZFhgkYcZbo4cFt`, cut out of `tk_H-UuKYR4R38YOZt_eAm8t` |
@@ -170,3 +171,15 @@ siblings, `tk_G-jkFurQ7awpi4oa54qWM`), chains with no visible break
 (`tk_dvY5__w286DNBNwodWtaO`, `tk_JDhvFcE8-7TYZVf4bp0S-`), tags on wings left
 low or small (`tk_HvU87Eg5GdIivMKcSmx8I`, `tk_ev2rh5vO3Uifrvf3ksP9c`), and
 every shrug whose right wing measured under 0.7 of the left.
+
+A third read passed all seven but found two props that didn't say their
+moment at 80px: the spyglass read as a rolled tube, and the chain's break
+didn't show. Both were re-made as boxed edits of the kept takes (`box` on the
+prop alone, so the wings, their sizes and the rest stay as read), the
+spyglass's box at x 0, y 0.06, 0.36 by 0.4 and the chain's at x 0.76, y 0.54,
+0.23 by 0.42. A boxed edit can leave the violet ground at its seam;
+`halo.py` clears that too. Passed over: slimmer spyglasses and one with a
+vermilion blot (`tk_Sc86awxgNLf340ARg30rk` and its siblings), a chain box
+that cut into the wing (`tk_0ybkgwV4nIn4sdkI8c8hC` and its siblings), and the
+from-source chains, whose wings measured unequal (`tk_FozmJBO0Si1P9-VvVIQuN`
+and its siblings).

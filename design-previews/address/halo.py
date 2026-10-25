@@ -11,7 +11,9 @@ ink is under 60) and no deeper than the fringe (12px), so a pale prop keeps
 its inside even where its outline has a gap. Every take then loses the opaque
 ground's colour left in a pocket the flood can't reach (a patch of under
 400px of light pixels tinted blue over red, as the violet ground leaves it
-between a wing and the body; neither Caw nor a pale prop has that colour)
+between a wing and the body, or of violet itself, red and blue both over
+green, as a boxed edit leaves at its seam; neither Caw nor a prop has those
+colours, and a spyglass's blue glass is green over red and a bigger patch)
 and the soft halo under alpha 96.
 
     python3 -I halo.py measure take.png                       # the band's light count
@@ -78,7 +80,10 @@ def flood(img: Image.Image) -> int:
 def pockets(a: np.ndarray) -> int:
     h, w = a.shape[:2]
     rgb = a[..., :3].astype(int)
-    tinted = (a[..., 3] >= 32) & (rgb.min(-1) > 150) & (rgb[..., 2] > rgb[..., 0] + 20)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    blue_grey = (rgb.min(-1) > 150) & (b > r + 20)
+    violet = (b > g + 15) & (r > g + 15)
+    tinted = (a[..., 3] >= 32) & (blue_grey | violet)
     seen = np.zeros((h, w), bool)
     cleared = 0
     for y0, x0 in zip(*np.nonzero(tinted)):
