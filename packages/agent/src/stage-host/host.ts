@@ -22,7 +22,8 @@
  * `ready` with its port once it serves, `errors` with every section's
  * problem standing (a states file that isn't written, a compile error)
  * whenever that changes, `beat` every {@link BEAT_MS}, and `fatal`
- * with why it could not start. Vite's own words go to stderr (its logger at
+ * with why it could not start (`config: true` when the project's config
+ * didn't load). Vite's own words go to stderr (its logger at
  * "warn"). Once nothing reads its stdout (the daemon is gone), a beat's
  * write fails and the stage ends. Astro's and Nuxt's own words go to stderr
  * too (their `logLevel` at `warn`).
@@ -48,6 +49,7 @@ import {
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { parse } from "@babel/parser";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -3141,20 +3143,23 @@ const onPort = (got: number | undefined, name: string): number => {
   return got;
 };
 
+/** A project's Vite config that Vite's loader could not load: the stage's start ends there, and its daemon does not start it again (agent stage.ts). */
+class ConfigUnread extends Error {}
+
 /**
  * The project's Vite, from its own config file (vite.dev/guide/api-javascript
- * `createServer`), loaded by the stage's own runtime, which is always bun
- * (agent stage.ts): `native` "executes the original config file directly …
- * It requires a runtime that supports the syntax used by your config file"
- * (vite.dev/config), and bun reads what the default `bundle` loader does
- * (TS enums, extensionless relative imports, `__dirname` in ESM). `bundle`
- * itself "writes the bundled config to `node_modules/.vite-temp`" and fails
- * on a read-only one (Vite 8.3.4 `loadConfigFromBundledFile` falls back
- * beside the config only on EACCES, so EROFS throws; vitejs/vite#18839 open).
- * `runner` transforms the config with Vite's own oxc, which fails the whole
- * load on any `extends` it can't follow (oxc-resolver#1185, vitejs/vite
- * #21852), such as SvelteKit 3's `$app/tsconfig` before `svelte-kit sync`
- * has written it.
+ * `createServer`), loaded the way the project's own `vite` command loads it:
+ * by Vite's default loader, whatever that is in the Vite installed. On Vite
+ * 8 it is `bundle`: "By default, Vite uses Rolldown to bundle the config
+ * into a temporary file and load it" (vite.dev/config), "the current
+ * default, though `native` is planned to become the default in a future
+ * major version", which "writes the bundled config to
+ * `node_modules/.vite-temp` before loading it" (Vite 8.3.4
+ * `loadConfigFromBundledFile`: the `node_modules` nearest the config, the
+ * file unlinked once imported). That folder is the stage's to write: a stage
+ * runs in its workspace's clone or its place's stage clone, never in a
+ * place, whose boundary holds `node_modules` read-only (stage-clone.ts).
+ * Vite's own caches stay in {@link CACHE_DIR}.
  */
 async function startVite(): Promise<Started> {
   const vite = (await import(projectPackage("vite").href)) as Vite;
@@ -3162,7 +3167,8 @@ async function startVite(): Promise<Started> {
     existsSync
   );
   // A config that does not load fails the stage with the load's own error,
-  // named as the config's: no other loader is tried (no fallback).
+  // named as the config's: no other loader is tried (no fallback), and the
+  // stage is not started again until someone asks for it.
   const logger = vite.createLogger("warn");
   const said = logger.error;
   let unread = false;
@@ -3174,7 +3180,6 @@ async function startVite(): Promise<Started> {
     .createServer({
       root,
       configFile: configFile ?? false,
-      configLoader: "native",
       cacheDir: CACHE_DIR,
       clearScreen: false,
       customLogger: logger,
@@ -3183,8 +3188,9 @@ async function startVite(): Promise<Started> {
     })
     .catch((error: unknown) => {
       throw unread && configFile
-        ? new Error(
-            `Vite couldn't load ${relative(root, configFile)}: ${error instanceof Error ? error.message : String(error)}`,
+        ? new ConfigUnread(
+            // Rolldown colours its parse errors for a terminal; the sheet shows plain text.
+            `Vite couldn't load ${relative(root, configFile)}: ${stripVTControlCharacters(error instanceof Error ? error.message : String(error))}`,
             { cause: error }
           )
         : error;
@@ -3331,6 +3337,8 @@ try {
 } catch (error) {
   say("fatal", {
     message: error instanceof Error ? error.message : String(error),
+    // The same config fails the same load: the daemon leaves it in error.
+    ...(error instanceof ConfigUnread ? { config: true } : {}),
   });
   process.exit(1);
 }

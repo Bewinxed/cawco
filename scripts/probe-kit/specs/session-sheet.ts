@@ -149,6 +149,22 @@
  *     is refused both, 404, with today's words; the Kit session's own
  *     artifact_update of it is still refused as the delegate's.
  *
+ * A project's Vite config loads the way its own `vite` command loads it, by
+ * Vite's default loader (stage-host/host.ts `startVite`; on Vite 8 `bundle`,
+ * "the current default", vite.dev/config), in two checkouts of their own,
+ * each committed with its bun.lock and nothing installed:
+ *
+ * 27. One whose `vite.config.ts` imports a relative module without its
+ *     extension and declares a TypeScript enum: `artifact_create(kind:
+ *     "component")` answers its stage `live`, and in its stage clone the
+ *     host wrote nothing past its own `.cawco/` but the loader's temp folder,
+ *     `node_modules/.vite-temp`, left empty (the bundled config unlinked).
+ * 28. One whose `vite.config.ts` has a syntax error: `artifact_create` is
+ *     refused once with the plain failure, Vite couldn't load
+ *     `vite.config.ts`, with Vite's parse error and no
+ *     terminal colour codes; past every restart's wait the agent has put the
+ *     stage in error once and never started it again.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -448,6 +464,55 @@ const writeNpm = async (dir: string) => {
     .cwd(dir)
     .quiet();
   await Bun.$`git init -q && git add -A && git -c user.email=p@p -c user.name=p commit -q -m npm`
+    .cwd(dir)
+    .quiet();
+};
+
+/** Leg 27's config: an extensionless relative import and a TypeScript enum, which Vite's default loader bundles. */
+const ENUM_CONFIG = `import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { defineConfig } from "vite";
+import { strictness } from "./config/strictness";
+
+enum Mode {
+  Loose = "loose",
+  Strict = "strict",
+}
+
+export default defineConfig({
+  plugins: [svelte()],
+  server: { fs: { strict: strictness(Mode.Strict) } },
+});
+`;
+
+/** Leg 28's config: it never parses. */
+const BROKEN_CONFIG = "export default {\n  plugins: [,\n";
+
+/** A Vite + Svelte project whose `vite.config.ts` is `config` (legs 27 and 28). */
+const configProject = (config: string): Record<string, string> => ({
+  ".gitignore": "node_modules\n",
+  "package.json": JSON.stringify({
+    name: "probe-config",
+    private: true,
+    type: "module",
+    devDependencies: {
+      "@sveltejs/vite-plugin-svelte": "^7.3.1",
+      svelte: "5.57.1",
+      vite: "^8.3.4",
+    },
+  }),
+  "vite.config.ts": config,
+  "config/strictness.ts":
+    'export const strictness = (mode: string): boolean => mode === "strict";\n',
+  "index.html": PROJECT["index.html"] as string,
+  "src/Card.svelte": PROJECT["src/Card.svelte"] as string,
+  [STORY]: PROJECT[STORY] as string,
+});
+
+/** `files` committed whole in a checkout of its own at `dir` with the bun.lock bun resolves for them, nothing installed: nothing uncommitted for its stage clone to mirror. */
+const writeCommitted = async (dir: string, files: Record<string, string>) => {
+  await writeFiles(dir, files);
+  await Bun.$`bun install --lockfile-only --no-progress`.cwd(dir).quiet();
+  await Bun.$`git init -q && git add -A && git -c user.email=p@p -c user.name=p commit -q -m config`
     .cwd(dir)
     .quiet();
 };
@@ -1398,6 +1463,10 @@ const run = async (kit: Kit) => {
   fleet.fileAccount();
   const npmDir = join(fleet.sandbox, "npm");
   await writeNpm(npmDir);
+  const enumDir = join(fleet.sandbox, "enum-config");
+  await writeCommitted(enumDir, configProject(ENUM_CONFIG));
+  const brokenDir = join(fleet.sandbox, "broken-config");
+  await writeCommitted(brokenDir, configProject(BROKEN_CONFIG));
   // Short enough that the npm stage sleeps within a minute of its last use (legs 10–12).
   fleet.launch("agent", [], { CAWCO_STAGE_IDLE_MS: String(IDLE_MS) });
   await fleet.agentUp();
@@ -1596,6 +1665,7 @@ const run = async (kit: Kit) => {
     `${short(relisted)}; sweep ${JSON.stringify(again).slice(0, 300)}`
   );
 
+  await configLoads();
   await scopedAndStyled(kitCreated.match(ID)?.[1]);
   await builtStories(kit, call, fleet.repo);
   await panelLegs(kit, call, await fleet.dashboard(), session);
@@ -1615,6 +1685,93 @@ const run = async (kit: Kit) => {
     await fleet.dashboard(),
     kitSession
   );
+
+  /** Legs 27 and 28: a config Vite's default loader bundles loads; one that never parses fails once, in plain words. */
+  async function configLoads(): Promise<void> {
+    // 27. The enum and the extensionless import load, and the host writes only the loader's temp folder.
+    const enumSession = await fleet.spawn("claude", "Enum config", enumDir);
+    const enumCreated = await call(
+      "27",
+      "mcp__cawco__artifact_create",
+      {
+        kind: "component",
+        name: "enum-cards",
+        file: STORY,
+        does: "judge",
+        ask: "Judge the card of the project whose config holds an enum",
+      },
+      enumSession
+    );
+    const enumClone = await stageCloneIn(fleet.env.HOME as string, enumDir);
+    // What the stage wrote once its host was written (stage.ts `start`: the clone installed first, then the host), outside its own `.cawco/` and git's.
+    const written = enumClone
+      ? (
+          await Bun.$`find . -newer ${HOST_FILE} -not -path ./.git -not -path './.git/*' -not -path ./.cawco -not -path './.cawco/*' -print`
+            .cwd(enumClone.path)
+            .nothrow()
+            .text()
+        )
+          .split("\n")
+          .filter(Boolean)
+          .sort()
+      : [];
+    const temp = enumClone
+      ? await readdir(join(enumClone.path, "node_modules", ".vite-temp")).catch(
+          () => null
+        )
+      : null;
+    kit.check(
+      "27: a vite.config.ts with an extensionless relative import and a TypeScript enum loads: its stage live, and the host wrote nothing past .cawco/ but node_modules/.vite-temp, left empty",
+      !!enumCreated.match(ID)?.[1] &&
+        enumCreated.match(STATUS)?.[1] === "live" &&
+        JSON.stringify(written) ===
+          JSON.stringify(["./node_modules", "./node_modules/.vite-temp"]) &&
+        temp?.length === 0,
+      `${short(enumCreated).slice(0, 300)}; clone ${enumClone?.path ?? "not found"}; written since the host: ${JSON.stringify(written)}; .vite-temp holds ${JSON.stringify(temp)}`
+    );
+
+    // 28. A config that never parses: refused once, in plain words, and never started again.
+    const brokenSession = await fleet.spawn(
+      "claude",
+      "Broken config",
+      brokenDir
+    );
+    const brokenCreated = await call(
+      "28",
+      "mcp__cawco__artifact_create",
+      {
+        kind: "component",
+        name: "broken-cards",
+        file: STORY,
+        does: "judge",
+        ask: "Judge the card of the project whose config never parses",
+      },
+      brokenSession
+    );
+    // Past every restart's wait (stage.ts `BACKOFF_MS`, 1 s + 4 s + 16 s), so a restart would have logged.
+    await Bun.sleep(30_000);
+    const unread = "Vite couldn't load vite.config.ts";
+    const lines = (await fleet.logs("agent"))
+      .split("\n")
+      .filter((line) => line.includes("[stage]") && line.includes(unread));
+    // The stage's words for each move (stage.ts `tell`): `error (why)` once in error, `starting (why)` at each restart after a crash.
+    const errored = lines.filter((line) => line.includes(`: error (${unread}`));
+    const restarted = lines.filter((line) =>
+      line.includes(`: starting (${unread}`)
+    );
+    const ESC = String.fromCharCode(27);
+    kit.check(
+      "28: a vite.config.ts with a syntax error is refused once in plain words (Vite couldn't load vite.config.ts, Vite's parse error, no colour codes), the stage in error once and never started again",
+      !brokenCreated.match(ID)?.[1] &&
+        brokenCreated.includes(unread) &&
+        brokenCreated.includes("PARSE_ERROR") &&
+        !brokenCreated.includes(ESC) &&
+        !brokenCreated.includes("\\u001b") &&
+        errored.length === 1 &&
+        restarted.length === 0,
+      `${short(brokenCreated).slice(0, 400)}; agent log: ${errored.length} error line(s), ${restarted.length} restart line(s): ${JSON.stringify(lines.map((line) => line.slice(0, 160)))}`
+    );
+  }
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
   async function scopedAndStyled(kitId: string | undefined): Promise<void> {

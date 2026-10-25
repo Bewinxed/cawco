@@ -22,7 +22,8 @@
  *   `error`;
  * - is asked {@link HEALTH_PATH} every {@link STAGE_HEALTH_MS}; a stage that
  *   ends or stops answering is started again, {@link STAGE_RESTARTS} times
- *   with a growing wait, then stays in `error`;
+ *   with a growing wait, then stays in `error`; one whose project config
+ *   didn't load is in `error` at once, until the next use starts it;
  * - sleeps once {@link STAGE_IDLE_MS} pass with no viewer (an open socket
  *   through a preview of it) and no use (a request, an agent's read);
  *   the next use wakes it;
@@ -461,13 +462,10 @@ function notInstalled(
   if (!version) {
     return `${name} isn't installed in ${dir}: run the project's install there, then call again.`;
   }
-  const [major, minor] = version.split(".").map(Number);
-  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on;
-  // its config loads by `configLoader: "native"`, which writes nothing into
-  // node_modules (stage-host/host.ts `startVite`): "Added as exprimental in
-  // vite@6.1.0" (github.com/vitejs/vite/discussions/20162).
-  if (toolchain === "vite" && !(major > 6 || (major === 6 && minor >= 1))) {
-    return `Live components need Vite 6.1 or later, whose Environment API and native config loading the stage runs on; ${dir} runs Vite ${version}.`;
+  const major = Number(version.split(".")[0]);
+  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on.
+  if (toolchain === "vite" && !(major >= 6)) {
+    return `Live components need Vite 6 or later, whose Environment API the stage runs on; ${dir} runs Vite ${version}.`;
   }
   if (toolchain === "astro" && major !== ASTRO_MAJOR) {
     return `The stage starts Astro through its experimental programmatic API, read for Astro ${ASTRO_MAJOR}; ${dir} runs Astro ${version}, whose API this CawCo hasn't read.`;
@@ -548,11 +546,9 @@ function stageFor(
     );
   }
   // Every stage runs on the machine's own bun (user-bun.ts), whatever the
-  // lockfile: Vite's `native` config loader imports the project's config with
-  // the stage's runtime (stage-host/host.ts `startVite`), and bun reads what
-  // Vite's default bundler does (TS enums, extensionless relative imports,
-  // `__dirname` in ESM), where node strips types only ("TypeScript enum is
-  // not supported in strip-only mode", measured on node 26).
+  // lockfile, as CawCo's other scripts in a boundary do. The project's config
+  // is loaded by its Vite's own default loader (stage-host/host.ts
+  // `startVite`), not by this runtime's import.
   const runtime = userBun();
   if (!runtime) {
     throw new StageRefusal(sheetWords.noBun);
@@ -763,10 +759,7 @@ function crashed(stage: Stage, why: string): void {
   }
   kill(stage);
   if (stage.restarts >= STAGE_RESTARTS) {
-    stage.status = "error";
-    stage.message = why;
-    stage.ready = undefined;
-    tell(stage);
+    inError(stage, why);
     return;
   }
   const wait = BACKOFF_MS[stage.restarts] ?? BACKOFF_MS.at(-1) ?? 0;
@@ -871,6 +864,8 @@ function sleep(stage: Stage): void {
 /** One of the host's words (stage-host/host.ts `say`); null for a line of anyone else's (a config's own console.log). */
 interface HostWord {
   cawco?: string;
+  /** On `fatal`: the project's config didn't load. */
+  config?: boolean;
   errors?: StageError[];
   message?: string;
 }
@@ -977,12 +972,17 @@ const letGo = async (stage: Stage, waitMs: number): Promise<boolean> => {
   }
 };
 
-/** A start found its port held: in `error` with why, and the hub told. */
-function refusedStart(stage: Stage, why: string): never {
+/** The stage in `error` with why, started again only when someone asks for it ({@link wake}); the hub told. */
+function inError(stage: Stage, why: string): void {
   stage.status = "error";
   stage.message = why;
   stage.ready = undefined;
   tell(stage);
+}
+
+/** A start found its port held: in `error` with why, and the hub told. */
+function refusedStart(stage: Stage, why: string): never {
+  inError(stage, why);
   throw new StageRefusal(why);
 }
 
@@ -1062,6 +1062,9 @@ async function start(stage: Stage): Promise<void> {
   }
   let said = "";
   let fatal: string | undefined;
+  // The host's config didn't load: the same config fails the same load, so
+  // its exit is the stage's error, not a crash to start again.
+  let unread = false;
   const keep = (chunk: Buffer) => {
     said = (said + chunk.toString("utf8")).slice(-STDERR_KEPT);
   };
@@ -1112,6 +1115,7 @@ async function start(stage: Stage): Promise<void> {
               const word = hostWord(line);
               if (word?.cawco === "fatal") {
                 fatal = word.message;
+                unread = word.config === true;
               } else if (word && heard(stage, word)) {
                 settle();
               }
@@ -1141,7 +1145,12 @@ async function start(stage: Stage): Promise<void> {
               .slice(0, 400) ||
               `it ended (${ended ?? `status ${code}`})`);
           settle(new Error(why));
-          crashed(stage, why);
+          if (unread && !stage.stopping) {
+            kill(stage);
+            inError(stage, why);
+          } else {
+            crashed(stage, why);
+          }
         });
       })
   );
