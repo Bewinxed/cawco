@@ -32,6 +32,11 @@
  *      before → after (a "before" past 200 characters folds to three lines
  *      with More, which opens it in place to every word), the card standing clear of the element's box (on a
  *      phone, the foot sheet clear of it), and the row leaves To check;
+ *    - a third comment, a 40-word line on the foot, answered in three
+ *      paragraphs: the comment_reply's row shows the exchange whole (his
+ *      words and the reply, word for word, selectable), nothing in it
+ *      clamped, its overflow sweep 0 at this width, and resting the mouse
+ *      on its pin chip opens no peek;
  *    - the agent's turn carries a chip for each spot it changed and for the
  *      comment it answered; the paragraph's chip opens the panel scrolled
  *      to it, its thread open;
@@ -80,6 +85,17 @@ const HEADLINE =
 /** The paragraph's words as first written: past 200 characters, so its change line's "before" runs past the line's three lines. */
 const COPY =
   "Claude Code, OpenCode and pi sessions across every machine you own, on one board you can steer from your desk or your phone, every ask of theirs waiting in one place, every answer they need from you a press away, wherever you are.";
+
+/** The person's comment on the headline: a 40-word line. */
+const ASKED =
+  "Too long for a headline that has to land in a second: say what it does in six words, keep the board and the phone, and drop the list of harnesses, which belongs in the paragraph right under it instead.";
+/** The agent's answer to it: several paragraphs, read back whole from its transcript row. */
+const ANSWER = [
+  "Shortened it to six words, One board for every agent. The old line named every harness and every machine, which the paragraph under it already does, so the headline now says only what the product is.",
+  "Moved the button under the headline and relabelled it Connect a machine, since connecting one is the first thing anyone does on a fresh hub, and Get started said nothing about what starts.",
+  "The paragraph under your second comment changed too, but that one is not answered yet: it needs your pick between one real session and the whole board before I go further with it.",
+].join("\n\n");
+const WHITESPACE = /\s+/g;
 
 /** The page as each revision has it: first, the agent's answer, a later change no one asked for. */
 const page = (leg: string, revision: 1 | 2 | 3) => {
@@ -1074,6 +1090,201 @@ const chipReachable = (on: On) =>
     return !!hit && chip.contains(hit);
   }, on.id);
 
+/** The comment_reply's row in the turn carrying pin `pin`'s exchange, as the engine lays it out now. */
+const exchangeRead = (on: On, chipId: string) =>
+  on.screen.evaluate(
+    ({ chipId: pin, spaces }) => {
+      const row = [...document.querySelectorAll('[data-slot="row"]')].find(
+        (one) =>
+          one.querySelector('[data-slot="pin-exchange"]') &&
+          one.querySelector(`[data-pin-chip="${pin}"]`)
+      );
+      if (!row) {
+        return null;
+      }
+      const squash = (words: string | null | undefined) =>
+        (words ?? "").replace(new RegExp(spaces, "g"), "");
+      const r = row.getBoundingClientRect();
+      // The exchange's own boxes; its speakers' names read out alone (sr-only) are no box of words on screen.
+      const well = row.querySelector('[data-slot="pin-exchange"]') as Element;
+      const all = [well, ...well.querySelectorAll("*")].filter(
+        (el) => !el.classList.contains("sr-only")
+      );
+      const entries = [
+        ...row.querySelectorAll('[data-slot="exchange-entry"]'),
+      ].map((entry) => {
+        const box = entry.getBoundingClientRect();
+        const words = entry.querySelector('[data-slot="tprose"]');
+        const own = words ? getComputedStyle(words) : null;
+        return {
+          by: entry.getAttribute("data-by"),
+          words: squash(words?.textContent),
+          top: box.top,
+          bottom: box.bottom,
+          selectable:
+            !!own &&
+            (own.userSelect || own.webkitUserSelect || "auto") !== "none",
+        };
+      });
+      // Every box of words in the row: its own text, or a paragraph of it.
+      const texts = all.filter((el) =>
+        [...el.childNodes].some(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()
+        )
+      );
+      const clamped = texts
+        .filter((el) => el.scrollHeight > el.clientHeight + 1)
+        .map((el) => `${el.tagName} ${el.scrollHeight}>${el.clientHeight}`);
+      const lineClamps = all
+        .filter((el) => {
+          const own = getComputedStyle(el);
+          const clamp =
+            own.getPropertyValue("-webkit-line-clamp") ||
+            own.getPropertyValue("line-clamp");
+          return !!clamp && clamp !== "none";
+        })
+        .map((el) => el.tagName);
+      const sticksOut = all
+        .filter((el) => {
+          const b = el.getBoundingClientRect();
+          return (
+            b.width > 0 && (b.left < r.left - 0.5 || b.right > r.right + 0.5)
+          );
+        })
+        .map((el) => `${el.tagName}.${el.getAttribute("data-slot") ?? ""}`);
+      const sideways = all
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => `${el.tagName}.${el.getAttribute("data-slot") ?? ""}`);
+      const overlaps = entries
+        .slice(1)
+        .filter((entry, i) => entry.top < (entries[i]?.bottom ?? 0) - 0.5)
+        .map((entry) => entry.by);
+      const root = document.scrollingElement ?? document.documentElement;
+      const pageWide = root.scrollWidth > root.clientWidth + 1 ? 1 : 0;
+      return {
+        entries,
+        clamped,
+        lineClamps,
+        overflow: {
+          sticksOut,
+          sideways,
+          overlaps,
+          page: pageWide,
+          total:
+            sticksOut.length +
+            sideways.length +
+            overlaps.length +
+            clamped.length +
+            pageWide,
+        },
+        right: r.right,
+        width: innerWidth,
+      };
+    },
+    { chipId, spaces: SPACES.source }
+  );
+
+/**
+ * A third comment, his 40-word line on the page's foot, answered with
+ * several paragraphs (after the thread checks, so pin 1's card keeps its
+ * short thread): the comment_reply's row reads as the exchange, whole, every
+ * word in the DOM, nothing clamped, cut or scrolling sideways at this width;
+ * resting the mouse on its pin chip peeks nothing (the thread already stands
+ * there).
+ */
+const exchangeChecks = async (on: On) => {
+  on.frame = await legFrame(on.screen, on.key, "the hero for pin 3", on.id);
+  const third = await pinOn(on.frame, 3, "#foot", ASKED, { x: 0.5, y: 0.5 });
+  // Answered once the hub holds it: its delivery to the session says so.
+  await until(
+    "pin 3 delivered",
+    async () => (await docRead(on.frame)).deliveries,
+    (all) => !!all[third]?.sentAt,
+    60_000
+  ).catch(() => undefined);
+  await on.fleet.call(REPLY, { pin: third, text: ANSWER });
+  const pin = `${on.id}/3`;
+  const reachable = () =>
+    on.screen.evaluate((chipId) => {
+      const chip = [
+        ...document.querySelectorAll(`[data-pin-chip="${chipId}"]`),
+      ].find((one) =>
+        one
+          .closest('[data-slot="row"]')
+          ?.querySelector('[data-slot="pin-exchange"]')
+      );
+      chip?.scrollIntoView({ block: "center" });
+      const r = chip?.getBoundingClientRect();
+      if (!(chip && r && r.width > 0)) {
+        return false;
+      }
+      const hit = document.elementFromPoint(
+        r.x + r.width / 2,
+        r.y + r.height / 2
+      );
+      return !!hit && chip.contains(hit);
+    }, pin);
+  if (!(await reachable())) {
+    // The panel stands over the conversation (a phone's sheet): closed, the turn shows.
+    await on.screen
+      .locator(':is([data-slot="preview-pane"], [data-side-card="preview"])')
+      .getByRole("button", { name: "Close", exact: true })
+      .first()
+      .click()
+      .catch(() => undefined);
+    await settle(on.screen, 600);
+    await reachable();
+  }
+  const read = await until(
+    "the reply's row shows his words and the reply",
+    () => exchangeRead(on, pin),
+    (now) => (now?.entries.length ?? 0) >= 2,
+    20_000
+  ).catch(() => exchangeRead(on, pin));
+  const squash = (words: string) => words.replace(WHITESPACE, "");
+  const person = read?.entries.find((one) => one.by === "person");
+  const agent = read?.entries.find((one) => one.by === "agent");
+  on.check(
+    "the comment_reply's row shows the exchange whole: his 40-word comment, then the agent's three-paragraph reply, each word for word in the row, selectable",
+    ASKED.split(" ").length === 40 &&
+      read?.entries.length === 2 &&
+      read.entries[0]?.by === "person" &&
+      person?.words === squash(ASKED) &&
+      agent?.words === squash(ANSWER) &&
+      read.entries.every((one) => one.selectable),
+    JSON.stringify(
+      read?.entries.map((one) => ({ ...one, words: one.words.slice(0, 60) }))
+    )
+  );
+  on.check(
+    "nothing in the reply's row is clamped: every box of its words is as tall as its words (scrollHeight ≤ clientHeight + 1), and none sets a line clamp",
+    !!read && read.clamped.length === 0 && read.lineClamps.length === 0,
+    `clamped ${JSON.stringify(read?.clamped)}; line clamps ${JSON.stringify(read?.lineClamps)}`
+  );
+  on.check(
+    `at ${VIEWS[on.leg.view].width}, the overflow sweep of the reply's row totals 0: nothing sticks out of the row, scrolls sideways, overlaps or is clipped, and the page scrolls nothing sideways`,
+    read?.overflow.total === 0,
+    JSON.stringify(read?.overflow)
+  );
+  const chip = on.screen
+    .locator('[data-slot="row"]:has([data-slot="pin-exchange"])')
+    .locator(`[data-pin-chip="${pin}"]`)
+    .first();
+  const hovered = await chip
+    .hover({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  // Past --dur-peek (300ms) and the peek's own entrance: a peek would be up by now.
+  await settle(on.screen, 900);
+  const peeks = await on.screen.locator('[data-slot="pin-chip-peek"]').count();
+  await on.screen.mouse.move(0, 0);
+  on.check(
+    "resting the mouse on the reply row's pin chip opens no peek",
+    hovered && peeks === 0,
+    `hovered ${hovered}; peeks ${peeks}`
+  );
+};
+
 const chipChecks = async (on: On) => {
   if (!(await chipReachable(on))) {
     // The panel stands over the conversation (a phone's sheet): closed, the turn shows.
@@ -1260,6 +1471,7 @@ const legChecks = async (kit: Kit, fleet: Fleet, leg: Leg) => {
     await cameBackChecks(on);
     await carriedChecks(on);
     await rowChecks(on);
+    await exchangeChecks(on);
     await chipChecks(on);
     if (leg.engine === "chromium" && leg.view === "desk") {
       await askAgainChecks(on);

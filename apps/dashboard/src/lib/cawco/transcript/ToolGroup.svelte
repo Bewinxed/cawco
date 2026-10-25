@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { parseReference } from "@cawco/core";
   import {
     shownAttachments,
     sidecarOf,
@@ -16,12 +17,14 @@
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ArtifactRefused, showArtifact } from "#lib/cawco/artifact-api.js";
+  import { pinNamed } from "#lib/cawco/artifact-names.svelte.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import PinReference from "#lib/cawco/PinReference.svelte";
   import {
     type CalledArtifact,
     calledArtifact,
@@ -44,7 +47,12 @@
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import { IconChevronRight, IconWindow } from "#lib/icons.js";
+  import {
+    IconAgent,
+    IconChevronRight,
+    IconUser,
+    IconWindow,
+  } from "#lib/icons.js";
   import { browser } from "$app/env";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
@@ -153,6 +161,61 @@
       seen.add(href);
       return [{ href, label: (match[1] ?? "").replace(ESCAPED, "$1") }];
     });
+  };
+
+  /** The calls that answer a pin in its thread, under any harness's naming of them. */
+  const ANSWERING_CALL = /(^|_)(comment_reply|comment_resolve)$/;
+
+  /** One entry of the exchange a call answered: who said it, and their words whole. */
+  interface Said {
+    by: "person" | "agent";
+    /** Files an agent's reply names as changed. */
+    files: string[];
+    key: string;
+    text: string;
+  }
+
+  /**
+   * The exchange a `comment_reply` or `comment_resolve` call answered, whole,
+   * for its row's body: the pin's thread up to this reply (the pin its chip
+   * reads, artifact-names `pinNamed`), then the reply as the call wrote it
+   * (its `text`). Null for any other call and a failed one, whose row keeps
+   * its fields and its refusal.
+   */
+  const exchangeOf = (m: Message): Said[] | null => {
+    const name = (m.metadata?.toolName ?? "").toLowerCase();
+    if (!ANSWERING_CALL.test(name) || m.metadata?.toolStatus === "error") {
+      return null;
+    }
+    const input = (m.metadata?.toolInput ?? {}) as {
+      files?: unknown;
+      text?: unknown;
+    };
+    const reply = typeof input.text === "string" ? input.text.trim() : "";
+    const files = Array.isArray(input.files)
+      ? input.files.filter((file): file is string => typeof file === "string")
+      : [];
+    const named = pointedBy(m)
+      .map((pointed) => parseReference(pointed.href))
+      .find((reference) => reference?.kind === "pin");
+    const thread = (named ? pinNamed(named.id) : null)?.thread ?? [];
+    // This reply's own entry, once the thread holds it: what came after it is a later row's.
+    const at = reply
+      ? thread.findIndex(
+          (entry) => entry.by === "agent" && entry.text.trim() === reply
+        )
+      : -1;
+    const before: Said[] = (at === -1 ? thread : thread.slice(0, at))
+      .filter((entry) => entry.text.trim() !== "")
+      .map((entry) => ({
+        by: entry.by,
+        files: entry.files ?? [],
+        key: entry.id,
+        text: entry.text,
+      }));
+    return reply
+      ? [...before, { by: "agent", files, key: "reply", text: reply }]
+      : before;
   };
 
   let { messages }: { messages: Message[] } = $props();
@@ -392,6 +455,7 @@
       m.metadata?.toolName,
       m.metadata?.toolDiff
     )}
+    {@const exchange = exchangeOf(m)}
     {#snippet line()}
       <span data-slot="rail-cell" class="rail-cell">
         {#key m.metadata?.toolStatus}
@@ -585,9 +649,11 @@
                 Couldn't open {name}: {openFailed.get(callId(m))}
               </p>
             {/if}
-          {:else if hasBody}
+          {:else if hasBody && !exchange}
             {@const disclosed = disclosure(m)}
             {@const body = `${uid}-${m.id ?? m.toolCallId}`}
+            <!-- A call answering a pin opens nothing: its exchange stands
+                 whole under its line (below). -->
             <!-- The trigger is a plain button and the disclosure is built only
                  once the call is first opened: a scroll mounts calls by the
                  dozen, and a closed Collapsible with its trigger was most of
@@ -803,7 +869,14 @@
             >
               {#each pointedBy(m) as pointed (pointed.href)}
                 {@const drawn = referenceOf(pointed.href)}
-                {#if drawn.draw === "element"}
+                {#if drawn.draw === "element" && drawn.kind === "pin" && exchange}
+                  <!-- The thread stands whole under it: no peek to stand in for it. -->
+                  <PinReference
+                    id={drawn.id}
+                    label={pointed.label}
+                    peek={false}
+                  />
+                {:else if drawn.draw === "element"}
                   <drawn.element
                     id={drawn.id}
                     kind={drawn.kind}
@@ -812,6 +885,54 @@
                 {/if}
               {/each}
             </p>
+          {/if}
+          {#if exchange?.length}
+            <!-- The exchange the call answered, whole: his words, then the
+                 reply, each by its speaker's glyph (the rail's row line's:
+                 the person's user glyph, the agent's ghost; WORDS.md,
+                 Speakers), in the fields body's well, its words at the
+                 row's text column. Nothing in it is cut or capped: the
+                 words wrap, a word longer than the line breaks. -->
+            <ol
+              data-slot="pin-exchange"
+              class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-surface-recess"
+              style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
+            >
+              {#each exchange as said (said.key)}
+                {@const Speaker = said.by === "agent" ? IconAgent : IconUser}
+                <li
+                  data-slot="exchange-entry"
+                  class="flex items-start gap-space-2 min-w-0 text-size-body leading-body"
+                  data-by={said.by}
+                >
+                  <span class="sr-only"
+                    >{said.by === "agent" ? "Agent: " : "You: "}</span
+                  >
+                  <span
+                    aria-hidden="true"
+                    class="mark-cell text-ink-muted data-you:text-brand-ink"
+                    data-box
+                    data-you={said.by === "person" || undefined}
+                    ><Speaker class="size-icon-sm" /></span
+                  >
+                  <div
+                    class="flex flex-col gap-space-1 flex-1 min-w-0 wrap-anywhere text-pretty"
+                  >
+                    <ToolProse source={said.text} />
+                    {#if said.files.length > 0}
+                      <p class="flex flex-wrap gap-space-1 m-0">
+                        {#each said.files as file, i (i)}
+                          <code
+                            class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                            >{file}</code
+                          >
+                        {/each}
+                      </p>
+                    {/if}
+                  </div>
+                </li>
+              {/each}
+            </ol>
           {/if}
           {#if m.metadata?.resultImages?.length}
             <div

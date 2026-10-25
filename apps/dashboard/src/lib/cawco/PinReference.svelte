@@ -17,7 +17,7 @@
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { artifactMarks } from "./artifact-names.svelte";
+  import { pinNamed } from "./artifact-names.svelte";
   import { dur } from "./motion/curves.svelte";
   import PinMark, { markState } from "./preview/PinMark.svelte";
   import PinPeek from "./preview/PinPeek.svelte";
@@ -26,18 +26,20 @@
   import { refusals } from "./refusals.svelte";
   import { sessionHere } from "./session-here";
 
-  let { id, label = "" }: { id: string; label?: string } = $props();
+  let {
+    id,
+    label = "",
+    peek = true,
+  }: {
+    id: string;
+    label?: string;
+    /** Whether resting a mouse on it peeks its thread: not where the thread stands whole beside it (a comment_reply's row, ToolGroup). */
+    peek?: boolean;
+  } = $props();
   const here = sessionHere();
 
   const named = $derived(pinReference(id));
-  const pin = $derived.by(() => {
-    const at = named;
-    return at
-      ? (artifactMarks(at.artifact)?.pins.find(
-          (one) => one.number === at.number
-        ) ?? null)
-      : null;
-  });
+  const pin = $derived(pinNamed(id));
   /*
    * Its words, as its first paint draws them, kept: what the pin stands on
    * (core pin-name.ts; DESIGN.md, a pin's chip: "its label what it stands
@@ -64,7 +66,7 @@
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   function rest() {
     clearTimeout(peekTimer);
-    if (!(fine.current && pin && chip)) {
+    if (!(peek && fine.current && pin && chip)) {
       return;
     }
     const at = chip;

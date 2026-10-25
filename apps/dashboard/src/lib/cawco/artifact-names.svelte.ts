@@ -17,7 +17,7 @@
  * has its page and its pins, and is taken once ({@link takeOpen}), so a
  * press made before the page is ready still lands.
  */
-import type { ArtifactKind, ChoiceEntry } from "@cawco/core";
+import { type ArtifactKind, type ChoiceEntry, pinReference } from "@cawco/core";
 import type { Pin } from "@cawco/core/comments";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
@@ -162,6 +162,20 @@ export function artifactMarks(id: string): HeldMarks | null {
     askPins(id, named.instanceId);
   }
   return null;
+}
+
+/**
+ * The pin a link names (`<artifact>/<number>`, core `pinReference`), as
+ * {@link artifactMarks} holds it: null while its pins are asked, and when it
+ * names none.
+ */
+export function pinNamed(id: string): Pin | null {
+  const at = pinReference(id);
+  return at
+    ? (artifactMarks(at.artifact)?.pins.find(
+        (one) => one.number === at.number
+      ) ?? null)
+    : null;
 }
 
 /**
