@@ -518,7 +518,40 @@ export function highlight(options: HighlightOptions) {
     const showOrCover = () => {
       showGhostLayer(!(covered && ghostRow?.matches(covered)));
     };
-    const showGhost = (row: HTMLElement | null) => {
+    /**
+     * What the layers read next, by what asked (`readSoon`): each read runs
+     * in the next frame's delivery, on the layout that frame has just done,
+     * and answers its write, which runs once every site there has read. Read
+     * where it was asked instead (a pointer crossing rows as a wheel moves
+     * them, in the wheel's own task after the list's writes), each hit test
+     * and each box laid the page out there. Asked again before then under
+     * the same name, a read runs once, as last asked.
+     */
+    const reads = new Map<string, () => (() => void) | undefined>();
+    const readSite = frameObserver(null, {
+      inside: () => {
+        const due = [...reads.values()];
+        reads.clear();
+        if (skipped) {
+          return;
+        }
+        const writes = due.map((read) => read());
+        return () => {
+          for (const write of writes) {
+            write?.();
+          }
+        };
+      },
+    });
+    const readSoon = (name: string, read: () => (() => void) | undefined) => {
+      reads.set(name, read);
+      readSite.readNext();
+    };
+    /**
+     * The ghost onto `row` at `box` (read with it), or off the list with
+     * none. Every read is the caller's: this only writes.
+     */
+    const placeGhost = (row: HTMLElement | null, box: Box | undefined) => {
       if (!withGhost || skipped) {
         return;
       }
@@ -528,9 +561,8 @@ export function highlight(options: HighlightOptions) {
         ghostRow?.removeAttribute("data-ghosted");
         row?.setAttribute("data-ghosted", "");
       }
-      const box = row && boxOf(row);
       if (!(row && box)) {
-        cancelAnimationFrame(following);
+        followed += 1;
         row?.removeAttribute("data-ghosted");
         showGhostLayer(false);
         ghostRow = null;
@@ -549,6 +581,9 @@ export function highlight(options: HighlightOptions) {
       follow();
       afterMoves();
     };
+    /** The ghost onto `row`, measured where it is asked: a list resized, a pointer leaving. */
+    const showGhost = (row: HTMLElement | null) =>
+      placeGhost(row, row ? boxOf(row) : undefined);
     /**
      * A placement taken while the list was moving (its content shifting
      * under a still pointer, a panel above it folding) is the list's place
@@ -599,29 +634,41 @@ export function highlight(options: HighlightOptions) {
       // A fade cancelled is a ghost shown again: its place is its own.
       Promise.all(fades.map((run) => run.finished)).then(drop, () => undefined);
     };
-    let following = 0;
+    /** Which following is current: a later one, or the ghost let go, ends the one before. */
+    let followed = 0;
     const follow = () => {
-      cancelAnimationFrame(following);
-      let still = 0;
-      const check = () => {
-        const row = ghostRow;
-        if (!(row?.isConnected && ghostBox) || scrolling || skipped) {
-          return;
-        }
-        const box = boxOf(row);
-        if (box && moved(box, ghostBox)) {
-          setGlide(ghost, false);
-          place(ghost, box);
-          ghostBox = box;
-          still = 0;
-        } else {
-          still += 1;
-        }
-        if (still < STILL) {
-          following = requestAnimationFrame(check);
-        }
-      };
-      following = requestAnimationFrame(check);
+      followed += 1;
+      const mine = followed;
+      // Each check read in a frame's delivery, a frame apart.
+      const check = (still: number) =>
+        readSoon("follow", () => {
+          const row = ghostRow;
+          if (
+            mine !== followed ||
+            !(row?.isConnected && ghostBox) ||
+            scrolling ||
+            skipped
+          ) {
+            return;
+          }
+          const box = boxOf(row);
+          return () => {
+            if (mine !== followed || ghostRow !== row || !ghostBox) {
+              return;
+            }
+            let next = still + 1;
+            if (box && moved(box, ghostBox)) {
+              setGlide(ghost, false);
+              place(ghost, box);
+              ghostBox = box;
+              next = 0;
+            }
+            if (next < STILL) {
+              check(next);
+            }
+          };
+        });
+      check(0);
     };
 
     /** The pill onto the selected row: from the ghost, or gliding. */
@@ -849,8 +896,15 @@ export function highlight(options: HighlightOptions) {
 
     /** Where the pointer last was, to re-aim when a list scrolls under it. */
     let pointer: { x: number; y: number } | null = null;
-    /** The frame a still pointer is next aimed on (`settle`). */
-    let settling = 0;
+    /** Which wait for the rows to stand still is current (`settle`): a move ends it. */
+    let waits = 0;
+    /** The next aim places the ghost even on the row it is on (`again`). */
+    let aimAgain = false;
+    /**
+     * The ghost to the row the pointer is on, aimed in the next delivery:
+     * however many moves come before that frame, one hit test and one box,
+     * on the frame's own layout.
+     */
     const onMove = (
       event: { clientX: number; clientY: number },
       again = false
@@ -858,12 +912,27 @@ export function highlight(options: HighlightOptions) {
       if (hovered) {
         return;
       }
-      cancelAnimationFrame(settling);
+      waits += 1;
       pointer = { x: event.clientX, y: event.clientY };
-      const best = nearest(event.clientX, event.clientY);
-      if (again || best !== ghostRow) {
-        showGhost(best);
-      }
+      aimAgain ||= again;
+      readSoon("pointer", () => {
+        const at = pointer;
+        const force = aimAgain;
+        aimAgain = false;
+        if (hovered || !at) {
+          return;
+        }
+        const best = nearest(at.x, at.y);
+        if (!(force || best !== ghostRow)) {
+          return;
+        }
+        const box = best ? boxOf(best) : undefined;
+        return () => {
+          if (pointer === at) {
+            placeGhost(best, box);
+          }
+        };
+      });
     };
 
     /** Whether any row is drawn off its place: a slide is carrying it. */
@@ -890,30 +959,54 @@ export function highlight(options: HighlightOptions) {
       if (hovered || !at) {
         return;
       }
-      cancelAnimationFrame(settling);
-      if (nearest(at.x, at.y) === ghostRow && !rowsMoving()) {
-        // Nothing left its place: the ghost follows its own row.
-        if (ghostRow) {
-          showGhost(ghostRow);
-        }
-        return;
-      }
-      showGhost(null);
-      let still = 0;
-      const check = () => {
-        if (pointer !== at) {
+      waits += 1;
+      const mine = waits;
+      // Read in the next delivery, and each check a frame apart after it.
+      readSoon("pointer", () => {
+        if (pointer !== at || mine !== waits) {
           return;
         }
-        still = rowsMoving() ? 0 : still + 1;
-        if (still < STILL) {
-          settling = requestAnimationFrame(check);
+        if (nearest(at.x, at.y) === ghostRow && !rowsMoving()) {
+          // Nothing left its place: the ghost follows its own row.
+          const row = ghostRow;
+          const box = row ? boxOf(row) : undefined;
+          return () => {
+            if (row && ghostRow === row) {
+              placeGhost(row, box);
+            }
+          };
+        }
+        return () => {
+          placeGhost(null, undefined);
+          stillFor(at, mine, 0);
+        };
+      });
+    };
+    /** Once the rows have stood still for `STILL` frames, the ghost onto the row the pointer is on. */
+    const stillFor = (
+      at: { x: number; y: number },
+      mine: number,
+      still: number
+    ): void =>
+      readSoon("pointer", () => {
+        if (pointer !== at || mine !== waits) {
           return;
+        }
+        const next = rowsMoving() ? 0 : still + 1;
+        if (next < STILL) {
+          return () => {
+            stillFor(at, mine, next);
+          };
         }
         // From out of view, so it lands without a glide.
-        showGhost(nearest(at.x, at.y));
-      };
-      settling = requestAnimationFrame(check);
-    };
+        const best = nearest(at.x, at.y);
+        const box = best ? boxOf(best) : undefined;
+        return () => {
+          if (pointer === at && mine === waits) {
+            placeGhost(best, box);
+          }
+        };
+      });
 
     /**
      * A hovering pointer only. A touch has nothing to hover, and a tap's
@@ -939,7 +1032,7 @@ export function highlight(options: HighlightOptions) {
       }
     };
     const onLeave = () => {
-      cancelAnimationFrame(settling);
+      waits += 1;
       forgetScroll();
       pointer = null;
       if (!hovered) {
@@ -988,24 +1081,15 @@ export function highlight(options: HighlightOptions) {
       clearTimeout(scrollEnd);
       scrolling = null;
     };
-    const aimScrolling = (at: { x: number; y: number }) => {
-      if (!scrolling) {
-        const shares = new Map<HTMLElement, { x: number; y: number }>();
-        scrolling = {
-          frame: frameOf(),
-          rows: rowsNow().flatMap((row) => {
-            const box =
-              getComputedStyle(row).pointerEvents === "none"
-                ? undefined
-                : placeOf(row, shares);
-            return box ? [{ row, box }] : [];
-          }),
-        };
-      }
-      const local = inFrame(scrolling.frame, at.x, at.y);
+    /** The row whose box, as the scroll began, holds the pointer now: the scroll offset its only read. */
+    const scrolledOnto = (
+      at: { x: number; y: number },
+      held: NonNullable<typeof scrolling>
+    ): HTMLElement | null => {
+      const local = inFrame(held.frame, at.x, at.y);
       let best: HTMLElement | null = null;
       let bestDistance = Number.POSITIVE_INFINITY;
-      for (const { row, box } of scrolling.rows) {
+      for (const { row, box } of held.rows) {
         if (!reaches(box, local)) {
           continue;
         }
@@ -1021,9 +1105,39 @@ export function highlight(options: HighlightOptions) {
           bestDistance = distance;
         }
       }
-      if (best !== ghostRow) {
-        showGhost(best);
-      }
+      return best;
+    };
+    /** Read in the next delivery, whatever the scroll's own writes laid out. */
+    const aimScrolling = () => {
+      readSoon("pointer", () => {
+        const at = pointer;
+        if (!(at && ghostRow) || hovered) {
+          return;
+        }
+        if (!scrolling) {
+          const shares = new Map<HTMLElement, { x: number; y: number }>();
+          scrolling = {
+            frame: frameOf(),
+            rows: rowsNow().flatMap((row) => {
+              const box =
+                getComputedStyle(row).pointerEvents === "none"
+                  ? undefined
+                  : placeOf(row, shares);
+              return box ? [{ row, box }] : [];
+            }),
+          };
+        }
+        const best = scrolledOnto(at, scrolling);
+        if (best === ghostRow) {
+          return;
+        }
+        const box = best ? boxOf(best) : undefined;
+        return () => {
+          if (pointer === at) {
+            placeGhost(best, box);
+          }
+        };
+      });
       clearTimeout(scrollEnd);
       scrollEnd = setTimeout(() => {
         scrolling = null;
@@ -1038,8 +1152,8 @@ export function highlight(options: HighlightOptions) {
       }
       if (performance.now() - lastInput < OWN_SCROLL) {
         if (ghostRow && !hovered) {
-          cancelAnimationFrame(settling);
-          aimScrolling(pointer);
+          waits += 1;
+          aimScrolling();
         }
         return;
       }
@@ -1072,27 +1186,49 @@ export function highlight(options: HighlightOptions) {
         const row = container.querySelector<HTMLElement>(hovered);
         cancelAnimationFrame(pendingHide);
         if (row) {
-          showGhost(row);
+          // Measured in the next delivery, as a pointer's aim is.
+          readSoon("pointer", () => {
+            const box = boxOf(row);
+            return () => {
+              if (row.matches(hovered)) {
+                placeGhost(row, box);
+              }
+            };
+          });
         } else {
           // A highlight moving from one row to the next can clear the old
           // row a task before it marks the new one: wait a frame before
           // taking the ghost away, so it glides instead of blinking.
           pendingHide = requestAnimationFrame(() => {
             if (!container.querySelector(hovered)) {
-              showGhost(null);
+              placeGhost(null, undefined);
             }
           });
         }
       }
-      // The pill follows in the next frame's callbacks, where that frame
-      // lays the page out anyway. Placed from here, in the microtask after
-      // the change that moved the selection (a tab switch showing another
+      // The pill follows in the next frame's delivery, on the layout that
+      // frame has just done. Placed from here, in the microtask after the
+      // change that moved the selection (a tab switch showing another
       // conversation), measuring the row laid the whole page out a second
-      // time before the change could paint.
-      cancelAnimationFrame(pendingSync);
-      pendingSync = requestAnimationFrame(() => syncPill(true));
+      // time before the change could paint; measured in the frame's
+      // callbacks, it laid out whatever the updates since the last frame
+      // had changed, which on a page at rest is every hub message's.
+      pillAim.readNext();
     });
-    let pendingSync = 0;
+    /** The pill to the selected row, read in a delivery (`readNext`). */
+    const pillAim = frameObserver(null, {
+      inside: () => {
+        if (skipped) {
+          return;
+        }
+        const at = selectedPill();
+        return () => {
+          if (!skipped) {
+            placePill(true, at);
+          }
+        };
+      },
+    });
     watch.observe(container, {
       subtree: true,
       childList: true,
@@ -1153,24 +1289,39 @@ export function highlight(options: HighlightOptions) {
      * Each layer onto its row's box as it stands now, where that is anywhere
      * else at all (`moved`: a residue under `same`'s half pixel is still a
      * place the layer is not), without a glide. A layer already on its row's
-     * box is left as it is, so a glide on its way there runs on.
+     * box is left as it is, so a glide on its way there runs on. Read in a
+     * delivery, on the frame's own layout, and written once every site
+     * there has read; a layer whose row changed in between (the pill
+     * placed on another row in the same delivery) is left to that row.
      */
     const realign = () => {
       if (skipped) {
         return;
       }
-      const pillAt = pillRow?.isConnected ? shownBoxOf(pillRow) : undefined;
-      if (pillAt && pillBox && moved(pillAt, pillBox)) {
-        setGlide(pill, false);
-        place(pill, pillAt);
-        pillBox = pillAt;
-      }
-      const ghostAt = ghostRow?.isConnected ? boxOf(ghostRow) : undefined;
-      if (ghostAt && ghostBox && moved(ghostAt, ghostBox)) {
-        setGlide(ghost, false);
-        place(ghost, ghostAt);
-        ghostBox = ghostAt;
-      }
+      const pillOn = pillRow;
+      const ghostOn = ghostRow;
+      const pillAt = pillOn?.isConnected ? shownBoxOf(pillOn) : undefined;
+      const ghostAt = ghostOn?.isConnected ? boxOf(ghostOn) : undefined;
+      return () => {
+        if (skipped) {
+          return;
+        }
+        if (pillRow === pillOn && pillAt && pillBox && moved(pillAt, pillBox)) {
+          setGlide(pill, false);
+          place(pill, pillAt);
+          pillBox = pillAt;
+        }
+        if (
+          ghostRow === ghostOn &&
+          ghostAt &&
+          ghostBox &&
+          moved(ghostAt, ghostBox)
+        ) {
+          setGlide(ghost, false);
+          place(ghost, ghostAt);
+          ghostBox = ghostAt;
+        }
+      };
     };
     /**
      * The rows the layers stand on, watched beside the list. A row's own box
@@ -1184,8 +1335,10 @@ export function highlight(options: HighlightOptions) {
      * the box they were measured at may have moved on before it.
      */
     const watchedRows = new Set<Element>();
-    const rowWatch = frameObserver(() => realign());
-    const toRealign = () => rowWatch.request();
+    // A watched row's report, and a move heard without one, aim the layers
+    // in a delivery, on the layout the frame has just done.
+    const rowWatch = frameObserver(null, { inside: realign });
+    const toRealign = () => rowWatch.readNext();
     watchRows = () => {
       for (const row of watchedRows) {
         if (row !== pillRow && row !== ghostRow) {
@@ -1253,14 +1406,17 @@ export function highlight(options: HighlightOptions) {
 
     // A list that measures its rows moves the layers each time it does: the
     // ghost glides to the row under the pointer now (or its own row, or
-    // away if its row has gone), and the pill onto the selected row.
+    // away if its row has gone), and the pill onto the selected row. Read
+    // here, in the update that moved them, so the layers move in the frame
+    // the rows do: the list measured them on that frame's layout.
     if (laidOut) {
       $effect(() => {
         laidOut();
         untrack(() => {
           forgetScroll();
           if (pointer && !hovered) {
-            onMove({ clientX: pointer.x, clientY: pointer.y }, true);
+            waits += 1;
+            showGhost(nearest(pointer.x, pointer.y));
           } else if (ghostRow) {
             showGhost(ghostRow.isConnected ? ghostRow : null);
           }
@@ -1272,9 +1428,10 @@ export function highlight(options: HighlightOptions) {
     return () => {
       forgetScroll();
       cancelAnimationFrame(pendingHide);
-      cancelAnimationFrame(pendingSync);
-      cancelAnimationFrame(settling);
-      cancelAnimationFrame(following);
+      pillAim.disconnect();
+      readSite.disconnect();
+      waits += 1;
+      followed += 1;
       container.removeEventListener("pointermove", onPointer);
       container.removeEventListener("pointerover", onOver);
       container.removeEventListener("pointerleave", onLeave);

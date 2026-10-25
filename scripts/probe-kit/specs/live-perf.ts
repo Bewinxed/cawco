@@ -51,8 +51,10 @@
  *   and CPU after it, and what it changed, by region.
  * - idle: `--quiet` (by default the newest stopped session) left open for a
  *   minute while the fleet runs: the main thread's busy share (live-page.ts
- *   `busyMeter`, beside its floor on a blank page, and the trace's thread
- *   time), socket messages a second and each kind's handling.
+ *   `busyMeter`, beside its floor on a blank page), socket messages a
+ *   second and each kind's handling; then the thread time of a trace with
+ *   no profiler (the budget), and a second trace with it, where that time
+ *   went.
  * - nav: cold loads of the home, a session and a project page (time to
  *   first byte, the HTML in, first and largest paint and what each largest
  *   paint painted, the first frame the transcript's newest row is drawn in
@@ -105,7 +107,7 @@ import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright-core";
 import { HUB_TAKE_MEASURE } from "../../../packages/core/src/stream";
 import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
-import { type MainThread, traceMain } from "../frames";
+import { type MainThread, OWN_PASS, traceMain } from "../frames";
 import { type Kit, ROOT, type Spec } from "../kit";
 import {
   attributeOn,
@@ -369,7 +371,9 @@ const UNTRACED: MainThread = {
 async function traced(
   page: Page,
   act: () => Promise<unknown>,
-  profile = true
+  profile = true,
+  /** Why each style and layout pass ran too (frames.ts `restyles`): heavier, for a page at rest. */
+  restyles = false
 ): Promise<{ main: MainThread; offsetUs: number }> {
   if (!TRACES) {
     await act();
@@ -385,7 +389,7 @@ async function traced(
       });
       await act();
     },
-    { passes: true, profile }
+    { passes: true, profile, restyles }
   );
   const mark = main.marks.find((one) => one.name === "live-perf");
   return { main, offsetUs: (mark?.at ?? 0) - pageAt * 1000 };
@@ -864,6 +868,158 @@ function takesRan(
   };
 }
 
+/**
+ * The animations running on the page, by name and the element they run
+ * on (its `data-slot`, else its tag), with how many: a page at rest whose
+ * frames keep coming is drawing one of these. Run in the page.
+ */
+function runningAnimations(): string {
+  const said = new Map<string, number>();
+  for (const run of document.getAnimations()) {
+    if (run.playState !== "running") {
+      continue;
+    }
+    const target = (run.effect as KeyframeEffect | null)?.target ?? null;
+    let name = `script ${run.id}`;
+    if (run instanceof CSSAnimation) {
+      name = run.animationName;
+    } else if (run instanceof CSSTransition) {
+      name = `transition ${run.transitionProperty}`;
+    }
+    const endless =
+      run.effect?.getComputedTiming().iterations === Number.POSITIVE_INFINITY
+        ? " (endless)"
+        : "";
+    const where = target
+      ? (target.getAttribute("data-slot") ?? target.tagName.toLowerCase())
+      : "?";
+    const key = `${name}${endless} on ${where}`;
+    said.set(key, (said.get(key) ?? 0) + 1);
+  }
+  return (
+    [...said]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([key, count]) => `${key} ×${count}`)
+      .join(", ") || "nothing"
+  );
+}
+
+/** Adds `ms` to `key`'s total. */
+const addTo = (totals: Map<string, number>, key: string, ms: number) => {
+  totals.set(key, (totals.get(key) ?? 0) + ms);
+};
+
+/**
+ * The style and layout passes of the trace's tasks: the frames' own by
+ * phase, with how many and the elements or layout objects each took on
+ * (`counts`), and by their layout's root box (a layout of the whole page,
+ * or of one row); and each a script forced, at its frames, ms with how
+ * many: what reads geometry while nothing moves.
+ */
+function passesOf(main: MainThread, maps: string | undefined) {
+  const phases = new Map<string, number>();
+  const counts = new Map<string, number>();
+  const objects = new Map<string, number>();
+  const roots = new Map<string, number>();
+  const forced = new Map<string, number>();
+  const forcedCount = new Map<string, number>();
+  for (const pass of main.tasks.flatMap((task) => task.passes)) {
+    if (pass.at === OWN_PASS) {
+      const own = `${pass.name} (the frame's)`;
+      addTo(phases, own, pass.ms);
+      addTo(counts, own, 1);
+      addTo(objects, own, pass.elements);
+      if (pass.root) {
+        addTo(roots, pass.root, pass.ms);
+      }
+    } else {
+      const site = `${pass.name} at ${pass.at
+        .split(" ← ")
+        .map((frame) => atSource(maps, frame))
+        .join(" ← ")}`;
+      addTo(forced, site, pass.ms);
+      addTo(forcedCount, site, 1);
+    }
+  }
+  const passes = [...counts].map(([own, count]): [string, number, number] => [
+    own,
+    count,
+    round((objects.get(own) ?? 0) / count, 0),
+  ]);
+  return { phases, passes, roots, forced, forcedCount };
+}
+
+/**
+ * What the page's own CPU went to while the trace ran: each task's thread
+ * time by what it opened with (`byTask`: a timer, a frame's callbacks, an
+ * event, the frame's own rendering), and all the time sampled under each of
+ * the dashboard's own functions (`under`), whatever ran beneath them.
+ */
+function restOf(
+  { main, offsetUs }: { main: MainThread; offsetUs: number },
+  maps: string | undefined
+) {
+  const byTask = new Map<string, number>();
+  const tasks = new Map<string, number>();
+  const { phases, passes, roots, forced, forcedCount } = passesOf(main, maps);
+  // The frames the main thread painted; with `PROBE_IDLE_WHY`, what each
+  // layout and restyle was asked for, by the element it named.
+  let painted = 0;
+  const relaidOut = new Map<string, number>();
+  const restyled = new Map<string, number>();
+  for (const task of main.tasks) {
+    addTo(byTask, task.ran, task.cpu);
+    addTo(tasks, task.ran, 1);
+    for (const [phase, ms] of task.rendering) {
+      addTo(phases, phase, ms);
+    }
+    if (task.rendering.some(([phase]) => phase === "Paint")) {
+      painted += 1;
+    }
+    for (const [why, count] of task.relaidOut) {
+      addTo(relaidOut, why, count);
+    }
+    for (const [why, count] of task.invalidated) {
+      addTo(restyled, why, count);
+    }
+  }
+  const under = new Map<string, number>();
+  for (const [stack, self] of main.stacksIn(
+    offsetUs,
+    Number.POSITIVE_INFINITY
+  )) {
+    const own = new Set(
+      stack
+        .split(" < ")
+        .map((frame) => atSource(maps, frame))
+        .filter((frame) => OWN_SOURCE.test(frame))
+    );
+    for (const frame of own) {
+      under.set(frame, (under.get(frame) ?? 0) + self);
+    }
+  }
+  return {
+    byTask: largest(byTask).map(([ran, ms]): [string, number, number] => [
+      ran,
+      ms,
+      tasks.get(ran) ?? 0,
+    ]),
+    painted,
+    passes,
+    phases: largest(phases),
+    relaidOut: largest(relaidOut).slice(0, 12),
+    restyled: largest(restyled).slice(0, 8),
+    roots: largest(roots).slice(0, 4),
+    forced: largest(forced).map(([site, ms]): [string, number, number] => [
+      site,
+      ms,
+      forcedCount.get(site) ?? 0,
+    ]),
+    under: largest(under),
+  };
+}
+
 /** Idle: a quiet session left open while the fleet runs. */
 async function idleLeg(live: Live, quiet: string) {
   const { kit, page } = live;
@@ -876,11 +1032,30 @@ async function idleLeg(live: Live, quiet: string) {
   const meter = await page.evaluate((ms) => window.__pf.busyMeter(ms), IDLE_MS);
   const pressedAfter = machineQuiet();
   const state = await page.evaluate(() => window.__pf.perfRead());
-  const traceOf = await traced(page, () => page.waitForTimeout(20_000));
-  const { main } = traceOf;
+  // The minute's DOM changes and frame asks are read: the probe's own
+  // recorders stop, so neither trace counts their work as the page's.
+  await page.evaluate(() => window.__pf.perfReset(false, false));
+  // The budget, read on a trace of the main thread's tasks alone. The CPU
+  // profiler the trace after it runs is the trace's, not the page's: its
+  // start is a task of its own on the trace's first frame (232ms on the
+  // scale fleet), and its sampling and the stacks every pass records added
+  // 0.1–1.1% at rest, alternating 8s traces of the same page.
+  const bare = TRACES
+    ? await traceMain(page, () => page.waitForTimeout(20_000), {})
+    : UNTRACED;
   const spanMs =
-    ((main.tasks.at(-1)?.end ?? 0) - (main.tasks[0]?.at ?? 0)) / 1000 || 1;
-  const ownCpu = main.tasks.reduce((sum, task) => sum + task.cpu, 0) / spanMs;
+    ((bare.tasks.at(-1)?.end ?? 0) - (bare.tasks[0]?.at ?? 0)) / 1000 || 1;
+  const ownCpu = bare.tasks.reduce((sum, task) => sum + task.cpu, 0) / spanMs;
+  // Where the time goes, on a second trace with the profiler and each pass.
+  const traceOf = await traced(
+    page,
+    () => page.waitForTimeout(20_000),
+    true,
+    // Why each pass ran, on request: the invalidation tracking it turns on
+    // costs the page CPU of its own.
+    process.env.PROBE_IDLE_WHY === "1"
+  );
+  const { main } = traceOf;
   // What the page's own time went to at rest, by sampled self time, and
   // what its message tasks (the hub socket's) ran, the same way.
   const functions = topFunctions(
@@ -899,6 +1074,8 @@ async function idleLeg(live: Live, quiet: string) {
     spans,
     live.maps
   );
+  const atRest = restOf(traceOf, live.maps);
+  const moving = await page.evaluate(runningAnimations);
   // The meter's floor: the same meter on a blank page, the machine's other
   // turns alone.
   const blank = await live.desk();
@@ -930,13 +1107,15 @@ async function idleLeg(live: Live, quiet: string) {
     messageFunctions,
     messageInclusive,
     kindInclusive,
+    atRest,
+    moving,
     // The page's takes of its messages (if it takes them after its frame):
     // how many, how many messages, their ms all told and the longest.
     takes: state.ws.takes,
     mutated: state.mutated,
   };
   kit.note(
-    `idle on ${live.titleOf(quiet)} (the machine as the minute began: ${quietWords(pressedBefore)}; as it ended: ${quietWords(pressedAfter)}): busy ${round(meter.busyShare * 100)}% (blank page ${round(floor.busyShare * 100)}%; the meter's clock steps ${round(meter.grainMs, 3)}ms, no task under that seen), its own CPU by the trace ${round(ownCpu * 100)}%; ${round((total / IDLE_MS) * 1000)} messages a second: ${messages
+    `idle on ${live.titleOf(quiet)} (the machine as the minute began: ${quietWords(pressedBefore)}; as it ended: ${quietWords(pressedAfter)}): busy ${round(meter.busyShare * 100)}% (blank page ${round(floor.busyShare * 100)}%; the meter's clock steps ${round(meter.grainMs, 3)}ms, no task under that seen), its own CPU by a trace with no profiler ${round(ownCpu * 100)}%; ${round((total / IDLE_MS) * 1000)} messages a second: ${messages
       .sort((a, b) => b.msEach * b.count - a.msEach * a.count)
       .slice(0, 6)
       .map(
@@ -963,13 +1142,60 @@ async function idleLeg(live: Live, quiet: string) {
             .map(([fn, ms]) => `${fn} ${ms}ms`)
             .join(", ")}`
       )
-      .join("")}`
+      .join("")}; at rest, its CPU by task ${atRest.byTask
+      .slice(0, 6)
+      .map(([ran, ms, count]) => `${ran} ×${count} ${ms}ms`)
+      .join(
+        ", "
+      )}; ${atRest.painted} frames painted, their own work ${atRest.phases
+      .slice(0, 6)
+      .map(([phase, ms]) => `${phase} ${ms}ms`)
+      .join(", ")}, their passes ${atRest.passes
+      .map(([pass, count, each]) => `${pass} ×${count} (${each} each)`)
+      .join(", ")}, their layouts by root ${atRest.roots
+      .map(([root, ms]) => `${root} ${ms}ms`)
+      .join(", ")}${
+      atRest.relaidOut.length > 0
+        ? `, laid out for ${atRest.relaidOut
+            .map(([why, count]) => `${why} ×${count}`)
+            .join(", ")}; restyled for ${atRest.restyled
+            .map(([why, count]) => `${why} ×${count}`)
+            .join(", ")}`
+        : ""
+    }; frames asked for in the minute by ${Object.entries(state.framesAsked)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(
+        ([asker, count]) =>
+          `${asker
+            .split(" ← ")
+            .map((frame) => atSource(live.maps, frame))
+            .join(" ← ")} ×${count}`
+      )
+      .join(
+        ", "
+      )}; running at rest ${moving}; changed in the minute ${Object.entries(
+      state.mutatedAt
+    )
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 16)
+      .map(
+        ([where, count]) =>
+          `${where} ×${count} [${(state.mutationSamples[where] ?? []).join(" | ")}]`
+      )
+      .join(", ")}; under the dashboard's own ${atRest.under
+      .slice(0, 14)
+      .map(([fn, ms]) => `${fn} ${ms}ms`)
+      .join(", ")}; forced ${atRest.forced
+      .slice(0, 8)
+      .map(([site, ms, count]) => `${site} ×${count} ${ms}ms`)
+      .join("; ")}`
   );
   if (TRACES) {
     kit.check(
       `idle: the main thread's own CPU under ${IDLE_SHARE * 100}% while the fleet runs`,
       ownCpu < IDLE_SHARE,
-      `${round(ownCpu * 100)}% by the trace's thread time`
+      `${round(ownCpu * 100)}% by the thread time of a trace with no profiler`
     );
   }
   for (const [kind, budget] of KIND_BUDGETS) {

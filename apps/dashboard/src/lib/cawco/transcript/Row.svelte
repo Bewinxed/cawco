@@ -65,7 +65,7 @@
     row: HTMLElement,
     start: (height: number) => void
   ): void {
-    arrivalSizes ??= frameObserver(() => undefined, {
+    arrivalSizes ??= frameObserver(null, {
       inside: (entries) => {
         const writes: (() => void)[] = [];
         for (const entry of entries) {

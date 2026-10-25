@@ -771,106 +771,115 @@
 {#if waiting || home.working.length + home.finished.length > 0}
   <section
     aria-label="Sessions"
-    class="@container flex flex-col"
+    class="flex flex-col"
     data-flip={plan ? undefined : "box"}
   >
-    <!-- The tabs on no shelf of their own (PaneTabs' hosted bar): the chosen
-         sheet is the only mark, the section's seam runs under the row, and
-         the delegates button stands at its end, centred on the tabs, over
-         the row's hairline (DESIGN.md Borders: `border-hairline` separates
-         rows and regions, as the tab shelf's own line does). --tight is
-         how far the row is under the rail at which three-digit counts stand
-         whole at rest (`c-work-tabs-roomy-w`): none there and wider, up to
-         `c-work-tabs-squeeze`. Read off the row's own width, not the desktop
-         rail's (`--rail-w`), so the phone's sheet, which is its own width
-         whatever the rail was dragged to, is told as it is. The header's own
-         spacing gives that room back to the words, each part to its tight
-         step together: the gap to the Delegates switch and the head's
-         trailing pad (both to nothing at the full squeeze: the switch's
-         28px box keeps its glyph clear of the tabs and the edge), a tab's
-         inset, the room after a count. The room before a count stands at
-         --space-1 at every width, so a count never touches its word. Past
-         the tight steps the words give way and the counts and the switch
-         stand (DESIGN.md Typography: "the name gives way first"; the
-         artifact head's narrowest forms): the label ends in its ellipsis,
-         the head never overflowing. -->
-    <div
-      data-slot="head"
-      class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-border-hairline pt-space-1 pr-(--head-end) pb-0 pl-0"
-      style:--head-gap="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
-      style:--head-end="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
-      style:--tight={"clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw - var(--space-4)), var(--c-work-tabs-squeeze))"}
-      style:--count-start="var(--space-1)"
-      style:--count-end="max(0px, var(--space-row) - var(--tight) * 0.06)"
-    >
-      <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
-           sheet the only mark, the section's seam under the row. -->
-      <Tabs
-        data-work-tabs
-        boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
-          .foldBoxes}
-        fill="none"
-        onValueChange={(id: string) => choose(id as WorkTab)}
-        strip="work"
-        value={workTab.current}
-        values={TAB_IDS}
-        variant="folder"
+    <!-- The head is a query container of its own, the width its squeeze
+         reads (`100cqw`): the section's own, as the head stands full width
+         in it. With the section as the container, every change under it
+         that laid it out (a row's words, a row in or out, a count) worked
+         the squeeze out again across the section: 1.0–1.4ms a layout at
+         rest on the scale fleet, against 0.1ms with the head its own
+         container (live-perf idle, each change timed alone). -->
+    <div class="@container">
+      <!-- The tabs on no shelf of their own (PaneTabs' hosted bar): the chosen
+           sheet is the only mark, the section's seam runs under the row, and
+           the delegates button stands at its end, centred on the tabs, over
+           the row's hairline (DESIGN.md Borders: `border-hairline` separates
+           rows and regions, as the tab shelf's own line does). --tight is
+           how far the row is under the rail at which three-digit counts stand
+           whole at rest (`c-work-tabs-roomy-w`): none there and wider, up to
+           `c-work-tabs-squeeze`. Read off the row's own width, not the desktop
+           rail's (`--rail-w`), so the phone's sheet, which is its own width
+           whatever the rail was dragged to, is told as it is. The header's own
+           spacing gives that room back to the words, each part to its tight
+           step together: the gap to the Delegates switch and the head's
+           trailing pad (both to nothing at the full squeeze: the switch's
+           28px box keeps its glyph clear of the tabs and the edge), a tab's
+           inset, the room after a count. The room before a count stands at
+           --space-1 at every width, so a count never touches its word. Past
+           the tight steps the words give way and the counts and the switch
+           stand (DESIGN.md Typography: "the name gives way first"; the
+           artifact head's narrowest forms): the label ends in its ellipsis,
+           the head never overflowing. -->
+      <div
+        data-slot="head"
+        class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-border-hairline pt-space-1 pr-(--head-end) pb-0 pl-0"
+        style:--head-gap="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
+        style:--head-end="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
+        style:--tight={"clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw - var(--space-4)), var(--c-work-tabs-squeeze))"}
+        style:--count-start="var(--space-1)"
+        style:--count-end="max(0px, var(--space-row) - var(--tight) * 0.06)"
       >
-        <TabsList aria-label="Sessions">
-          {#each TABS as tab (tab.id)}
-            {@const count = topOf(tab.id).length}
-            <TabItem label={tab.label} value={tab.id}>
-              {#snippet trail()}
-                <!-- No count until it is read, and only above 0 (DESIGN.md,
-                     The Earned Count Rule). -->
-                {#if !waiting && count > 0}
-                  {#key count}
-                    <!-- The count is the kit's badge in its tab's status
-                         pair (DESIGN.md, Badge), its numeral meta in tabular
-                         figures: only its place in the tab is the tab's. A
-                         press on the count is a press on its tab: it reaches
-                         the hit. -->
-                    <Badge
-                      data-num
-                      data-slot="count"
-                      class="ms-(--count-start) me-(--count-end)"
-                      data-flip="pop"
-                      data-tab={tab.id}
-                      size="count"
-                      variant={pairOf(tab.id)}><span>{count}</span></Badge
-                    >
-                  {/key}
-                {/if}
-              {/snippet}
-            </TabItem>
-          {/each}
-        </TabsList>
-      </Tabs>
-      <Tip label={rail.delegates ? "Hide delegates" : "Show delegates"}>
-        {#snippet children(tip)}
-          <!-- A switch with no count of its own, at a fixed size, so
-               nothing in the header moves when it is pressed. On, its
-               glyph turns solid in strong ink; off, the duotone, muted. -->
-          <!-- The corner actions' icon button (Sidebar .head-action), at one
-               size whatever it shows. Pressed, its glyph turns solid in
-               strong ink: no fill, nothing that moves. -->
-          <button
-            {...tip}
-            aria-label="Delegates"
-            aria-pressed={rail.delegates}
-            class="select-none focus-inset touch-hit mb-space-row inline-grid size-c-bar-item flex-none place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
-            data-on={rail.delegates || undefined}
-            onclick={() => rail.setDelegates(!rail.delegates)}
-            type="button"
-          >
-            {#if rail.delegates}
-              <StructureOn aria-hidden="true" class="size-icon-md" />
-            {:else}
-              <Structure aria-hidden="true" class="size-icon-md" />
-            {/if}
-          </button>
-        {/snippet}
-      </Tip>
+        <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
+             sheet the only mark, the section's seam under the row. -->
+        <Tabs
+          data-work-tabs
+          boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
+            .foldBoxes}
+          fill="none"
+          onValueChange={(id: string) => choose(id as WorkTab)}
+          strip="work"
+          value={workTab.current}
+          values={TAB_IDS}
+          variant="folder"
+        >
+          <TabsList aria-label="Sessions">
+            {#each TABS as tab (tab.id)}
+              {@const count = topOf(tab.id).length}
+              <TabItem label={tab.label} value={tab.id}>
+                {#snippet trail()}
+                  <!-- No count until it is read, and only above 0 (DESIGN.md,
+                       The Earned Count Rule). -->
+                  {#if !waiting && count > 0}
+                    {#key count}
+                      <!-- The count is the kit's badge in its tab's status
+                           pair (DESIGN.md, Badge), its numeral meta in tabular
+                           figures: only its place in the tab is the tab's. A
+                           press on the count is a press on its tab: it reaches
+                           the hit. -->
+                      <Badge
+                        data-num
+                        data-slot="count"
+                        class="ms-(--count-start) me-(--count-end)"
+                        data-flip="pop"
+                        data-tab={tab.id}
+                        size="count"
+                        variant={pairOf(tab.id)}><span>{count}</span></Badge
+                      >
+                    {/key}
+                  {/if}
+                {/snippet}
+              </TabItem>
+            {/each}
+          </TabsList>
+        </Tabs>
+        <Tip label={rail.delegates ? "Hide delegates" : "Show delegates"}>
+          {#snippet children(tip)}
+            <!-- A switch with no count of its own, at a fixed size, so
+                 nothing in the header moves when it is pressed. On, its
+                 glyph turns solid in strong ink; off, the duotone, muted. -->
+            <!-- The corner actions' icon button (Sidebar .head-action), at one
+                 size whatever it shows. Pressed, its glyph turns solid in
+                 strong ink: no fill, nothing that moves. -->
+            <button
+              {...tip}
+              aria-label="Delegates"
+              aria-pressed={rail.delegates}
+              class="select-none focus-inset touch-hit mb-space-row inline-grid size-c-bar-item flex-none place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
+              data-on={rail.delegates || undefined}
+              onclick={() => rail.setDelegates(!rail.delegates)}
+              type="button"
+            >
+              {#if rail.delegates}
+                <StructureOn aria-hidden="true" class="size-icon-md" />
+              {:else}
+                <Structure aria-hidden="true" class="size-icon-md" />
+              {/if}
+            </button>
+          {/snippet}
+        </Tip>
+      </div>
     </div>
     {#if waiting}
       <!-- The list is being read: rows at a session row's height stand in

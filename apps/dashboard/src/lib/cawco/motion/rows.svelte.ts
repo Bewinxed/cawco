@@ -536,6 +536,8 @@ interface Placed extends Box {
 interface Move {
   /** The slide, once it has taken over from the hold. */
   animation?: Animation;
+  /** It has no transform of its own as the slide began (`transformsOf`): it slides on `transform`. */
+  bare: boolean;
   /** Drops the slide's start while a style still holds the element. */
   hold?: () => void;
   /** Its element's own `translate` as the slide began, under the hold and the slide. */
@@ -808,13 +810,19 @@ function referenceIn(node: HTMLElement, element: HTMLElement): HTMLElement {
   return node;
 }
 
+/** A marked element: one a container places (`data-flip`), or reads others against (`data-flip-anchor`). */
+const MARKED = "[data-flip], [data-flip-anchor]";
+
+/** A node that is, or holds, a marked element. */
+const holdsMarked = (node: Node): boolean =>
+  node instanceof Element &&
+  (node.matches(MARKED) || node.querySelector(MARKED) !== null);
+
 /** Every marked element the container lays out, placed against its reference. */
 function placesIn(node: HTMLElement): Map<HTMLElement, Placed> {
   const boxes = new Map<HTMLElement, Box>();
   const boxIn = boxesIn(node);
-  for (const element of node.querySelectorAll<HTMLElement>(
-    "[data-flip], [data-flip-anchor]"
-  )) {
+  for (const element of node.querySelectorAll<HTMLElement>(MARKED)) {
     const box = ownedBy(node, element) ? boxIn(element) : null;
     if (box) {
       boxes.set(element, box);
@@ -852,6 +860,26 @@ function heldBy(move: Move | undefined) {
   const timed = move.animation.effect?.getComputedTiming().progress ?? 1;
   const progress = move.share ? move.share(timed) : timed;
   return { x: move.x * (1 - progress), y: move.y * (1 - progress) };
+}
+
+/** An element's own transforms as a slide reads them (`#slide`). */
+interface Transforms {
+  /** No transform of its own at all: none of `translate`, `rotate`, `scale` or `transform`. */
+  bare: boolean;
+  /** Its own `translate`. */
+  translate: string;
+}
+
+function transformsOf(styles: CSSStyleDeclaration): Transforms {
+  return {
+    translate: styles.translate,
+    bare: [
+      styles.translate,
+      styles.rotate,
+      styles.scale,
+      styles.transform,
+    ].every((value) => value === "none" || value === ""),
+  };
 }
 
 /** An element's own `translate`, offset by a step: composed, never replaced. */
@@ -1334,6 +1362,7 @@ class Reflow {
     this.#placed = placesIn(this.#node);
     this.#scroll = this.#node.scrollTop;
     this.#view = null;
+    this.#heardAt = new Set();
   }
 
   get skipped(): boolean {
@@ -1378,7 +1407,86 @@ class Reflow {
       this.#placed = placesIn(this.#node);
       this.#scroll = this.#node.scrollTop;
       this.#view = null;
+      this.#heardAt = new Set();
     }
+  }
+
+  /**
+   * The marked elements the changes heard since the last reading landed
+   * inside (`hear`), each the innermost this container places; null once
+   * one landed anywhere else: on a marked element itself, bringing or
+   * taking one, or outside every one.
+   */
+  #heardAt: Set<HTMLElement> | null = new Set();
+
+  /**
+   * Where changes landed. A change inside a marked element (its words, a
+   * count, a class on something in it) moves nothing else unless that
+   * element's size changed, which the reading checks (`plan`); any other
+   * change can move anything, and every place is read again.
+   */
+  hear(records: readonly MutationRecord[]) {
+    for (const record of records) {
+      const inside = this.#landedIn(record);
+      if (inside) {
+        this.#heardAt?.add(inside);
+      } else {
+        this.#heardAt = null;
+      }
+    }
+  }
+
+  /** The innermost marked element of this container a change landed inside; null when it moved one. */
+  #landedIn(record: MutationRecord): HTMLElement | null {
+    const at =
+      record.target instanceof Element
+        ? record.target
+        : record.target.parentElement;
+    if (
+      !at ||
+      (record.type === "attributes" && at.matches(MARKED)) ||
+      (record.type === "childList" &&
+        [...record.addedNodes, ...record.removedNodes].some(holdsMarked))
+    ) {
+      return null;
+    }
+    let inside = at.closest<HTMLElement>(MARKED);
+    while (inside && !ownedBy(this.#node, inside)) {
+      inside = inside.parentElement?.closest<HTMLElement>(MARKED) ?? null;
+    }
+    // One holding marked elements of its own lays them out: a change in it
+    // can move them inside it whatever its own size does.
+    return inside && inside.querySelector(MARKED) === null ? inside : null;
+  }
+
+  /**
+   * Every change heard landed inside marked elements that kept their size,
+   * with nothing in flight to read again: nothing this container places has
+   * moved. Read in the delivery, on the frame's layout, so it costs no
+   * layout of its own: a session's words changing in the rail read every
+   * place in it, on every hub message.
+   */
+  #nothingMoved(placed: Map<HTMLElement, Placed>): boolean {
+    const landed = this.#heardAt;
+    if (
+      landed === null ||
+      landed.size === 0 ||
+      (this.#drawn !== null && this.#drawn.size > 0)
+    ) {
+      return false;
+    }
+    for (const element of landed) {
+      const was = placed.get(element);
+      if (!(
+        was &&
+        element.isConnected &&
+        element.offsetWidth === was.w &&
+        element.offsetHeight === was.h
+      )) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1404,6 +1512,7 @@ class Reflow {
       this.firstRead();
     } else if (!this.#skipped) {
       this.#placed = placesIn(this.#node);
+      this.#heardAt = new Set();
     }
   }
 
@@ -1444,6 +1553,12 @@ class Reflow {
     if (!placed) {
       return;
     }
+    const unmoved = this.#nothingMoved(placed);
+    this.#heardAt = new Set();
+    if (unmoved) {
+      this.#drawn = null;
+      return;
+    }
     const still = !motionOk.current;
     const drawn = this.#drawn ?? new Map();
     this.#drawn = null;
@@ -1482,14 +1597,15 @@ class Reflow {
       }
     }
     // Every style the writes need, in one pass. An element under a slide or
-    // its hold has its own `translate` as the slide began (`Move.own`):
-    // read with its hold dropped instead, the drop laid the page out under
-    // the read.
-    const own = plan.slides.map(
-      (slide) =>
-        this.#moves.get(slide.element)?.own ??
-        getComputedStyle(slide.element).translate
-    );
+    // its hold has its own transforms as the slide began (`Move.own`,
+    // `Move.bare`): read with its hold dropped instead, the drop laid the
+    // page out under the read.
+    const own = plan.slides.map((slide) => {
+      const move = this.#moves.get(slide.element);
+      return move
+        ? { translate: move.own, bare: move.bare }
+        : transformsOf(getComputedStyle(slide.element));
+    });
     const shrinks = plan.edges.map((edge) =>
       edge.to < edge.from && !edge.carry
         ? shrinkOf(getComputedStyle(edge.element))
@@ -1529,7 +1645,7 @@ class Reflow {
       arrivals: [HTMLElement, number][];
       departures: [HTMLElement, Placed, { x: number; y: number }][];
       now: Map<HTMLElement, Placed>;
-      own: string[];
+      own: Transforms[];
       shrinks: (Shrink | null)[];
       spans: { margin: number; placed: boolean }[];
       still: boolean;
@@ -1770,30 +1886,48 @@ class Reflow {
     );
   }
 
-  /** `own`: its own `translate`, read with its hold dropped (`change`). */
-  #slide(element: HTMLElement, x: number, y: number, own: string) {
+  /** `own`: its own transforms, read with its hold dropped (`change`). */
+  #slide(element: HTMLElement, x: number, y: number, own: Transforms) {
     // The first frames hold it with a style, which their layout reads. An
     // animation started in the same update runs off the main thread, and the
     // frame is drawn, and counted as a layout shift, as though it had
     // jumped. The slide takes over from the same place when the batch starts
-    // (`atTravel`), on the batch's clock. It is on `translate`, composed with
-    // the element's own, so a chip's scale and a control's centring are left
-    // alone; Chrome runs it on the compositor all the same.
-    element.style.translate = offsetTranslate(own, x, y);
-    const move: Move = { x, y, own };
+    // (`atTravel`), on the batch's clock.
+    //
+    // An element with no transform of its own, which is nearly every row,
+    // slides on `transform`. On `translate` instead, a slide under a box
+    // whose edge moves by its clip (`edgeOf`, the change's own boxes round
+    // it) took the clip off the compositor, and the page restyled and
+    // re-layered every frame of every change in the rail (a looping clip
+    // over a sliding child: 195 frames in 4s on the page's own thread on
+    // `translate`, 66 on `transform`, 66 with neither; scale fleet). One
+    // with a transform of its own (a control's centring, a chip's scale)
+    // slides on `translate`, composed with its own: added where it has a
+    // `translate`, which Chrome then runs on the page's own thread (the
+    // trace's `compositeFailed` 16, `kEffectHasNonReplaceCompositeMode`).
+    element.style.translate = offsetTranslate(own.translate, x, y);
+    const move: Move = { x, y, own: own.translate, bare: own.bare };
     this.#moves.set(element, move);
     move.hold = atTravel((at, pace) => {
       move.hold = undefined;
       element.style.translate = "";
-      const slide = paced(
-        pace,
-        { translate: `${x}px ${y}px` },
-        { translate: "0px 0px" },
-        Math.hypot(x, y)
-      );
+      const slide = own.bare
+        ? paced(
+            pace,
+            { transform: `translate(${x}px, ${y}px)` },
+            { transform: "translate(0px, 0px)" },
+            Math.hypot(x, y)
+          )
+        : paced(
+            pace,
+            { translate: `${x}px ${y}px` },
+            { translate: "0px 0px" },
+            Math.hypot(x, y)
+          );
       const animation = element.animate(slide.frames, {
         ...slide.timing,
-        composite: "add",
+        composite:
+          own.translate === "none" || own.translate === "" ? "replace" : "add",
       });
       animation.startTime = at;
       move.animation = animation;
@@ -1944,7 +2078,7 @@ let sizesOfReflows: FrameObserver | undefined;
  * its writes run with every site's.
  */
 const reflowSizes = (): FrameObserver => {
-  sizesOfReflows ??= frameObserver(() => undefined, {
+  sizesOfReflows ??= frameObserver(null, {
     inside: (entries) => {
       const reported = new Set<Element>();
       for (const entry of entries) {
@@ -2070,7 +2204,9 @@ export function reflow({ on = [] }: { on?: readonly string[] } = {}) {
     states.set(node, state);
     const depth = depthOf(node);
     const watcher = new MutationObserver((records) => {
-      if (records.some(canMove)) {
+      const moving = records.filter(canMove);
+      if (moving.length > 0) {
+        state.hear(moving);
         heard(state, depth);
       }
     });

@@ -1502,7 +1502,7 @@
    * mounted for as long as the list lived (tab-return's detached leg).
    */
   function rowSizesOf(): FrameObserver {
-    rowSizes ??= frameObserver(() => undefined, {
+    rowSizes ??= frameObserver(null, {
       read: (entries) => {
         for (const entry of entries) {
           const height = entry.borderBoxSize[0]?.blockSize;
@@ -3086,7 +3086,7 @@
       if (!node) {
         return;
       }
-      nearStart ??= frameObserver(() => undefined, {
+      nearStart ??= frameObserver(null, {
         read: (entries) => {
           const target = entries.at(-1)?.target;
           nearStart?.unobserve(target as Element);
@@ -3678,7 +3678,7 @@
       return;
     }
     pinAsked = true;
-    pinSizes ??= frameObserver(() => undefined, {
+    pinSizes ??= frameObserver(null, {
       read: () => {
         if (!pinAsked) {
           return;

@@ -215,7 +215,7 @@
   }
   /** An incoming face's size observer: its first report starts the tween, read with every site's reads and written after them (frameObserver). */
   const entered: Attachment<HTMLElement> = (node) => {
-    const sized = frameObserver(() => undefined, {
+    const sized = frameObserver(null, {
       first: (entries) => {
         const end = entries[0]?.borderBoxSize[0]?.blockSize ?? 0;
         const easing = box

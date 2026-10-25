@@ -79,16 +79,28 @@ export interface PerfState {
   done?: boolean;
   events: Interaction[];
   frames: boolean;
+  /** Who asked the page for frames while `mutations` was on, by their frame, with how many times. */
+  framesAsked: Record<string, number>;
   loaf: Loaf[];
   long: [number, number][];
   /** DOM changes while `mutations` is on, by region: added, removed, attributes, text. */
   mutated: Record<string, [number, number, number, number]>;
+  /**
+   * The same changes by where they landed, finer: the region, the nearest
+   * box with a slot, and the change (`text`, `nodes`, or the attribute's
+   * name), with how many records.
+   */
+  mutatedAt: Record<string, number>;
+  /** The first few of each kind of change in `mutatedAt`, said short: what it was before and after. */
+  mutationSamples: Record<string, string[]>;
   mutations: boolean;
   painted: Painted[];
   pendingDrive: number;
   /** A scroll journey's steps: each its name, its span on the page's clock, how far it moved the view. */
   phases?: [string, number, number, number][];
   rafs: number[];
+  /** Starts the frame callbacks `rafs` is read by, while `frames` is on. */
+  readFrames?: () => void;
   shifts: [number, number][];
   /**
    * Socket messages by kind, from `since`: count, characters, and the
@@ -132,10 +144,13 @@ export function installPerf(takeMeasure: string): string {
     loaf: [],
     long: [],
     mutated: {},
+    mutatedAt: {},
+    mutationSamples: {},
     mutations: false,
     painted: [],
     pendingDrive: 0,
     rafs: [],
+    framesAsked: {},
     shifts: [],
     ws: {
       kinds: {},
@@ -288,6 +303,66 @@ export function installPerf(takeMeasure: string): string {
     }
     return `other ${named.tagName.toLowerCase()}[aria-label=${named.getAttribute("aria-label")?.slice(0, 30)}]`;
   };
+  /**
+   * A change's nearest box with a slot, and what changed: `text`, `nodes` or
+   * the attribute's name; ` (moves rows)` where a list that reflows its
+   * marked rows (motion/rows) would read every place again for it: it lands
+   * on a marked row, brings or takes one, or lands outside every one.
+   */
+  const MARKED = "[data-flip], [data-flip-anchor]";
+  const holdsMarked = (node: Node) =>
+    node instanceof Element &&
+    (node.matches(MARKED) || node.querySelector(MARKED) !== null);
+  const SIZING = ["class", "hidden", "open", "data-state"];
+  const movesRows = (r: MutationRecord, el: Element | null): boolean => {
+    if (
+      !el?.closest("[data-reflow]") ||
+      (r.type === "attributes" && !SIZING.includes(r.attributeName ?? ""))
+    ) {
+      return false;
+    }
+    const inside = el.closest(MARKED);
+    return (
+      !inside ||
+      inside.querySelector(MARKED) !== null ||
+      (r.type === "attributes" && el.matches(MARKED)) ||
+      [...r.addedNodes, ...r.removedNodes].some(holdsMarked)
+    );
+  };
+  const landedAt = (r: MutationRecord): string => {
+    const el = r.target instanceof Element ? r.target : r.target.parentElement;
+    const slot =
+      el?.closest("[data-slot]")?.getAttribute("data-slot") ?? "no slot";
+    let change = r.type === "characterData" ? "text" : "nodes";
+    if (r.type === "attributes") {
+      change = String(r.attributeName);
+    }
+    return `${slot} ${change}${movesRows(r, el) ? " (moves rows)" : ""}`;
+  };
+  /** A node, said short: its tag and slot, or its text. */
+  const nodeSaid = (node: Node): string =>
+    node instanceof Element
+      ? `<${node.tagName.toLowerCase()}${node.getAttribute("data-slot") ? ` ${node.getAttribute("data-slot")}` : ""}>`
+      : JSON.stringify((node.textContent ?? "").slice(0, 24));
+  /** What one change did, said short: the value before and after, or the nodes that came and went. */
+  const changeSaid = (r: MutationRecord): string => {
+    if (r.type === "attributes") {
+      const el = r.target as Element;
+      return `${JSON.stringify(r.oldValue?.slice(0, 60))} → ${JSON.stringify(el.getAttribute(r.attributeName ?? "")?.slice(0, 60))}`;
+    }
+    if (r.type === "characterData") {
+      return `${JSON.stringify(r.oldValue?.slice(0, 40))} → ${JSON.stringify(r.target.textContent?.slice(0, 40))}`;
+    }
+    return `+${[...r.addedNodes].map(nodeSaid).join("")} −${[...r.removedNodes].map(nodeSaid).join("")}`;
+  };
+  /** The first few changes of each kind, said short. */
+  const keepSample = (at: string, r: MutationRecord) => {
+    const samples = p.mutationSamples[at] ?? [];
+    if (samples.length < 3) {
+      samples.push(changeSaid(r));
+      p.mutationSamples[at] = samples;
+    }
+  };
   const watchMutations = () => {
     new MutationObserver((records) => {
       if (!p.mutations) {
@@ -304,12 +379,17 @@ export function installPerf(takeMeasure: string): string {
           row[3] += 1;
         }
         p.mutated[region] = row;
+        const at = `${region} › ${landedAt(r)}`;
+        p.mutatedAt[at] = (p.mutatedAt[at] ?? 0) + 1;
+        keepSample(at, r);
       }
     }).observe(document, {
       subtree: true,
       childList: true,
       attributes: true,
+      attributeOldValue: true,
       characterData: true,
+      characterDataOldValue: true,
     });
   };
   if (document.documentElement) {
@@ -387,14 +467,46 @@ export function installPerf(takeMeasure: string): string {
   };
   const channel = new MessageChannel();
   channel.port1.onmessage = afterPaint;
+  // Asks for frames only while they are read (`frames`): a frame callback
+  // asked for every frame keeps the page drawing at the display's rate, and
+  // a page at rest read with it on was charged a frame a vsync of its own.
+  let looping = false;
   const loop = (t: number) => {
-    if (p.frames) {
-      p.rafs.push(t);
-      channel.port2.postMessage(0);
+    if (!p.frames) {
+      looping = false;
+      return;
     }
+    p.rafs.push(t);
+    channel.port2.postMessage(0);
     requestAnimationFrame(loop);
   };
-  requestAnimationFrame(loop);
+  p.readFrames = () => {
+    if (!looping) {
+      looping = true;
+      requestAnimationFrame(loop);
+    }
+  };
+  // Who asks the page for frames, while `mutations` is on: each asker's
+  // first two frames outside this watcher, `fn@file:line:column ← its
+  // caller`, with how many times. A page at rest that keeps asking draws a
+  // frame each time.
+  const askFrame = window.requestAnimationFrame.bind(window);
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, which has none of this module's scope
+  const FRAME = /at (?:(\S+) \()?(?:.*\/)?([^/\s]+):(\d+):(\d+)\)?$/;
+  const said = (line: string) => {
+    const at = FRAME.exec(line.trim());
+    return at ? `${at[1] ?? "(anonymous)"}@${at[2]}:${at[3]}:${at[4]}` : "?";
+  };
+  window.requestAnimationFrame = (callback) => {
+    if (p.mutations) {
+      const [, , asked = "", by = ""] = String(new Error("asked").stack).split(
+        "\n"
+      );
+      const asker = `${said(asked)} ← ${said(by)}`;
+      p.framesAsked[asker] = (p.framesAsked[asker] ?? 0) + 1;
+    }
+    return askFrame(callback);
+  };
   // The page's takes of what its socket said (client.svelte.ts `takeHeld`):
   // each take's time shared evenly among the messages that arrived before
   // it began, added to each one's kind.
@@ -537,8 +649,11 @@ export function perfReset(frames: boolean, mutations: boolean): number {
   p.events = [];
   p.shifts = [];
   p.rafs = [];
+  p.framesAsked = {};
   p.painted = [];
   p.mutated = {};
+  p.mutatedAt = {};
+  p.mutationSamples = {};
   p.pendingDrive = 0;
   p.ws = {
     kinds: {},
@@ -548,6 +663,9 @@ export function perfReset(frames: boolean, mutations: boolean): number {
     takeSpans: [],
   };
   p.frames = frames;
+  if (frames) {
+    p.readFrames?.();
+  }
   p.mutations = mutations;
   return performance.now();
 }

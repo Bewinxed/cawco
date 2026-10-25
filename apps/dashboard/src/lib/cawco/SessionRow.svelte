@@ -37,34 +37,29 @@
   const watchTrail = (node: HTMLElement): (() => void) => {
     // Its width from its observer's reports, never read off the page: read
     // off it as the row mounted (`getComputedStyle(...).inlineSize`), it laid
-    // the page out between the writes of the flush that mounted it. The
-    // first report is written inside its delivery, for every row of it
-    // together (frameObserver `first`): the frame the row mounts in lays it
-    // out, and its title gives way to the column in that frame's paint
-    // (`--trail-w` moves the row's actions and its title's end, and resizes
-    // no column). A change after that, in the next frame.
-    trailSizes ??= frameObserver(
-      (changed) => {
-        for (const column of changed) {
-          writeTrail(column);
+    // the page out between the writes of the flush that mounted it. Every
+    // report is written inside its delivery, for every row of it together:
+    // the frame that lays the column out at its new width gives the title
+    // its room in that frame's paint (`--trail-w` moves the row's actions
+    // and its title's end, and resizes no column). Written in the next
+    // frame instead, a row whose trail changed (a running session's time)
+    // was drawn a frame with its title under the trail, and asked the page
+    // for a frame of its own to set it right.
+    trailSizes ??= frameObserver(null, {
+      read: (entries) => {
+        for (const entry of entries) {
+          const [box] = entry.borderBoxSize;
+          if (box) {
+            trailWidths.set(entry.target, box.inlineSize);
+          }
         }
       },
-      {
-        read: (entries) => {
-          for (const entry of entries) {
-            const [box] = entry.borderBoxSize;
-            if (box) {
-              trailWidths.set(entry.target, box.inlineSize);
-            }
-          }
-        },
-        first: (entries) => () => {
-          for (const entry of entries) {
-            writeTrail(entry.target);
-          }
-        },
-      }
-    );
+      inside: (entries) => () => {
+        for (const entry of entries) {
+          writeTrail(entry.target);
+        }
+      },
+    });
     trailSizes.observe(node);
     return () => trailSizes?.unobserve(node);
   };

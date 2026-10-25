@@ -5733,21 +5733,30 @@ function bind(socket: WebSocket): void {
 
 /**
  * The hub's messages read off the socket and not yet taken, in order: all
- * of them are taken in one task once the page has drawn its next frame,
- * so a burst costs the store one update, and a message that lands while a
- * press is being drawn (a tab switch) waits for that frame instead of
- * holding it (7433e2b3, mechanisms 2 and 6).
+ * of them are taken in one task, so a burst costs the store one update. A
+ * message that lands while a press is being drawn (a tab switch), or within
+ * a frame of the last take, is taken once the page has drawn its next
+ * frame, and so waits for that frame instead of holding it (7433e2b3,
+ * mechanisms 2 and 6). One that lands at rest is taken in a task of its
+ * own at once: asked for from a frame, every message drew a frame of its
+ * own whether it changed anything or not (the scale fleet at rest: 109 of
+ * the page's 388 frames in 20s ran a callback and drew nothing).
  */
 const heldMessages: unknown[] = [];
 let takeAsked = false;
 /** When the take waiting was asked for, and when its task was posted (the page's clock). */
 const taking = { askedAt: 0, postedAt: 0 };
+/** When the last take ran (the page's clock). */
+let tookAt = Number.NEGATIVE_INFINITY;
+/** A frame at 60Hz, ms: a take at rest comes no sooner than this after the last. */
+const TAKE_SPACING_MS = 1000 / 60;
 /** When the person last pressed or typed: a pointer down, a key. */
 let pressedAt = Number.NEGATIVE_INFINITY;
 /**
- * The longest a press holds a waiting take back past its ask, ms: the
- * press's frame is drawn first, and a person typing on never holds the
- * hub's word back longer than this. Our own call.
+ * The longest a press holds a waiting take back past its ask, ms, and how
+ * long after a press takes wait for a frame: the press's frame is drawn
+ * first, and a person typing on never holds the hub's word back longer
+ * than this. Our own call.
  */
 const PRESS_HOLD_MS = 250;
 /** Posts the take as a task of its own, behind the frame that asked for it. */
@@ -5796,9 +5805,13 @@ function holdMessage(message: unknown): void {
     return;
   }
   takeAsked = true;
-  taking.askedAt = performance.now();
-  if (document.hidden) {
-    taking.postedAt = taking.askedAt;
+  const now = performance.now();
+  taking.askedAt = now;
+  if (
+    document.hidden ||
+    (now - pressedAt >= PRESS_HOLD_MS && now - tookAt >= TAKE_SPACING_MS)
+  ) {
+    taking.postedAt = now;
     takeChannel?.port2.postMessage(0);
     return;
   }
@@ -5817,6 +5830,7 @@ function takeHeld(): void {
     return;
   }
   const began = performance.now();
+  tookAt = began;
   const batch = heldMessages.splice(0);
   for (const message of batch) {
     takeMessage(message);

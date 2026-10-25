@@ -29,13 +29,15 @@ import type { Attachment } from "svelte/attachments";
  * the other things a site hears (a scroll, rows arriving, the window) share
  * its one frame.
  *
- * `readNext()` asks for `read` in the next delivery with nothing resized,
- * then the answer: a change no box's size reports (a tab moved, not
- * resized) is measured on the layout that frame does. Measured in a frame
- * callback instead, it laid the page out ahead of that layout, under what
- * the frame had just changed (decision-pages (o): fluid-tabs `rects`'
- * `offsetParent`, a reply arriving on the phone at 4x). The page's root is
- * observed again for it, so a delivery comes.
+ * `readNext()` asks for `read` and `inside` in the next frame's delivery
+ * with nothing resized, then the answer in the frame after: a change no
+ * box's size reports (a tab moved, not resized; a row's `top` written, a
+ * style turned) is measured on the layout that frame does. Measured in a
+ * frame callback instead, it laid the page out ahead of that layout, under
+ * what the frame had just changed (decision-pages (o): fluid-tabs `rects`'
+ * `offsetParent`, a reply arriving on the phone at 4x; the highlight's
+ * realign, ten 10ms layouts in twenty seconds of a page at rest). The
+ * page's root is observed again for it, so a delivery comes.
  *
  * `first`, when given, takes a target's first report inside the delivery
  * itself, for a box mounting: the frame it mounts in has laid it out and not
@@ -55,7 +57,7 @@ import type { Attachment } from "svelte/attachments";
 export interface FrameObserver {
   disconnect: () => void;
   observe: (target: Element, options?: ResizeObserverOptions) => void;
-  /** `read` in the next delivery, on that frame's layout, then the answer in the frame after, with nothing resized. */
+  /** `read` and `inside` in the next frame's delivery, on that frame's layout, then the answer in the frame after, with nothing resized. */
   readNext: () => void;
   /** The answer in the next frame, with nothing resized (`changed` empty unless something also was). */
   request: () => void;
@@ -135,9 +137,6 @@ interface Hold {
 /** Every target observed, and each site's hold on it. */
 const holds = new Map<Element, Map<Site, Hold>>();
 
-/** The sites that asked to read in the next delivery (`readNext`). */
-const wanting = new Set<Site>();
-
 /** The size of `box` an entry reports, as one string. */
 const sizeOf = (entry: ResizeObserverEntry, box: ResizeObserverBoxOptions) => {
   const [size] =
@@ -213,11 +212,47 @@ const readInside = (site: Site, writes: (() => void)[]) => {
   }
 };
 
+/** The sites that asked to read in the next delivery whatever resized (`readNext`). */
+const askedToRead = new Set<Site>();
+/** A frame callback is asked for that has the root report in that frame's delivery (`readNext`). */
+let rootAsked = false;
+
+/**
+ * `site` reads in the next delivery the root reports in. The root is asked
+ * to report from the next frame's callbacks, so that frame has a delivery
+ * even with nothing resized: asked from inside a delivery, or from the
+ * microtask after one, the root's report would come at a depth the frame
+ * had already passed, and be held back as a loop. Only a delivery with the
+ * root in it takes the site: there every box is deeper than what was
+ * delivered, so what the site writes or starts observing is delivered again
+ * in the same frame.
+ */
+const readInNextDelivery = (site: Site) => {
+  askedToRead.add(site);
+  if (rootAsked) {
+    return;
+  }
+  rootAsked = true;
+  requestAnimationFrame(() => {
+    rootAsked = false;
+    if (askedToRead.size > 0) {
+      deliverWithRoot();
+    }
+  });
+};
+
 const deliver = (entries: ResizeObserverEntry[]) => {
-  const reported = sitesOf(entries);
-  const asked = [...wanting];
-  wanting.clear();
-  const sites = [...new Set([...reported, ...asked])];
+  const sites = [...sitesOf(entries)];
+  const asked: Site[] = [];
+  if (entries.some((entry) => entry.target === document.documentElement)) {
+    for (const site of askedToRead) {
+      asked.push(site);
+      if (!sites.includes(site)) {
+        sites.push(site);
+      }
+    }
+    askedToRead.clear();
+  }
   const own = sites.filter((site) => !site.foreign);
   for (const site of own) {
     site.options.read?.(site.delivered);
@@ -351,14 +386,18 @@ if (Native && typeof window !== "undefined") {
   window.ResizeObserver = ForeignResizeObserver as unknown as NativeClass;
 }
 
+/**
+ * `answer` null: a site that does all it does inside the delivery
+ * (`inside`), with no answer in the next frame.
+ */
 export function frameObserver(
-  answer: (changed: Element[]) => void,
+  answer: ((changed: Element[]) => void) | null,
   options: Inside = {}
 ): FrameObserver {
   let frame = 0;
   const changed = new Set<Element>();
   const request = () => {
-    if (frame === 0) {
+    if (frame === 0 && answer) {
       frame = requestAnimationFrame(() => {
         frame = 0;
         const targets = [...changed];
@@ -373,17 +412,16 @@ export function frameObserver(
     options,
     reported: new WeakSet(),
     take: (entry) => {
-      changed.add(entry.target);
-      request();
+      if (answer) {
+        changed.add(entry.target);
+        request();
+      }
     },
   };
   const held = holdsOf(site);
   return {
     observe: held.observe,
-    readNext: () => {
-      wanting.add(site);
-      deliverWithRoot();
-    },
+    readNext: () => readInNextDelivery(site),
     request,
     unobserve: (target) => {
       held.release(target);
@@ -392,9 +430,9 @@ export function frameObserver(
     disconnect: () => {
       cancelAnimationFrame(frame);
       frame = 0;
-      wanting.delete(site);
       held.releaseAll();
       changed.clear();
+      askedToRead.delete(site);
     },
   };
 }

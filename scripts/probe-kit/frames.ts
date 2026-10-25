@@ -486,8 +486,8 @@ export interface MainTask {
   /**
    * Each style recalculation and layout in it, in order (`passes` or
    * `restyles`): what it was, the elements it restyled, its ms, and the script frame
-   * that forced it (`url:line:column`), or "the frame" when the frame's own
-   * rendering ran it.
+   * that forced it (`url:line:column`), or {@link OWN_PASS} when the frame's
+   * own rendering ran it.
    */
   passes: {
     at: string;
@@ -642,8 +642,17 @@ const scriptFrame = (c: Partial<StackFrame>): string | null =>
     ? `${c.functionName || "(anonymous)"}@${c.url.split("/").pop()}:${(c.lineNumber ?? 0) + 1}:${(c.columnNumber ?? 0) + 1}`
     : null;
 
-/** How many script frames a sampled stack is said with (`stacksIn`). */
-const STACK_DEPTH = 10;
+/**
+ * How many script frames a sampled stack is said with (`stacksIn`): all of
+ * them, in practice. A Svelte flush nests a derived in a derived in an
+ * effect sixty frames deep and more; cut at ten, the frame a sample ran
+ * under (a message's take, a frame callback) fell off the top and its
+ * inclusive time was counted short.
+ */
+const STACK_DEPTH = 256;
+
+/** A pass the frame's own rendering ran, no script forcing it (`MainTask.passes`' `at`). */
+export const OWN_PASS = "the frame";
 
 /**
  * The main thread's sampling profile, out of the trace's `Profile` and
@@ -970,7 +979,7 @@ export async function traceMain(
               `${frame.functionName || "(anonymous)"}@${frame.url.split("/").pop()}:${frame.lineNumber}:${frame.columnNumber + 1}`
           )
           .join(" ← ")
-      : "the frame";
+      : OWN_PASS;
   };
   const trackedAs = (name: string) =>
     events.filter((event) => event.name === name && event.pid === first.pid);
