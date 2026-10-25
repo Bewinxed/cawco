@@ -384,6 +384,26 @@ function findActiveChain(
   return { chain, chainSet };
 }
 
+/**
+ * Each record by uuid as the file first wrote it. Claude Code writes an
+ * earlier compaction's block again when a later `/compact` runs in the same
+ * process (anthropics/claude-code#92089): the boundary, its summary and the
+ * records it kept, under their old uuids, the kept ones now hung from the
+ * summary. A later copy is not where a record was said, and its links lead
+ * the boundary's logical parent back to the boundary itself (1,274 records
+ * written twice in a real 413 MB session, whose walk stopped there 9,666
+ * entries back of 47,076).
+ */
+function firstWrites(records: readonly ChainNode[]): Map<string, ChainNode> {
+  const m = new Map<string, ChainNode>();
+  for (const r of records) {
+    if (typeof r.uuid === "string" && !m.has(r.uuid)) {
+      m.set(r.uuid, r);
+    }
+  }
+  return m;
+}
+
 /** Whether `r` is the line Claude Code starts a compacted conversation on. */
 const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
   r.type === "system" && r.subtype === "compact_boundary";
@@ -401,7 +421,8 @@ const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
  * The walk follows one record's parent at a time, so a branch the
  * conversation left (a retry, an edit, a rewind) is never on it. A
  * preserved record stands once, where it was said, and not again after the
- * summary.
+ * summary: `original` holds each record as the file first wrote it
+ * ({@link firstWrites}).
  */
 function withSetAside(
   chain: ChainNode[],
@@ -613,7 +634,7 @@ function* walkSteps(
   said: boolean
 ): Generator<void, ChainNode[]> {
   const byUuid = buildUuidMap(records);
-  const original = said ? new Map(byUuid) : byUuid;
+  const original = said ? firstWrites(records) : byUuid;
   yield;
   const skippedAnchors = relinkCompactBoundaries(byUuid);
   yield;
