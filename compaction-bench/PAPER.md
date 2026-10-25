@@ -339,10 +339,16 @@ The runs share a 48-core host and the subscription accounts with the live fleet.
 - an account has its 5-hour window below 70 %, by the hub's own live readings, and fewer than 2 units on it.
 
 The session account is the one with the lowest reading plus 8 points per unit already on it. The summariser account
-is the lowest other one. The pool was the four Petralab Team accounts with session windows only (1c962620, 676d0582,
-d18c5ce4, c6b14b4e) and one account in another organization (e8b553ef, weekly window at 33 %). Left out were the
-account whose weekly window stood at 57 % (3c788add) and the account the driving session ran on. Every start is a line
-of `out/pace.jsonl` with its account and the readings it saw, and every run's `result.json` names its accounts.
+is the lowest other one under the cap, else the session's own. The pool was the Petralab Team accounts with session
+windows only (1c962620, 676d0582, d18c5ce4, c6b14b4e, and from 09:17 UTC 61896e03) and one account in another
+organization (e8b553ef, weekly window at 33 % at the start). The account whose weekly window stood at 57 % (3c788add)
+was left out. Every start is a line of `out/pace.jsonl` with its account and the readings it saw, and every run's
+`result.json` names its accounts.
+
+The 5-hour windows, not the host, bound the run: a unit at a 600k+ cut uses about a tenth of a window, and the fleet
+works on the same accounts. Units therefore run arm by arm (A0 and A1 across every cut, then A2, then the rest), so the
+readings the decisions rest on arrive first. A run stopped by a session or usage limit is run again later; a run
+stopped by anything else (a refusal, "Prompt is too long") stands.
 
 The arm's session continues on a different account from the original session's in every run. That is the cold
 regime by construction for every arm alike. It changes nothing within a cut, since all of a cut's arms share it.

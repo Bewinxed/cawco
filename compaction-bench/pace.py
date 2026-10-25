@@ -82,7 +82,7 @@ def main():
     cuts = common.load(a.cuts)["cuts"]
     if a.only_cuts:
         cuts = [c for c in cuts if c["id"] in a.only_cuts.split(",")]
-    # longest first: chained cuts (their replays), then by context at the cut
+    # within an arm, longest first: chained cuts (their replays), then by context at the cut
     cuts.sort(key=lambda c: (not c.get("chained"), -c["pre_tokens"]))
     jobs = []
     for c in cuts:
@@ -96,6 +96,9 @@ def main():
             if not retry and all(d.get("status") in ("done", "stopped") for d in done):
                 continue
             jobs.append((c["id"], arm, runs))
+    # arm by arm, in the order --arms names them: the control and native compaction across every cut before the
+    # summary arms, so the readings the decisions rest on come first when account windows are the limit
+    jobs.sort(key=lambda j: arms.index(j[1]))
     running = {}  # unit → (account, cut, arm)
     # a unit a previous pace started and that still runs is adopted, not started twice
     for cid, arm, runs in list(jobs):
