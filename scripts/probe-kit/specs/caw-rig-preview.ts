@@ -35,8 +35,8 @@
  *   solid all round (no clear pixel beside his ink: the beak's open edge,
  *   every feather tip), and by day there is no rim;
  * - phoneUp holds the phone (feathers in front of its lower half, its top
- *   clear); cheer lifts both wings clear of his head with his beak open;
- *   letGo sets the phone down clear of his feet;
+ *   clear); cheer and shrug hold both wings clear of his head, cheer with
+ *   his beak open; letGo sets the phone down clear of his feet and wing;
  * - no console error.
  *
  *   bun scripts/probe-kit/run.ts caw-rig-preview
@@ -771,99 +771,37 @@ async function beakLegs(kit: Kit, page: Page, engine: Engine) {
     `${engine}: phoneUp holds the phone: across its lower half his feathers stand in front of it at ${grip.lower} of ${grip.of} points, and its top stands clear at ${grip.upper} of ${grip.of}`,
     grip.lower >= 3 && grip.upper >= 4
   );
-  // Cheer: both wings raised clear of his head, two silhouettes, his beak wide enough to read.
-  // Read off the drawing's geometry: each wing's outlines sampled along their length, against
-  // his head's fill and outline, in his 512 units.
-  const lift = async (pose: string) => {
-    const name = `pose-${pose}-160`;
-    await api(page, "seek", name, 0);
-    const got = await page.evaluate((rig) => {
-      const root = document.querySelector(
-        `[data-rig-name="${rig}"] [data-caw-rig]`
-      ) as HTMLElement;
-      const head = root.querySelector(
-        '[data-layer="head"] > path'
-      ) as SVGPathElement;
-      const tuft = root.querySelector(
-        '[data-layer="tuft"] > path'
-      ) as SVGPathElement;
-      const { top, width } = root.getBoundingClientRect();
-      const px = width / 512;
-      const onScreen = (el: SVGGeometryElement, n: number) => {
-        const ctm = el.getScreenCTM() as DOMMatrix;
-        const length = el.getTotalLength();
-        return Array.from({ length: n }, (_, i) =>
-          el.getPointAtLength((i / n) * length).matrixTransform(ctm)
-        );
-      };
-      const rim = [...onScreen(head, 400), ...onScreen(tuft, 80)];
-      const inside = (p: DOMPoint) =>
-        [head, tuft].some((el) =>
-          el.isPointInFill(
-            p.matrixTransform((el.getScreenCTM() as DOMMatrix).inverse())
-          )
-        );
-      const wing = (side: "L" | "R") => {
-        const paths = [
-          ...root.querySelectorAll(`[data-layer="wing${side}"] path`),
-        ].filter(
-          (el) => !el.closest('[data-part="prop"]')
-        ) as SVGGeometryElement[];
-        const points = paths.flatMap((el) => onScreen(el, 300));
-        const into = points.filter(inside).length;
-        const clear = Math.min(
-          ...points.map((p) =>
-            Math.min(...rim.map((q) => Math.hypot(p.x - q.x, p.y - q.y)))
-          )
-        );
-        return {
-          clear: into > 0 ? 0 : clear / px,
-          top: (Math.min(...points.map((p) => p.y)) - top) / px,
-        };
-      };
-      return { L: wing("L"), R: wing("R") };
-    }, name);
-    await api(page, "release", name);
-    return got;
-  };
-  // letGo: the phone stands clear of his feet, so at 64 px neither runs into the other.
-  await api(page, "seek", "pose-letGo-160", 0);
-  const apart = await page.evaluate(() => {
-    const root = document.querySelector(
-      '[data-rig-name="pose-letGo-160"] [data-caw-rig]'
-    ) as HTMLElement;
-    const px = root.getBoundingClientRect().width / 512;
-    const set = root
-      .querySelector('[data-part="prop"]')
-      ?.getBoundingClientRect();
-    const feet = [...root.querySelectorAll('[data-part="foot"]')].map((el) =>
-      el.getBoundingClientRect()
-    );
-    if (!set) {
-      return Number.NaN;
-    }
-    return (
-      Math.min(
-        ...feet.map((foot) =>
-          Math.max(
-            set.left - foot.right,
-            foot.left - set.right,
-            set.top - foot.bottom,
-            foot.top - set.bottom
-          )
-        )
-      ) / px
-    );
+  // letGo: the phone stands clear of his feet and his far wing's red tips.
+  const feet = await clearance(page, {
+    rig: "pose-letGo-160",
+    mover: '[data-part="prop"] path',
+    from: '[data-part="foot"] path',
   });
-  await api(page, "release", "pose-letGo-160");
+  const tips = await clearance(page, {
+    rig: "pose-letGo-160",
+    mover: '[data-part="prop"] path',
+    from: '[data-layer="wingR"] path',
+  });
   kit.check(
-    `${engine}: letGo sets the phone down clear of both feet (${apart.toFixed(1)} units between their boxes; one 64 px pixel is 8)`,
-    apart >= 8
+    `${engine}: letGo sets the phone down clear of his feet (${feet.clear.toFixed(1)} units) and of his far wing's red tips (${tips.clear.toFixed(1)}); one 64 px pixel is 8`,
+    feet.clear >= 8 && tips.clear >= 8
   );
-  const rest = await lift("ready");
-  const up = await lift("cheer");
-  const cheer = await read("cheer");
-  const jaw = angleOf(cheer.jaw);
+  // Raised wings stand clear of his head (beak and tuft included): two silhouettes, not one.
+  const wings = async (pose: string) => ({
+    L: await clearance(page, {
+      rig: `pose-${pose}-160`,
+      mover: '[data-layer="wingL"] path',
+      from: '[data-layer="head"] path',
+    }),
+    R: await clearance(page, {
+      rig: `pose-${pose}-160`,
+      mover: '[data-layer="wingR"] path',
+      from: '[data-layer="head"] path',
+    }),
+  });
+  const rest = await wings("ready");
+  const up = await wings("cheer");
+  const jaw = angleOf((await read("cheer")).jaw);
   const raisedL = rest.L.top - up.L.top;
   const raisedR = rest.R.top - up.R.top;
   kit.check(
@@ -874,6 +812,62 @@ async function beakLegs(kit: Kit, page: Page, engine: Engine) {
       raisedR >= 15 &&
       jaw >= 24
   );
+  const shrug = await wings("shrug");
+  kit.check(
+    `${engine}: shrug holds both wings clear of his head, beak included (near wing ${shrug.L.clear.toFixed(1)} units off it, far wing ${shrug.R.clear.toFixed(1)})`,
+    shrug.L.clear >= 6 && shrug.R.clear >= 6
+  );
+}
+
+/**
+ * How far one part of a Caw stands from another, read off the drawing's
+ * geometry in his 512 units: the mover's outlines sampled along their length
+ * against the other's fill and outline (0 if any point of it lies inside),
+ * and the mover's top. Held at frame 0.
+ */
+async function clearance(
+  page: Page,
+  at: { rig: string; mover: string; from: string }
+): Promise<{ clear: number; top: number }> {
+  await api(page, "seek", at.rig, 0);
+  const got = await page.evaluate(({ rig, mover, from }) => {
+    const root = document.querySelector(
+      `[data-rig-name="${rig}"] [data-caw-rig]`
+    ) as HTMLElement;
+    const { top, width } = root.getBoundingClientRect();
+    const px = width / 512;
+    const shapes = (sel: string) =>
+      [...root.querySelectorAll(sel)].filter(
+        (el) => sel.includes('"prop"') || !el.closest('[data-part="prop"]')
+      ) as SVGGeometryElement[];
+    const onScreen = (el: SVGGeometryElement, n: number) => {
+      const ctm = el.getScreenCTM() as DOMMatrix;
+      const length = el.getTotalLength();
+      return Array.from({ length: n }, (_, i) =>
+        el.getPointAtLength((i / n) * length).matrixTransform(ctm)
+      );
+    };
+    const others = shapes(from);
+    const rim = others.flatMap((el) => onScreen(el, 300));
+    const inside = (p: DOMPoint) =>
+      others.some((el) =>
+        el.isPointInFill(
+          p.matrixTransform((el.getScreenCTM() as DOMMatrix).inverse())
+        )
+      );
+    const points = shapes(mover).flatMap((el) => onScreen(el, 300));
+    const near = Math.min(
+      ...points.map((p) =>
+        Math.min(...rim.map((q) => Math.hypot(p.x - q.x, p.y - q.y)))
+      )
+    );
+    return {
+      clear: points.some(inside) ? 0 : near / px,
+      top: (Math.min(...points.map((p) => p.y)) - top) / px,
+    };
+  }, at);
+  await api(page, "release", at.rig);
+  return got;
 }
 
 /**

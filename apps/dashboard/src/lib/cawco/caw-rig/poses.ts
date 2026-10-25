@@ -162,10 +162,13 @@ export const POSES = {
     weight: 0,
     accent: { on: "handL", amp: 5, every: 520 },
   },
-  /** Not sure: wings out, primaries turned up, head cocked, a look up and aside. */
+  /**
+   * Not sure: wings out, primaries turned up, head cocked, a look up and aside. His far
+   * shoulder slides down his side so that wing stands clear of his cocked cheek.
+   */
   shrug: {
     wingL: { a: 94, e: 26 },
-    wingR: { a: 90, e: 24 },
+    wingR: { a: 86, e: 24, out: 10 },
     tilt: 9,
     yaw: -0.12,
     gaze: [0.45, -0.8],
@@ -185,8 +188,9 @@ export const POSES = {
     beak: 0,
     breath: 0.8,
     weight: 0.2,
-    // Clear of his near foot's toes, so at 64 px neither runs into the other.
-    prop: { prop: "phone", on: "ground", at: [432, 442], rotate: 0 },
+    // Clear of his feet and of his far wing's red tips, which hang to its top at 432; standing
+    // on the ground, it can only go further out.
+    prop: { prop: "phone", on: "ground", at: [474, 442], rotate: 0 },
   },
 } as const satisfies Record<string, Pose>;
 
