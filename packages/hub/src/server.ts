@@ -24661,6 +24661,10 @@ export const createServer = (
     lifetime,
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
+    // A connection's projects poll their repositories with it (ingress.ts),
+    // made further down: no connection is written before the hub serves.
+    projectsWritten: (connection, dropped) =>
+      ingress.followConnection(connection, dropped),
     // A push-only service connected (§5.5): each project with no relay for
     // its provider has its Caw woken to offer one (caw.ts `offerRelay`).
     pushOnlyConnected: (connection, projects) => {

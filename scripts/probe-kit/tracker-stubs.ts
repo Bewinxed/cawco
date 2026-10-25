@@ -10,6 +10,9 @@
  *   "Update an issue" (`state_reason` "completed, not_planned, duplicate,
  *   reopened"), "List issue comments for a repository" and "Create an issue
  *   comment" answer them; each list answers 304 to its own ETag.
+ * - What a project's GitHub poller reads besides (hub github.ts `pollRepo`):
+ *   "List pull requests" and "List issue events for a repository", none
+ *   each, and the discussions through `POST /graphql`, none.
  * - A token without "Issues" write is refused as the troubleshooting page
  *   says: 403 "Resource not accessible by personal access token", with
  *   `X-Accepted-GitHub-Permissions: issues=write`.
@@ -557,6 +560,17 @@ export const githubStub = (options: {
           },
         });
       }
+      case "CawcoDiscussions":
+        return json(200, {
+          data: {
+            repository: {
+              discussions: {
+                nodes: [],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        });
       default:
         return json(200, {
           errors: [{ message: `Unknown operation ${operation}` }],
@@ -582,6 +596,13 @@ export const githubStub = (options: {
       request.method === "GET"
     ) {
       return listed(request, window(url, comments));
+    }
+    if (
+      (pathname === `${repoPath}/pulls` ||
+        pathname === `${repoPath}/issues/events`) &&
+      request.method === "GET"
+    ) {
+      return listed(request, []);
     }
     if (pathname === `${repoPath}/issues`) {
       if (request.method === "GET") {

@@ -15,9 +15,12 @@
  *   s: pulls, issues, issue comments and issue events, each with its ETag,
  *   and discussions with their comments through GraphQL, each resource's
  *   high-water mark kept in
- *   `github_pollers`, so a restart neither re-delivers nor misses. With no
- *   connection named, its repository isn't polled, and its ingress view says
- *   so.
+ *   `github_pollers`, so a restart neither re-delivers nor misses. A GitHub
+ *   connection's projects that name none are polled with it from the moment
+ *   it names them, by whichever way it signed in; dropping a project or
+ *   removing the connection stops it ({@link Ingress.followConnection}).
+ *   With no connection named, its repository isn't polled, and its ingress
+ *   view says so.
  * - **Connector polls**: any connection's read-only tool, called on an
  *   interval of 60 s or more; its items diffed by id and version against
  *   what the last call saw and stored as `conn:<connection>:<tool>`,
@@ -1032,6 +1035,39 @@ export const createIngress = ({
     return view(projectId);
   };
 
+  /**
+   * A connection's projects were written (connections.ts `writeProjects`):
+   * while it reads GitHub's API, each project it names that polls with no
+   * connection polls with it from now; a project naming another keeps that
+   * one. Each project it dropped, or every one once it no longer reads
+   * GitHub's API, stops polling with it.
+   */
+  const followConnection = (
+    connection: string,
+    dropped: readonly string[]
+  ): void => {
+    const found = connections.get(connection);
+    const reads =
+      found.service.trim().toLowerCase() === "github" &&
+      readsGitHubApi(found.auth);
+    for (const poller of store.githubPollers()) {
+      if (
+        poller.connection === connection &&
+        (!reads || dropped.includes(poller.projectId))
+      ) {
+        setGitHubConnection(poller.projectId, null);
+      }
+    }
+    if (!reads) {
+      return;
+    }
+    for (const projectId of found.projects) {
+      if (!store.githubPoller(projectId)) {
+        setGitHubConnection(projectId, connection);
+      }
+    }
+  };
+
   /** Polls a project's repository now, unless GitHub's rate limit holds it. */
   const pollGitHubNow = async (projectId: string): Promise<IngressView> => {
     projectOf(projectId);
@@ -1490,6 +1526,7 @@ export const createIngress = ({
     createRoute,
     deletePoll,
     deleteRoute,
+    followConnection,
     ingest,
     pollConnectorNow,
     pollGitHubNow,

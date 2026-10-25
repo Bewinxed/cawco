@@ -14,6 +14,8 @@ import {
   fleetMemoryDocProjects,
   fleetMemoryDocs,
   fleetMemoryDocTypes,
+  githubPollCursors,
+  githubPollers,
   marketplaces,
   mcpServers,
   plugins,
@@ -122,6 +124,13 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
     part(
       "connection_projects",
       sql`${connectionProjects.connectionId} in (select ${connections.id} from ${connections} where ${eq(connections.name, key)})`
+    ),
+    // The GitHub pollers it ran stop, and come back with it, cursors and
+    // all, to a project that has named no other meanwhile.
+    part("github_pollers", eq(githubPollers.connection, key)),
+    part(
+      "github_poll_cursors",
+      sql`${githubPollCursors.projectId} in (select ${githubPollers.projectId} from ${githubPollers} where ${eq(githubPollers.connection, key)})`
     ),
   ],
 };

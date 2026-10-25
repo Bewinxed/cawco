@@ -307,6 +307,12 @@ export interface ConnectionsDeps {
   readonly lifetime: HubLifetimeShape;
   readonly projectExists: (id: string) => boolean;
   /**
+   * A connection's projects were written, `dropped` the ones it no longer
+   * names: the GitHub poller of each project follows it (ingress.ts
+   * `followConnection`).
+   */
+  readonly projectsWritten: (connection: string, dropped: string[]) => void;
+  /**
    * A push-only service's connection (core `pushOnlyProvider`) reached
    * `projects` signed in: it signed in while they had it, or they were
    * granted it while signed in. Each is told once per such moment (server.ts
@@ -1723,6 +1729,24 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
+   * THE write of a connection's projects, for every way one is made or
+   * changed: the projects it drops and the ones it names go on to their
+   * GitHub pollers ({@link ConnectionsDeps.projectsWritten}).
+   */
+  const writeProjects = (
+    r: Pick<ConnectionRow, "id" | "name">,
+    projects: readonly string[]
+  ): void => {
+    const had = db.projectsOf(r.id);
+    db.setProjects(r.id, [...projects]);
+    const now = new Set(db.projectsOf(r.id));
+    deps.projectsWritten(
+      r.name,
+      had.filter((project) => !now.has(project))
+    );
+  };
+
+  /**
    * After a sign-in or a grant: `projects` now have `name` signed in, and a
    * push-only service's say so ({@link ConnectionsDeps.pushOnlyConnected}).
    * Nothing for a connection that is not signed in once looked at.
@@ -1787,7 +1811,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       createdAt: now,
       updatedAt: now,
     });
-    db.setProjects(id, input.projects ?? []);
+    writeProjects({ id, name: input.name }, input.projects ?? []);
     console.info(`[connections] made ${input.name} (${input.service})`);
     if (input.auth === "none") {
       await probe(input.name);
@@ -1827,9 +1851,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
       ...where,
       ...(moved ? { ...startState(next.auth, next.service), ...LET_GO } : {}),
     });
-    if (patch.projects) {
-      db.setProjects(r.id, patch.projects);
-    }
+    // Written even when only its service or sign-in changed: its pollers
+    // follow what it is now.
+    writeProjects(r, patch.projects ?? [...had]);
     if (moved) {
       drop(r.id);
       listed.delete(r.id);
@@ -2432,7 +2456,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       key: read.token,
     }));
     ghRead.set(id, { token: read.token, at: Date.now() });
-    db.setProjects(id, input.projects ?? []);
+    writeProjects({ id, name }, input.projects ?? []);
     console.info(
       `[connections] made ${name} from gh on ${deps.gh.machineName(input.machineId)}`
     );
@@ -2765,12 +2789,17 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return restore;
   };
 
-  /** Back from the trash, its key or tokens with it: looked at again, as at hub start. */
+  /**
+   * Back from the trash, its key, tokens and pollers with it (db/trash.ts):
+   * looked at again, as at hub start, and a project it names that polls
+   * with nothing now polls with it.
+   */
   const returned = (name: string): ConnectionView => {
     const r = row(name);
     if (r.state !== "needs-sign-in") {
       detach(probe(name), `connection ${name} back from the trash`);
     }
+    deps.projectsWritten(name, []);
     console.info(`[connections] ${name} back from the trash`);
     deps.changed();
     return view(r);

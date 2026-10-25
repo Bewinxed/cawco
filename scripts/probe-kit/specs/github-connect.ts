@@ -34,7 +34,18 @@
  *     refuses a GitHub App's old registration body in words.
  *  A4 its sign-in started again from the row (no organization named)
  *     registers under the organization the first one named.
- * Polling (P): a project's GitHub poller takes each of the three.
+ * Polling (P): a project's GitHub poller takes each of the three, and
+ *  follows its connections (hub ingress.ts `followConnection`):
+ *  P1 a code connection and a GitHub App made with a project each: the
+ *     project's ingress names it.
+ *  P2 the gh connection granted a project that names none and one that
+ *     names the code connection: the first names github-bewinxed and its
+ *     repository is polled with gh's token; the second keeps github-code.
+ *  P3 the project dropped from the gh connection stops polling with it.
+ *  P4 the gh connection removed: the project it polled names none, the
+ *     other still names github-code.
+ *  P5 gh connected again with the project: it names github-bewinxed at
+ *     once and a poll runs with gh's token.
  * The page (U): Chromium and WebKit at 1440 and 390, the gh list inside the
  *  form with nothing spilling sideways; no console error on any page.
  *
@@ -110,6 +121,15 @@ interface Connection {
   name: string;
   reason?: string;
   signIn?: { expiresAt: number; url: string };
+  state: string;
+}
+
+/** A project's GitHub poller, as its ingress view says it (hub ingress.ts `IngressView`). */
+interface IngressGitHub {
+  connection: string | null;
+  polled: boolean;
+  polledAt: number | null;
+  repo: string | null;
   state: string;
 }
 
@@ -199,6 +219,38 @@ const legs = async (kit: Kit, github: ReturnType<typeof githubStub>) => {
     }
     return { status: response.status, body: parsed as T };
   };
+  const ingressOf = async (project: string) =>
+    (
+      await hub<{ github: IngressGitHub }>(
+        "GET",
+        `/api/projects/${project}/ingress`
+      )
+    ).body.github;
+  /** A project on a checkout whose origin is `OWNER/repo` on github.com, once the hub has read it. */
+  const projectOn = async (name: string, repo: string) => {
+    const cwd = join(fleet.sandbox, `checkout-${repo}`);
+    await mkdir(cwd, { recursive: true });
+    await Bun.$`git init -q -b main && git remote add origin https://github.com/${OWNER}/${repo}.git`
+      .cwd(cwd)
+      .quiet();
+    const { id } = await fleet.api<{ id: string }>("/api/projects", {
+      name,
+      machineId,
+      cwd,
+    });
+    await until(
+      `${name}'s repository read`,
+      () => ingressOf(id),
+      (poller) => poller.repo === `${OWNER}/${repo}`,
+      30_000
+    );
+    return id;
+  };
+  // The projects the connections are made with: the stand-in's repository,
+  // and one each for a code and a GitHub App.
+  const polledProject = await projectOn("Polled probe", REPO);
+  const codeProject = await projectOn("Code probe", "code-app");
+  const appProject = await projectOn("App probe", "app-app");
   const connectionNamed = async (name: string) =>
     (
       await hub<{ connections: Connection[] }>("GET", "/api/connections")
@@ -316,6 +368,7 @@ const legs = async (kit: Kit, github: ReturnType<typeof githubStub>) => {
     transport: "http",
     url: `${github.url}/mcp`,
     auth: "device",
+    projects: [codeProject],
   });
   const started = await hub<{ authorizationUrl: string }>(
     "POST",
@@ -353,6 +406,7 @@ const legs = async (kit: Kit, github: ReturnType<typeof githubStub>) => {
     transport: "http",
     url: `${github.url}/mcp`,
     auth: "app",
+    projects: [appProject],
   });
   const appStart = await hub<{ authorizationUrl: string }>(
     "POST",
@@ -482,6 +536,129 @@ const legs = async (kit: Kit, github: ReturnType<typeof githubStub>) => {
     "P: a project's GitHub poller takes gh, a code and a GitHub App alike",
     Object.values(polled).every((code) => code === 200),
     JSON.stringify(polled)
+  );
+
+  // ── P1: made with a project, its poller names it ─────────────────────
+  const codeIngress = await ingressOf(codeProject);
+  const appIngress = await ingressOf(appProject);
+  check(
+    "P1: a code connection and a GitHub App made with a project: each project's ingress names its connection",
+    codeIngress.connection === "github-code" &&
+      codeIngress.polled &&
+      appIngress.connection === "github-app" &&
+      appIngress.polled,
+    JSON.stringify({ codeIngress, appIngress })
+  );
+
+  // ── P2: gh granted a project polls its repository ────────────────────
+  const pollsWithGh = () =>
+    github.calls.filter(
+      (one) =>
+        one.path === `/repos/${OWNER}/${REPO}/pulls` &&
+        one.status === 200 &&
+        one.auth.includes(SECOND_TOKEN)
+    ).length;
+  const before = await ingressOf(polledProject);
+  const granted = await hub("PATCH", "/api/connections/github-bewinxed", {
+    projects: [polledProject, codeProject],
+  });
+  const named = await ingressOf(polledProject);
+  const polledOnce = await until(
+    "P2: the polled project's repository polled",
+    () => ingressOf(polledProject),
+    (one) => one.polledAt !== null,
+    30_000
+  ).catch(() => ingressOf(polledProject));
+  const keptCode = await ingressOf(codeProject);
+  check(
+    "P2: github-bewinxed granted a project that polls with nothing: its ingress names github-bewinxed and a poll runs with gh's token; a project naming github-code keeps it",
+    before.connection === null &&
+      granted.status === 200 &&
+      named.connection === "github-bewinxed" &&
+      polledOnce.polledAt !== null &&
+      polledOnce.state ===
+        `Polling ${OWNER}/${REPO} every 60 s with github-bewinxed.` &&
+      pollsWithGh() >= 1 &&
+      keptCode.connection === "github-code",
+    JSON.stringify({
+      before,
+      named,
+      polledOnce,
+      keptCode,
+      polls: pollsWithGh(),
+    })
+  );
+
+  // ── P3: dropped from it, the project stops polling with it ───────────
+  await hub("PATCH", "/api/connections/github-bewinxed", {
+    projects: [codeProject],
+  });
+  const dropped = await ingressOf(polledProject);
+  const keptOnDrop = await ingressOf(codeProject);
+  check(
+    "P3: the project dropped from github-bewinxed names no connection; github-code's project keeps it",
+    dropped.connection === null &&
+      !dropped.polled &&
+      keptOnDrop.connection === "github-code",
+    JSON.stringify({ dropped, keptOnDrop })
+  );
+
+  // ── P4: the connection removed, its poller goes ──────────────────────
+  await hub("PATCH", "/api/connections/github-bewinxed", {
+    projects: [polledProject, codeProject],
+  });
+  const regranted = await ingressOf(polledProject);
+  const removed = await hub("DELETE", "/api/connections/github-bewinxed");
+  const afterRemove = await ingressOf(polledProject);
+  const keptOnRemove = await ingressOf(codeProject);
+  check(
+    "P4: github-bewinxed removed: the project it polled names no connection; github-code's project keeps it",
+    regranted.connection === "github-bewinxed" &&
+      removed.status === 200 &&
+      afterRemove.connection === null &&
+      keptOnRemove.connection === "github-code",
+    JSON.stringify({
+      regranted,
+      removed: removed.status,
+      afterRemove,
+      keptOnRemove,
+    })
+  );
+
+  // ── P5: gh connected with the project, polled from the start ─────────
+  const pollsBefore = pollsWithGh();
+  const reconnected = await hub<Connection>("POST", "/api/github-sign-in/gh", {
+    machineId,
+    host: "github.com",
+    login: GH_LOGIN,
+    projects: [polledProject],
+  });
+  const atOnce = await ingressOf(polledProject);
+  const repolled = await until(
+    "P5: the project polled again with gh",
+    async () => ({
+      github: await ingressOf(polledProject),
+      polls: pollsWithGh(),
+    }),
+    (one) => one.polls > pollsBefore && one.github.polledAt !== null,
+    30_000
+  ).catch(async () => ({
+    github: await ingressOf(polledProject),
+    polls: pollsWithGh(),
+  }));
+  check(
+    "P5: gh connected with the project: its ingress names github-bewinxed at once and a poll runs with gh's token",
+    reconnected.status === 200 &&
+      atOnce.connection === "github-bewinxed" &&
+      repolled.polls > pollsBefore &&
+      repolled.github.state ===
+        `Polling ${OWNER}/${REPO} every 60 s with github-bewinxed.`,
+    JSON.stringify({
+      status: reconnected.status,
+      atOnce,
+      repolled,
+      pollsBefore,
+    })
   );
 
   // ── A4: a sign-in restarted from the row keeps its organization ─────
