@@ -1648,9 +1648,17 @@ function branchOf(target: SessionState, toolUseId: string): SubagentState {
   return target.subagents[toolUseId];
 }
 
-/** The tail's fields the hub moved. */
+/**
+ * The tail's fields the hub moved. Whether a turn is under way is the
+ * daemon's now-state (`applyPulse`) once a pulse has come, the socket's or
+ * the server load's: the tail's `busy` stands only where none has. The tail
+ * and the pulse reach this tab by two roads, the session's stream and the
+ * broadcast, and either can be first: a tail saying busy that landed after
+ * the turn's end pulse held Stop up over a session at rest, with no pulse
+ * left to come and put it down.
+ */
 function applyTail(target: SessionState, tail: Partial<TranscriptTail>): void {
-  if (tail.busy !== undefined) {
+  if (tail.busy !== undefined && !pulseOf(target.instanceId)) {
     target.busy = tail.busy;
   }
   if (tail.currentTool !== undefined) {
@@ -2057,10 +2065,12 @@ function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
   }
   // Whether a turn is under way, and its tool, are the daemon's now-state
   // (`applyPulse`), once the hub has sent one. The page is a read made out
-  // of band, and its tail says `busy` as the frames show it, which trails
-  // the pulse at a turn's start: written over it, a working session read
-  // quiet until its next pulse (`wqw` on a reload). The tail stands only
-  // where no pulse has come, neither the socket's nor the server load's.
+  // of band, and its tail says `busy` and the tool as the frames show them,
+  // which trail the pulse at a turn's start: written over it, a working
+  // session read quiet until its next pulse (`wqw` on a reload). The tail
+  // stands only where no pulse has come, neither the socket's nor the server
+  // load's (`applyTail` keeps its `busy` off already; the tool is put back
+  // here, and a session built from this page alone takes the pulse's `busy`).
   const pulse = pulseOf(target.instanceId);
   if (pulse) {
     applyPulse(target, pulse);
@@ -2146,14 +2156,14 @@ function trackTurn(instanceId: string, pulse: SessionPulse): void {
 /**
  * The daemon's now-state, written onto the session it describes.
  *
- * `busy` and the running tool are otherwise learnt from the turn's own
- * frames — a delta, a tool starting, the turn ending — which is a complete
- * account only for a subscriber who was there for all of them. One that
- * joined while a tool was running has seen none, and would hold the session
- * as idle until the next delta. The pulse is built from the same state
- * machine, sent down the same ordered channel after the frames that changed
- * it, and broadcast to every tab, so it is never behind what this tab has
- * already applied: writing it is the same truth arriving by a second road.
+ * The running tool is otherwise learnt from the turn's own frames — a tool
+ * starting, its result, the turn ending — which is a complete account only
+ * for a subscriber who was there for all of them. One that joined while a
+ * tool was running has seen none, and would hold the session as idle until
+ * the next delta. `busy` is the pulse's alone once one has come
+ * (`applyTail`): the hub's tail reaches this tab on the session's stream,
+ * the pulse on the broadcast, and their order across the two is no one's
+ * to promise.
  */
 function applyPulse(target: SessionState, pulse: SessionPulse): void {
   target.busy = pulse.busy;
