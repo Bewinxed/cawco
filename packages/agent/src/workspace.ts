@@ -20,6 +20,7 @@ import {
   open,
   readdir,
   readFile,
+  readlink,
   realpath,
   rm,
   stat,
@@ -1974,7 +1975,10 @@ const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
  * read by nothing else:
  * - on Linux, the folder its `node_modules` links to, `modules/<id>`
  *   (workspace-modules.ts): a view's only one, since a view's path is the
- *   person's folder, which names nothing of the workspace's;
+ *   person's folder, which names nothing of the workspace's; and for a copy,
+ *   the folder of `modules/` its `node_modules` link leads into, whatever it
+ *   is named (a clone linked before the folders were named by workspace has
+ *   `modules/<clone's folder name>`);
  * - its Apple build root, `xdg/cawco-apple.noindex/<clone's folder name>`,
  *   where build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and
  *   its lock;
@@ -1997,7 +2001,17 @@ const cacheOfWorkspace = async (
   const cache = workspaceCacheDir();
   const apple = join(cache, "xdg", "cawco-apple.noindex");
   const name = basename(clone);
-  const owned = [join(apple, name), join(apple, ".locks", name), modules];
+  const linked = await readlink(join(clone, "node_modules")).catch(() => "");
+  const linkedModules =
+    dirname(dirname(linked)) === join(cache, "modules") &&
+    basename(linked) === "node_modules"
+      ? [dirname(linked)]
+      : [];
+  const owned = [
+    join(apple, name),
+    join(apple, ".locks", name),
+    ...new Set([modules, ...linkedModules]),
+  ];
   if (process.platform !== "darwin") {
     return owned;
   }

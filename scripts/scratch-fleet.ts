@@ -976,6 +976,12 @@ const workspaceFleetDir = async (id: string): Promise<string | undefined> => {
 async function fleetRoots(): Promise<{
   /** The workspace's fleet folder on macOS, which `scratch` and `homes` are. */
   fleet?: string;
+  /**
+   * Off a workspace, `~/.cache`, where fleets stood until 2026-10-25: swept
+   * as the roots are ({@link sweepDeadFleets}), so no fleet of then, dead or
+   * kept, is left there.
+   */
+  former?: string;
   homes: string;
   scratch: string;
   short: string;
@@ -1000,6 +1006,9 @@ async function fleetRoots(): Promise<{
     scratch: workspaceTmp ? realpathSync(workspaceTmp) : fleets,
     homes: short,
     short,
+    ...(workspaceTmp
+      ? {}
+      : { former: join(process.env.HOME ?? "/tmp", ".cache") }),
   };
 }
 
@@ -1371,8 +1380,8 @@ class FleetDirs {
 const KEPT_FILE = ".kept.json";
 
 /**
- * Removes the sandboxes earlier fleets named `name` kept for reading under
- * `scratch`, and every folder each says it kept ({@link KEPT_FILE}): a
+ * Removes the sandboxes earlier fleets named `name` (any, with none) kept for
+ * reading under `scratch`, and every folder each says it kept ({@link KEPT_FILE}): a
  * failed run's evidence stays until the same spec runs again. Each goes as
  * the agent removes a workspace's trees (agent remove-tree.ts): a kept HOME
  * holds read-only folders (a workspace layer's upper `.opencode`, 0555),
@@ -1380,10 +1389,10 @@ const KEPT_FILE = ".kept.json";
  * ("EACCES: permission denied, rm '/home/bewinxed/.cache/1d'", round r336).
  * Answers the sandboxes removed.
  */
-async function removeKept(scratch: string, name: string): Promise<string[]> {
+async function removeKept(scratch: string, name?: string): Promise<string[]> {
   const removed: string[] = [];
   for (const entry of await readdir(scratch).catch(() => [] as string[])) {
-    if (!entry.startsWith(`${name}-`)) {
+    if (name !== undefined && !entry.startsWith(`${name}-`)) {
       continue;
     }
     const sandbox = join(scratch, entry);
@@ -1512,15 +1521,21 @@ async function heldByLive(dir: string): Promise<boolean> {
  * over", d31b2f5ac).
  */
 export async function sweepDeadFleets(): Promise<string[]> {
-  const { homes, scratch, short } = await fleetRoots();
+  const { former, homes, scratch, short } = await fleetRoots();
   const [temp] = await darwinUserDirs();
   const fleetDirs = temp
     ? (await readdir(temp).catch(() => [] as string[]))
         .filter((entry) => FLEET_DIR.test(entry))
         .map((entry) => join(temp, entry))
     : [];
-  const removed: string[] = [];
-  for (const root of new Set([scratch, homes, short, ...fleetDirs])) {
+  const removed: string[] = former ? await removeKept(former) : [];
+  for (const root of new Set([
+    scratch,
+    homes,
+    short,
+    ...(former ? [former] : []),
+    ...fleetDirs,
+  ])) {
     // biome-ignore lint/performance/noAwaitInLoops: one root at a time
     const entries = await readdir(root).catch(() => [] as string[]);
     for (const entry of entries) {
