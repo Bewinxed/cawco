@@ -1188,10 +1188,11 @@ const PROC_NET_FIELDS = /\s+/;
 export async function listeningPorts(pid: number): Promise<number[]> {
   if (process.platform !== "linux") {
     // Awaited, never a synchronous spawn: one holds the calling thread's
-    // event loop for as long as lsof runs.
+    // event loop for as long as lsof runs. Its stderr is kept from the
+    // caller's, as the synchronous spawn kept it.
     const ran = Bun.spawn(
       ["lsof", "-nP", "-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN", "-Fn"],
-      { env: hostEnvironment() }
+      { env: hostEnvironment(), stderr: "ignore" }
     );
     const [stdout] = await Promise.all([
       new Response(ran.stdout).text(),

@@ -113,9 +113,9 @@ export interface SafeGitRead {
  * `git <args>` as {@link safeGitArgv} runs it, awaited: never a synchronous
  * spawn, which holds the calling thread's event loop for as long as git runs
  * (and under Bun has unbalanced that loop's keep-alive count, after which it
- * stopped polling I/O: oven-sh/bun#40508). Its stdout is read unless it is
- * ignored; its stderr only when piped (otherwise inherited, as a spawn's is,
- * or ignored), and said as "" when not read.
+ * stopped polling I/O: oven-sh/bun#40508). Its stdout and stderr are read
+ * unless ignored, as `Bun.spawnSync` read both (git's words never reach the
+ * caller's own stderr), and said as "" when not read.
  */
 export const readSafeGit = async (
   args: readonly string[],
@@ -123,14 +123,14 @@ export const readSafeGit = async (
     readonly cwd?: string;
     readonly env: Record<string, string | undefined>;
     readonly stdout?: "pipe" | "ignore";
-    readonly stderr?: "pipe" | "ignore" | "inherit";
+    readonly stderr?: "pipe" | "ignore";
   }
 ): Promise<SafeGitRead> => {
   const child = Bun.spawn(safeGitArgv(args), {
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     env: options.env,
     stdout: options.stdout ?? "pipe",
-    stderr: options.stderr ?? "inherit",
+    stderr: options.stderr ?? "pipe",
   });
   const text = (stream: unknown): Promise<string> =>
     stream instanceof ReadableStream

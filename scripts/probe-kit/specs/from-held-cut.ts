@@ -57,6 +57,9 @@ const AHEAD_MADE = "PROBE-FROMHELD-AHEAD-MADE";
 const FROM = "PROBE-FROMHELD-FROM";
 const COMMIT = "Probe commit held on no remote";
 const FINISH = "mcp__cawco__finish_item";
+const WAIT = "mcp__cawco__wait_item";
+/** What wait_item answers once the wait is declared (work-items.ts `waitItem`). */
+const WAITING = " is waiting until ";
 /** What finish_item answers a blocked finish (work-items.ts `finishItem`). */
 const BLOCKED = "The item failed as blocked";
 /** The agent's line for a broken law (core invariant.ts). */
@@ -103,10 +106,16 @@ const respond = (request: Seen): Reply => {
       blocked: { command: "probe", error: "the probe stops this item here" },
     });
   }
+  // The cut's delegate stays at work, a wait declared, so its clone stands
+  // while (c) reads it: done, its item lands none, so its settle would carry
+  // its commits off and retire it (work-items.ts `carriesOff`).
   if (request.all.includes(FROM)) {
-    return request.afterTool
-      ? text("Done.")
-      : found(request, FINISH, { headline: "Done.", summary: "Done." });
+    return request.all.includes(WAITING)
+      ? text("Waiting.")
+      : found(request, WAIT, {
+          minutes: 30,
+          reason: "the probe reads this clone",
+        });
   }
   return text("ok");
 };

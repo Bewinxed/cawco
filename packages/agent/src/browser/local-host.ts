@@ -227,6 +227,9 @@ export class LocalHost implements BrowserHost {
         rm(join(profile, name), { force: true })
       )
     );
+    // Chromium's own sandbox: the daemon's rule (capabilities.ts), as the
+    // canvas screen and stage renderer launch it.
+    const sandboxed = await chromiumSandboxed();
     // Its own output, kept beside its profile: the one word on why it ended.
     const log = openSync(logFile(record), "w", 0o600);
     const child = spawn(
@@ -264,9 +267,7 @@ export class LocalHost implements BrowserHost {
         // emulates touch (`Emulation.setTouchEmulationEnabled`) still reads
         // coarse while it does.
         "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
-        // Chromium's own sandbox: the daemon's rule (capabilities.ts), as the
-        // canvas screen and stage renderer launch it.
-        ...(chromiumSandboxed() ? [] : ["--no-sandbox"]),
+        ...(sandboxed ? [] : ["--no-sandbox"]),
         "about:blank",
       ],
       { detached: true, env: hostEnvironment(), stdio: ["ignore", log, log] }

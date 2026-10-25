@@ -150,6 +150,9 @@ export const hubOrigins = (): string[] => {
 export const hubOriginOf = (url: string): string | undefined =>
   hubOrigins().find((origin) => url.startsWith(`${origin}/git/`));
 
+/** The last {@link useHubCredentialHelper} run queued for each repository; it only resolves. */
+const credentialTurns = new Map<string, Promise<void>>();
+
 /**
  * `cawco git-credential` named in the checkout at `repo`'s own config for
  * the hub origin its `origin` remote is under ({@link hubOriginOf}; the one
@@ -164,8 +167,29 @@ export const hubOriginOf = (url: string): string | undefined =>
  * rewrite each time met any other writer of that config (another agent on
  * the computer readying it, the owner's own git) at its lock: "could not
  * lock config file .git/config: File exists" (link-under-load, 2026-10-20).
+ * One repository's runs go one after another ({@link credentialTurns}): its
+ * reads and writes are awaited, and two workspaces cut from one project at
+ * once would otherwise meet at that lock, or both add the helper.
  */
-export const useHubCredentialHelper = async (repo: string): Promise<void> => {
+export const useHubCredentialHelper = (repo: string): Promise<void> => {
+  const before = credentialTurns.get(repo) ?? Promise.resolve();
+  const mine = before.then(() => writeHubCredentialHelper(repo));
+  const settled = mine.then(
+    () => undefined,
+    () => undefined
+  );
+  credentialTurns.set(repo, settled);
+  // biome-ignore lint/complexity/noVoid: the turn's own cleanup, never awaited
+  void settled.then(() => {
+    if (credentialTurns.get(repo) === settled) {
+      credentialTurns.delete(repo);
+    }
+  });
+  return mine;
+};
+
+/** {@link useHubCredentialHelper}'s reads and writes, in `repo`'s turn. */
+const writeHubCredentialHelper = async (repo: string): Promise<void> => {
   const config = (...args: string[]) =>
     readSafeGit(["-C", repo, "config", "--local", ...args], {
       env: { ...process.env, ...SAFE_GIT_ENV },

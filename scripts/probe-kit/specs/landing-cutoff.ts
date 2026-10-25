@@ -25,7 +25,9 @@
  *   background, then calls finish_item. Its item ends done, saying it
  *   landed; its commit is on the hub's main; the clone's `.git/config` is
  *   the file it was; the sandbox is the one it was (the agent's log says no
- *   restart); and its `sleep` still runs.
+ *   restart); and its `sleep` ran on through the landing: it still runs, or
+ *   the agent's log names its pid among what the hub's settle of the ended
+ *   item ended (work-items.ts `endLeftWork`, which skips a landing's run).
  * - B, the end state when a push is cut off all the same: a delegate commits
  *   a large file, so the door's `git lfs push` uploads it. As the upload
  *   lands in the hub's LFS store (its `tmp` dir), the spec replaces the
@@ -103,6 +105,54 @@ const SLEEP: Partial<Record<Tag, string[]>> = {
   F: ["sleep", "7312"],
   G: ["sleep", "7313"],
 };
+/** How the agent says it ended what a session whose items have all ended left running (session.ts `#endWork`), before its pids. */
+const FINISHED_WORK = workWords.workEnded("", "finished", [], []);
+/** The agent's line saying it ended `pid` as a finished session's left work ({@link FINISHED_WORK}), if one says so. */
+const finishedWorkLine = (log: string, pid: Pid): string | undefined =>
+  log.split("\n").find((line) => {
+    const at = line.indexOf(FINISHED_WORK);
+    return (
+      at >= 0 &&
+      (line
+        .slice(at + FINISHED_WORK.length)
+        .split(";")[0]
+        ?.split(", ")
+        .includes(String(pid)) ??
+        false)
+    );
+  });
+
+/**
+ * Whether a delegate's background `sleeping` ran on through its landing: it
+ * still runs (`alive`), or the agent's log names it among what the hub's
+ * settle of the ended item ended (work-items.ts `endLeftWork`, which skips a
+ * landing's run), the one end of it that is not the landing's.
+ */
+const ranThroughLanding = async (
+  logs: () => Promise<string>,
+  sleeping: Pid | undefined,
+  alive: boolean
+): Promise<{ ok: boolean; said: string }> => {
+  if (alive) {
+    return { ok: true, said: "runs" };
+  }
+  if (sleeping === undefined) {
+    return { ok: false, said: "no sleep was read" };
+  }
+  const line = await until(
+    "the sleep ended as its session's left work",
+    async () => finishedWorkLine(await logs(), sleeping),
+    Boolean,
+    15_000
+  ).catch(() => undefined);
+  return line
+    ? { ok: true, said: line }
+    : {
+        ok: false,
+        said: "gone, and no agent line ended it as its session's left work",
+      };
+};
+
 /** How long a sandbox's processes get to be gone once it was ended. */
 const GONE_MS = 10_000;
 /**
@@ -861,10 +911,15 @@ const run = async (kit: Kit) => {
       sameSandbox(a),
       sandboxSaid(a)
     );
+    const sleepRan = await ranThroughLanding(
+      () => fleet.logs("agent"),
+      a.sleeping,
+      a.sleepAlive === true
+    );
     check(
-      "A: the delegate's background command still runs",
-      a.sleepAlive === true,
-      `pid ${a.sleeping}`
+      "A: the delegate's background command ran on through the landing: it still runs, or the hub's settle of its ended item ended it",
+      sleepRan.ok,
+      `pid ${a.sleeping}; ${sleepRan.said}`
     );
 
     // B
