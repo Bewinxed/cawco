@@ -139,12 +139,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    step, a transcript block's metadata no run event, and no run frame is
  *    sent. A thread's note carries a made routine or a design offer in its
  *    `event`. A page built for 27 reloads first.
+ * 29: the stream relay's router step is the forwards to make: two states,
+ *    `needs` and `done`, and no `how`; the act that asked the router
+ *    (`open-ports`) is gone; a journey view carries the hub's `revision`,
+ *    and a page keeps none older than the one it holds. A page built for 28
+ *    would offer a press the hub no longer takes, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 28;
+export const WIRE_PROTOCOL = 29;
 
 /**
  * What a session's stream carries: the changes each frame made to its

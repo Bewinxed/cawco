@@ -94,7 +94,6 @@ import {
   onMediaNetwork,
   relayMediaAddress,
 } from "./media-network";
-import { unmapRelayPorts } from "./relay-router";
 import { type Runtime, runtimeInstallCommand } from "./runtime";
 
 /** coturn's immutable alpine tag ("Once built, it's never updated", its docker README). */
@@ -1008,8 +1007,7 @@ export const stopRelay = (): Promise<RelayFrame> =>
 
 /**
  * The relay gone from this machine: its container removed, then its
- * certificate volume, then the ports it asked the router for, so nothing of
- * it stays behind. Stop keeps them; this is Remove relay's, and a relay
+ * certificate volume, so nothing of it stays behind. Stop keeps them; this is Remove relay's, and a relay
  * moved to another machine's.
  */
 export const removeRelay = (): Promise<RelayFrame> =>
@@ -1026,11 +1024,8 @@ export const removeRelay = (): Promise<RelayFrame> =>
           }
         });
     }
-    await unmapRelayPorts();
     tell({ state: "stopped", ports: NO_PORTS });
-    console.info(
-      "[relay] removed, its certificate volume and router mappings with it"
-    );
+    console.info("[relay] removed, its certificate volume with it");
     return { kind: "stream_relay", machineId, ...current };
   });
 

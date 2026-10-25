@@ -106,8 +106,6 @@
   const named = $derived(
     nameStep !== undefined && nameStep.state !== "skipped"
   );
-  /** Step 7's number, for the router's "proven in step N". */
-  const proveAt = $derived(steps.findIndex((one) => one.step === "prove") + 1);
   /** Every step ticked. */
   const finished = $derived(
     steps.every((one) => one.state === "done" || one.state === "skipped")
@@ -124,25 +122,37 @@
         return "failed";
       case "checking":
       case "running":
-      case "asking":
         return "working";
       case "waiting":
-      case "by-hand":
         return "waiting";
       case "inside":
       case "needs":
       case "none":
-      case "refused":
         break;
     }
     return "standing";
   }
 
-  /** Something stands on the person: a step to act on, or one that failed. */
-  const asks = (step: RelayStep): boolean => {
+  /** A step to act on, or one that failed. */
+  const standsOn = (step: RelayStep): boolean => {
     const mark = markOf(step);
     return mark === "standing" || mark === "failed";
   };
+  /**
+   * The router's forwards give way once another step stands on the person
+   * or the relay is live: nothing waits on them, and the last step proves
+   * them from outside.
+   */
+  const routerYields = $derived(
+    steps.some(
+      (one) =>
+        one.step !== "router" &&
+        (standsOn(one) || (one.step === "start" && one.state === "done"))
+    )
+  );
+  /** Something stands on the person now. */
+  const asks = (step: RelayStep): boolean =>
+    standsOn(step) && !(step.step === "router" && routerYields);
   /**
    * The one step whose note and control are shown: the first that stands on
    * the person, else the first at work (its progress, and the name's Skip
@@ -223,7 +233,7 @@
           ? words.nameSkipped
           : words.nameDone(step.name);
       case "router":
-        return words.routerDone(step.how);
+        return words.routerDone;
       case "runtime":
         return words.runtimeDone;
       case "certificate":
@@ -251,9 +261,7 @@
       case "name":
         return words.name;
       case "router":
-        return step.state === "by-hand"
-          ? words.routerByHand(proveAt)
-          : words.router;
+        return words.router;
       case "runtime":
         return words.runtime;
       case "certificate":
@@ -621,28 +629,13 @@
   {:else if step.step === "name"}
     {@render nameBody(step)}
   {:else if step.step === "router"}
-    {#if step.state === "refused"}
-      <p class={NOTE}>{words.routerRefused}</p>
-      {@render copyable(
-        words.forwardsLabel,
-        words.forwards(machineNow.lan ?? machineNow.address),
-        words.copyForwards,
-        false
-      )}
-    {:else}
-      <p class={NOTE}>{words.routerAsk}</p>
-      <div class={CONTROLS}>
-        <Button
-          disabled={pending !== null && pending !== "open-ports"}
-          label={words.openPorts}
-          onclick={() => act("open-ports")}
-          pending={step.state === "asking" || pending === "open-ports"}
-          pendingLabel={words.openingPorts}
-          size="sm"
-          variant="secondary"
-        />
-      </div>
-    {/if}
+    <p class={NOTE}>{words.routerNote}</p>
+    {@render copyable(
+      words.forwardsLabel,
+      words.forwards(machineNow.lan ?? machineNow.address),
+      words.copyForwards,
+      false
+    )}
   {:else if step.step === "runtime"}
     <p class={NOTE}>{words.runtimeNote(step, machineNow.name)}</p>
     {@render copyable(

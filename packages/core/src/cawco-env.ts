@@ -121,17 +121,12 @@ export const CAWCO_ENV = {
    * origin (`https://api.cloudflare.com/client/v4`), the page listing
    * Cloudflare's IPv4 ranges, the DNS server the name check asks
    * (`host:port`) in place of the system's, the STUN server the agent asks
-   * for its router's address, and the router the agent maps ports on: the
-   * UPnP gateway's descriptor URL in place of the one SSDP finds, and the
-   * NAT-PMP gateway's address in place of the default route's. Either set,
-   * the agent asks only the gateways named.
+   * for its router's address.
    */
   cloudflareApi: "CAWCO_CLOUDFLARE_API",
   cloudflareIps: "CAWCO_CLOUDFLARE_IPS",
-  natPmpGateway: "CAWCO_NAT_PMP_GATEWAY",
   relayDns: "CAWCO_RELAY_DNS",
   stunServer: "CAWCO_STUN_SERVER",
-  upnpGateway: "CAWCO_UPNP_GATEWAY",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

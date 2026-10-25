@@ -6540,9 +6540,12 @@ async function readTailnetHttps(): Promise<void> {
   }
 }
 
-/** The journey as the hub has it now, and whether it ticked while this page stood (asking, then done). */
+/** The journey as the hub has it now (none older than the one held), and whether it ticked while this page stood (asking, then done). */
 function keepRelayJourney(journey: RelayJourneyView): void {
   const before = state.relayJourney;
+  if (before && journey.revision < before.revision) {
+    return;
+  }
   state.relayJourney = journey;
   if (before?.asks && !journey.asks && journey.done) {
     state.relayTicked = true;

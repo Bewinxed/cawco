@@ -64,6 +64,7 @@ const closed: RelayJourneyView = {
   candidates: 1,
   steps: [],
   summary: null,
+  revision: 1,
   urls: [],
 };
 
@@ -119,7 +120,7 @@ const tokenAsked: RelayJourneyView = {
   steps: [
     { step: "machine", state: "done" },
     { step: "name", state: "done", name: NAME },
-    { step: "router", state: "done", how: "UPnP" },
+    { step: "router", state: "done" },
     { step: "certificate", state: "needs" },
     { step: "start", state: "waiting" },
     { step: "prove", state: "waiting" },
@@ -133,7 +134,7 @@ const finished = (summary: RelaySummary): RelayJourneyView => ({
   steps: [
     { step: "machine", state: "done" },
     { step: "name", state: "done", name: NAME },
-    { step: "router", state: "done", how: "UPnP" },
+    { step: "router", state: "done" },
     { step: "certificate", state: "done", endsAt: Date.UTC(2027, 0, 17, 10) },
     { step: "start", state: "done" },
     {

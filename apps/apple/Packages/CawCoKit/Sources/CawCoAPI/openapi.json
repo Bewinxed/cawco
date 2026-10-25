@@ -1327,7 +1327,6 @@
                           "later",
                           "skip-name",
                           "add-name",
-                          "open-ports",
                           "retry",
                           "start-again",
                           "check-again",
@@ -34190,6 +34189,10 @@
             "description": "Someone set it up (the setup card, Settings, a take-over through a domain); false before.",
             "type": "boolean"
           },
+          "revision": {
+            "description": "Its place in the hub's order of views: a page keeps none older than the\none it holds, since an act's answer can arrive after a frame computed\nlater.",
+            "type": "number"
+          },
           "steps": {
             "description": "Every step that applies, in order, with where each stands.",
             "type": "array",
@@ -34214,6 +34217,7 @@
           "candidates",
           "done",
           "open",
+          "revision",
           "steps",
           "urls"
         ]
@@ -34332,19 +34336,12 @@
                 ]
               },
               "state": {
-                "description": "`refused`: no UPnP or NAT-PMP answered; `by-hand`: forwarded by hand,\nproven only by the last step.",
+                "description": "`needs`: the forwards to make, until a proof from outside answers; `done` once one has.",
                 "enum": [
-                  "asking",
-                  "by-hand",
                   "done",
-                  "needs",
-                  "refused",
-                  "waiting"
+                  "needs"
                 ],
                 "type": "string"
-              },
-              "how": {
-                "$ref": "#/components/schemas/RelayStepHow"
               }
             },
             "required": [
@@ -60538,13 +60535,6 @@
           "elsewhere",
           "proxied",
           "unresolved"
-        ]
-      },
-      "RelayStepHow": {
-        "type": "string",
-        "enum": [
-          "NAT-PMP",
-          "UPnP"
         ]
       },
       "RoutineMadeEventBy": {

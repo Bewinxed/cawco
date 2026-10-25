@@ -4292,9 +4292,6 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
     .default("open"),
   /** Sealed: the person's Cloudflare API token (Zone · DNS · Edit), for the record and the certificate's DNS challenge. */
   cloudflareToken: sealedText("cloudflare_token"),
-  /** What the router answered "Open the ports" with; null before it was asked. */
-  router: text("router").$type<"mapped" | "refused">(),
-  routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
   /** The machine's runtime carries the relay's ports as it is (a VM's forwarder carries UDP and TCP), as last read. */
   runtimeHolds: integer("runtime_holds", { mode: "boolean" })
     .notNull()
