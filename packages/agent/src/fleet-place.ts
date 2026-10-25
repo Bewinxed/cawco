@@ -5,9 +5,10 @@
  * this agent cut is a place it knows itself. Placing is one pure step,
  * {@link place}: a project's rows as the copies one folder takes. It runs
  *
- * - as a workspace is cut, after its clone and before its boundary and its
+ * - as a workspace is cut, after its copy and before its boundary and its
  *   first session (workspace.ts `createWorkspace`, session.ts
- *   `placeClone`), over that clone alone, from the rows this agent holds;
+ *   `placeClone`), over that copy alone, from the rows this agent holds: a
+ *   copy of its own, never a Linux view of the person's folder;
  * - as a project-bound item moves, over every place of the project the
  *   agent has at that moment ({@link placedConfig}, the converge).
  *
@@ -33,6 +34,7 @@ import { fleetConfigOf } from "@cawco/core/fleet-items";
 import { fleetProjectRowsFile, workspaceProjectFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
+import { ownFolderSync } from "./layer";
 import { workspaceRefs } from "./workspace-records";
 
 /** One place of a project on this machine: a checkout the hub named, or a clone this agent cut. */
@@ -79,7 +81,10 @@ const isFolder = async (path: string): Promise<boolean> =>
  * checkout the hub named, and the clone of each workspace of one of them
  * this agent cut that is still here (an archive takes the clone and its
  * records away; a held one keeps both). Stage clones and places
- * (core `isPlace`) are none: no project's rows were ever placed there.
+ * (core `isPlace`) are none: no project's rows were ever placed there. Nor
+ * is a Linux view (layer.ts `ownFolderSync`): its path is the person's
+ * folder, which shows through it with what its own place holds, and which
+ * nothing of CawCo's writes for the view.
  */
 export const placesNow = async (
   projects: Readonly<Record<string, FleetProjectRows>>
@@ -89,7 +94,7 @@ export const placesNow = async (
   );
   const clones = await Promise.all(
     (await workspaceRefs())
-      .filter((ref) => !isPlace(ref.id))
+      .filter((ref) => !isPlace(ref.id) && ownFolderSync(ref.id, ref.path))
       .map(async (ref): Promise<FleetPlace | undefined> => {
         const projectId = await readRecord<unknown>(
           workspaceProjectFile(ref.id)
