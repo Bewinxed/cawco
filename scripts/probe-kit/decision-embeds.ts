@@ -215,7 +215,7 @@ async function overlayAnswer(
  * (a machine's preview proxy, agent preview.ts), framed by `parents()`.
  * With `latencyMs`, each answer from the stage waits that long first, as
  * the hops between the owner's browser and a stage hold each request (some
- * 350 ms through the hub's preview proxy, stage-host host.ts `preloadsOf`).
+ * 350 ms through the hub's preview proxy, stage-host host.ts `closureOf`).
  */
 export function embedOrigin(
   stage: number,

@@ -134,8 +134,13 @@ interface DevServer {
     client: {
       /** The environment's resolved options: its dependency optimizer's `include`, the packages the project forces into the pre-bundle. */
       config: { optimizeDeps: { include?: string[] } };
-      /** Vite's optimizer of the project's dependencies: its `browserHash` names the deps it last built (each served at `?v=<hash>`). */
-      depsOptimizer?: { metadata: { browserHash: string } } | null;
+      /** Vite's optimizer of the project's dependencies: its `browserHash` names the deps it last built (each served at `?v=<hash>`); each dependency found since, with the build that bundles it while it runs. */
+      depsOptimizer?: {
+        metadata: {
+          browserHash: string;
+          discovered: Record<string, { processing?: Promise<void> }>;
+        };
+      } | null;
       hot: { send: (payload: unknown, ...rest: unknown[]) => void };
       pluginContainer: {
         resolveId: (
@@ -143,8 +148,11 @@ interface DevServer {
           importer?: string
         ) => Promise<{ id: string } | null>;
       };
+      /** Vite's own transform of `url` ahead of a page's ask (its `warmupRequest`): kept in its graph, an error logged and passed by. */
+      warmupRequest: (url: string) => Promise<void>;
       moduleGraph: {
         getModuleById: (id: string) => ModuleNode | undefined;
+        getModuleByUrl: (url: string) => Promise<ModuleNode | undefined>;
         getModulesByFile: (file: string) => Set<ModuleNode> | undefined;
         idToModuleMap: Map<string, ModuleNode>;
         invalidateModule: (mod: ModuleNode) => void;
@@ -1135,18 +1143,17 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
  * arrived before it evaluates it (runtime.ts, `CANVAS_EMBED_FETCHED`).
  * Measured on caw-panel's States, cold: its 839 preloads answered 1.5 s
  * in, its frame drew 3.8 s in; the 2.3 s between are the page's main thread
- * evaluating the graph, which the next embed's fetch may overlap. None when
- * the stage has no graph to preload.
+ * evaluating the graph, which the next embed's fetch may overlap.
+ *
+ * Each preload's answer is heard by one listener on the document (`load`
+ * and `error` reach it in their capture phase), never by a handler of its
+ * own: a handler attribute is a script the frame compiles, 665 of them for
+ * a 665-module graph.
  */
 const graphPreloads = (urls: string[]): string =>
-  urls.length === 0
-    ? ""
-    : `<script>window.__cawcoGraph={asked:${urls.length},done:0,whole:false};window.__cawcoPreloaded=function(){var g=window.__cawcoGraph;g.done+=1;if(!g.whole&&g.done>=g.asked){g.whole=true;dispatchEvent(new Event(${JSON.stringify(CANVAS_GRAPH_FETCHED)}))}};</script>${urls
-        .map(
-          (url) =>
-            `<link rel="modulepreload" href="${escapeAttr(url)}" onload="__cawcoPreloaded()" onerror="__cawcoPreloaded()">`
-        )
-        .join("")}`;
+  `<script>(function(){var g=window.__cawcoGraph={asked:${urls.length},done:0,whole:false};function heard(e){var t=e.target;if(!(t instanceof HTMLLinkElement&&t.rel==="modulepreload"))return;g.done+=1;if(!g.whole&&g.done>=g.asked){g.whole=true;document.removeEventListener("load",heard,true);document.removeEventListener("error",heard,true);dispatchEvent(new Event(${JSON.stringify(CANVAS_GRAPH_FETCHED)}))}}document.addEventListener("load",heard,true);document.addEventListener("error",heard,true)})();</script>${urls
+    .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
+    .join("")}`;
 
 /** The canvas's page, through the project's own HTML transforms. */
 async function serveCanvas(
@@ -1156,13 +1163,13 @@ async function serveCanvas(
   next: (error?: unknown) => void
 ): Promise<void> {
   try {
-    const files = new URL(
-      req.url ?? CANVAS_PATH,
-      "http://stage"
-    ).searchParams.getAll("file");
+    const asked = new URL(req.url ?? CANVAS_PATH, "http://stage").searchParams;
+    const files = asked.getAll("file");
     // JSON in a script element: no `<` closes it early.
     const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
-    const preloads = graphPreloads(preloadsOf(files));
+    const preloads = graphPreloads(
+      await settledClosureOf(dev, files, asked.get("by") === "embed")
+    );
     const html = keyedPage(
       await dev.transformIndexHtml(
         req.url ?? CANVAS_PATH,
@@ -1231,27 +1238,44 @@ const keyedPage = (html: string, key: string): string =>
 /** Vite's client declares the base its HMR imports a changed module under. */
 const CLIENT_BASE = (base: string) => `const base = ${JSON.stringify(base)} ||`;
 
+/** A string literal a module imports from: its span in the code, its value, and whether it is an `import("…")`. */
+interface ImportLiteral {
+  dynamic: boolean;
+  end: number;
+  start: number;
+  value: string;
+}
+
 /** The string literals `code` imports from (static, re-exported, and `import("…")` of a literal), as their spans in it. */
-function importedLiterals(code: string): { end: number; start: number }[] {
-  if (!STAGE_IMPORT.test(code)) {
-    return [];
-  }
+function importLiterals(code: string): ImportLiteral[] {
   const { program } = parse(code, {
     sourceType: "module",
     errorRecovery: true,
     allowAwaitOutsideFunction: true,
     allowImportExportEverywhere: true,
   });
-  const spans: { end: number; start: number }[] = [];
-  const literal = (node: unknown) => {
+  const spans: ImportLiteral[] = [];
+  const literal = (node: unknown, dynamic: boolean) => {
     const one = node as
-      { end?: number; start?: number; type?: string } | null | undefined;
+      | {
+          end?: number;
+          start?: number;
+          type?: string;
+          value?: string;
+        }
+      | null
+      | undefined;
     if (
       one?.type === "StringLiteral" &&
       one.start !== undefined &&
       one.end !== undefined
     ) {
-      spans.push({ start: one.start, end: one.end });
+      spans.push({
+        start: one.start,
+        end: one.end,
+        value: one.value ?? "",
+        dynamic,
+      });
     }
   };
   const walk = (node: unknown): void => {
@@ -1270,13 +1294,13 @@ function importedLiterals(code: string): { end: number; start: number }[] {
       one.type === "ExportAllDeclaration" ||
       one.type === "ExportNamedDeclaration"
     ) {
-      literal(one.source);
+      literal(one.source, false);
     }
     if (
       one.type === "CallExpression" &&
       (one.callee as { type?: string } | undefined)?.type === "Import"
     ) {
-      literal((one.arguments as unknown[] | undefined)?.[0]);
+      literal((one.arguments as unknown[] | undefined)?.[0], true);
     }
     for (const [name, value] of Object.entries(one)) {
       if (
@@ -1295,8 +1319,11 @@ function importedLiterals(code: string): { end: number; start: number }[] {
 
 /** `code` with every stage address it imports from at `key`. */
 function keyedImports(code: string, key: string): string {
+  if (!STAGE_IMPORT.test(code)) {
+    return code;
+  }
   let out = code;
-  for (const { start, end } of importedLiterals(code).sort(
+  for (const { start, end } of importLiterals(code).sort(
     (a, b) => b.start - a.start
   )) {
     const quote = out[start] as string;
@@ -1309,17 +1336,114 @@ function keyedImports(code: string, key: string): string {
   return out;
 }
 
+/** A keyed module as served: its body, its type, and the source map Vite wrote into it, kept apart. */
+interface Keyed {
+  body: Uint8Array | string;
+  map: string | null;
+  type: string;
+}
+
 /** Each keyed module as served, by its keyed address: rewritten once a generation. */
-const keyedServed = new Map<
-  string,
-  { body: Uint8Array | string; type: string }
->();
+const keyedServed = new Map<string, Keyed>();
+
+/** Where a keyed module's source map is asked for: `/@cawco/m/<key>/@cawco-map/<the module's address>`. */
+const MAP_AT = "/@cawco-map";
 
 /**
- * A module at a key (`/@cawco/m/<key>/<address>`): the stage's own answer
- * at its address, asked of itself, with what it imports keyed alike and
- * Vite's client's HMR base the page's key. Kept for good when it answered;
- * an error (a module that doesn't compile) is never kept.
+ * The source map Vite's dev server writes at the end of each module it
+ * serves, the map's JSON base64 in a data URL ("inline source maps", its
+ * `getCodeWithSourcemap`): as large as the code again or more (bits-ui's
+ * prebundle, 1.5 MB of code, is served as 4.4 MB with it).
+ */
+const INLINE_MAP =
+  /\n\/\/# sourceMappingURL=data:application\/json;(?:charset=utf-8;)?base64,([A-Za-z0-9+/=]+)\s*$/;
+
+/**
+ * `code` with its inline source map taken out and named by its address
+ * beside the module instead (`/@cawco/m/<key>/@cawco-map/<address>`), the
+ * map's JSON returned apart: a frame decodes and keeps every byte of each
+ * script's text, and only DevTools, once open, asks for a map. The map is
+ * no part of what a frame draws or reports: an element's place in the
+ * source is its framework's own (Svelte's `__svelte_meta`, the stage's
+ * `data-insp-path` stamp, canvas measure.ts), and an error's place is
+ * mapped on the stage from Vite's own map ({@link sourced}).
+ */
+function mapApart(
+  code: string,
+  key: string,
+  address: string
+): { code: string; map: string | null } {
+  const found = code.match(INLINE_MAP);
+  if (!found) {
+    return { code, map: null };
+  }
+  return {
+    code: `${code.slice(0, found.index)}\n//# sourceMappingURL=${MODULES_PATH}${key}${MAP_AT}${address}`,
+    map: Buffer.from(found[1] as string, "base64").toString("utf8"),
+  };
+}
+
+/**
+ * The stage's own answer at `address`, asked of itself, keyed at `key`:
+ * what it imports keyed alike, Vite's client's HMR base the page's key, its
+ * source map apart ({@link mapApart}). Kept when it answered; an error (a
+ * module that doesn't compile) is never kept, and is the answer as it came.
+ */
+async function keyedModule(
+  dev: DevServer,
+  req: IncomingMessage,
+  key: string,
+  address: string
+): Promise<Keyed | { failed: Response }> {
+  const at = `${MODULES_PATH}${key}${address}`;
+  const known = keyedServed.get(at);
+  if (known) {
+    return known;
+  }
+  const listening = dev.httpServer?.address();
+  const stagePort =
+    typeof listening === "object" && listening ? listening.port : 0;
+  const headers: Record<string, string> = {};
+  for (const name of ["accept", "sec-fetch-dest", "user-agent"]) {
+    const value = req.headers[name];
+    if (typeof value === "string") {
+      headers[name] = value;
+    }
+  }
+  const answer = await fetch(`http://127.0.0.1:${stagePort}${address}`, {
+    headers,
+  });
+  if (answer.status !== 200) {
+    return { failed: answer };
+  }
+  const type = answer.headers.get("content-type") ?? "application/octet-stream";
+  let kept: Keyed;
+  if (type.includes("javascript")) {
+    const prefix = `${MODULES_PATH}${key}`;
+    const apart = mapApart(await answer.text(), key, address);
+    let body = keyedImports(apart.code, key);
+    if (address.split("?")[0] === `${dev.config.base}@vite/client`) {
+      body = body.replace(
+        CLIENT_BASE(dev.config.base),
+        CLIENT_BASE(`${prefix}${dev.config.base}`)
+      );
+    }
+    kept = { body, type, map: apart.map };
+  } else {
+    kept = {
+      body: new Uint8Array(await answer.arrayBuffer()),
+      type,
+      map: null,
+    };
+  }
+  keyedServed.set(at, kept);
+  return kept;
+}
+
+/**
+ * A module at a key (`/@cawco/m/<key>/<address>`), or its source map
+ * (`/@cawco/m/<key>/@cawco-map/<address>`): kept for good, as every keyed
+ * address is.
  */
 async function serveKeyed(
   dev: DevServer,
@@ -1330,138 +1454,176 @@ async function serveKeyed(
   const rest = url.pathname.slice(MODULES_PATH.length);
   const cut = rest.indexOf("/");
   const key = rest.slice(0, cut);
-  const address = `${rest.slice(cut)}${url.search}`;
-  const at = `${MODULES_PATH}${key}${address}`;
-  let kept = keyedServed.get(at);
-  if (!kept) {
-    const listening = dev.httpServer?.address();
-    const stagePort =
-      typeof listening === "object" && listening ? listening.port : 0;
-    const headers: Record<string, string> = {};
-    for (const name of ["accept", "sec-fetch-dest", "user-agent"]) {
-      const value = req.headers[name];
-      if (typeof value === "string") {
-        headers[name] = value;
-      }
-    }
-    const answer = await fetch(`http://127.0.0.1:${stagePort}${address}`, {
-      headers,
-    });
-    const type =
-      answer.headers.get("content-type") ?? "application/octet-stream";
-    if (answer.status !== 200) {
-      res.statusCode = answer.status;
-      res.setHeader("content-type", type);
-      res.setHeader("cache-control", "no-store");
-      res.end(Buffer.from(await answer.arrayBuffer()));
-      return;
-    }
-    let body: Uint8Array | string;
-    if (type.includes("javascript")) {
-      const prefix = `${MODULES_PATH}${key}`;
-      body = keyedImports(await answer.text(), key);
-      if (address.split("?")[0] === `${dev.config.base}@vite/client`) {
-        body = body.replace(
-          CLIENT_BASE(dev.config.base),
-          CLIENT_BASE(`${prefix}${dev.config.base}`)
-        );
-      }
-    } else {
-      body = new Uint8Array(await answer.arrayBuffer());
-    }
-    kept = { body, type };
-    keyedServed.set(at, kept);
+  const asked = `${rest.slice(cut)}${url.search}`;
+  const forMap = asked.startsWith(`${MAP_AT}/`);
+  const address = forMap ? asked.slice(MAP_AT.length) : asked;
+  const kept = await keyedModule(dev, req, key, address);
+  if ("failed" in kept) {
+    res.statusCode = kept.failed.status;
+    res.setHeader(
+      "content-type",
+      kept.failed.headers.get("content-type") ?? "application/octet-stream"
+    );
+    res.setHeader("cache-control", "no-store");
+    res.end(Buffer.from(await kept.failed.arrayBuffer()));
+    return;
+  }
+  if (forMap && kept.map === null) {
+    res.statusCode = 404;
+    res.setHeader("cache-control", "no-store");
+    res.end();
+    return;
   }
   res.statusCode = 200;
-  res.setHeader("content-type", kept.type);
+  res.setHeader("content-type", forMap ? "application/json" : kept.type);
   res.setHeader("cache-control", KEPT);
-  res.end(kept.body);
+  res.end(forMap ? kept.map : kept.body);
 }
 
 /** An attribute's value, its quotes and ampersands written as entities. */
 const escapeAttr = (value: string): string =>
   value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 
-/**
- * Every module a page of `files`' canvas loaded before, by the address the
- * page asks for it: the stage's entry and each section's module, and all
- * they import, as Vite's graph holds them (a module is in it once a page
- * asked for it). The canvas page preloads them (`modulepreload`), so the
- * browser asks for its whole graph at once, where each level of imports was
- * a round trip of its own: a canvas through the hub's preview proxy, some
- * 350 ms a request, waited ~25 of them in turn (the comment card's, 10 to
- * 18 s to draw). A module changed under a page is asked for with its
- * `?t=` (Vite's import analysis), and preloaded so. A stage no page has
- * drawn yet preloads nothing.
- */
-function preloadsOf(files: string[]): string[] {
-  const graph = server?.environments.client.moduleGraph;
-  if (!graph) {
+/** Code that imports or re-exports anything: what a module with no module syntax (a prebundle's leaf chunk) is passed by without parsing. */
+const ANY_IMPORT = /\b(?:import|export)\b/;
+/** Vite's `?import` (its `importQueryRE`), which it takes off an address before it transforms it. */
+const IMPORT_QUERY = /(\?|&)import=?(?:&|$)/;
+const TRAILING_SEPARATOR = /[?&]$/;
+/** Vite's address of a module named by its id (`/@id/<id>`, its `wrapId`), and the null byte a virtual id starts with, written out in it. */
+const WRAPPED_ID = /^\/@id\//;
+const NULL_BYTE = /^__x00__/;
+/** Each served module's static imports, as its code writes them, by the transform that wrote it. */
+const staticKept = new WeakMap<object, string[]>();
+
+/** The addresses `code` imports statically; none where it doesn't parse: the browser fetches what it names, and says what is wrong with it. */
+function staticOf(code: string): string[] {
+  try {
+    return importLiterals(code)
+      .filter((one) => !one.dynamic)
+      .map((one) => one.value);
+  } catch {
     return [];
   }
-  const sections = new Set<ModuleNode>();
-  const starts = [...graph.idToModuleMap.values()].filter((mod) => {
-    if (!mod.transformResult) {
-      return false;
-    }
-    const section = mod.id ? sectionOfId(mod.id) : null;
-    if (section !== null && files.includes(section)) {
-      sections.add(mod);
-      return true;
-    }
-    // The page's own scripts: the canvas's entry, and Vite's client, which its HTML transform adds.
-    return servedAt(mod) === CANVAS_ENTRY || servedAt(mod) === VITE_CLIENT;
-  });
-  const seen = new Set<ModuleNode>(starts);
-  const queue = [...starts];
-  // Breadth first: an array's iterator reaches what is pushed while it runs.
-  for (const mod of queue) {
-    for (const next of mod.importedModules) {
-      if (!seen.has(next) && next.transformResult) {
-        seen.add(next);
-        queue.push(next);
-      }
-    }
+}
+
+/**
+ * The addresses module `url` (as its page asks for it, the dev server's
+ * base in it) imports statically, as the page will ask for them: its code
+ * as Vite serves it, transformed here when no page has asked for it yet
+ * (Vite's own `warmupRequest`), each `import`/`export … from` of it, a
+ * relative one (a prebundle's chunks) resolved from it. An `import("…")`
+ * is no part of it: the page asks for one only once its code runs.
+ */
+async function staticImportsOf(dev: DevServer, url: string): Promise<string[]> {
+  const env = dev.environments.client;
+  const { base } = dev.config;
+  // As Vite's own middleware takes it: its base off, its `?import` off, a virtual module's `/@id/` unwrapped (its `unwrapId`).
+  const own = (url.startsWith(base) ? `/${url.slice(base.length)}` : url)
+    .replace(IMPORT_QUERY, "$1")
+    .replace(TRAILING_SEPARATOR, "")
+    .replace(WRAPPED_ID, "")
+    .replace(NULL_BYTE, "\0");
+  await env.warmupRequest(own);
+  const result = (await env.moduleGraph.getModuleByUrl(own))?.transformResult;
+  if (!result) {
+    return [];
   }
-  return queue.map((mod) => {
-    // A section's module is a dynamic import of an address the runtime builds, which Vite asks for with `?import` first.
-    const asked = sections.has(mod)
-      ? withQuery(servedAt(mod), "import", true)
-      : servedAt(mod);
-    return mod.lastHMRTimestamp > 0
-      ? withQuery(asked, `t=${mod.lastHMRTimestamp}`, false)
-      : asked;
+  let imports = staticKept.get(result);
+  if (!imports) {
+    imports = ANY_IMPORT.test(result.code) ? staticOf(result.code) : [];
+    staticKept.set(result, imports);
+  }
+  return imports.flatMap((one) => {
+    if (one.startsWith(".")) {
+      const at = new URL(one, `http://stage${url}`);
+      return [`${at.pathname}${at.search}`];
+    }
+    return one.startsWith("/") && !one.startsWith("//") ? [one] : [];
   });
 }
 
 /**
- * The address a page asks for `mod` at, as Vite's import analysis writes
- * it: Vite's client at `/@vite/client`; a virtual module's id (`\0…`)
- * under `/@id/` (its `wrapId`); a module that is neither script nor style
- * (JSON, a `?url` asset) with `?import` first (its `isExplicitImportRequired`).
+ * Every module a page of `files`' canvas loads before it draws, by the
+ * address the page asks for it: Vite's client, the stage's entry, each
+ * section's module, and what each imports statically, all the way down
+ * ({@link staticImportsOf}), each transformed here first when no page has
+ * asked for it yet. The canvas page preloads them (`modulepreload`), so
+ * the browser asks for its whole graph at once, where each level of
+ * imports was a round trip of its own: cold, NeedsCard's 665 modules came
+ * 21 levels deep, drawn 4.1 s in on the stage's own host and 11.4 s in at
+ * 350 ms a request (the hub's preview proxy, as the comment card's trace
+ * read it). Nothing a page's code imports only when it runs is preloaded:
+ * a frame parses only the modules its stories reach. The sections are the
+ * ones the page loads at once: an embed's every one (runtime.ts `pump`), a
+ * canvas's first, the others as each nears the view.
  */
-const servedAt = (mod: ModuleNode): string => {
-  if (mod.file?.endsWith(VITE_CLIENT_FILE)) {
-    return VITE_CLIENT;
+async function closureOf(
+  dev: DevServer,
+  files: string[],
+  embed: boolean
+): Promise<string[]> {
+  const { base } = dev.config;
+  const asPage = (address: string) => `${base}${address.slice(1)}`;
+  const sections = files
+    .filter((file) => sectionProblem(file) === null)
+    .slice(0, embed ? files.length : 1)
+    .map((file) =>
+      asPage(`/@id/__x00__${VIRTUAL}${encodeURIComponent(file)}.js`)
+    );
+  const seen = new Set<string>();
+  const order: string[] = [];
+  let level = [asPage(VITE_CLIENT), asPage(CANVAS_ENTRY), ...sections];
+  while (level.length > 0) {
+    const fresh = [...new Set(level)].filter((url) => !seen.has(url));
+    for (const url of fresh) {
+      seen.add(url);
+      order.push(url);
+    }
+    // One level of imports at a time, each level's modules at once.
+    const next = Promise.all(fresh.map((url) => staticImportsOf(dev, url)));
+    // biome-ignore lint/performance/noAwaitInLoops: the next level is known only once this one is read
+    level = (await next).flat();
   }
-  const url = mod.url.startsWith("/")
-    ? mod.url
-    : `/@id/${mod.url.replace("\0", "__x00__")}`;
-  const bare = url.split("?")[0] as string;
-  const script = JS_SOURCE.test(bare) || !LAST_SEGMENT_EXT.test(bare);
-  return script || STYLE_SOURCE.test(bare)
-    ? url
-    : withQuery(url, "import", true);
-};
+  // A section's module is a dynamic import of an address the runtime builds, which Vite asks for with `?import` first.
+  return order.map((url) =>
+    sections.includes(url) ? withQuery(url, "import", true) : url
+  );
+}
 
-/** Vite's client module, by its file. */
-const VITE_CLIENT_FILE = "/vite/dist/client/client.mjs";
-/** What Vite serves as a script whatever it is asked with (its `knownJsSrcRE`). */
-const JS_SOURCE = /\.(?:[jt]sx?|m[jt]s|vue|marko|svelte|astro|imba|mdx)$/;
-/** A style sheet (its `CSS_LANGS_RE`). */
-const STYLE_SOURCE = /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)$/;
-/** A path whose last segment has an extension. */
-const LAST_SEGMENT_EXT = /\.[^/.]+$/;
+/** How many times a page's graph is walked again when the walk set off a new build of the dependencies. Ours: each new build finds what the walk before it reached. */
+const DEPENDENCY_ROUNDS = 3;
+
+/**
+ * The page's graph ({@link closureOf}) once the dependencies it names are
+ * built: a dependency no page had imported yet, which the walk's own
+ * transforms found, is bundled by Vite's optimizer after the walk, and a
+ * new build that changes the others (`optimized dependencies changed.
+ * reloading`, its `fullReload`) leaves every address the walk read at the
+ * old build's `?v=`, each answered 504 "Outdated Optimize Dep" (the React
+ * fixture's first canvas). The walk then reads the graph again, at the new
+ * build.
+ */
+async function settledClosureOf(
+  dev: DevServer,
+  files: string[],
+  embed: boolean
+): Promise<string[]> {
+  const optimizer = () => dev.environments.client.depsOptimizer;
+  let urls: string[] = [];
+  for (let round = 0; round < DEPENDENCY_ROUNDS; round += 1) {
+    const build = optimizer()?.metadata.browserHash;
+    // biome-ignore lint/performance/noAwaitInLoops: each walk reads the build the one before it waited on
+    urls = await closureOf(dev, files, embed);
+    const building = Object.values(optimizer()?.metadata.discovered ?? {})
+      .map((one) => one.processing)
+      .filter((one): one is Promise<void> => one !== undefined);
+    await Promise.all(building);
+    if (optimizer()?.metadata.browserHash === build) {
+      return urls;
+    }
+  }
+  return urls;
+}
 
 /** `url` with `query` added, at the start of its query (Vite's `injectQuery`) or its end. */
 const withQuery = (url: string, query: string, first: boolean): string => {

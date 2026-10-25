@@ -3,7 +3,7 @@
  * in view, or nearest to it, first.
  *
  * Each canvas embed asks for its whole module graph at once (stage-host
- * host.ts `preloadsOf`: every module a `modulepreload`, 626 for the pairing
+ * host.ts `closureOf`: every module a `modulepreload`, 626 for the pairing
  * canvas), and every embed of a page stands in one renderer process: the
  * hub's host is one site whatever the port. Chromium caps a process's
  * requests in flight at 2,700 (services/network/network_context.h,

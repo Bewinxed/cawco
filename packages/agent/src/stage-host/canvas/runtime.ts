@@ -556,7 +556,11 @@ export function boot(options: BootOptions): void {
       if (!canvasOwned(sheet)) {
         frameWidths(sheet, rewrite.refused);
       }
-      rewriteSheet(sheet, rewrite);
+      // An embed draws each story at rest only (`columnsFor`): no state is
+      // forced in it, so its sheets' state rules stay as written.
+      if (!embed) {
+        rewriteSheet(sheet, rewrite);
+      }
       forceMotion(sheet, view.motion);
     }
   };
@@ -615,10 +619,14 @@ export function boot(options: BootOptions): void {
     subtree: true,
     characterData: true,
   });
+  // A stylesheet's link loaded: its rules are rewritten. A module's
+  // preload (host.ts `graphPreloads`, one a module of the canvas's graph)
+  // loads no sheet, and each of a 665-module graph's would walk every rule
+  // of every sheet again.
   document.addEventListener(
     "load",
     (event) => {
-      if (event.target instanceof HTMLLinkElement) {
+      if (event.target instanceof HTMLLinkElement && event.target.sheet) {
         rewriteAll();
       }
     },
@@ -1360,15 +1368,12 @@ export function boot(options: BootOptions): void {
    * The page holding an embed hears its whole graph arrived (core
    * `CANVAS_EMBED_FETCHED`), once its page's preloads have all answered,
    * before it is evaluated and drawn: the next embed may fetch meanwhile
-   * (dashboard decisions host embed-turns.ts). Nothing is said where the
-   * page carried no graph: its turn ends at its shape.
+   * (dashboard decisions host embed-turns.ts). Every page the stage serves
+   * carries its graph (host.ts `closureOf`).
    */
   function tellGraphFetched(): void {
-    const graph = (window as unknown as { __cawcoGraph?: CanvasGraph })
+    const graph = (window as unknown as { __cawcoGraph: CanvasGraph })
       .__cawcoGraph;
-    if (!graph || graph.asked === 0) {
-      return;
-    }
     const tell = () =>
       window.parent.postMessage({ type: CANVAS_EMBED_FETCHED }, "*");
     if (graph.whole) {

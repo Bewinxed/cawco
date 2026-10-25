@@ -80,8 +80,7 @@ export const CANVAS_EMBED_SIZE = "cawco:embed-size";
  * its page carried answered), the message it posts to the page holding it,
  * `{ type }`, before it has evaluated and drawn: the page may let the next
  * embed fetch while this one evaluates (dashboard decisions host
- * embed-turns.ts). An embed whose page carried no graph (a stage no page
- * has drawn since it started) never posts it.
+ * embed-turns.ts).
  */
 export const CANVAS_EMBED_FETCHED = "cawco:embed-fetched";
 

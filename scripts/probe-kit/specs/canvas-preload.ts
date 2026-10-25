@@ -1,7 +1,8 @@
 /**
- * A canvas page asks for the modules its sections loaded before all at once
- * (stage-host/host.ts `preloadsOf`: one `modulepreload` link a module, read
- * from Vite's graph), where each level of imports was a round trip of its
+ * A canvas page asks for its sections' whole graph at once (stage-host/
+ * host.ts `closureOf`: one `modulepreload` link a module its stories import
+ * statically, read from the code Vite serves, transformed first when no page
+ * asked for it yet), where each level of imports was a round trip of its
  * own. Through the hub's preview proxy a request takes some 350 ms (the
  * comment-card-sizing page, traced through it: a canvas of 672 modules drawn
  * whole 11 to 18 s after its start). On the dashboard's stage, built from
@@ -10,7 +11,8 @@
  * every request answered `LATENCY_MS` late (a route the spec answers, many
  * at once, as the proxy's HTTP/2 does), the stage warm from a first draw:
  *
- * 1. A cold stage's page preloads nothing (no graph yet), and draws.
+ * 1. A cold stage's page preloads its whole graph, and draws: no script it
+ *    fetches is missing from its preloads, none is fetched twice.
  * 2. A warm stage's page preloads every module it then asks for: no script
  *    it fetches is missing from its preloads, none is fetched twice.
  * 3. Drawn whole in less time than the same page with its preloads taken
@@ -293,9 +295,19 @@ const run = async (kit: Kit) => {
     );
     const url = `http://127.0.0.1:${port}/@cawco/canvas?file=${encodeURIComponent(FILE)}`;
     const cold = await draw(kit, url, 0, false);
+    const coldPreloaded = new Set(cold.preloads);
+    const coldMissing = [...new Set(cold.fetched)].filter(
+      (one) => !(coldPreloaded.has(one) || one.startsWith("/@cawco/canvas"))
+    );
+    const coldTwice = cold.fetched.filter(
+      (one, at) => cold.fetched.indexOf(one) !== at
+    );
     kit.check(
-      `1: a cold stage's page preloads nothing and draws (${cold.preloads.length} preloads, ${cold.fetched.length} scripts, drawn ${cold.drawn} ms)`,
-      cold.preloads.length === 0 && cold.fetched.length > 0
+      `1: a cold stage's page preloads its ${cold.preloads.length} modules and fetches ${cold.fetched.length} scripts: ${coldMissing.length} not preloaded, ${coldTwice.length} fetched twice, drawn ${cold.drawn} ms`,
+      cold.preloads.length > 0 &&
+        coldMissing.length === 0 &&
+        coldTwice.length === 0,
+      `not preloaded: ${coldMissing.slice(0, 8).join(", ")}; twice: ${[...new Set(coldTwice)].slice(0, 8).join(", ")}`
     );
     const warm = await draw(kit, url, LATENCY_MS, false);
     const preloaded = new Set(warm.preloads);

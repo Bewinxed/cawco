@@ -5020,7 +5020,7 @@ const dozenOverlaps = (order: DozenEmbed[]): string[] =>
 /**
  * (r)'s canvas drawn on the stage's own port, twice, as a canvas the person
  * was shown: the stage then preloads its whole graph into every embed of it
- * (stage-host host.ts `preloadsOf`). Answers how many modules the second
+ * (stage-host host.ts `closureOf`). Answers how many modules the second
  * open preloaded.
  */
 async function warmDozen(kit: Kit, stagePort: number): Promise<number> {

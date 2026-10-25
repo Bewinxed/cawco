@@ -327,12 +327,16 @@ export function forceMotion(
         REDUCE.lastIndex = 0;
         NO_PREFERENCE.lastIndex = 0;
         // Conditions that hold and fail at any width, valid inside `and`.
-        rule.media.mediaText =
+        const next =
           motion === "reduce"
             ? original
                 .replace(REDUCE, "(min-width: 0px)")
                 .replace(NO_PREFERENCE, "(not (min-width: 0px))")
             : original;
+        // Written only when it changes: each write is a new media query the engine restyles the page for.
+        if (rule.media.mediaText !== next) {
+          rule.media.mediaText = next;
+        }
       }
       REDUCE.lastIndex = 0;
       NO_PREFERENCE.lastIndex = 0;
