@@ -13,6 +13,14 @@
 export const updatesWords = {
   /** The notice's title while a build waits. */
   ready: (version: string) => `CawCo ${version} is ready`,
+  /** The update toast's title: the dashboard serves a newer build than the open page (dashboard update-toast.svelte.ts). */
+  pageReady: "A new build of CawCo is ready",
+  /** The update toast's line: when the page reloads by itself, the away clock in whole minutes. */
+  pageUpdatesItself: (minutes: number) =>
+    `This page updates by itself once it's in the background or you've been away for ${minutes} min.`,
+  /** The update toast's buttons: reload at once, or leave it to the idle reload. */
+  updateNow: "Update now",
+  updateWhenIdle: "Update when idle",
   /** An Install now the hub refused: the notice's title, and why under a machine's row. */
   notInstalled: (version: string, machine: string) =>
     `CawCo ${version} was not installed on ${machine}`,

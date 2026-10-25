@@ -381,7 +381,7 @@ export const installable = (
 
 // ── the notice ───────────────────────────────────────────────────────────
 
-export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9;
 
 /** What the hub refused of an install this tab asked for, or of its cancel. */
 export interface Refusal {
@@ -403,7 +403,7 @@ export interface Notice {
    */
   acks: string[];
   /** The primary button, when the notice has one. */
-  action?: "retry" | "install-all" | "reload";
+  action?: "retry" | "install-all";
   /** Caw: a still mark, or (needs-you) the one that moves. */
   caw: { moves: boolean; status: string };
   /** Machines the notice stands for, by id. */
@@ -442,9 +442,6 @@ export interface NoticeInput {
 /** A landing's notice id: the landing itself, by its machine and when it finished. */
 export const landingId = (machineId: string, landing: { at: number }): string =>
   `landed:${machineId}:${landing.at}`;
-
-/** The reload's notice id: the dashboard build it offers. */
-export const reloadId = (build: string): string => `reload:${build}`;
 
 /** The machines, with every landing someone has acknowledged taken off. */
 export function unseenLandings<T extends UpdateMachine>(
@@ -812,43 +809,17 @@ export function updatedNotice(machines: UpdateMachine[]): Notice | null {
   };
 }
 
-/** 7. This tab is older than the dashboard serving it, and nothing landed to say why. */
-export const reloadNotice = (build: string): Notice => ({
-  acks: [reloadId(build)],
-  kind: 7,
-  title: "CawCo updated",
-  failed: false,
-  // No "reload" line: the tab reloads by itself once it is idle
-  // (reload.svelte.ts); the button is there to go now.
-  lines: [],
-  configure: false,
-  action: "reload",
-  caw: { status: "sleeping", moves: false },
-  machineIds: [],
-  version: "",
-});
-
-/**
- * A landing's notice on a tab that is older than it: it offers the reload,
- * and acknowledging it acknowledges the reload too.
- */
-const withReload = (notice: Notice | null, build: string): Notice | null =>
-  notice
-    ? { ...notice, action: "reload", acks: [...notice.acks, reloadId(build)] }
-    : null;
-
 /** Notices 4 and 5 someone already acknowledged are not shown again. */
 const unlessSeen = (notice: Notice | null, input: NoticeInput) =>
   notice?.acks.every((id) => input.seen.has(id)) ? null : notice;
 
 /**
  * The one notice the screen shows, or null. First match wins. A tab older
- * than the dashboard serving it is one notice too, not a second box: the
- * landing that replaced the dashboard says so and offers the reload, and
- * with no landing to announce the reload says it alone. Everything else
- * waits for the reload, since an old tab may misread what it is sent.
- * Choosing Reload acknowledges what the notice said, so the reloaded tab
- * does not say it again.
+ * than the dashboard serving it says only the landing that replaced the
+ * dashboard, and everything else waits for its reload, since an old tab may
+ * misread what it is sent; the reload itself is the update toast's
+ * (update-toast.svelte.ts), and acknowledges the landing as the tab goes,
+ * so the reloaded tab does not say it again.
  */
 export function noticeFor(
   input: NoticeInput,
@@ -862,13 +833,8 @@ export function noticeFor(
     ),
     name: (machine) => label(machine.hostname),
   };
-  const build = input.newerBuild;
-  if (build !== null && !input.seen.has(reloadId(build))) {
-    return (
-      withReload(landedAll(ctx), build) ??
-      withReload(updatedNotice(machines), build) ??
-      reloadNotice(build)
-    );
+  if (input.newerBuild !== null) {
+    return landedAll(ctx) ?? updatedNotice(machines);
   }
   return (
     rolledBack(ctx) ??

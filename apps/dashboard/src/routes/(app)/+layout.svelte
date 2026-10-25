@@ -87,8 +87,9 @@
       }
     });
   });
-  // The update notice's upkeep: an idle old tab reloads, "running on N
-  // machines" leaves by itself. The notice itself is a row of Caw's panel.
+  // The update notice's upkeep: an old tab's update toast and its idle
+  // reload, "running on N machines" leaving by itself. The notice itself is
+  // a row of Caw's panel.
   onMount(startUpdateWatch);
   // iOS has no right-click; a held press is its context menu.
   onMount(enableLongPressMenus);

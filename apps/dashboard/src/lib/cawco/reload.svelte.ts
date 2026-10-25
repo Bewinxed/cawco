@@ -1,26 +1,28 @@
 /**
- * A tab older than the dashboard reloads itself once the operator isn't
- * using it. One gate for both reasons a tab is behind:
+ * How a tab leaves for the build the dashboard's server runs, and the one
+ * reload that goes by itself whatever the person chose.
  *
- * - the dashboard's server runs a newer build than the tab
- *   (served-build.svelte.ts, the signal the update notice reads);
- * - the tab was built for an older wire than the hub's (`WIRE_PROTOCOL`,
- *   client.svelte.ts `olderThanHub`), so it misreads what the hub sends and
- *   reads nothing more until it reloads.
+ * Every reload for a new build ends in {@link leaveForBuild}: the composers'
+ * words written down, the landing the update notice announced acknowledged
+ * on the hub, the change marked as reloaded for, then the page goes. Its
+ * callers:
  *
- * Either way an open page never sits stale. A reload at any moment is safe,
- * since everything a person has in progress comes back after it ({@link
- * busy}), so it waits only for the input in hand: a keystroke or a press
- * under {@link IDLE_MS} old, or words in a field nothing keeps. Then it goes
- * at once, and the connection band's Reload goes sooner ({@link reloadNow}).
- * A tab held for hours after nightly 5408, when a focused field alone held
- * it (a composer keeps the keyboard after an Enter sends), and so did the
- * side pane's artifact cards, a listbox, taken for an open picker.
- * The reload acknowledges what the notice announced, on the hub, so neither
- * the reloaded tab nor any other says it again.
+ * - the update toast (updates/update-toast.svelte.ts): Update now, or the
+ *   person away or the tab hidden;
+ * - the forced reload of a tab built for an older wire than the hub's
+ *   (`WIRE_PROTOCOL`, client.svelte.ts `olderThanHub`): it misreads what the
+ *   hub sends and reads nothing more until it reloads, so it goes by itself
+ *   ({@link reloadWhenIdle}) at the first moment it interrupts no keystroke
+ *   or press ({@link busy}), and the connection band's Reload goes sooner
+ *   ({@link reloadNow}). A tab held for hours after nightly 5408, when a
+ *   focused field alone held it (a composer keeps the keyboard after an
+ *   Enter sends), and so did the side pane's artifact cards, a listbox,
+ *   taken for an open picker.
  *
- * It only reloads once the dashboard's server runs a build other than this
- * tab's (`runningBuild`), or the reload would load this one again.
+ * A reload at any moment is safe, since everything a person has in progress
+ * comes back after it ({@link busy}). It only goes once the dashboard's
+ * server runs a build other than this tab's (`runningBuild`), or the reload
+ * would load this one again.
  */
 import { version } from "$app/env";
 import { leaveThePage } from "./leaving";
@@ -195,7 +197,7 @@ const STANDING = [
  * dialog, sheet, popover or drawer. A field left with its words outside
  * those has committed them as it was left, or is a search's.
  */
-function unsavedWords(): boolean {
+export function unsavedWords(): boolean {
   const active = focused();
   for (const [field, start] of started) {
     if (!field.isConnected) {
@@ -251,13 +253,13 @@ export function busy(): Busy | null {
  */
 export type ReloadHold = "build" | Busy | "unkept";
 
-/** What the update notice gives the reload: the notice ids it acknowledges for the build it loads. */
+/** What the update notice gives the reload: the notice ids it acknowledges as the tab goes. */
 interface Farewell {
-  acks: (build: string) => string[];
+  acks: () => string[];
 }
 let farewell: Farewell | null = null;
 
-/** The update notice hands the reload its acknowledgement. */
+/** The update notice hands every reload for a new build its acknowledgement. */
 export function bidFarewell(given: Farewell): () => void {
   farewell = given;
   return () => {
@@ -271,18 +273,10 @@ export function bidFarewell(given: Farewell): () => void {
 const listeners = new Set<(hold: ReloadHold) => void>();
 let reloading = false;
 
-/** The reload that is due: the build it loads and its change, once {@link reloadWhenIdle} has found one. */
-let due: { running: string; change: string } | null = null;
-/** The person's Reload is on its way: the waiting reload stands down. */
+/** The build the forced reload loads, once {@link reloadWhenIdle} has found one. */
+let due: string | null = null;
+/** A reload for a new build is on its way: the waiting one stands down. */
 let leaving = false;
-
-/** Every composer's words written down, and what the update notice said acknowledged for `running`. */
-const writeDown = async (running: string): Promise<void> => {
-  await Promise.allSettled([
-    ...[...flushes].map((flush) => flush()),
-    notices.acknowledge(farewell?.acks(running) ?? []),
-  ]);
-};
 
 const nextLook = () =>
   new Promise<void>((resolve) => {
@@ -308,11 +302,44 @@ const nextLook = () =>
  */
 const RELOADED_FOR = "cawco:reloaded-for";
 
-const reloadedFor = (): string | null => stored("session", RELOADED_FOR);
+const changeTo = (running: string): string => `${version}→${running}`;
+
+/** This tab was reloaded once already for `running`, and came back on this build: another reload would only loop. */
+export const reloadedFor = (running: string): boolean =>
+  stored("session", RELOADED_FOR) === changeTo(running);
 
 /**
- * Reloads this tab once the dashboard runs another build and the operator
- * isn't using it, once per version change ({@link RELOADED_FOR}). Called
+ * The one way a tab leaves for `running`, the build the dashboard's server
+ * runs: every composer's words written down and what the update notice
+ * announced acknowledged ({@link bidFarewell}), the change marked as
+ * reloaded for ({@link RELOADED_FOR}), then the page reloads, at the address
+ * it stands on. `chosen`: the person asked for it, so it goes even where the
+ * mark is not kept; by itself it does not, and answers false, as it could
+ * otherwise go round.
+ */
+export async function leaveForBuild(
+  running: string,
+  chosen: boolean
+): Promise<boolean> {
+  leaving = true;
+  await Promise.allSettled([
+    ...[...flushes].map((flush) => flush()),
+    notices.acknowledge(farewell?.acks() ?? []),
+  ]);
+  store("session", RELOADED_FOR, changeTo(running));
+  if (!(chosen || reloadedFor(running))) {
+    leaving = false;
+    return false;
+  }
+  leaveThePage(() => location.reload());
+  return true;
+}
+
+/**
+ * The forced reload of a tab built for an older wire than the hub's (its
+ * only caller, client.svelte.ts `olderThanHub`): it goes once the dashboard
+ * runs another build and the operator isn't using it, once per version
+ * change ({@link RELOADED_FOR}), whatever the update toast was told. Called
  * again on every socket open and every snapshot, so a dashboard that did not
  * serve the other build yet is asked again; one reload is ever on its way.
  */
@@ -326,8 +353,7 @@ export async function reloadWhenIdle(
     return;
   }
   const running = await runningBuild();
-  const change = `${version}→${running}`;
-  if (running === null || running === version || reloadedFor() === change) {
+  if (running === null || running === version || reloadedFor(running)) {
     for (const listener of listeners) {
       listener("build");
     }
@@ -337,7 +363,7 @@ export async function reloadWhenIdle(
     return;
   }
   reloading = true;
-  due = { running, change };
+  due = running;
   for (let hold = busy(); hold !== null && !leaving; hold = busy()) {
     for (const listener of listeners) {
       listener(hold);
@@ -348,30 +374,25 @@ export async function reloadWhenIdle(
   if (leaving) {
     return;
   }
-  await writeDown(running);
-  store("session", RELOADED_FOR, change);
-  if (reloadedFor() !== change) {
+  if (!(await leaveForBuild(running, false))) {
     for (const listener of listeners) {
       listener("unkept");
     }
-    return;
   }
-  leaveThePage(() => location.reload());
 }
 
 /**
- * The person's Reload (the connection band's): the reload that is due, at
- * once, whatever holds it. The drafts are written down first, as the reload
- * by itself writes them, and the change is marked as reloaded for, so a
- * reload handed the old build again does not go round.
+ * The person's Reload (the connection band's): the forced reload that is
+ * due, at once, whatever holds it ({@link leaveForBuild}). With none due
+ * (the dashboard does not serve the other build yet) the drafts are still
+ * written down before the page goes.
  */
 export async function reloadNow(): Promise<void> {
-  leaving = true;
   if (due) {
-    await writeDown(due.running);
-    store("session", RELOADED_FOR, due.change);
-  } else {
-    await Promise.allSettled([...flushes].map((flush) => flush()));
+    await leaveForBuild(due, true);
+    return;
   }
+  leaving = true;
+  await Promise.allSettled([...flushes].map((flush) => flush()));
   leaveThePage(() => location.reload());
 }

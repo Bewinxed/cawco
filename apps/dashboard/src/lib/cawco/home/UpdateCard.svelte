@@ -18,7 +18,6 @@
 
 <script lang="ts">
   import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { reflowsFrom, reread } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -29,9 +28,10 @@
    * lines and a footer: Caw's mark in the notice's status and the title
    * (with the failure glyph when it says one), then one meta line, the
    * notes counted by section and what the act does ("4 new · 3 improved ·
-   * 2 fixed. Reload to run it."), then the footer at the row's trailing
-   * edge: Show changes, then its one act (Retry, Install now, Reload) when
-   * it has one (updates/model `noticeFor`).
+   * 2 fixed. Install now to run it everywhere."), then the footer at the
+   * row's trailing edge: Show changes, then its one act (Retry, Install now)
+   * when it has one (updates/model `noticeFor`). The reload a tab older than
+   * the dashboard needs is the update toast's (updates/update-toast).
    *
    * The notes fold in the row with what it says machine by machine and its
    * closing line: transitions-dev's Accordion expand, a grid row going 0fr
@@ -49,16 +49,10 @@
    * above it, so Hide changes is never a scroll away; folding gives it back
    * to the row's flow where it stands. The list's own foot fade gives way
    * to it meanwhile (CawPanel).
-   *
-   * Reload turns the row into its goodbye (../updates/goodbye): his mark
-   * waiting on his `loading`, beside "See you in a bit", and nothing else,
-   * until the tab goes. The row is a `reflow` box, so its edge travels to the
-   * goodbye's height and what is under it follows.
    */
   import { page } from "$app/state";
-  import { arrive, GOODBYE, leaveInPlace } from "../updates/goodbye";
   import ReleaseNotes from "../updates/ReleaseNotes.svelte";
-  import Caw, { type CawStatus } from "./Caw.svelte";
+  import type { CawStatus } from "./Caw.svelte";
   import CawMark from "./CawMark.svelte";
   import NoticeRow from "./NoticeRow.svelte";
 
@@ -68,8 +62,7 @@
     ondismiss,
     onaction,
   }: {
-    /** Null only once Reload was chosen and the acknowledgement dropped it: the goodbye needs none. */
-    notice: Notice | null;
+    notice: Notice;
     /** It is all the panel holds: its notes stand open unless the reader folded them. */
     alone: boolean;
     ondismiss: () => void;
@@ -82,32 +75,23 @@
   const ACTS: Record<NonNullable<Notice["action"]>, string> = {
     retry: "Retry",
     "install-all": "Install now",
-    reload: "Reload",
   };
   /** What the act does, after the notes' tally. */
   const ACT_WORDS: Record<NonNullable<Notice["action"]>, string> = {
     retry: "Retry to install it again.",
     "install-all": "Install now to run it everywhere.",
-    reload: "Reload to run it.",
   };
 
-  /** Reload was chosen: the row says its goodbye until the tab goes. */
-  let leaving = $state(false);
-  let card = $state<HTMLElement>();
-  let layer = $state<HTMLElement>();
-
-  const notes = $derived(notice?.notes ?? null);
+  const notes = $derived(notice.notes ?? null);
   /** The notes stand open: as the reader left them, else open when alone. */
-  const open = $derived(
-    notice !== null && notes !== null && (chosen.get(keyOf(notice)) ?? alone)
-  );
+  const open = $derived(notes !== null && (chosen.get(keyOf(notice)) ?? alone));
   /** The first line still under way carries the spinner; the rest are words. */
   const spinnerAt = $derived(
-    notice?.lines.findIndex((line) => line.state === "busy") ?? -1
+    notice.lines.findIndex((line) => line.state === "busy")
   );
   /** The way to the settings, but not on Configure › Updates; with notes, once they stand open. */
   const showConfigure = $derived(
-    notice?.configure === true &&
+    notice.configure &&
       page.url.pathname !== "/config/updates" &&
       (notes === null || open)
   );
@@ -116,9 +100,6 @@
    * its closing line instead. A landing with no act runs here already.
    */
   const meta = $derived.by(() => {
-    if (!notice) {
-      return "";
-    }
     if (notice.failed) {
       return notice.closing ?? "";
     }
@@ -132,39 +113,14 @@
   });
   /** What it says beyond the meta line: machine by machine, and its closing line (unless the meta said it). */
   const said = $derived(
-    notice !== null &&
-      (notice.lines.length > 0 || (notice.closing && !notice.failed))
+    notice.lines.length > 0 || Boolean(notice.closing && !notice.failed)
   );
   const footer = $derived(
-    showConfigure || notes !== null || Boolean(notice?.action)
+    showConfigure || notes !== null || Boolean(notice.action)
   );
 
-  /** What the row showed leaves where it stood, and the row turns into its goodbye. */
-  function sayGoodbye(): void {
-    if (card && layer) {
-      const away = layer;
-      leaveInPlace(
-        [...card.children].filter(
-          (child): child is HTMLElement =>
-            child instanceof HTMLElement && child !== away
-        ),
-        away
-      );
-    }
-    leaving = true;
-  }
-
-  function act(action: NonNullable<Notice["action"]>): void {
-    if (action === "reload") {
-      sayGoodbye();
-    }
-    onaction(action);
-  }
-
   function toggle(): void {
-    if (notice) {
-      chosen.set(keyOf(notice), !open);
-    }
+    chosen.set(keyOf(notice), !open);
   }
 
   /**
@@ -241,172 +197,143 @@
 
 <NoticeRow
   dismissLabel="Dismiss the update notice"
-  label={leaving ? GOODBYE : (notice?.title ?? GOODBYE)}
-  ondismiss={leaving ? undefined : ondismiss}
+  label={notice.title}
+  {ondismiss}
 >
   {#snippet lead()}
-    {#if leaving && motionOk.current}
-      <!-- His wait: the page can't show its content until the tab is back. -->
-      <Caw size={28} status="loading" />
-    {:else}
-      <CawMark
-        size={28}
-        status={leaving
-          ? "loading"
-          : ((notice?.caw.status ?? "sleeping") as CawStatus)}
-      />
-    {/if}
+    <CawMark size={28} status={notice.caw.status as CawStatus} />
   {/snippet}
-  <div
-    data-slot="update-card-card"
-    class="relative flex min-w-0 flex-col gap-space-row"
-    bind:this={card}
-  >
-    <!-- What the row showed, copied where it stood, leaving. -->
-    <div
-      aria-hidden="true"
-      class="pointer-events-none absolute inset-0"
-      inert
-      bind:this={layer}
-    ></div>
-    {#if leaving}
-      <!-- The goodbye's one line, beside his waiting mark and centred on it. -->
-      <span
-        class="flex min-h-c-row-lead items-center type-label text-ink-strong"
-        {@attach arrive}>{GOODBYE}</span
-      >
-    {:else if notice}
-      <h2
-        data-slot="title"
-        class="mark-line m-0 flex items-center gap-space-2 pe-(--x-room) type-label wrap-anywhere text-ink-strong"
-      >
-        {#if notice.failed}
-          <IconError
-            aria-hidden="true"
-            class="size-icon-md shrink-0 text-status-fail-ink"
-          />
-        {/if}
-        <span>{notice.title}</span>
-      </h2>
-      {#if meta}
-        <p data-slot="meta" class="m-0 type-meta text-ink-muted">{meta}</p>
+  <div data-slot="update-card-card" class="flex min-w-0 flex-col gap-space-row">
+    <h2
+      data-slot="title"
+      class="mark-line m-0 flex items-center gap-space-2 pe-(--x-room) type-label wrap-anywhere text-ink-strong"
+    >
+      {#if notice.failed}
+        <IconError
+          aria-hidden="true"
+          class="size-icon-md shrink-0 text-status-fail-ink"
+        />
       {/if}
-      {#if notes}
-        <!-- The notes' fold (transitions-dev Accordion expand): the grid row
-             is the track, 0fr shut and 1fr open, so any height of notes
-             folds with no measuring; the inner box clips, fades and
-             cross-blurs. The shut fold gives the column's 2px gap back, and
-             its air is the inner box's own padding, never the track's, so it
-             closes to nothing. Shutting is quicker than opening. With less
-             motion nothing travels: the notes only fade. -->
+      <span>{notice.title}</span>
+    </h2>
+    {#if meta}
+      <p data-slot="meta" class="m-0 type-meta text-ink-muted">{meta}</p>
+    {/if}
+    {#if notes}
+      <!-- The notes' fold (transitions-dev Accordion expand): the grid row
+           is the track, 0fr shut and 1fr open, so any height of notes
+           folds with no measuring; the inner box clips, fades and
+           cross-blurs. The shut fold gives the column's 2px gap back, and
+           its air is the inner box's own padding, never the track's, so it
+           closes to nothing. Shutting is quicker than opening. With less
+           motion nothing travels: the notes only fade. -->
+      <div
+        data-slot="fold"
+        class="group/fold -mt-space-row grid grid-rows-shut transition-[grid-template-rows,margin-top] duration-(--dur-exit) ease-out data-open:mt-0 data-open:grid-rows-open motion-safe:data-open:duration-(--dur-panel) motion-reduce:transition-off"
+        data-open={open || undefined}
+        id="update-notes"
+        inert={!open}
+        ontransitionend={settled}
+      >
+        <!-- Open, no filter at all: a blur(0) is still a filter, and WebKit
+             drew the whole of the notes through one on every paint of the
+             panel. It interpolates with the shut blur as blur(0) would. -->
         <div
-          data-slot="fold"
-          class="group/fold -mt-space-row grid grid-rows-shut transition-[grid-template-rows,margin-top] duration-(--dur-exit) ease-out data-open:mt-0 data-open:grid-rows-open motion-safe:data-open:duration-(--dur-panel) motion-reduce:transition-off"
-          data-open={open || undefined}
-          id="update-notes"
-          inert={!open}
-          ontransitionend={settled}
+          data-slot="fold-inner"
+          class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:group-data-open/fold:duration-(--dur-panel)"
         >
-          <!-- Open, no filter at all: a blur(0) is still a filter, and WebKit
-               drew the whole of the notes through one on every paint of the
-               panel. It interpolates with the shut blur as blur(0) would. -->
-          <div
-            data-slot="fold-inner"
-            class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:group-data-open/fold:duration-(--dur-panel)"
-          >
-            <div class="flex flex-col gap-space-1 pt-space-1">
-              <div class="type-body text-ink-row">
-                <ReleaseNotes source={notes.full} />
-              </div>
-              {#if said}
-                {@render lines(notice)}
-              {/if}
+          <div class="flex flex-col gap-space-1 pt-space-1">
+            <div class="type-body text-ink-row">
+              <ReleaseNotes source={notes.full} />
             </div>
+            {#if said}
+              {@render lines(notice)}
+            {/if}
           </div>
         </div>
-      {:else if said}
-        {@render lines(notice)}
-      {/if}
-      {#if footer}
-        <!-- The footer: one row packed to the row's trailing edge, the way to
-             the settings at its leading edge while the notes stand open. It
-             holds at the panel's foot while the notes run past it, on the
-             panel's own surface, with the house edge fade (`--fade-len`)
-             above it so the notes pass under it while it is held (`held`).
-             The footer's last control ends its ink on the panel's trailing
-             edge, its box kept whole. Every kit button has a 1px transparent
-             border: the act's fill stops inside it (the kit clips its fill
-             to the padding box), so it hangs past by that pixel; the way to
-             the settings, standing alone, by it and its 11px. With the notes
-             open the way to the settings takes the footer's leading edge,
-             its words on the text column with the title's: it hangs into the
-             gutter by what stands before its first letter (the kit's 1px
-             transparent border and the sm size's 11px padding), its box kept
-             whole. On a phone the buttons wrap under it, still at the
-             trailing edge. -->
-        <div
-          data-slot="actions"
-          class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--dur-control) before:ease-out data-stuck:before:opacity-100"
-          {@attach held}
-        >
-          {#if showConfigure}
-            <Button
-              data-settings
-              class={[
-                "shrink",
-                notes !== null && "ms-(--settings-hang) me-auto",
-                notes === null && "last:me-(--settings-hang)",
-              ]}
-              href="/config/updates"
-              label="Configure update behaviour"
-              size="sm"
-              style="--settings-hang: calc(-1 * (1px + var(--space-3)));"
-              variant="link"
-              width="shrink"
+      </div>
+    {:else if said}
+      {@render lines(notice)}
+    {/if}
+    {#if footer}
+      <!-- The footer: one row packed to the row's trailing edge, the way to
+           the settings at its leading edge while the notes stand open. It
+           holds at the panel's foot while the notes run past it, on the
+           panel's own surface, with the house edge fade (`--fade-len`)
+           above it so the notes pass under it while it is held (`held`).
+           The footer's last control ends its ink on the panel's trailing
+           edge, its box kept whole. Every kit button has a 1px transparent
+           border: the act's fill stops inside it (the kit clips its fill
+           to the padding box), so it hangs past by that pixel; the way to
+           the settings, standing alone, by it and its 11px. With the notes
+           open the way to the settings takes the footer's leading edge,
+           its words on the text column with the title's: it hangs into the
+           gutter by what stands before its first letter (the kit's 1px
+           transparent border and the sm size's 11px padding), its box kept
+           whole. On a phone the buttons wrap under it, still at the
+           trailing edge. -->
+      <div
+        data-slot="actions"
+        class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--dur-control) before:ease-out data-stuck:before:opacity-100"
+        {@attach held}
+      >
+        {#if showConfigure}
+          <Button
+            data-settings
+            class={[
+              "shrink",
+              notes !== null && "ms-(--settings-hang) me-auto",
+              notes === null && "last:me-(--settings-hang)",
+            ]}
+            href="/config/updates"
+            label="Configure update behaviour"
+            size="sm"
+            style="--settings-hang: calc(-1 * (1px + var(--space-3)));"
+            variant="link"
+            width="shrink"
+          />
+        {/if}
+        {#if notes}
+          <!-- Show changes, when last, would hang by its 1px border, its
+               8px end padding and the 16px chevron's side bearing (its
+               stroke ends at 19.75 of 24), past the row's own `space-3`
+               and out of the list, which then scrolled sideways: so it
+               hangs by `space-3` exactly, and what its end padding gives
+               up for that its start padding takes, so its box is the sm
+               size's as ever (11px and 8px padding). The chevron flips
+               from ⌄ to ⌃ with the fold (scaleY through a flat line), its
+               stroke kept even through the flip. -->
+          <Button
+            data-toggle
+            aria-controls="update-notes"
+            aria-expanded={open}
+            onclick={toggle}
+            class="last:-me-space-3"
+            expanded="unfilled"
+            size="sm"
+            toggle="last"
+            style="--end: calc(var(--space-3) - 1px - var(--icon-md) * 4.25 / 24); --toggle-start: calc(var(--space-3) + var(--space-2) - var(--end));"
+            variant="ghost"
+          >
+            <span>{open ? "Hide changes" : "Show changes"}</span>
+            <IconChevronDown
+              data-chev
+              aria-hidden="true"
+              class="*:vector-non-scaling transition-[scale] duration-(--dur-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
+              data-icon="inline-end"
             />
-          {/if}
-          {#if notes}
-            <!-- Show changes, when last, would hang by its 1px border, its
-                 8px end padding and the 16px chevron's side bearing (its
-                 stroke ends at 19.75 of 24), past the row's own `space-3`
-                 and out of the list, which then scrolled sideways: so it
-                 hangs by `space-3` exactly, and what its end padding gives
-                 up for that its start padding takes, so its box is the sm
-                 size's as ever (11px and 8px padding). The chevron flips
-                 from ⌄ to ⌃ with the fold (scaleY through a flat line), its
-                 stroke kept even through the flip. -->
-            <Button
-              data-toggle
-              aria-controls="update-notes"
-              aria-expanded={open}
-              onclick={toggle}
-              class="last:-me-space-3"
-              expanded="unfilled"
-              size="sm"
-              toggle="last"
-              style="--end: calc(var(--space-3) - 1px - var(--icon-md) * 4.25 / 24); --toggle-start: calc(var(--space-3) + var(--space-2) - var(--end));"
-              variant="ghost"
-            >
-              <span>{open ? "Hide changes" : "Show changes"}</span>
-              <IconChevronDown
-                data-chev
-                aria-hidden="true"
-                class="*:vector-non-scaling transition-[scale] duration-(--dur-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
-                data-icon="inline-end"
-              />
-            </Button>
-          {/if}
-          {#if notice.action}
-            {@const action = notice.action}
-            <Button
-              label={ACTS[action]}
-              margin="hairline-overlap"
-              onclick={() => act(action)}
-              size="sm"
-            />
-          {/if}
-        </div>
-      {/if}
+          </Button>
+        {/if}
+        {#if notice.action}
+          {@const action = notice.action}
+          <Button
+            label={ACTS[action]}
+            margin="hairline-overlap"
+            onclick={() => onaction(action)}
+            size="sm"
+          />
+        {/if}
+      </div>
     {/if}
   </div>
 </NoticeRow>

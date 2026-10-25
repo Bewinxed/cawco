@@ -91,12 +91,6 @@
   const rebalanced = $derived(feed.rebalanced);
   const artifactNotices = $derived(feed.artifactNotices);
 
-  /**
-   * Reload was chosen: the row says its goodbye until the tab goes, also
-   * once acknowledging has dropped the notice from `updated`.
-   */
-  let reloading = $state(false);
-  const updateShown = $derived(updated !== null || reloading);
   /** The hub's notices record is damaged: one row says so, with Reset. */
   const damaged = $derived(feed.noticesDamaged);
   /** Machines Add machine brought in, until their outcome is acknowledged (connect/). */
@@ -105,7 +99,7 @@
   );
   /** The notices standing: the update, each moved login and rebalance, each machine joined, each artifact's, or the damaged record. */
   const noticeCount = $derived(
-    (updateShown ? 1 : 0) +
+    (updated ? 1 : 0) +
       moved.length +
       rebalanced.length +
       joined.length +
@@ -127,7 +121,7 @@
       resetting = false;
     }
   }
-  /** Every notice but a goodbye has an id to acknowledge. */
+  /** Something stands to acknowledge. */
   const clearable = $derived(
     updated !== null ||
       moved.length > 0 ||
@@ -146,16 +140,6 @@
   function dismissUpdate(notice: Notice): void {
     forgetFold(notice);
     feed.dismissUpdate(notice);
-  }
-
-  function act(notice: Notice, action: NonNullable<Notice["action"]>): void {
-    if (action === "reload") {
-      if (reloading) {
-        return;
-      }
-      reloading = true;
-    }
-    feed.actOnUpdate(notice, action);
   }
 
   /** Clear all: every notice acknowledged at once; the section leaves with its rows. */
@@ -320,21 +304,14 @@
             {/if}
           </li>
         {/if}
-        {#if updateShown}
+        {#if updated}
+          {@const notice = updated}
           <li data-flip>
             <UpdateCard
               {alone}
-              notice={updated}
-              onaction={(action) => {
-                if (updated) {
-                  act(updated, action);
-                }
-              }}
-              ondismiss={() => {
-                if (updated) {
-                  dismissUpdate(updated);
-                }
-              }}
+              {notice}
+              onaction={(action) => feed.actOnUpdate(notice, action)}
+              ondismiss={() => dismissUpdate(notice)}
             />
           </li>
         {/if}

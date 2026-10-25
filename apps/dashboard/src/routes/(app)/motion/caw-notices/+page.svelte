@@ -3,9 +3,8 @@
   /**
    * CAW'S NOTICES BENCH (dev only) — the real CawPanel in the real popover
    * shell (a HangCard on the top bar's own glass, as NeedsCaw hangs it),
-   * driven by a fixture feed with no hub. Dismissing, Clear all,
-   * Show changes and Reload all work against the fixture; Reset brings it
-   * back. The fixture (update, 5 logins and 2 asks; update only; nothing)
+   * driven by a fixture feed with no hub. Dismissing, Clear all and
+   * Show changes work against the fixture; Reset brings it back. The fixture (update, 5 logins and 2 asks; update only; nothing)
    * and the width are switches.
    *
    * The phone width is the same page in a 390×844 frame (`?frame`), whose
@@ -65,7 +64,7 @@
     "- Caw's panel groups notices and says what to do",
     "- Clear all in the Notices head",
     "- Moved logins name their provider",
-    "- Reload tells you what it is for",
+    "- A new build asks before the page reloads",
     "",
     "### Improved",
     "",
@@ -114,13 +113,13 @@
       binaryUpdate: binary({}),
     },
   ];
-  /** A landing in a tab older than the dashboard: its notes, and Reload. */
+  /** A landing nobody has acknowledged: its notes. */
   const UPDATE = noticeFor(
     {
       refused: new Map(),
       commanded: new Set(),
       machines: MACHINES,
-      newerBuild: "e3cbba1",
+      newerBuild: null,
       policy: { autoUpdate: true, channel: "nightly" },
       seen: new Set(),
     },
@@ -288,7 +287,7 @@
   let needs = $state.raw<NeedsItem[]>([]);
   let updated = $state.raw<Notice | null>(null);
   let moved = $state.raw<MovedLogin[]>([]);
-  /** Bumped by Reset: a fresh panel, its fold shut and no goodbye said. */
+  /** Bumped by Reset: a fresh panel, its fold shut. */
   let generation = $state(0);
 
   function load(which: Fixture): void {
@@ -326,13 +325,7 @@
     dismissUpdate() {
       updated = null;
     },
-    actOnUpdate(_notice, action) {
-      // Reload here does not reload: the notice goes, as the acknowledgement
-      // drops it, and the goodbye stands until Reset.
-      if (action === "reload") {
-        updated = null;
-      }
-    },
+    actOnUpdate: () => undefined,
   };
 
   /* ── The popover, hanging from his glass ───────────────────────────── */

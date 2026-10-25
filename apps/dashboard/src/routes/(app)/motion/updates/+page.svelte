@@ -5,7 +5,7 @@
    * Stable chosen), one table row for each row of the Update cell (row 12
    * also with a keeper handing over, and with one kept for what its unit
    * holds), and the
-   * seven notices as the update row of Caw's panel.
+   * notices as the update row of Caw's panel.
    */
   import { machineLabel } from "@cawco/core";
   import type {
@@ -15,7 +15,6 @@
     KeptProcess,
   } from "@cawco/core/binary-updates";
   import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
     type Notice,
@@ -305,10 +304,6 @@
       }),
       machineLabel
     ),
-    noticeFor(
-      input({ newerBuild: "e3cbba1", machines: trio([{}, {}, {}]) }),
-      machineLabel
-    ),
   ].filter((notice): notice is Notice => notice !== null);
 
   const UPDATED = updatedNotice(
@@ -330,31 +325,6 @@
     ])
   ) as Notice;
 
-  /** A landing's notice in a tab older than the dashboard: notes, Configure and Reload. */
-  const UPDATED_RELOAD = noticeFor(
-    input({
-      newerBuild: "e3cbba1",
-      machines: trio([
-        { phase: "installed", installedVersion: "1.4.2", landed: LANDED },
-        {},
-        {},
-      ]),
-    }),
-    machineLabel
-  ) as Notice;
-
-  /**
-   * The row in a tab older than the dashboard, which the acknowledgement
-   * drops as Reload is chosen. Reload here does not reload: the notice goes
-   * at once, so the goodbye can be seen to stand on its own until the tab
-   * would go.
-   */
-  let reloadRow = $state<Notice | null>(UPDATED_RELOAD);
-  function rowAction(action: NonNullable<Notice["action"]>) {
-    if (action === "reload") {
-      reloadRow = null;
-    }
-  }
   const noop = () => undefined;
 </script>
 
@@ -399,7 +369,7 @@
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>
 
-  <h1 class="type-title">Notices 1 to 7, as the update row of Caw's panel</h1>
+  <h1 class="type-title">Notices, as the update row of Caw's panel</h1>
   <div
     data-slot="notices"
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
@@ -428,26 +398,6 @@
     </div>
   </div>
 
-  <h1 class="type-title">
-    Updated, in a tab older than the dashboard: Reload says goodbye
-  </h1>
-  <!-- As the panel has it: the row in a `reflow`, a row under it. -->
-  <div class={panel} data-states="notice-reload" {@attach reflow()}>
-    <div data-flip="box">
-      <UpdateCard
-        alone={false}
-        notice={reloadRow}
-        onaction={rowAction}
-        ondismiss={noop}
-      />
-    </div>
-    <div
-      class="type-meta border-t border-t-border-hairline p-space-3 text-ink-muted"
-      data-flip="box"
-    >
-      The next row of the panel follows the row's edge
-    </div>
-  </div>
   <div
     data-slot="notices"
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"

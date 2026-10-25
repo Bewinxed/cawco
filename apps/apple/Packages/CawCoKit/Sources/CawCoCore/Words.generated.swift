@@ -1714,6 +1714,19 @@ public enum Words {
             "CawCo \(version) is ready"
         }
 
+        /// The update toast's title: the dashboard serves a newer build than the open page (dashboard update-toast.svelte.ts).
+        public static let pageReady = "A new build of CawCo is ready"
+
+        /// The update toast's line: when the page reloads by itself, the away clock in whole minutes.
+        public static func pageUpdatesItself(minutes: Int) -> String {
+            "This page updates by itself once it's in the background or you've been away for \(minutes) min."
+        }
+
+        /// The update toast's buttons: reload at once, or leave it to the idle reload.
+        public static let updateNow = "Update now"
+
+        public static let updateWhenIdle = "Update when idle"
+
         /// An Install now the hub refused: the notice's title, and why under a machine's row.
         public static func notInstalled(version: String, machine: String) -> String {
             "CawCo \(version) was not installed on \(machine)"

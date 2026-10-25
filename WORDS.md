@@ -266,6 +266,10 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   close what you're editing", "when the dashboard serves the new build" (no Reload: it would load
   this build again), "Reload it to catch up" (a browser that keeps no session storage). Never an
   open-ended "once you're not using it". Core `words/shell.ts`
+- A new build served to an open page (the update toast): **"A new build of CawCo is ready. This
+  page updates by itself once it's in the background or you've been away for 10 min." → [Update
+  when idle] [Update now]** (the minutes are the person's away clock; the line names exactly when
+  the page goes by itself, never "soon" or "when you're not using it"). Core `words/updates.ts`
 - A project the hub didn't give (an error empty, where its board would be): **"The tasks, stages and
   views for Launch couldn't be read. The hub didn't answer (502). Nothing was changed." → [Retry]**
   (one failed read is said once, in one place, naming only the parts that didn't come; its one Retry

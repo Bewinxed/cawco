@@ -30,8 +30,7 @@
   }: {
     label: string;
     dismissLabel: string;
-    /** Absent while the row says its goodbye: nothing is left to dismiss. */
-    ondismiss?: () => void;
+    ondismiss: () => void;
     nested?: boolean;
     lead: Snippet;
     children: Snippet;
@@ -66,28 +65,26 @@
   >
     {@render children()}
   </div>
-  {#if ondismiss}
-    <!-- The first line's trailing cell: the label line's middle, its ink on
-         the row's trailing edge. An entry's first line is in body type: the ✕
-         centres on that. -->
-    <span
-      data-slot="end"
-      class="absolute end-(--end-edge) top-(--end-top) flex type-label group-data-nested:type-body"
-      style:--end-edge="calc(var(--space-3) - var(--x-ink))"
-      style:--end-top="calc(var(--pad-block) + (1lh - var(--c-btn-h-xs)) / 2)"
+  <!-- The first line's trailing cell: the label line's middle, its ink on
+       the row's trailing edge. An entry's first line is in body type: the ✕
+       centres on that. -->
+  <span
+    data-slot="end"
+    class="absolute end-(--end-edge) top-(--end-top) flex type-label group-data-nested:type-body"
+    style:--end-edge="calc(var(--space-3) - var(--x-ink))"
+    style:--end-top="calc(var(--pad-block) + (1lh - var(--c-btn-h-xs)) / 2)"
+  >
+    <button
+      data-slot="x"
+      aria-label={dismissLabel}
+      class="select-none touch-hit pointer-hit grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
+      onclick={ondismiss}
+      style:--tpress="scale(var(--press-scale))"
+      style:--hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--x-ink))"}
+      style:--hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--x-ink))"}
+      type="button"
     >
-      <button
-        data-slot="x"
-        aria-label={dismissLabel}
-        class="select-none touch-hit pointer-hit grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
-        onclick={ondismiss}
-        style:--tpress="scale(var(--press-scale))"
-        style:--hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--x-ink))"}
-        style:--hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--x-ink))"}
-        type="button"
-      >
-        <IconClose aria-hidden="true" class="size-icon-sm" />
-      </button>
-    </span>
-  {/if}
+      <IconClose aria-hidden="true" class="size-icon-sm" />
+    </button>
+  </span>
 </article>

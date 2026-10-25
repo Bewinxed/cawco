@@ -1,9 +1,8 @@
 /**
  * Whether the dashboard now serving this tab is a newer build than the tab
- * itself. Nothing here shows anything: the one update notice
- * (updates/update-notice.svelte.ts) says it, as the landing that replaced
- * the dashboard or, with no landing to announce, as the reload alone, and
- * the tab reloads itself once the operator isn't using it (reload.svelte.ts).
+ * itself. Nothing here shows anything: the update toast
+ * (updates/update-toast.svelte.ts) offers the reload, which goes by itself
+ * once the tab is in the background or the person is away.
  *
  * The build bakes its version (the commit, `kit.version.name` in
  * vite.config.ts) into the page. The comparison is with the build the

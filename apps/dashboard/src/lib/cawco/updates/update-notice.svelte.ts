@@ -3,8 +3,7 @@
  * (home/CawPanel, home/UpdateCard): the notice the fleet's state calls for
  * now (`noticeFor`), what its buttons do, and what goes on without anyone
  * looking (`startUpdateWatch`): "running on N machines" leaving by itself,
- * and a tab older than the dashboard reloading once no keystroke or press is
- * in hand (reload.svelte.ts).
+ * and the update toast of a tab older than the dashboard (update-toast).
  *
  * Every notice is acknowledged on the hub (notices.svelte.ts), by the ids of
  * the events it announces: its ✕, or acting on it, clears it for every tab
@@ -12,11 +11,11 @@
  */
 import { machineLabel } from "@cawco/core";
 import { cawco } from "../client.svelte";
-import { leaveThePage } from "../leaving";
 import { notices } from "../notices.svelte";
-import { bidFarewell, reloadWhenIdle } from "../reload.svelte";
+import { bidFarewell } from "../reload.svelte";
 import { newerBuild } from "../served-build.svelte";
-import { type Notice, noticeFor, reloadId } from "./model";
+import { type Notice, noticeFor } from "./model";
+import { watchUpdateToast } from "./update-toast.svelte";
 import { updates } from "./updates.svelte";
 
 /** How long "running on N machines" stays up. */
@@ -46,16 +45,6 @@ class UpdateNotice {
 export const updateNotice = new UpdateNotice();
 
 /**
- * Reload chosen: what the notice said is acknowledged on the hub first, so
- * neither the reloaded tab nor any other says it again, then the tab loads
- * the build the dashboard's server is running.
- */
-export async function reloadAcknowledging(acks: string[]): Promise<void> {
-  await notices.acknowledge(acks);
-  leaveThePage(() => location.reload());
-}
-
-/**
  * The notice's ✕: acknowledged everywhere; "running on N machines" also
  * forgets this tab's installs, and a refusal, this tab's own, is forgotten here.
  */
@@ -76,15 +65,6 @@ export function actOnUpdate(
   notice: Notice,
   action: NonNullable<Notice["action"]>
 ): void {
-  if (action === "reload") {
-    const build = newerBuild();
-    // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
-    void reloadAcknowledging([
-      ...notice.acks,
-      ...(build ? [reloadId(build)] : []),
-    ]);
-    return;
-  }
   const { policy } = updates;
   if (action === "install-all" && policy) {
     // biome-ignore lint/complexity/noVoid: each machine reports its own outcome
@@ -116,21 +96,20 @@ export function actOnUpdate(
 /** What runs with nobody looking at the notice. Started once from the root layout. */
 export function startUpdateWatch(): () => void {
   return $effect.root(() => {
-    // A tab older than the dashboard reloads itself once no input is in
-    // hand (reload.svelte.ts `busy`); the reload acknowledges what the
-    // notice said, as Reload does.
+    // A tab older than the dashboard offers its reload in the update toast.
+    // Every reload for a new build acknowledges the landing the notice says
+    // (on a tab older than the dashboard it says nothing else, `noticeFor`),
+    // so the reloaded tab does not say it again.
     const unbid = bidFarewell({
-      acks: (build) => [...(updateNotice.current?.acks ?? []), reloadId(build)],
+      acks: () => {
+        const notice = updateNotice.current;
+        return notice?.kind === 3 || notice?.kind === 6 ? notice.acks : [];
+      },
     });
-    $effect(() => {
-      if (newerBuild() !== null) {
-        // biome-ignore lint/complexity/noVoid: a reload ends this page
-        void reloadWhenIdle();
-      }
-    });
+    watchUpdateToast();
     $effect(() => unbid);
 
-    // "Running on N machines" leaves by itself, unless it is also this tab's reload.
+    // "Running on N machines" leaves by itself.
     $effect(() => {
       const notice = updateNotice.current;
       if (notice?.kind !== 3) {
@@ -139,9 +118,6 @@ export function startUpdateWatch(): () => void {
       const { acks } = notice;
       // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
       void notices.acknowledge(acks.filter((id) => id.startsWith("landed:")));
-      if (notice.action === "reload") {
-        return;
-      }
       const timer = setTimeout(() => {
         // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
         void notices.acknowledge(acks);

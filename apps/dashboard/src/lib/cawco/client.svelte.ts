@@ -9015,6 +9015,10 @@ export const cawco = {
   get reloadHold(): ReloadHold | null {
     return state.older === "reloading" ? null : state.older;
   },
+  /** This page was built for an older wire than the hub's: its reload is forced (reload.svelte.ts `reloadWhenIdle`), and the update toast stands aside. */
+  get olderWire(): boolean {
+    return state.older !== null;
+  },
   /** What a session has been handed and not yet answered; `null` for most. */
   handoffFor: (instanceId: string): { from: string; at: number } | null =>
     state.handoffs[instanceId] ?? null,
