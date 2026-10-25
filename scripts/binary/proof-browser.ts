@@ -30,7 +30,10 @@ try {
   page.on("pageerror", (error) => thrown.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") {
-      logged.push(message.text());
+      // Chromium's "Failed to load resource" names no URL; the message's
+      // location does.
+      const { url: from } = message.location();
+      logged.push(from ? `${message.text()} (${from})` : message.text());
     }
   });
   await page.goto(url, { waitUntil: "domcontentloaded" });

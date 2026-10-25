@@ -33,9 +33,9 @@
  * each host mode, on that tab:
  * (c) Both embeds remounted three times (the page sets each frame's address
  *     again, as a Preview mounting anew does) draw each time; no embed's
- *     answer is ever 401 (the page's own first load is, before the browser
- *     holds a pass), and exactly one `/__cawco/enter` is asked in all, none
- *     per remount: nothing is locked or entered once the remounts begin.
+ *     answer is ever 401, nor the page's own first load (the dashboard
+ *     enters before it), and exactly one `/__cawco/enter` is asked in all,
+ *     none per remount: nothing is locked or entered once the remounts begin.
  *     No ticket stands in the page's media or any
  *     embed's address, and neither dev server is ever sent the pass.
  * (d) The pass revoked (`DELETE /api/preview-pass`, the person's sign-out of
@@ -356,7 +356,7 @@ const run = async (kit: Kit) => {
       .map((one) => one.url());
     const pass = passHeld(heard, embeds, remountsFrom);
     kit.check(
-      `(c) ${mode}: both embeds remounted three times draw each time; none of the embeds' ${pass.said.embedAnswers} answers is 401, the page's first load is (no pass yet), one /__cawco/enter is asked in all and none per remount; no ticket in the page's media or an embed's address, and no dev server is sent the pass`,
+      `(c) ${mode}: both embeds remounted three times draw each time; none of the embeds' ${pass.said.embedAnswers} answers is 401, nor the page's first load (entered before it), one /__cawco/enter is asked in all and none per remount; no ticket in the page's media or an embed's address, and no dev server is sent the pass`,
       remounts.every((one) => one === BOTH) &&
         embeds.size === 2 &&
         pass.held &&

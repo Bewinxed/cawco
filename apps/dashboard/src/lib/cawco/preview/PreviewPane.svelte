@@ -436,10 +436,10 @@
     return untrack(keptAt) ?? startAt;
   });
   /**
-   * Host mode's route: every name is locked to the browser's pass (hub
-   * preview-access.ts), which the frame's own load carries; a frame turned
-   * away enters and loads again (preview/pass.ts). Either route loads the
-   * place, straight.
+   * Host mode's route, its names under the pattern's domain; else the
+   * preview's port on this tab's host. Either route is locked to the
+   * browser's pass (hub preview-access.ts), which the frame's own load
+   * carries, and loads the place straight.
    */
   const byHost = $derived(!!route?.byHost);
   /** How many entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
@@ -461,8 +461,10 @@
    * word that it is down, another answerer's status, and whether the hub
    * itself reaches the origin), the fix, and probes again by itself
    * (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once when its tab
-   * is back in view) until one answers: never a fallback. Once reached, the
-   * frame loads, once.
+   * is back in view) until one answers: never a fallback. Reached, the
+   * browser enters its previews (pass.ts), so the lock never sees this tab
+   * without a pass; an entry the hub won't give is unreached the same way,
+   * in the hub's words. Once reached and entered, the frame loads, once.
    */
   let reached = $state<
     | { origin: string; ok: true }
@@ -475,6 +477,21 @@
   /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
   const PROBE_FIRST_MS = 2000;
   const PROBE_MOST_MS = 30_000;
+  /** Why this tab can't load a frame of `origin` yet, or null once it reached it and entered its previews. */
+  async function unreachedWords(origin: string): Promise<string | null> {
+    const failed = await probePreview(origin, (asked) =>
+      askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
+    );
+    if (failed) {
+      return previewUnreachedWords(
+        new URL(origin).host,
+        failed,
+        await previewsNeed(origin)
+      );
+    }
+    const refused = await enterPreviews(origin);
+    return refused && `The hub didn't give this preview a pass: ${refused}`;
+  }
   $effect(() => {
     const origin = paneOrigin;
     // biome-ignore lint/complexity/noVoid: read-only dependency — each bump probes again
@@ -484,22 +501,13 @@
     }
     let live = true;
     probing = true;
-    probePreview(origin, (asked) =>
-      askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
-    ).then(async (failed) => {
-      const said = failed
-        ? previewUnreachedWords(
-            new URL(origin).host,
-            failed,
-            await previewsNeed(origin)
-          )
-        : "";
+    unreachedWords(origin).then((said) => {
       if (!live) {
         return;
       }
       probing = false;
       const was = untrack(() => reached);
-      reached = failed
+      reached = said
         ? {
             origin,
             ok: false,
@@ -653,8 +661,9 @@
     standing = key;
   }
   /**
-   * The page turned the frame away (`cawco:locked`): the browser enters its
-   * previews and the frame loads again, once in a row. An entry the hub
+   * The page turned the frame away (`cawco:locked`: the pass entered before
+   * its first load ran out or was revoked since): the browser enters its
+   * previews again and the frame loads again, once in a row. An entry the hub
    * won't give is the failure band, with Try again.
    */
   async function turnedAway() {

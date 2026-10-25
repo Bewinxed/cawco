@@ -22,8 +22,8 @@
  * (c) host mode, the owner's 401s ("Failed to load resource: the server
  *     responded with a status of 401", seven times on one decision page):
  *     both canvases remounted three times (the page sets each frame's
- *     address again) draw the card each time; none of the embeds' answers
- *     is 401, the page's first load is (the browser holds no pass yet), and
+ *     address again) draw the card each time; nothing is answered 401,
+ *     the page's first load included (the dashboard enters before it), and
  *     one `/__cawco/enter` is asked in all, none once the remounts begin;
  * (d) the Previews told the hub the shape their canvas said (hub preview.ts
  *     `PAGE_SHAPE_PATH`): the page served again carries it in its media,
@@ -307,7 +307,7 @@ const run = async (kit: Kit) => {
       }
       const pass = passHeld(heard, embeds, remountsFrom);
       kit.check(
-        `(c) ${mode}: both canvases remounted three times draw the card each time; none of the embeds' ${pass.said.embedAnswers} answers is 401, the page's first load is (no pass yet), one /__cawco/enter is asked in all and none per remount`,
+        `(c) ${mode}: both canvases remounted three times draw the card each time; none of the embeds' ${pass.said.embedAnswers} answers is 401, nor the page's first load (entered before it), one /__cawco/enter is asked in all and none per remount`,
         remounts.every((one) => one === BOTH) && pass.held,
         JSON.stringify({ remounts, embeds: [...embeds], ...pass.said })
       );

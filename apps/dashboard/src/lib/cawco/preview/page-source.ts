@@ -5,8 +5,9 @@
  * life and whether or not the session that wrote it stands; any other page
  * on its session's. The Decisions tab's live page (PageFrame) and Files'
  * unseen thumbnail drawer (files/page-thumbs) both load a page this way,
- * at its own address on either route: a host-mode name turns a browser
- * without a pass away, and its frame enters then (preview/pass.ts).
+ * at its own address on either route, once the browser entered its previews
+ * (preview/pass.ts): every preview origin turns a browser without a pass
+ * away.
  */
 import {
   decisionsWords,
@@ -15,6 +16,7 @@ import {
   previewRoute,
 } from "@cawco/core";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { enterPreviews } from "./pass";
 
 /** The origin that serves a page: its project's, or (a page outside any project) its session's. */
 export type PageOrigin = { project: string } | { instance: string };
@@ -30,9 +32,10 @@ const said = async (answer: Response | null, otherwise: string) =>
   answer ? (await hubRefusal(answer)).message : otherwise;
 
 /**
- * Where `origin`'s pages are served and the page at `wanted` there:
- * its origin (the only one its frame's messages are heard from), whether
- * it is entered by host name, and its address; or why it can't be.
+ * Where `origin`'s pages are served and the page at `wanted` there, with
+ * the browser's pass to it: its origin (the only one its frame's messages
+ * are heard from), whether it is entered by host name, and its address; or
+ * why it can't be.
  */
 export async function pageSource(
   origin: PageOrigin,
@@ -64,6 +67,10 @@ export async function pageSource(
     .catch(() => false);
   if (!reached) {
     return { problem: decisionsWords.unreached(new URL(route.origin).host) };
+  }
+  const refused = await enterPreviews(route.origin);
+  if (refused) {
+    return { problem: refused };
   }
   return {
     origin: route.origin,

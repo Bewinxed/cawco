@@ -3,13 +3,18 @@
  * frame loads its preview's own address; the browser's one pass lets it
  * through, the frames inside it too: on host mode's names set on the domain
  * every name stands under (core `PREVIEW_PASS_COOKIE`), on an origin's own
- * port on the host it stands on, which every port of it carries. Only a
- * frame turned away (`cawco:locked`) enters: one ticket, spent at
- * `/__cawco/enter` on its origin beside the frames, never in one, then the
- * frame loads again. One entry stands in flight per pass (a domain, or a
- * host by its scheme), so frames turned away together spend one ticket, and
- * an entry that landed after a frame last stood without a pass (its load, or
- * its page's word that it was let in) stands for that frame too.
+ * port on the host it stands on, which every port of it carries. That
+ * cookie is HttpOnly and may sit on a domain this page isn't under, so the
+ * page can't tell whether the browser holds one: it enters before its first
+ * frame of a pass loads, as the app enters before every load, and a page
+ * with no pass never asks the lock for a frame. An entry is one ticket,
+ * spent at `/__cawco/enter` on the frame's origin beside the frames, never
+ * in one. A frame turned away later (`cawco:locked`: its pass ran out or
+ * was revoked since) enters again, then loads again. One entry stands per
+ * pass (a domain, or a host by its scheme), so the frames of one pass spend
+ * one ticket, and an entry that landed after a frame last stood without a
+ * pass (its load, or its page's word that it was let in) stands for that
+ * frame too.
  */
 import {
   hostModeDomain,
@@ -80,13 +85,15 @@ async function enter(origin: string): Promise<string | null> {
 }
 
 /**
- * Enters the previews `origin`'s pass covers for a frame turned away that
- * last stood without a pass at `since` (`performance.now()`): null once it
- * may load again, else the hub's words for why it can't.
+ * Enters the previews `origin`'s pass covers: null once a frame there may
+ * load, else the hub's words for why it can't. Before a frame's first load
+ * `since` is left out, and any entry of this page that let it in stands. For
+ * a frame turned away, `since` is when it last stood without a pass
+ * (`performance.now()`), and only an entry that landed after it stands.
  */
 export function enterPreviews(
   origin: string,
-  since: number
+  since = Number.NEGATIVE_INFINITY
 ): Promise<string | null> {
   const scope = passScope(origin);
   const held = entries.get(scope);

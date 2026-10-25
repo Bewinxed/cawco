@@ -237,9 +237,9 @@ export class Stage {
   }
 
   /**
-   * The iframe's address: the canvas's page on its origin, which on a
-   * host-mode name the browser's pass lets through (preview/pass.ts). Null
-   * until known.
+   * The iframe's address: the canvas's page on its origin, which the
+   * browser's pass lets through (preview/pass.ts). Null until known and
+   * entered.
    */
   entry = $state<string | null>(null);
   /** Entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
@@ -285,6 +285,14 @@ export class Stage {
       route &&
       !(this.entry && canvasEntries.get(this.id)?.origin === route.origin)
     ) {
+      // The browser enters its previews before the page first loads, so
+      // the lock never sees it without a pass (preview/pass.ts).
+      const refused = await enterPreviews(route.origin);
+      if (refused) {
+        this.unreached = refused;
+        this.changed();
+        return;
+      }
       const src = `${route.origin}/__cawco/canvas/${this.id}/`;
       canvasEntries.set(this.id, { origin: route.origin, src });
       this.unreached = null;

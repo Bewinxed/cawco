@@ -120,10 +120,10 @@ export const hear = (tab: Page): Heard[] => {
 /**
  * Whether what was heard is the owner's case held ("Every embed loads with
  * no 401, one `/__cawco/enter` per browser in total, and none per
- * remount"): none of the answers to `embeds` (their hosts) is 401, at least
- * one 401 came (a page's first load, before the browser held a pass), one
- * entry was asked in all, and from `remounts` on (where the remounts
- * began) nothing was locked and nothing entered; and the lines that say so.
+ * remount"): nothing was answered 401, the page's first load included (the
+ * dashboard enters before it: dashboard preview/pass.ts), one entry was
+ * asked in all, and from `remounts` on (where the remounts began) nothing
+ * entered; and the lines that say so.
  */
 export const passHeld = (
   heard: Heard[],
@@ -142,7 +142,7 @@ export const passHeld = (
     held:
       embedAnswers.length > 0 &&
       embedAnswers.every((one) => one.kind === "answer") &&
-      locks.length > 0 &&
+      locks.length === 0 &&
       enters.length === 1 &&
       sinceRemounts.length === 0,
     said: {

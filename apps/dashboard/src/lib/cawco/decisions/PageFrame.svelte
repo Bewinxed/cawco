@@ -7,9 +7,9 @@
    * the page's document itself (the `cawco:hello` names it), so a pick here is
    * a pick in the panel and every other view, and a revision morphs in place.
    * It draws in the dashboard's theme and pads its foot for the docked
-   * composer (`inset.bottom`). On a host-mode name the browser's pass lets
-   * it through; turned away, it enters once and loads again
-   * (preview/pass.ts).
+   * composer (`inset.bottom`). It loads once the browser entered its
+   * previews (page-source.ts); turned away later, it enters once more and
+   * loads again (preview/pass.ts).
    */
   import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";

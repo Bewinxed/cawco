@@ -25,7 +25,7 @@
  *    lock's 401 page; with the person's pass, from a ticket spent at its
  *    port, it answers the server's page.
  * 1. the artifact's own tab in the dashboard draws the server's page from
- *    that port (the dashboard entering on the lock's word).
+ *    that port (the dashboard entering before the frame loads).
  * 2. host mode, switched live: the preview's own origin is on another port,
  *    named by it; the tab, never reloaded, draws the page from the new port.
  * 3. 16 requests without a pass each to the preview's name, its session's
