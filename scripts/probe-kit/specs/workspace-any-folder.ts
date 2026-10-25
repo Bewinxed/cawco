@@ -2,7 +2,7 @@
  * A delegate gets its own private copy of any folder, a repository or not,
  * and its work lands there (agent layer.ts, workspace.ts; hub work-items.ts
  * `landFolder`). On a scratch fleet (real hub, agent and sessiond; Claude
- * Code against the mock model). This spec delegates, so its fleet makes
+ * Code and OpenCode against the mock model). This spec delegates, so its fleet makes
  * workspaces: it runs on the host, outside every boundary.
  *
  * - a. A folder that is no repository (`site/`): its delegate edits
@@ -28,29 +28,120 @@
  *   workspace.ts `ownRepository`), its commit lands on the hub's main
  *   through the merge checks, and the person's repository (refs, config)
  *   and the worktree (its HEAD, index and working tree) are untouched.
+ * - f. An OpenCode delegate in a folder works in a server of its
+ *   workspace's own entered into the view: its file tool's write is read by
+ *   its shell at the folder's path while the folder lacks it, and it lands;
+ *   once the workspace retired, a handoff continues the same session in the
+ *   workspace made again.
  *
  *   bun scripts/probe-kit/run.ts workspace-any-folder
  */
 import { createHash } from "node:crypto";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
+import { toolWords } from "../../lib/tool-call";
+import {
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-FOLDER-(A|B|C1|C2|E)\b/;
+const TAG = /PROBE-FOLDER-(A|B|C1|C2|E|F)\b/;
 /** How finish_item answers a folder landing's conflict (hub work-items.ts `conflictText`). */
 const CONFLICT = "Not landed: a file you changed";
-type Tag = "A" | "B" | "C1" | "C2" | "E";
+type Tag = "A" | "B" | "C1" | "C2" | "E" | "F";
+/** The handoff that continues f's OpenCode session once its workspace retired. */
+const F_AGAIN = "PROBE-FOLDER-F-AGAIN";
+/** OpenCode's Code Mode tool, which runs MCP tools from a script. */
+const CODE_MODE = "execute";
+/** What f's file tool writes, and where in its folder. */
+const OC_FILE = "oc.txt";
+const OC_TEXT = "from opencode";
 
 /** Where each tag's folder is, filled once the fleet's sandbox is known. */
 const folders: Partial<Record<Tag, string>> = {};
+/**
+ * f's OpenCode server as its command answered: the workspace its plugin is
+ * told (`CAWCO_VIEW_WORKSPACE`), its mount namespace, and the namespace of
+ * that workspace's view as the agent records it; and the fleet's HOME, where
+ * that record is.
+ */
+const ocSeen: {
+  home?: string;
+  server?: { mnt: string; workspace: string };
+  view?: string;
+} = {};
+
+/** The OpenCode server a view runs, read off /proc by the workspace it is told; and its view's namespace. */
+const noteViewServer = (): void => {
+  const marker = `${CAWCO_ENV.viewWorkspace}=`;
+  for (const name of readdirSync("/proc")) {
+    if (!NUMERIC.test(name)) {
+      continue;
+    }
+    let environ = "";
+    try {
+      environ = readFileSync(`/proc/${name}/environ`, "utf8");
+    } catch {
+      continue;
+    }
+    const entry = environ.split("\0").find((one) => one.startsWith(marker));
+    if (!entry) {
+      continue;
+    }
+    const workspace = entry.slice(marker.length);
+    try {
+      ocSeen.server = { workspace, mnt: readlinkSync(`/proc/${name}/ns/mnt`) };
+      ocSeen.view = readFileSync(
+        join(
+          ocSeen.home ?? "",
+          ".cawco",
+          "workspaces",
+          workspace,
+          "layer",
+          "view"
+        ),
+        "utf8"
+      )
+        .trim()
+        .split(" ")[1];
+    } catch {
+      continue;
+    }
+    return;
+  }
+};
+
+const NUMERIC = /^\d+$/;
+
 /** What the host's folder held at the moment each delegate's command answered. */
 const hostAt: Partial<Record<Tag, string>> = {};
-const steps: Partial<Record<Tag, { finish?: boolean; searched?: boolean }>> =
-  {};
+const steps: Partial<
+  Record<
+    Tag,
+    {
+      again?: boolean;
+      finish?: boolean;
+      finishAgain?: boolean;
+      searched?: boolean;
+      wrote?: boolean;
+    }
+  >
+> = {};
 
 const commandOf = (tag: Tag): string => {
   const at = folders[tag] as string;
@@ -65,6 +156,8 @@ const commandOf = (tag: Tag): string => {
       return `cd ${at} && if test -f one.txt; then echo HAS-ONE; fi && cat .env && echo SECRET=2 > .env && cat .env && echo two > two.txt && git add two.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate two' && echo DONE-C2`;
     case "E":
       return `cd ${at} && if test -d .git; then echo DOTGIT-""DIR; fi && echo three > three.txt && git add three.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate three' && echo DONE-E`;
+    case "F":
+      return `cat ${at}/${OC_FILE} && echo "DONE-""F"`;
     default: {
       const unhandled: never = tag;
       return unhandled;
@@ -83,6 +176,12 @@ const noteHost = (tag: Tag): void => {
     hostAt.E = "noted";
     return;
   }
+  if (tag === "F") {
+    const file = join(at, OC_FILE);
+    hostAt.F = existsSync(file) ? readFileSync(file, "utf8") : "absent";
+    noteViewServer();
+    return;
+  }
   if (tag === "B") {
     writeFileSync(join(at, "notes.txt"), "person\n");
     hostAt.B = "written";
@@ -94,14 +193,84 @@ const noteHost = (tag: Tag): void => {
   );
 };
 
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+const tool = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+
+/** finish_item as OpenCode offers it: by its name, or in its Code Mode. */
+const openCodeFinish = (request: Seen, input: object): Reply | undefined => {
+  const named = [FINISH, "cawco_finish_item", "finish_item"].find((name) =>
+    request.toolNames.includes(name)
+  );
+  if (named) {
+    return tool(named, input);
+  }
+  return request.toolNames.includes(CODE_MODE)
+    ? tool(CODE_MODE, {
+        code: `return await tools.cawco.finish_item(${JSON.stringify(input)});`,
+      })
+    : undefined;
+};
+
+/**
+ * f, an OpenCode delegate: its file tool writes `oc.txt` in its folder, its
+ * shell reads it there, it finishes; handed off once its workspace retired,
+ * its shell reads the landed file and it finishes again.
+ */
+const openCodeTurn = (
+  request: Seen,
+  step: NonNullable<(typeof steps)["F"]>
+): Reply => {
+  const at = folders.F as string;
+  if (request.all.includes(F_AGAIN)) {
+    if (!request.all.includes("AGAIN-F")) {
+      return tool("shell", {
+        command: `cat ${at}/${OC_FILE} && echo "AGAIN-""F"`,
+        description: "Read it again",
+      });
+    }
+    if (!step.finishAgain) {
+      const call = openCodeFinish(request, {
+        headline: "Read F again.",
+        summary: "Read F again.\n\nNot run: none.",
+      });
+      step.finishAgain = call !== undefined;
+      return (
+        call ??
+        text(`finish_item is not offered: ${request.toolNames.join(", ")}`)
+      );
+    }
+    return text("done");
+  }
+  if (!step.wrote) {
+    step.wrote = true;
+    return tool("write", { path: join(at, OC_FILE), content: `${OC_TEXT}\n` });
+  }
+  if (!request.all.includes("DONE-F")) {
+    return tool("shell", { command: commandOf("F"), description: "Work" });
+  }
+  if (hostAt.F === undefined) {
+    noteHost("F");
+  }
+  if (!step.finish) {
+    const call = openCodeFinish(request, {
+      headline: "Did F.",
+      summary: "Did F.\n\nThe command printed DONE-F.\n\nNot run: none.",
+    });
+    step.finish = call !== undefined;
+    return (
+      call ??
+      text(`finish_item is not offered: ${request.toolNames.join(", ")}`)
+    );
+  }
+  return text("done");
+};
+
 /** Each delegate runs its command, then calls finish_item once; the parents say "ok". */
 const respond = (request: Seen): Reply => {
-  const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
-  const tool = (name: string, input: object): Reply => ({
-    everyMs: 5,
-    words: [],
-    tool: { name, input },
-  });
   const tag = request.tools
     ? (TAG.exec(request.all)?.[1] as Tag | undefined)
     : undefined;
@@ -110,6 +279,9 @@ const respond = (request: Seen): Reply => {
   }
   steps[tag] ??= {};
   const step = steps[tag];
+  if (tag === "F") {
+    return openCodeTurn(request, step);
+  }
   if (!request.all.includes(`DONE-${tag}`)) {
     return tool("Bash", { command: commandOf(tag), description: "Work" });
   }
@@ -300,6 +472,129 @@ const run = async (kit: Kit) => {
 
   const repoParent = await repoLegs(kit, fleet, { delegate, ended, env, git });
   await worktreeLeg(kit, fleet, { delegate, ended, env, git }, repoParent);
+  await openCodeLeg(kit, fleet, parent);
+};
+
+/**
+ * f: an OpenCode delegate in a folder that is no repository works in a
+ * server of its workspace's own entered into the view (agent opencode.ts
+ * `#ensureView`): its file tool's write is read by its shell at the
+ * folder's path while the folder on the host lacks it, and lands there.
+ * Once its workspace retired, its parent's handoff makes the workspace again
+ * and the same session goes on in it, its first turn in its conversation.
+ */
+const openCodeLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const { check } = kit;
+  const folder = join(fleet.sandbox, "oc-site");
+  folders.F = folder;
+  ocSeen.home = fleet.home;
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, "README"), "OpenCode.\n");
+  const credential =
+    (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
+      .split("\0")
+      .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+      ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  const started = await fleet.api<{
+    instanceId: string;
+    workItemId: string;
+    workspaceId: string;
+  }>("/api/work-items", {
+    parentInstanceId: parent,
+    title: "Folder F",
+    prompt: "PROBE-FOLDER-F: write your file, read it, then finish.",
+    harness: "opencode",
+    model: MODEL.opencode,
+    cwd: folder,
+  });
+  const itemOf = () =>
+    fleet.query<ItemRow>(
+      "SELECT state, error, result, workspace_id FROM work_items WHERE id = ?",
+      started.workItemId
+    )[0];
+  const workspaceState = () =>
+    fleet.query<{ state: string }>(
+      "SELECT state FROM workspaces WHERE id = ?",
+      started.workspaceId
+    )[0]?.state;
+  const first = await until(
+    "f's item ended",
+    itemOf,
+    (row) => ["done", "failed", "cancelled"].includes(row.state),
+    600_000
+  ).catch(itemOf);
+  const said =
+    fleet.seen.find(
+      (one) =>
+        one.afterTool &&
+        one.all.includes("DONE-F") &&
+        !one.all.includes(F_AGAIN)
+    )?.all ?? "";
+  const inView =
+    ocSeen.server?.workspace === started.workspaceId &&
+    ocSeen.view !== undefined &&
+    ocSeen.server.mnt === ocSeen.view;
+  check(
+    "f: an OpenCode delegate in a folder runs in a server of its workspace's own entered into the view: its file tool's write is read by its shell at the folder's path while the folder on the host lacks it",
+    said.includes(OC_TEXT) && hostAt.F === "absent" && inView,
+    `host then: ${JSON.stringify(hostAt.F)}; server ${JSON.stringify(ocSeen.server)}, view ${ocSeen.view ?? "unread"} (workspace ${started.workspaceId}); ${said.slice(-400)}`
+  );
+  check(
+    "f: it lands through the folder's checks, the file in the folder",
+    first?.state === "done" &&
+      (await readFile(join(folder, OC_FILE), "utf8").catch(() => "")) ===
+        `${OC_TEXT}\n`,
+    `${first?.state} ${first?.error ?? ""}\n${(first?.result ?? "").slice(0, 800)}`
+  );
+  const retired = await until(
+    "f's workspace retired",
+    workspaceState,
+    (state) => state === "archived",
+    180_000
+  ).catch(workspaceState);
+  const session = { base: fleet.base, id: parent, credential };
+  const message = `${F_AGAIN}: read your file again, then finish.`;
+  let handed = await toolWords(session, "handoff", {
+    target: started.instanceId,
+    message,
+  });
+  // A cold target is refused once with the cost considerations; the repeat goes.
+  if (!handed.text.includes("cutting")) {
+    handed = await toolWords(session, "handoff", {
+      target: started.instanceId,
+      message,
+    });
+  }
+  const again = await until(
+    "f's session finished again",
+    itemOf,
+    (row) =>
+      steps.F?.finishAgain === true &&
+      ["done", "failed", "cancelled"].includes(row.state),
+    600_000
+  ).catch(itemOf);
+  const againSaid =
+    fleet.seen.find((one) => one.afterTool && one.all.includes("AGAIN-F"))
+      ?.all ?? "";
+  const items = fleet.query<{ id: string; instance_id: string }>(
+    "SELECT id, instance_id FROM work_items WHERE workspace_id = ?",
+    started.workspaceId
+  );
+  check(
+    "f: once its workspace retired, a handoff continues the same OpenCode session in the workspace made again: the same item and session, its first turn in its conversation, its shell reading the landed file",
+    retired === "archived" &&
+      handed.status === 200 &&
+      items.length === 1 &&
+      items[0]?.instance_id === started.instanceId &&
+      again?.state === "done" &&
+      againSaid.includes("DONE-F") &&
+      againSaid.includes(OC_TEXT),
+    `${retired}; handoff ${handed.status} ${handed.text.slice(0, 300)}; ${JSON.stringify(items)}; ${again?.state} ${again?.error ?? ""}; ${againSaid.slice(-400)}`
+  );
 };
 
 /** What the legs share of the spec's reads. */

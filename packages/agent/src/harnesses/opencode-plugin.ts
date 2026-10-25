@@ -188,7 +188,25 @@ const worktrees = realOf(join(homedir(), ".worktrees"));
 // workspace whose records are damaged, so that none names its clone, still
 // holds a directory inside a clone cut for it (\`~/.worktrees/<repo>-<id8>\`):
 // that is refused, never run outside its boundary.
+const viewWorkspace = process.env[${JSON.stringify(CAWCO_ENV.viewWorkspace)}];
 const workspaceOf = (directory) => {
+  // A server a workspace's Linux view runs (the agent's opencode.ts
+  // #ensureView), entered into the view: every session of it is that
+  // workspace's, in its folder at the folder's own path, where every other
+  // view's and the person's own sessions are too, so no path names it. A
+  // directory outside that folder is refused, never run outside its boundary.
+  if (viewWorkspace) {
+    let path;
+    try { path = JSON.parse(readFileSync(cawcoWorkspaces + "/" + viewWorkspace + "/create.json", "utf8")).path; } catch (error) {
+      throw new Error("cawco: workspace " + viewWorkspace + "'s record could not be read (" + said(error) + "), so this did not run.");
+    }
+    const root = realOf(path);
+    const at = realOf(directory);
+    if (at === root || at.startsWith(root + "/")) return { id: viewWorkspace, root };
+    // The location the agent reads through runs no session's tools.
+    if (at === realOf(cawcoQuiet)) return undefined;
+    throw new Error("cawco: " + directory + " is outside " + root + ", the folder workspace " + viewWorkspace + "'s server serves, so this did not run.");
+  }
   let ids = [];
   try { ids = readdirSync(cawcoWorkspaces); } catch { return undefined; }
   const at = realOf(directory);
