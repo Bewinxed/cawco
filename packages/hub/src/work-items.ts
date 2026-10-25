@@ -91,6 +91,7 @@ import {
   INPUTS_LIMIT_BYTES,
   isWorkspaceNeedsRefusal,
   machineCalled,
+  OUTPUTS_DIR,
   sessionLink,
   sizeWords,
   todoLink,
@@ -183,6 +184,7 @@ import {
 import { handle } from "./presenters/words";
 import {
   FOLDER_FILE_LIMIT,
+  type FolderCommits,
   FolderRefusal,
   folderPath,
   projectRoot,
@@ -1612,6 +1614,7 @@ export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
 const landingOf = (item: WorkItemRow): WorkspaceLanding => ({
   lands: item.lands,
   ...(item.outputs?.length ? { outputs: item.outputs } : {}),
+  ...(item.projectId ? { assets: outputsFolder(item) } : {}),
 });
 
 const MIB = 1024 * 1024;
@@ -1636,6 +1639,82 @@ const outputsProbe = (outputs: string[]): string =>
  */
 const outputFilesCommand = (path: string): string =>
   `p=${quote(path)}; if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort; else echo "$p"; fi`;
+
+/** `$TMPDIR/outputs/` as a delegate is told of it (core `OUTPUTS_DIR`). */
+const SCRATCH_OUTPUTS = `$TMPDIR/${OUTPUTS_DIR}/`;
+
+/**
+ * The shell that lists the workspace's `$TMPDIR/outputs/`, a line a file:
+ * `file <bytes> <path under outputs/>`, or `link 0 <path>` for a link (which
+ * could lead anywhere, so it is never read). Nothing when there is no such
+ * folder.
+ */
+const SCRATCH_OUTPUTS_LIST = `if [ -n "$TMPDIR" ] && [ -d "$TMPDIR/${OUTPUTS_DIR}" ]; then cd "$TMPDIR/${OUTPUTS_DIR}" && find . -mindepth 1 \\( -type l -o -type f \\) | LC_ALL=C sort | while IFS= read -r f; do f="\${f#./}"; if [ -L "$f" ]; then echo "link 0 $f"; else echo "file $(wc -c < "$f" | tr -d ' ') $f"; fi; done; fi`;
+
+/** One entry of `$TMPDIR/outputs/`: its path under it, its size, whether it is a link. */
+interface ScratchOutput {
+  link: boolean;
+  path: string;
+  size: number;
+}
+
+/** {@link SCRATCH_OUTPUTS_LIST}'s answer, read. */
+const scratchOutputsOf = (stdout: string): ScratchOutput[] =>
+  stdout
+    .split("\n")
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [kind, size, ...rest] = line.split(" ");
+      const path = rest.join(" ");
+      return (kind === "file" || kind === "link") && path
+        ? [{ link: kind === "link", path, size: Number(size) }]
+        : [];
+    });
+
+/**
+ * What is wrong with the files in `$TMPDIR/outputs/`, a sentence each: a
+ * link, a file past the folder's size limit, or a file that would land at
+ * the path of a declared output's file (`declared`, paths from the
+ * workspace's root), since both land under the item's assets folder.
+ */
+const scratchOutputsSaid = (
+  scratch: readonly ScratchOutput[],
+  declared: ReadonlySet<string>
+): string[] => {
+  const links = scratch.filter((one) => one.link).map((one) => one.path);
+  const large = scratch
+    .filter((one) => !one.link && one.size > FOLDER_FILE_LIMIT)
+    .map((one) => `${one.path} is ${(one.size / MIB).toFixed(2)} MiB`);
+  const twins = scratch
+    .filter((one) => declared.has(one.path))
+    .map((one) => one.path);
+  return [
+    ...(links.length > 0
+      ? [
+          `These files in ${SCRATCH_OUTPUTS} are links, and the hub copies files: ${links.join(", ")}. Write the file itself there.`,
+        ]
+      : []),
+    ...(large.length > 0
+      ? [
+          `In ${SCRATCH_OUTPUTS}, ${large.join("; ")}; a file there stops at ${FOLDER_FILE_LIMIT / MIB} MiB.`,
+        ]
+      : []),
+    ...(twins.length > 0
+      ? [
+          `These files in ${SCRATCH_OUTPUTS} would land where your declared outputs of the same path land: ${twins.join(", ")}. Rename one.`,
+        ]
+      : []),
+  ];
+};
+
+/** The workspace-root paths of the files a declared outputs probe ({@link outputsProbe}) found. */
+const declaredFilesOf = (stdout: string): Set<string> =>
+  new Set(
+    stdout
+      .split("\n")
+      .filter((line) => line.startsWith("size "))
+      .map((line) => line.split(" ").slice(2).join(" ").replaceAll("//", "/"))
+  );
 
 /** What a probe's answer says is wrong with the outputs, a sentence each. */
 const outputsSaid = (stdout: string): string[] => {
@@ -2122,7 +2201,8 @@ const finishedReport = (
   if (!failure) {
     return `${head}\n\n${landing.line}${collected.line}${tail}`;
   }
-  const landed = landing.kind === "done" ? `\n\n${landing.line}` : "";
+  const landed =
+    landing.kind === "done" ? `\n\n${landing.line}` : collected.line;
   return `${failure}\n\n${head}${landed}${tail}`;
 };
 
@@ -2140,7 +2220,7 @@ const landedText = (
   if (landing.kind !== "done") {
     return {
       done: false,
-      text: `The work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+      text: `The work could not land. ${landing.line}${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
     };
   }
   return collected.ok
@@ -3708,6 +3788,47 @@ export const createWorkItems = ({
   };
 
   /**
+   * What a workspace's `$TMPDIR/outputs/` holds, copied into the project's
+   * folder under its latest item's assets folder before the workspace
+   * closes, `$TMPDIR` with it ({@link closeWorkspace}): an item that ended
+   * without finishing (cancelled, failed, reopened and left) collected
+   * nothing at finish_item, and on 2026-10-25 a delegate's report there went
+   * with its workspace. A copy that fails keeps the workspace: closing is
+   * refused with why, and the next settle tries again. A gate workspace and
+   * a host-scope one have no scratch outputs; an item of no project has no
+   * folder to copy into.
+   */
+  const keepScratchOutputs = async (workspace: WorkspaceRow): Promise<void> => {
+    if (workspace.host || workspace.checksFor) {
+      return;
+    }
+    const item = db.workItemsIn(workspace.id).find((one) => one.projectId);
+    if (!item?.projectId) {
+      return;
+    }
+    const folder = outputsFolder(item);
+    try {
+      const files = await scratchOutputFiles(workspace, item, folder);
+      if (files.length === 0) {
+        return;
+      }
+      const written = await writeFolderFiles(item.projectId, files, {
+        author: { name: item.title },
+        message: `assets: ${SCRATCH_OUTPUTS} of work item ${item.id.slice(0, 8)}, kept as its workspace closed`,
+      });
+      console.log(
+        `[workspaces] ${workspace.id}: ${SCRATCH_OUTPUTS} copied into ${folder}/ before it closed ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}: ${written.paths.join(", ")}`
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `its ${SCRATCH_OUTPUTS} could not be copied into ${folder}/ of its project's folder, so it stays: ${reason}`,
+        { cause: error }
+      );
+    }
+  };
+
+  /**
    * A workspace closed on its machine ({@link CONTROL_WORKSPACE_ARCHIVE}):
    * its boundary killed first and never started, then what it holds that is
    * nowhere else read on the host, and done with as `unlanded` says
@@ -3728,6 +3849,7 @@ export const createWorkItems = ({
     unlanded: WorkspaceUnlanded | "discard" | "carry",
     skip: string[] = []
   ): Promise<ArchivedWorkspace> => {
+    await keepScratchOutputs(workspace);
     const discard = unlanded === "discard" || unlanded === "carry";
     const landed = landedFrom(workspace.id);
     const request: WorkspaceArchive = {
@@ -7654,27 +7776,90 @@ export const createWorkItems = ({
   /**
    * Whether each of the item's outputs is in its workspace: a file, or a
    * folder of files (no link, which could lead anywhere), each within the
-   * size the project's folder takes. The text that sends the item back when
-   * one is not; else nothing.
+   * size the project's folder takes; and, for an item of a project, whether
+   * what it left in `$TMPDIR/outputs/` can be copied ({@link
+   * scratchOutputsSaid}). The text that sends the item back when one is
+   * not; else nothing.
    */
   const outputsProblem = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow,
-    outputs: string[]
+    item: WorkItemRow
   ): Promise<string | undefined> => {
-    const result = await runIn(workspace, item)(
-      outputsProbe(outputs),
-      GIT_TIMEOUT_MS
-    );
+    const outputs = item.outputs ?? [];
+    const result =
+      outputs.length > 0
+        ? await runIn(workspace, item)(outputsProbe(outputs), GIT_TIMEOUT_MS)
+        : { exitCode: 0, stdout: "", stderr: "" };
     if (result.exitCode !== 0) {
       throw new Error(
         `the hub could not look for the item's outputs: ${failedWith(result)}`
       );
     }
-    const problems = outputsSaid(result.stdout);
+    const scratch = item.projectId ? await scratchOutputs(workspace, item) : [];
+    const problems = [
+      ...outputsSaid(result.stdout),
+      ...scratchOutputsSaid(scratch, declaredFilesOf(result.stdout)),
+    ];
     return problems.length > 0
       ? `Not landed: the item's outputs are not ready. ${problems.join(" ")} Then call finish_item again.`
       : undefined;
+  };
+
+  /**
+   * What the workspace's `$TMPDIR/outputs/` holds ({@link
+   * SCRATCH_OUTPUTS_LIST}); nothing for a host-scope workspace, which has no
+   * scratch dir of its own.
+   */
+  const scratchOutputs = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<ScratchOutput[]> => {
+    if (workspace.host) {
+      return [];
+    }
+    const listed = await runIn(workspace, item)(
+      SCRATCH_OUTPUTS_LIST,
+      GIT_TIMEOUT_MS
+    );
+    if (listed.exitCode !== 0) {
+      throw new Error(
+        `${SCRATCH_OUTPUTS} could not be listed: ${failedWith(listed)}`
+      );
+    }
+    return scratchOutputsOf(listed.stdout);
+  };
+
+  /**
+   * The files of `$TMPDIR/outputs/` read from the workspace, each at its
+   * path under it within the item's assets `folder`: `$TMPDIR/outputs/x.md`
+   * lands at `assets/<item>/x.md`. Links are not read.
+   */
+  const scratchOutputFiles = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    folder: string
+  ): Promise<{ path: string; content: Uint8Array }[]> => {
+    const files: { path: string; content: Uint8Array }[] = [];
+    for (const one of await scratchOutputs(workspace, item)) {
+      if (one.link) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
+      const read = await runIn(workspace, item)(
+        `base64 < "$TMPDIR/${OUTPUTS_DIR}/"${quote(one.path)}`,
+        GIT_TIMEOUT_MS
+      );
+      if (read.exitCode !== 0) {
+        throw new Error(
+          `${SCRATCH_OUTPUTS}${one.path} could not be read: ${failedWith(read)}`
+        );
+      }
+      files.push({
+        path: `${folder}/${one.path}`,
+        content: Buffer.from(read.stdout, "base64"),
+      });
+    }
+    return files;
   };
 
   /**
@@ -7715,39 +7900,59 @@ export const createWorkItems = ({
   };
 
   /**
+   * The item's outputs, declared and in `$TMPDIR/outputs/`, read from its
+   * workspace and written into its project's folder under its assets folder
+   * in one commit (project-folder.ts); null when there are none.
+   */
+  const copyOutputs = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow & { projectId: string }
+  ): Promise<FolderCommits | null> => {
+    const folder = outputsFolder(item);
+    const files: { path: string; content: Uint8Array }[] = [];
+    for (const output of item.outputs ?? []) {
+      // biome-ignore lint/performance/noAwaitInLoops: one output at a time keeps each read under the command's output cap
+      files.push(...(await outputFiles(workspace, item, output, folder)));
+    }
+    files.push(...(await scratchOutputFiles(workspace, item, folder)));
+    if (files.length === 0) {
+      return null;
+    }
+    return await writeFolderFiles(item.projectId, files, {
+      author: { name: item.title },
+      message: `assets: ${item.taskId ? `outputs of ${item.taskId}, attempt ${item.id.slice(0, 8)}` : `outputs of work item ${item.id.slice(0, 8)}`}`,
+    });
+  };
+
+  /**
    * Copies the item's outputs from its workspace into its project's folder,
-   * under `assets/<task or item>/`, in one commit (project-folder.ts). The
-   * report's lines on them, and whether they arrived.
+   * under `assets/<task or item>/` ({@link copyOutputs}): its declared
+   * outputs and whatever it left in `$TMPDIR/outputs/`. The report's lines
+   * on them, and whether they arrived.
    */
   const collectOutputs = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<{ ok: boolean; line: string }> => {
-    const outputs = item.outputs ?? [];
-    if (outputs.length === 0) {
-      return { ok: true, line: "" };
-    }
-    if (!item.projectId) {
-      return {
-        ok: false,
-        line: "\n\nOutputs not collected: the item belongs to no project.",
-      };
+    const { projectId } = item;
+    if (!projectId) {
+      return item.outputs?.length
+        ? {
+            ok: false,
+            line: "\n\nOutputs not collected: the item belongs to no project.",
+          }
+        : { ok: true, line: "" };
     }
     const folder = outputsFolder(item);
     try {
-      const files: { path: string; content: Uint8Array }[] = [];
-      for (const output of outputs) {
-        // biome-ignore lint/performance/noAwaitInLoops: one output at a time keeps each read under the command's output cap
-        files.push(...(await outputFiles(workspace, item, output, folder)));
+      const written = await copyOutputs(workspace, { ...item, projectId });
+      if (!written) {
+        return { ok: true, line: "" };
       }
-      const written = await writeFolderFiles(item.projectId, files, {
-        author: { name: item.title },
-        message: `assets: ${item.taskId ? `outputs of ${item.taskId}, attempt ${item.id.slice(0, 8)}` : `outputs of work item ${item.id.slice(0, 8)}`}`,
-      });
       // Absolute, as the project's workspaces on the hub's machine read them
       // (core workspace-policy.ts `projectFolder`); a delegate on any machine
       // reads them by the folder path with `folder_read`.
-      const root = projectRoot(item.projectId);
+      const root = projectRoot(projectId);
       return {
         ok: true,
         line: `\n\nOutputs, copied into the project's folder ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}, readable by the project's delegates (on the hub's machine at these paths, on any machine with folder_read and the path after ${root}/):\n${written.paths.map((path) => `- ${root}/${path}`).join("\n")}`,
@@ -7825,9 +8030,7 @@ export const createWorkItems = ({
     earlier: GateRun
   ): Promise<{ done: boolean; text: string }> => {
     const settled = { landingSince: null, submission: null };
-    const unready = item.outputs?.length
-      ? await outputsProblem(workspace, item, item.outputs)
-      : undefined;
+    const unready = await outputsProblem(workspace, item);
     if (unready) {
       update(item.id, settled);
       return { done: false, text: unready };
@@ -7869,10 +8072,9 @@ export const createWorkItems = ({
     if (landing.kind === "done" && item.lands === "main") {
       await vouchLanded(workspace, item);
     }
-    const collected =
-      landing.kind === "done"
-        ? await collectOutputs(workspace, item)
-        : { ok: true, line: "" };
+    // A refused landing's outputs are collected too: its item fails, and
+    // its workspace, $TMPDIR with it, goes once nothing holds it.
+    const collected = await collectOutputs(workspace, item);
     const failure = failureOf(landing, collected);
     const shipped =
       landing.kind === "done" && !failure && submission.ship

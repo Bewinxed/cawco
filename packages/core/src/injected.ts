@@ -20,6 +20,7 @@
  */
 import type { ArtifactKind, CarryRestored } from "./index";
 import { artifactLink, stepLink } from "./references";
+import { workWords } from "./words/work";
 
 /** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
 export interface MarkerTag {
@@ -147,6 +148,13 @@ export const LANDS_MODES: readonly LandsMode[] = [
 
 /** How a work item lands, and the files it hands in besides commits. */
 export interface WorkspaceLanding {
+  /**
+   * Where in its project's folder the item's outputs land (hub work-items.ts
+   * `outputsFolder`, like `assets/tsk-12`): what it leaves in
+   * `$TMPDIR/outputs/` goes there too. None for an item of no project,
+   * which hands in nothing but its report.
+   */
+  assets?: string;
   lands: LandsMode;
   /** Paths in the workspace the hub copies into the project's folder. */
   outputs?: string[];
@@ -157,6 +165,15 @@ const outputsLine = (outputs: string[] | undefined): string =>
   outputs?.length
     ? ` The hub then copies your outputs (${outputs.join(", ")}) into the project's folder; a missing one comes back to you.`
     : "";
+
+/**
+ * What a session is told of `$TMPDIR/outputs/` (hub work-items.ts
+ * `scratchOutputs`): copied into its project's folder at `assets` when it
+ * finishes and again before its workspace goes, or, with no project, not
+ * collected at all.
+ */
+const scratchOutputsLine = (assets: string | undefined): string =>
+  ` ${assets ? workWords.scratchOutputsCopied(assets) : workWords.scratchOutputsNoProject}`;
 
 /** The merge checks, as a delegate is told of them. */
 const GATE =
@@ -169,9 +186,9 @@ const GATE =
  */
 const hubLandLine = (
   base: string,
-  { lands, outputs }: WorkspaceLanding
+  { lands, outputs, assets }: WorkspaceLanding
 ): string => {
-  const outputsSaid = outputsLine(outputs);
+  const outputsSaid = `${outputsLine(outputs)}${scratchOutputsLine(assets)}`;
   const compare = ` Your finish_item summary is the proof of the work: quote the real output of each command that proves it. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
   const opening = `The repository's default branch is ${base}.`;
   switch (lands) {
@@ -181,8 +198,8 @@ const hubLandLine = (
       return `${opening} Commit your work and do not push: after finish_item, the hub runs ${GATE} on your commits, pushes your branch to origin and opens a pull request against ${base}.${outputsSaid}${compare}`;
     case "none":
       return outputs?.length
-        ? `${opening} Nothing is pushed: after finish_item, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you. They need not be committed.${compare}`
-        : `${opening} Nothing is pushed and nothing is collected: finish_item hands your report to your parent.${compare}`;
+        ? `${opening} Nothing is pushed: after finish_item, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you. They need not be committed.${scratchOutputsLine(assets)}${compare}`
+        : `${opening} Nothing is pushed: finish_item hands your report to your parent.${scratchOutputsLine(assets)}${compare}`;
     case "main":
       return `${opening} Commit your work and do not push: after finish_item, the hub rebases your commits onto origin/${base}, runs ${GATE} on the result, and pushes to ${base}; a failed check comes back to you with its output.${outputsSaid}${compare}`;
   }

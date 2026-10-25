@@ -153,13 +153,13 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
   const reads =
     " Your parent reads this report alone; chat messages reach no one. A report pointing at a chat message is refused.";
   const proof =
-    " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (in the repository or your outputs) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
+    " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (committed, or in $TMPDIR/outputs/) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
   const gate =
     "the merge checks your project's gate.md names (for CawCo: the dependency install, `bun run check --all`, and the iOS build when the app changed)";
   const back =
     " A failed check or a conflict comes back with its output: fix, commit, call again.";
   const outputs =
-    " Outputs are files in your workspace, copied to the project's folder.";
+    " In a project, $TMPDIR/outputs/ and your declared outputs are copied to its folder's assets/; the report names each path.";
   const close =
     " `blocked` only when something outside your control stops the work. A task attempt's first call lists its open to-dos once: tick the done ones with todo_write, explain the rest, call again.";
   switch (lands) {
@@ -170,7 +170,7 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
     case "pr":
       return `Finish your work item. Commit and do not push.${proof} Then ${gate} runs on your commits, the hub pushes your branch and opens a pull request against the base branch (or updates the open one).${back}${outputs}${close}`;
     case "none":
-      return `Finish your work item. Nothing is pushed.${proof} The hub collects your outputs into the project's folder; a missing one comes back to you.${close}`;
+      return `Finish your work item. Nothing is pushed.${proof}${outputs} A missing declared one comes back to you.${close}`;
     case "main":
       return `Finish your work item. Commit and do not push.${proof} Then the hub rebases your commits onto the base branch, runs ${gate} on the result and pushes.${back}${outputs}${close}`;
   }
@@ -520,7 +520,7 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/."
+            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/, as is whatever the delegate leaves in its $TMPDIR/outputs/ without being named here."
           ),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),

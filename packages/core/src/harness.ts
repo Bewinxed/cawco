@@ -2564,6 +2564,15 @@ export const CONTROL_INPUTS_COPY = "inputsCopy";
 export const INPUTS_DIR = "inputs";
 
 /**
+ * The folder in a workspace's scratch dir (its `$TMPDIR`) whose files the hub
+ * copies into the item's project's folder, under its assets folder, when the
+ * item finishes and again before the workspace closes (hub work-items.ts
+ * `scratchOutputs`): `$TMPDIR` goes with the workspace, and on 2026-10-25 a
+ * delegate's report there went with it.
+ */
+export const OUTPUTS_DIR = "outputs";
+
+/**
  * The most one delegation's inputs come to, together. A long session's
  * transcript, the largest input the fleet hands on, runs to tens of MB
  * (wire.ts); this holds one with room. To a workspace on another machine

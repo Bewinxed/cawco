@@ -12,6 +12,16 @@ export const workWords = {
    */
   hostRefused: (lines: readonly string[]) =>
     `Host scope refuses ${lines.length === 1 ? "this" : "these"}:\n${lines.map((line) => `- ${line}`).join("\n")}`,
+  /**
+   * What a delegate is told of its `$TMPDIR/outputs/` (core injected.ts
+   * `scratchOutputsLine`): copied to `assets`, its item's folder in its
+   * project's folder.
+   */
+  scratchOutputsCopied: (assets: string) =>
+    `Files you leave in $TMPDIR/outputs/ are copied into the project's folder at ${assets}/ (each at its path under outputs/) when you finish and before this workspace goes; your parent reads them there with folder_read, and the hub's report names each path.`,
+  /** What a delegate of no project is told of its `$TMPDIR/outputs/`: nothing there is collected. */
+  scratchOutputsNoProject:
+    "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",
   /** The heading of a report's merge checks section, over its checks' lines. */
   gateHeading: "Merge checks, run by the hub:",
   /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
