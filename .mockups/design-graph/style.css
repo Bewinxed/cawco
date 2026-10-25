@@ -124,7 +124,7 @@ body { margin: 0; min-block-size: 100dvh; font: var(--type-body); background: va
 button { font: inherit; color: inherit; }
 
 /* ---- The page under the tool: the component being judged ---- */
-.page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter-start) calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-8); display: grid; justify-items: center; align-content: start; }
+.page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter-start) calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; --page-pad-b: var(--space-8); padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--space-5) var(--page-pad-b); display: grid; justify-items: center; align-content: start; }
 /* The round's open choice, over the pages: one segmented control, its label in meta. */
 .review-bar { inline-size: min(100%, 600px); display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); margin-block-end: var(--space-5); }
 .review-label { font: var(--type-meta); color: var(--ink-muted); }
@@ -146,15 +146,18 @@ button { font: inherit; color: inherit; }
 .line.fail { color: var(--status-fail-ink); }
 .field .line { margin: var(--space-1) 0 0; }
 /* The page under review scrolls under the house edge fade where more is past its top or its foot. */
-.page[data-fade~="top"] { --page-fade-t: var(--c-edge-fade-len-phone); }
-.page[data-fade~="foot"]:not(:has(.stage .actions)) { --page-fade-b: var(--c-edge-fade-len-phone); }
+.page[data-fade~="top"] { --page-fade-t: var(--c-edge-fade-len); }
+.page[data-fade~="foot"]:not(:has(.stage .actions)) { --page-fade-b: var(--c-edge-fade-len); }
 .page[data-fade] { mask-image: linear-gradient(transparent, #000 var(--page-fade-t, 0px), #000 calc(100% - var(--page-fade-b, 0px)), transparent); }
 /* The form's actions hold at the page's foot while the form runs on past it, so they never sit under the
-   drawer or the dock: their own band of the frame's surface, the edge fade over the form above them while
-   more is under them. At rest their padding is taken back by their margins, so nothing moves. */
-.actions { position: sticky; z-index: 1; inset-block-end: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-6)); padding: var(--space-3) var(--space-6); background: var(--surface-raised); }
-.actions::before { content: ""; position: absolute; inset-inline: 0; inset-block-end: 100%; block-size: var(--c-edge-fade-len-phone); background: linear-gradient(transparent, var(--surface-raised)); opacity: 0; pointer-events: none; }
+   drawer or the dock: their own band of the frame's surface, the house edge fade (40px) over the form above
+   them while more is under them. Held, the band runs down over the page's foot padding to the page's edge, so
+   no sliver of the form shows under it. At rest their padding is taken back by their margins, so nothing
+   moves. */
+.actions { position: sticky; z-index: 1; inset-block-end: calc(-1 * var(--page-pad-b, 0px)); display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-6)); padding: var(--space-3) var(--space-6); background: var(--surface-raised); }
+.actions::before { content: ""; position: absolute; inset-inline: 0; inset-block-end: 100%; block-size: var(--c-edge-fade-len); background: linear-gradient(transparent, var(--surface-raised)); opacity: 0; pointer-events: none; }
 .page[data-fade~="foot"] .actions::before { opacity: 1; }
+.page[data-fade~="foot"] .actions { padding-block-end: calc(var(--space-3) + var(--page-pad-b, 0px)); }
 .actions .note { font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 @container page (width < 440px) { .actions .note { grid-column: 1 / -1; } .actions .btn { grid-row: 2; grid-column: 2; } .actions .btn.primary { grid-column: 3; } }
 .btn { display: inline-flex; align-items: center; min-block-size: var(--c-btn-h-sm); padding: 0 var(--space-4); border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); color: var(--ink-strong); font: var(--type-button); white-space: nowrap; }
@@ -480,11 +483,11 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .tl { position: relative; min-inline-size: 0; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; margin-inline: calc(-1 * var(--space-2)); padding: 0 var(--space-2) var(--space-3); }
 /* The house edge fade where more rows are past the timeline's top (under its sticky ruler) or its foot. */
 .tl { --fade-t: 0px; --fade-b: 0px; }
-.tl[data-fade~="top"] { --fade-t: var(--c-edge-fade-len-phone); }
-.tl[data-fade~="foot"] { --fade-b: var(--c-edge-fade-len-phone); }
+.tl[data-fade~="top"] { --fade-t: var(--c-edge-fade-len); }
+.tl[data-fade~="foot"] { --fade-b: var(--c-edge-fade-len); }
 .tl[data-fade] { mask-image: linear-gradient(#000 var(--tl-head, 0px), transparent var(--tl-head, 0px), #000 calc(var(--tl-head, 0px) + var(--fade-t)), #000 calc(100% - var(--fade-b)), transparent); }
 .tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
-.ruler-row { position: sticky; inset-block-start: 0; z-index: 3; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
+.ruler-row { position: sticky; inset-block-start: 0; z-index: 6; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
 .ruler-row .ruler { grid-column: 2; }
 .tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
 .tbtn svg { grid-area: 1 / 1; inline-size: var(--icon-md); block-size: var(--icon-md); transition: opacity var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out), filter var(--dur-control) var(--ease-out); }
@@ -603,7 +606,9 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-e
 /* The playhead: 1px of the strong ink down through the rows from the ruler's tick line, a dot on that line.
    Nothing on the ruler is red: coral is the action, crimson a failure. */
 .playhead { position: absolute; inset-block: 0; inline-size: 0; z-index: 4; pointer-events: none; }
-.playhead::before { content: ""; position: absolute; inset-block-start: calc(var(--ph-y, 0px) - var(--c-block-drop-dot) / 2); inset-inline-start: calc(var(--c-block-drop-dot) / -2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: var(--ink-strong); }
+/* The playhead's dot stands on the ruler's tick line, drawn by the ruler (over every row, an open row's
+   controls included); its line runs down under the rows' own open controls. */
+.ruler::after { content: ""; position: absolute; z-index: 1; inset-block-start: calc(100% - var(--space-1) / 2 - var(--c-block-drop-dot) / 2); inset-inline-start: calc(var(--ph-x, 0px) - var(--c-block-drop-dot) / 2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: var(--ink-strong); pointer-events: none; }
 .playhead::after { content: ""; position: absolute; inset-block: var(--ph-y, 0px) 0; inset-inline-start: -0.5px; inline-size: 1px; background: var(--ink-strong); }
 .snap { position: absolute; inset-block: 0; inline-size: 1px; z-index: 2; background: var(--border-contrast); pointer-events: none; }
 .marquee { position: absolute; z-index: 2; background: var(--selection); border: 1px solid var(--focus-ring); pointer-events: none; }
@@ -619,6 +624,10 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-e
 .ctl { font: var(--type-label); color: var(--ink-strong); }
 .ctl-body { display: flex; flex-direction: column; gap: var(--space-3); }
 .clip > .ctl-row { grid-column: 1 / -1; min-inline-size: 0; margin-block-start: var(--space-2); padding-block-end: var(--space-1); cursor: auto; }
+/* An open row stands over the playhead's line and the anchor ties that run down through the rows, its controls
+   on an opaque face of the row's chosen wash, so no line strikes a figure. */
+.clip:has(> .ctl-row) { z-index: 5; }
+.clip > .ctl-row { position: relative; background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
 .ctl-row .ctl-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
 .ctl-row .ctl-head { grid-column: 1 / -1; justify-content: flex-end; min-block-size: 0; margin-block-end: calc(-1 * var(--space-2)); }
 .dock-grid { flex: 1 1 auto; min-block-size: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: var(--space-4); }
@@ -627,10 +636,14 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-e
 .tl { grid-column: 1; grid-row: 2; }
 .insp { grid-column: 2; grid-row: 2; min-block-size: 0; overflow: hidden auto; overscroll-behavior: contain; padding: var(--space-1) 0 var(--space-3) var(--space-4); border-inline-start: 1px solid var(--border-hairline); }
 .insp:empty { display: none; }
-.insp[data-fade~="top"] { --insp-fade-t: var(--c-edge-fade-len-phone); }
-.insp[data-fade~="foot"] { --insp-fade-b: var(--c-edge-fade-len-phone); }
+.insp[data-fade~="top"] { --insp-fade-t: var(--c-edge-fade-len); }
+.insp[data-fade~="foot"] { --insp-fade-b: var(--c-edge-fade-len); }
 .insp[data-fade] { mask-image: linear-gradient(transparent, #000 var(--insp-fade-t, 0px), #000 calc(100% - var(--insp-fade-b, 0px)), transparent); }
 @container dock (width < 440px) {
+  /* Stacked, an open row is a column whose head (its name and facts) holds under the ruler while its controls
+     scroll on beneath it. */
+  .clip:has(> .ctl-row) { display: flex; flex-direction: column; align-items: stretch; }
+  .clip:has(> .ctl-row) > .clip-name { position: sticky; z-index: 2; inset-block-start: var(--tl-head, 0px); margin-inline: calc(-1 * var(--space-2)); padding-inline-start: var(--space-2); padding-block-end: var(--space-1); background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
   .dock[data-insp] .dock-grid { grid-template-columns: minmax(0, 1fr); }
   .dock[data-insp] .tl { display: none; }
   .dock[data-insp] .insp { grid-column: 1; padding-inline-start: 0; border-inline-start: 0; }
@@ -828,6 +841,10 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
 /* A fact cut to its glyph (a narrow facts line gives up its words) still takes a finger: the floor wide, its glyph centred. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fact { min-inline-size: var(--c-touch-floor); justify-content: center; }
+/* The row's open controls stand clear of the lane's 44px bar layer, and their Close keeps its own layer inside
+   the timeline. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip > .ctl-row { margin-block-start: calc(var(--c-touch-floor) - var(--c-pill-h)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ctl-head { padding-inline-end: calc((var(--c-touch-floor) - var(--c-btn-h-xs)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .ctl input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
@@ -849,7 +866,7 @@ html:is([data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom :
 html:not([data-layout="desk"]) .tools { position: fixed; z-index: var(--layer-dock); display: flex; flex-direction: column; color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); font: var(--type-label); font-weight: var(--weight-body); }
 .edge-pill-top { position: absolute; z-index: 5; pointer-events: none; padding: 0; border-radius: var(--radius-pill); background: var(--border-row-outline); block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
 /* The head: no title and no ground. Its title area stays empty; the faces' switch stands in the centre and Hide
-   trailing, each a glass group; the head itself is the drawer's press and drag. */
+   trailing as a bare symbol; the head itself is the drawer's press and drag. */
 html:not([data-layout="desk"]) .sheet-head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); flex: none; block-size: var(--c-sheet-inspector-head-h); padding-inline: var(--space-2); }
 .faces-group { grid-column: 2; }
 .sheet-end { grid-column: 3; justify-self: end; }
@@ -871,7 +888,7 @@ html:not([data-layout="desk"]) .dock-head { min-block-size: var(--c-touch-floor)
 
 /* The drawer: the house bottom drawer, three stops (head, peek, full). The page takes the room above it. */
 html[data-layout="drawer"] .tools { inset-inline: 0; inset-block-end: 0; block-size: var(--drawer-h, var(--c-graph-drawer-stop)); border-block-end: 0; border-start-start-radius: var(--radius-panel); border-start-end-radius: var(--radius-panel); box-shadow: var(--shadow-drawer); padding-block-end: env(safe-area-inset-bottom, 0px); transition: block-size var(--dur-panel) var(--ease-drawer); }
-html[data-layout="drawer"] .page { inset: 0 0 var(--dock-room, 0px) 0; padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--c-screen-margin) var(--space-5); transition: inset-block-end var(--dur-panel) var(--ease-drawer); }
+html[data-layout="drawer"] .page { --page-pad-b: var(--space-5); inset: 0 0 var(--dock-room, 0px) 0; padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--c-screen-margin) var(--page-pad-b); transition: inset-block-end var(--dur-panel) var(--ease-drawer); }
 html[data-layout="drawer"][data-drawer-drag] :is(.tools, .page) { transition: none; }
 html[data-layout="drawer"] .sheet-head { cursor: grab; touch-action: none; }
 html[data-layout="drawer"] .show { display: none; }
@@ -882,7 +899,7 @@ html[data-layout="drawer"] .show { display: none; }
 
 /* The side sheet: from the trailing edge at half the pane. Hide folds it to the tucked tab. */
 html[data-layout="sheet"] .tools { inset-block: var(--c-screen-margin); inset-inline-end: max(var(--c-screen-margin), env(safe-area-inset-right, 0px)); inline-size: calc(50% - var(--c-screen-margin)); border-radius: var(--radius-panel); box-shadow: var(--shadow-overlay); overflow: hidden; }
-html[data-layout="sheet"] .page { inset: 0 50% 0 0; padding: var(--space-5) var(--space-5) var(--space-5) max(var(--space-5), env(safe-area-inset-left, 0px)); }
+html[data-layout="sheet"] .page { --page-pad-b: var(--space-5); inset: 0 50% 0 0; padding: var(--space-5) var(--space-5) var(--page-pad-b) max(var(--space-5), env(safe-area-inset-left, 0px)); }
 html[data-layout="sheet"] .edge-pill-top { display: none; }
 html[data-layout="sheet"][data-tools="hidden"] .tools { display: none; }
 html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c-tucked-tab); }

@@ -717,7 +717,7 @@ async function captures(browser) {
   const pick = (page, id, attr, v) => page.evaluate(([id, attr, v]) => document.querySelector("#" + id + ' [data-' + attr + '="' + v + '"]').click(), [id, attr, v]);
   const openReveal = async (page) => { await page.evaluate(() => document.querySelector('.clip[data-key="reveal"] .fact-dur').click()); await page.waitForTimeout(500); };
   for (const [w, h] of [[1440, 900], [390, 844]]) {
-    const { page } = await openPage(browser, w, h);
+    let { page } = await openPage(browser, w, h);
     const phone = w === 390;
     if (phone) { await page.click('#faces [data-face="move"]'); await page.waitForTimeout(400); }
     // Clip kinds: the timeline at rest, its rows in each dress.
@@ -725,23 +725,26 @@ async function captures(browser) {
     await pick(page, "kinds", "kinds", "ink"); await page.waitForTimeout(300);
     await shot(page, "Clip kinds", "In ink only", w, w + "-kinds-ink.jpg", phone ? "The phone's timeline in ink only: the glyph alone names each kind, the bars one neutral fill." : "The timeline in ink only: the glyph alone names each kind, the bars one neutral fill.");
     await pick(page, "kinds", "kinds", "hue"); await page.waitForTimeout(200);
-    // Clip controls: the reason line's spring (the agent's ad hoc 340 ms, 0.15 bounce) opened each way.
+    // Clip controls: the reason line's spring (the agent's ad hoc 340 ms, 0.15 bounce) opened each way, the dock
+    // held at one height for both (as a drag of its corner sets it), so the two compare at one size.
+    if (!phone) await page.evaluate(() => { document.documentElement.style.setProperty("--dock-h", "520px"); window.dispatchEvent(new Event("resize")); });
+    await page.waitForTimeout(300);
     await pick(page, "ctlChoice", "ctl", "row"); await openReveal(page);
     await shot(page, "Clip controls", "In the row", w, w + "-controls-row.jpg", phone ? "The reason line's controls open inside its own row, under its facts; the timeline scrolls on past them." : "The reason line's controls open inside its own row, across the timeline, its spring marked ad hoc.");
     await page.keyboard.press("Escape"); await page.waitForTimeout(200);
     await pick(page, "ctlChoice", "ctl", "inspector"); await openReveal(page);
     await shot(page, "Clip controls", "In an inspector", w, w + "-controls-inspector.jpg", phone ? "On a phone the inspector takes the timeline's place, Back leading its head." : "The reason line's controls in an inspector beside the timeline, headed by the clip's line.");
     await page.keyboard.press("Escape"); await page.waitForTimeout(200);
-    await pick(page, "ctlChoice", "ctl", "row"); await page.waitForTimeout(200);
-    // The resize handle (section A): the corner arc reaching along the edge the pointer is on; on a phone,
-    // the drawer's grabber, its own resize.
+    await page.close();
+    // The resize handle (section A), on a page fresh from its load (no clip chosen, nothing focused): the corner
+    // arc reaching along the edge the pointer rests on; on a phone, the drawer's grabber, its own resize.
+    ({ page } = await openPage(browser, w, h));
     if (phone) {
-      await page.click('#faces [data-face="graph"]'); await page.waitForTimeout(400);
       await shot(page, "Resize handle", "The corner arc", w, w + "-handle.jpg", "On a phone the panel is the drawer: its grabber on the top edge resizes it, and the arc has no corner to stand in.");
     } else {
       const sw = await page.evaluate(() => __k.box(document.getElementById("sashW")));
       await page.mouse.move(sw.x + sw.w / 2, sw.y + sw.h / 2 - 100); await page.waitForTimeout(400);
-      await shot(page, "Resize handle", "The corner arc", w, w + "-handle.jpg", "Pointing at the panel's leading edge: the corner arc runs up it past the pointer, thickened in the strong ink.");
+      await shot(page, "Resize handle", "The corner arc", w, w + "-handle.jpg", "A pointer resting on the panel's leading edge (the capture doesn't draw the pointer): the corner arc runs up that edge past it, thickened in the strong ink.");
       await page.mouse.move(700, 300); await page.waitForTimeout(300);
     }
     await page.close();
