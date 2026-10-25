@@ -25,13 +25,14 @@
  *   bar's Ask Caw), and none while an ask stands;
  * - his pins (DESIGN.md, The Title Bars Follow Liquid Glass Rule): the
  *   project's head is one row, the name, the place as its OS mark, Caw's
- *   seat and one glass capsule of bare symbols (Ask Caw, Spin off, More on a
- *   desk; Spin off and More from 640 to 900; More alone under 640), nothing
- *   in it coral and no second line; the pane's bar holds bare symbols only
- *   (no metadata strip: no section name, id, stage, agent or age), its
- *   capsule holds the session's symbol named in its tooltip, and its tabs
- *   are Task, Changes and History, no Session; Caw's first thread stands its
- *   title as the marked placeholder its copy replaces;
+ *   seat and its bare symbols (Ask Caw, Spin off, More on a desk; Spin off
+ *   and More from 640 to 900; More alone under 640), nothing in it coral and
+ *   no second line; the pane's bar holds bare symbols only (no metadata
+ *   strip: no section name, id, stage, agent or age), the session's symbol
+ *   named in its tooltip is the one way into the session (the review's
+ *   handed-in row holds no control), and its tabs are Task, Changes and
+ *   History, no Session; a capsule's glass stands only round two symbols or
+ *   more; Caw's first thread is titled "Caw is new to obelisk-site";
  * - the house rules (house-rules.ts) at 390, 1037 and 1440 on both engines,
  *   and the overflow sweep (journeys/scan.ts) totals zero at each width;
  * - no glyph stands in a box of its own: a glyph whose parent draws a
@@ -1796,6 +1797,28 @@ const pinParts = (page: Page) =>
       glyphs: element.querySelectorAll("svg").length,
     });
 
+    /** A capsule's shown symbols, and whether its glass is drawn round them. */
+    const capsuleOf = (scope: Element | null) => {
+      const capsule = scope?.querySelector(".capsule") ?? null;
+      if (!capsule) {
+        return null;
+      }
+      const style = getComputedStyle(capsule);
+      const clear = (colour: string) =>
+        colour === "transparent" ||
+        colour.endsWith(", 0)") ||
+        colour.endsWith("/ 0)");
+      return {
+        items: [...capsule.querySelectorAll(".bar-item")].filter(shown).length,
+        glass:
+          !clear(style.backgroundColor) ||
+          (Number.parseFloat(style.borderTopWidth) > 0 &&
+            !clear(style.borderTopColor)) ||
+          style.boxShadow !== "none" ||
+          (style.backdropFilter || "none") !== "none",
+      };
+    };
+
     const head = document.querySelector(".head");
     const name = head?.querySelector(".head-name") ?? null;
     const headShown =
@@ -1828,6 +1851,7 @@ const pinParts = (page: Page) =>
             words: (head as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
             name: (name?.textContent ?? "").trim(),
             capsule: capsule.map(named),
+            glass: capsuleOf(head),
             seat: shown(head?.querySelector(".head-seat") ?? null),
             place: shown(head?.querySelector(".head-place") ?? null)
               ? named(head?.querySelector(".head-place") as Element)
@@ -1852,6 +1876,17 @@ const pinParts = (page: Page) =>
               bar?.nextElementSibling?.matches('[data-slot="pane-title"]')
             ),
             session: shown(session) ? named(session as Element) : null,
+            glass: capsuleOf(bar),
+            handed: [...(pane as HTMLElement).querySelectorAll(".review-who")]
+              .filter(shown)
+              .map((row) => ({
+                words: (row as HTMLElement).innerText
+                  .replace(/\s+/g, " ")
+                  .trim(),
+                controls: row.querySelectorAll("a, button").length,
+                who: getComputedStyle(row.querySelector(".who") ?? row)
+                  .fontWeight,
+              })),
           }
         : null,
       first: shown(first)
@@ -1865,6 +1900,59 @@ const pinParts = (page: Page) =>
 
 /** The open-session symbol's name says what it opens. */
 const SESSION = /session/i;
+/** The review's handed-in row: who, and when, nothing else. */
+const HANDED = /^[\w-]+ handed in · \S+ ago$/;
+
+/** Pins 11 and 12 on the project head, where the state shows it. */
+const checkHead = async (
+  kit: Kit,
+  page: Page,
+  where: string,
+  state: string,
+  head: NonNullable<Awaited<ReturnType<typeof pinParts>>["head"]>
+): Promise<void> => {
+  const width = page.viewportSize()?.width ?? 0;
+  // The capsule's symbols by width: under the drawer's line the view bar
+  // carries Ask Caw, and under 640 Spin off moves into More.
+  const more = commonWords.moreFor("");
+  let want = [projectWords.askCaw, projectWords.spinOff, more];
+  if (width < 640) {
+    want = [more];
+  } else if (width < 901) {
+    want = [projectWords.spinOff, more];
+  }
+  const seat = !["empty", "fault"].includes(state);
+  const bare = head.capsule.every(
+    (item) => item.words === "" && item.glyphs === 1 && item.tip !== ""
+  );
+  kit.check(
+    `${where}: pins 11 and 12, the head is one row: the name on one line, its place as its OS mark, ${seat ? "Caw's seat, " : ""}then one capsule of bare named symbols (${want.join(", ")}), no second row, no words but the name`,
+    head.spread <= 4 &&
+      head.nameLines === 1 &&
+      head.words === head.name &&
+      !head.secondRow &&
+      head.seat === seat &&
+      head.place !== null &&
+      head.place.words === "" &&
+      head.place.tip !== "" &&
+      bare &&
+      head.capsule.length === want.length &&
+      head.capsule.every((item, i) => item.label.startsWith(want[i] as string)),
+    `centres within ${head.spread.toFixed(1)}px over ${head.parts} parts, name on ${head.nameLines} line(s), words “${head.words}”, seat ${head.seat}, place ${head.place ? `“${head.place.tip}”` : "none"}, capsule ${head.capsule.map((item) => `${item.label}${item.words ? ` “${item.words}”` : ""}`).join(", ")}`
+  );
+  const { glass } = head;
+  kit.check(
+    `${where}: the head's capsule draws its glass only round two symbols or more`,
+    Boolean(glass && glass.glass === glass.items >= 2),
+    glass ? `${glass.items} symbol(s), glass ${glass.glass}` : "no capsule"
+  );
+  const coral = await coralFills(page, ".head");
+  kit.check(
+    `${where}: pin 12, nothing in the head is coral`,
+    coral.length === 0,
+    coral.join(", ") || "none"
+  );
+};
 
 /** Each pin's element, read where the state shows it. */
 const checkPins = async (
@@ -1873,46 +1961,9 @@ const checkPins = async (
   where: string,
   state: string
 ): Promise<void> => {
-  const width = page.viewportSize()?.width ?? 0;
   const pins = await pinParts(page);
   if (pins.head) {
-    const { head } = pins;
-    // The capsule's symbols by width: under the drawer's line the view bar
-    // carries Ask Caw, and under 640 Spin off moves into More.
-    const more = commonWords.moreFor("");
-    let want = [projectWords.askCaw, projectWords.spinOff, more];
-    if (width < 640) {
-      want = [more];
-    } else if (width < 901) {
-      want = [projectWords.spinOff, more];
-    }
-    const seat = !["empty", "fault"].includes(state);
-    const bare = head.capsule.every(
-      (item) => item.words === "" && item.glyphs === 1 && item.tip !== ""
-    );
-    kit.check(
-      `${where}: pins 11 and 12, the head is one row: the name on one line, its place as its OS mark, ${seat ? "Caw's seat, " : ""}then one capsule of bare named symbols (${want.join(", ")}), no second row, no words but the name`,
-      head.spread <= 4 &&
-        head.nameLines === 1 &&
-        head.words === head.name &&
-        !head.secondRow &&
-        head.seat === seat &&
-        head.place !== null &&
-        head.place.words === "" &&
-        head.place.tip !== "" &&
-        bare &&
-        head.capsule.length === want.length &&
-        head.capsule.every((item, i) =>
-          item.label.startsWith(want[i] as string)
-        ),
-      `centres within ${head.spread.toFixed(1)}px over ${head.parts} parts, name on ${head.nameLines} line(s), words “${head.words}”, seat ${head.seat}, place ${head.place ? `“${head.place.tip}”` : "none"}, capsule ${head.capsule.map((item) => `${item.label}${item.words ? ` “${item.words}”` : ""}`).join(", ")}`
-    );
-    const coral = await coralFills(page, ".head");
-    kit.check(
-      `${where}: pin 12, nothing in the head is coral`,
-      coral.length === 0,
-      coral.join(", ") || "none"
-    );
+    await checkHead(kit, page, where, state, pins.head);
   }
   if (pins.pane) {
     const { pane } = pins;
@@ -1935,6 +1986,25 @@ const checkPins = async (
         : "no open-session symbol"
     );
     kit.check(
+      `${where}: the pane's capsule draws its glass only round two symbols or more`,
+      Boolean(pane.glass && pane.glass.glass === pane.glass.items >= 2),
+      pane.glass
+        ? `${pane.glass.items} symbol(s), glass ${pane.glass.glass}`
+        : "no capsule"
+    );
+    kit.check(
+      `${where}: the bar's symbol is the one way into the session: the handed-in row is its words alone, the agent's name in the row's weight step`,
+      pane.handed.every(
+        (row) =>
+          row.controls === 0 && HANDED.test(row.words) && Number(row.who) >= 500
+      ),
+      pane.handed
+        .map(
+          (row) => `“${row.words}”, ${row.controls} control(s), who ${row.who}`
+        )
+        .join("; ") || "no handed-in row"
+    );
+    kit.check(
       `${where}: pin 11, the pane's bar is one row of bare symbols with no metadata strip, the task's title under it`,
       pane.bar &&
         pane.strip === 0 &&
@@ -1946,9 +2016,8 @@ const checkPins = async (
   }
   if (pins.first !== null) {
     kit.check(
-      `${where}: pin 14, Caw's first thread stands its title as the marked placeholder, the old line gone`,
-      pins.first.startsWith("[Copy to come:") &&
-        !pins.first.includes("Talk to Caw"),
+      `${where}: pin 14, Caw's first thread is titled “Caw is new to …”, the old line gone`,
+      pins.first === "Caw is new to obelisk-site",
       pins.first
     );
   }
@@ -2512,12 +2581,6 @@ const boxes = async (kit: Kit, origin: string): Promise<void> => {
     house = new HouseRules(kit, `${engine}`, {
       scope: ".app",
       except: [
-        {
-          rule: "glyph",
-          selector: ".head .capsule [data-act='more']",
-          reason:
-            "under 640 the head's capsule holds More alone, as ProjectHead.svelte draws it (its BarGlass, `max-phone:hidden` on Ask Caw and Spin off)",
-        },
         {
           rule: "glyph",
           selector: ".glass-caw",

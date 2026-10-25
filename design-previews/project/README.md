@@ -17,8 +17,10 @@ Rule as the live head does (`ProjectHead.svelte`): one row, the name, the
 place as its machine's OS mark, Caw's seat and one glass capsule (Ask Caw,
 Spin off, More); the pane's bar is bare symbols (Back on a phone, the
 session's symbol and Close in its capsule) over the task's title, and its
-tabs are Task, Changes and History. Caw's first-thread title is a marked
-placeholder (`[Copy to come: …]`) until its copy is written.
+tabs are Task, Changes and History. A capsule's glass stands only round two
+symbols or more: More alone under 640, and the session's symbol alone on a
+phone's pane, are bare glyphs. The session opens from the pane's bar alone.
+Caw's first thread is titled "Caw is new to {project}".
 
 ## Caw
 

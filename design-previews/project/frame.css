@@ -543,7 +543,9 @@ pre {
 }
 
 /* One capsule of the panel's glass, the top bar's trailing group its recipe:
-   bare symbols, no fill or edge of their own until hovered or pressed. */
+   bare symbols, no fill or edge of their own until hovered or pressed. The
+   glass stands only round two symbols or more: one alone is a bare glyph
+   (`.bare`, and the widths where the capsule's others step out). */
 .capsule {
   display: flex;
   flex: none;
@@ -556,6 +558,14 @@ pre {
   border: 1px solid var(--border-hairline);
   box-shadow: var(--shadow-tile);
   backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+}
+.capsule.bare {
+  height: auto;
+  padding: 0;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 .bar-item {
   display: inline-grid;
@@ -1384,9 +1394,6 @@ pre {
   font-weight: 500;
   color: var(--ink-strong);
 }
-.review-who .open {
-  margin-inline-start: auto;
-}
 .review-words {
   color: var(--ink-strong);
   text-wrap: pretty;
@@ -1887,6 +1894,15 @@ pre {
   .pane-close {
     display: none;
   }
+  /* The session's symbol stands alone here: a bare glyph, no glass. */
+  .pane-bar .capsule {
+    height: auto;
+    padding: 0;
+    border-color: transparent;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
 
   /* The board as one grouped list (the recommended fork). */
   .app[data-layout="list"] .board {
@@ -2070,6 +2086,15 @@ pre {
   .head-spin {
     display: none;
   }
+  /* More stands alone here: a bare glyph, no glass. */
+  .head .capsule {
+    height: auto;
+    padding: 0;
+    border-color: transparent;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
   .menu-item.phone-only {
     display: flex;
   }
@@ -2107,6 +2132,7 @@ pre {
 
 @media (prefers-reduced-transparency: reduce) {
   .glass,
+  .capsule,
   .composer,
   .viewbar {
     background: var(--surface-raised);

@@ -901,7 +901,7 @@ const reviewCard = (task) => {
       : "";
   return `<section class="pcard review" data-slot="review">
     ${askSection(task)}
-    <p class="review-who mark-line">${agentMark(task.agent)}<span><span class="who">${task.agent}</span> handed in · ${task.age} ago</span><a class="btn ghost sm open" href="#session"><span>Open</span>${use("square-top-down", "glyph sm")}</a></p>
+    <p class="review-who mark-line">${agentMark(task.agent)}<span><span class="who">${task.agent}</span> handed in · ${task.age} ago</span></p>
     <p class="review-words">${words} <button class="more" type="button">More</button></p>
     <p class="review-check">${task.check.replace("Check:", "<b>Check:</b>")}</p>
     ${files}
@@ -961,9 +961,10 @@ const tabsHTML = (tab) =>
 /**
  * The pane's bar: one row of bare symbols and no title (DESIGN.md, The Title
  * Bars Follow Liquid Glass Rule). Back leads where the pane is its own page
- * (a phone); trailing, one glass capsule: the task's session, opened where
- * sessions open, then Close where the pane is a side card (a desk). The task
- * itself is the pane's content, its title first.
+ * (a phone); trailing, the task's session, opened where sessions open (its
+ * one way in), then Close where the pane is a side card (a desk). A capsule
+ * of glass stands only round two symbols or more: one alone is a bare glyph.
+ * The task itself is the pane's content, its title first.
  */
 const paneBar = (task) => {
   const session = task.agent
@@ -971,7 +972,7 @@ const paneBar = (task) => {
     : "";
   return `<header class="pane-bar" data-slot="pane-bar">
       <button class="bar-item pane-back" type="button" data-act="close-pane" aria-label="Back to Board" title="Back to Board">${use("alt-arrow-left-l", "glyph sym")}</button>
-      <div class="capsule" role="group" aria-label="${task.title}">${session}<button class="bar-item pane-close" type="button" data-act="close-pane" aria-label="Close ${task.id}" title="Close">${use("close-l", "glyph sym")}</button></div>
+      <div class="capsule${session ? "" : " bare"}" role="group" aria-label="${task.title}">${session}<button class="bar-item pane-close" type="button" data-act="close-pane" aria-label="Close ${task.id}" title="Close">${use("close-l", "glyph sym")}</button></div>
     </header>`;
 };
 
@@ -1551,9 +1552,8 @@ const drawCaw = () => {
   $('[data-slot="caw-rule"]').hidden = asks.length === 0 || first;
   const start = $('[data-slot="caw-first"]');
   start.hidden = !first;
-  /* PLACEHOLDER: the first thread's title waits for its copy (pin 14). */
   $('[data-slot="caw-first-title"]').textContent =
-    `[Copy to come: Caw's first-thread title for ${PROJECTS[S.project].name}]`;
+    `Caw is new to ${PROJECTS[S.project].name}`;
   $('[data-slot="caw-starters"]').innerHTML = (FIRST_STARTERS[S.project] ?? [])
     .map(
       (words) =>
