@@ -163,6 +163,35 @@ let owed: number | undefined;
 /** The main thread's CPU time (ticks) and when it was read, for its share since. */
 let lastCpu: { at: number; ticks: number } | undefined;
 
+/** The system calls whose first argument is a descriptor (a file's, or a directory's for the `*at` ones), so its file is named. */
+const FD_FIRST = new Set([
+  "read",
+  "write",
+  "close",
+  "fstat",
+  "ioctl",
+  "pread64",
+  "pwrite64",
+  "readv",
+  "writev",
+  "fcntl",
+  "flock",
+  "fsync",
+  "fdatasync",
+  "ftruncate",
+  "getdents64",
+  "fallocate",
+  "epoll_wait",
+  "epoll_pwait",
+  "epoll_pwait2",
+  "openat",
+  "newfstatat",
+  "statx",
+  "unlinkat",
+  "renameat",
+  "readlinkat",
+]);
+
 /**
  * The system call the main thread is in, as `/proc` says it, with the file
  * its first argument names when that is one of this process's descriptors;
@@ -183,7 +212,10 @@ const systemCall = async (task: string): Promise<string> => {
   const name = SYSCALLS[process.arch]?.[Number(number)] ?? `#${number}`;
   const first = Number(fields[1]);
   const fd =
-    Number.isSafeInteger(first) && first >= 0 && first < 65_536
+    FD_FIRST.has(name) &&
+    Number.isSafeInteger(first) &&
+    first >= 0 &&
+    first < 65_536
       ? await readlink(`/proc/self/fd/${first}`).catch(() => "")
       : "";
   return loopWords.inSyscall(name, fd ? `fd ${first}, ${fd}` : "");
