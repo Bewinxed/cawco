@@ -184,10 +184,7 @@ export const layerOf = async (
   if (layer) {
     return layer;
   }
-  if (
-    dirname(path) !== join(homedir(), ".worktrees") ||
-    !basename(path).endsWith(`-${id.slice(0, 8)}`)
-  ) {
+  if (!cutBeforeLayers(id, path)) {
     return;
   }
   const there = await lstat(path).catch(() => undefined);
@@ -208,29 +205,49 @@ export const layerOf = async (
 export const isOverlay = (layer: Layer | undefined): boolean =>
   layer?.form === "overlay";
 
-/** Whether workspace `id` is a Linux view of its folder (read from its record, synchronously). */
-export const overlaySync = (id: string): boolean => {
+/** Workspace `id`'s layer record, read synchronously; none when it has none whole. */
+const layerSync = (id: string): Layer | undefined => {
   try {
-    return (
-      (JSON.parse(readFileSync(layerFile(id), "utf8")) as Layer).form ===
-      "overlay"
-    );
+    return JSON.parse(readFileSync(layerFile(id), "utf8")) as Layer;
   } catch {
-    return false;
+    // No record, or one cut short: no layer on record.
   }
 };
 
-/** Whether workspace `id` is a copy of a folder that is no repository (read from its record, synchronously). */
-export const folderSync = (id: string): boolean => {
-  try {
-    return (
-      (JSON.parse(readFileSync(layerFile(id), "utf8")) as Layer).kind ===
-      "folder"
-    );
-  } catch {
-    return false;
-  }
+/** Whether workspace `id` is a Linux view of its folder (read from its record, synchronously). */
+export const overlaySync = (id: string): boolean =>
+  layerSync(id)?.form === "overlay";
+
+/**
+ * Whether `path` is where a build before layers cut workspace `id`'s clone
+ * ({@link layerOf}), `~/.worktrees/<repo>-<id8>`, or where a place's stage
+ * clone is cut (stage-clone.ts `stageCloneOf`, `<repo>-stage-<id8>` there):
+ * a git clone of the workspace's own, never a person's folder.
+ */
+const cutBeforeLayers = (id: string, path: string): boolean =>
+  dirname(path) === join(homedir(), ".worktrees") &&
+  basename(path).endsWith(`-${id.slice(0, 8)}`);
+
+/**
+ * Whether workspace `id`'s `path` is a folder of its own (read from its
+ * record, synchronously): a copy (macOS), or a clone cut before layers or a
+ * stage clone ({@link cutBeforeLayers}), so whatever runs or stands there is
+ * the workspace's. Never for a Linux view, whose path is the person's folder,
+ * nor for a workspace whose layer is gone or was never made and whose path
+ * is no clone of its own: its path names the person's folder, where the
+ * person's own sessions and every other view's run. Whatever finds a
+ * workspace's processes or files by its path asks this first.
+ */
+export const ownFolderSync = (id: string, path: string): boolean => {
+  const layer = layerSync(id);
+  return layer
+    ? layer.form === "copy" && layer.path !== layer.folder
+    : cutBeforeLayers(id, path);
 };
+
+/** Whether workspace `id` is a copy of a folder that is no repository (read from its record, synchronously). */
+export const folderSync = (id: string): boolean =>
+  layerSync(id)?.kind === "folder";
 
 // ---------------------------------------------------------------- Linux view
 
@@ -318,10 +335,11 @@ const PASSTHROUGH = (): string[] => [
 ];
 
 /**
- * The bwrap words of `layer`'s view: the host's whole tree, then each of its
- * overlays, then what under F is the host's again.
+ * The bwrap words of workspace `id`'s view of `layer`: the host's whole
+ * tree, then each of its overlays, then what under F is the host's again,
+ * then its mark ({@link viewMarked}).
  */
-export const viewMounts = (layer: Layer): string[] => {
+const viewMounts = (id: string, layer: Layer): string[] => {
   const mounts = layer.mounts ?? [];
   const { bound } = mountsUnder(layer.folder);
   const through = PASSTHROUGH().filter(
@@ -341,6 +359,9 @@ export const viewMounts = (layer: Layer): string[] => {
     ]),
     ...bound.flatMap((path) => ["--dev-bind", path, path]),
     ...through.flatMap((path) => ["--bind", path, path]),
+    "--bind",
+    layerDir(id),
+    layerDir(id),
   ];
 };
 
@@ -386,9 +407,47 @@ const membersOf = (mnt: string): number[] =>
     .filter((pid) => nsOf(pid, "mnt") === mnt);
 
 /**
+ * Whether the mount namespace of `pids` (all in one) is workspace `id`'s
+ * view, or one made from it (a sandbox its boundary starts there): its mark
+ * is mounted there, the workspace's layer dir bound onto itself
+ * ({@link viewMounts}), a mount point no other namespace has. A view's
+ * record names its namespace by inode number, which names it only while it
+ * lives: the kernel frees the number with the namespace and hands it to a
+ * later one (include/linux/proc_ns.h `proc_alloc_inum`, `proc_free_inum`).
+ * So a record its view outlived (the holder ended by an agent restart under
+ * systemd, then its last session; a reboot) can name a namespace that is
+ * nothing of the workspace's: another view's, a sandbox's, a snap's. Read
+ * off the first of `pids` whose mount table still reads; false when none's
+ * does (they are gone).
+ */
+const viewMarked = (id: string, pids: readonly number[]): boolean => {
+  const mark = layerDir(id);
+  for (const pid of pids) {
+    let table: string;
+    try {
+      table = readFileSync(`/proc/${pid}/mountinfo`, "utf8");
+    } catch {
+      // Gone since it was listed: the next one answers.
+      continue;
+    }
+    return table
+      .split("\n")
+      .some((line) => unescapeMount(line.split(" ")[4] ?? "") === mark);
+  }
+  return false;
+};
+
+/** Every live process of workspace `id`'s view named by `record`: none when its namespace is no longer the view ({@link viewMarked}). */
+const viewMembers = (id: string, record: ViewRecord): number[] => {
+  const members = membersOf(record.mnt);
+  return viewMarked(id, members) ? members : [];
+};
+
+/**
  * A live process of workspace `id`'s view, to enter it by: its holder, or,
  * with the holder gone (an agent restart under systemd ends it), any process
- * still in its mount namespace. None when the view is gone.
+ * still in its mount namespace. None when the view is gone, its namespace
+ * gone with it or its number another's ({@link viewMarked}).
  */
 export const viewMember = (
   id: string
@@ -397,10 +456,10 @@ export const viewMember = (
   if (!record) {
     return;
   }
-  if (nsOf(record.pid, "mnt") === record.mnt) {
+  if (nsOf(record.pid, "mnt") === record.mnt && viewMarked(id, [record.pid])) {
     return record;
   }
-  const [pid] = membersOf(record.mnt);
+  const [pid] = viewMembers(id, record);
   return pid === undefined ? undefined : { ...record, pid };
 };
 
@@ -408,11 +467,16 @@ export const viewMember = (
  * Whether process `pid` runs in workspace `id`'s view: in its mount
  * namespace. The one test of a process being the view's, since its path is
  * the person's folder, where the person's own processes and every other
- * view's run at the same path. None is once the view has ended.
+ * view's run at the same path. None is once the view has ended, its
+ * namespace's number another's or not ({@link viewMarked}).
  */
 export const inView = (id: string, pid: number): boolean => {
   const record = readViewRecord(id);
-  return record !== undefined && nsOf(pid, "mnt") === record.mnt;
+  return (
+    record !== undefined &&
+    nsOf(pid, "mnt") === record.mnt &&
+    viewMarked(id, [pid])
+  );
 };
 
 const viewing = new Map<string, Promise<number>>();
@@ -449,7 +513,7 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   const holder = Bun.spawn(
     [
       systemTool("bwrap"),
-      ...viewMounts(layer),
+      ...viewMounts(id, layer),
       "--",
       "/bin/sh",
       "-c",
@@ -573,7 +637,9 @@ export const endView = async (
   }
   const deadline = Date.now() + VIEW_END_MS;
   const ended = new Map<number, string>();
-  let left = membersOf(record.mnt);
+  // Read again each round, mark and all: once its last process is gone, the
+  // namespace's number may be another's within the same round.
+  let left = viewMembers(id, record);
   while (left.length > 0 && Date.now() < deadline) {
     // biome-ignore lint/performance/noAwaitInLoops: each round names what it kills, then reads the namespace again
     const named = await Promise.all(
@@ -588,7 +654,7 @@ export const endView = async (
       signalPid(listedPid(pid), "SIGKILL");
     }
     await Bun.sleep(50);
-    left = membersOf(record.mnt);
+    left = viewMembers(id, record);
   }
   if (left.length === 0) {
     await rm(viewFile(id), { force: true });
@@ -1522,10 +1588,10 @@ export const copyPathSync = (id: string, path: string): string => {
  * `.git/config`, workspace.ts `ownGitConfig`).
  */
 export const copyFileOf = (id: string, path: string): string => {
-  if (!overlaySync(id)) {
+  const layer = layerSync(id);
+  if (layer?.form !== "overlay") {
     return path;
   }
-  const layer = JSON.parse(readFileSync(layerFile(id), "utf8")) as Layer;
   const mount = [...(layer.mounts ?? [])]
     .reverse()
     .find((each) => within(path, each.at));

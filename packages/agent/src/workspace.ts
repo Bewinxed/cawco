@@ -122,6 +122,7 @@ import {
   makeLayer,
   markMade,
   markPersonsOwn,
+  ownFolderSync,
   readChanges,
   readLayer,
   removeLayer,
@@ -2222,6 +2223,30 @@ const processWords = (left: readonly LeftInside[]): string =>
   left.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)})`).join("; ");
 
 /**
+ * A Linux view's processes, every process in its namespace, ended whole
+ * (layer.ts `endView`), each named in the log as {@link endLeftInside}
+ * names what it ends: its path is the person's folder, whose own processes
+ * run outside the view and are never the workspace's.
+ */
+const endViewProcesses = async (workspace: WorkspaceRef): Promise<void> => {
+  const layer = await readLayer(workspace.id).catch(() => undefined);
+  if (layer?.form !== "overlay") {
+    return;
+  }
+  const { ended, left } = await endView(workspace.id);
+  if (ended.length > 0) {
+    console.info(
+      `[workspace] ${workspace.id}: ended ${ended.length} process(es) left running in its view once its boundary was stopped: ${ended.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)})`).join("; ")}`
+    );
+  }
+  if (left.length > 0) {
+    throw new Error(
+      `Workspace ${workspace.id} was not archived: pid ${left.join(", ")} of its view still ${left.length === 1 ? "runs" : "run"} after SIGKILL, so nothing was deleted.`
+    );
+  }
+};
+
+/**
  * Every process left running from workspace `workspace`'s clone or scratch
  * dir once its boundary is stopped (live-processes.ts `processesWithin`: its
  * working directory or executable there, or its command line naming a path
@@ -2235,38 +2260,15 @@ const processWords = (left: readonly LeftInside[]): string =>
  * folder gone. One of the person's own (their shell or editor there) is
  * never ended: the archive throws naming it and what it hangs from, nothing
  * is deleted, and the next sweep tries again. So does one of CawCo's still
- * there after the rounds.
+ * there after the rounds. Its path is read only when it is a folder of the
+ * workspace's own (layer.ts `ownFolderSync`): a Linux view's, or a path
+ * whose layer is gone, is the person's folder, where the person's own
+ * sessions and CawCo's other sessions run, none of them the workspace's.
  */
-/**
- * A Linux view's processes, every process in its namespace, ended whole
- * (layer.ts `endView`), each named in the log as {@link endLeftInside}
- * names what it ends: its path is the person's folder, whose own processes
- * run outside the view and are never the workspace's. Answers whether
- * `workspace` is such a view.
- */
-const endViewProcesses = async (workspace: WorkspaceRef): Promise<boolean> => {
-  const layer = await readLayer(workspace.id).catch(() => undefined);
-  if (layer?.form !== "overlay") {
-    return false;
-  }
-  const { ended, left } = await endView(workspace.id);
-  if (ended.length > 0) {
-    console.info(
-      `[workspace] ${workspace.id}: ended ${ended.length} process(es) left running in its view once its boundary was stopped: ${ended.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)})`).join("; ")}`
-    );
-  }
-  if (left.length > 0) {
-    throw new Error(
-      `Workspace ${workspace.id} was not archived: pid ${left.join(", ")} of its view still ${left.length === 1 ? "runs" : "run"} after SIGKILL, so nothing was deleted.`
-    );
-  }
-  return true;
-};
-
 const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
-  const overlay = await endViewProcesses(workspace);
+  await endViewProcesses(workspace);
   const roots = [
-    ...(overlay ? [] : [workspace.path]),
+    ...(ownFolderSync(workspace.id, workspace.path) ? [workspace.path] : []),
     workspaceScratchDir(workspace.id),
     workspaceTmpDir(workspace.id),
   ];

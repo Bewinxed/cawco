@@ -223,6 +223,7 @@ import {
   inView,
   layerOf,
   overlaySync,
+  ownFolderSync,
   ownModules,
   viewArgv,
 } from "./layer";
@@ -1753,8 +1754,8 @@ const rearmOne = async (id: string): Promise<boolean> => {
   const ref = { id, path: held.path };
   // A person's own folder gets no stand-ins, and nothing is listed in its
   // exclude; nor does the folder a Linux view overlays (layer.ts), whose
-  // stand-ins are in its upper.
-  const own = !(isPlace(id) || overlaySync(id));
+  // stand-ins are in its upper: only a folder of the workspace's own does.
+  const own = !isPlace(id) && ownFolderSync(id, ref.path);
   if (own && process.platform === "linux") {
     // Before anything is armed: each mount point a running sandbox left
     // where a file stands in holds that file's stand-in now, in place; one
@@ -6350,7 +6351,10 @@ const attachedProcs = (
     if (overlaySync(id)) {
       return inView(id, proc.pid);
     }
+    // A path that is no folder of the workspace's own names the person's
+    // (a view whose layer is gone, or one never made): nothing is in it.
     return (
+      ownFolderSync(id, path) &&
       proc.cwd !== undefined &&
       (proc.cwd === path || proc.cwd.startsWith(`${path}/`))
     );
@@ -7939,7 +7943,7 @@ const launch = async (
   // overlays (layer.ts): nothing of the boundary's is written into it from
   // here (no copied inodes, no stand-ins, no exclude lines). The srt host
   // makes the view's stand-ins inside it, into its upper.
-  const own = !(isPlace(ref.id) || overlaySync(ref.id));
+  const own = !isPlace(ref.id) && ownFolderSync(ref.id, ref.path);
   const procId = boundaryProcId(ref.id, gen);
   if (linux) {
     // Only with no sandbox of the workspace running: a handover starts this
@@ -8274,10 +8278,13 @@ export const closeBoundary = (ref: WorkspaceRef): Promise<void> =>
 const closeAll = async (ref: WorkspaceRef): Promise<void> => {
   const inners = await stopNow(ref);
   // A place, a person's own folder, has no stand-ins: an empty dir there at a
-  // deny path is theirs. A Linux view's go with its upper (layer.ts).
+  // deny path is theirs. A Linux view's go with its upper (layer.ts), which
+  // an archive takes away before its boundary closes: its path is then the
+  // person's folder alone, and nothing there is the workspace's.
   if (
     process.platform === "linux" &&
-    !(isPlace(ref.id) || overlaySync(ref.id))
+    !isPlace(ref.id) &&
+    ownFolderSync(ref.id, ref.path)
   ) {
     if (await sandboxesGone(inners)) {
       // Only once no sandbox holds a mount on them: each goes if it is still
