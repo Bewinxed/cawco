@@ -8161,12 +8161,39 @@ export function readTranscript(
  * machines are not known yet.
  */
 function storedAwayOn(viewId: string): Machine | null {
-  if (socketRun === null || instanceIndex.byId.has(viewId)) {
+  const waits = storedReadWaits(viewId);
+  return waits?.on === "machine" ? waits.machine : null;
+}
+
+/** What a read off a stored conversation's machine waits on ({@link storedReadWaits}). */
+export type StoredWait = { on: "board" } | { machine: Machine; on: "machine" };
+
+/**
+ * What a read off a view's stored conversation waits on before it asks the
+ * hub, when the hub holds no row for it and the view names its machine: the
+ * hub reads it off that machine alone. `machine` while the board lists that
+ * machine away, its row; `board` before the first board, whose machines are
+ * not known yet; null when it can be asked. Read reactively: the board, the
+ * machines and the rows are all `$state`.
+ */
+export function storedReadWaits(viewId: string): StoredWait | null {
+  // Read first, so a reader that runs before the first board runs again
+  // when the board's machines land.
+  const { machines } = state;
+  if (instanceIndex.byId.has(viewId)) {
     return null;
   }
   const machineId = contextOf(viewId)?.machine;
-  const machine = state.machines.find((row) => row.machineId === machineId);
-  return machine && machine.status !== "online" ? machine : null;
+  if (!machineId) {
+    return null;
+  }
+  if (socketRun === null) {
+    return { on: "board" };
+  }
+  const machine = machines.find((row) => row.machineId === machineId);
+  return machine && machine.status !== "online"
+    ? { on: "machine", machine }
+    : null;
 }
 
 /**

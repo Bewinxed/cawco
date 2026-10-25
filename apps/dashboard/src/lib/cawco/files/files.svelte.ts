@@ -22,9 +22,10 @@
  */
 import type { ArtifactSummary, SessionAttachment } from "@cawco/core";
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
+import { machineCalled, machineFaultWords } from "@cawco/core/machine-names";
 import { SvelteMap } from "svelte/reactivity";
 import { listAttachments, listFiles } from "../artifact-api";
-import { cawco } from "../client.svelte";
+import { cawco, storedReadWaits } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { failureWords } from "../hub-read";
 import { extensionOf } from "../lightbox/extension";
@@ -93,6 +94,20 @@ const artifactReads = new SessionReads<ArtifactSummary>(listFiles);
 const harnessOf = new SvelteMap<string, string>();
 const attachmentReads = new SessionReads<SessionAttachment>(
   async (instanceId) => {
+    // A stored conversation's attachments are read off its whole transcript,
+    // on its machine: while the board lists that machine away the hub could
+    // only refuse the read (503), so it is not asked, and its refusal's own
+    // words stand in its place (`followFiles` reads it once the machine is
+    // back).
+    const waits = storedReadWaits(instanceId);
+    if (waits?.on === "machine") {
+      throw new Error(
+        machineFaultWords(
+          machineCalled(waits.machine.machineId, cawco.machines),
+          "offline"
+        )
+      );
+    }
     const read = await listAttachments(instanceId);
     harnessOf.set(instanceId, read.harness);
     return read.attachments;
@@ -120,9 +135,15 @@ onArtifactReached((instanceId, id) => {
   }
 });
 
-/** Reads the session's attachments again; its promise settles once the hub answered. */
+/**
+ * Reads the session's attachments again; its promise settles once the hub
+ * answered. A stored conversation's waits for the first board, which says
+ * whether its machine is there (`followFiles` reads it then).
+ */
 export const readAttachments = (instanceId: string): Promise<void> =>
-  attachmentReads.read(instanceId);
+  storedReadWaits(instanceId)?.on === "board"
+    ? Promise.resolve()
+    : attachmentReads.read(instanceId);
 
 /** An artifact as Files' cards draw it. */
 export interface ArtifactCard {
@@ -329,7 +350,16 @@ export function followFiles(instanceId: string | null): void {
     artifactsReadAt.set(instanceId, held);
     readArtifacts(instanceId);
   }
-  const carrying = newestCarrying(instanceId);
+  // A stored conversation's machine away is a place of its own: its read
+  // says so without asking, and the machine back reads it once.
+  const waits = storedReadWaits(instanceId);
+  if (waits?.on === "board") {
+    return;
+  }
+  const carrying =
+    waits?.on === "machine"
+      ? `away:${waits.machine.machineId}`
+      : newestCarrying(instanceId);
   if (attachmentsReadAt.get(instanceId) !== carrying) {
     attachmentsReadAt.set(instanceId, carrying);
     readAttachments(instanceId);

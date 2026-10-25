@@ -35,13 +35,13 @@
  * e. A tab on a conversation stored on the machine, which the hub holds no
  *    row for, opened by its address once the machine is away: the hub's
  *    locate finds it in the machine's last catalog and answers its
- *    transcript 503 (the machine away), never 404. The page asks for it not
- *    once, through the machine's reconnecting window and past it: the
- *    server's read of the load said the machine is away, and the board lists
- *    it away (`storedAwayOn`). The page logs nothing; Chromium's own "Failed
- *    to load resource" line for each 503 (Files' attachments) is the
- *    browser's, counted against the 503s. The pane shows the machine away.
- *    The machine back, the page reads it once, and the pane says so no more.
+ *    transcript 503 (the machine away), never 404. The page asks for neither
+ *    its transcript nor Files' attachments, through the machine's
+ *    reconnecting window and past it: the server's read of the load said the
+ *    machine is away, and the board lists it away (client.svelte.ts
+ *    `storedReadWaits`). No request fails and nothing is logged; the pane
+ *    shows the machine away. The machine back, the page reads each once, and
+ *    the pane says so no more.
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -68,9 +68,6 @@ const STORED = "00000000-0000-4000-8000-00000000c0de";
 const READ_LINE = /^\[cawco\] read (\w+) because (\w+)/;
 /** The pane's title for a transcript whose machine is away (SessionPane.svelte `faultTitle`). */
 const AWAY_TITLE = /This machine is (offline|reconnecting)/;
-/** Chromium's console line for a 503 response: the browser's, not the page's. */
-const AWAY_LOAD_LINE =
-  /^\[error\] Failed to load resource: the server responded with a status of 503/;
 /** The hub's answer to a stream's resume (hub stream.ts `subscribe`). */
 const STREAM_ANSWER = /"type":"stream\.(backlog|reset)"/;
 /** Any session's newest transcript page. */
@@ -423,6 +420,7 @@ const run = async (kit: Kit): Promise<void> => {
   );
   take(heard);
   const stored = `/api/instances/${STORED}/transcript`;
+  const attachments = `/api/instances/${STORED}/attachments`;
   // The hub's own answer for it, asked beside the page (not in its log).
   const hubSays = await page.request.get(`${base}${stored}`);
   await page.goto(
@@ -444,25 +442,22 @@ const run = async (kit: Kit): Promise<void> => {
   // (client.svelte.ts `readAtDeadline`, the board still listing it away).
   await page.waitForTimeout(RECONNECTING_MS + SETTLE_MS);
   const awayLoad = take(heard);
-  // Chromium's own line for each response that is not a 2xx: one for each
-  // 503 in the network log, and none of them the page's.
-  const browserLines = awayLoad.said.filter((line) =>
-    AWAY_LOAD_LINE.test(line)
-  );
-  const pageSaid = awayLoad.said.filter((line) => !AWAY_LOAD_LINE.test(line));
-  const unavailable = awayLoad.failed.filter((line) => line.startsWith("503 "));
   const storedReads = awayLoad.asked.filter((path) => path === stored).length;
+  const attachmentReads = awayLoad.asked.filter(
+    (path) => path === attachments
+  ).length;
   kit.check(
-    "e. the stored conversation's machine away: the hub answers its transcript 503, the page asks for it not once through the machine's reconnecting window and past it, every failed response is a 503 (none a 404), the page logs nothing (the browser's line for each 503 aside), and the pane shows the machine away",
+    "e. the stored conversation's machine away: the hub answers its transcript 503, the page asks for neither its transcript nor its attachments through the machine's reconnecting window and past it, no request fails, nothing is logged, and the pane shows the machine away",
     hubSays.status() === 503 &&
       storedReads === 0 &&
-      unavailable.length === awayLoad.failed.length &&
-      browserLines.length === unavailable.length &&
-      pageSaid.length === 0 &&
+      attachmentReads === 0 &&
+      awayLoad.failed.length === 0 &&
+      awayLoad.said.length === 0 &&
       awayShown,
     JSON.stringify({
       hub: hubSays.status(),
       storedReads,
+      attachmentReads,
       why: awayLoad.read,
       failed: awayLoad.failed,
       said: awayLoad.said,
@@ -488,12 +483,20 @@ const run = async (kit: Kit): Promise<void> => {
   await page.waitForTimeout(SETTLE_MS);
   const backLoad = take(heard);
   const backReads = backLoad.asked.filter((path) => path === stored).length;
+  const backAttachments = backLoad.asked.filter(
+    (path) => path === attachments
+  ).length;
   kit.check(
-    "e. the machine back: the stored conversation is read once, answers 200, and the pane no longer says the machine is away",
-    backRead?.status() === 200 && backReads === 1 && awayGone,
+    "e. the machine back: the stored conversation and its attachments are read once each, the transcript answers 200, nothing fails, and the pane no longer says the machine is away",
+    backRead?.status() === 200 &&
+      backReads === 1 &&
+      backAttachments === 1 &&
+      backLoad.failed.length === 0 &&
+      awayGone,
     JSON.stringify({
       status: backRead?.status() ?? null,
       backReads,
+      backAttachments,
       why: backLoad.read,
       awayGone,
       failed: backLoad.failed,
