@@ -118,6 +118,5 @@
       data-box
       data-slot="badge-dot"
     ></span>
-  {/if}
-  {@render children?.()}
+  {/if}<!-- no space between: a count's words are its children's alone -->{@render children?.()}
 </svelte:element>
