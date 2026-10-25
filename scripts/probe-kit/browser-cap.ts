@@ -242,6 +242,13 @@ function look(): void {
   }
 }
 
+/**
+ * Reads every watched tree now: one that ended says the most it held. The
+ * kit calls it once it has closed browsers, so a run that ends straight
+ * after still says each browser's most.
+ */
+export const lookNow = (): void => look();
+
 /** One launch at a time, so the children a launch adds are its own. */
 let launching: Promise<unknown> = Promise.resolve();
 

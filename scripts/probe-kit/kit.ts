@@ -42,7 +42,12 @@ import {
   scratchFleet,
   until,
 } from "../scratch-fleet";
-import { BROWSER_MEMORY_CAP, capped, reportCapsTo } from "./browser-cap";
+import {
+  BROWSER_MEMORY_CAP,
+  capped,
+  lookNow,
+  reportCapsTo,
+} from "./browser-cap";
 import {
   launchEnv,
   leftBehind,
@@ -1355,6 +1360,8 @@ export class Run {
       // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       await (await browser).close().catch(() => undefined);
     }
+    // Each closed browser says the most its processes held (browser-cap.ts).
+    lookNow();
     await this.noneLeft(takeLaunches(), (assertion, ok, detail) => {
       const line = `${ok ? "PASS" : "FAIL"} the run's browsers: ${assertion}${detail ? ` (${detail})` : ""}`;
       console.log(line);
