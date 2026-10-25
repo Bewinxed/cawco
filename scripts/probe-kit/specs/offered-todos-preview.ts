@@ -9,7 +9,10 @@
  * 1. Every state renders tsk-16's own words: each to-do, undo line, hint
  *    and card title drawn is one tsk-16 has (app/tsk16.js, read from the
  *    hub), and the state draws what it names: its rows, its counts, its
- *    undo line, its pending Keep all, its refusal in the hub's words.
+ *    undo line, its pending Keep all, its refusal in the hub's words. The
+ *    undo line is one line: the dropped words cut to it, Undo at its end
+ *    with no fill or edge. An offer's hint stands as close under its words
+ *    on the phone as on the desk.
  * 2. The offer's dashed square is no control: hidden from readers, out of
  *    the tab order, and it takes no focus.
  * 3. Keep and Drop are bare glyphs: no fill, no edge, no shadow, a glyph
@@ -26,14 +29,25 @@
  *    shares one start, the rows' travel one duration and one curve
  *    (--dur-panel, --ease-in-out: the house reflow's), and the kept row
  *    ends at the foot of the agreed rows.
+ * 9. Ink, at night: the dashed square reads 3:1 on its ground, and Drop's
+ *    glyph as strongly as Keep's.
  *
  *   bun scripts/probe-kit/run.ts offered-todos-preview
  *   OFFERED_ENGINES=chromium bun scripts/probe-kit/run.ts offered-todos-preview
  *   OFFERED_CAPTURES=1 … also writes the decision page's captures
+ *   OFFERED_CAPTURES=offered,dropped … only those views' captures
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import {
+  contrast,
+  dx,
+  dy,
+  capture as inkCapture,
+  peakContrast,
+  px,
+} from "../ink";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec } from "../kit";
 import { ROOT, readMotion } from "../kit";
@@ -168,6 +182,8 @@ interface StateRead {
   dark: boolean;
   dropped: number;
   groups: string[];
+  /** Each offer's gap from its words' last line to its hint's line, px. */
+  hintGaps: number[];
   hints: string[];
   hitBad: string[];
   key: string;
@@ -176,6 +192,8 @@ interface StateRead {
   pendingAll: boolean;
   problem: string | null;
   rows: number;
+  /** Each undo line that is not one line with Undo at its end, bare. */
+  undoBad: string[];
   width: number;
   words: string[];
 }
@@ -209,6 +227,53 @@ function readStage(): StateRead {
     words.push(text(el) ?? "");
   }
   const coarse = matchMedia("(pointer: coarse)").matches;
+
+  // The hint stands as close under the words on the phone as on the desk.
+  const hintGaps: number[] = [];
+  for (const row of all('li[data-slot="offered"]')) {
+    const said = row.querySelector('[data-slot="text"] > span:not([class])');
+    const hint = row.querySelector(
+      '[data-slot="offered-by"] a span:not([class])'
+    );
+    if (said && hint) {
+      hintGaps.push(
+        Math.round(
+          hint.getBoundingClientRect().top - said.getBoundingClientRect().bottom
+        )
+      );
+    }
+  }
+
+  // The undo line: one line, its words cut to it, Undo at its end, bare.
+  const undoBad: string[] = [];
+  for (const line of all('li[data-slot="dropped"] p')) {
+    const said = line.querySelector<HTMLElement>('[data-slot="dropped-words"]');
+    const undo = line.querySelector<HTMLElement>('[data-slot="undo"]');
+    if (!(said && undo)) {
+      undoBad.push("no words or no Undo");
+      continue;
+    }
+    const p = line.getBoundingClientRect();
+    const w = said.getBoundingClientRect();
+    const u = undo.getBoundingClientRect();
+    const lines = Math.round(
+      w.height / Number.parseFloat(getComputedStyle(said).lineHeight)
+    );
+    const s = getComputedStyle(undo);
+    const centre = (r: DOMRect) => r.top + r.height / 2;
+    if (
+      lines !== 1 ||
+      Math.abs(centre(w) - centre(u)) > 1 ||
+      Math.abs(u.right - p.right) > 1 ||
+      w.right > u.left ||
+      s.borderTopColor !== "rgba(0, 0, 0, 0)" ||
+      s.backgroundColor !== "rgba(0, 0, 0, 0)"
+    ) {
+      undoBad.push(
+        `${lines} line(s), words ${Math.round(w.left)}–${Math.round(w.right)} at ${Math.round(centre(w))}, Undo ${Math.round(u.left)}–${Math.round(u.right)} at ${Math.round(centre(u))} (line ends ${Math.round(p.right)}), edge ${s.borderTopColor}, fill ${s.backgroundColor}`
+      );
+    }
+  }
 
   // The dashed square: drawn, never a control.
   const boxBad: string[] = [];
@@ -345,6 +410,8 @@ function readStage(): StateRead {
     ),
     words,
     hints,
+    hintGaps,
+    undoBad,
     rows: all("li[data-todo]").length,
     agreed: all('li[data-slot="todo"]').length,
     offered: all('li[data-slot="offered"]').length,
@@ -396,6 +463,9 @@ function misses(view: string, read: StateRead): string[] {
       same("Keep all pending", read.pendingAll, want.pendingAll ?? false);
     }
     same("problem", read.problem, want.problem ?? null);
+    if (read.undoBad.length > 0) {
+      bad.push(`undo line: ${read.undoBad.join("; ")}`);
+    }
     if (want.offered !== undefined) {
       same("hints", read.hints.length, want.offered);
       for (const hint of read.hints) {
@@ -480,6 +550,105 @@ async function keepLeg(
   );
 }
 
+/**
+ * Leg 9, ink: what drawing alone decides. At night the offer's dashed square
+ * (the row's one mark of being offered) reads 3:1 on its ground (WCAG
+ * 1.4.11, a graphical object), and Drop's glyph reads as strongly as Keep's.
+ */
+async function inkLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  engine: string,
+  where: string
+) {
+  await go(page, base, `view:offered,where:${where},theme:dark`);
+  const boxes = await page.evaluate(() => {
+    const rect = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    };
+    const region = document.querySelector('[data-slot="region"]');
+    return {
+      region: region ? rect(region) : null,
+      squares: [
+        ...document.querySelectorAll(
+          '[data-slot="region"] [data-slot="offer-box"]'
+        ),
+      ].map(rect),
+      keeps: [
+        ...document.querySelectorAll('[data-slot="region"] [data-slot="keep"]'),
+      ].map(rect),
+      drops: [
+        ...document.querySelectorAll('[data-slot="region"] [data-slot="drop"]'),
+      ].map(rect),
+    };
+  });
+  const r = await inkCapture(page);
+  const peak = (box: {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  }) =>
+    // A pixel past the box on each side: the ground is in the read.
+    peakContrast(r, {
+      left: box.left - 1,
+      right: box.right + 1,
+      top: box.top - 1,
+      bottom: box.bottom + 1,
+    });
+  /** A glyph's ink: its strongest pixel, and how many of its pixels read 3:1 on the ground. */
+  const ink = (box: {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  }) => {
+    const ground = px(r, dx(r, box.left) + 1, dy(r, box.top) + 1);
+    let strong = 0;
+    for (
+      let y = Math.floor(dy(r, box.top));
+      y < Math.ceil(dy(r, box.bottom));
+      y += 1
+    ) {
+      for (
+        let x = Math.floor(dx(r, box.left));
+        x < Math.ceil(dx(r, box.right));
+        x += 1
+      ) {
+        if (contrast(px(r, x, y), ground) >= 3) {
+          strong += 1;
+        }
+      }
+    }
+    return { peak: peak(box), strong };
+  };
+  const squares = boxes.squares.map(peak);
+  const keeps = boxes.keeps.map(ink);
+  const drops = boxes.drops.map(ink);
+  const fixed = (n: number[]) => n.map((v) => v.toFixed(2)).join(", ");
+  const said = (g: { peak: number; strong: number }[]) =>
+    g
+      .map((one) => `${one.peak.toFixed(2)}:1, ${one.strong}px at 3:1`)
+      .join("; ");
+  kit.check(
+    `${engine} ${where} dark: the offer's dashed square reads 3:1 or more on its ground (${fixed(squares)}:1)`,
+    squares.length === 2 && squares.every((c) => c >= 3)
+  );
+  kit.check(
+    `${engine} ${where} dark: Drop's glyph reads as strongly as Keep's, as strong a pixel and as many at 3:1 (Drop ${said(drops)}; Keep ${said(keeps)})`,
+    drops.length === 2 &&
+      keeps.length === 2 &&
+      drops.every(
+        (d, i) =>
+          d.peak >= 3 &&
+          d.peak >= (keeps[i]?.peak ?? 0) - 0.25 &&
+          d.strong >= (keeps[i]?.strong ?? 0)
+      )
+  );
+}
+
 /** The decision page's captures: the component region alone, at DPR 1. */
 async function capture(
   page: Page,
@@ -488,6 +657,11 @@ async function capture(
   file: string
 ): Promise<void> {
   await go(page, base, key);
+  // A press the page made (Drop, Keep all) leaves the focus on what it put
+  // there, drawn as a keyboard's ring: the picture is of the state at rest.
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur()
+  );
   await page
     .locator('[data-slot="stage"] [data-slot="region"]')
     .screenshot({ path: join(CAPTURES, file), animations: "disabled" });
@@ -503,7 +677,11 @@ const spec: Spec = {
       const engines = (process.env.OFFERED_ENGINES ?? "chromium,webkit").split(
         ","
       ) as Engine[];
+      /** Which views to capture: every one (`1`), or those named (`offered,dropped`). */
+      const shoot = process.env.OFFERED_CAPTURES ?? "";
       for (const engine of engines) {
+        /** Each place's gaps from an offer's words to its hint, light and dark. */
+        const gaps: Partial<Record<string, number[]>> = {};
         for (const where of ["desk", "phone"]) {
           const errors: string[] = [];
           // biome-ignore lint/performance/noAwaitInLoops: one engine and place at a time
@@ -560,6 +738,9 @@ const spec: Spec = {
                 if (!REAL.has(word)) {
                   strangers.add(word);
                 }
+              }
+              if (view === "offered") {
+                gaps[where] = [...(gaps[where] ?? []), ...read.hintGaps];
               }
               boxBad.push(...read.boxBad.map((b) => `${key}: ${b}`));
               bareBad.push(...read.bareBad.map((b) => `${key}: ${b}`));
@@ -621,15 +802,22 @@ const spec: Spec = {
             `${engine} ${where}: the overflow sweep over all ${states} states totals ${spills}`,
             spills === 0
           );
+          kit.check(
+            `${engine} ${where}: the undo line is one line, the dropped words cut to it, Undo at its end with no fill or edge`,
+            bad.filter((b) => b.includes("undo line")).length === 0
+          );
           await keepLeg(kit, page, base, engine, where);
+          await inkLeg(kit, page, base, engine, where);
           kit.check(
             `${engine} ${where}: no console or page error`,
             errors.length === 0,
             errors.slice(0, 4).join(" | ")
           );
-          if (process.env.OFFERED_CAPTURES && engine === "chromium") {
+          if (shoot && engine === "chromium") {
             mkdirSync(CAPTURES, { recursive: true });
-            for (const view of views) {
+            for (const view of views.filter(
+              (v) => shoot === "1" || shoot.split(",").includes(v)
+            )) {
               for (const theme of ["light", "dark"]) {
                 // biome-ignore lint/performance/noAwaitInLoops: one state on the page at a time
                 await capture(
@@ -643,8 +831,15 @@ const spec: Spec = {
           }
           await page.close();
         }
+        const { desk = [], phone = [] } = gaps;
+        kit.check(
+          `${engine}: an offer's hint stands the same step under its words, one line of words or two, on the phone as on the desk, light and dark (desk ${desk.join(", ")}px; phone ${phone.join(", ")}px)`,
+          desk.length === 4 &&
+            phone.length === 4 &&
+            [...desk, ...phone].every((g) => Math.abs(g - (desk[0] ?? 0)) <= 1)
+        );
       }
-      if (process.env.OFFERED_CAPTURES) {
+      if (shoot) {
         await writeManifest();
       }
     } finally {

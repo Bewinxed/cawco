@@ -444,15 +444,17 @@
 
 {#snippet offered(todo: Todo, ref: string)}
   {@const by = offeredBy(todo)}
-  <div
-    class="flex items-center gap-space-2 min-h-c-btn-h coarse:min-h-c-btn-h-lg"
-  >
-    <!-- Its box: drawn, never a control (Keep agrees to it). -->
+  <!-- Its words' line as tall as the words: the hint stands the same step
+       under one line of words as under two. -->
+  <div class="flex items-center gap-space-2">
+    <!-- Its box: drawn, never a control (Keep agrees to it). Its dashes in
+         the strong control edge, 3:1 on the ground by day and at night: the
+         row's one mark of being offered. -->
     <span
       aria-hidden="true"
       data-flip="pop"
       data-slot="offer-box"
-      class="flex-none size-icon-md rounded-xs border border-dashed border-border-control"
+      class="flex-none size-icon-md rounded-xs border border-dashed border-border-control-strong"
     ></span>
     {@render words(todo, ref, false, true)}
     <span id="offered-{ref}" class="sr-only">offered, not agreed</span>
@@ -489,13 +491,15 @@
   {#if todo.proposed}
     <!-- Where it came from: the attempt's session, one press away. -->
     <div data-slot="offered-by" class="flex gap-space-2 pb-space-1">
-      <!-- Under the words: as wide as the box above and its gap. -->
+      <!-- Under the words: as wide as the box above and its gap. Under a
+           finger the link stands a control's height for its touch area, its
+           line at the top, so it sits as close under the words as by day. -->
       <span aria-hidden="true" class="flex-none w-icon-md"></span>
       {#if by}
         {@const long = formatDistanceToNowLong(new Date(by.at))}
         <a
           aria-label="Offered by {by.title}, {long}. Open that session"
-          class="mark-line touch-hit inline-flex flex-wrap items-center gap-x-space-1 min-w-0 coarse:min-h-c-btn-h px-space-1 rounded-xs type-meta text-ink-muted no-underline wrap-anywhere hover:bg-surface-hover press-tint focus-inset"
+          class="mark-line touch-hit inline-flex flex-wrap items-center gap-x-space-1 min-w-0 coarse:min-h-c-btn-h coarse:content-start px-space-1 rounded-xs type-meta text-ink-muted no-underline wrap-anywhere hover:bg-surface-hover press-tint focus-inset"
           href={by.href}
           onclick={(event) => {
             if (
@@ -536,12 +540,22 @@
 
 {#snippet undoLine(line: Dropped)}
   {@const [todo] = line.todos}
+  <!-- One line where the row stood: the words it dropped cut to the line
+       (the whole sentence its title), Undo at the end. -->
   <p
-    class="flex flex-wrap items-center gap-x-space-2 min-h-c-btn-h m-0 ps-space-1 type-meta text-ink-muted"
+    class="flex items-center gap-space-2 min-h-c-btn-h m-0 ps-space-1 type-meta text-ink-muted"
   >
-    <span class="min-w-0 wrap-anywhere">Dropped “{todo.text}”.</span>
+    <span
+      data-slot="dropped-words"
+      class="flex min-w-0 whitespace-nowrap"
+      title="Dropped “{todo.text}”."
+      ><span class="flex-none">Dropped “</span><span class="min-w-0 truncate"
+        >{todo.text}</span
+      ><span class="flex-none">”.</span></span
+    >
     <Button
       aria-label="Undo: put “{todo.text}” back"
+      class="ms-auto"
       data-slot="undo"
       onclick={() => undo(line)}
       pending={writing === `undo:${refOf(todo)}`}

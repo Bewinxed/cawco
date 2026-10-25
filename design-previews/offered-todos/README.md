@@ -93,4 +93,13 @@ list is drawn.
 - Refusal openings past the report's "Couldn't keep “…”": "Couldn't drop
   “…”", "Couldn't keep all", "Couldn't put “…” back" (Undo's own words).
 - On a coarse pointer the glyphs stand `--space-7` apart, so each 44×44
-  area clears the other, and the hint link is 36 tall with its touch area.
+  area clears the other, and the hint link is 36 tall with its touch area,
+  its line at the top, so it sits 4px under the words as on the desk.
+- The offer's first line is as tall as its words (no 36px floor), so the
+  hint stands the same 4px under one line of words as under two.
+- The dashed square is drawn in `border-control-strong` (3:1 on the ground
+  by day and at night, WCAG 1.4.11), not `border-control`, which measured
+  about 1.4:1 at night and all but vanished.
+- The undo line keeps the designer's words on one line: the dropped to-do
+  is cut to the line with an ellipsis (the whole sentence its title, and
+  Undo's accessible name), Undo at the line's end.
