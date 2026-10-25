@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>Comments on a tablet · preview</title>
+    <link href="./house.css" rel="stylesheet" />
+    <link href="./preview.css" rel="stylesheet" />
+    <script src="./preview.js" type="module"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>Comments on a tablet</h1>
+      <fieldset class="row">
+        <legend class="label">Option</legend>
+        <div class="seg" data-slot="option">
+          <button aria-pressed="false" data-value="a" type="button">
+            A · A strip, the thread hangs from its row
+          </button>
+          <button aria-pressed="false" data-value="b" type="button">
+            B · The list hangs from Comments
+          </button>
+        </div>
+      </fieldset>
+      <fieldset class="row">
+        <legend class="label">Width</legend>
+        <div class="seg" data-slot="width">
+          <button aria-pressed="false" data-value="744" type="button">
+            744, iPad mini
+          </button>
+          <button aria-pressed="false" data-value="820" type="button">
+            820, iPad Air
+          </button>
+          <button aria-pressed="false" data-value="1024" type="button">
+            1024, iPad Pro
+          </button>
+        </div>
+      </fieldset>
+      <p class="rule" data-slot="rule"></p>
+    </header>
+
+    <main class="stage">
+      <p aria-live="polite" class="readout" data-slot="readout"></p>
+      <div class="fit" data-slot="fit">
+        <div class="frame" data-slot="frame"></div>
+      </div>
+      <p class="note">
+        The page in the well is the comment-sizing preview, and its two
+        comments are the real ones, read from the hub. Press a row or a pin to
+        open its thread; Close, Back and Esc put it away. Resolve, Delete,
+        More, Sort, + and Reply are drawn, not wired.
+      </p>
+    </main>
+  </body>
+</html>

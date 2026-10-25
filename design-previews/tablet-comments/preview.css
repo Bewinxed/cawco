@@ -1,0 +1,309 @@
+/* The tablet comments preview: the preview pane at a tablet's width, made
+   of the real components' markup (parts.js) on the dashboard's own
+   stylesheet (house.css, captured by capture/capture.ts). This file draws
+   only what stands round the parts (the switches, the frame, the pane, its
+   well and the page in it) and, marked as such, what each option asks of
+   the parts that they don't do today: the rail's compact dress, a row
+   standing open as its card's anchor, the thread's bar in B. Its layer
+   comes after every layer of the house's, so it wins only where it names
+   its own selectors. */
+@layer preview {
+  :root {
+    color-scheme: light dark;
+    background: var(--surface-page);
+    color: var(--ink-strong);
+    font: var(--type-body);
+    -webkit-font-smoothing: antialiased;
+    /* Option A's strip (the advisor's proposal, a token it would add):
+       pad 7 + pill 20 + 7 + place about 120 + 7 + age 24 + 7. */
+    --c-comments-compact-w: 200px;
+  }
+  body {
+    margin: 0;
+    min-block-size: 100dvh;
+  }
+  :where(.seg button, .page-pin):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* ---- The switches. ---- */
+  .bar {
+    display: block grid;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6) var(--space-4);
+    border-block-end: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    h1 {
+      margin: 0;
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+      text-wrap: balance;
+    }
+    .row {
+      display: block flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-3);
+      min-inline-size: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .label {
+      float: inline-start;
+      min-inline-size: 4.5rem;
+      padding: 0;
+      color: var(--ink-muted);
+      font: var(--type-label);
+    }
+    .rule {
+      max-inline-size: 72ch;
+      margin: 0;
+      color: var(--ink-muted);
+      font: var(--type-meta);
+      text-wrap: pretty;
+    }
+  }
+  .seg {
+    display: inline flex;
+    flex-wrap: wrap;
+    gap: var(--space-row);
+    min-inline-size: 0;
+    padding: var(--c-segmented-pad);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+    button {
+      min-block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      border: 0;
+      border-radius: var(--radius-well);
+      background: transparent;
+      color: var(--ink-muted);
+      font: var(--type-label);
+      text-align: start;
+      cursor: pointer;
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out);
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--ink-strong);
+        }
+      }
+      &[aria-pressed="true"] {
+        background: var(--surface-lift);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-knob);
+      }
+    }
+  }
+
+  /* ---- The stage: the pane at its real width, scaled only when the
+     window is narrower than it. ---- */
+  .stage {
+    display: block grid;
+    justify-items: center;
+    gap: var(--space-4);
+    padding-block: var(--space-5) var(--space-8);
+  }
+  .readout,
+  .note {
+    max-inline-size: 72ch;
+    margin: 0;
+    padding-inline: var(--space-4);
+    color: var(--ink-muted);
+    font: var(--type-meta);
+    text-align: center;
+    text-wrap: pretty;
+  }
+  .readout {
+    color: var(--ink-strong);
+  }
+  .fit {
+    inline-size: calc(var(--frame-w) * var(--s, 1));
+    block-size: calc(var(--frame-h) * var(--s, 1));
+  }
+  .frame {
+    inline-size: var(--frame-w);
+    block-size: var(--frame-h);
+    transform: scale(var(--s, 1));
+    transform-origin: 0 0;
+    box-shadow: var(--shadow-overlay);
+    border-radius: var(--radius-lg);
+    overflow: clip;
+  }
+
+  /* ---- The pane: its head of three glass groups (The Title Bars Follow
+     Liquid Glass Rule), its well holding the page, and in A the strip. ---- */
+  .pane {
+    position: relative;
+    display: block flex;
+    flex-direction: column;
+    block-size: 100%;
+    background: var(--surface-raised);
+  }
+  .pane-head {
+    display: block grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-3);
+    flex: none;
+    min-block-size: calc(var(--c-btn-h) + 2 * var(--space-2));
+    padding-inline: var(--space-3) var(--space-3);
+    .lead {
+      display: block flex;
+      min-inline-size: 0;
+    }
+    .trail {
+      display: block flex;
+      justify-content: end;
+      align-items: center;
+      gap: var(--space-2);
+      min-inline-size: 0;
+    }
+  }
+  .pane-body {
+    display: block flex;
+    flex: auto;
+    min-block-size: 0;
+    padding: 0 var(--space-2) var(--space-2);
+    gap: var(--space-2);
+  }
+  .well {
+    position: relative;
+    flex: auto;
+    min-inline-size: 0;
+    border: 1px solid var(--border-well);
+    border-radius: var(--radius-sm);
+    background: var(--surface-well);
+    overflow: clip;
+    iframe {
+      display: block flow;
+      inline-size: 100%;
+      block-size: 100%;
+      border: 0;
+      background: var(--surface-page);
+    }
+  }
+  /* The page's pills, over the page as the pane's overlay draws them. */
+  .pins {
+    position: absolute;
+    inset: 0;
+    overflow: clip;
+    pointer-events: none;
+  }
+  .page-pin {
+    position: absolute;
+    display: inline flex;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: none;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  /* What hangs: the HangCard wrappers, over the pane. */
+  .hangs {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    > [data-hang] {
+      position: absolute;
+      pointer-events: auto;
+    }
+  }
+  /* A hung card: its width and its room, set where it is placed; its
+     contents are its faces (GlassCard's), each with its own padding. */
+  .hangs [data-slot="popover-content"] {
+    display: block flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    inline-size: var(--card-w);
+    max-block-size: var(--card-max-h);
+    min-inline-size: 0;
+    padding: 0;
+  }
+  [data-face] {
+    display: block flex;
+    flex: auto;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-block-size: 0;
+    min-inline-size: 0;
+    border-radius: inherit;
+  }
+  [data-face="thread"] {
+    padding: var(--space-3);
+  }
+  [data-face="list"] {
+    padding: var(--space-1) 0 0;
+  }
+
+  /* ---- A list's own bar (both options): no title, one glass group of
+     bare symbols at its trailing edge (The Comments rail, as the Title Bars
+     rule asks of it), the search field shut until Search opens it. ---- */
+  .list-bar {
+    display: block flex;
+    justify-content: end;
+    flex: none;
+    padding: var(--space-2) var(--space-2) var(--space-1);
+  }
+  [data-slot="comment-rail"] [data-slot="input-group"][hidden] {
+    display: none;
+  }
+
+  /* ---- A: the strip. The rail at `--c-comments-compact-w`, its rows one
+     line each (the pill, the place, the age), 44px under a finger. ---- */
+  .strip {
+    display: block flex;
+    flex: none;
+    flex-direction: column;
+    inline-size: var(--c-comments-compact-w);
+    min-block-size: 0;
+    [data-slot="comment-rail"] {
+      inline-size: 100%;
+      background: transparent;
+    }
+    [data-line="words"],
+    [data-line="back"],
+    [data-attach-strip] {
+      display: none;
+    }
+    [data-slot="pin-row"] {
+      align-items: center;
+    }
+  }
+  /* A's open row: the anchor its card hangs from. Its place and age give
+     way to the thread's four peers; it keeps the strip's surface (no
+     selection wash) and draws its own foot, the glass's join, so the row
+     and the card read as one shape. */
+  li[data-open] {
+    --flare: var(--radius-lg);
+    [data-slot="pin-row"] {
+      position: relative;
+    }
+    [data-slot="title"],
+    [data-slot="age"] {
+      visibility: hidden;
+    }
+  }
+  .row-peers {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--space-1);
+    display: block flex;
+    align-items: center;
+  }
+
+  /* ---- B: the thread's bar. Back leads; Resolve, Delete, More and Close
+     trail; the pill and what it stands on under it. ---- */
+  .thread-bar {
+    display: block flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+}

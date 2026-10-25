@@ -1,0 +1,418 @@
+/* The comment sizing preview: the comments surface at its real size, made
+   of the real components' markup (parts.js) on the dashboard's own
+   stylesheet (house.css, captured by capture/capture.ts). This file draws
+   only what stands round them: the switches, the frame, the pane's head,
+   the decision page in the well, and each option's own holders (the rail
+   holding a thread, the panel, a foot sheet). Its layer comes after every
+   layer of the house's, so it wins only where it names its own classes. */
+@layer preview {
+  :root {
+    color-scheme: light dark;
+    background: var(--surface-page);
+    color: var(--ink-strong);
+    font: var(--type-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    margin: 0;
+    min-block-size: 100dvh;
+  }
+  /* The preview's own controls: the switches, Play, the page's pins. */
+  :where(.seg button, .replay, .page-pin):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .page-pin {
+    border-radius: var(--radius-pill);
+  }
+
+  /* ---- The switches. ---- */
+  .bar {
+    display: block grid;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6) var(--space-4);
+    border-block-end: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    h1 {
+      margin: 0;
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+      text-wrap: balance;
+    }
+    .row {
+      display: block flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-3);
+      min-inline-size: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .label {
+      float: inline-start;
+      min-inline-size: 5.5rem;
+      padding: 0;
+      color: var(--ink-muted);
+      font: var(--type-label);
+    }
+    .rule {
+      max-inline-size: 72ch;
+      margin: 0;
+      color: var(--ink-muted);
+      font: var(--type-meta);
+      text-wrap: pretty;
+    }
+  }
+  .seg {
+    display: inline flex;
+    flex-wrap: wrap;
+    gap: var(--space-row);
+    min-inline-size: 0;
+    padding: var(--c-segmented-pad, 2px);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+    button {
+      min-block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      border: 0;
+      border-radius: var(--radius-well);
+      background: transparent;
+      color: var(--ink-muted);
+      font: var(--type-label);
+      text-align: start;
+      cursor: pointer;
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out);
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--ink-strong);
+        }
+      }
+      &[aria-pressed="true"] {
+        background: var(--surface-lift);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-knob);
+      }
+    }
+  }
+  .seg .short {
+    display: none;
+  }
+  @media (width <= 480px) {
+    .bar .label {
+      float: none;
+      display: block flow;
+      margin-block-end: var(--space-1);
+    }
+    .seg .long {
+      display: none;
+    }
+    .seg .short {
+      display: inline;
+    }
+  }
+  .note {
+    max-inline-size: 72ch;
+    margin: 0;
+    padding-inline: var(--space-4);
+    color: var(--ink-muted);
+    font: var(--type-meta);
+    text-align: center;
+    text-wrap: pretty;
+  }
+  .replay {
+    min-block-size: var(--c-btn-h-sm);
+    padding-inline: var(--space-3);
+    border: 1px solid var(--border-button-outline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    font: var(--type-label);
+    cursor: pointer;
+    transition: background-color var(--dur-control) var(--ease-out);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--surface-hover);
+      }
+    }
+  }
+
+  /* ---- The stage: one frame at its real size, scaled down only when the
+     window is narrower than it. ---- */
+  .stage {
+    display: block grid;
+    justify-items: center;
+    gap: var(--space-3);
+    padding: var(--space-6);
+  }
+  .readout {
+    justify-self: stretch;
+    max-inline-size: 72ch;
+    min-block-size: calc(2lh);
+    margin: 0 auto;
+    color: var(--ink-strong);
+    font: var(--type-label);
+    text-align: center;
+    text-wrap: balance;
+  }
+  .fit {
+    position: relative;
+    inline-size: calc(var(--w) * var(--s) * 1px);
+    block-size: calc(var(--h) * var(--s) * 1px);
+  }
+  .frame {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    display: block flex;
+    flex-direction: column;
+    inline-size: calc(var(--w) * 1px);
+    block-size: calc(var(--h) * 1px);
+    overflow: clip;
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow:
+      0 0 0 1px var(--border-hairline),
+      var(--shadow-hairline);
+    transform: scale(var(--s));
+    transform-origin: 0 0;
+  }
+  @media (width <= 480px) {
+    .stage {
+      padding-inline: 0;
+    }
+    .frame {
+      border-radius: 0;
+    }
+  }
+
+  /* ---- The preview pane: its head, the well and what stands beside it. ---- */
+  .pane-head {
+    display: block flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+    block-size: 44px;
+    padding-inline: var(--space-4) var(--space-2);
+    border-block-end: 1px solid var(--border-hairline);
+    h2 {
+      flex: 1;
+      min-inline-size: 0;
+      margin: 0;
+      overflow: clip;
+      font: var(--type-label);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+  .pane-body {
+    position: relative;
+    display: block flex;
+    flex: 1;
+    min-block-size: 0;
+  }
+  .well {
+    position: relative;
+    flex: 1;
+    min-inline-size: 0;
+    overflow: clip;
+    background: var(--surface-well);
+  }
+  .page-scroll {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* The pane's pin room: the size container a card's width reads. */
+  .pin-room {
+    position: absolute;
+    inset: 0;
+    container-type: inline-size;
+    pointer-events: none;
+  }
+  .page-pin {
+    position: absolute;
+    inset-block-start: calc(var(--y) * 1px);
+    inset-inline-start: calc(var(--x) * 1px);
+    display: inline flex;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  .side {
+    position: relative;
+    display: block flex;
+    flex: none;
+    inline-size: calc(var(--side-w) * 1px);
+    min-block-size: 0;
+    overflow: clip;
+    border-inline-start: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    &[data-panel] {
+      border-inline-start: 0;
+    }
+    > [data-slot="comment-rail"] {
+      inline-size: 100%;
+      min-inline-size: 0;
+    }
+  }
+  /* What the side stood as before a hand-off, fading out over the new. */
+  .side-was {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    display: block flex;
+    inline-size: calc(var(--was-w) * 1px);
+    pointer-events: none;
+    > [data-slot="comment-rail"] {
+      inline-size: 100%;
+    }
+  }
+  .handle-slot {
+    position: relative;
+    display: block flex;
+    flex: none;
+    z-index: 3;
+  }
+  /* The rail holding one thread: its head and its reply stand, its entries scroll. */
+  .rail-thread {
+    display: block flex;
+    flex: auto;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-block-size: 0;
+    padding: var(--space-3);
+  }
+  .foot-sheet {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 2;
+    display: block flex;
+    max-block-size: 60%;
+    &[data-tall] {
+      max-block-size: 85%;
+    }
+    > [data-slot="comment-rail"] {
+      inline-size: 100%;
+    }
+  }
+  /* B on a phone: the open comment's row opens into its thread, the list round it. */
+  .row-thread {
+    display: block flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2) var(--space-3);
+    overflow: clip;
+  }
+  /* ---- The decision page the comments stand on. ---- */
+  .doc {
+    max-inline-size: 680px;
+    margin-inline: auto;
+    padding: var(--space-8) var(--space-6) calc(var(--h) * 0.7px);
+    color: var(--ink-strong);
+    @container well (width < 520px) {
+      padding-inline: var(--space-4);
+    }
+  }
+  .well {
+    container: well / inline-size;
+  }
+  .kicker {
+    margin: 0;
+    color: var(--ink-muted);
+    font: var(--type-meta);
+  }
+  .doc-title {
+    margin: var(--space-1) 0 0;
+    font: var(--type-title);
+    letter-spacing: var(--track-title);
+    text-wrap: balance;
+  }
+  .lede {
+    margin: var(--space-3) 0 0;
+    color: var(--ink-muted);
+    text-wrap: pretty;
+  }
+  .decision {
+    margin-block-start: var(--space-6);
+    padding: var(--space-5);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    h2 {
+      margin: 0;
+      font: var(--type-label);
+      text-wrap: balance;
+    }
+    .why {
+      margin: var(--space-1) 0 0;
+      color: var(--ink-muted);
+      font: var(--type-meta);
+      text-wrap: pretty;
+    }
+  }
+  .options {
+    display: block grid;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .option {
+    display: block flex;
+    align-items: start;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    &:has(.dot[data-picked]) {
+      border-color: var(--border-control);
+      background: var(--surface-recess);
+    }
+  }
+  .dot {
+    flex: none;
+    inline-size: 16px;
+    block-size: 16px;
+    margin-block-start: 1px;
+    border: 2px solid var(--border-control);
+    border-radius: var(--radius-pill);
+    &[data-picked] {
+      border: 5px solid var(--action-solid);
+    }
+  }
+  .option-body {
+    display: block grid;
+    gap: var(--space-row);
+    min-inline-size: 0;
+  }
+  .option-name {
+    font: var(--type-label);
+    overflow-wrap: anywhere;
+  }
+  .option-line {
+    color: var(--ink-muted);
+    font: var(--type-meta);
+    text-wrap: pretty;
+  }
+  .badge {
+    margin-inline-start: var(--space-1);
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-pill);
+    background: var(--brand-wash);
+    color: var(--brand-ink);
+    font: var(--type-meta);
+    white-space: nowrap;
+  }
+  .doc-foot {
+    margin: var(--space-6) 0 0;
+    color: var(--ink-muted);
+    font: var(--type-meta);
+  }
+}
