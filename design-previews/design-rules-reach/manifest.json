@@ -1,0 +1,514 @@
+[
+  {
+    "card": "grant",
+    "surface": "prompt-grant",
+    "option": "Plain, like the other peers",
+    "width": 1440,
+    "file": "grant-prompt-grant-after-desk.png",
+    "caption": "The standing grant drawn like the other peers: the recessed fill, one neutral outline, ink-strong, its shield glyph and its sentence kept."
+  },
+  {
+    "card": "grant",
+    "surface": "prompt-grant",
+    "option": "Plain, like the other peers",
+    "width": 390,
+    "file": "grant-prompt-grant-after-phone.png",
+    "caption": "The standing grant drawn like the other peers: the recessed fill, one neutral outline, ink-strong, its shield glyph and its sentence kept."
+  },
+  {
+    "card": "grant",
+    "surface": "prompt-grant",
+    "option": "Keep the warning fill",
+    "width": 1440,
+    "file": "grant-prompt-grant-today-desk.png",
+    "caption": "The standing grant (\"Always allow …\") in the warning fill, warning ink and edge. Deny and Approve are drawn untinted, as DESIGN.md has them, so only the grant differs."
+  },
+  {
+    "card": "grant",
+    "surface": "prompt-grant",
+    "option": "Keep the warning fill",
+    "width": 390,
+    "file": "grant-prompt-grant-today-phone.png",
+    "caption": "The standing grant (\"Always allow …\") in the warning fill, warning ink and edge. Deny and Approve are drawn untinted, as DESIGN.md has them, so only the grant differs."
+  },
+  {
+    "card": "needs-you",
+    "surface": "connect-card",
+    "option": "Now, everywhere",
+    "width": 1440,
+    "file": "needs-you-connect-card-after-desk.png",
+    "caption": "The same ask with Connect drawn as the untinted peer of Not now."
+  },
+  {
+    "card": "needs-you",
+    "surface": "connect-card",
+    "option": "Now, everywhere",
+    "width": 390,
+    "file": "needs-you-connect-card-after-phone.png",
+    "caption": "The same ask with Connect drawn as the untinted peer of Not now."
+  },
+  {
+    "card": "needs-you",
+    "surface": "connect-card",
+    "option": "With each redesign",
+    "width": 1440,
+    "file": "needs-you-connect-card-today-desk.png",
+    "caption": "A connect ask in the transcript: Connect outlined in green."
+  },
+  {
+    "card": "needs-you",
+    "surface": "connect-card",
+    "option": "With each redesign",
+    "width": 390,
+    "file": "needs-you-connect-card-today-phone.png",
+    "caption": "A connect ask in the transcript: Connect outlined in green."
+  },
+  {
+    "card": "needs-you",
+    "surface": "needs-card",
+    "option": "Now, everywhere",
+    "width": 1440,
+    "file": "needs-you-needs-card-after-desk.png",
+    "caption": "The same rows with Deny and Approve as untinted peers (the recessed fill, one outline, ink-strong), Deny at the text's start and Approve at the trailing edge."
+  },
+  {
+    "card": "needs-you",
+    "surface": "needs-card",
+    "option": "Now, everywhere",
+    "width": 390,
+    "file": "needs-you-needs-card-after-phone.png",
+    "caption": "The same rows with Deny and Approve as untinted peers (the recessed fill, one outline, ink-strong), Deny at the text's start and Approve at the trailing edge."
+  },
+  {
+    "card": "needs-you",
+    "surface": "needs-card",
+    "option": "With each redesign",
+    "width": 1440,
+    "file": "needs-you-needs-card-today-desk.png",
+    "caption": "Caw's Needs you list: Deny filled red and Approve filled green, side by side at the row's end."
+  },
+  {
+    "card": "needs-you",
+    "surface": "needs-card",
+    "option": "With each redesign",
+    "width": 390,
+    "file": "needs-you-needs-card-today-phone.png",
+    "caption": "Caw's Needs you list: Deny filled red and Approve filled green, side by side at the row's end."
+  },
+  {
+    "card": "needs-you",
+    "surface": "peek-ask",
+    "option": "Now, everywhere",
+    "width": 1440,
+    "file": "needs-you-peek-ask-after-desk.png",
+    "caption": "The same ask on the peek's own ground inside a hairline, its Needs you mark in the state line above, Deny and Approve untinted peers."
+  },
+  {
+    "card": "needs-you",
+    "surface": "peek-ask",
+    "option": "With each redesign",
+    "width": 1440,
+    "file": "needs-you-peek-ask-today-desk.png",
+    "caption": "The peek's ask: a yellow-filled block holding red- and green-outlined Deny and Approve."
+  },
+  {
+    "card": "needs-you",
+    "surface": "prompt",
+    "option": "Now, everywhere",
+    "width": 1440,
+    "file": "needs-you-prompt-after-desk.png",
+    "caption": "The same card with Approve and Deny as untinted peers: the same fill and one neutral outline, told apart by glyph, word and place."
+  },
+  {
+    "card": "needs-you",
+    "surface": "prompt",
+    "option": "Now, everywhere",
+    "width": 390,
+    "file": "needs-you-prompt-after-phone.png",
+    "caption": "The same card with Approve and Deny as untinted peers: the same fill and one neutral outline, told apart by glyph, word and place."
+  },
+  {
+    "card": "needs-you",
+    "surface": "prompt",
+    "option": "With each redesign",
+    "width": 1440,
+    "file": "needs-you-prompt-today-desk.png",
+    "caption": "The transcript's permission card: Approve outlined in green and Deny in red."
+  },
+  {
+    "card": "needs-you",
+    "surface": "prompt",
+    "option": "With each redesign",
+    "width": 390,
+    "file": "needs-you-prompt-today-phone.png",
+    "caption": "The transcript's permission card: Approve outlined in green and Deny in red."
+  },
+  {
+    "card": "needs-you",
+    "surface": "task-needs",
+    "option": "Now, everywhere",
+    "width": 1440,
+    "file": "needs-you-task-needs-after-desk.png",
+    "caption": "The same action on the task's own ground inside a hairline, its Needs you mark and words kept, Deny and Approve untinted peers at opposite ends."
+  },
+  {
+    "card": "needs-you",
+    "surface": "task-needs",
+    "option": "Now, everywhere",
+    "width": 390,
+    "file": "needs-you-task-needs-after-phone.png",
+    "caption": "The same action on the task's own ground inside a hairline, its Needs you mark and words kept, Deny and Approve untinted peers at opposite ends."
+  },
+  {
+    "card": "needs-you",
+    "surface": "task-needs",
+    "option": "With each redesign",
+    "width": 1440,
+    "file": "needs-you-task-needs-today-desk.png",
+    "caption": "A task's approved action: a yellow-ground, yellow-edged card holding red and green Deny and Approve."
+  },
+  {
+    "card": "needs-you",
+    "surface": "task-needs",
+    "option": "With each redesign",
+    "width": 390,
+    "file": "needs-you-task-needs-today-phone.png",
+    "caption": "A task's approved action: a yellow-ground, yellow-edged card holding red and green Deny and Approve."
+  },
+  {
+    "card": "title-bars",
+    "surface": "configure-crumb",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-configure-crumb-after-desk.png",
+    "caption": "The same page: no title on the desk (the rail says where you are); on the phone, Back is the chevron alone (\"Back to Configure\") and the section's own name is the title."
+  },
+  {
+    "card": "title-bars",
+    "surface": "configure-crumb",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-configure-crumb-after-phone.png",
+    "caption": "The same page: no title on the desk (the rail says where you are); on the phone, Back is the chevron alone (\"Back to Configure\") and the section's own name is the title."
+  },
+  {
+    "card": "title-bars",
+    "surface": "configure-crumb",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-configure-crumb-today-desk.png",
+    "caption": "A Configure page (MCP servers): the bar says \"Configure\" beside the rail that already shows it; on the phone, Back is a chevron and the word \"Configure\"."
+  },
+  {
+    "card": "title-bars",
+    "surface": "configure-crumb",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-configure-crumb-today-phone.png",
+    "caption": "A Configure page (MCP servers): the bar says \"Configure\" beside the rail that already shows it; on the phone, Back is a chevron and the word \"Configure\"."
+  },
+  {
+    "card": "title-bars",
+    "surface": "decision-page",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-decision-page-after-desk.png",
+    "caption": "The same head with no band: Back is the chevron alone (\"Back to Decisions\"), then the title; the count is left to the page and its Send."
+  },
+  {
+    "card": "title-bars",
+    "surface": "decision-page",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-decision-page-after-phone.png",
+    "caption": "The same head with no band: Back is the chevron alone (\"Back to Decisions\"), then the title; the count is left to the page and its Send."
+  },
+  {
+    "card": "title-bars",
+    "surface": "decision-page",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-decision-page-today-desk.png",
+    "caption": "A decision page's head: a filled, edged band with Back as a chevron and the word, the title, and the pick count beside it."
+  },
+  {
+    "card": "title-bars",
+    "surface": "decision-page",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-decision-page-today-phone.png",
+    "caption": "A decision page's head: a filled, edged band with Back as a chevron and the word, the title, and the pick count beside it."
+  },
+  {
+    "card": "title-bars",
+    "surface": "folder-file",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-folder-file-after-desk.png",
+    "caption": "The same file named by its name: on the desk the controls float in a glass group; on the phone Back is the chevron alone, then the file's name."
+  },
+  {
+    "card": "title-bars",
+    "surface": "folder-file",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-folder-file-after-phone.png",
+    "caption": "The same file named by its name: on the desk the controls float in a glass group; on the phone Back is the chevron alone, then the file's name."
+  },
+  {
+    "card": "title-bars",
+    "surface": "folder-file",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-folder-file-today-desk.png",
+    "caption": "A project file: on the desk the side panel names it by its path; on the phone Back is a chevron and a word, with the path at the row's end."
+  },
+  {
+    "card": "title-bars",
+    "surface": "folder-file",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-folder-file-today-phone.png",
+    "caption": "A project file: on the desk the side panel names it by its path; on the phone Back is a chevron and a word, with the path at the row's end."
+  },
+  {
+    "card": "title-bars",
+    "surface": "peek",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-peek-after-desk.png",
+    "caption": "The peek's head as DESIGN.md writes it: one row, the title by its folder in its hue, the machine's mark (its name in the tooltip), and Open as the maximize symbol in its glass group. No path."
+  },
+  {
+    "card": "title-bars",
+    "surface": "peek",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-peek-today-desk.png",
+    "caption": "The peek's head: the title over a line with the machine and the folder's path, and Open as a word."
+  },
+  {
+    "card": "title-bars",
+    "surface": "preview-pane",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-preview-pane-after-desk.png",
+    "caption": "The artifact panel in one row: the ask moves to the name's menu and tooltip, the mode stands in its own glass group, Comments is its glyph and count, and the rest float in one trailing group with Close last."
+  },
+  {
+    "card": "title-bars",
+    "surface": "preview-pane",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-preview-pane-after-phone.png",
+    "caption": "The artifact panel in one row: the ask moves to the name's menu and tooltip, the mode stands in its own glass group, Comments is its glyph and count, and the rest float in one trailing group with Close last."
+  },
+  {
+    "card": "title-bars",
+    "surface": "preview-pane",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-preview-pane-today-desk.png",
+    "caption": "The artifact panel: the page's name with its ask on a line under it where the head has room, and Comments as a glyph and a word among the controls."
+  },
+  {
+    "card": "title-bars",
+    "surface": "preview-pane",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-preview-pane-today-phone.png",
+    "caption": "The artifact panel: the page's name with its ask on a line under it where the head has room, and Comments as a glyph and a word among the controls."
+  },
+  {
+    "card": "title-bars",
+    "surface": "section-head",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-section-head-after-desk.png",
+    "caption": "The same section with no head of its own: its actions float in one glass group at the trailing end, and its purpose is the first line of the content."
+  },
+  {
+    "card": "title-bars",
+    "surface": "section-head",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-section-head-after-phone.png",
+    "caption": "The same section with no head of its own: its actions float in one glass group at the trailing end, and its purpose is the first line of the content."
+  },
+  {
+    "card": "title-bars",
+    "surface": "section-head",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-section-head-today-desk.png",
+    "caption": "A Configure section (Rules): its card opens with the title over its one-line purpose, the actions beside them."
+  },
+  {
+    "card": "title-bars",
+    "surface": "section-head",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-section-head-today-phone.png",
+    "caption": "A Configure section (Rules): its card opens with the title over its one-line purpose, the actions beside them."
+  },
+  {
+    "card": "title-bars",
+    "surface": "side-surface",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-side-surface-after-desk.png",
+    "caption": "The same head: the id line is gone from the bar, the file is named by its name (its path in the tooltip), and the controls float in one trailing glass group with Close last."
+  },
+  {
+    "card": "title-bars",
+    "surface": "side-surface",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-side-surface-after-phone.png",
+    "caption": "The same head: the id line is gone from the bar, the file is named by its name (its path in the tooltip), and the controls float in one trailing glass group with Close last."
+  },
+  {
+    "card": "title-bars",
+    "surface": "side-surface",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-side-surface-today-desk.png",
+    "caption": "The side panel's shared head (the bench's three kinds of name): a plan, to-dos with the task's id on a line under the title, and a file named by its whole path."
+  },
+  {
+    "card": "title-bars",
+    "surface": "side-surface",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-side-surface-today-phone.png",
+    "caption": "The side panel's shared head (the bench's three kinds of name): a plan, to-dos with the task's id on a line under the title, and a file named by its whole path."
+  },
+  {
+    "card": "title-bars",
+    "surface": "top-bar",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-top-bar-after-desk.png",
+    "caption": "The top bar with no ground or hairline of its own; the tabs keep their shelf, and a section the rail shows chosen gets no title."
+  },
+  {
+    "card": "title-bars",
+    "surface": "top-bar",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-top-bar-after-phone.png",
+    "caption": "The top bar with no ground or hairline of its own; the tabs keep their shelf, and a section the rail shows chosen gets no title."
+  },
+  {
+    "card": "title-bars",
+    "surface": "top-bar",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-top-bar-today-desk.png",
+    "caption": "The top bar over a conversation as it ships: a raised ground with a hairline under it on every page, the session's tabs on its shelf."
+  },
+  {
+    "card": "title-bars",
+    "surface": "top-bar",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-top-bar-today-phone.png",
+    "caption": "The top bar over a conversation as it ships: a raised ground with a hairline under it on every page, the session's tabs on its shelf."
+  },
+  {
+    "card": "title-bars",
+    "surface": "usage",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-usage-after-desk.png",
+    "caption": "Usage with no page head: on the desk the range and the project picker with Export (a symbol) stand in the bar as two glass groups; on the phone they are the page's first row."
+  },
+  {
+    "card": "title-bars",
+    "surface": "usage",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-usage-after-phone.png",
+    "caption": "Usage with no page head: on the desk the range and the project picker with Export (a symbol) stand in the bar as two glass groups; on the phone they are the page's first row."
+  },
+  {
+    "card": "title-bars",
+    "surface": "usage",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-usage-today-desk.png",
+    "caption": "Usage: \"Usage\" in the bar, then the page's own head (title over a line), with the project picker, range and Export beside it."
+  },
+  {
+    "card": "title-bars",
+    "surface": "usage",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-usage-today-phone.png",
+    "caption": "Usage: \"Usage\" in the bar, then the page's own head (title over a line), with the project picker, range and Export beside it."
+  },
+  {
+    "card": "warnings",
+    "surface": "alert-warning",
+    "option": "A mark and words, no filled row",
+    "width": 1440,
+    "file": "warnings-alert-warning-after-desk.png",
+    "caption": "The same warning as a mark and words: the shield in the warning's mark colour, its words in the warning ink, no filled row."
+  },
+  {
+    "card": "warnings",
+    "surface": "alert-warning",
+    "option": "A mark and words, no filled row",
+    "width": 390,
+    "file": "warnings-alert-warning-after-phone.png",
+    "caption": "The same warning as a mark and words: the shield in the warning's mark colour, its words in the warning ink, no filled row."
+  },
+  {
+    "card": "warnings",
+    "surface": "alert-warning",
+    "option": "Keep the yellow row",
+    "width": 1440,
+    "file": "warnings-alert-warning-today-desk.png",
+    "caption": "A warning alert (New session's \"Full Send is on\"): a yellow-filled row."
+  },
+  {
+    "card": "warnings",
+    "surface": "alert-warning",
+    "option": "Keep the yellow row",
+    "width": 390,
+    "file": "warnings-alert-warning-today-phone.png",
+    "caption": "A warning alert (New session's \"Full Send is on\"): a yellow-filled row."
+  },
+  {
+    "card": "warnings",
+    "surface": "hub-band",
+    "option": "A mark and words, no filled row",
+    "width": 1440,
+    "file": "warnings-hub-band-after-desk.png",
+    "caption": "The same band as a mark and words: the warning triangle and the sentence, no filled row, Reconnect now kept."
+  },
+  {
+    "card": "warnings",
+    "surface": "hub-band",
+    "option": "A mark and words, no filled row",
+    "width": 390,
+    "file": "warnings-hub-band-after-phone.png",
+    "caption": "The same band as a mark and words: the warning triangle and the sentence, no filled row, Reconnect now kept."
+  },
+  {
+    "card": "warnings",
+    "surface": "hub-band",
+    "option": "Keep the yellow row",
+    "width": 1440,
+    "file": "warnings-hub-band-today-desk.png",
+    "caption": "The hub band when the hub can't be reached: a yellow-filled row under the bar with Reconnect now."
+  },
+  {
+    "card": "warnings",
+    "surface": "hub-band",
+    "option": "Keep the yellow row",
+    "width": 390,
+    "file": "warnings-hub-band-today-phone.png",
+    "caption": "The hub band when the hub can't be reached: a yellow-filled row under the bar with Reconnect now."
+  }
+]
