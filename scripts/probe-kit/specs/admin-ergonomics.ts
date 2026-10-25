@@ -271,17 +271,7 @@ const run = async (kit: Kit) => {
   const session = await fleet.spawn("claude", "Ergonomics", place, {
     projectId: project.id,
   });
-  const credential = await Bun.file(
-    `/proc/${await fleet.sessionPid(session)}/environ`
-  )
-    .text()
-    .then(
-      (environ) =>
-        environ
-          .split("\0")
-          .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-          ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? ""
-    );
+  const credential = await fleet.sessionCredential(session);
 
   const me = { base: fleet.base, id: session, credential };
   /**

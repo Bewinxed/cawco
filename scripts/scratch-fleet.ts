@@ -48,6 +48,7 @@ import {
   socketPathProblem,
   workspaceCacheDir,
 } from "../packages/core/src/paths";
+import { processArgs } from "../packages/core/src/process-identity";
 import { forgetSessiondLink } from "../packages/core/src/sessiond";
 import {
   listedPid,
@@ -599,6 +600,20 @@ const answeredOf = (
 const encoder = new TextEncoder();
 /** The agent's log lines about accounts and sign-ins, for a failed wait to show. */
 const ACCOUNT_LINE = /account|sign|auth|login|credential/i;
+
+/**
+ * Variable `name` of process `pid`'s environment, as core `processArgs`
+ * reads it on Linux and macOS alike; undefined when it is unset, or the
+ * process is gone or not ours to read.
+ */
+export const envOf = async (
+  pid: number,
+  name: string
+): Promise<string | undefined> =>
+  (await processArgs(pid))?.env
+    .find((entry) => entry.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+
 /** Anthropic's usage headers for a subscription's answer ({@link Reply.limits}). */
 const limitHeaders = (limits: Reply["limits"]): Record<string, string> => {
   if (!limits) {
@@ -2235,6 +2250,22 @@ async function standUp(
       client.close();
     }
   };
+  /**
+   * Variable `name` of a session's own process's environment, by its proc
+   * id, as core `processArgs` reads it (`/proc` on Linux, `KERN_PROCARGS2` on
+   * macOS). Undefined while sessiond holds no process for it, or the
+   * variable is unset.
+   */
+  const sessionEnv = async (
+    instanceId: string,
+    name: string
+  ): Promise<string | undefined> => {
+    const pid = await sessionPid(instanceId);
+    return pid === undefined ? undefined : await envOf(pid, name);
+  };
+  /** A session's own credential (`CAWCO_SESSION_CREDENTIAL`), {@link sessionEnv}'s; empty when there is none. */
+  const sessionCredential = async (instanceId: string): Promise<string> =>
+    (await sessionEnv(instanceId, "CAWCO_SESSION_CREDENTIAL")) ?? "";
 
   /**
    * The paired device's token the probe acts as the person with, once a
@@ -3060,6 +3091,8 @@ async function standUp(
     killTree,
     killSessiond,
     sessionPid,
+    sessionEnv,
+    sessionCredential,
     heldProcs,
     api,
     post,

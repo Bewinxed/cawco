@@ -229,10 +229,7 @@ const readPage = async (raw: Raw, session: string) => {
 
 /** A session's process's own credential (its environment). */
 const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
-  (await Bun.file(`/proc/${await fleet.sessionPid(id)}/environ`).text())
-    .split("\0")
-    .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-    ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  await fleet.sessionCredential(id);
 
 /** `browser_ask` called through the hub's tool door as session `id`: the words its agent reads, or the refusal's marked as one. */
 const ask = (fleet: KitFleet, id: string, credential: string) =>

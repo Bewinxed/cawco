@@ -74,7 +74,13 @@ import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  envOf,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { decisionsOf, startedSince } from "../agent-records";
 import type { Kit, Spec } from "../kit";
 
@@ -263,9 +269,9 @@ const treeMarkOf = async (
 ): Promise<string | undefined> =>
   pid === undefined
     ? undefined
-    : (await readFile(`/proc/${pid}/environ`, "utf8").catch(() => ""))
-        .split("\0")
-        .find((entry) => entry.startsWith(`${CAWCO_ENV.sessiondTree}=`));
+    : await envOf(pid, CAWCO_ENV.sessiondTree).then((value) =>
+        value === undefined ? undefined : `${CAWCO_ENV.sessiondTree}=${value}`
+      );
 
 /** The host pids of H's heartbeat loop's shell ({@link START}). */
 const loopProcesses = async (): Promise<number[]> =>

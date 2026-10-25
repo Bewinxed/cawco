@@ -126,10 +126,7 @@ type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
 /** A session's credential, read off its own process. */
 const credentialOf = async (fleet: Fleet, instanceId: string) =>
-  (await Bun.file(`/proc/${await fleet.sessionPid(instanceId)}/environ`).text())
-    .split("\0")
-    .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-    ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  await fleet.sessionCredential(instanceId);
 
 /** One request: its status, its text and its headers. */
 const ask = async (

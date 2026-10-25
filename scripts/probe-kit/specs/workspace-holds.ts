@@ -353,22 +353,6 @@ const linesOf = async (fleet: KitFleet, id: string): Promise<string> => {
     .join(" | ");
 };
 
-/** The session's own credential, from its environment: `/proc` on Linux, `ps -E` on macOS. */
-/** The session credential's line in a process's environment. */
-const CREDENTIAL = /CAWCO_SESSION_CREDENTIAL=(\S+)/;
-
-const credentialOf = async (fleet: KitFleet, id: string): Promise<string> => {
-  const pid = await fleet.sessionPid(id);
-  const env =
-    process.platform === "linux"
-      ? (await Bun.file(`/proc/${pid}/environ`).text()).split("\0").join(" ")
-      : await Bun.$`ps -E -ww -o command= -p ${String(pid)}`
-          .quiet()
-          .nothrow()
-          .text();
-  return CREDENTIAL.exec(env)?.[1] ?? "";
-};
-
 /** Whether a process whose command line runs `sleep <arg>` is still there. */
 const sleeps = async (arg: string): Promise<number[]> =>
   (await commandLines())
@@ -939,7 +923,7 @@ const spec: Spec = {
     const treeParent = await fleet.spawn("claude", "Tree parent", tree, {
       projectId: treeProject,
     });
-    const credential = await credentialOf(fleet, parent);
+    const credential = await fleet.sessionCredential(parent);
     const workspaceOf = (id: string) =>
       fleet.query<Workspace>(
         "SELECT id, path, state, tmp, carry, head FROM workspaces WHERE id = ?",

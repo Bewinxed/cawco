@@ -37,8 +37,10 @@
  *   is leaking memory, naming `leak-probe-W` and its workspace.
  * - (w4) Within {@link ENDED_WAIT_MS} of its item's end, `sleep 600.0961`
  *   and `leak-probe-W` are gone while the workspace's boundary still runs on
- *   the keeper and the session was not stopped, and the agent's log says
- *   the session `finished`, naming the leaker's pid among those it ended.
+ *   the keeper (or closed with the session's sleep, which the hub asks of a
+ *   delegate whose item is over, server.ts `sleepFinished`) and the session
+ *   was not stopped, and the agent's log says the session `finished`, naming
+ *   the leaker's pid among those it ended.
  * - (w5) The browser ran with its crash handlers, which ended with it, and
  *   no session read a leftover naming a crash handler, nor did the agent's
  *   log say one: on main every browser launch in a workspace was told as "2
@@ -294,10 +296,14 @@ const endedCheck = async (
     ? `gone ${seconds.toFixed(1)} s after the item ended, the boundary ${gone.boundary ? "running" : "gone"}`
     : `still running: ${LEAKER} ${(await pidsOf(LEAKER)).join(", ") || "none"}, sleep ${LEFTOVER} ${(await pidsOf(`sleep ${LEFTOVER}`)).join(", ") || "none"}`;
   kit.check(
-    "(w4) within 15 s of its item's end the delegate's leftover and leaking processes are gone, its boundary still runs, its session was not stopped, and the agent's log says it finished, naming the leaker's pid",
+    "(w4) within 15 s of its item's end the delegate's leftover and leaking processes are gone, its boundary runs on unless its session's sleep closed it, its session was not stopped, and the agent's log says it finished, naming the leaker's pid",
     gone !== undefined &&
       seconds <= ENDED_WAIT_MS / 1000 &&
-      gone.boundary &&
+      // A delegate whose item is over is put to sleep once at rest (hub
+      // server.ts `sleepFinished`), and its sleep closes the boundary: on a
+      // Mac host run that came within the same read as the work's end. The
+      // agent's line is what says the work's end took them, not the sleep.
+      (gone.boundary || status === "sleeping") &&
       (status === "running" || status === "sleeping") &&
       finishedLine !== undefined,
     `${left}; session ${status}; leaker pids ${of.leakerPids.join(", ") || "none seen"}; ${finishedLine ?? "no agent line saying it finished"}`

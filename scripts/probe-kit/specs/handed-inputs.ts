@@ -548,10 +548,7 @@ const ended = (fleet: KitFleet, workItemId: string) =>
 
 /** The parent's own credential, as its tools call the hub with it. */
 const credentialOf = async (fleet: KitFleet, parent: string): Promise<string> =>
-  (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
-    .split("\0")
-    .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-    ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  await fleet.sessionCredential(parent);
 
 const pageFrame = async (page: Page): Promise<Frame> =>
   (await until(

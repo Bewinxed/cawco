@@ -290,22 +290,6 @@ const serving = async (
   return { ok: false, last };
 };
 
-/** The session credential's line in a process's environment. */
-const CREDENTIAL = /CAWCO_SESSION_CREDENTIAL=(\S+)/;
-
-/** The session's own credential, from its environment: `/proc` on Linux, `ps -E` on macOS. */
-const credentialOf = async (fleet: KitFleet, id: string): Promise<string> => {
-  const pid = await fleet.sessionPid(id);
-  const env =
-    process.platform === "linux"
-      ? (await Bun.file(`/proc/${pid}/environ`).text()).split("\0").join(" ")
-      : await Bun.$`ps -E -ww -o command= -p ${String(pid)}`
-          .quiet()
-          .nothrow()
-          .text();
-  return CREDENTIAL.exec(env)?.[1] ?? "";
-};
-
 interface Started {
   instanceId: string;
   workItemId: string;
@@ -374,7 +358,7 @@ const stoppedLeg = async (
     (step) => step >= 3,
     60_000
   ).catch(() => undefined);
-  const credential = await credentialOf(fleet, parent);
+  const credential = await fleet.sessionCredential(parent);
   const stopped = await toolWords(
     { base: fleet.base, id: parent, credential },
     "stop_delegate",

@@ -167,6 +167,10 @@ import {
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright-core";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import {
+  commandLines,
+  processArgs,
+} from "../../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import {
   type CanvasMap,
@@ -469,8 +473,6 @@ const stageCloneIn = async (
   }
 };
 
-/** A process's folder under /proc. */
-const PID = /^\d+$/;
 /** A read's `unreached` (hub service.ts `unreachedWritten`), whole. */
 const UNREACHED = /"unreached":(\{[^}]*\})/;
 
@@ -491,30 +493,30 @@ const stageHostIn = async (
   clone: string
 ): Promise<{ argv: string[]; pid: number } | undefined> => {
   const real = await realpath(clone);
-  for (const entry of await readdir("/proc")) {
-    if (!PID.test(entry)) {
+  const inClone = (dir: string) => dir === real || dir.startsWith(`${real}/`);
+  // Its arguments and environment through core `processArgs` (`/proc` on Linux, `KERN_PROCARGS2` on macOS).
+  for (const { pid, command } of await commandLines()) {
+    if (!command.includes(HOST_FILE)) {
       continue;
     }
     // biome-ignore lint/performance/noAwaitInLoops: one process at a time, until the host
-    const cmdline = await readFile(`/proc/${entry}/cmdline`, "utf8").catch(
-      () => ""
-    );
-    const argv = cmdline.split("\0").filter(Boolean);
+    const args = await processArgs(pid);
+    const argv = args?.argv ?? [];
     if (
       !argv.some((one) => one === HOST_FILE || one.endsWith(`/${HOST_FILE}`))
     ) {
       continue;
     }
-    const cwd = await realpath(`/proc/${entry}/cwd`).catch(() => "");
-    // Its PWD as the daemon set it (stage.ts `start`: the executor enters it), should its mount namespace show the cwd otherwise.
+    // Its working dir where the system shows one (Linux's /proc; macOS has no reader for another process's), else its PWD as the daemon set it (stage.ts `start`: the executor enters it).
+    const cwd =
+      process.platform === "linux"
+        ? await realpath(`/proc/${pid}/cwd`).catch(() => "")
+        : "";
     const pwd =
-      (await readFile(`/proc/${entry}/environ`, "utf8").catch(() => ""))
-        .split("\0")
-        .find((one) => one.startsWith("PWD="))
-        ?.slice("PWD=".length) ?? "";
-    const inClone = (dir: string) => dir === real || dir.startsWith(`${real}/`);
+      args?.env.find((one) => one.startsWith("PWD="))?.slice("PWD=".length) ??
+      "";
     if (inClone(cwd) || inClone(pwd)) {
-      return { pid: Number(entry), argv };
+      return { pid, argv };
     }
   }
 };
