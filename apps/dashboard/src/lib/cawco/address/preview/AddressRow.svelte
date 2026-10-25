@@ -47,7 +47,7 @@
     onclick={onopen}
     type="button"
   ></button>
-  <span
+  <span data-box
     class="pointer-events-none relative col-1 row-1 grid h-c-row-mark w-c-row-lead place-items-center self-center text-ink-muted"
     data-slot="lead"
   >

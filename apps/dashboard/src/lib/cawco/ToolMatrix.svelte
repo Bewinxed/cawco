@@ -326,7 +326,7 @@
             <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
               {spec.name}
             </h2>
-            <a
+            <a data-box
               aria-label="{spec.name} homepage"
               class="pointer-hit touch-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
               href={spec.homepage}

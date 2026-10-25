@@ -58,7 +58,7 @@
       variant="secondary"
     >
       <span>{label}</span>
-      <button
+      <button data-box
         aria-label="Remove the label {label}"
         class="select-none -me-space-row inline-grid w-0 place-items-center overflow-hidden border-none border-current bg-transparent p-0 text-inherit opacity-0 transition-[inline-size,opacity] duration-(--dur-control) ease-out group-[:hover]/label:w-icon-sm group-[:hover]/label:opacity-100 focus-visible:w-icon-sm focus-visible:opacity-100 coarse:w-icon-sm coarse:opacity-100"
         onclick={() => save(labels.filter((each) => each !== label))}

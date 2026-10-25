@@ -62,7 +62,7 @@
  * (`watchPosts`, from the reach on), when its release reached the page, the
  * page's own long tasks before its first frame, and that frame. While a
  * busy tab is away, its turns running, every loop in a pane off screen is
- * read (`hiddenLoopsOf`).
+ * read (`hiddenLoopsOf`): none costs a frame.
  *
  * Asserted per Chromium return: its interaction under `INPUT_MS`, and,
  * for a busy or kept return, its longest task within two frames' budget
@@ -74,7 +74,7 @@
  * (none of its animation frames or timers ran), and its first animation
  * frame after the press comes within `BACK_MS`. Asserted in leg 3: each
  * silent session's blank state and no skeleton; and wherever the loops off
- * screen are read, none running.
+ * screen are read, none costing a frame (`hiddenLoopsOf` `costly`).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one return at a time, as a person makes them
 
@@ -117,6 +117,18 @@ const LIGHT_READY_MS = 60_000;
 const ELSEWHERE_MS = 1000;
 /** After the switch away, how long before a kept page's window is first read: its hold has landed. */
 const SETTLE_MS = 1000;
+/**
+ * How long leg 3 watches the panes it put away for a run served there:
+ * past the cover's wait (`--dur-wait-grace` 1000 ms, then `--dur-fade`
+ * 200 ms), which a preview let go as its pane went away starts again.
+ */
+const OFFSCREEN_MS = 2500;
+/**
+ * From a switch away, the switch's own frames: a run it starts or ends in
+ * the pane it puts away is the switch's, read with the switch, not the
+ * absence's (`hiddenLoopsOf` reads from here on).
+ */
+const SWITCHED_MS = 500;
 /** How long after a switch its tasks are its own: the shown frame, the catch-up, the landing's steps. */
 const WINDOW_MS = 2500;
 /** A reloaded preview's window runs on past its `cawco:ready` by this. */
@@ -199,6 +211,8 @@ interface Back {
   reachAt: number;
   /** That task said whole: what it ran, its restyle, the changes that scheduled it and its sampled stacks. */
   reachWhat: string;
+  /** Chromium: the style passes Blink counted from the reach to the window's end, and their time. */
+  recalc?: string;
   scene: string;
   /** The pane once the window is over: anything left skipped, rows in view with no text box, rows a different height (`shownStateOf`). */
   shown: string;
@@ -920,13 +934,97 @@ function landingOf(page: Page, pane: string): Promise<string> {
 }
 
 /**
- * Every animation in a pane off screen, put away (PaneLeaf
- * `data-pane-hidden`) or laid out unseen (`data-pane-settling`: drawing its
- * first picture, or warm), by its play state and whether it runs on an
- * element or its `::before`/`::after`.
+ * Every run the engine served in a pane off screen (PaneLeaf
+ * `data-pane-hidden` or `data-pane-settling`), each the event it sent from
+ * there (`__offscreenRuns`: when, epoch ms, and what). An engine sends a
+ * CSS animation's or transition's events from the frame that updates it,
+ * so a run it draws says so here; one in content it skips sends none until
+ * shown (WebKit: "skip updating and sending events for animation in hidden
+ * content-visibility subtrees", WebKit/WebKit#17540; Chromium restyles
+ * nothing it skips). A run ended by script (PaneLeaf's `holdSkipped`
+ * finishing an entrance where it stands) is no frame drawn, and is not
+ * counted.
  */
-const hiddenLoopsOf = (page: Page) =>
-  page.evaluate(() => {
+function watchOffscreenRuns(): void {
+  if (window.top !== window) {
+    return;
+  }
+  const said: [number, string][] = [];
+  (window as unknown as { __offscreenRuns: typeof said }).__offscreenRuns =
+    said;
+  const ended = new WeakMap<EventTarget, Set<string>>();
+  const nameOf = (one: Animation) =>
+    (one as CSSAnimation).animationName ??
+    (one as CSSTransition).transitionProperty ??
+    "";
+  const { finish } = Animation.prototype;
+  Animation.prototype.finish = function (this: Animation) {
+    const el = (this.effect as KeyframeEffect | null)?.target;
+    if (el) {
+      const names = ended.get(el) ?? new Set();
+      names.add(nameOf(this));
+      ended.set(el, names);
+    }
+    return finish.call(this);
+  };
+  for (const type of [
+    "animationstart",
+    "animationiteration",
+    "animationend",
+    "transitionstart",
+    "transitionend",
+  ]) {
+    addEventListener(
+      type,
+      (event) => {
+        const el = event.target;
+        const pane =
+          el instanceof Element ? el.closest('[data-slot="pane"]') : null;
+        if (
+          !(
+            el instanceof Element &&
+            pane?.matches("[data-pane-hidden], [data-pane-settling]")
+          )
+        ) {
+          return;
+        }
+        const name =
+          (event as AnimationEvent).animationName ??
+          (event as TransitionEvent).propertyName;
+        if (ended.get(el)?.has(name)) {
+          return;
+        }
+        said.push([
+          performance.timeOrigin + performance.now(),
+          `${type} ${name} on ${el.localName}.${[...el.classList].slice(0, 2).join(".")} in ${pane.getAttribute("data-pane")?.slice(0, 8)}`,
+        ]);
+      },
+      true
+    );
+  }
+}
+
+/**
+ * What runs in a pane off screen, put away (PaneLeaf `data-pane-hidden`)
+ * or laid out unseen (`data-pane-settling`: drawing its first picture, or
+ * warm): every animation there by its play state and whether it runs on an
+ * element or its `::before`/`::after`, and the runs the engine served there
+ * since `since` (epoch ms, `watchOffscreenRuns`). `costly` is what costs
+ * frames. On Chromium a running run is one: it restyles nothing in content
+ * it skips, so a loop still running as its pane went away stayed running
+ * and drew 120 frames in 2 s (motion/rest.ts `holdSkipped`). On WebKit a
+ * run's play state is its clock's, served or not: one in skipped content
+ * reads `running`, then `finished`, never updated and never drawn (a hidden
+ * fade read so with no event, its process's CPU 2–4 ticks over five runs
+ * against 37–40 shown, 2026-10-25), so only the runs it served cost.
+ */
+const hiddenLoopsOf = async (page: Page, since = 0) => {
+  const webkit = page.context().browser()?.browserType().name() === "webkit";
+  const read = await page.evaluate((from) => {
+    const served = (
+      (window as unknown as { __offscreenRuns?: [number, string][] })
+        .__offscreenRuns ?? []
+    ).filter(([at]) => at >= from);
     const panes = [
       ...document.querySelectorAll<HTMLElement>(
         '[data-slot="pane"][data-pane-hidden], [data-slot="pane"][data-pane-settling]'
@@ -960,11 +1058,18 @@ const hiddenLoopsOf = (page: Page) =>
     const byKind = [...kinds].map(([kind, n]) => `${kind} ×${n}`).join(", ");
     return {
       running: running.length,
+      served: served.length,
       paused: runs.length - running.length,
       panes: panes.length,
-      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${byKind ? `; by keyframes: ${byKind}` : ""}${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}`,
+      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${byKind ? `; by keyframes: ${byKind}` : ""}${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}; ${served.length} events from runs served there${served.length > 0 ? `: ${served.slice(0, 4).map(([, what]) => what).join(", ")}` : ""}`,
     };
-  });
+  }, since);
+  return {
+    ...read,
+    costly: webkit ? read.served : read.running + read.served,
+    line: `${read.line}; costing frames, as ${webkit ? "WebKit serves them (events sent)" : "Chromium runs them (running, or events sent)"}: ${webkit ? read.served : read.running + read.served}`,
+  };
+};
 
 /** warm.svelte.ts `COOL_MS`: how long a reach outlasts the pointer or the focus that made it. */
 const REACH_COOL_MS = 1500;
@@ -1102,7 +1207,7 @@ function noteOf(back: Back, turns: number): string {
   const warm = Number.isNaN(back.warmTask)
     ? "not traced"
     : `${back.warmTask.toFixed(1)}ms`;
-  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input}; its task: ${back.pressWhat} | the switch: ${back.switchLine} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
+  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}${back.recalc ? `from the reach to the window's end ${back.recalc} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input}; its task: ${back.pressWhat} | the switch: ${back.switchLine} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
 }
 
 /**
@@ -1273,6 +1378,16 @@ async function measureBack(
   rest = REACH_MS
 ): Promise<Read> {
   const point = await pointAt(page, input, id);
+  await input.send("Performance.enable");
+  /** Blink's own style counters (`Performance.getMetrics`): passes run, seconds spent. */
+  const styleNow = async () => {
+    const { metrics } = await input.send("Performance.getMetrics");
+    const of = (name: string) =>
+      metrics.find((one) => one.name === name)?.value ?? 0;
+    return [of("RecalcStyleCount"), of("RecalcStyleDuration")] as const;
+  };
+  let styleBefore: readonly [number, number] = [0, 0];
+  let styleAfter: readonly [number, number] = [0, 0];
   const held = await census(page);
   const { sizes: sizesBefore, rewritten } = await itemSizesOf(page, id);
   await markWarm(page, id);
@@ -1313,6 +1428,7 @@ async function measureBack(
       )
         ?.evaluate(() => 0)
         .catch(() => undefined);
+      styleBefore = await styleNow();
       reachEpoch = await page.evaluate(() => {
         performance.mark("two-pane:reach:0");
         return performance.timeOrigin + performance.now();
@@ -1348,6 +1464,7 @@ async function measureBack(
       }, id);
       await point.press();
       await page.waitForTimeout(WINDOW_MS);
+      styleAfter = await styleNow();
       if (waitFor) {
         const began = Date.now();
         while (!(await waitFor()) && Date.now() - began < READY_MS) {
@@ -1424,6 +1541,7 @@ async function measureBack(
   return {
     held,
     frames: [],
+    recalc: `${styleAfter[0] - styleBefore[0]} style passes, ${((styleAfter[1] - styleBefore[1]) * 1000).toFixed(1)}ms (Performance.getMetrics RecalcStyleCount, RecalcStyleDuration; traced, so slower than untraced)`,
     inserted,
     input: press ?? "none reported",
     inputMs,
@@ -1798,7 +1916,7 @@ type LoopRead = { scene: string } & Awaited<ReturnType<typeof hiddenLoopsOf>>;
 /** Leg 3's readings: each silent session's pane once shown (`silentStateOf`). */
 type SilentRead = { scene: string } & Awaited<ReturnType<typeof silentStateOf>>;
 
-/** Leg 3's silent sessions each show their blank state and no skeleton; every read of the loops off screen finds none running. */
+/** Leg 3's silent sessions each show their blank state and no skeleton; every read of the loops off screen finds none costing a frame. */
 function checkQuiet(
   kit: Kit,
   silentReads: SilentRead[],
@@ -1813,8 +1931,8 @@ function checkQuiet(
   }
   for (const read of loopReads) {
     kit.check(
-      `${read.scene}: every animation in a pane off screen is held (none running)`,
-      read.running === 0,
+      `${read.scene}: nothing in a pane off screen costs a frame (no animation there drawn)`,
+      read.costly === 0,
       read.line
     );
   }
@@ -2115,9 +2233,9 @@ const run = async (kit: Kit) => {
     const page = await kit.page(
       "desk",
       engine === "webkit"
-        ? { engine: "webkit", init: [watchGaps, watchPosts] }
+        ? { engine: "webkit", init: [watchGaps, watchPosts, watchOffscreenRuns] }
         : {
-            init: [watchCost, watchPosts, watchSizes],
+            init: [watchCost, watchPosts, watchSizes, watchOffscreenRuns],
             oneProcess: engine === "one-process",
           }
     );
@@ -2202,11 +2320,12 @@ const run = async (kit: Kit) => {
         `${said}: ${state.blank ? "its blank state stands" : "no blank state"}, ${state.skeletons} skeletons in its pane`
       );
     }
+    const awayAt = Date.now();
     await away(on.page, front);
-    await on.page.waitForTimeout(SETTLE_MS);
+    await on.page.waitForTimeout(OFFSCREEN_MS);
     loopReads.push({
       scene: `3 (${engine}): the silent sessions put away`,
-      ...(await hiddenLoopsOf(on.page)),
+      ...(await hiddenLoopsOf(on.page, awayAt + SWITCHED_MS)),
     });
   };
   /**
@@ -2240,12 +2359,13 @@ const run = async (kit: Kit) => {
     await page.waitForTimeout(REACH_MS);
     const resting = await previewsRunning(page);
     const restingLoops = await hiddenLoopsOf(page);
-    await page.evaluate(() =>
-      (document.activeElement as HTMLElement | null)?.blur()
-    );
+    const leftAt = await page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      return performance.timeOrigin + performance.now();
+    });
     await page.waitForTimeout(REACH_COOL_MS + SETTLE_MS);
     const left = await previewsRunning(page);
-    const leftLoops = await hiddenLoopsOf(page);
+    const leftLoops = await hiddenLoopsOf(page, leftAt + SWITCHED_MS);
     const running = resting.filter((one) => one.runs);
     kit.check(
       `${engine}: the keyboard's focus resting on a tab lets go the previews of the tabs an arrow lands on next, two at most, and no other`,
@@ -2255,8 +2375,8 @@ const run = async (kit: Kit) => {
       `focus on ${place(front)}, an arrow lands on ${beside.map(place).join(" or ")}: ${said(resting)}; ${restingLoops.line}`
     );
     kit.check(
-      `${engine}: the focus gone from the strip, its reach over, every preview is held again and no loop off screen runs`,
-      left.every((one) => !one.runs) && leftLoops.running === 0,
+      `${engine}: the focus gone from the strip, its reach over, every preview is held again and nothing off screen costs a frame`,
+      left.every((one) => !one.runs) && leftLoops.costly === 0,
       `${REACH_COOL_MS + SETTLE_MS}ms after the focus left: ${said(left)}; ${leftLoops.line}`
     );
   };
@@ -2343,15 +2463,18 @@ const run = async (kit: Kit) => {
         before = await clockOf(page, to);
         await pastBound(on);
       } else {
-        await away(page, front);
         const began = Date.now();
+        await away(page, front);
         await page.waitForTimeout(SETTLE_MS);
         before = kind === "kept" ? await clockOf(page, to) : null;
         // Away from the busy tab, its session runs the absence's turns, landed before the return.
         if (turns > 0) {
           await scene.release(turns);
-          // Its session still answering, every loop in a pane off screen is held.
-          loopReads.push({ scene: name, ...(await hiddenLoopsOf(page)) });
+          // Its session still answering, nothing in a pane off screen costs a frame.
+          loopReads.push({
+            scene: name,
+            ...(await hiddenLoopsOf(page, began + SWITCHED_MS)),
+          });
           await page.waitForTimeout(LANDED_MS);
         }
         await page.waitForTimeout(Math.max(0, absence - (Date.now() - began)));

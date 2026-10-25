@@ -126,8 +126,11 @@
 
 /* A fluid tab held down by its own hit (components/ui/fluid-tabs TabItem):
    the press tints the whole segment, its trailing controls included; a
-   press on a trailing control leaves it be. */
-@custom-variant hit-pressed (&:has([data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])));
+   press on a trailing control leaves it be. The hit is the tab's own child,
+   and asked for as one: a press flips `:active` on every element up to the
+   root, and a descendant asked for sent each of them up its ancestors to
+   find the tab (tab-return 1c's press). */
+@custom-variant hit-pressed (&:has(> [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])));
 
 /* A primary input that can hover, whatever its pointer: (hover: hover)
    alone, the pair of hover-none (can-hover also asks for a fine pointer). */

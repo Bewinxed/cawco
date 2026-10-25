@@ -159,9 +159,11 @@
   /**
    * Where a folder tab stands in the stack at rest, from the order and the
    * value alone (`restRank`): what the first render draws, the server's
-   * included, until the track ranks the tabs itself (TabsList `--z`).
+   * included, until the track ranks the tabs itself (TabsList `--z`), which
+   * it does in the flush the tab mounts in. Read once, as it mounts: kept up
+   * to date, it was written again on every tab at every choice, never read.
    */
-  const restAt = $derived.by(() => {
+  const restAt = untrack(() => {
     const at = tabs.order.indexOf(value);
     return at < 0
       ? undefined

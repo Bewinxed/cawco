@@ -265,7 +265,13 @@
     failed: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
     quiet: { rest: "0", full: "var(--rim-idle)" },
   };
-  /** A tab's place in the track's stack at rest, until the track ranks it (TabItem's own). */
+  /**
+   * A tab's place in the track's stack at rest, until the track ranks it
+   * (TabItem's own): read as the tab mounts, the server's render included.
+   * The track ranks every tab (`--z`) in the flush that mounts it, so a
+   * rest rank kept up to date was written again on every tab at every
+   * choice, never read.
+   */
   const restAt = (i: number) => restRank(tabs.length, chosenAt, i);
 
   const otherLeaves = $derived(
@@ -1373,6 +1379,7 @@
       {@const chosen = leaf.active === tab.id}
       {@const cardHere = cardJoined && detailId === tab.id}
       {@const menuHere = menuHung === tab.id}
+      {@const restZ = untrack(() => restAt(i))}
       <!-- The caret marks where a drop would land, drawn on the side the
            pointer is nearest. Graphite, like every structural mark here:
            the one loud colour belongs to a session asking for something. -->
@@ -1450,7 +1457,7 @@
           ? "var(--surface-recess)"
           : undefined}
         style:--tone={TONE_INK[tab.tone]}
-        style:--z-rest={restAt(i)}
+        style:--z-rest={restZ}
         use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
         out:leavingTab={tab.id}
         {@attach attachmentsOf(tab.id).enter}

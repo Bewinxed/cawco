@@ -27,7 +27,21 @@
  * each top-level task's wall time and its thread time, the CPU it took
  * whatever else the machine ran, and the page's `performance.mark`s.
  */
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Page } from "playwright-core";
+
+/**
+ * `PROBE_TRACE_SELECTORS=<folder>`: every `traceMain` trace also takes
+ * Blink's selector statistics (`SelectorStats` under each style pass: each
+ * rule's match attempts, matches and time) and is written whole to the
+ * folder, `trace-<pid>-<n>.json`, for DevTools' Performance panel or a
+ * reading of its own. A diagnosis, never a timed run: counting every
+ * selector's matches slows each style pass it counts.
+ */
+const SELECTORS_TO = process.env.PROBE_TRACE_SELECTORS;
+/** Traces written to `SELECTORS_TO` so far in this process. */
+let traced = 0;
 
 /** The transcript's scroller, as every transcript spec reads it. */
 export const SCROLLER = '[aria-label="Session transcript"]';
@@ -770,6 +784,7 @@ export async function traceMain(
           ? ["disabled-by-default-devtools.timeline.invalidationTracking"]
           : []),
         ...(profile ? ["disabled-by-default-v8.cpu_profiler"] : []),
+        ...(SELECTORS_TO ? ["disabled-by-default-blink.debug"] : []),
       ],
     },
   });
@@ -777,6 +792,14 @@ export async function traceMain(
   await cdp.send("Tracing.end");
   await complete;
   await cdp.detach();
+  if (SELECTORS_TO) {
+    await mkdir(SELECTORS_TO, { recursive: true });
+    traced += 1;
+    await writeFile(
+      join(SELECTORS_TO, `trace-${process.pid}-${traced}.json`),
+      JSON.stringify({ traceEvents: events })
+    );
+  }
   const marks = events.filter(
     (event) => event.cat.includes("blink.user_timing") && event.ph !== "X"
   );

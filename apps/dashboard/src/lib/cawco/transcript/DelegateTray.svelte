@@ -1375,7 +1375,7 @@
         class="flex-none ms-auto text-size-meta text-ink-muted whitespace-nowrap"
         >{failedWhen(item)}</span
       >
-      <a
+      <a data-box
         aria-label="Open {item.title} in its own view"
         class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
         href={hrefOf(item)}
@@ -1536,7 +1536,7 @@
         >{span(item.createdAt, item.endedAt ?? minute)}</span
       >
       {#if !item.queued}
-        <a
+        <a data-box
           aria-label="Open {item.title} in its own view"
           class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
           href={hrefOf(item)}
@@ -1838,7 +1838,7 @@
                    The delegate card's way out to its own view, as the card
                    draws it. -->
               {#if !item.queued}
-                <a
+                <a data-box
                   aria-label="Open {item.title} in its own view"
                   class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
                   href={hrefOf(item)}

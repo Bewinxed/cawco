@@ -634,7 +634,7 @@
       <!-- Folds the card to its bar over the composer; answers nothing. It
            ends the title row, in the title's muted ink, and keeps the row's
            own height (its 24px box overhangs the label line). -->
-      <Button
+      <Button data-box
         aria-label="Minimize question"
         class="touch-hit flex-none -my-space-1 ms-auto"
         margin="beside-num"

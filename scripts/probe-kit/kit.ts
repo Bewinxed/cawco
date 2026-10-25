@@ -158,6 +158,80 @@ export const COMPOSER_FIELD = '[role="combobox"][contenteditable="true"]';
 /** A composer's field in its pill (Composer.svelte's `data-slot="cin"` form). */
 export const COMPOSER = `form[data-slot="cin"] ${COMPOSER_FIELD}`;
 
+/**
+ * Every WebKit page styles as Safari does: Tailwind v4's `@layer
+ * properties` fallback goes from each of its style sheets as it loads. The
+ * fallback (`@supports (((-webkit-hyphens:none)) and (not
+ * (margin-trim:inline))) …` around `*, ::before, ::after, ::backdrop`)
+ * sets about 105 custom properties on every element for a WebKit without
+ * `@property`'s support it stands in for; Playwright's WebKit lacks
+ * `margin-trim: inline` and so applies it, real Safari 27 does not. With it
+ * a full restyle took 344 ms, without it 134 ms (the Safari audit's
+ * `parity.js`, 2026-10-24): every WebKit style and layout number read
+ * with it was Playwright's own. Sheets of another origin cannot be read and
+ * keep it.
+ */
+function safariParity(): void {
+  /** The fallback's `@supports` blocks, last first, from the `properties` layer. */
+  const dropIn = (layer: CSSLayerBlockRule) => {
+    for (let i = layer.cssRules.length - 1; i >= 0; i -= 1) {
+      if (layer.cssRules[i] instanceof CSSSupportsRule) {
+        layer.deleteRule(i);
+      }
+    }
+  };
+  const drop = (sheet: CSSStyleSheet | null) => {
+    let rules: CSSRuleList | undefined;
+    try {
+      rules = sheet?.cssRules;
+    } catch {
+      return;
+    }
+    for (const rule of rules ?? []) {
+      if (rule instanceof CSSLayerBlockRule && rule.name === "properties") {
+        dropIn(rule);
+      }
+    }
+  };
+  const all = () => {
+    for (const sheet of document.styleSheets) {
+      drop(sheet);
+    }
+  };
+  // The document's own sheets: those parsed in, loaded by the window's load.
+  addEventListener("load", all);
+  // Each sheet put in later as it loads (a route's `<link>`), and a
+  // `<style>` (the dev server's) as it is put in or written again. WebKit
+  // gave a window's capturing `load` listener no `<link>`'s load.
+  document.addEventListener("DOMContentLoaded", () => {
+    all();
+    for (const link of document.querySelectorAll("link")) {
+      link.addEventListener("load", () => drop(link.sheet));
+    }
+    const put = (node: Node) => {
+      if (node instanceof HTMLLinkElement) {
+        node.addEventListener("load", () => drop(node.sheet));
+      }
+      const style = node instanceof HTMLStyleElement ? node : node.parentElement;
+      if (style instanceof HTMLStyleElement) {
+        drop(style.sheet);
+      }
+    };
+    new MutationObserver((records) => {
+      for (const node of records.flatMap(({ target, addedNodes }) => [
+        target,
+        ...addedNodes,
+      ])) {
+        put(node);
+      }
+    }).observe(document.head, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  });
+}
+
 /** The browser engines a page runs on. */
 export type Engine = "chromium" | "webkit" | "firefox";
 
@@ -1140,6 +1214,7 @@ export class Run {
         }, options.theme ?? "light");
         await context.addInitScript(installRuns);
         if (engine === "webkit") {
+          await context.addInitScript(safariParity);
           await watchContext(context);
         }
         for (const script of options.init ?? []) {

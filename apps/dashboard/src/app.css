@@ -1002,10 +1002,15 @@
   }
   /* The session hover card's identity tile (its head, beside its tone):
      the sprite in the mark glyph's ink on the tile's hue. Keyed on that
-     head alone, so another nest host's head mark keeps its own ink. */
+     head alone, so another nest host's head mark keeps its own ink. The
+     head and its tile are named by attributes of their own (SessionCard),
+     not found by what the head holds: as `:has()` over `[data-slot]`, every
+     element the hover card's ancestors held was its anchor's to test, and
+     every `data-slot` written restyled the svgs under it (tab-return 1c's
+     press, 22 invalidations). */
   [data-nest-host]
-    > [data-slot="head"]:has(> [data-session-hover-tone])
-    > [data-slot="mark"]
+    > [data-session-hover-head]
+    > [data-session-hover-mark][data-box]
     svg {
     inline-size: var(--icon-sm);
     block-size: var(--icon-sm);

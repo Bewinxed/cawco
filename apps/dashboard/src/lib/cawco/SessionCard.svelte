@@ -158,10 +158,12 @@
 <div data-nest-host>
   <div
     data-slot="head"
+    data-session-hover-head
     class="mark-line mb-space-2 flex min-w-c-session-hover-head items-center gap-space-2"
   >
     <span
       data-slot="mark"
+      data-session-hover-mark
       aria-hidden="true"
       class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
       style:--mark-bg="var(--mark-{markHue(sessionPlace(id))})"

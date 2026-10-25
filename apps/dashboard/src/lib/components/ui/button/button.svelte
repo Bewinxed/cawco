@@ -314,6 +314,13 @@
     )
   );
 
+  /**
+   * Given an icon and no label, it holds its icon slot alone: on a mark
+   * line (DESIGN.md, The Mark Line Rule) it is a box, centred as one, and
+   * says so (`data-box`) rather than being found by what it holds.
+   */
+  const iconOnly = $derived(label === undefined && icon !== undefined);
+
   const press = whileIdle(
     () => pending,
     (event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }) =>
@@ -343,6 +350,7 @@
   <a
     aria-disabled={disabled}
     class={classes}
+    data-box={iconOnly || undefined}
     data-slot="button"
     data-variant={variant}
     href={disabled ? undefined : href}
@@ -359,6 +367,7 @@
     aria-busy={pending || undefined}
     aria-disabled={pending || undefined}
     class={classes}
+    data-box={iconOnly || undefined}
     data-slot="button"
     data-variant={variant}
     {disabled}

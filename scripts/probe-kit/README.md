@@ -109,6 +109,22 @@ Safari on the owner's iPhone (iPhone18,2, iOS 27.0): what a spec reads in
 it is that build's behaviour, and a spec says so rather than claiming his
 phone does the same.
 
+Every WebKit page styles as Safari does where the build alone differs: the
+kit removes Tailwind v4's `@layer properties` fallback from each style sheet
+as it loads (kit.ts `safariParity`). Playwright's WebKit lacks
+`margin-trim: inline` and so applies it (about 105 custom properties on
+every element), real Safari 27 does not; with it a full restyle took 344 ms
+against 134 ms. Every WebKit style and layout number reads Safari's cost.
+
+## A trace's selector statistics
+
+`PROBE_TRACE_SELECTORS=<folder>` has every `traceMain` trace (Chromium) take
+Blink's selector statistics too and writes each trace whole to the folder,
+for DevTools' Performance panel or a reading of its own: each rule's match
+attempts, matches and time under each style pass, and the selectors behind
+each invalidation. A diagnosis only: counting every match slows each pass
+several times over, so its timed assertions fail.
+
 ## A browser leaves nothing behind
 
 Every browser the kit or a spec launches runs with `launchEnv()`

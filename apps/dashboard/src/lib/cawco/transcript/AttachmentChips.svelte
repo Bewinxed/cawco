@@ -219,7 +219,7 @@
           onclick={onopencanvas}
           type="button"
         >
-          <span
+          <span data-box
             aria-hidden="true"
             class="grid place-items-center size-icon-lg flex-none text-ink-muted"
           >

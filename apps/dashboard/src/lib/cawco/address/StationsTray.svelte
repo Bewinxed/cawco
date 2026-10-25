@@ -387,7 +387,7 @@
                       title={LINES[station](state)}
                       >{open ? "" : LINES[station](state)}</span
                     >
-                    <span
+                    <span data-box
                       class="grid size-icon-md place-items-center text-ink-muted"
                     >
                       {#if open || shown === station}
