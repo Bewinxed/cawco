@@ -15,6 +15,7 @@ import {
   listClaudeFiles,
   opencodeDatabases,
 } from "@cawco/core/paths";
+import { syncSection } from "../loop-watch";
 import { gauge } from "../memory";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
@@ -244,6 +245,12 @@ const tokenValues = (t: UsageTokens) =>
 
 const NEWLINE = 10;
 
+/** How long a read of a transcript's lines goes before it gives the loop a turn. Ours, as jsonl-parser's scans do. */
+const YIELD_MS = 8;
+
+/** Usage records one turn of the loop folds in ({@link UsageScanner}). Ours: a few milliseconds of them. */
+const INGEST_PART = 500;
+
 /**
  * Hands `onLine` every whole line of `path` from byte `offset` on, as the
  * file streams in, and answers the offset after the last whole line: a
@@ -259,7 +266,16 @@ const eachLine = async (
   let consumed = offset;
   let pending: Uint8Array[] = [];
   let pendingBytes = 0;
+  let turnAt = performance.now();
   for await (const chunk of Bun.file(path).slice(offset).stream()) {
+    // A file's chunks come as fast as they are read, each on a microtask:
+    // the loop gets no turn between them unless given one, and a 413 MB
+    // transcript's first read held it 560 ms.
+    if (performance.now() - turnAt > YIELD_MS) {
+      // biome-ignore lint/performance/noAwaitInLoops: the await is the loop's turn
+      await new Promise((resolve) => setImmediate(resolve));
+      turnAt = performance.now();
+    }
     let start = 0;
     for (
       let end = chunk.indexOf(NEWLINE);
@@ -649,8 +665,17 @@ export class UsageScanner {
     const next = await eachLine(path, offset, (line) => {
       records.push(...parseClaudeLine(line, project));
     });
-    for (const rec of records) {
-      this.#ingest(rec);
+    // Folded in a part at a time, a turn of the loop between: all at once,
+    // a 413 MB transcript's 28,000 usage records held the agent's loop
+    // 700 ms (1.0-1.5 s on a loaded machine) at its first scan.
+    for (let at = 0; at < records.length; at += INGEST_PART) {
+      syncSection("usage records folded in", () => {
+        for (const rec of records.slice(at, at + INGEST_PART)) {
+          this.#ingest(rec);
+        }
+      });
+      // biome-ignore lint/performance/noAwaitInLoops: the await is the loop's turn between parts
+      await new Promise((resolve) => setImmediate(resolve));
     }
     this.#putFile.run(path, info.mtimeMs, info.size, next);
   }

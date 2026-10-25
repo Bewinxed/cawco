@@ -15,6 +15,7 @@
  */
 
 import { Database } from "bun:sqlite";
+import { section } from "./section.ts";
 import { type DocAuthor, TOOL_OUTPUT_CHARS, type TranscriptDoc, userAuthor } from "./text.ts";
 
 /** What a tool block answered, as 2.0 keeps it: its content's text parts, or its error. */
@@ -147,9 +148,11 @@ export async function scanRanges<R>(
         ?.top ?? 0;
     const read = db.query<R, [number, number, number]>(sql);
     for (let from = 0; from < top; from += SCAN_RANGE) {
-      for (const row of read.all(from, from + SCAN_RANGE, since)) {
-        each(row);
-      }
+      section(`${table} read, a range at a time`, () => {
+        for (const row of read.all(from, from + SCAN_RANGE, since)) {
+          each(row);
+        }
+      });
       // biome-ignore lint/performance/noAwaitInLoops: the await is the turn between ranges
       await new Promise((resolve) => setImmediate(resolve));
     }

@@ -1123,6 +1123,10 @@ export class TranscriptIndex {
    * cost, and the answer keeps a few.
    */
   search(query: string, options: SearchOptions = {}): ConversationHit[] {
+    return section("search index: query", () => this.#searchNow(query, options));
+  }
+
+  #searchNow(query: string, options: SearchOptions): ConversationHit[] {
     const queries = matchQueries(query);
     if (queries.whole.length === 0) {
       return [];
@@ -1275,6 +1279,10 @@ export class TranscriptIndex {
    * the start of its words.
    */
   listed(options: ListOptions): ConversationHit[] {
+    return section("search index: listed", () => this.#listedNow(options));
+  }
+
+  #listedNow(options: ListOptions): ConversationHit[] {
     const author = this.#strings.get(options.author);
     if (author === undefined || options.limit < 1) {
       return [];
@@ -1360,6 +1368,10 @@ export class TranscriptIndex {
    * answer or a thought alone is a turn only at the centre.
    */
   turns(options: TurnsOptions): TurnsAnswer {
+    return section("search index: turns", () => this.#turnsNow(options));
+  }
+
+  #turnsNow(options: TurnsOptions): TurnsAnswer {
     const sessions = new Set(
       options.sessions.flatMap((session) => {
         const id = this.#strings.get(session);
