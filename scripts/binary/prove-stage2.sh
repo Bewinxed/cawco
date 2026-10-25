@@ -286,7 +286,7 @@ orchestrate() {
   # cca90e213: "Cannot find module '../../packages/core/src/bounded' from '/shared/stage2-send.ts'").
   machine_helpers() {
     local dir=$1 helper
-    for helper in start-session stop-session send sends during-install hook-calls preview-port; do
+    for helper in start-session stop-session send sends signin during-install hook-calls preview-port; do
       bun build "$here/stage2-$helper.ts" --target=bun --outfile "$dir/stage2-$helper.ts" || return 1
     done
   }
@@ -1153,38 +1153,23 @@ export -f check_hub_dashboard_3455 install_hub join_machine signed_in_on new_acc
 # update_outcomes_start CONTAINER MACHINE SESSION [nosends], called by the update's check before the update is asked
 # for, on the machine that updates and a session running there (its pid kept): from then the machine's Claude Code
 # answers `--version` and `auth status` CLAUDE_LATE_S late (claude-late.sh), what the hub says of the machine's
-# sign-in is sampled every second, and,
+# sign-in is sampled every second (stage2-signin.ts), and,
 # unless `nosends`, a message goes to the session every 3 s (stage2-sends.ts), through the update and the hub's own
 # restarts, until update_sends_stop. Sampling and sending run on in the background past the check that started them;
 # the checks below end them.
-# Fails when the hub does not answer. Not a pipe from hub_api: a check's shell has no pipefail (`bash -eEx -c`), and
-# `json` reads no input as no value, so a hub that was away read as `none` (nightly d0ca43009: handover's one `none`
-# at 19:18:38.920, the hub's helper "the hub does not answer" at 19:18:38.778, its restart in the update).
-signin_state() {
-  local accounts
-  accounts=$(hub_api /api/accounts) || return 1
-  json "d => d.signins.find(s => s.accountId === '$1' && s.machineId === '$2')?.state" <<< "$accounts"
-}
-# `<epoch ms> <state>` each second until the stop file is there; `hub-away` while the hub does not answer. Each sample
-# is stamped when the hub was asked, so one stamped after a read ended is the hub's word from after it however long the
-# asking took: a podman exec and a Bun on a loaded host (load average 44, nightly a3d9e8ed1's keeperkilled: 4 samples
-# in the 22.6 s after the last read). One that took a second or more is followed by the next at once.
-signin_sampler() {
-  local machine=$1 file=$2 stop=$3 aid state asked rest
-  aid=$(cat "$rigdir/account-id")
-  while [[ ! -e $stop ]]; do
-    asked=$(now_ms)
-    state=$(signin_state "$aid" "$machine" 2> /dev/null) || state=hub-away
-    echo "$asked ${state:-none}" >> "$file"
-    rest=$((1000 - ($(now_ms) - asked)))
-    (( rest <= 0 )) || sleep "$((rest / 1000)).$(printf '%03d' $((rest % 1000)))"
-  done
-}
+#
+# The sampler is one Bun process in the hub's container, asking the hub's /api/accounts over its loopback once a second
+# whether or not the asks before have answered, each sample `<epoch ms> <state>` stamped when the hub was asked and
+# written to $rigdir/outcomes-signin.txt as its answer comes (`hub-away` for no 2xx answer in 30 s, `none` for no such
+# sign-in), until /tmp/outcomes-signin.stop is there in the hub's container. Not a podman exec and a Bun per sample
+# from the host: on a loaded host those took seconds each (load average 44, nightly a3d9e8ed1's keeperkilled: 4
+# samples in the 22.6 s after the last read), and the check below holds only while samples come faster than reads end.
+signin_stop() { as_user "$hubc" touch /tmp/outcomes-signin.stop; }
 # The samples in file $1 where the hub answered and said other than signed-in.
 signin_bad() { awk '$2 != "signed-in" && $2 != "hub-away"' "$1"; }
 # How many samples in file $1 asked the hub after epoch ms $2 and heard signed-in, and how long after $2 the newest of
-# them asked: `<count> <ms>`, `0 0` for none.
-signin_heard_after() { awk -v t="$2" '$1 > t && $2 == "signed-in" { n++; past = $1 - t } END { print n + 0, past + 0 }' "$1"; }
+# them asked: `<count> <ms>`, `0 0` for none. The newest by its stamp, not its line: lines come as answers do.
+signin_heard_after() { awk -v t="$2" '$1 > t && $2 == "signed-in" { n++; if ($1 - t > past) past = $1 - t } END { print n + 0, past + 0 }' "$1"; }
 claude_late() { as_user "$1" sh /shared/claude-late.sh "$2"; }
 claude_calls() { as_user "$1" sh -c 'cat "$HOME/.cawco-proof/claude-calls.log" 2> /dev/null || true'; }
 # The late `auth status` reads of machine $1's Claude Code that have ended since $2 (epoch ms): answered, or `cut` by
@@ -1213,9 +1198,13 @@ update_outcomes_start() {
   [[ "$(cut -d' ' -f2 "$rigdir/outcomes-session.txt")" =~ ^[0-9]+$ ]] || { echo "the session $session holds no one process: $(cat "$rigdir/outcomes-session.txt")"; return 1; }
   echo "$c $machine $session $(now_ms) $sends" > "$rigdir/outcomes-of"
   claude_late "$c" "$CLAUDE_LATE_S"
-  rm -f "$rigdir/outcomes-signin.stop"
+  as_user "$hubc" rm -f /tmp/outcomes-signin.stop
   : > "$rigdir/outcomes-signin.txt"
-  signin_sampler "$machine" "$rigdir/outcomes-signin.txt" "$rigdir/outcomes-signin.stop" < /dev/null > /dev/null 2>&1 &
+  # Its stdout is samples alone: its errors, and this subshell's trace, go beside it.
+  ( set +x; run_script "$hubc" /shared/stage2-signin.ts http://127.0.0.1:3456 "$(cat "$rigdir/account-id")" "$machine" \
+    /tmp/outcomes-signin.stop < /dev/null > "$rigdir/outcomes-signin.txt" 2> "$rigdir/outcomes-signin.err" ) &
+  wait_until 60 '[[ -s "$rigdir/outcomes-signin.txt" ]]' \
+    || { echo "the sign-in sampler wrote no sample in 60 s:"; cat "$rigdir/outcomes-signin.err"; return 1; }
   [[ $sends != nosends ]] || return 0
   as_user "$hubc" rm -f /tmp/outcomes-sends.stop
   # The file holds the sender's own words and nothing of the check's: its trace (-x) is off in the subshell before the
@@ -1270,20 +1259,20 @@ update_sends_delivered() {
 # answered, and it was heard saying so at least 5 times after the last read that ended, the newest asked 15 s or more
 # past it. The 15 s run from the last read, not the first: the agent reads each minute (a sixth of one here, the
 # proof's pace), and a fixed wait after the first could end a moment after another read, with no sample of the hub's
-# word on it. The check waits for those samples, up to 240 s, rather than for 15 s of the clock: on a loaded host a
-# sample takes seconds (nightly a3d9e8ed1, keeperkilled: 4 in the 22.6 s after the last read, every one signed-in, and
-# the check failed). The last read is read again at each look, so a read that ends meanwhile starts the count again;
-# a sample that says otherwise ends the wait at once.
+# word on it. The check waits for those samples, up to 240 s, rather than for 15 s of the clock: the samples come each
+# second (stage2-signin.ts), but the reads of the calls log that find the last read are podman execs on a loaded host.
+# The last read is read again at each look, so a read that ends meanwhile starts the count again; a sample that says
+# otherwise ends the wait at once.
 update_signin_kept() {
   local c machine since bad last=0 heard=0 past=0 file="$rigdir/outcomes-signin.txt"
   [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before the sign-in was watched"; return 1; }
   read -r c machine _ since _ < "$rigdir/outcomes-of"
-  on_exit "touch \"\$rigdir/outcomes-signin.stop\"; claude_late $c 0"
+  on_exit "signin_stop; claude_late $c 0"
   wait_until 300 '(( $(auth_reads_ended_since "$c" "$since") >= 1 ))' \
     || { echo "ASSERTION FAILED: no late read of the machine's account ended after its update began, so none was proven"; claude_calls "$c"; return 1; }
   wait_until 240 '[[ -n $(signin_bad "$file") ]] || { last=$(auth_read_last_ended "$c") &&
     read -r heard past <<< "$(signin_heard_after "$file" "$last")" && (( heard >= 5 && past >= 15000 )); }' || true
-  touch "$rigdir/outcomes-signin.stop"
+  signin_stop
   echo "== the Claude Code stand-in's late calls (<epoch ms> start|answered|cut <pid> <args>)"
   claude_calls "$c"
   bad=$(signin_bad "$file")
@@ -1303,7 +1292,7 @@ update_session_reattached() {
   cat "$rigdir/outcomes-session.txt"
   survived "$c" "$rigdir/outcomes-session.txt"
 }
-export -f signin_state signin_sampler signin_bad signin_heard_after claude_late claude_calls auth_reads_ended_since auth_read_last_ended turns_on turns_of all_reached \
+export -f signin_stop signin_bad signin_heard_after claude_late claude_calls auth_reads_ended_since auth_read_last_ended turns_on turns_of all_reached \
   update_outcomes_start update_sends_stop update_sends_delivered update_signin_kept update_session_reattached
 
 # ================================================================ THE RIGS
