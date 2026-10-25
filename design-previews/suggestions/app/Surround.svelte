@@ -4,8 +4,8 @@
   edge ("What’s next for Cawco?" in his thread and on the phone, "Nothing
   on the board yet" on the empty board), the direction's set under them,
   and the composer at the foot, where it stays. What the set holds past the
-  room scrolls above the composer, both edges under the house's 40px fade
-  (edges.js), drawn from where the scroll stands so a still capture keeps it.
+  room scrolls above the composer, both edges under the house edge fade
+  (`kit-edge-fade-block`, edge-fade.css), as the dashboard draws it.
   A direction changes this only where the designer's report says so (the
   switcher's note names it): where its set stands (`anchor`: the drafts'
   stack on the composer) and what its foot holds (the tray's composer).
@@ -13,7 +13,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import CawStill from "./CawStill.svelte";
-  import { edges } from "./edges.js";
 
   let {
     where,
@@ -30,7 +29,7 @@
 </script>
 
 <div class="surround" data-slot="surround" data-where={where}>
-  <div class="scroll edges" data-slot="scroll" {@attach edges}>
+  <div class="scroll kit-edge-fade-block" data-slot="scroll">
     <div class="hero" data-slot="hero">
       <CawStill class="caw" size={80} />
       <h2 class="title" data-slot="heading">

@@ -25,19 +25,19 @@ Caw at 80 and the heading on the left edge ("What’s next for Cawco?" in his
 thread and on the phone, "Nothing on the board yet" on the empty board), the
 direction's set under them, and the composer at the foot, where it stays.
 What a set holds past its room scrolls above the composer under the house's
-40px edge fade (`--c-edge-fade-len`), drawn by `app/edges.js` from where the
-scroll stands rather than by the kit's scroll-driven fade, so a still capture
-keeps it. A direction differs only where the designer's report says so, and
+edge fade (`kit-edge-fade-block`, `apps/dashboard/src/edge-fade.css`, 40px at
+a desk), the cue the dashboard's own scrollers wear, so a cut list shows more
+lies below before anyone scrolls. A direction differs only where the designer's report says so, and
 the switcher's note says it in one line:
 
 - drafts: the stack stands right-aligned on the composer, in a centred 560px
   column on the board, and hides while the keyboard is up ("stack hides when
   the keyboard is up").
 - ledger: on the board the rows stand at the report's 560px reading width.
-- tray: the suggestions live in the composer's own frame, centred at 560px
-  on the board, and grow upward from it until the heading's room; past it
-  the rows scroll inside the tray under the same fade, and Caw and the
-  heading stay.
+- tray: the suggestions live in the composer's own frame, over its field,
+  so the field keeps Today's place at the foot at Today's width; the tray
+  grows upward until the heading's room, past it the rows scroll inside the
+  tray under the same fade, and Caw and the heading stay.
 
 ## The switcher: groups and keys
 
@@ -89,7 +89,7 @@ motion:
 - **The ledger:** the row tints deeper (`--dur-control`), and its pencil
   swaps for a check, growing from 0.25 out of a 4px blur (`--dur-control`,
   `--ease-out`), then back after about a second.
-- **The tray:** the row's words lift 40px into the field as they fade, the
+- **The tray:** the row's words travel 40px down into the field as they fade, the
   field's words fading in on the same clock (`--dur-exit`, `--ease-out`);
   the tray then folds to its chip row under the house edge fade.
 
@@ -123,7 +123,7 @@ variables in `app/preview.css`:
 | `--tray-tint` | ink at 3% (6% dark) | the tray |
 | `--tray-hover-fill` | ink at 7% (10% dark) | hover ("+4%") |
 | `--tray-pad-inline` | 12px | rows' side padding |
-| `--tray-lift` | -40px | the lift |
+| `--tray-carry` | 40px | the words' travel down into the field |
 | `--tray-line` | 2px | loading's line on the divider |
 | `--tray-bone-1/2/3` | 72% / 88% / 58% | loading rows (own call: the ledger's) |
 | `--tray-chip-max` | 16rem | a chip's widest before its words clip (own call) |
@@ -136,7 +136,7 @@ The switcher's own look (`--sm-*`) is the preview's, not the product's.
 - `app/`: the page's source. `Preview.svelte` (the switcher and the stage),
   `states.js` (groups and keys), `starters.js` and `starters.tsv` (his
   words), `directions/` (Today, Drafts, Ledger, Tray), `Composer.svelte`,
-  `Surround.svelte`, `CawStill.svelte`, `clock.js`, `edges.js`, `preview.css`, `build.ts` (the dashboard's
+  `Surround.svelte`, `CawStill.svelte`, `clock.js`, `preview.css`, `build.ts` (the dashboard's
   Vite and plugins). Every direction is the dashboard's own primitives and
   tokens (Suggestions, the kit's chips, Skeleton, Solar glyphs, the motion
   helpers); nothing goes into the product until the owner picks.

@@ -130,7 +130,7 @@ export const DIRECTIONS = [
   {
     value: "tray",
     label: "The tray",
-    note: "The design's stated change: the suggestions live in the composer's own frame, centred at 560px on the board, growing upward from it until the heading's room, then scrolling inside.",
+    note: "The design's stated change: the suggestions live in the composer's own frame, over its field, growing upward until the heading's room, then scrolling inside.",
     where: ["thread", "board", "phone", "keyboard"],
     data: [
       common.loading,

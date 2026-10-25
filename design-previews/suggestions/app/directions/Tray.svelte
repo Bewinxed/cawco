@@ -1,19 +1,20 @@
 <!--
   Direction 3, The tray (the designer's report, report-92c112b7): the
   suggestions and the message box are one object. The composer's frame
-  continues down past a hairline into a tray tinted 3% of the ink (6% at
-  night): a header with the count and a collapse chevron, then rows at
-  14px, each reason at 12px under it (shown on hover or focus at a desk,
-  always under a finger). Four rows at most; "3 more" grows the tray
-  upward, never down. While the box holds words, the tray is one row of
-  chips that scrolls sideways under the edge fade; clearing the box opens
-  it again; after the first send it stays shut. On the empty board the box
-  and its tray stand centred at 560px. Drawn as specced, its costs included
-  (a tall composer; three nested surfaces in one control).
+  holds a tray tinted 3% of the ink (6% at night) over a hairline above its
+  field, so the field keeps Today's place at the foot, at Today's width
+  everywhere (Today's surroundings, the review's must-fix): a header with
+  the count and a collapse chevron, then rows at 14px, each reason at 12px
+  under it (shown on hover or focus at a desk, always under a finger). Four
+  rows at most; "3 more" grows the tray upward, never down. While the box
+  holds words, the tray is one row of chips that scrolls sideways under
+  the edge fade; clearing the box opens it again; after the first send it
+  stays shut. Drawn as specced otherwise, its costs included (a tall
+  composer; three nested surfaces in one control).
 
-  A press lifts the row's words 40px up into the field as they fade, while
-  the field's words fade in: one clock (`--dur-exit`, `--ease-out`). Then
-  the tray folds to its chip row. With less motion, only the fades.
+  A press carries the row's words 40px down into the field as they fade,
+  while the field's words fade in: one clock (`--dur-exit`, `--ease-out`).
+  Then the tray folds to its chip row. With less motion, only the fades.
 -->
 <script lang="ts">
   import {
@@ -26,7 +27,6 @@
   import { IconChevronDown } from "../../../../apps/dashboard/src/lib/icons.js";
   import { IN_THE_BOX, oneClock, putIn, typedOf } from "../clock.js";
   import Composer from "../Composer.svelte";
-  import { edges } from "../edges.js";
   import Surround from "../Surround.svelte";
 
   type Item = { text: string; reason?: string };
@@ -54,8 +54,8 @@
   // svelte-ignore state_referenced_locally
   let reopened = $state(draws.phase === "reopened");
   let shut = $state(false);
-  /** A lift in flight: the tray keeps its rows until the words are up. */
-  let lifting = $state(false);
+  /** A carry in flight: the tray keeps its rows until the words are in the field. */
+  let carrying = $state(false);
   // svelte-ignore state_referenced_locally
   let expanded = $state(draws.expanded);
   let said = $state("");
@@ -68,7 +68,7 @@
   );
   /** The box holds words (or the keyboard is up): the tray is its chip row, unless reopened. */
   const chips = $derived(
-    (value !== "" || keyboard) && !reopened && !draws.loading && !lifting
+    (value !== "" || keyboard) && !reopened && !draws.loading && !carrying
   );
   const shown = $derived(expanded ? draws.items : draws.items.slice(0, 4));
   const more = $derived(draws.items.length - shown.length);
@@ -93,15 +93,15 @@
       easing: ease("--ease-out"),
       fill: "forwards",
     };
-    const lift = Number.parseFloat(getComputedStyle(row).getPropertyValue("--tray-lift"));
-    lifting = true;
+    const carry = Number.parseFloat(getComputedStyle(row).getPropertyValue("--tray-carry"));
+    carrying = true;
     putIn(field, words);
     const runs = [
       text.animate(
         motionOk.current
           ? [
               { translate: "0 0", opacity: 1 },
-              { translate: `0 ${lift}px`, opacity: 0 },
+              { translate: `0 ${carry}px`, opacity: 0 },
             ]
           : [{ opacity: 1 }, { opacity: 0 }],
         timing
@@ -111,7 +111,7 @@
     await oneClock(runs);
     value = words;
     reopened = false;
-    lifting = false;
+    carrying = false;
     said = IN_THE_BOX;
     for (const run of runs) {
       run.cancel();
@@ -143,9 +143,6 @@
   <Composer bind:field bind:value focused={keyboard}>
     {#if tray}
       <div class="tray" data-loading={draws.loading || undefined}>
-        <div class="divider">
-          {#if draws.loading}<span class="running" data-slot="skeleton"></span>{/if}
-        </div>
         {#if chips}
           <div class="head" data-slot="tray-count"><span>{label}{count}</span></div>
           <div
@@ -178,10 +175,9 @@
           {#if !shut}
             <ul
               aria-labelledby="tray-label"
-              class="rows edges"
+              class="rows kit-edge-fade-block"
               data-slot="tray-rows"
               {@attach morph()}
-              {@attach edges}
             >
               {#if draws.loading}
                 {#each ["var(--tray-bone-1)", "var(--tray-bone-2)", "var(--tray-bone-3)"] as width (width)}
@@ -220,6 +216,9 @@
             </ul>
           {/if}
         {/if}
+        <div class="divider">
+          {#if draws.loading}<span class="running" data-slot="skeleton"></span>{/if}
+        </div>
       </div>
     {/if}
   </Composer>
@@ -227,9 +226,9 @@
 {/snippet}
 
 <div class="tray-direction" data-direction="tray" data-touch={draws.touch || undefined} data-where={where}>
-  <!-- The report's own arrangement in Today's surroundings: the suggestions
-       live in the composer's own frame, the frame centred at 560px on the
-       board, and the tray grows upward from the composer at the foot. -->
+  <!-- Today's surroundings: the composer is Today's box, its field at the
+       foot; the suggestions live in the box's own frame over the field, and
+       the tray grows upward from it. -->
   <Surround anchor="end" {foot} {set} {where} />
   <p aria-live="polite" class="sr-only">{said}</p>
 </div>
@@ -258,14 +257,6 @@
     flex: 0 1 auto;
     flex-direction: column;
     min-block-size: 0;
-  }
-
-  .box {
-    [data-where="board"] & {
-      inline-size: 100%;
-      max-inline-size: var(--board-column);
-      margin-inline: auto;
-    }
   }
 
   .sent {

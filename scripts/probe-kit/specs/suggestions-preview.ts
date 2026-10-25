@@ -22,7 +22,7 @@
  * 4. The press moments, each held on the clock (the DevTools Animation
  *    domain on Chromium, the page's own held clock on WebKit) and sought
  *    through: the drafts' travel into the box, the ledger's pencil→check,
- *    the tray's lift. Every run a press starts at one moment shares one
+ *    the tray's carry into the field. Every run a press starts at one moment shares one
  *    start, one duration and one easing (one clock), on the house's
  *    tokens; and the press ends with his words in the box, the caret after
  *    them, and the live region saying "In the message box, ready to edit".
@@ -57,10 +57,29 @@ const HIS = (() => {
   };
 })();
 /** The press each new direction makes, and the house duration its clock runs on. */
+/**
+ * The captures for a reviewer (into `kit.out`, Chromium alone): the states
+ * the review's two findings changed. Every tray state's field moved to
+ * Today's foot (finding 1), so the tray's at each where; and the cut lists
+ * now under the house edge fade (finding 2): Today's seven, the drafts' and
+ * the ledger's seven expanded, the tray's seven expanded.
+ */
+const SHOTS: string[] = [
+  ...["thread", "board", "phone", "keyboard"].flatMap((where) =>
+    ["three", "seven-collapsed", "seven-expanded", "filled", "loading"].map(
+      (data) => `direction:tray,where:${where},data:${data},theme:light`
+    )
+  ),
+  "direction:tray,where:thread,data:seven-expanded,theme:dark",
+  "direction:today,where:thread,data:seven,theme:light",
+  "direction:today,where:phone,data:seven,theme:light",
+  "direction:drafts,where:thread,data:seven-expanded,theme:light",
+  "direction:ledger,where:thread,data:seven-expanded,theme:light",
+];
 const PRESSES: [string, string, string][] = [
   ["drafts", "the drafts' travel into the box", "--dur-morph"],
   ["ledger", "the ledger's pencil→check", "--dur-control"],
-  ["tray", "the tray's lift", "--dur-exit"],
+  ["tray", "the tray's carry into the field", "--dur-exit"],
 ];
 
 /** How many of his suggestions a state draws, and whether it draws placeholders. */
@@ -187,12 +206,14 @@ interface StateRead {
     caw: Box | null;
     heading: Box | null;
     box: Box | null;
+    /** The composer's field, where the person writes. */
+    field: Box | null;
     words: string;
   };
   /** The set, or the tray's rows, run past their room. */
   clipped: boolean;
   dark: boolean;
-  /** Every room that runs past itself fades its cut at the house 40px. */
+  /** Every room that runs past itself wears the house edge fade (kit-edge-fade-block), its foot faded over the house 40px. */
   faded: boolean;
   /** The composer stands whole inside the frame. */
   footInside: boolean;
@@ -316,6 +337,7 @@ function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
       ),
       heading: rel(stage?.querySelector('[data-slot="heading"]')),
       box: rel(box),
+      field: rel(box?.querySelector('[data-slot="composer-field"]')),
       words:
         stage?.querySelector('[data-slot="heading"]')?.textContent?.trim() ??
         "",
@@ -325,8 +347,11 @@ function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
       clipped &&
       cuts.every(
         (el) =>
-          el.hasAttribute("data-more-end") &&
-          getComputedStyle(el).getPropertyValue("--fade-len").trim() === "40px"
+          el.classList.contains("kit-edge-fade-block") &&
+          getComputedStyle(el).getPropertyValue("--fade-len").trim() ===
+            "40px" &&
+          // The house fade's own scroll-driven length at the foot, as it stands.
+          getComputedStyle(el).getPropertyValue("--fade-end").trim() === "40px"
       ),
     headingShown: (() => {
       const h = stage
@@ -568,6 +593,9 @@ const spec: Spec = {
         let clippedStates = 0;
         const lowText: string[] = [];
         let lowest = 99;
+        /** Every tray state's composer field, by where: Today's field it must match. */
+        const trayFields: { key: string; where: string; field: Box | null }[] =
+          [];
         /** The tray's box with seven collapsed and expanded, by where. */
         const trayBox = new Map<string, Record<string, Box | null>>();
         for (const direction of await links(page, "direction")) {
@@ -632,6 +660,13 @@ const spec: Spec = {
                 }
                 lowest = Math.min(lowest, read.lowest);
                 lowText.push(...read.low.map((one) => `${key} ${one}`));
+                if (direction.value === "tray") {
+                  trayFields.push({
+                    key,
+                    where: where.value,
+                    field: read.around.field,
+                  });
+                }
                 // With the keyboard up the tray is its chip row: no rows grow there.
                 if (
                   direction.value === "tray" &&
@@ -679,8 +714,8 @@ const spec: Spec = {
         );
         // The surroundings, alike in every direction at each where: Caw, the
         // heading and the composer's box. The tray's box holds its tray (the
-        // report's own change): its foot and sides are the others' at the
-        // thread and on the phone, and on the board it stands centred at 560.
+        // report's own change) over its field: its foot and sides are the
+        // others' at every where, the board included.
         const aroundBad: string[] = [];
         const same = (a: Box | null, b: Box | null) =>
           Boolean(
@@ -713,7 +748,6 @@ const spec: Spec = {
           if (
             tray &&
             other &&
-            where !== "board" &&
             (tray.b !== other.b || tray.l !== other.l || tray.r !== other.r)
           ) {
             aroundBad.push(
@@ -726,8 +760,35 @@ const spec: Spec = {
           aroundBad.length === 0 && around.size === 4,
           aroundBad.slice(0, 4).join(" | ")
         );
+        // Finding 1: the tray in Today's surroundings. Its field, where the
+        // person writes, stands where Today's stands at every where and in
+        // every tray state, its foot and sides fixed whatever the tray holds
+        // (the keyboard, which Today hasn't, against the drafts').
+        const fieldBad: string[] = [];
+        for (const one of trayFields) {
+          const ref = (
+            around.get(one.where)?.get("today") ??
+            around.get(one.where)?.get("drafts")
+          )?.field;
+          if (!(
+            one.field &&
+            ref &&
+            one.field.b === ref.b &&
+            one.field.l === ref.l &&
+            one.field.r === ref.r
+          )) {
+            fieldBad.push(
+              `${one.key}: field ${JSON.stringify(one.field)} against ${JSON.stringify(ref)}`
+            );
+          }
+        }
         kit.check(
-          `${engine}: wherever a set (or the tray's rows) runs past its room it scrolls under the house 40px edge fade, and the composer stands whole in every state (${clippedStates} states scroll)`,
+          `${engine}: the tray stands in Today's surroundings: in all ${trayFields.length} tray states its composer field keeps Today's foot and sides at each where (${[...around.entries()].map(([w, by]) => `${w} ${JSON.stringify((by.get("today") ?? by.get("drafts"))?.field)}`).join("; ")})`,
+          fieldBad.length === 0 && trayFields.length > 0,
+          fieldBad.slice(0, 4).join(" | ")
+        );
+        kit.check(
+          `${engine}: wherever a set (or the tray's rows) runs past its room it scrolls under the house 40px edge fade (kit-edge-fade-block, its foot's --fade-end at 40px as it stands, so more below shows before any scroll), and the composer stands whole in every state (${clippedStates} states scroll)`,
           clipBad.length === 0,
           clipBad.slice(0, 4).join(" | ")
         );
@@ -779,6 +840,19 @@ const spec: Spec = {
           `${engine}: the overflow sweep over all ${states} states totals ${spills}`,
           spills === 0
         );
+        if (engine === "chromium") {
+          for (const key of SHOTS) {
+            // biome-ignore lint/performance/noAwaitInLoops: one state on the page at a time
+            await go(page, base, `?__state=${key}`);
+            const name = key.replaceAll(/[a-z]+:/g, "").replaceAll(",", "-");
+            await page.locator('[data-slot="stage"] .frame').screenshot({
+              path: join(kit.out, `${name}.png`),
+              animations: "allow",
+              caret: "hide",
+            });
+          }
+          kit.note(`captures: ${SHOTS.length} PNGs in ${kit.out}`);
+        }
         for (const press of PRESSES) {
           // biome-ignore lint/performance/noAwaitInLoops: one press at a time under one mouse
           await pressLeg(kit, page, base, engine, press);

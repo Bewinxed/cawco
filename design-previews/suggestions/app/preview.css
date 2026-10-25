@@ -54,7 +54,7 @@
     --tray-tint: color-mix(in oklch, var(--ink-strong) 3%, transparent);
     --tray-hover-fill: color-mix(in oklch, var(--ink-strong) 7%, transparent);
     --tray-pad-inline: 12px;
-    --tray-lift: -40px;
+    --tray-carry: 40px;
     --tray-line: 2px;
     --tray-bone-1: 72%;
     --tray-bone-2: 88%;
@@ -263,29 +263,6 @@
     border-block-start: 1px solid var(--border-hairline);
     font: var(--type-meta);
     color: var(--ink-muted);
-  }
-
-  /* The house edge fade (edges.js): an edge fades over the house's 40px
-     only while there is more past it. */
-  .edges {
-    --fade-len: var(--c-edge-fade-len);
-    --edge-start: 0px;
-    --edge-end: 0px;
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      #000 var(--edge-start),
-      #000 calc(100% - var(--edge-end)),
-      transparent
-    );
-
-    &[data-more-start] {
-      --edge-start: var(--fade-len);
-    }
-
-    &[data-more-end] {
-      --edge-end: var(--fade-len);
-    }
   }
 
   /* Caw's still by day; by night his still drawn on the paper rim. */

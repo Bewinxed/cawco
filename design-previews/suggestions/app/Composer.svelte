@@ -18,12 +18,13 @@
     value?: string;
     field?: HTMLTextAreaElement;
     focused?: boolean;
-    /** What the box holds under its field (the tray). */
+    /** What the box holds over its field (the tray), so the field keeps the foot. */
     children?: Snippet;
   } = $props();
 </script>
 
 <div class="composer" data-focused={focused || undefined} data-slot="composer">
+  {@render children?.()}
   <label class="line">
     <span class="sr-only">Message Caw</span>
     <textarea
@@ -35,7 +36,6 @@
     ></textarea>
     <span class="send" aria-hidden="true"></span>
   </label>
-  {@render children?.()}
 </div>
 
 <style>
