@@ -2199,8 +2199,12 @@ function checkPage(kit: Kit, back: Back): void {
   }
 }
 
-/** The detached kinds the leg holds at zero growth (audit 0d8f70d1: +192 div, +113 svg, +1688 text per 30 switches). */
+/** The detached kinds the leg reads (audit 0d8f70d1: +192 div, +113 svg, +1688 text per 30 switches). */
 const DETACHED_KINDS = ["SVGSVGElement", "div", "Text"] as const;
+/** A step of a retaining path at an element that sits in a pane put away (heap.ts' `[away]`, `markAway`). */
+const AWAY_STEP = /^native <.* \[away\]/;
+/** A step of a retaining path that is the engine's own, not script's (an element, a layout object, a fragment). */
+const NATIVE_STEP = /^native /;
 /** A step of a retaining path that is a DOM node. */
 const DOM_STEP = /^native (<|SVG\w*Element|Text|Comment|DocumentFragment)/;
 /** A context's heap id in a retaining path's step. */
@@ -2225,6 +2229,52 @@ const LIST_ROW = /^div\{(?!tool\}|live\})[^}]*\} in {2}\(list \d+/;
 const IN_FLIGHT_ROW = /^div\{(tool|live)\} in {2}\(list \d+/;
 /** Any node taken out (`watchHiddenRemovals`' mark). */
 const ANY_NODE = /./;
+
+/**
+ * Every element in a pane put away (`[data-pane-hidden]`) marked
+ * `data-probe-away`, and no other: what heap.ts says as `[away]` in a path.
+ */
+async function markAway(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll("[data-probe-away]")) {
+      el.removeAttribute("data-probe-away");
+    }
+    for (const pane of document.querySelectorAll("[data-pane-hidden]")) {
+      for (const el of pane.querySelectorAll("*")) {
+        el.setAttribute("data-probe-away", "");
+      }
+    }
+  });
+}
+
+/**
+ * The detached nodes of `kind` in `heap` that `before` did not have and a
+ * pane put away holds: their path from the root reaches an element in such
+ * a pane (`markAway`), and from there to the node runs through the engine's
+ * own objects alone (the element's layout, its fragments, the node), no
+ * script between. A node script holds (an effect, a listener's closure) is
+ * script's, wherever its path passes: Svelte's deferred branch keeps its
+ * anchor so for as long as the branch lives (svelte 5.57.2 branches.js
+ * `ensure`), and the path to it can pass a button's listeners in a pane put
+ * away.
+ */
+function heldAway(
+  before: Heap,
+  heap: Heap,
+  kind: string
+): { at: number; path: string[] }[] {
+  const had = new Set(before.detachedOf(kind).map(before.idOf));
+  return heap
+    .detachedOf(kind)
+    .filter((at) => !had.has(heap.idOf(at)))
+    .map((at) => ({ at, path: heap.pathTo(at) }))
+    .filter(({ path }) => {
+      const pane = path.findLastIndex((step) => AWAY_STEP.test(step));
+      return (
+        pane !== -1 && path.slice(pane).every((step) => NATIVE_STEP.test(step))
+      );
+    });
+}
 
 /**
  * What holds each detached node of `DETACHED_KINDS` in `heap` that `before`
@@ -2263,8 +2313,10 @@ function holders(before: Heap, heap: Heap): string[] {
  * `QUIET_TABS` more in one pane, each shown once, so each pane has built
  * what it builds on its first visit; the heap read after a collection
  * (heap.ts); thirty pointer presses round the tabs while the busy session
- * streams `STREAM_TURNS` turns; read again. Asserted: no growth in detached
- * `<svg>`, `<div>` and text nodes. Then every pane is shown once more, the
+ * streams `STREAM_TURNS` turns; read again. Asserted: no detached `<svg>`,
+ * `<div>` or text node that the first reading did not have is held by a pane
+ * put away (`heldAway`: its path reaches an element there and runs on through
+ * the engine's own objects; raw growth is noted). Then every pane is shown once more, the
  * busy one left in front, and read a third time (noted): what a pane put
  * away still holds is let go once it is laid out again. What holds each
  * node the later readings find that the first did not, root to node, is
@@ -2328,6 +2380,7 @@ async function detachedLeg(
   });
   const cdp =
     engine === "chromium" ? await page.context().newCDPSession(page) : null;
+  await markAway(page);
   const before = cdp ? await heapOf(cdp) : null;
   await page.evaluate(() =>
     (
@@ -2343,6 +2396,7 @@ async function detachedLeg(
   await press(page, tabs[0] as string);
   await streaming;
   await page.waitForTimeout(SWITCH_REST_MS);
+  await markAway(page);
   const after = cdp ? await heapOf(cdp) : null;
   const removals = await page.evaluate(() =>
     (
@@ -2358,6 +2412,7 @@ async function detachedLeg(
     await page.waitForTimeout(SWITCH_REST_MS);
   }
   await page.waitForTimeout(3000);
+  await markAway(page);
   const shownAgain = cdp ? await heapOf(cdp) : null;
   // Where each transcript's list stands: its pane, and whether it is drawn.
   const listings = await page.evaluate(() =>
@@ -2423,11 +2478,14 @@ async function detachedLeg(
   kit.note(
     `detached: before ${JSON.stringify(before.detached)}, after ${SWITCHES} switches ${JSON.stringify(after.detached)} (held only for the driver: ${before.heldForDriver} → ${after.heldForDriver}); what holds each is in ${join(kit.out, "detached.txt")}`
   );
+  // The invariant: a pane put away holds nothing. Raw growth is said, not
+  // held to: script keeps nodes of its own for as long as it lives.
   for (const kind of DETACHED_KINDS) {
+    const held = heldAway(before, after, kind);
     kit.check(
-      `detached: ${SWITCHES} switches round ${tabs.length} tabs leave no more detached ${kind} after a collection`,
-      (now[kind] ?? 0) <= (was[kind] ?? 0),
-      `${was[kind]} → ${now[kind]}`
+      `detached: ${SWITCHES} switches round ${tabs.length} tabs leave no detached ${kind} that a pane put away holds, after a collection`,
+      held.length === 0,
+      `${held.length} held through a pane put away (raw ${was[kind]} → ${now[kind]})${held.length > 0 ? `; the first held so: ${held[0]?.path.slice(-8).join(" ")}` : ""}`
     );
   }
   await cdp.detach();
