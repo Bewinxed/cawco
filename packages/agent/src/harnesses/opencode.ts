@@ -54,7 +54,6 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
   contactWords,
-  IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
   mcpFleetState,
   offeredMode,
@@ -63,6 +62,7 @@ import {
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import {
   credentialAccountIds,
   opencodeAccountHome,
@@ -395,12 +395,20 @@ const prepareAccountServer = async (account: string): Promise<void> => {
   }
 };
 
-/** The hub's MCP server as 2.0 configures a remote server (`mcp.servers.<name>`). */
+/**
+ * The hub's MCP server as 2.0 configures a remote server (`mcp.servers.<name>`).
+ * `execution` bounds every tool call ("`execution` | 12 hours | Tool calls,
+ * prompt retrieval, and resource reads", opencode.ai/v2/docs/mcp-servers), and
+ * 2.0.29's client passes it to the MCP SDK's `callTool` without
+ * `resetTimeoutOnProgress`, so the hub's progress heartbeat does not extend
+ * it. Set to CawCo's long-call wall clock, a call here runs as long as the
+ * same call from Claude Code (agent delegation.ts `delegationMcp`).
+ */
 const cawcoMcp = () => ({
   type: "remote" as const,
   url: harnessMcpUrl("/mcp/cawco"),
   oauth: false as const,
-  timeout: { execution: IMAGE_GENERATION_TIMEOUT_MS + 60_000 },
+  timeout: { execution: LONG_CALL_WALL_MS },
 });
 
 /**

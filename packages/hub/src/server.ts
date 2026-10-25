@@ -428,6 +428,7 @@ import {
   isHubPreview,
   originsFor,
 } from "@cawco/core/hub-previews";
+import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/long-calls";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
@@ -499,7 +500,7 @@ import {
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
-import { adminTools, isAdminWrite } from "./admin-tools";
+import { adminTools } from "./admin-tools";
 import {
   createAdmission,
   pricedTokens,
@@ -838,7 +839,6 @@ import {
 } from "./project-placements";
 import {
   createProjectSettings,
-  PROJECT_SETTINGS,
   type ProjectSettings,
 } from "./project-settings";
 import { createProjectStarters, starterRoutes } from "./project-starters";

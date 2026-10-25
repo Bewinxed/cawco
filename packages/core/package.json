@@ -157,6 +157,7 @@
     "./stream": "./src/stream.ts",
     "./connections": "./src/connections.ts",
     "./fleet-watch": "./src/fleet-watch.ts",
+    "./long-calls": "./src/long-calls.ts",
     "./injected": "./src/injected.ts",
     "./invariant": "./src/invariant.ts",
     "./move": "./src/move.ts",

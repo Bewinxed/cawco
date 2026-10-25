@@ -7,6 +7,11 @@ import {
   type SendPayload,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import {
+  isAdminWrite,
+  LONG_CALLS,
+  PROJECT_SETTINGS,
+} from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -16,7 +21,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ACTION_TOOLS, type Actions } from "./actions";
-import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
+import { adminTools, answeredWithoutAsking } from "./admin-tools";
 import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
 import { type CallKeys, CLAUDE_CALL_META, mcpCallKey } from "./call-keys";
 import type { Caw } from "./caw";
@@ -49,7 +54,7 @@ import {
   PROJECT_FROM_SESSION,
   projectFromSessionTool,
 } from "./project-offers";
-import { PROJECT_SETTINGS, type ProjectSettings } from "./project-settings";
+import type { ProjectSettings } from "./project-settings";
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -81,16 +86,6 @@ type ConnectTool = ReturnType<ConnectAsks["tools"]>[number];
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
   RoutineTool | IngressTool | ActionTool | RelayTool | MemoryTool;
-
-/** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
-const LONG_CALLS: Record<string, string> = {
-  delegate: "Creating the delegate's workspace",
-  generate_image: "Generating image through ChatGPT",
-  continue_session: "Summarising the session",
-  finish_item: "Running the merge checks of the work item",
-  task_start: "Creating the attempt's workspace",
-  start_session: "Waiting for the machine to start the session",
-};
 
 /** The listing every unbound connection shares: OpenCode's discovery, the superset. */
 const SHARED_DISCOVERY = "shared-discovery";

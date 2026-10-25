@@ -184,12 +184,6 @@ const wholeHash = async (
   return kept?.startsWith(asked) ? kept : asked;
 };
 
-const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
-
-/** Whether a tool is an admin write: the hub asks the person before each call runs, unless its session is in Full Send (admin-asks.ts). */
-export const isAdminWrite = (name: string): boolean =>
-  ADMIN_WRITE_TOOL.test(name);
-
 /** What a session is told to have the owner run to give a connection its key. */
 const setKeyCommand = (name: string): string =>
   `Run on a machine joined to this hub: cawco connections set-key ${name}`;

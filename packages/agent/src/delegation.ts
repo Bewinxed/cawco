@@ -1,12 +1,11 @@
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
-  IMAGE_GENERATION_TIMEOUT_MS,
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
-import { FLEET_WATCH_WAITS } from "@cawco/core/fleet-watch";
+import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { hubAnswer } from "./hub-away";
 
 export const MCP_SERVER_NAME = "cawco";
@@ -26,8 +25,6 @@ export const delegationHubUrl = () =>
  */
 export const harnessMcpUrl = (path: string): string =>
   `http://127.0.0.1:${mcpGatewayPort()}${path}`;
-/** How long any call to the hub's tools may run: finish_item's landing gate sets it. */
-const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 export const delegationMcp = (instanceId: string, credential?: string) => ({
   type: "http" as const,
@@ -43,9 +40,9 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
   // ran work inline 79 times for each delegation, so delegate is one of the
   // marked few.
   // A hard wall clock on every call to this server, and the floor of its idle
-  // limit: finish_item runs a work item's landing gate, up to an hour (an iOS build), and
-  // image generation runs minutes. Claude's own default would cut both.
-  timeout: DELEGATION_CALL_TIMEOUT_MS,
+  // limit: CawCo's one long-call wall clock. Claude's own default would cut
+  // finish_item's landing gate and a delegate's workspace creation.
+  timeout: LONG_CALL_WALL_MS,
 });
 
 /**
@@ -128,21 +125,17 @@ export async function callDelegationTool(
     }
     return { content: result.content, details: {} };
   };
-  // Workspace creation, continuation and checks may take minutes without a
-  // response byte; a tool whose job is to wait (on the person: a browser or
-  // connect ask; on a command: wait_item) answers when that ends.
-  if (
-    name === "continue_session" ||
-    name === "finish_item" ||
-    name === "delegate" ||
-    FLEET_WATCH_WAITS.has(name)
-  ) {
-    return take(await fetch(url, { ...init, timeout: false }));
-  }
-  const ms =
-    name === "generate_image" ? IMAGE_GENERATION_TIMEOUT_MS + 60_000 : 30_000;
+  // A long call (workspace creation, continuation, checks, image generation)
+  // may take minutes without a response byte, and a wait (on the person, on a
+  // command) answers when that ends: each runs to CawCo's one long-call wall
+  // clock, as it does from Claude Code and OpenCode, with Bun's idle fetch
+  // timeout off. Any other call is quick.
+  const long = runsLong(name);
+  const ms = long ? LONG_CALL_WALL_MS : 30_000;
   const read = await readWithin(ms, async (signal) =>
-    take(await fetch(url, { ...init, signal }))
+    take(
+      await fetch(url, { ...init, signal, ...(long ? { timeout: false } : {}) })
+    )
   );
   switch (read.kind) {
     case "answered":

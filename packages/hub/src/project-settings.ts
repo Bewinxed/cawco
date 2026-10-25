@@ -44,6 +44,7 @@ import {
   publishedWords,
   type ThreadNote,
 } from "@cawco/core";
+import { PROJECT_SETTINGS } from "@cawco/core/long-calls";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
@@ -52,8 +53,6 @@ import { type ProjectEdit, projectName } from "./project-edit";
 import type { RepoPublish } from "./repo-publish";
 import { roleOf } from "./roles";
 import { runsOnValue } from "./runs-on";
-
-export const PROJECT_SETTINGS = "project_settings";
 
 const GITHUB_REPO =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
