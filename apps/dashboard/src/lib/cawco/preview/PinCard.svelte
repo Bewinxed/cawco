@@ -511,7 +511,7 @@
      it and the reply under it, never a scroll away; the house edge fade says
      there is more above or below. -->
 <div
-  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
+  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain data-whole:shrink-0"
   data-whole={squeezed || undefined}
   data-pin-room
   onscroll={readAt}

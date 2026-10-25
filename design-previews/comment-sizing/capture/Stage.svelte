@@ -184,7 +184,22 @@
       <span></span>
     </PinFloat>
   </div>
-  <!-- A card on each other side of its pill (left, under, over), not
+  <div
+    data-part="float-bare-sheet"
+    style="position: relative; inline-size: 390px; block-size: 400px"
+  >
+    <PinFloat
+      bare
+      label={said.comment}
+      mark={{ x: 100, y: 100, w: 20, h: 20 }}
+      room={{ w: 390, h: 400 }}
+      sheet
+      slot="pin-composer"
+    >
+      <span></span>
+    </PinFloat>
+  </div>
+  <!-- A composer on each other side of its pill (left, under, over), not
        captured as parts: standing here, the stylesheet's rules for each side
        its pop rises from are kept in house.css. -->
   {#each [{ w: 900, x: 860, y: 100 }, { w: 300, x: 10, y: 10 }, { w: 300, x: 10, y: 370 }] as at (`${at.w}-${at.y}`)}
@@ -192,11 +207,11 @@
       style="position: relative; inline-size: {at.w}px; block-size: 400px"
     >
       <PinFloat
-        label="Comment 3"
+        bare
+        label={said.comment}
         mark={{ x: at.x, y: at.y, w: 20, h: 20 }}
-        pin={3}
         room={{ w: at.w, h: 400 }}
-        slot="pin-card"
+        slot="pin-composer"
       >
         <span></span>
       </PinFloat>

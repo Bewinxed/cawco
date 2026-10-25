@@ -22,32 +22,48 @@
   way (the owner: "i can't read here", of a long thread scrolling in the
   room above one); else under or over the pill, whichever holds more, at
   that side's room. Always `--space-2` from the pill as drawn, its focus
-  ring included, inside the well. A pin not on
-  the page (its element gone) stands at the well's top-right. On a phone,
-  under a finger, and wherever the pane says so (`sheet`), it is the well's
-  foot sheet, full width, standing over a software keyboard by the well's
-  `--keyboard-lift` (PreviewPane) so its field stays in view while the page
-  keeps its box.
+  ring included, inside the well. A pin not on the page (its element gone)
+  stands at the well's top-right. On a phone, under a finger, and wherever
+  the pane says so (`sheet`), it is the well's foot sheet, full width,
+  standing over a software keyboard by the well's `--keyboard-lift`
+  (PreviewPane) so its field stays in view while the page keeps its box.
 
-  It opens as every kit popover does, out of its pill (the kit's `pop`,
-  `popMotion`: rising `--pop-rise` from the side it stands on and growing
-  from `--pop-scale` as it fades in over `--dur-pop` on the drawer curve,
-  on `data-state` going from `closed` to `open`), its transform origin at
-  the pill: on its edge facing the pill, at the pill's height (or along it,
-  under or over it). It mounts closed, is measured and placed, and only
-  then opens, all before its first frame, so it rises from the side it
-  ends up on, never the one a box not yet measured gave it. It goes back
-  into the pill
-  by `popOut` over `--dur-exit`, and at once where another pin's card takes
-  its place. Without motion it fades. The foot sheet fades in over
-  `--dur-menu` and out over `--dur-control`.
+  Where it stands is chosen once (`plan`: the side, what it stands beside,
+  its tallest) and chosen again only when the well, the card's size or what
+  it is about changes size, never as the page scrolls (the owner: "when
+  scrolling the page why does this jump up and down instead of animating
+  its position?"): scrolling, it keeps to its pill, held whole inside the
+  well at its edges, every place a continuous step from the last, and a
+  pill gone out of view leaves it where it last stood beside it. Chosen
+  again while it stands, it travels to its new place over `--dur-morph` on
+  `--ease-drawer`, never a jump.
+
+  The thread's card is the pill growing (the owner: "a gooey animation
+  that morphs out of the comment just how the caw/search/machine bar on the
+  top right does it"): one surface, `pin-surface`, starts as the pill (its
+  box, its round corners, its face's fill and edge) and grows to the card's
+  box, corners, fill and edge over `--dur-pop` on `--ease-out`, the top
+  bar's card's own open (motion/hang); the thread fades in once the shape
+  has room, waiting two fifths of the open. Closing is the same in reverse
+  over `--dur-exit`, the thread gone in its first half, back into the pill; a close
+  caught mid-open turns back from where it is drawn. At once where another
+  pin's card takes its place. Without motion it fades. The composer, whose
+  own pill is its surface, opens as every kit popover does (`popMotion`),
+  out of the pill; the foot sheet fades in over `--dur-menu` and out over
+  `--dur-control`.
 -->
 <script lang="ts">
-  import { type Snippet, tick } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { popMotion } from "#lib/components/ui/popover/index.js";
   import { frameObserver } from "../frame-observer";
-  import { dur, easeOut, numberOf } from "../motion/curves.svelte";
+  import {
+    dur,
+    ease,
+    easeOut,
+    motionOk,
+    numberOf,
+  } from "../motion/curves.svelte";
   import { type PopSide, popOut } from "../motion/pop.svelte";
 
   interface Box {
@@ -57,12 +73,19 @@
     y: number;
   }
 
+  /** A pill's face: its fill and its edge, as tokens (PinMark's faces). */
+  export interface PinFace {
+    edge: `--${string}`;
+    fill: `--${string}`;
+  }
+
   let {
     mark,
     box = null,
     room,
     sheet = false,
     bare = false,
+    face = { fill: "--action-solid", edge: "--action-solid" },
     label,
     slot,
     pin,
@@ -85,6 +108,8 @@
     sheet?: boolean;
     /** No card round it: what it holds is its own surface (the composer's pill). */
     bare?: boolean;
+    /** The pill's face, which the card's surface grows from and goes back to. */
+    face?: PinFace;
     /** What it is, read out. */
     label: string;
     /** Its `data-slot`: what the pane and the probes call it. */
@@ -95,16 +120,21 @@
     children: Snippet;
   } = $props();
 
+  /** The thread's card: drawn by its own surface, which grows from the pill. */
+  const card = $derived(!(sheet || bare));
+  let surface = $state<HTMLElement>();
+  let body = $state<HTMLElement>();
+
   let width = $state(0);
   let height = $state(0);
   /**
-   * Its height with nothing capping it: its own, plus what its thread's
-   * room (PinCard `data-pin-room`) and it hold past their boxes. Where it
+   * Its height with nothing capping it: its own, plus what its body and its
+   * thread's room (PinCard `data-pin-room`) hold past their boxes. Where it
    * stands is chosen by this, never by the cap that choice sets, so a cap
    * never moves it.
    */
   let natural = $state(0);
-  /** Placed: its `data-state` goes from `closed` to `open`, and the kit's pop runs. */
+  /** Placed: the composer's `data-state` goes from `closed` to `open`, and the card's surface grows. */
   let opened = $state(false);
   // Its size as it mounts, then each change in the next frame
   // (frameObserver): what it holds grows inside a ResizeObserver pass (the
@@ -114,28 +144,36 @@
   // box that keeps its size.
   $effect(() => {
     const el = float;
-    if (!el) {
+    const inner = body;
+    if (!(el && inner)) {
       return;
     }
     const rooms = [...el.querySelectorAll<HTMLElement>("[data-pin-room]")];
     const read = () => {
-      width = el.offsetWidth;
-      height = el.offsetHeight;
+      const tall = el.offsetHeight;
       const past = rooms.reduce(
         (sum, one) => sum + one.scrollHeight - one.clientHeight,
-        el.scrollHeight - el.clientHeight
+        inner.scrollHeight - inner.clientHeight
       );
-      natural = height + Math.max(0, past);
+      width = el.offsetWidth;
+      height = tall;
+      natural = tall + Math.max(0, past);
     };
     read();
-    // Opened once the flush that places it has landed and its closed style
-    // there is taken, so the transition starts from where it stands.
+    // Opened once the flush that places it has landed: the composer's
+    // closed style taken there, so the kit's transition starts from where
+    // it stands; the card's surface grown from the pill it stands beside.
     tick().then(() => {
-      if (float === el) {
+      if (float !== el) {
+        return;
+      }
+      if (untrack(() => card)) {
+        grow();
+      } else {
         // biome-ignore lint/suspicious/noUnusedExpressions: the read takes its closed look at the side it was placed on, the start the kit's transition runs from
         getComputedStyle(el).translate;
-        opened = true;
       }
+      opened = true;
     });
     const watch = frameObserver(read);
     watch.observe(el);
@@ -158,127 +196,297 @@
    */
   const clear = $derived(gap + 4);
 
+  /** Two boxes as one. */
+  const union = (parts: Box[]): Box => {
+    const left = Math.min(...parts.map((one) => one.x));
+    const top = Math.min(...parts.map((one) => one.y));
+    return {
+      x: left,
+      y: top,
+      w: Math.max(...parts.map((one) => one.x + one.w)) - left,
+      h: Math.max(...parts.map((one) => one.y + one.h)) - top,
+    };
+  };
+
   /**
-   * What the comment is about, in the well: the pill and its element's box
-   * as the well shows it (cut to the well), one box; the pill alone without
-   * its element's.
+   * The pill and what the comment is about as last seen on the page: the
+   * card keeps to them while the pill is out of view, so it never leaves
+   * for the well's corner as the pill scrolls away.
    */
-  const subject = $derived.by((): Box | null => {
-    if (!mark) {
-      return null;
+  let last: { mark: Box; whole: Box } | null = null;
+  const seen = $derived.by(() => {
+    if (mark) {
+      last = { mark, whole: box ? union([mark, box]) : mark };
     }
-    const parts = box ? [mark, box] : [mark];
-    const left = Math.max(0, Math.min(...parts.map((one) => one.x)));
-    const top = Math.max(0, Math.min(...parts.map((one) => one.y)));
-    const right = Math.min(
-      room.w,
-      Math.max(...parts.map((one) => one.x + one.w))
-    );
-    const bottom = Math.min(
-      room.h,
-      Math.max(...parts.map((one) => one.y + one.h))
-    );
-    return right > left && bottom > top
-      ? { x: left, y: top, w: right - left, h: bottom - top }
-      : mark;
+    return last;
   });
 
   /**
-   * Where it stands: its top-left in the well, the side of the pill it
-   * stands on (the kit's `data-side`), its tallest, and its transform
-   * origin, all px.
+   * What the comment is about as the well shows it (cut to the well), for
+   * choosing where the card stands: the pill and its element's box, one box.
    */
-  const place = $derived.by(() => {
-    if (sheet) {
-      return null;
-    }
+  const shownOf = (whole: Box, pill: Box): Box => {
+    const left = Math.max(0, whole.x);
+    const top = Math.max(0, whole.y);
+    const right = Math.min(room.w, whole.x + whole.w);
+    const bottom = Math.min(room.h, whole.y + whole.h);
+    return right > left && bottom > top
+      ? { x: left, y: top, w: right - left, h: bottom - top }
+      : pill;
+  };
+
+  /** Where it stands: the side, what it stands beside, and its tallest. */
+  interface Plan {
+    along: "subject" | "pill" | "room";
+    max: number;
+    side: PopSide;
+  }
+  const decide = (at: { mark: Box; whole: Box } | null): Plan => {
     const full = Math.max(0, room.h - 2 * gap);
     /** Its height as it will stand beside the pill: what it holds, up to the well's. */
     const tall = Math.min(natural || height, full);
-    if (!(mark && subject)) {
+    if (!at) {
+      return { along: "room", side: "bottom", max: full };
+    }
+    const pill = at.mark;
+    const subject = shownOf(at.whole, pill);
+    const fits = (about: Box): PopSide | null => {
+      if (about.x + about.w + clear + width <= room.w - gap) {
+        return "right";
+      }
+      return about.x - clear - width >= gap ? "left" : null;
+    };
+    const under = room.h - (subject.y + subject.h + clear) - gap;
+    const over = subject.y - clear - gap;
+    const nextTo = fits(subject);
+    if (nextTo) {
+      return { along: "subject", side: nextTo, max: full };
+    }
+    if (under >= tall) {
+      return { along: "subject", side: "bottom", max: under };
+    }
+    if (over >= tall) {
+      return { along: "subject", side: "top", max: over };
+    }
+    const alone = fits(pill);
+    if (alone) {
+      return { along: "pill", side: alone, max: full };
+    }
+    const belowPill = room.h - (pill.y + pill.h + clear) - gap;
+    const abovePill = pill.y - clear - gap;
+    return belowPill >= tall || belowPill >= abovePill
+      ? { along: "pill", side: "bottom", max: Math.max(0, belowPill) }
+      : { along: "pill", side: "top", max: Math.max(0, abovePill) };
+  };
+
+  /**
+   * The plan, chosen again only when what it was chosen from changes size
+   * (the well, the card, what it holds, the pill or its element), never as
+   * the page under it scrolls.
+   */
+  let planFor = "";
+  let planHeld: Plan | null = null;
+  const plan = $derived.by(() => {
+    if (sheet) {
+      return null;
+    }
+    const at = seen;
+    const key = [
+      room.w,
+      room.h,
+      width,
+      Math.round(natural),
+      at ? `${at.mark.w}x${at.mark.h}` : "none",
+      at ? `${Math.round(at.whole.w)}x${Math.round(at.whole.h)}` : "",
+    ].join();
+    if (key !== planFor || !planHeld) {
+      planFor = key;
+      planHeld = untrack(() => decide(at));
+    }
+    return planHeld;
+  });
+
+  /**
+   * Where it stands now, from the plan and the pill as it stands: a
+   * continuous function of the pill's place, held whole inside the well.
+   */
+  const place = $derived.by(() => {
+    if (!plan) {
+      return null;
+    }
+    const tall = Math.min(natural || height, plan.max);
+    const at = seen;
+    const inX = (x: number) => Math.max(gap, Math.min(x, room.w - width - gap));
+    const inY = (y: number) => Math.max(gap, Math.min(y, room.h - gap - tall));
+    if (!at || plan.along === "room") {
       return {
-        left: Math.max(gap, room.w - width - gap),
+        left: inX(room.w - width - gap),
         top: gap,
-        side: "bottom" as PopSide,
-        max: full,
+        side: plan.side,
+        max: plan.max,
         origin: { x: width, y: 0 },
       };
     }
-    const pill = mark;
-    /** Beside `about` at its end side, else its start side; none where neither holds its width. */
-    const besideOf = (about: Box) => {
-      const end = about.x + about.w + clear;
-      if (end + width <= room.w - gap) {
-        return { left: end, side: "right" as PopSide };
-      }
-      const start = about.x - clear - width;
-      return start >= gap ? { left: start, side: "left" as PopSide } : null;
-    };
-    /** Its top at the pill's, shifted up as far as it takes to stand whole. */
-    const besideTop = Math.max(gap, Math.min(pill.y, room.h - gap - tall));
-    const across = Math.max(gap, Math.min(pill.x, room.w - width - gap));
-    const under = room.h - (subject.y + subject.h + clear) - gap;
-    const over = subject.y - clear - gap;
-    const belowPill = room.h - (pill.y + pill.h + clear) - gap;
-    const abovePill = pill.y - clear - gap;
-    const nextTo = besideOf(subject);
-    const alone = besideOf(pill);
-    let spot: { left: number; top: number; side: PopSide; max: number };
-    if (nextTo) {
-      spot = { ...nextTo, top: besideTop, max: full };
-    } else if (under >= tall) {
-      spot = {
-        left: across,
-        top: subject.y + subject.h + clear,
-        side: "bottom",
-        max: under,
-      };
-    } else if (over >= tall) {
-      spot = {
-        left: across,
-        top: subject.y - clear - tall,
-        side: "top",
-        max: over,
-      };
-    } else if (alone) {
-      spot = { ...alone, top: besideTop, max: full };
-    } else if (belowPill >= tall || belowPill >= abovePill) {
-      spot = {
-        left: across,
-        top: pill.y + pill.h + clear,
-        side: "bottom",
-        max: Math.max(0, belowPill),
-      };
+    const pill = at.mark;
+    const about = plan.along === "pill" ? pill : at.whole;
+    let left = pill.x;
+    let top = pill.y;
+    if (plan.side === "right") {
+      left = about.x + about.w + clear;
+    } else if (plan.side === "left") {
+      left = about.x - clear - width;
+    } else if (plan.side === "bottom") {
+      top = about.y + about.h + clear;
     } else {
-      spot = {
-        left: across,
-        top: pill.y - clear - Math.min(tall, abovePill),
-        side: "top",
-        max: Math.max(0, abovePill),
-      };
+      top = about.y - clear - tall;
     }
-    // The origin at the pill: its centre, brought onto the card's box.
-    const standing = Math.min(tall, spot.max);
+    left = inX(left);
+    top = inY(top);
     const inside = (value: number, most: number) =>
       Math.max(0, Math.min(value, most));
     return {
-      ...spot,
+      left,
+      top,
+      side: plan.side,
+      max: plan.max,
       origin: {
-        x: inside(pill.x + pill.w / 2 - spot.left, width),
-        y: inside(pill.y + pill.h / 2 - spot.top, standing),
+        x: inside(pill.x + pill.w / 2 - left, width),
+        y: inside(pill.y + pill.h / 2 - top, tall),
       },
     };
   });
 
-  /** The kit's state for its pop: none on the foot sheet. */
+  // A new plan while it stands: it travels from where it stood to its new
+  // place, over --dur-morph on --ease-drawer (The Interruptible Rule: a
+  // second one starts from where the first has it).
+  let stood: { left: number; top: number; plan: Plan | null } | null = null;
+  let travel: Animation | null = null;
+  $effect(() => {
+    const at = place;
+    const now = plan;
+    const el = float;
+    if (!(at && el)) {
+      return;
+    }
+    const before = stood;
+    stood = { left: at.left, top: at.top, plan: now };
+    const moved = before && before.plan !== now && untrack(() => opened);
+    if (!(moved && motionOk.current)) {
+      return;
+    }
+    // Where it is drawn now, a travel in flight counted, is where it starts.
+    const shift = getComputedStyle(el).translate;
+    const [dx = 0, dy = 0] =
+      shift === "none"
+        ? [0, 0]
+        : shift.split(" ").map((one) => Number.parseFloat(one));
+    travel?.cancel();
+    travel = el.animate(
+      [
+        {
+          translate: `${before.left - at.left + dx}px ${before.top - at.top + dy}px`,
+        },
+        { translate: "0px 0px" },
+      ],
+      { duration: dur("--dur-morph"), easing: ease("--ease-drawer") }
+    );
+  });
+
+  /** A colour token as the page computes it now (its scheme's). */
+  const colourOf = (token: `--${string}`): string => {
+    const probe = document.createElement("i");
+    probe.style.color = `var(${token})`;
+    probe.hidden = true;
+    float?.append(probe);
+    const value = probe.isConnected ? getComputedStyle(probe).color : "";
+    probe.remove();
+    return value;
+  };
+
+  /** The pill's shape in the card's own coordinates, as the surface starts and ends. */
+  const pillShape = () => {
+    const at = untrack(() => place);
+    const where = untrack(() => seen);
+    if (!(at && where)) {
+      return null;
+    }
+    const pill = where.mark;
+    return {
+      left: `${pill.x - at.left}px`,
+      top: `${pill.y - at.top}px`,
+      width: `${pill.w}px`,
+      height: `${pill.h}px`,
+      borderRadius: `${pill.h / 2}px`,
+      backgroundColor: colourOf(face.fill),
+      borderColor: colourOf(face.edge),
+    };
+  };
+
+  /** The surface as it stands in the card's box: its box, corners, fill and edge. */
+  const surfaceShape = (el: HTMLElement) => {
+    const style = getComputedStyle(el);
+    return {
+      left: `${el.offsetLeft}px`,
+      top: `${el.offsetTop}px`,
+      width: `${el.offsetWidth}px`,
+      height: `${el.offsetHeight}px`,
+      borderRadius: style.borderTopLeftRadius,
+      backgroundColor: style.backgroundColor,
+      borderColor: style.borderTopColor,
+    };
+  };
+
+  /** The thread's card grows out of its pill: the surface from the pill's shape to the card's, the thread fading in once there is room. */
+  function grow() {
+    const shape = surface;
+    const inner = body;
+    if (!(shape && inner)) {
+      return;
+    }
+    if (!motionOk.current) {
+      float?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--dur-control"),
+        easing: ease("--ease-out"),
+      });
+      return;
+    }
+    const from = pillShape();
+    if (!from) {
+      // Not on the page: no pill to grow from; it fades in where it stands.
+      float?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--dur-pop"),
+        easing: ease("--ease-out"),
+      });
+      return;
+    }
+    const to = surfaceShape(shape);
+    const length = dur("--dur-pop");
+    shape.animate([from, to], { duration: length, easing: ease("--ease-out") });
+    // The thread waits two fifths of the open, held hidden, then comes in
+    // over the rest as the shape lands.
+    inner.animate(
+      [
+        { opacity: 0, filter: "blur(var(--part-blur))" },
+        { opacity: 1, filter: "blur(0px)" },
+      ],
+      {
+        delay: length * 0.4,
+        duration: length * 0.6,
+        easing: ease("--ease-out"),
+        fill: "backwards",
+      }
+    );
+  }
+
+  /** The kit's state for the composer's pop: none on the foot sheet nor the card. */
   const popState = $derived.by(() => {
-    if (sheet) {
+    if (sheet || card) {
       return;
     }
     return opened ? "open" : "closed";
   });
 
-  /** The foot sheet fades in; a card comes in by the kit's `@starting-style` (`popMotion`). */
+  /** The foot sheet fades in; the card grows (`grow`), the composer comes in by the kit's `@starting-style` (`popMotion`). */
   function arrive(_node: Element): TransitionConfig {
     return sheet
       ? {
@@ -289,10 +497,10 @@
       : { duration: 0 };
   }
   /**
-   * Out: a card back into its pill (`popOut`), the foot sheet by its
-   * opacity; where another card takes its place, gone from the screen in
-   * this very frame (an outro of no length still holds its element for
-   * frames before the block lets it go).
+   * Out: the card back into its pill, the composer by the kit's `popOut`,
+   * the foot sheet by its opacity; where another card takes its place, gone
+   * from the screen in this very frame (an outro of no length still holds
+   * its element for frames before the block lets it go).
    */
   function leave(node: HTMLElement): TransitionConfig {
     if (exit.at === "cut") {
@@ -306,15 +514,55 @@
         css: (t: number) => `opacity: ${t}`,
       };
     }
-    return popOut(node, { side: place?.side ?? "bottom" });
+    if (!card) {
+      return popOut(node, { side: place?.side ?? "bottom" });
+    }
+    return shrink(node);
+  }
+
+  /** The card goes back into its pill: the surface from where it is drawn to the pill's shape, the thread gone by half way. */
+  function shrink(node: HTMLElement): TransitionConfig {
+    const shape = surface;
+    const inner = body;
+    const to = pillShape();
+    const length = dur("--dur-exit");
+    if (!(shape && inner && to && motionOk.current)) {
+      node.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: dur("--dur-control"),
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+      return { duration: dur("--dur-control") };
+    }
+    // From where it is drawn: a close caught mid-open turns back there.
+    const from = surfaceShape(shape);
+    const shown = getComputedStyle(inner).opacity;
+    for (const run of [...shape.getAnimations(), ...inner.getAnimations()]) {
+      run.cancel();
+    }
+    shape.animate([from, to], {
+      duration: length,
+      easing: ease("--ease-out"),
+      fill: "forwards",
+    });
+    // The thread is gone in the first half, before the shape is too small to hold it.
+    inner.animate([{ opacity: shown }, { opacity: 0 }], {
+      duration: length / 2,
+      easing: ease("--ease-out"),
+      fill: "forwards",
+    });
+    return { duration: length };
   }
 </script>
 
 <div
   aria-label={label}
   class={[
-    "pointer-events-auto absolute z-2 flex flex-col w-(--float-w) max-h-(--float-max) not-data-sheet:start-(--float-x) not-data-sheet:top-(--float-y) origin-(--float-origin) not-data-bare:overflow-y-auto not-data-bare:overscroll-contain not-data-bare:gap-space-2 not-data-sheet:not-data-bare:p-space-3 not-data-sheet:not-data-bare:border not-data-sheet:not-data-bare:border-border-control not-data-sheet:not-data-bare:rounded-lg not-data-bare:bg-surface-raised not-data-sheet:not-data-bare:shadow-hairline data-sheet:inset-x-0 data-sheet:bottom-(--keyboard-lift,0px) data-sheet:w-full data-sheet:max-h-over-keyboard-70 data-sheet:px-space-3 data-sheet:pt-space-3 data-sheet:pb-(--sheet-pb) data-sheet:border-t data-sheet:border-border-hairline data-sheet:rounded-t-lg data-sheet:bg-surface-raised data-sheet:shadow-drawer",
-    !sheet && popMotion,
+    "pointer-events-auto absolute z-2 flex flex-col max-h-(--float-max)",
+    sheet
+      ? "inset-x-0 bottom-(--keyboard-lift,0px) w-full max-h-over-keyboard-70"
+      : "start-(--float-x) top-(--float-y) w-(--float-w)",
+    !(sheet || card) && ["origin-(--float-origin)", popMotion],
   ]}
   data-bare={bare || undefined}
   data-sheet={sheet || undefined}
@@ -337,5 +585,28 @@
   in:arrive
   out:leave
 >
-  {@render children()}
+  {#if card}
+    <!-- The card's one surface: the pill grown (`grow`), behind what it holds. -->
+    <div
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-0 -z-1 rounded-lg border border-border-control bg-surface-raised shadow-hairline"
+      data-slot="pin-surface"
+      bind:this={surface}
+    ></div>
+  {/if}
+  <!-- What it holds: the one part that scrolls, never sideways. -->
+  <div
+    class={[
+      "flex min-h-0 min-w-0 flex-col",
+      !bare &&
+        "gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain",
+      card && "p-space-3",
+      sheet &&
+        "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-border-hairline rounded-t-lg bg-surface-raised shadow-drawer",
+    ]}
+    data-slot="pin-body"
+    bind:this={body}
+  >
+    {@render children()}
+  </div>
 </div>

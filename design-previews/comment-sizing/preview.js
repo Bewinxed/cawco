@@ -5,10 +5,10 @@
  * component's markup (parts.js, captured by capture/capture.ts); this file
  * places them, by the pane's own rules (PinFloat's placement, ported line
  * for line below) and each option's sizes, and plays the house motion for
- * opening and handing off: the card grows out of its pill as every kit
- * popover does (its captured `popMotion` classes, by the stylesheet's own
- * `@starting-style`, its origin at the pill) and goes back into it
- * (`popOut`),
+ * opening and handing off: the card is its pill grown (PinFloat `grow`:
+ * one surface from the pill's shape to the card's, the thread fading in
+ * once it has room) and goes back into it (`shrink`), and keeps to its
+ * pill as the page scrolls (PinFloat `plan`),
  * a rail changing size tweens its width (motion/morph: --dur-morph on
  * --ease-drawer) while what it held fades out and what it holds fades in,
  * a rail arriving comes in from its end (PreviewPane `railIn`: --dur-panel
@@ -146,11 +146,13 @@ const railShell = (form) => {
 /** A float's own element (PinFloat), its contents emptied. */
 const floatShell = (kind) => {
   const shell = first(PARTS[kind]);
-  shell.replaceChildren();
+  bodyOf(shell).replaceChildren();
   shell.removeAttribute("style");
   shell.removeAttribute("data-side");
   return shell;
 };
+/** What a float holds (PinFloat `pin-body`): the one part that scrolls. */
+const bodyOf = (float) => float.querySelector('[data-slot="pin-body"]');
 
 /** The thread's own parts (PinCard), its head carrying the pill when its page pill is out of reach. */
 const threadParts = (beside) => {
@@ -321,21 +323,15 @@ function build() {
   let float = null;
   if (stands === "card" || stands === "sheet") {
     float = floatShell(stands === "sheet" ? "float-sheet" : "float");
-    if (stands === "card") {
-      // PinFloat: it mounts closed, and opens once it is placed (render).
-      float.dataset.state = "closed";
-    }
-    float.append(threadParts(true));
+    bodyOf(float).append(threadParts(true));
     room.append(float);
   } else if (stands === "compose") {
-    float = floatShell("float-bare");
-    if (phone) {
-      float.dataset.sheet = "true";
-      delete float.dataset.state;
-    } else {
+    float = floatShell(phone ? "float-bare-sheet" : "float-bare");
+    if (!phone) {
+      // PinFloat: the composer mounts closed, and opens once it is placed (render).
       float.dataset.state = "closed";
     }
-    float.append(fragment(PARTS.composer));
+    bodyOf(float).append(fragment(PARTS.composer));
     room.append(float);
   }
 
@@ -461,7 +457,7 @@ function needsRail(phone) {
   const screen = SCREENS[state.screen];
   const wellH = screen.h - HEAD_H;
   const probe = floatShell(phone ? "float-sheet" : "float");
-  probe.append(threadParts(true));
+  bodyOf(probe).append(threadParts(true));
   probe.style.cssText = `position: absolute; visibility: hidden; inset-block: 0 auto; inset-inline-start: 0; --float-w: ${B_CARD_W}px; --float-max: none; max-block-size: none;`;
   const host = document.createElement("div");
   host.className = "pin-room";
@@ -557,20 +553,25 @@ function openRow(list) {
 }
 
 /* ---- Placement: PinFloat's, line for line. ---- */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: PinFloat's `place`, ported line for line so the card stands where the pane puts it
-function placeOf({ mark, box, room, width, natural, cap }) {
+/** Two boxes as one. */
+const union = (parts) => {
+  const left = Math.min(...parts.map((one) => one.x));
+  const top = Math.min(...parts.map((one) => one.y));
+  return {
+    x: left,
+    y: top,
+    w: Math.max(...parts.map((one) => one.x + one.w)) - left,
+    h: Math.max(...parts.map((one) => one.y + one.h)) - top,
+  };
+};
+
+/** PinFloat `decide`: where it stands (the side, what it stands beside, its tallest), chosen once. */
+function decideOf({ mark, whole, room, width, natural, cap }) {
   const { gap, clear } = T;
-  const parts = box ? [mark, box] : [mark];
-  const left = Math.max(0, Math.min(...parts.map((one) => one.x)));
-  const top = Math.max(0, Math.min(...parts.map((one) => one.y)));
-  const right = Math.min(
-    room.w,
-    Math.max(...parts.map((one) => one.x + one.w))
-  );
-  const bottom = Math.min(
-    room.h,
-    Math.max(...parts.map((one) => one.y + one.h))
-  );
+  const left = Math.max(0, whole.x);
+  const top = Math.max(0, whole.y);
+  const right = Math.min(room.w, whole.x + whole.w);
+  const bottom = Math.min(room.h, whole.y + whole.h);
   const subject =
     right > left && bottom > top
       ? { x: left, y: top, w: right - left, h: bottom - top }
@@ -578,70 +579,72 @@ function placeOf({ mark, box, room, width, natural, cap }) {
   const full = Math.max(0, Math.min(room.h - 2 * gap, cap));
   const tall = Math.min(natural, full);
   const pill = mark;
-  const besideOf = (about) => {
-    const end = about.x + about.w + clear;
-    if (end + width <= room.w - gap) {
-      return { left: end, side: "right" };
+  const fits = (about) => {
+    if (about.x + about.w + clear + width <= room.w - gap) {
+      return "right";
     }
-    const start = about.x - clear - width;
-    return start >= gap ? { left: start, side: "left" } : null;
+    return about.x - clear - width >= gap ? "left" : null;
   };
-  const besideTop = Math.max(gap, Math.min(pill.y, room.h - gap - tall));
-  const across = Math.max(gap, Math.min(pill.x, room.w - width - gap));
   const under = room.h - (subject.y + subject.h + clear) - gap;
   const over = subject.y - clear - gap;
+  const nextTo = fits(subject);
+  if (nextTo) {
+    return { along: "subject", side: nextTo, max: full };
+  }
+  if (under >= tall) {
+    return { along: "subject", side: "bottom", max: Math.min(under, full) };
+  }
+  if (over >= tall) {
+    return { along: "subject", side: "top", max: Math.min(over, full) };
+  }
+  const alone = fits(pill);
+  if (alone) {
+    return { along: "pill", side: alone, max: full };
+  }
   const belowPill = room.h - (pill.y + pill.h + clear) - gap;
   const abovePill = pill.y - clear - gap;
-  const nextTo = besideOf(subject);
-  const alone = besideOf(pill);
-  let spot;
-  if (nextTo) {
-    spot = { ...nextTo, top: besideTop, max: full };
-  } else if (under >= tall) {
-    spot = {
-      left: across,
-      top: subject.y + subject.h + clear,
-      side: "bottom",
-      max: Math.min(under, full),
-    };
-  } else if (over >= tall) {
-    spot = {
-      left: across,
-      top: subject.y - clear - tall,
-      side: "top",
-      max: Math.min(over, full),
-    };
-  } else if (alone) {
-    spot = { ...alone, top: besideTop, max: full };
-  } else if (belowPill >= tall || belowPill >= abovePill) {
-    spot = {
-      left: across,
-      top: pill.y + pill.h + clear,
-      side: "bottom",
-      max: Math.max(0, Math.min(belowPill, full)),
-    };
+  return belowPill >= tall || belowPill >= abovePill
+    ? { along: "pill", side: "bottom", max: Math.max(0, Math.min(belowPill, full)) }
+    : { along: "pill", side: "top", max: Math.max(0, Math.min(abovePill, full)) };
+}
+
+/** PinFloat `place`: where it stands now, from the plan and the pill as it stands, held whole in the well. */
+function standOf({ plan, mark, whole, room, width, natural }) {
+  const { gap, clear } = T;
+  const tall = Math.min(natural, plan.max);
+  const inX = (x) => Math.max(gap, Math.min(x, room.w - width - gap));
+  const inY = (y) => Math.max(gap, Math.min(y, room.h - gap - tall));
+  const about = plan.along === "pill" ? mark : whole;
+  let left = mark.x;
+  let top = mark.y;
+  if (plan.side === "right") {
+    left = about.x + about.w + clear;
+  } else if (plan.side === "left") {
+    left = about.x - clear - width;
+  } else if (plan.side === "bottom") {
+    top = about.y + about.h + clear;
   } else {
-    spot = {
-      left: across,
-      top: pill.y - clear - Math.min(tall, abovePill),
-      side: "top",
-      max: Math.max(0, Math.min(abovePill, full)),
-    };
+    top = about.y - clear - tall;
   }
-  const standing = Math.min(tall, spot.max);
+  left = inX(left);
+  top = inY(top);
   const inside = (value, most) => Math.max(0, Math.min(value, most));
   return {
-    ...spot,
+    left,
+    top,
+    side: plan.side,
+    max: plan.max,
     origin: {
-      x: inside(pill.x + pill.w / 2 - spot.left, width),
-      y: inside(pill.y + pill.h / 2 - spot.top, standing),
+      x: inside(mark.x + mark.w / 2 - left, width),
+      y: inside(mark.y + mark.h / 2 - top, tall),
     },
   };
 }
 
-/** PinFloat's `natural`: its height with nothing capping it, its thread's room's overflow and its own counted. */
+/** PinFloat's `natural`: its height with nothing capping it, its body's and its thread's room's overflow counted. */
 const naturalOf = (float) => {
-  let past = float.scrollHeight - float.clientHeight;
+  const body = bodyOf(float);
+  let past = body ? body.scrollHeight - body.clientHeight : 0;
   for (const room of float.querySelectorAll("[data-pin-room]")) {
     past += room.scrollHeight - room.clientHeight;
   }
@@ -722,18 +725,52 @@ function layout() {
       h: T.pin,
     };
     const box = inWell(target);
+    const whole = union([mark, box]);
     const cap =
       state.option === "b" && !look.composing
         ? bCap(size.h)
         : Number.POSITIVE_INFINITY;
-    const place = placeOf({
+    const width = float.offsetWidth;
+    const natural = naturalOf(float);
+    // PinFloat `plan`: chosen again only when what it was chosen from
+    // changes size, never as the page scrolls under it.
+    const key = [
+      size.w,
+      size.h,
+      width,
+      Math.round(natural),
+      `${mark.w}x${mark.h}`,
+      `${Math.round(whole.w)}x${Math.round(whole.h)}`,
+    ].join();
+    if (key !== built.planFor || !built.plan) {
+      const before = built.plan ? { ...built.place } : null;
+      built.planFor = key;
+      built.plan = decideOf({ mark, whole, room: size, width, natural, cap });
+      built.replanned = before;
+    }
+    const place = standOf({
+      plan: built.plan,
       mark,
-      box,
+      whole,
       room: size,
-      width: float.offsetWidth,
-      natural: naturalOf(float),
-      cap,
+      width,
+      natural,
     });
+    // A new plan while it stands: it travels there over --dur-morph on
+    // --ease-drawer, from where it was drawn.
+    if (built.replanned && built.opened && motionOk()) {
+      const from = built.replanned;
+      float.animate(
+        [
+          { translate: `${from.left - place.left}px ${from.top - place.top}px` },
+          { translate: "0px 0px" },
+        ],
+        { duration: T.morph, easing: T.easeDrawer }
+      );
+    }
+    built.replanned = null;
+    built.place = place;
+    built.mark = mark;
     float.dataset.side = place.side;
     float.style.setProperty("--float-x", `${place.left}px`);
     float.style.setProperty("--float-y", `${place.top}px`);
@@ -779,15 +816,130 @@ function follow(duration) {
 }
 
 /* ---- Motion. ---- */
+/** The card's one surface (PinFloat `pin-surface`). */
+const surfaceOf = (float) => float.querySelector('[data-slot="pin-surface"]');
+
+/** A colour token as the page computes it now. */
+const colourOf = (token) => {
+  const probe = document.createElement("i");
+  probe.style.color = `var(${token})`;
+  probe.hidden = true;
+  document.body.append(probe);
+  const value = getComputedStyle(probe).color;
+  probe.remove();
+  return value;
+};
+
+/** The pill's shape in the card's own coordinates (PinFloat `pillShape`): the pill, sent, is filled with `action-solid`. */
+const pillShapeOf = () => {
+  const { place, mark } = built;
+  if (!(place && mark)) {
+    return null;
+  }
+  return {
+    left: `${mark.x - place.left}px`,
+    top: `${mark.y - place.top}px`,
+    width: `${mark.w}px`,
+    height: `${mark.h}px`,
+    borderRadius: `${mark.h / 2}px`,
+    backgroundColor: colourOf("--action-solid"),
+    borderColor: colourOf("--action-solid"),
+  };
+};
+
+/** The surface as it stands (PinFloat `surfaceShape`). */
+const surfaceShapeOf = (el) => {
+  const style = getComputedStyle(el);
+  return {
+    left: `${el.offsetLeft}px`,
+    top: `${el.offsetTop}px`,
+    width: `${el.offsetWidth}px`,
+    height: `${el.offsetHeight}px`,
+    borderRadius: style.borderTopLeftRadius,
+    backgroundColor: style.backgroundColor,
+    borderColor: style.borderTopColor,
+  };
+};
+
+/**
+ * PinFloat `grow`: the card is its pill grown, one surface from the pill's
+ * shape to the card's over --dur-pop on --ease-out (the top bar's card's
+ * own open, motion/hang), the thread waiting two fifths of it, then coming
+ * in as the shape lands.
+ */
+function growRuns(float) {
+  const shape = surfaceOf(float);
+  const body = bodyOf(float);
+  const from = pillShapeOf();
+  if (!(motionOk() && from)) {
+    return [
+      float.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: T.control,
+        easing: T.easeOut,
+      }),
+    ];
+  }
+  const to = surfaceShapeOf(shape);
+  return [
+    shape.animate([from, to], { duration: T.pop, easing: T.easeOut }),
+    body.animate(
+      [
+        { opacity: 0, filter: "blur(var(--part-blur))" },
+        { opacity: 1, filter: "blur(0px)" },
+      ],
+      {
+        delay: T.pop * 0.4,
+        duration: T.pop * 0.6,
+        easing: T.easeOut,
+        fill: "backwards",
+      }
+    ),
+  ];
+}
+
+/** PinFloat `shrink`: back into the pill over --dur-exit, the thread gone in the first half. */
+function shrinkRuns(float) {
+  const shape = surfaceOf(float);
+  const body = bodyOf(float);
+  const to = pillShapeOf();
+  if (!(motionOk() && to)) {
+    return [
+      float.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: T.control,
+        easing: T.easeOut,
+        fill: "forwards",
+      }),
+    ];
+  }
+  const from = surfaceShapeOf(shape);
+  const shown = getComputedStyle(body).opacity;
+  for (const run of [...shape.getAnimations(), ...body.getAnimations()]) {
+    run.cancel();
+  }
+  return [
+    shape.animate([from, to], {
+      duration: T.exit,
+      easing: T.easeOut,
+      fill: "forwards",
+    }),
+    body.animate([{ opacity: shown }, { opacity: 0 }], {
+      duration: T.exit / 2,
+      easing: T.easeOut,
+      fill: "forwards",
+    }),
+  ];
+}
+
 /** How the open plays, from what stood before it: the list (or nothing) beside the page, no thread. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per surface the thread can open in, each on its house clock
 function playOpen() {
   const { float, side, sheet, look } = built;
   const ok = motionOk();
   const runs = [];
-  if (float && !float.dataset.sheet) {
-    // The kit's pop, out of the pill: its captured classes' own
-    // `@starting-style` transitions, begun as it was laid out.
+  if (float && surfaceOf(float)) {
+    runs.push(...growRuns(float));
+  } else if (float && !float.dataset.sheet) {
+    // The composer: the kit's pop, out of the pill, on its `data-state`.
     runs.push(...float.getAnimations());
   } else if (float) {
     runs.push(
@@ -890,34 +1042,8 @@ function wireThread() {
   const close = holder?.querySelector('button[aria-label="Close"]');
   close?.addEventListener("click", async () => {
     const runs = [];
-    if (holder === float && !float.dataset.sheet) {
-      // `popOut`: back toward the pill it stands beside, shrinking to the
-      // pop scale as it fades, over --dur-exit on the drawer curve.
-      const toward = {
-        bottom: [0, -1],
-        top: [0, 1],
-        right: [-1, 0],
-        left: [1, 0],
-      }[float.dataset.side ?? "bottom"];
-      runs.push(
-        float.animate(
-          motionOk()
-            ? [
-                { opacity: 1, scale: 1, translate: "0px 0px" },
-                {
-                  opacity: 0,
-                  scale: T.popScale,
-                  translate: `${toward[0] * T.popRise}px ${toward[1] * T.popRise}px`,
-                },
-              ]
-            : [{ opacity: 1 }, { opacity: 0 }],
-          {
-            duration: motionOk() ? T.exit : T.control,
-            easing: T.easeDrawer,
-            fill: "forwards",
-          }
-        )
-      );
+    if (holder === float && surfaceOf(float)) {
+      runs.push(...shrinkRuns(float));
     } else if (holder === float) {
       runs.push(
         float.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -1113,10 +1239,12 @@ function render({ play }) {
   syncSwitches();
   build();
   const { scroller, target, well, float } = built;
-  // A card opens once it is placed (PinFloat `opened`): from `closed` to
-  // `open`, the kit's pop. A frame drawn again for what is not an opening
-  // (the list toggled) shows its card standing: it opens with no transition.
-  const card = float && !float.dataset.sheet ? float : null;
+  // The composer opens once it is placed (PinFloat `opened`): from
+  // `closed` to `open`, the kit's pop. A frame drawn again for what is not
+  // an opening (the list toggled) shows it standing, with no transition.
+  // The card grows from its pill in `playOpen`.
+  const card =
+    float && !float.dataset.sheet && float.dataset.state ? float : null;
   const opening = play === "open";
   if (card && !opening) {
     card.style.transition = "none";
@@ -1136,6 +1264,7 @@ function render({ play }) {
     }
   }
   save();
+  built.opened = true;
   if (play === "open") {
     playOpen();
   } else if (

@@ -13,6 +13,23 @@
     }
     return pinUnsent(pin) ? "unsent" : "sent";
   };
+
+  /**
+   * A pill's face by its state, as tokens: its fill and its edge (the
+   * hollow ones a 2px `action-solid` ring on the raised surface). What a
+   * thread's card grows from and goes back into (PinFloat `face`).
+   */
+  export const markFace = (
+    state: PinMarkState
+  ): { edge: `--${string}`; fill: `--${string}` } => {
+    if (state === "sent") {
+      return { fill: "--action-solid", edge: "--action-solid" };
+    }
+    if (state === "resolved") {
+      return { fill: "--surface-fill-strong", edge: "--surface-fill-strong" };
+    }
+    return { fill: "--surface-raised", edge: "--action-solid" };
+  };
 </script>
 
 <script lang="ts">
