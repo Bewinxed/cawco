@@ -1190,15 +1190,18 @@ const holds = (
     ([key, value]) => task.fields[key] === value
   );
 
-/** Ids joined with what they do: `tsk-4 waits`, `tsk-4, tsk-5 wait`. */
-const named = (rows: { id: string }[], one: string, many: string): string =>
-  `${rows.map((row) => row.id).join(", ")} ${rows.length === 1 ? one : many}`;
+/** Tasks by their titles, joined with what they do: `“Fix the tray” waits`, `“A”, “B” wait`. */
+const named = (rows: { title: string }[], one: string, many: string): string =>
+  `${rows.map((row) => `“${row.title}”`).join(", ")} ${rows.length === 1 ? one : many}`;
 
 /**
  * Who holds on to a task, in a sentence: the tasks waiting for it (`after`)
  * and the tasks under it (`parent`); empty when none does.
  */
-const holders = (waiting: { id: string }[], under: { id: string }[]): string =>
+const holders = (
+  waiting: { title: string }[],
+  under: { title: string }[]
+): string =>
   [
     ...(waiting.length > 0
       ? [`${named(waiting, "waits", "wait")} for it`]
@@ -2149,10 +2152,10 @@ export const createTasks = (store: TaskStore) => {
     for (const row of rows) {
       claimed.set(row.id, [...(claimed.get(row.id) ?? []), row.path]);
     }
-    for (const [id, paths] of claimed) {
+    for (const paths of claimed.values()) {
       if (paths.length > 1) {
         problems.push(
-          `${id} is claimed by ${paths.length} files (${paths.join(", ")}); rename all but one.`
+          `${paths.length} task files carry the same number: ${paths.join(", ")}. Rename all but one.`
         );
       }
     }
@@ -3504,14 +3507,17 @@ export const createTasks = (store: TaskStore) => {
         const { rows } = await sync(projectId);
         const { path, number } = await locate(projectId, ref);
         const id = taskId(number);
+        const waiting = new Set(
+          store.waiters(projectId, id).map((row) => row.path)
+        );
         const held = holders(
-          store.waiters(projectId, id).filter((row) => row.path !== path),
+          rows.filter((row) => row.path !== path && waiting.has(row.path)),
           rows.filter((row) => row.path !== path && row.parent === id)
         );
         if (held) {
           refuse(
             409,
-            `${id} cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`
+            `This task cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`
           );
         }
         const { content } = await readFolderFile(projectId, path);
@@ -3853,7 +3859,7 @@ export const taskRoutes = (tasks: Tasks) =>
           if (!task.outputs.includes(query.name)) {
             throw new FolderRefusal(
               404,
-              `${task.id} hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
+              `This task hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
             );
           }
           const extension = fileExtension(query.name);
