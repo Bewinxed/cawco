@@ -44,6 +44,13 @@
         "files": ["scripts/probe-kit/specs/tool-answers.ts"],
         "createdAt": "2026-10-25T05:39:49.616Z",
         "reason": "agent call: the font is a pin fixture's recorded computed style in the tool-answers probe, not UI"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": ["design-previews/pairing/app/index.html"],
+        "createdAt": "2026-10-25T15:03:52.036Z",
+        "reason": "builder (leaf): false positive on the unstyled source template; the built page's sizes come from preview.css and the spec: title 28px (--text-hero) over 14px body, 2×; probe kit house rules pass"
       }
     ]
   }
