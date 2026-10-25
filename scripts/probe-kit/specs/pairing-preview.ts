@@ -1139,7 +1139,16 @@ async function strikeLeg(kit: Kit, page: Page, engine: Engine) {
       ) as HTMLElement;
       const g = h.getBoundingClientRect();
       const bg = getComputedStyle(document.body).backgroundColor;
+      const runEl = document.querySelector(".run") as HTMLElement;
+      const run = runEl.getBoundingClientRect();
+      const size = Number.parseFloat(getComputedStyle(runEl).fontSize);
+      const paper = (
+        document.querySelector(".slot") as HTMLElement
+      ).getBoundingClientRect();
       return {
+        across: `the strike ${Math.round(r.left)}–${Math.round(r.right)}, the letters ${Math.round(run.left)}–${Math.round(run.right)}, the paper ${Math.round(paper.left)}–${Math.round(paper.right)}`,
+        onLetters:
+          r.width <= run.width + 0.25 * size && r.width < paper.width / 2,
         strike: r.top + r.height / 2,
         pen: r.height,
         glyph: { x: g.left, y: g.top, width: g.width, height: g.height },
@@ -1169,6 +1178,10 @@ async function strikeLeg(kit: Kit, page: Page, engine: Engine) {
       inked.length > 0 &&
         Math.abs(boxes.strike - middle) <= 0.75 &&
         boxes.pen === 1.5
+    );
+    kit.check(
+      `${engine} at ${width}: the strike spans the letters, not the paper (${boxes.across})`,
+      boxes.onLetters
     );
   }
 }
@@ -1218,6 +1231,10 @@ async function shootRests(
     await picksTo(page, picks);
     await restIn(page, m);
     await holdForShot(page);
+    const ping = await page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector(".ping") as HTMLElement).opacity
+    );
     const v = picks ? `-${picks.map(([, value]) => value).join("-")}` : "";
     const file = `${m}${v}-${frame}-${width}-${scheme === "light" ? "day" : "night"}.png`;
     await page.locator(".frame").screenshot({ path: join(out, file) });
@@ -1226,7 +1243,7 @@ async function shootRests(
       : "";
     shots.push({
       file,
-      caption: `${LABEL[m]}${said}, the ${frame === "desk" ? "Desk" : "Phone"} frame at ${width}, by ${scheme === "light" ? "day" : "night"}`,
+      caption: `${LABEL[m]}${said}, the ${frame === "desk" ? "Desk" : "Phone"} frame at ${width}, by ${scheme === "light" ? "day" : "night"}; the ping's ring at opacity ${ping}`,
     });
   }
   return shots;
