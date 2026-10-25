@@ -659,13 +659,13 @@ export const projectTaskFields = sqliteTable(
 );
 
 /**
- * What a place is: a checkout on a machine, a delegate's workspace (kept
- * while the workspace is active), or the project's folder on the hub (its
+ * What a place is: a checkout on a machine, or the project's folder on the
+ * hub (its
  * `machineId` is `"hub"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative
  * to the hub's data folder; every project has one from the moment it is
  * made).
  */
-export type PlaceKind = "checkout" | "workspace" | "hub";
+export type PlaceKind = "checkout" | "hub";
 
 /** A project's folder on the hub, relative to the hub's data (db `hubPlacePath`). */
 export type HubFolder = `projects/${string}`;
@@ -708,7 +708,7 @@ export const projectPlaces = sqliteTable(
     /**
      * The project's primary checkout: where it is worked on first, and what a
      * client names it by. Exactly one checkout per project once it has any,
-     * set when its first checkout is added; never a workspace or the hub's.
+     * set when its first checkout is added; never the hub's.
      */
     isPrimary: integer("is_primary", { mode: "boolean" })
       .notNull()

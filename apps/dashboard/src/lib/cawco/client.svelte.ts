@@ -285,7 +285,7 @@ export interface ProjectPlace {
   /** The project's primary checkout: exactly one once it has any. */
   isPrimary: boolean;
   /** A `hub` place is the project's folder on the hub (machine `hub`, path `projects/<id>`). */
-  kind: "checkout" | "workspace" | "hub";
+  kind: "checkout" | "hub";
   machineId: string;
   path: string;
   projectId: string;

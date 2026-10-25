@@ -26,7 +26,9 @@ import type {
   FleetDelta,
   FleetHeld,
   FleetHoldings,
+  FleetItemState,
   FleetItemStatus,
+  FleetMcpServer,
   FleetReportFrame,
   FleetSyncReport,
   FramePayload,
@@ -36,12 +38,12 @@ import type {
   HarnessKind,
   IngestMark,
   LaunchGrant,
-  MachineFleetConfig,
   MoveEnded,
   NeutralMessage,
   NeutralResultMessage,
   NeutralSessionInfo,
   PermissionResult,
+  PlacedFleetConfig,
   SendPayload,
   SessionAddress,
   SessionPulse,
@@ -111,10 +113,12 @@ import {
   MESSAGES_STORED,
   MOVE_STEPS,
   machineLabel,
+  PLACED_SECTIONS,
   PREVIEW_FOLDERS,
   PREVIEW_START,
   PREVIEW_STOP,
   PREVIEW_WEIGHT,
+  placedApart,
   promptCacheUsage,
   RATE_LIMIT_READ,
   REPEATED_FAILURE,
@@ -185,9 +189,16 @@ import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
 import { forgetFirstSession } from "./first-session";
-import { placeMemoryAtLaunch } from "./fleet";
+import { placeFolder } from "./fleet";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
-import { writeFleetMcpSet } from "./fleet-mcp-set";
+import { readFleetMcpSet, writeFleetMcpSet } from "./fleet-mcp-set";
+import {
+  keepProjectRows,
+  keptProjectRows,
+  placedConfig,
+  place as placeRowsAt,
+  placesNow,
+} from "./fleet-place";
 import { expandHome, runFs } from "./fs";
 import type {
   Harness,
@@ -212,7 +223,7 @@ import { createLeftRunning } from "./left-running";
 import { inFlight } from "./loop-watch";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpGateOf, mcpHost } from "./mcp-host";
-import { retireInstalls, syncInstalls } from "./mcp-install";
+import { placeInstalls, retireInstalls, syncInstalls } from "./mcp-install";
 import { resolveMcpLauncher } from "./mcp-launcher";
 import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
@@ -304,6 +315,25 @@ const SETTING_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SET_EFFORT,
 ]);
+
+/**
+ * The key a row's resolved launch is kept under (`#launcherOf`): a fleet
+ * row's name, a project row's name and project, so every place of the
+ * project launches it as its first did and a clone cut later resolves
+ * nothing again.
+ */
+const launchKeyOf = (row: FleetMcpServer): string =>
+  row.placeId ? `${row.name}@project:${row.projectId ?? ""}` : row.name;
+
+/** Each placed copy that failed in `report`, in words: its section, its row and why. */
+const failedPlaced = (report: FleetSyncReport): string[] =>
+  Object.entries(placedApart(report).placed ?? {}).flatMap(([section, rows]) =>
+    Object.entries(rows ?? {}).flatMap(([key, byPlace]) =>
+      Object.values(byPlace)
+        .filter((state) => state.state === "failed")
+        .map((state) => `${section} ${key}: ${state.detail ?? "failed"}`)
+    )
+  );
 
 /** The words of whatever was thrown. */
 const errorText = (problem: unknown): string =>
@@ -1116,6 +1146,8 @@ export class SessionSupervisor {
   }
   /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
   readonly #desired = new FleetDesired();
+  /** The machine's last fleet report sent, which a clone's placement adds its place to ({@link placeClone}). */
+  #lastReport: FleetSyncReport | undefined;
   /** The items deltas moved since the last converge began, and whether one took any away. */
   readonly #convergeIds = new Set<string>();
   #convergeRemoved = false;
@@ -3361,11 +3393,6 @@ export class SessionSupervisor {
       const grant = payload.reattachOnly
         ? undefined
         : await this.#granted(payload);
-      // Its project's memory documents are in its place before it reads
-      // them; a workspace opened for it got its place in the same step.
-      if (grant?.placedMemory) {
-        await placeMemoryAtLaunch(grant.placedMemory);
-      }
       // Its scoped memory documents are the grant's alone, whatever the
       // spawn carried.
       const spec: SpawnPayload = grant
@@ -5932,6 +5959,16 @@ export class SessionSupervisor {
         this.#convergeIds.add(id);
       }
     }
+    // A whole one (a welcome) holds every project row there is, none among
+    // them too.
+    if (
+      delta.full ||
+      [...applied.changed, ...applied.removed].some((id) =>
+        id.startsWith("project:")
+      )
+    ) {
+      this.#keepProjectRows();
+    }
     this.#convergeRemoved ||= applied.removed.length > 0;
     this.#reconverge ||= delta.reconverge === true;
     const denied = this.#desired.deniedTools;
@@ -5942,6 +5979,189 @@ export class SessionSupervisor {
       return write;
     }
     return Promise.resolve();
+  }
+
+  /**
+   * The project rows held now, kept on disk (fleet-place.ts): what every
+   * clone cut from here on places ({@link placeClone}), in this run and the
+   * next. A write that fails is said.
+   */
+  #keepProjectRows(): void {
+    keepProjectRows(this.#desired.projectItems()).catch((error: unknown) =>
+      warn(
+        `the project rows were not kept on disk, so a workspace cut next places the ones kept before: ${errorText(error)}`
+      )
+    );
+  }
+
+  /**
+   * A workspace's clone at `cwd`, cut for project `projectId`, given the
+   * project's rows this agent keeps on disk (fleet-place.ts `place`), which
+   * hold through a restart: its skills and memory documents written into
+   * the clone, its MCP servers, hooks and harness settings into the files
+   * CawCo's sessions read for that folder. Before its boundary and first
+   * session start (workspace.ts `createWorkspace`), after any converge
+   * already under way, and with nothing asked of the hub: nothing else on
+   * the machine is written, no session is told, no boundary looked at. Its
+   * states go to the hub in the machine's report, beside the places it had.
+   */
+  placeClone(cwd: string, projectId: string): Promise<void> {
+    return this.#fleetTurn(async () => {
+      const rows = (await keptProjectRows())[projectId];
+      if (!rows) {
+        return;
+      }
+      const copies = placeRowsAt(rows, cwd);
+      const mcp = await this.#placeMcp(cwd, copies.mcp);
+      const placed = await placeFolder(cwd, copies, Object.keys(mcp.taken));
+      placed.mcp = {
+        ...mcp.states,
+        ...(await this.#placeHarnessMcp(cwd, copies.mcp, mcp.taken)),
+      };
+      const said = failedPlaced(placed);
+      console.info(
+        `[fleet] ${cwd}: project ${projectId}'s ${copies.skills.length} skill(s), ${copies.mcp.length} MCP server(s), ${copies.memory.length} memory document(s), ${copies.hooks.length} hook(s) and ${copies.harnessConfig.length} harness setting(s) placed from the rows kept on disk, as its workspace was cut${said.length > 0 ? `; not placed: ${said.join("; ")}` : ""}`
+      );
+      this.#reportPlaced(placed);
+    });
+  }
+
+  /**
+   * The MCP copies placed at `cwd` (`rows`; `launched`, as this machine
+   * launches them) into each harness's own files that keeps them
+   * (`Harness.placeFleet`): each copy's state there, the worst of the
+   * harnesses'. A harness that cannot is said, and the others go on.
+   */
+  async #placeHarnessMcp(
+    cwd: string,
+    rows: FleetMcpServer[],
+    launched: Record<string, FleetMcpServer>
+  ): Promise<Record<string, FleetItemState>> {
+    const states: Record<string, FleetItemState> = {};
+    for (const adapter of harnesses()) {
+      if (!adapter.placeFleet) {
+        continue;
+      }
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one harness's files at a time, as a converge writes them
+        const said = await adapter.placeFleet(
+          cwd,
+          adapter.capabilities.mcpStatus ? Object.values(launched) : rows
+        );
+        for (const [key, state] of Object.entries(said)) {
+          states[key] = states[key]
+            ? worstFleetState([states[key], state])
+            : state;
+        }
+      } catch (error) {
+        warn(
+          `${adapter.kind} did not take the MCP servers placed at ${cwd}: ${errorText(error)}`
+        );
+      }
+    }
+    return states;
+  }
+
+  /**
+   * The MCP copies placed at `cwd` as this machine launches them
+   * ({@link #launchRows}), each that launches in the fleet MCP set for the
+   * sessions in that folder; every other entry of the set left as it
+   * stands. Answers the copies it took and each enabled copy's state, by
+   * `<name>@<place id>`: applied once in the set, else why it cannot launch.
+   */
+  async #placeMcp(
+    cwd: string,
+    rows: FleetMcpServer[]
+  ): Promise<{
+    states: Record<string, FleetItemState>;
+    taken: Record<string, FleetMcpServer>;
+  }> {
+    const launched = await placeInstalls(async () => {
+      const result = await Promise.all(
+        rows.map(async (row) => ({
+          row,
+          launcher: row.enabled
+            ? await this.#launcherOf(launchKeyOf(row), row.config)
+            : undefined,
+        }))
+      );
+      return {
+        dirs: result.flatMap(({ launcher }) =>
+          launcher && "dir" in launcher && launcher.dir ? [launcher.dir] : []
+        ),
+        result,
+      };
+    });
+    const taken: Record<string, FleetMcpServer> = {};
+    const states: Record<string, FleetItemState> = {};
+    for (const { row, launcher } of launched) {
+      if (!row.enabled) {
+        continue;
+      }
+      const key = `${row.name}@${row.placeId ?? ""}`;
+      const local = this.#launchRow(row, launcher, key);
+      if (local.enabled) {
+        taken[key] = local;
+        states[key] = { state: "applied" };
+      } else {
+        states[key] = this.#mcpLauncherStates.get(key) ?? {
+          state: "failed",
+          cause: "unknown",
+          detail: "it does not launch on this machine",
+        };
+      }
+    }
+    const set = await readFleetMcpSet();
+    await writeFleetMcpSet({
+      ...set,
+      placed: {
+        ...Object.fromEntries(
+          Object.entries(set.placed).filter(([, entry]) => entry.cwd !== cwd)
+        ),
+        ...Object.fromEntries(
+          Object.entries(taken).map(([key, row]) => [
+            key,
+            { cwd, name: row.name, config: row.config },
+          ])
+        ),
+      },
+    });
+    return { states, taken };
+  }
+
+  /**
+   * A clone's placement (`placed`, keyed per place) sent to the hub in the
+   * machine's report: the last one with each placed row's state at the
+   * clone's place put in. None before the machine's first report, which
+   * its welcome's converge sends with every place.
+   */
+  #reportPlaced(placed: FleetSyncReport): void {
+    const last = this.#lastReport;
+    if (!last) {
+      return;
+    }
+    const fresh = placedApart(placed).placed ?? {};
+    const merged: NonNullable<FleetSyncReport["placed"]> = {
+      ...last.placed,
+    };
+    for (const section of PLACED_SECTIONS) {
+      for (const [key, byPlace] of Object.entries(fresh[section] ?? {})) {
+        const rows = { ...merged[section] };
+        rows[key] = { ...rows[key], ...byPlace };
+        merged[section] = rows;
+      }
+    }
+    const report: FleetSyncReport = { ...last, placed: merged, at: Date.now() };
+    this.#lastReport = report;
+    this.emit({
+      verb: "frames",
+      machineId: "",
+      payload: {
+        kind: "fleet_report",
+        report,
+        rev: null,
+      } satisfies FleetReportFrame,
+    });
   }
 
   /** The machine's word on items as they move (core `FleetConvergeFrame`). */
@@ -5995,11 +6215,14 @@ export class SessionSupervisor {
           state: "running" as const,
         }))
       );
-      const config = this.#desired.config();
       const started = Date.now();
       let report: FleetSyncReport | undefined;
       let thrown: string | undefined;
       try {
+        // Each project's rows at each of its places here now: its
+        // checkouts, and the clones of its workspaces this agent cut.
+        const holding = this.#desired.config();
+        const config = placedConfig(holding, await placesNow(holding.projects));
         report = await this.#syncFleet(config, "syncFleet");
         if (this.#harnessFailures.size > 0) {
           thrown = [...this.#harnessFailures]
@@ -6109,7 +6332,7 @@ export class SessionSupervisor {
    */
   async #launcherOf(
     key: string,
-    config: MachineFleetConfig["mcp"][number]["config"]
+    config: FleetMcpServer["config"]
   ): Promise<Awaited<ReturnType<typeof resolveMcpLauncher>>> {
     const asked = JSON.stringify(config);
     const kept = this.#launched.get(key);
@@ -6140,22 +6363,20 @@ export class SessionSupervisor {
    * (mcp-install.ts): a row that cannot launch here is disabled and says why
    * in its launcher state (a placed copy under `<name>@<place id>`), and a
    * shared fleet row goes to the gateway (`hosted`) with the harnesses
-   * dialing it there. The installs no row launches from any more retire once
-   * no session uses them.
+   * dialing it there. A project row's launch is resolved once for all its
+   * places ({@link launchKeyOf}). The installs no row launches from any
+   * more retire once no session uses them.
    */
   async #launchRows(
-    incoming: MachineFleetConfig,
+    incoming: PlacedFleetConfig,
     hosted: { name: string; config: HostedConfig }[]
-  ): Promise<Pick<MachineFleetConfig, "mcp" | "placedMcp">> {
-    const resolveAll = (rows: MachineFleetConfig["mcp"]) =>
+  ): Promise<Pick<PlacedFleetConfig, "mcp" | "placedMcp">> {
+    const resolveAll = (rows: FleetMcpServer[]) =>
       Promise.all(
         rows.map(async (row) => ({
           row,
           launcher: row.enabled
-            ? await this.#launcherOf(
-                row.placeId ? `${row.name}@${row.placeId}` : row.name,
-                row.config
-              )
+            ? await this.#launcherOf(launchKeyOf(row), row.config)
             : undefined,
         }))
       );
@@ -6186,11 +6407,11 @@ export class SessionSupervisor {
 
   /** One row as {@link #launchRows} launches it, its launcher state kept under `key`; a shared fleet row onto `hosted`. */
   #launchRow(
-    row: MachineFleetConfig["mcp"][number],
+    row: FleetMcpServer,
     launcher: Awaited<ReturnType<typeof resolveMcpLauncher>> | undefined,
     key: string,
     hosted?: { name: string; config: HostedConfig }[]
-  ): MachineFleetConfig["mcp"][number] {
+  ): FleetMcpServer {
     if (!launcher) {
       return row;
     }
@@ -6230,7 +6451,7 @@ export class SessionSupervisor {
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
-    incoming: MachineFleetConfig | undefined,
+    incoming: PlacedFleetConfig | undefined,
     which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {
     // The daemon's connection names a hub reachable from this machine.
@@ -6321,7 +6542,7 @@ export class SessionSupervisor {
                   await adapter.syncFleet!(
                     (adapter.capabilities.mcpStatus
                       ? config
-                      : incoming) as MachineFleetConfig
+                      : incoming) as PlacedFleetConfig
                   )
                 : // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
                   await adapter.fleetStatus!();
@@ -6453,7 +6674,8 @@ export class SessionSupervisor {
           .join("\n"),
       };
     }
-    return {
+    // Each project row's state said per place, as the hub keeps it.
+    const report = placedApart({
       mcp,
       mcpByHarness,
       marketplaces,
@@ -6466,7 +6688,9 @@ export class SessionSupervisor {
       ...(toolchain ? { toolchain } : {}),
       have: await this.#fleetHoldings(),
       at: Date.now(),
-    };
+    });
+    this.#lastReport = report;
+    return report;
   }
 
   /**

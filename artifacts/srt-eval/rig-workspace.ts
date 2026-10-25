@@ -106,7 +106,13 @@ if (verb === "create" && first && second) {
     ...held,
     projects: { ...held.projects, [project]: rule },
   });
-  const checkout = await createWorkspace(first, second, project);
+  // The rig holds no fleet, so no project's rows are placed in the clone.
+  const checkout = await createWorkspace(
+    () => Promise.resolve(),
+    first,
+    second,
+    project
+  );
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.on(signal, () => process.exit(0));
   }

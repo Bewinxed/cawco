@@ -201,15 +201,23 @@ const pruneUnder = async (
   );
 };
 
+/** What {@link readyHarnessRows} made ready, and the module and package dirs those name. */
+interface ReadyRows {
+  kept: { modules: Set<string>; packages: Set<string> };
+  set: Record<string, SetHarnessConfig>;
+}
+
 /**
- * Every row of the sync made ready, by `<kind>:<name>` (a placed copy's
+ * Each of `rows` made ready, by `<kind>:<name>` (a placed copy's
  * `@<place id>` after it), each reported applied or failed in words under
- * that key; the files no row names any more removed.
+ * that key: one folder's rows as its workspace is cut (fleet.ts
+ * `placeFolder`), every row as a sync converges ({@link syncHarnessConfig}).
+ * Nothing is removed.
  */
-export const syncHarnessConfig = async (
+export const readyHarnessRows = async (
   rows: readonly FleetHarnessConfig[],
   report: Record<string, FleetItemState>
-): Promise<Record<string, SetHarnessConfig>> => {
+): Promise<ReadyRows> => {
   const set: Record<string, SetHarnessConfig> = {};
   const kept = { modules: new Set<string>(), packages: new Set<string>() };
   for (const row of rows) {
@@ -240,6 +248,18 @@ export const syncHarnessConfig = async (
       };
     }
   }
+  return { kept, set };
+};
+
+/**
+ * Every row of the sync made ready ({@link readyHarnessRows}); the files no
+ * row names any more removed.
+ */
+export const syncHarnessConfig = async (
+  rows: readonly FleetHarnessConfig[],
+  report: Record<string, FleetItemState>
+): Promise<Record<string, SetHarnessConfig>> => {
+  const { kept, set } = await readyHarnessRows(rows, report);
   await Promise.all([
     ...MODULE_KINDS.map((kind) =>
       pruneUnder(join(fleetPlacedDir(), kind), kept.modules)

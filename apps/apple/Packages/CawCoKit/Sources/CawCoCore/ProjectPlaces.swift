@@ -3,8 +3,6 @@ public import CawCoAPI
 /// One of a project's places (WORDS.md: place), by its kind (`PlaceKind`):
 /// - `checkout`: a folder on a machine; sessions start in one, the primary
 ///   names the project's folder line;
-/// - `workspace`: a delegate's workspace on a machine, kept while it is
-///   active; sessions run in one and belong to the project;
 /// - `hub`: the project's folder on the hub (`machineId` "hub", a path
 ///   relative to the hub's data folder). Every project has one from the moment
 ///   it is made; no session runs there, so it holds no session's folder and
@@ -38,11 +36,11 @@ extension Components.Schemas.GetApiProjects200Payload {
         places.contains { $0.machineId == machineId }
     }
 
-    /// The places sessions run in: its checkouts and workspaces, on machines.
+    /// The places sessions run in: its checkouts, on machines.
     public var machinePlaces: [ProjectPlace] {
         places.filter { place in
             switch place.kind {
-            case .checkout, .workspace: true
+            case .checkout: true
             case .hub, .unrecognized: false
             }
         }

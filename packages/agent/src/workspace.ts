@@ -688,7 +688,9 @@ const placeFirst = async (
  * project with no outside remote gets the hub as its remote"), and a
  * repository whose `origin` is the hub reaches it with this machine's
  * credential, env-only; the owner's own pulls and pushes there go through
- * `cawco git-credential`, named in its config. `account` is the Claude
+ * `cawco git-credential`, named in its config. `placeRows` puts the rows of
+ * `projectId` this agent holds into the clone (session.ts `placeClone`),
+ * before the boundary starts. `account` is the Claude
  * account the workspace's first session launches on, placed by the hub
  * before the clone is cut: the boundary starts reading that account's user
  * layer, so the session's spawn finds its form unchanged and hands nothing
@@ -706,6 +708,7 @@ const placeFirst = async (
  * anything at the path, and unmarked once it is whole (interrupted-cut.ts).
  */
 export const createWorkspace = async (
+  placeRows: (cwd: string, projectId: string) => Promise<void>,
   cwd: unknown,
   workspaceId: unknown,
   projectId?: unknown,
@@ -818,6 +821,16 @@ export const createWorkspace = async (
     }
     await copyOwnSecrets(repoRoot, path, plain);
     await placeFirst(id, path, { account, first, projectId });
+    // The project's rows this agent holds, in the clone before its boundary
+    // and first session start: nothing is asked of the hub, and the
+    // boundary's form has them from its start.
+    if (typeof projectId === "string" && projectId) {
+      await placeRows(path, projectId).catch((error: unknown) =>
+        console.warn(
+          `[workspace] ${id}: its project's rows were not placed in ${path}, so its sessions start without them: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
     const boundary = await ensureBoundary({ id, path });
     const restored = await applyCarried({ id, path }, carried);
     await cutMade(id);

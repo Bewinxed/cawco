@@ -416,11 +416,7 @@ import {
 import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
-import {
-  type FleetItems,
-  fleetItemsOf,
-  itemHash,
-} from "@cawco/core/fleet-items";
+import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
 import {
   type HandoverCommand,
   type HandoverEvent,
@@ -757,11 +753,7 @@ import {
   memoryRoutes,
   ROUTINE_ORIGIN,
 } from "./memory";
-import {
-  documentFacts,
-  placesHolding,
-  sessionInstructions,
-} from "./memory-scopes";
+import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
 import {
@@ -841,11 +833,10 @@ import {
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import {
-  foldPlacedStates,
+  foldPlaced,
   onPlacesChanged,
-  placedCopies,
-  placedHooks,
   placesChanged,
+  projectRowsFor,
   unbound,
 } from "./project-placements";
 import {
@@ -970,14 +961,6 @@ import { createWorkspaceRetire } from "./workspace-retire";
  * extension takes (core harness-config.ts): each field optional, `null`
  * clearing it. The row's own check is `harnessConfigProblem`.
  */
-/**
- * How long a delegate's session in a new workspace waits for its machine to
- * converge the project's rows placed there (work-items.ts `placeTaken`): a
- * sync's npm install of a fleet MCP server, plugin or extension, with margin
- * (mcp-install.ts gives one install 180 s; most places hold none).
- */
-const PLACE_TAKEN_MS = 60_000;
-
 interface HarnessConfigBody {
   enabled?: boolean;
   module?: string | null;
@@ -7464,24 +7447,18 @@ export const createServer = (
       account = { accountDir: { accountId: where.accountId } };
     }
     // The fleet's documents for this session's role, delegate type, model
-    // and project, as the fleet says them now (memory-scopes.ts); and its
-    // project's for its own place, which its machine writes there before
-    // the session starts.
+    // and project, as the fleet says them now (memory-scopes.ts). Its
+    // project's for its folder are placed there already: in a checkout as
+    // its rows reached the machine, in a clone as the clone was cut.
     const places = db.listProjects().flatMap((project) => project.places);
     const instructions = sessionInstructions(
       db.listFleetMemoryDocs(),
       documentFacts(stored, places)
     );
-    const placedMemory = placedCopies(
-      db.fleetConfig().placedMemory,
-      placesHolding(stored, places),
-      machineId
-    );
     return {
       sessionCredential: identities.mint(read.id),
       ...account,
       ...(instructions.length > 0 ? { instructions } : {}),
-      ...(placedMemory.length > 0 ? { placedMemory } : {}),
     };
   };
   /**
@@ -19988,23 +19965,30 @@ export const createServer = (
 
   relayJourney.watch();
 
-  /**
-   * What the fleet's harnesses on `machineId` are to hold (NEW.md §11), as
-   * items (core fleet-items.ts): every MCP server, marketplace, plugin,
-   * skill, memory document and hook, the policy (the fleet's denied tools)
-   * among them, with each project's rows placed at its places there. Built
-   * on demand from what the hub holds now, and fast: nothing is read off the
-   * machine and nothing waited for (fleet-sync.ts diffs it against what the
-   * machine acknowledged, so only what moved is sent).
-   */
   /** Every known machine's fleet items hashed, before the hub listens (fleet-sync.ts `warmHashes`). */
   const warmFleetHashes = (): void => {
     for (const { machineId } of db.namedMachines()) {
       warmHashes(machineFleetItems(machineId));
     }
   };
+  /**
+   * What the fleet's harnesses on `machineId` are to hold (NEW.md §11), as
+   * items (core fleet-items.ts): every MCP server, marketplace, plugin,
+   * skill, memory document and hook, the policy (the fleet's denied tools)
+   * among them, and the rows of each project the machine holds, once each
+   * (project-placements.ts): every project with a checkout there or a work
+   * item there, since a workspace can be cut on a machine where its project
+   * has no checkout (`targetMachine` takes any `cwd`; a gate workspace
+   * falls back to `projectRepository`). The machine places them at the
+   * project's places itself, so a workspace opened or archived there moves
+   * no item. Built on demand from what the hub holds now, and fast: nothing
+   * is read off the machine and nothing waited for (fleet-sync.ts diffs it
+   * against what the machine acknowledged, so only what moved is sent).
+   */
   const machineFleetItems = (machineId: string): FleetItems => {
     const config = db.fleetConfig();
+    // A project's documents go with its rows alone.
+    const { placedMemory: _projectDocs, ...fleetRows } = config;
     // A directory on the hub's disk names nothing on any other machine, so
     // only the hub's own machine links it; every other one is told which
     // marketplaces those are and installs their plugins from the bytes.
@@ -20036,15 +20020,9 @@ export const createServer = (
     return fleetItemsOf(
       fleetMcp.syncConfig(
         {
-          ...config,
-          // The fleet's own, for every folder; a project's are placed below.
+          ...fleetRows,
+          // The fleet's own, for every folder; each project's apart, below.
           skills: unbound(config.skills),
-          // A project-bound skill and MCP server once per place of its
-          // project on this machine (project-placements.ts).
-          placedSkills: placedCopies(config.skills, places, machineId),
-          placedMcp: placedCopies(mcpRows, places, machineId),
-          // A project's memory documents, likewise once per place.
-          placedMemory: placedCopies(config.placedMemory, places, machineId),
           hubOnlyMarketplaces: [...hubOnly],
           // What the hub could not carry of a hub-only marketplace reaches
           // that machine no other way, so the hub's reason goes with the row.
@@ -20055,15 +20033,26 @@ export const createServer = (
               : plugin;
           }),
           mcp: unbound(mcpRows),
-          // A project-bound hook once per place of its project on this
-          // machine, with that place as its cwd (project-placements.ts).
-          hooks: placedHooks(config.hooks, places, machineId),
+          hooks: unbound(config.hooks),
           // The fleet's Claude Code settings, OpenCode plugins and pi
-          // extensions as they are, a project's once per place of it here.
-          harnessConfig: [
-            ...unbound(config.harnessConfig),
-            ...placedCopies(config.harnessConfig, places, machineId),
-          ],
+          // extensions; a project's go with its rows.
+          harnessConfig: unbound(config.harnessConfig),
+          // Each project's rows, once, for the machine to place at each of
+          // its places there.
+          projects: projectRowsFor(
+            { ...config, mcp: mcpRows },
+            new Set([
+              ...places
+                .filter(
+                  (place) =>
+                    place.machineId === machineId && place.kind === "checkout"
+                )
+                .map((place) => place.projectId),
+              ...db.projectsWorkedOn(machineId),
+            ]),
+            places,
+            machineId
+          ),
         },
         hubHttpUrl()
       )
@@ -21164,18 +21153,6 @@ export const createServer = (
     detach(checkSources(), "update check");
   });
 
-  /** Each place's path by its id, for a folded hook report to say which place a copy failed in. */
-  const placePathById = (): ((placeId: string) => string | undefined) => {
-    const paths = new Map(
-      db
-        .listProjects()
-        .flatMap((project) =>
-          project.places.map((place) => [place.id, place.path] as const)
-        )
-    );
-    return (placeId) => paths.get(placeId);
-  };
-
   /**
    * A machine's own account of what it has of the fleet, kept as its
    * `agents.fleet`: a sync's answer or a status read's, whoever asked, or
@@ -21188,25 +21165,10 @@ export const createServer = (
     peeked: FleetSyncReport,
     riding: RidingChanges | undefined
   ): void => {
-    // A project-bound hook, MCP server or skill went out once per place; the
-    // hub keeps one state per row, the worst of its places.
-    const pathOf = placePathById();
-    const report = {
-      ...peeked,
-      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
-      ...(peeked.skills
-        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
-        : {}),
-      ...(peeked.hooks
-        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
-        : {}),
-      ...(peeked.memoryDocs
-        ? { memoryDocs: foldPlacedStates(peeked.memoryDocs, pathOf) }
-        : {}),
-      ...(peeked.harnessConfig
-        ? { harnessConfig: foldPlacedStates(peeked.harnessConfig, pathOf) }
-        : {}),
-    };
+    // A project's rows are placed at each of its places on the machine,
+    // which says each place's state; the hub keeps one state per row, the
+    // worst of its places.
+    const report = foldPlaced(peeked);
     // Compare the machine's persisted content before overwriting its report;
     // timestamps and insertion order cannot cause a reload.
     const previous = db
@@ -21282,10 +21244,11 @@ export const createServer = (
       payload: { kind: "projects.changed" },
     });
 
-  // A place added or removed: every dashboard reads the projects again, and
-  // its machine is sent what moved there: the project's hooks, MCP servers,
-  // skills and memory documents reach the new place or leave the old one. A
-  // place of a project with none of them moves nothing, and nothing is sent.
+  // A checkout added or removed: every dashboard reads the projects again,
+  // and its machine is sent what moved there: the project's rows with the
+  // checkout named among them, which the machine places there or takes
+  // away. A checkout of a project with no rows moves nothing, and nothing
+  // is sent.
   onPlacesChanged((machineId) => {
     projectsChanged();
     fleetSyncs.changed("a place changed", { machineId });
@@ -23826,23 +23789,10 @@ export const createServer = (
     // and leaves a session to the send already on its way to it.
     inputRefusal,
     awaitsSend: (instanceId) => awaitsSend(instanceId),
-    placeTaken: async (machineId, placeId) => {
-      // Every item placed at the place, by its id's `@<place id>`, at the
-      // hash the machine is to hold it at.
-      const wanted = new Map(
-        [...machineFleetItems(machineId)]
-          .filter(([id]) => id.includes(`@${placeId}`))
-          .map(([id, value]) => [id, itemHash(value)])
-      );
-      if (wanted.size === 0) {
-        return;
-      }
-      if (!(await fleetSyncs.convergedAll(machineId, wanted, PLACE_TAKEN_MS))) {
-        console.warn(
-          `[fleet] ${machineName(machineId)} has not converged the ${wanted.size} row(s) placed at its new place ${placeId} within ${PLACE_TAKEN_MS / 1000} s: its first session starts without what it lacks, and takes what a harness reads live once it lands`
-        );
-      }
-    },
+    // A project's first work item on a machine where it has no checkout:
+    // the machine holds its rows from now on, for each clone of it cut there.
+    projectReached: (machineId) =>
+      fleetSyncs.changed("a project's first work item there", { machineId }),
     // A send that wakes its session holds its finished item's workspace.
     sendWakes: (instanceId) => {
       const [row] = db.getInstancesByIds([instanceId]);
@@ -32328,11 +32278,16 @@ export const createServer = (
           }
 
           const ids = forced.map((hook) => hook.id);
-          // Each hook's copies, one per place it is bound to there.
+          // Each hook's item: the fleet's own, or a project's, which the
+          // machine writes at each of the project's places there.
           fleetSyncs.force(
             body.machineId,
             [...machineFleetItems(body.machineId).keys()].filter((item) =>
-              ids.some((id) => item.startsWith(`hook:${id}@`))
+              ids.some(
+                (id) =>
+                  item === `hook:${id}` ||
+                  (item.startsWith("project:") && item.endsWith(`/hook:${id}`))
+              )
             )
           );
           fleetSyncs.changed(`an overwrite of hook(s) ${ids.join(", ")}`, {

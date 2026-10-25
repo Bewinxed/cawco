@@ -629,8 +629,8 @@ export class FleetMcp {
   }
 
   /**
-   * Every machine's sync passes here: the fleet's servers and a project's
-   * placed copies alike.
+   * Every machine's sync passes here: the fleet's servers and each
+   * project's alike.
    */
   syncConfig(config: MachineFleetConfig, hub: string): MachineFleetConfig {
     const outbound = (server: FleetMcpServer): FleetMcpServer => {
@@ -658,7 +658,12 @@ export class FleetMcp {
     return {
       ...config,
       mcp: config.mcp.map(outbound),
-      placedMcp: config.placedMcp.map(outbound),
+      projects: Object.fromEntries(
+        Object.entries(config.projects).map(([projectId, rows]) => [
+          projectId,
+          { ...rows, mcp: rows.mcp.map(outbound) },
+        ])
+      ),
     };
   }
 

@@ -216,14 +216,6 @@ export interface LaunchAsk {
  */
 export type LaunchGrant =
   | (Pick<SpawnPayload, "accountDir" | "homeLoginMove" | "instructions"> & {
-      /**
-       * The project's memory documents for the place the session runs in
-       * (`FleetConfig.placedMemory`'s copies for that place), written there
-       * before the session starts: a workspace opened for this launch is
-       * placed in the same step, so the sync its place set off may land
-       * after the session has read its rules.
-       */
-      placedMemory?: import("./fleet").FleetPlacedMemoryDoc[];
       sessionCredential: string;
     })
   | { refusal: string };

@@ -625,3 +625,23 @@ export const syncInstalls = async <T>(
   await retireInstalls(live);
   return (done as { dirs: string[]; result: T }).result;
 };
+
+/**
+ * Runs `work`, the install of the rows one folder takes as its workspace
+ * is cut (session.ts `placeClone`), in turn with every retirement, and
+ * names the dirs it answers as the fleet's beside the last sync's: a dir
+ * only that folder launches from is not retired before the next sync names
+ * it. Nothing is retired here.
+ */
+export const placeInstalls = async <T>(
+  work: () => Promise<{ dirs: string[]; result: T }>
+): Promise<T> => {
+  let done: { dirs: string[]; result: T } | undefined;
+  await inTurn(async () => {
+    done = await work();
+    for (const dir of done.dirs) {
+      named?.add(dir);
+    }
+  });
+  return (done as { dirs: string[]; result: T }).result;
+};

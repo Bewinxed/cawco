@@ -39,8 +39,8 @@ const inside = (cwd: string, folder: string): boolean =>
   cwd.startsWith(folder.endsWith("/") ? folder : `${folder}/`);
 
 /**
- * The checkouts and workspaces on a session's machine that hold its folder,
- * the deepest first, where places nest.
+ * The checkouts on a session's machine that hold its folder, the deepest
+ * first, where places nest.
  */
 export const placesHolding = (
   session: Launching,
@@ -50,15 +50,14 @@ export const placesHolding = (
     .filter(
       (place) =>
         place.machineId === session.machineId &&
-        (place.kind === "checkout" || place.kind === "workspace") &&
+        place.kind === "checkout" &&
         inside(session.cwd, place.path)
     )
     .sort((a, b) => b.path.length - a.path.length);
 
 /**
  * The project a session works in: the one it was started from, else the one
- * whose checkout or workspace holds its folder, which is where its
- * project-scoped documents are placed.
+ * whose checkout holds its folder.
  */
 export const sessionProject = (
   session: Launching,

@@ -29608,7 +29608,7 @@
         "type": "object",
         "properties": {
           "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"
           },
           "enabled": {
@@ -29641,7 +29641,7 @@
             "type": "string"
           },
           "placeId": {
-            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
             "type": "string"
           },
           "projectId": {
@@ -29650,7 +29650,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "script": {
             "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
@@ -45818,7 +45818,7 @@
           },
           "harnessConfig": {
             "type": "object",
-            "description": "The fleet's Claude Code settings, OpenCode plugins and pi extensions,\nby `<kind>:<name>` (a placed copy's `<kind>:<name>@<place id>`): what the\nsync wrote or installed for each, as sessions take it at their launch."
+            "description": "The fleet's Claude Code settings, OpenCode plugins and pi extensions,\nby `<kind>:<name>`: what the sync wrote or installed for each, as\nsessions take it at their launch. A project's are in {@link placed}."
           },
           "have": {
             "description": "What this machine holds on its disk once the sync is done, by hash — the\ncontent-carrying rows only, hashed as the hub hashes them. It tells the\nhub whose content moved, so running sessions reload.",
@@ -45835,7 +45835,7 @@
           },
           "hooks": {
             "type": "object",
-            "description": "The fleet's hooks, by the same id the hub keeps them under (a placed\ncopy's `<id>@<place id>`). Claude Code's report says what its sync\nregistered; OpenCode's and pi's whether CawCo runs the hook there at all,\n`unsupported` with why for an event or handler that harness has no point\nfor (core `hookUnsupported`). A machine's merged report holds each hook's\nworst, every harness's word in its `detail`. `failed` covers three\ndifferent machine-local facts — a hand-edited script, a validation the\nhub already passed but this row failed again, or a project hook with no\ncheckout here — and `detail` is what tells them apart."
+            "description": "The fleet's hooks, by the same id the hub keeps them under (a project's\nare in {@link placed}). Claude Code's report says what its sync\nregistered; OpenCode's and pi's whether CawCo runs the hook there at all,\n`unsupported` with why for an event or handler that harness has no point\nfor (core `hookUnsupported`). A machine's merged report holds each hook's\nworst, every harness's word in its `detail`. `failed` covers three\ndifferent machine-local facts — a hand-edited script, a validation the\nhub already passed but this row failed again, or a project hook with no\ncheckout here — and `detail` is what tells them apart."
           },
           "marketplaces": {
             "type": "object"
@@ -45959,6 +45959,27 @@
                 ]
               }
             ]
+          },
+          "placed": {
+            "type": "object",
+            "properties": {
+              "mcp": {
+                "type": "object"
+              },
+              "harnessConfig": {
+                "type": "object"
+              },
+              "skills": {
+                "type": "object"
+              },
+              "hooks": {
+                "type": "object"
+              },
+              "memoryDocs": {
+                "type": "object"
+              }
+            },
+            "description": "Each project row's state at each of its places on the machine\n({@link FleetPlacedStates}): its checkouts and its workspaces' clones,\nwhich only the machine knows. The hub keeps one state per row, the\nworst of its places, naming the place."
           },
           "plugins": {
             "type": "object"
@@ -47233,7 +47254,7 @@
         ]
       },
       "FleetScope": {
-        "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status.",
+        "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status.",
         "type": "string",
         "enum": [
           "local",
@@ -51379,11 +51400,11 @@
             "type": "boolean"
           },
           "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"
           },
           "placeId": {
-            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
             "type": "string"
           },
           "projectId": {
@@ -51392,7 +51413,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           }
         },
         "required": [
@@ -51412,11 +51433,11 @@
             "type": "string"
           },
           "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"
           },
           "placeId": {
-            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
             "type": "string"
           },
           "projectId": {
@@ -51425,7 +51446,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           }
         },
         "required": [
@@ -51461,11 +51482,11 @@
             "type": "string"
           },
           "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"
           },
           "placeId": {
-            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
             "type": "string"
           },
           "projectId": {
@@ -51474,7 +51495,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "checkError": {
             "description": "Why the last read of the source for what it holds failed.",
@@ -51602,11 +51623,11 @@
             "type": "string"
           },
           "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"
           },
           "placeId": {
-            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
             "type": "string"
           },
           "projectId": {
@@ -51615,7 +51636,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "checkError": {
             "description": "Why the last read of the source for what it holds failed.",
@@ -52285,11 +52306,11 @@
             "type": "string"
           },
           "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"
           },
           "placeId": {
-            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
             "type": "string"
           },
           "projectId": {
@@ -52298,7 +52319,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           }
         },
         "required": [
@@ -52552,7 +52573,7 @@
             "type": "string"
           },
           "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
             "type": "string"
           },
           "script": {
@@ -52568,7 +52589,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends one copy per checkout and workspace of it, and each\n  session in that folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "matcher": {
             "type": "string"
@@ -52581,7 +52602,7 @@
             "type": "boolean"
           },
           "placeId": {
-            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
             "type": "string"
           }
         },
@@ -52675,12 +52696,11 @@
         ]
       },
       "PlaceKind": {
-        "description": "What a place is: a checkout on a machine, a delegate's workspace (kept\nwhile the workspace is active), or the project's folder on the hub (its\n`machineId` is `\"hub\"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative\nto the hub's data folder; every project has one from the moment it is\nmade).",
+        "description": "What a place is: a checkout on a machine, or the project's folder on the\nhub (its\n`machineId` is `\"hub\"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative\nto the hub's data folder; every project has one from the moment it is\nmade).",
         "type": "string",
         "enum": [
           "checkout",
-          "hub",
-          "workspace"
+          "hub"
         ]
       },
       "PlacePath": {

@@ -7,19 +7,25 @@
  * converge. Its own register says what it holds (`fleetHeld`), so a hub that
  * restarted sends only what moved since. In memory only: an agent that
  * starts again holds nothing and is sent every item, which its harnesses
- * converge by hash and leave as they are.
+ * converge by hash and leave as they are. The project rows among them are
+ * also kept on disk (fleet-place.ts `keepProjectRows`), for a workspace cut
+ * before that welcome.
  */
-import type {
-  FleetDelta,
-  FleetHeld,
-  FleetItemStatus,
-  FleetSyncReport,
-  MachineFleetConfig,
+import {
+  type FleetDelta,
+  type FleetHeld,
+  type FleetItemState,
+  type FleetItemStatus,
+  type FleetSyncReport,
+  type MachineFleetConfig,
+  type PlacedSection,
+  worstFleetState,
 } from "@cawco/core";
 import {
   type FleetItems,
   fleetConfigOf,
   itemKind,
+  projectItemOf,
   reportKeyOf,
 } from "@cawco/core/fleet-items";
 
@@ -98,6 +104,13 @@ export class FleetDesired {
     return [...this.#items.keys()];
   }
 
+  /** The project items held now (core `projectItemOf`), by id: what the disk keeps of them. */
+  projectItems(): Record<string, unknown> {
+    return Object.fromEntries(
+      [...this.#items].filter(([id]) => projectItemOf(id) !== undefined)
+    );
+  }
+
   hashOf(id: string): string {
     return this.#hashes.get(id) ?? "";
   }
@@ -123,6 +136,27 @@ export class FleetDesired {
   }
 }
 
+/**
+ * A project row's state as the report says it per place (core
+ * `FleetSyncReport.placed`): the worst of its places, a failure naming its
+ * place; none where it is placed nowhere yet.
+ */
+const placedState = (
+  report: FleetSyncReport,
+  section: PlacedSection,
+  key: string
+): FleetItemState | undefined => {
+  const places = Object.entries(report.placed?.[section]?.[key] ?? {});
+  if (places.length === 0) {
+    return;
+  }
+  const worst = worstFleetState(places.map(([, state]) => state));
+  const [where] = places.find(([, state]) => state === worst) ?? [];
+  return worst.detail && where
+    ? { ...worst, detail: `${where}: ${worst.detail}` }
+    : worst;
+};
+
 /** One item's state as a converge's report names it: failed in its words, or done. */
 const reported = (
   report: FleetSyncReport,
@@ -135,10 +169,8 @@ const reported = (
   const kind = itemKind(id);
   switch (kind) {
     case "mcp":
-    case "placedMcp":
       return report.mcp[key];
     case "skill":
-    case "placedSkill":
       return report.skills?.[key];
     case "marketplace":
       return report.marketplaces[key];
@@ -147,15 +179,25 @@ const reported = (
     case "memory":
       return report.memory;
     case "memoryDoc":
-    case "placedMemory":
       return report.memoryDocs?.[key];
     case "hook":
       return report.hooks?.[key];
     case "harnessConfig":
       return report.harnessConfig?.[key];
+    case "projectMcp":
+      return placedState(report, "mcp", key);
+    case "projectSkill":
+      return placedState(report, "skills", key);
+    case "projectMemory":
+      return placedState(report, "memoryDocs", key);
+    case "projectHook":
+      return placedState(report, "hooks", key);
+    case "projectHarnessConfig":
+      return placedState(report, "harnessConfig", key);
     case "policy":
     case "hubOnly":
     case "pluginPayload":
+    case "projectCheckout":
       // No report names them: written as asked.
       return;
     default: {

@@ -10,11 +10,11 @@ import type {
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
-  MachineFleetConfig,
   ModelInfo,
   NeutralAssistantBlock,
   NeutralContentBlock,
   NeutralSessionInfo,
+  PlacedFleetConfig,
   SessionMessage,
   TranscriptWindow,
   WindowAsk,
@@ -1108,7 +1108,7 @@ export class PiProfile {
     return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
   }
 
-  async syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
+  async syncFleet(config: PlacedFleetConfig): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
     const report: FleetSyncReport = {
       mcp: {},

@@ -642,7 +642,7 @@ export interface DbShape {
           projectId: string;
           machineId: string;
           path: MachinePath;
-          kind: "checkout" | "workspace";
+          kind: "checkout";
         }
       | {
           projectId: string;
@@ -1740,6 +1740,12 @@ export interface DbShape {
   readonly projectsWithoutRemote: (
     machineId: string
   ) => { projectId: string; path: string }[];
+  /**
+   * The projects with a work item on `machineId`: in a workspace there,
+   * whatever checkout the project has there. The machine is sent their rows
+   * (server.ts `machineFleetItems`).
+   */
+  readonly projectsWorkedOn: (machineId: string) => string[];
   /** A project's threads, newest first, each with its newest message. */
   readonly projectThreads: (projectId: string) => ThreadListRow[];
   /** Every work item of the project, newest first (handed-inputs.ts names one by its handle). */
@@ -2051,11 +2057,6 @@ export interface DbShape {
     projectId: string,
     placeId: string
   ) => "removed" | "primary" | "missing";
-  /** A workspace's place, gone with the workspace when it is archived. */
-  readonly removeWorkspacePlaces: (
-    machineId: string,
-    clone: MachinePath
-  ) => void;
   /**
    * A marketplace row moved to the name its manifest gives, with every plugin
    * id after its `@`. Where the new name or id is already a row, that row
@@ -6607,8 +6608,9 @@ const make = async (path: string): Promise<DbShape> => {
             ),
           };
         })(),
-        // A project's documents for all its sessions, each placed once per
-        // checkout and workspace of it as the sync goes out (project-placements.ts).
+        // A project's documents for all its sessions, sent with its rows to
+        // each machine that holds it, which places them at each of its
+        // places there (project-placements.ts, agent fleet-place.ts).
         // One with a role, type or model goes to its sessions as they launch
         // instead, and a briefer's to the sessions that delegate.
         // A document of several projects is one row per project.
@@ -7703,6 +7705,19 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
       ),
     project: (id) => projectOf(db, id),
+    projectsWorkedOn: (machineId) =>
+      db
+        .selectDistinct({ projectId: workItems.projectId })
+        .from(workItems)
+        .innerJoin(workspaces, eq(workspaces.id, workItems.workspaceId))
+        .where(
+          and(
+            eq(workspaces.machineId, machineId),
+            isNotNull(workItems.projectId)
+          )
+        )
+        .all()
+        .flatMap(({ projectId }) => (projectId ? [projectId] : [])),
     projectRepository: (projectId, machineId) =>
       db
         .select({ path: projectRepositories.path })
@@ -8866,17 +8881,6 @@ const make = async (path: string): Promise<DbShape> => {
       }
       db.delete(projectPlaces).where(eq(projectPlaces.id, placeId)).run();
       return "removed";
-    },
-    removeWorkspacePlaces: (machineId, clone) => {
-      db.delete(projectPlaces)
-        .where(
-          and(
-            eq(projectPlaces.kind, "workspace"),
-            eq(projectPlaces.machineId, machineId),
-            eq(projectPlaces.path, clone)
-          )
-        )
-        .run();
     },
     deleteMachine: (machineId) =>
       db.transaction((tx) => {

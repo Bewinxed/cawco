@@ -5699,7 +5699,6 @@ public enum OpenEnums {
     public enum PlaceKind: OpenEnum {
         case checkout
         case hub
-        case workspace
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -5707,7 +5706,6 @@ public enum OpenEnums {
             switch rawValue {
             case "checkout": self = .checkout
             case "hub": self = .hub
-            case "workspace": self = .workspace
             default: self = .unrecognized(rawValue)
             }
         }
@@ -5716,7 +5714,6 @@ public enum OpenEnums {
             switch self {
             case .checkout: "checkout"
             case .hub: "hub"
-            case .workspace: "workspace"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -5725,7 +5722,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.checkout, .hub, .workspace]
+        public static let allCases: [Self] = [.checkout, .hub]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

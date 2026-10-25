@@ -26,6 +26,7 @@ import type {
   DiscoveredSkill,
   FleetConfig,
   FleetFaultCause,
+  FleetHarnessConfig,
   FleetHoldings,
   FleetHook,
   FleetItemState,
@@ -40,10 +41,10 @@ import type {
   FleetToolchain,
   HookEvent,
   HookHandler,
-  MachineFleetConfig,
   MachineHookScript,
   MachineMemoryDoc,
   MachineMemorySet,
+  PlacedFleetConfig,
   SkillFile,
 } from "@cawco/core";
 import {
@@ -73,7 +74,7 @@ import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { readFleetDenials, sidecarTurn } from "./denied-tools";
-import { syncHarnessConfig } from "./fleet-harness-config";
+import { readyHarnessRows, syncHarnessConfig } from "./fleet-harness-config";
 import {
   type FleetHarnessSet,
   readFleetHarnessSet,
@@ -209,7 +210,7 @@ interface Sidecar {
   hooks: Record<string, ManagedHook>;
   /**
    * The fleet marketplaces this machine was told live on the hub's machine
-   * only ({@link MachineFleetConfig.hubOnlyMarketplaces}). Nothing is linked for
+   * only ({@link PlacedFleetConfig.hubOnlyMarketplaces}). Nothing is linked for
    * them, so a status reads their rows off their plugins, as the sync did.
    */
   hubOnlyMarketplaces: string[];
@@ -528,7 +529,7 @@ const readFleetMcpRuntime = async (
  * does not is removed. Answers what this sync hands them.
  */
 const reportMcp = async (
-  config: MachineFleetConfig,
+  config: PlacedFleetConfig,
   managed: Sidecar,
   report: FleetSyncReport["mcp"]
 ): Promise<string[]> => {
@@ -901,7 +902,7 @@ type PluginRecords = Pick<
  * idempotent, but neither is free, so what the CLI already lists is left alone.
  */
 const syncPlugins = async (
-  config: MachineFleetConfig,
+  config: PlacedFleetConfig,
   managed: Sidecar,
   report: FleetSyncReport
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
@@ -1793,10 +1794,12 @@ const placeSkill = async (
 };
 
 /**
- * A project's skills, placed at each of its checkouts and workspaces on
- * this machine (`FleetConfig.placedSkills`), and the copies cawco placed
- * before and no longer does taken away, unless edited since. Reported under
- * `<name>@<place id>`; answers what cawco now manages.
+ * A project's skills, placed at each of its checkouts and workspace clones
+ * on this machine (`PlacedFleetConfig.placedSkills`), and the copies cawco
+ * placed before and no longer does taken away, unless edited since (an
+ * archived clone's are gone with it). A record of a dir placed again under
+ * another key (an earlier build's place id) is only forgotten. Reported
+ * under `<name>@<place id>`; answers what cawco now manages.
  */
 const syncPlacedSkills = async (
   desired: FleetSkillPayload[],
@@ -1812,11 +1815,19 @@ const syncPlacedSkills = async (
       placed[key] = { cwd: skill.cwd as string, name: skill.name, hash };
     }
   }
+  const placedDirs = new Set(
+    Object.values(placed).map(({ cwd, name }) =>
+      join(placedSkillsDir(cwd), name)
+    )
+  );
   for (const [key, record] of Object.entries(managed)) {
     if (placed[key]) {
       continue;
     }
     const dir = join(placedSkillsDir(record.cwd), record.name);
+    if (placedDirs.has(dir)) {
+      continue;
+    }
     // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each recorded before the next
     const disk = await heldHash(dir);
     if (disk !== undefined && record.hash && disk !== record.hash) {
@@ -2296,47 +2307,12 @@ const placeMemoryDoc = async (
 };
 
 /**
- * A launch's own place's memory documents (`LaunchGrant.placedMemory`),
- * written there before its session starts, by the rules a sync keeps and
- * recorded as a sync records them, in the fleet's queue so no sync writes
- * the sidecar beside it. A failure is said and the session starts; the sync
- * its place set off writes it again.
- */
-export const placeMemoryAtLaunch = (
-  docs: readonly FleetPlacedMemoryDoc[]
-): Promise<void> =>
-  inFleetQueue(async () => {
-    const managed = await readSidecar();
-    const report: Record<string, FleetItemState> = {};
-    const placed: Sidecar["placedMemory"] = {};
-    for (const doc of docs.filter((each) => each.cwd && each.placeId)) {
-      const key = placedKey({ name: doc.path, placeId: doc.placeId });
-      // biome-ignore lint/performance/noAwaitInLoops: one file written at a time, each recorded before the next
-      const hash = await placeMemoryDoc(
-        doc,
-        managed.placedMemory[key]?.hash,
-        report
-      );
-      if (hash !== undefined) {
-        placed[key] = { cwd: doc.cwd as string, name: doc.path, hash };
-      }
-    }
-    for (const [key, state] of Object.entries(report)) {
-      if (state.state === "failed") {
-        console.warn(`[fleet] memory ${key} at launch: ${state.detail}`);
-      }
-    }
-    await writeJson(SIDECAR, {
-      ...managed,
-      placedMemory: { ...managed.placedMemory, ...placed },
-    } satisfies Sidecar);
-  });
-
-/**
  * A project's memory documents, placed at each of its checkouts and
- * workspaces on this machine (`FleetConfig.placedMemory`), and the copies
- * cawco placed before and no longer does taken away, unless edited since.
- * Reported under `<path>@<place id>`; answers what cawco now manages.
+ * workspace clones on this machine (`PlacedFleetConfig.placedMemory`), and
+ * the copies cawco placed before and no longer does taken away, unless
+ * edited since; a record of a file placed again under another key is only
+ * forgotten. Reported under `<path>@<place id>`; answers what cawco now
+ * manages.
  */
 const syncPlacedMemory = async (
   desired: FleetPlacedMemoryDoc[],
@@ -2352,11 +2328,19 @@ const syncPlacedMemory = async (
       placed[key] = { cwd: doc.cwd as string, name: doc.path, hash };
     }
   }
+  const placedFiles = new Set(
+    Object.values(placed).map(({ cwd, name }) =>
+      join(placedMemoryDir(cwd), name)
+    )
+  );
   for (const [key, record] of Object.entries(managed)) {
     if (placed[key]) {
       continue;
     }
     const file = join(placedMemoryDir(record.cwd), record.name);
+    if (placedFiles.has(file)) {
+      continue;
+    }
     // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each recorded before the next
     const disk = await fileHashAt(file);
     if (disk !== null && disk !== record.hash) {
@@ -2591,43 +2575,50 @@ interface SyncedHooks {
 }
 
 /**
- * Writes every enabled hook's script, registers each of the fleet's own in
- * `~/.claude/settings.json`, and answers every one as the harness set holds
- * it (fleet-harness-set.ts): the fleet's for OpenCode and pi, a project's
- * copies for every harness. It takes back out whatever a disabled or deleted
- * hook, or one that no longer passes validation, used to have registered. The
- * one row here that is executable: a hook that reaches this function runs on
- * a shell, unprompted, on every machine that gets it, which is why it is
- * checked again below rather than trusted on the wire — the hub already
- * refused an invalid one at the door, but that is the hub's process, not this
- * one's guarantee.
+ * What {@link settleHooks} made of the hooks it was given: each that runs
+ * (`settled`), with the script it runs from and the hash cawco keeps for it,
+ * and the records it kept as they were for each that does not.
  */
-const syncHooks = async (
-  desired: FleetHook[],
+interface SettledHooks {
+  hashes: Map<string, string>;
+  /** The records kept for a hook this pass could not settle: it stays as it was. */
+  kept: Record<string, ManagedHook>;
+  scriptPaths: Map<string, string>;
+  settled: FleetHook[];
+}
+
+/**
+ * Each enabled hook of `desired` checked and its script written, the one
+ * step every hook takes before it is handed to sessions: one that fails a
+ * check, or whose script does not parse, is reported and keeps the record
+ * it had; one whose script was edited on this machine stays drifted, not
+ * overwritten unless `force`. The hooks dir is made first: a workspace's
+ * boundary binds it read only as it starts (core `fleetSyncedPaths`), and a
+ * dir that comes later is not in a boundary already running.
+ */
+const settleHooks = async (
+  desired: readonly FleetHook[],
   managed: Record<string, ManagedHook>,
   report: Record<string, FleetItemState>
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every enabled hook's script, registers the fleet's own in the user settings, then removes what a disabled/deleted/invalid hook used to have
-): Promise<SyncedHooks> => {
-  // There before any hook is: a workspace's boundary binds it read only as
-  // it starts (core `fleetSyncedPaths`), and a dir that comes later is not
-  // in a boundary already running.
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: checks every enabled hook, then writes each one's script by its drift plan and parse check
+): Promise<SettledHooks> => {
   await mkdir(HOOKS_DIR, { recursive: true });
   // The guard every fleet hook Claude Code runs goes through
   // (fleet-hook-guard.ts), written before anything names it.
   if ((await fileHashAt(hookGuardFile())) !== hashText(HOOK_GUARD_SOURCE)) {
     await writeAtomic(hookGuardFile(), HOOK_GUARD_SOURCE);
   }
-  const written: Record<string, ManagedHook> = {};
+  const kept: Record<string, ManagedHook> = {};
   const keep = (id: string): void => {
     if (managed[id]) {
-      written[id] = managed[id];
+      kept[id] = managed[id];
     }
   };
 
   // A disabled hook is simply not written — that is the whole of per-hook
   // disable, since Claude Code has no way to turn off one hook and keep the
   // rest of its matcher entry. It falls straight through to the removal pass
-  // at the bottom, same as a hook the fleet has stopped carrying at all.
+  // of a sync, same as a hook the fleet has stopped carrying at all.
   const wanted: FleetHook[] = [];
   for (const hook of desired) {
     if (!hook.enabled) {
@@ -2726,6 +2717,78 @@ const syncHooks = async (
     scriptPaths.set(hook.id, path);
     settled.push(hook);
   }
+  return { hashes, kept, scriptPaths, settled };
+};
+
+/** What a settled hook runs as a session takes it (fleet-harness-set.ts). */
+const setHookOf = (hook: FleetHook, handler: HookHandler): SetHook => ({
+  id: hook.id,
+  name: hook.name,
+  event: hook.event,
+  handler,
+  ...(hook.matcher ? { matcher: hook.matcher } : {}),
+  test: hookMatchTest(hook.matcher, hook.event),
+});
+
+/**
+ * A project's settled copy of a hook at one of its folders: its entry in
+ * the harness set, which that folder's sessions take, and the record cawco
+ * keeps of it. Applied once its script is written, with what a workspace
+ * session makes of a hook that could rewrite input (core
+ * `hookWorkspaceNote`).
+ */
+const placedHookOf = (
+  hook: FleetHook,
+  settled: Pick<SettledHooks, "hashes" | "scriptPaths">,
+  report: Record<string, FleetItemState>
+): { entry: FleetHarnessSet["placedHooks"][string]; record: ManagedHook } => {
+  const script = settled.scriptPaths.get(hook.id);
+  const handler = handlerFor(hook, script);
+  const note = hookWorkspaceNote(hook);
+  report[hook.id] ??= note
+    ? { state: "applied", detail: note }
+    : { state: "applied" };
+  return {
+    entry: { ...setHookOf(hook, handler), cwd: hook.cwd as string },
+    record: {
+      hash: settled.hashes.get(hook.id) ?? hook.hash,
+      command: identityOf(handler),
+      event: hook.event,
+      scope: hook.scope ?? "project",
+      cwd: hook.cwd as string,
+      placed: true,
+      ...(script ? { script } : {}),
+      ...(note ? { note } : {}),
+    },
+  };
+};
+
+/**
+ * Writes every enabled hook's script ({@link settleHooks}), registers each
+ * of the fleet's own in `~/.claude/settings.json`, and answers every one as
+ * the harness set holds it (fleet-harness-set.ts): the fleet's for OpenCode
+ * and pi, a project's copies for every harness. It takes back out whatever
+ * a disabled or deleted hook, or one that no longer passes validation, used
+ * to have registered. The one row here that is executable: a hook that
+ * reaches this function runs on a shell, unprompted, on every machine that
+ * gets it, which is why it is checked again rather than trusted on the wire
+ * — the hub already refused an invalid one at the door, but that is the
+ * hub's process, not this one's guarantee.
+ */
+const syncHooks = async (
+  desired: FleetHook[],
+  managed: Record<string, ManagedHook>,
+  report: Record<string, FleetItemState>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: registers the fleet's own in the user settings, then removes what a disabled/deleted/invalid hook used to have
+): Promise<SyncedHooks> => {
+  const settledHooks = await settleHooks(desired, managed, report);
+  const { hashes, scriptPaths, settled } = settledHooks;
+  const written: Record<string, ManagedHook> = { ...settledHooks.kept };
+  const keep = (id: string): void => {
+    if (managed[id]) {
+      written[id] = managed[id];
+    }
+  };
 
   // The script cawco wrote for a hook, which a later sync's drift check and
   // removal read; and the applied state, with what a workspace session makes
@@ -2744,33 +2807,17 @@ const syncHooks = async (
   const set: SyncedHooks["set"] = { hooks: {}, placedHooks: {} };
   const fleetWide: FleetHook[] = [];
   for (const hook of settled) {
-    const handler = handlerFor(hook, scriptPaths.get(hook.id));
-    const one: SetHook = {
-      id: hook.id,
-      name: hook.name,
-      event: hook.event,
-      handler,
-      ...(hook.matcher ? { matcher: hook.matcher } : {}),
-      test: hookMatchTest(hook.matcher, hook.event),
-    };
     if (!placedHook(hook)) {
-      set.hooks[hook.id] = one;
+      set.hooks[hook.id] = setHookOf(
+        hook,
+        handlerFor(hook, scriptPaths.get(hook.id))
+      );
       fleetWide.push(hook);
       continue;
     }
-    set.placedHooks[hook.id] = { ...one, cwd: hook.cwd as string };
-    const note = hookWorkspaceNote(hook);
-    written[hook.id] = {
-      hash: hashes.get(hook.id) ?? hook.hash,
-      command: identityOf(handler),
-      event: hook.event,
-      scope: hook.scope ?? "project",
-      cwd: hook.cwd as string,
-      placed: true,
-      ...scriptOf(hook.id),
-      ...(note ? { note } : {}),
-    };
-    report[hook.id] ??= applied(note);
+    const { entry, record } = placedHookOf(hook, settledHooks, report);
+    set.placedHooks[hook.id] = entry;
+    written[hook.id] = record;
   }
 
   // Registration in the user settings — a hook whose row was disabled or
@@ -2896,8 +2943,139 @@ const syncHooks = async (
   return { records: written, set };
 };
 
+/** The placed skills cawco manages, as the harness set names them (fleet-harness-set.ts). */
+const setSkillsOf = (
+  placed: Sidecar["placedSkills"]
+): FleetHarnessSet["placedSkills"] =>
+  Object.fromEntries(
+    Object.entries(placed).map(([key, { cwd, name }]) => [
+      key,
+      { cwd, name, dir: join(placedSkillsDir(cwd), name) },
+    ])
+  );
+
+/** `entries` but the ones placed at `cwd`. */
+const elsewhere = <T extends { cwd?: string }>(
+  entries: Record<string, T>,
+  cwd: string
+): Record<string, T> =>
+  Object.fromEntries(
+    Object.entries(entries).filter(([, entry]) => entry.cwd !== cwd)
+  );
+
+/**
+ * A project's rows placed at the one folder `cwd` (fleet-place.ts `place`),
+ * as a workspace's clone is cut there, by the steps a converge places each
+ * copy with: each skill written into `.claude/skills/`, each memory
+ * document into `.claude/rules/cawco/` ({@link placeSkill},
+ * {@link placeMemoryDoc}), each hook's script written ({@link settleHooks})
+ * and each Claude Code setting, OpenCode plugin and pi extension made ready
+ * (fleet-harness-config.ts `readyHarnessRows`). The harness set takes the
+ * folder's entries and the sidecar its records, every other folder's and
+ * the fleet's own left as they stand: nothing else on the machine moves.
+ * `mcpKeys`: the folder's MCP copies the fleet MCP set took (session.ts
+ * `placeClone`), recorded as handed. Answers what each copy came to, under
+ * `<key>@<place id>`.
+ */
+export const placeFolder = (
+  cwd: string,
+  copies: {
+    harnessConfig: readonly FleetHarnessConfig[];
+    hooks: readonly FleetHook[];
+    memory: readonly FleetPlacedMemoryDoc[];
+    skills: readonly FleetSkillPayload[];
+  },
+  mcpKeys: readonly string[]
+): Promise<FleetSyncReport> =>
+  inFleetQueue(async () => {
+    const managed = await readSidecar();
+    const report: FleetSyncReport = {
+      mcp: {},
+      marketplaces: {},
+      plugins: {},
+      skills: {},
+      memoryDocs: {},
+      hooks: {},
+      harnessConfig: {},
+      at: Date.now(),
+    };
+    const skillStates = report.skills as Record<string, FleetItemState>;
+    const docStates = report.memoryDocs as Record<string, FleetItemState>;
+    const hookStates = report.hooks as Record<string, FleetItemState>;
+    const placedSkills: Sidecar["placedSkills"] = {};
+    for (const skill of copies.skills) {
+      const key = placedKey(skill);
+      // biome-ignore lint/performance/noAwaitInLoops: one skill directory written at a time keeps the disk writes bounded
+      const hash = await placeSkill(
+        skill,
+        managed.placedSkills[key]?.hash,
+        skillStates
+      );
+      if (hash !== undefined) {
+        placedSkills[key] = { cwd, name: skill.name, hash };
+      }
+    }
+    const placedMemory: Sidecar["placedMemory"] = {};
+    for (const doc of copies.memory) {
+      const key = placedKey({ name: doc.path, placeId: doc.placeId });
+      // biome-ignore lint/performance/noAwaitInLoops: one file written at a time, each recorded before the next
+      const hash = await placeMemoryDoc(
+        doc,
+        managed.placedMemory[key]?.hash,
+        docStates
+      );
+      if (hash !== undefined) {
+        placedMemory[key] = { cwd, name: doc.path, hash };
+      }
+    }
+    const settled = await settleHooks(copies.hooks, managed.hooks, hookStates);
+    const placedHooks: FleetHarnessSet["placedHooks"] = {};
+    const records: Record<string, ManagedHook> = { ...settled.kept };
+    for (const hook of settled.settled) {
+      const { entry, record } = placedHookOf(hook, settled, hookStates);
+      placedHooks[hook.id] = entry;
+      records[hook.id] = record;
+    }
+    const harnessStates = report.harnessConfig as Record<
+      string,
+      FleetItemState
+    >;
+    const ready = await readyHarnessRows(copies.harnessConfig, harnessStates);
+    const set = await readFleetHarnessSet();
+    await writeFleetHarnessSet({
+      hooks: set.hooks,
+      placedHooks: { ...elsewhere(set.placedHooks, cwd), ...placedHooks },
+      config: { ...elsewhere(set.config, cwd), ...ready.set },
+      placedSkills: {
+        ...elsewhere(set.placedSkills, cwd),
+        ...setSkillsOf(placedSkills),
+      },
+    });
+    // Read again in the sidecar's turn: every record this did not place
+    // (the denials, the fleet's own rows, other folders') stays as it is.
+    await sidecarTurn(async () => {
+      const now = await readSidecar();
+      await writeJson(SIDECAR, {
+        ...now,
+        mcpServers: [...new Set([...now.mcpServers, ...mcpKeys])],
+        hooks: { ...now.hooks, ...records },
+        harnessConfigFailed: {
+          ...now.harnessConfigFailed,
+          ...Object.fromEntries(
+            Object.entries(harnessStates).filter(
+              ([, state]) => state.state === "failed"
+            )
+          ),
+        },
+        placedMemory: { ...now.placedMemory, ...placedMemory },
+        placedSkills: { ...now.placedSkills, ...placedSkills },
+      } satisfies Sidecar);
+    });
+    return { ...report, at: Date.now() };
+  });
+
 const converge = async (
-  config: MachineFleetConfig
+  config: PlacedFleetConfig
 ): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skillStates: Record<string, FleetItemState> = {};
@@ -2954,12 +3132,7 @@ const converge = async (
   await writeFleetHarnessSet({
     ...hooks.set,
     config: harnessConfig,
-    placedSkills: Object.fromEntries(
-      Object.entries(placedSkills).map(([key, { cwd, name }]) => [
-        key,
-        { cwd, name, dir: join(placedSkillsDir(cwd), name) },
-      ])
-    ),
+    placedSkills: setSkillsOf(placedSkills),
   });
   // The denials are the sync's own write, made as it arrived (denied-tools.ts
   // `applyFleetDenials`): kept as the sidecar holds them now, in the same
@@ -3035,7 +3208,7 @@ export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
  * same file and runs no CLI at all.
  */
 export const syncFleetConfig = (
-  config: MachineFleetConfig
+  config: PlacedFleetConfig
 ): Promise<FleetSyncReport> => inFleetQueue(() => converge(config));
 
 /**

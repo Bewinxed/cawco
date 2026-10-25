@@ -3581,7 +3581,15 @@ export const startDaemon = (rediscover = false) =>
       (cwd, id, projectId, account, at, first) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : createWorkspace(cwd, id, projectId, account, at, first)
+          : createWorkspace(
+              (path, project) => supervisor.placeClone(path, project),
+              cwd,
+              id,
+              projectId,
+              account,
+              at,
+              first
+            )
     );
     // A place's first commit writes its folder: none starts behind a raised fence.
     supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>

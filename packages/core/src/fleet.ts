@@ -25,8 +25,10 @@ import { memoryWords } from "./words/memory";
  * - `user` — every machine, every project. The default, and what most rows
  *   want.
  * - `local`, `project` — one project ({@link FleetPlacement.projectId}):
- *   the hub sends one copy per checkout and workspace of it, and each
- *   session in that folder takes it. An MCP server, a hook, Claude Code
+ *   the hub sends the row once to a machine that holds the project
+ *   ({@link MachineFleetConfig.projects}), the machine places a copy at each
+ *   checkout and workspace clone of it there, and each session in that
+ *   folder takes it. An MCP server, a hook, Claude Code
  *   settings, an OpenCode plugin and a pi extension reach the folder's
  *   sessions through CawCo's own files and their launch (agent
  *   fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.
@@ -41,15 +43,16 @@ export type FleetScope = "user" | "project" | "local";
  */
 export interface FleetPlacement {
   /**
-   * The checkout to write into. The hub fills this in as it sends a sync —
-   * a daemon never resolves a project id, and a machine only ever receives
-   * the project rows that live on it.
+   * The folder this copy is written into: set by the machine as it places a
+   * project's row at one of the project's places there (agent
+   * fleet-place.ts), never by the hub, which sends each row once.
    */
   cwd?: string;
   /**
-   * The place (`project_places` row) this copy is for, on a copy the hub
-   * placed: the machine reports what it came to under `<key>@<placeId>`, and
-   * the hub folds every place's report back onto the row.
+   * The place this copy is for ({@link placeKeyOf} of its folder), on a
+   * copy the machine placed: its converge keys what the copy came to under
+   * `<key>@<placeId>`, and its report says it per place
+   * ({@link FleetSyncReport.placed}).
    */
   placeId?: string;
   /** The hub `projects` row this is bound to. Required unless `user`. */
@@ -830,13 +833,14 @@ export const scopeWords = (
 };
 
 /**
- * One project-scoped document as a machine is sent it: once per checkout and
- * workspace of its project there ({@link FleetPlacement}, `cwd` and
- * `placeId` filled in by the hub), written to `<cwd>/.claude/rules/cawco/<path>`,
- * which Claude Code loads at a session's launch ("Rules without `paths`
- * frontmatter are loaded at launch with the same priority as
- * `.claude/CLAUDE.md`", code.claude.com/docs/en/memory) and CawCo hands
- * OpenCode and pi from the same file. Reported under `<path>@<placeId>`.
+ * One project-scoped document as a machine is sent it, once
+ * ({@link FleetProjectRows.memory}); the machine places a copy at each
+ * checkout and workspace clone of its project there ({@link FleetPlacement},
+ * `cwd` and `placeId` filled in as it places), written to
+ * `<cwd>/.claude/rules/cawco/<path>`, which Claude Code loads at a session's
+ * launch ("Rules without `paths` frontmatter are loaded at launch with the
+ * same priority as `.claude/CLAUDE.md`", code.claude.com/docs/en/memory) and
+ * CawCo hands OpenCode and pi from the same file.
  */
 export interface FleetPlacedMemoryDoc extends FleetPlacement {
   content: string;
@@ -891,8 +895,8 @@ export interface FleetConfig {
   /**
    * The fleet's Claude Code settings, OpenCode plugins and pi extensions
    * (core harness-config.ts). A machine is sent every one bound to no
-   * project as it is, and each project's once per place of it there, with
-   * that place's `cwd` and `placeId`, as {@link hooks} are.
+   * project as it is, and each project's with that project's rows
+   * ({@link MachineFleetConfig.projects}), as {@link hooks} are.
    */
   harnessConfig: FleetHarnessConfig[];
   /** Hooks the fleet keeps. */
@@ -906,8 +910,9 @@ export interface FleetConfig {
   memory: FleetMemory | null;
   /**
    * The project-scoped memory documents ({@link MemoryScope} with a project
-   * and no role), one copy per place as {@link MachineFleetConfig.placedMcp}.
-   * None is none: every copy cawco placed before is taken back.
+   * and no role), sent with their project's rows
+   * ({@link FleetProjectRows.memory}). None is none: every copy cawco placed
+   * before is taken back.
    */
   placedMemory: FleetPlacedMemoryDoc[];
   /**
@@ -922,13 +927,50 @@ export interface FleetConfig {
    * Directly-fetched skills, files inline (NEW.md §11). A daemon writes a
    * skill's directory under `~/.claude/skills/` only when the hash differs
    * from what its sidecar recorded. User-scope only: a project's skills are
-   * {@link MachineFleetConfig.placedSkills}.
+   * {@link FleetProjectRows.skills}.
    */
   skills: FleetSkillPayload[];
 }
 
-/** What the hub sends one machine to converge on: the fleet's state, placed for that machine. */
-export interface MachineFleetConfig extends FleetConfig {
+/**
+ * One project's rows as a machine is sent them: each row once, bound to no
+ * folder (no `cwd`, no `placeId`). The machine places them at each of the
+ * project's places there ({@link PlacedFleetConfig}, agent fleet-place.ts):
+ * the checkouts named here, and the clone of every workspace of the project
+ * it cut, which it knows itself. Opening or archiving a workspace changes
+ * nothing the hub sends.
+ */
+export interface FleetProjectRows {
+  /**
+   * The project's checkouts on this machine, each place id to its folder:
+   * where the hub knows the project to be there.
+   */
+  checkouts: Record<string, string>;
+  /** Its Claude Code settings, OpenCode plugins and pi extensions. */
+  harnessConfig: FleetHarnessConfig[];
+  hooks: FleetHook[];
+  /**
+   * Its MCP servers (Projects §5.1: "reach every place of the project"),
+   * written into CawCo's own file (agent fleet-mcp-set.ts, core
+   * `fleetMcpSetFile`) once per place, which each CawCo session reads as it
+   * starts: Claude Code's through the SDK's `mcpServers`, pi's through
+   * `pi.registerMcpServer`, OpenCode's through CawCo's plugin. No config
+   * file the person's own `claude`, `opencode` or `pi` reads holds them.
+   */
+  mcp: FleetMcpServer[];
+  /** Its memory documents. */
+  memory: FleetPlacedMemoryDoc[];
+  /**
+   * Its skills, files always inline: placed into `<cwd>/.claude/skills/<name>/`,
+   * which Claude Code and OpenCode both read, kept out of the checkout's
+   * status through its `info/exclude`; pi, which reads no `.claude/skills`,
+   * is handed each one's directory as it launches (agent fleet-harness-set.ts).
+   */
+  skills: FleetSkillPayload[];
+}
+
+/** What the hub sends one machine to converge on: the fleet's state, and the rows of each project it holds. */
+export interface MachineFleetConfig extends Omit<FleetConfig, "placedMemory"> {
   /**
    * The marketplaces, by name, whose source is a directory on the hub's own
    * machine, sent to a machine that is not that machine. Such a path names
@@ -945,26 +987,129 @@ export interface MachineFleetConfig extends FleetConfig {
    */
   hubOnlyMarketplaces: string[];
   /**
-   * Project-bound MCP servers (Projects §5.1: "reach every place of the
-   * project"), one copy per checkout and delegate workspace of the project on
-   * this machine, each with that place's `cwd` and `placeId`. Written into
-   * CawCo's own file (agent fleet-mcp-set.ts, core `fleetMcpSetFile`), which
-   * each CawCo session reads as it starts: Claude Code's through the SDK's
-   * `mcpServers`, pi's through `pi.registerMcpServer`, OpenCode's through
-   * CawCo's plugin. No config file the person's own `claude`, `opencode` or
-   * `pi` reads holds them. Never in {@link mcp}, so no user-scope path takes
-   * them.
+   * The rows of each project this machine holds, by project id: every
+   * project with a checkout here, and every one with a work item here
+   * (a workspace of it was cut here, whatever checkout it has), when it
+   * has any rows. Never in {@link mcp}, {@link skills}, {@link hooks} or
+   * {@link harnessConfig}, so no user-scope path takes them.
    */
+  projects: Record<string, FleetProjectRows>;
+}
+
+/**
+ * A machine's config as its harnesses converge it (agent fleet-place.ts):
+ * {@link MachineFleetConfig} with each project's rows placed at each of its
+ * places on the machine, a copy per place with that place's `cwd` and
+ * `placeId`. Its hooks and harness config hold the fleet's own and every
+ * placed copy, a placed hook under `<hook id>@<place id>`.
+ */
+export interface PlacedFleetConfig extends Omit<
+  MachineFleetConfig,
+  "projects"
+> {
+  /** Each project's MCP servers, a copy per place. */
   placedMcp: FleetMcpServer[];
-  /**
-   * Project-bound skills, one copy per place as {@link placedMcp}, files
-   * always inline. Written into `<cwd>/.claude/skills/<name>/`, which Claude
-   * Code and OpenCode both read, and kept out of the checkout's status
-   * through its `info/exclude`; pi, which reads no `.claude/skills`, is
-   * handed each one's directory as it launches (agent fleet-harness-set.ts).
-   */
+  /** Each project's memory documents, a copy per place. */
+  placedMemory: FleetPlacedMemoryDoc[];
+  /** Each project's skills, a copy per place. */
   placedSkills: FleetSkillPayload[];
 }
+
+/**
+ * The place key of the folder `path`: what a placed copy's `placeId` is,
+ * and what its converge keys it under (`<key>@<place key>`). The folder
+ * itself, URI-encoded, so it holds no `@` or `/` (a hook's copy is a
+ * script file named by it), and the folder is read back from it alone
+ * ({@link placeOfKey}).
+ */
+export const placeKeyOf = (path: string): string => encodeURIComponent(path);
+
+/** `encoded` URI-decoded; none for one that is not a URI component. */
+const uriDecoded = (encoded: string): string | undefined => {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * A placed copy's key apart: the row's own key and its place's folder, or
+ * none for a key that names no place (a fleet row's). The place is after
+ * the last `@`, so a row key holding one (an npm scope) stays whole.
+ */
+export const placeOfKey = (
+  key: string
+): { key: string; path: string } | undefined => {
+  const at = key.lastIndexOf("@");
+  if (at <= 0) {
+    return;
+  }
+  const encoded = key.slice(at + 1);
+  // Only a folder's key ({@link placeKeyOf}) starts so: an absolute path.
+  const path = encoded.startsWith("%2F") ? uriDecoded(encoded) : undefined;
+  return path === undefined ? undefined : { key: key.slice(0, at), path };
+};
+
+/** The report sections a project's rows are said in, per place ({@link FleetSyncReport.placed}). */
+export const PLACED_SECTIONS = [
+  "mcp",
+  "skills",
+  "memoryDocs",
+  "hooks",
+  "harnessConfig",
+] as const;
+export type PlacedSection = (typeof PLACED_SECTIONS)[number];
+
+/**
+ * What each project row came to at each of its places: by report section,
+ * the row's key there (a server's or skill's name, a document's path, a
+ * hook's id, `<kind>:<name>`), then the place's folder.
+ */
+export type FleetPlacedStates = Partial<
+  Record<PlacedSection, Record<string, Record<string, FleetItemState>>>
+>;
+
+/**
+ * `report` with every placed copy's state taken out of its section and
+ * said per row and place ({@link FleetSyncReport.placed}): what a machine
+ * sends.
+ */
+export const placedApart = (report: FleetSyncReport): FleetSyncReport => {
+  const placed: FleetPlacedStates = {};
+  const out: FleetSyncReport = { ...report };
+  for (const section of PLACED_SECTIONS) {
+    const states = report[section];
+    if (!states) {
+      continue;
+    }
+    const own: Record<string, FleetItemState> = {};
+    for (const [key, state] of Object.entries(states)) {
+      const at = placeOfKey(key);
+      if (!at) {
+        own[key] = state;
+        continue;
+      }
+      const rows = placed[section] ?? {};
+      rows[at.key] = { ...rows[at.key], [at.path]: state };
+      placed[section] = rows;
+    }
+    out[section] = own;
+  }
+  // Each harness's word on a project's server is in its placed state's
+  // detail already; per harness, the fleet's own servers.
+  if (report.mcpByHarness) {
+    out.mcpByHarness = Object.fromEntries(
+      Object.entries(report.mcpByHarness).map(([harness, rows]) => [
+        harness,
+        Object.fromEntries(
+          Object.entries(rows ?? {}).filter(([key]) => !placeOfKey(key))
+        ),
+      ])
+    );
+  }
+  return Object.keys(placed).length > 0 ? { ...out, placed } : out;
+};
 
 /**
  * Why one entry did not converge on a machine, named where it failed:
@@ -1100,8 +1245,8 @@ export interface FleetSyncReport {
   at: number;
   /**
    * The fleet's Claude Code settings, OpenCode plugins and pi extensions,
-   * by `<kind>:<name>` (a placed copy's `<kind>:<name>@<place id>`): what the
-   * sync wrote or installed for each, as sessions take it at their launch.
+   * by `<kind>:<name>`: what the sync wrote or installed for each, as
+   * sessions take it at their launch. A project's are in {@link placed}.
    */
   harnessConfig?: Record<string, FleetItemState>;
   /**
@@ -1115,8 +1260,8 @@ export interface FleetSyncReport {
     plugins?: Record<string, string>;
   };
   /**
-   * The fleet's hooks, by the same id the hub keeps them under (a placed
-   * copy's `<id>@<place id>`). Claude Code's report says what its sync
+   * The fleet's hooks, by the same id the hub keeps them under (a project's
+   * are in {@link placed}). Claude Code's report says what its sync
    * registered; OpenCode's and pi's whether CawCo runs the hook there at all,
    * `unsupported` with why for an event or handler that harness has no point
    * for (core `hookUnsupported`). A machine's merged report holds each hook's
@@ -1148,6 +1293,13 @@ export interface FleetSyncReport {
    * wire-compat.ts); it goes with the last of them (20261018).
    */
   memoryHook?: FleetItemState;
+  /**
+   * Each project row's state at each of its places on the machine
+   * ({@link FleetPlacedStates}): its checkouts and its workspaces' clones,
+   * which only the machine knows. The hub keeps one state per row, the
+   * worst of its places, naming the place.
+   */
+  placed?: FleetPlacedStates;
   plugins: Record<string, FleetItemState>;
   /** Absent from a harness's own report when it converges none. */
   skills?: Record<string, FleetItemState>;

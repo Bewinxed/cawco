@@ -196,7 +196,6 @@ import {
   projectRoot,
   writeFolderFiles,
 } from "./project-folder";
-import { placesChanged } from "./project-placements";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { shipLanded } from "./ship";
 import type { Todo } from "./task-file";
@@ -993,19 +992,19 @@ export interface WorkItemDeps {
     task: { projectId: string | null; taskId?: string }
   ) => ItemPlacement;
   /**
-   * Waits, bounded, until `machineId`'s harnesses converged the project's
-   * rows placed at the place `placeId` (its MCP servers, skills, hooks,
-   * memory documents, Claude Code settings, OpenCode plugins and pi
-   * extensions): a delegate's session in a new workspace starts with them,
-   * as each harness reads what is placed at its folder as it launches.
-   */
-  readonly placeTaken: (machineId: string, placeId: string) => Promise<void>;
-  /**
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
    * these.
    */
   readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
+  /**
+   * A project's first work item on `machineId`, which holds no checkout of
+   * it: the machine is sent the project's rows from now on (server.ts
+   * `machineFleetItems`), and places them in each clone of it there. A
+   * workspace's own open and archive send nothing: its machine places the
+   * rows it holds in the clone as it cuts it, before the boundary starts.
+   */
+  readonly projectReached: (machineId: string) => void;
   readonly publish: (item: WorkItemSummary) => void;
   /**
    * The session called `finish_item`, and its turn ends with that call: each
@@ -2297,7 +2296,7 @@ const unpushed = (
 const TRAY_HOLD_MS = 6000;
 
 export const createWorkItems = ({
-  placeTaken,
+  projectReached,
   awaitsSend,
   beforeCut,
   call,
@@ -2395,7 +2394,7 @@ export const createWorkItems = ({
   };
   /**
    * Refuses a start whose project was deleted while its workspace was being
-   * made: called in the synchronous step that files the project's place.
+   * made: called in the synchronous step before its item is filed.
    */
   const projectStands = (projectId: string): void => {
     if (!db.project(projectId)) {
@@ -3911,7 +3910,6 @@ export const createWorkItems = ({
           heldAt: new Date(),
           boundaryPid: null,
         }) ?? workspace;
-      placesChanged(workspace.machineId);
       workspaceChanged?.(kept);
       const work = heldWork({ ...kept, holding: held });
       console.log(
@@ -3922,8 +3920,6 @@ export const createWorkItems = ({
       }
       return { workspace: kept, carry: null, held: work };
     }
-    db.removeWorkspacePlaces(workspace.machineId, workspace.path);
-    placesChanged(workspace.machineId);
     const archived =
       db.updateWorkspace(workspace.id, {
         state: "archived",
@@ -4031,9 +4027,7 @@ export const createWorkItems = ({
         project.places
           .filter(
             (place) =>
-              place.kind !== "workspace" &&
-              place.machineId === workspace.machineId &&
-              inside(place.path)
+              place.machineId === workspace.machineId && inside(place.path)
           )
           .map((place) => `${project.name} at ${place.path}`)
       );
@@ -4113,7 +4107,6 @@ export const createWorkItems = ({
       console.log(
         `[workspaces] ${filed.id} on ${machineName(machineId)}: filed, the stage clone of place ${frame.place} at ${path}`
       );
-      placesChanged(machineId);
       workspaceChanged?.(filed);
       return;
     }
@@ -4704,16 +4697,6 @@ export const createWorkItems = ({
           `workspace ${handle(workspace.id)} was cut again at ${path}, not at its own path ${workspace.path}`
         );
       }
-      if (projectId && db.project(projectId)) {
-        const { place } = db.addPlace({
-          projectId,
-          machineId: workspace.machineId,
-          path: workspace.path,
-          kind: "workspace",
-        });
-        placesChanged(workspace.machineId, projectId);
-        await placeTaken(workspace.machineId, place.id);
-      }
       const again =
         db.updateWorkspace(workspace.id, {
           state: "active",
@@ -4772,7 +4755,6 @@ export const createWorkItems = ({
         holding: null,
         heldAt: null,
       }) ?? workspace;
-    placesChanged(workspace.machineId);
     workspaceChanged?.(active);
     return active;
   };
@@ -5271,6 +5253,31 @@ export const createWorkItems = ({
   };
 
   /**
+   * Files a work item on `machineId`. Its project's first there, where the
+   * project has no checkout, tells the hub the machine holds that project's
+   * rows from now on ({@link WorkItemDeps.projectReached}).
+   */
+  const fileItem = (
+    machineId: string,
+    row: Parameters<typeof db.createWorkItem>[0]
+  ): WorkItemRow => {
+    const { projectId } = row;
+    const reaches =
+      typeof projectId === "string" &&
+      !db.projectsWorkedOn(machineId).includes(projectId) &&
+      !db
+        .project(projectId)
+        ?.places.some(
+          (place) => place.machineId === machineId && place.kind === "checkout"
+        );
+    const item = db.createWorkItem(row);
+    if (reaches) {
+      projectReached(machineId);
+    }
+    return item;
+  };
+
+  /**
    * A follow-up in a workspace whose last session has a conversation: a new
    * item on that same session, its brief the session's next message, read on
    * the transcript its provider still has cached. The session now answers to
@@ -5284,7 +5291,7 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     inputs: Inputs
   ): WorkItemStart => {
-    const item = db.createWorkItem({
+    const item = fileItem(workspace.machineId, {
       // A queued follow-up's item takes the id its chip stood under.
       id: request.queuedAs?.id ?? crypto.randomUUID(),
       workspaceId: workspace.id,
@@ -5976,19 +5983,8 @@ export const createWorkItems = ({
     }
     if (projectId) {
       recordRepository(projectId, workspace);
-    }
-    // While it lives, the clone is one of the parent's project's places;
-    // archiving the workspace removes it.
-    if (parent.projectId) {
-      projectStands(parent.projectId);
-      const { place } = db.addPlace({
-        projectId: parent.projectId,
-        machineId,
-        path: workspace.path,
-        kind: "workspace",
-      });
-      placesChanged(machineId, parent.projectId);
-      await placeTaken(machineId, place.id);
+      // The machine placed the project's rows in the clone as it cut it.
+      projectStands(projectId);
     }
     // In its scratch dir before its session starts ({@link spawnIn}).
     // Commits carried from a build go on building from its pages.
@@ -6176,7 +6172,7 @@ export const createWorkItems = ({
       ahead?.instanceId ?? request.queuedAs?.instanceId ?? crypto.randomUUID();
     // Not a row yet: it is launched in the workspace's root.
     const label = `${leafOf(workspace.path)}#${instanceId.slice(0, 8)}`;
-    const item = db.createWorkItem({
+    const item = fileItem(workspace.machineId, {
       id: request.queuedAs?.id ?? crypto.randomUUID(),
       workspaceId: workspace.id,
       parentInstanceId: parent.id,
@@ -7130,8 +7126,6 @@ export const createWorkItems = ({
       projectId,
       { checksFor: workspace.id }
     );
-    db.addPlace({ projectId, machineId, path: opened.path, kind: "workspace" });
-    placesChanged(machineId, projectId);
     return opened;
   };
 

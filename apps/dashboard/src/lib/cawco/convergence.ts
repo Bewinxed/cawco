@@ -139,18 +139,37 @@ export function syncNotice(
   }
 }
 
+/** A project's row as an item id (core fleet-items.ts): `project:<id>/<kind>:<key>`. */
+const PROJECT_ITEM = /^project:[^/]+\/([^:]+):(.*)$/;
+
+/** A project row's kind in words, before its key. */
+const PROJECT_KIND_WORDS: Record<string, string> = {
+  skill: "skill",
+  mcp: "MCP server",
+  memory: "memory document",
+  hook: "hook",
+  harnessConfig: "setting",
+};
+
 /** What a fleet item is, in words: "MCP server chrome-devtools", "skill show", "the memory". */
 export function itemWords(id: string): string {
+  const project = PROJECT_ITEM.exec(id);
+  if (project) {
+    const [, kind = "", key = ""] = project;
+    if (kind === "checkout") {
+      return "the project's checkout";
+    }
+    const words = PROJECT_KIND_WORDS[kind];
+    return words ? `${words} ${key}` : id;
+  }
   const colon = id.indexOf(":");
   const kind = colon < 0 ? id : id.slice(0, colon);
   const key = colon < 0 ? "" : id.slice(colon + 1);
   const name = key.includes("@") ? key.slice(0, key.lastIndexOf("@")) : key;
   switch (kind) {
     case "mcp":
-    case "placedMcp":
       return `MCP server ${name}`;
     case "skill":
-    case "placedSkill":
       return `skill ${name}`;
     case "marketplace":
       return `marketplace ${name}`;
@@ -160,7 +179,6 @@ export function itemWords(id: string): string {
     case "memory":
       return "the memory";
     case "memoryDoc":
-    case "placedMemory":
       return `memory document ${name}`;
     case "hook":
       return `hook ${name}`;

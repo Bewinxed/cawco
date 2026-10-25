@@ -214,6 +214,15 @@ export const fleetMcpSetFile = (): string =>
 export const fleetHooksDir = (): string => join(cawcoDataDir(), "fleet-hooks");
 
 /**
+ * The rows of each project this machine holds (core `FleetProjectRows`), as
+ * the hub's deltas left them (agent fleet-place.ts): what a workspace cut
+ * after the agent started again, before the hub's welcome, places in its
+ * clone.
+ */
+export const fleetProjectRowsFile = (): string =>
+  join(cawcoDataDir(), "fleet-project-rows.json");
+
+/**
  * Where the fleet sync writes each OpenCode plugin's and pi extension's
  * module, and installs each one's npm package (agent
  * fleet-harness-config.ts): files of CawCo's own, loaded by the OpenCode

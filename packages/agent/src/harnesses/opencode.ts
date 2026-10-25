@@ -40,9 +40,9 @@ import type {
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
-  MachineFleetConfig,
   ModelInfo,
   NeutralSessionInfo,
+  PlacedFleetConfig,
   SessionMessage,
   SignInFault,
   SlashCommand,
@@ -888,8 +888,8 @@ const serversByPlace = (placed: PlacedMcp): Map<string, string> => {
  * servers as it boots (the plugin's `placeMcp`), and one no session is in
  * is evicted (`#releaseDirectory`), so a place added (a workspace cut) is
  * taken by the first location there, a place gone (a workspace archived) by
- * none, and neither is a change of any location a server runs: a sync that
- * carried one (the hub's "a place changed") touches that place alone. A
+ * none, and neither is a change of any location a server runs: a converge
+ * that finds one touches that place alone. A
  * live session's location holds its place's old servers until it boots
  * again, on the server that replaces this one, which it moves to at rest.
  */
@@ -908,20 +908,14 @@ const placedRevisionMoved = (
 };
 
 /**
- * A project's MCP servers at each of its places on this machine
- * (`MachineFleetConfig.placedMcp`), for OpenCode: {@link OPENCODE_PLACED_MCP}
- * rewritten whole, which the plugin hands each location as it boots, and
- * {@link OPENCODE_PLACED_REVISION} moved when a place a live session runs
- * in changed (`live`, its directories: {@link placedRevisionMoved}).
- * Answers each copy's state under `<name>@<place id>`, a copy no longer
- * carried as removed.
+ * Each enabled placed copy of `desired` put in `placed` as OpenCode takes
+ * it, one whose folder is not here said so: each one's state, under
+ * `<name>@<place id>`.
  */
-const placeOpencodeMcp = async (
-  desired: FleetMcpServer[],
-  live: readonly string[]
-): Promise<Record<string, FleetItemState>> => {
-  const before = (await readJson<PlacedMcp>(OPENCODE_PLACED_MCP)) ?? {};
-  const placed: PlacedMcp = {};
+const placedOpencode = (
+  desired: readonly FleetMcpServer[],
+  placed: PlacedMcp
+): Record<string, FleetItemState> => {
   const report: Record<string, FleetItemState> = {};
   for (const server of desired) {
     if (!(server.enabled && server.cwd && server.placeId)) {
@@ -943,6 +937,44 @@ const placeOpencodeMcp = async (
       };
     }
   }
+  return report;
+};
+
+/**
+ * A project's MCP servers at the one folder `cwd`, as a workspace's clone is
+ * cut there: {@link OPENCODE_PLACED_MCP} with that folder's copies put in and
+ * every other folder's as it stands. No session runs in a clone being cut,
+ * so the placed revision stays where it is.
+ */
+const placeOpencodeMcpAt = async (
+  cwd: string,
+  desired: readonly FleetMcpServer[]
+): Promise<Record<string, FleetItemState>> => {
+  const before = (await readJson<PlacedMcp>(OPENCODE_PLACED_MCP)) ?? {};
+  const placed: PlacedMcp = Object.fromEntries(
+    Object.entries(before).filter(([, entry]) => entry.cwd !== cwd)
+  );
+  const report = placedOpencode(desired, placed);
+  await writeJson(OPENCODE_PLACED_MCP, placed);
+  return report;
+};
+
+/**
+ * A project's MCP servers at each of its places on this machine
+ * (`PlacedFleetConfig.placedMcp`), for OpenCode: {@link OPENCODE_PLACED_MCP}
+ * rewritten whole, which the plugin hands each location as it boots, and
+ * {@link OPENCODE_PLACED_REVISION} moved when a place a live session runs
+ * in changed (`live`, its directories: {@link placedRevisionMoved}).
+ * Answers each copy's state under `<name>@<place id>`, a copy no longer
+ * carried as removed.
+ */
+const placeOpencodeMcp = async (
+  desired: FleetMcpServer[],
+  live: readonly string[]
+): Promise<Record<string, FleetItemState>> => {
+  const before = (await readJson<PlacedMcp>(OPENCODE_PLACED_MCP)) ?? {};
+  const placed: PlacedMcp = {};
+  const report = placedOpencode(desired, placed);
   for (const key of Object.keys(before)) {
     report[key] ??= { state: "removed" };
   }
@@ -6128,7 +6160,14 @@ export class OpencodeHarness implements Harness {
     }
   }
 
-  async syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
+  placeFleet(
+    cwd: string,
+    mcp: FleetMcpServer[]
+  ): Promise<Record<string, FleetItemState>> {
+    return placeOpencodeMcpAt(cwd, mcp);
+  }
+
+  async syncFleet(config: PlacedFleetConfig): Promise<FleetSyncReport> {
     this.#syncing += 1;
     try {
       return await this.#syncFleet(config);
@@ -6147,7 +6186,7 @@ export class OpencodeHarness implements Harness {
    * config watcher applies one ({@link #configTick}), and a sync that changed
    * none of the servers reads none of them again ({@link #readFleetMcp}).
    */
-  async #syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
+  async #syncFleet(config: PlacedFleetConfig): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
     const report: FleetSyncReport = {
       mcp: {},

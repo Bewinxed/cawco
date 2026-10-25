@@ -1,26 +1,32 @@
 /**
  * A project-bound fleet row reaches every place of its project (Projects spec
  * §5.1, D15): "Project skills and MCP servers reach every place of the
- * project". A row stores only its project; the hub fills in the cwd as it
- * sends each machine its fleet config ({@link FleetPlacement}): one copy of
- * the row per checkout and per delegate workspace of that project on the
- * machine, each with that place's path. A machine with no place of the
- * project is not sent the row at all.
+ * project". The hub sends each row once, bound to no folder, to every
+ * machine that holds the project ({@link projectRowsFor}): one with a
+ * checkout of it, or with a work item of it. The machine places it at each
+ * of the project's places there itself (agent fleet-place.ts): the checkouts
+ * the hub names with the rows, and the clone of every workspace of the
+ * project it cuts, as it cuts it. A workspace opened or archived changes
+ * nothing the hub sends.
  *
- * Hooks, MCP servers and skills carry a placement. A daemon keys a hook by
- * its id, so each hook copy goes out under its own id, `<hook id>@<place
- * id>`. An MCP server's and a skill's name is what sessions see, so their
- * copies keep it and carry `placeId` instead ({@link placedCopies}); the
- * machine reports them under `<name>@<place id>`. Every report is folded back
- * onto the row's own key before the hub keeps it — the dashboard reads one
- * state per row per machine, the worst of its places.
+ * The machine says what each row came to at each place, by folder
+ * (core `FleetSyncReport.placed`); the hub keeps one state per row per
+ * machine, the worst of its places, naming the place ({@link foldPlaced}).
  *
  * The hub folder is a place too, but it is the hub's own git folder of
  * tasks, not a working tree a session runs in, so nothing is placed there.
  */
-import type { FleetHook, FleetItemState, FleetPlacement } from "@cawco/core";
+import type {
+  FleetConfig,
+  FleetItemState,
+  FleetPlacement,
+  FleetProjectRows,
+  FleetSyncReport,
+} from "@cawco/core";
+import { PLACED_SECTIONS } from "@cawco/core";
+import { noProjectRows } from "@cawco/core/fleet-items";
 
-/** A place as a placement needs it (`project_places`). */
+/** A place as the hub keeps it (`project_places`). */
 export interface PlacementPlace {
   id: string;
   kind: string;
@@ -28,12 +34,6 @@ export interface PlacementPlace {
   path: string;
   projectId: string;
 }
-
-const PLACED = "@";
-
-/** The id one copy of a project-bound row goes out under, for one place. */
-export const placedId = (id: string, placeId: string): string =>
-  `${id}${PLACED}${placeId}`;
 
 /** Whether a row is bound to a project rather than to every machine. */
 const projectBound = (row: FleetPlacement): boolean =>
@@ -44,60 +44,65 @@ export const unbound = <T extends FleetPlacement>(
   rows: readonly T[] | undefined
 ): T[] => (rows ?? []).filter((row) => !projectBound(row));
 
-/**
- * The copies of the project-bound rows one machine is sent: each once per
- * place of its project there, with that place's path and id. Their names
- * stay as they are, being what a session sees.
- */
-export const placedCopies = <T extends FleetPlacement>(
+/** The rows of `projectId` among `rows`. */
+const boundTo = <T extends FleetPlacement>(
   rows: readonly T[] | undefined,
-  places: readonly PlacementPlace[],
-  machineId: string
+  projectId: string
 ): T[] =>
-  (rows ?? []).flatMap((row) =>
-    projectBound(row)
-      ? placesOn(places, row.projectId as string, machineId).map((place) => ({
-          ...row,
-          cwd: place.path,
-          placeId: place.id,
-        }))
-      : []
-  );
-
-/** The places a row's copies go to on one machine: the project's checkouts and workspaces there. */
-const placesOn = (
-  places: readonly PlacementPlace[],
-  projectId: string,
-  machineId: string
-): PlacementPlace[] =>
-  places.filter(
-    (place) =>
-      place.projectId === projectId &&
-      place.machineId === machineId &&
-      (place.kind === "checkout" || place.kind === "workspace")
+  (rows ?? []).filter(
+    (row) => projectBound(row) && row.projectId === projectId
   );
 
 /**
- * The hooks one machine is sent: every fleet-wide hook as it is, and each
- * project-bound hook once per place of its project on that machine, with
- * that place's path as its cwd.
+ * The rows one machine is sent of each project it holds (`held`): each
+ * project-bound row once, and the project's checkouts there (`places`), by
+ * place id. A project with no rows is left out, so a checkout of it added
+ * or removed sends nothing.
  */
-export const placedHooks = (
-  hooks: FleetHook[],
+export const projectRowsFor = (
+  config: Pick<
+    FleetConfig,
+    "skills" | "mcp" | "placedMemory" | "hooks" | "harnessConfig"
+  >,
+  held: ReadonlySet<string>,
   places: readonly PlacementPlace[],
   machineId: string
-): FleetHook[] =>
-  hooks.flatMap((hook) =>
-    projectBound(hook)
-      ? placesOn(places, hook.projectId as string, machineId).map((place) => ({
-          ...hook,
-          id: placedId(hook.id, place.id),
-          cwd: place.path,
-        }))
-      : [hook]
-  );
+): Record<string, FleetProjectRows> => {
+  const projects: Record<string, FleetProjectRows> = {};
+  for (const projectId of held) {
+    const rows: FleetProjectRows = {
+      ...noProjectRows(),
+      skills: boundTo(config.skills, projectId),
+      mcp: boundTo(config.mcp, projectId),
+      memory: boundTo(config.placedMemory, projectId),
+      hooks: boundTo(config.hooks, projectId),
+      harnessConfig: boundTo(config.harnessConfig, projectId),
+    };
+    if (
+      rows.skills.length +
+        rows.mcp.length +
+        rows.memory.length +
+        rows.hooks.length +
+        rows.harnessConfig.length ===
+      0
+    ) {
+      continue;
+    }
+    for (const place of places) {
+      if (
+        place.projectId === projectId &&
+        place.machineId === machineId &&
+        place.kind === "checkout"
+      ) {
+        rows.checkouts[place.id] = place.path;
+      }
+    }
+    projects[projectId] = rows;
+  }
+  return projects;
+};
 
-/** Worst first: the one state a hook shows for a machine where its places differ. */
+/** Worst first: the one state a row shows for a machine where its places differ. */
 const SEVERITY: FleetItemState["state"][] = [
   "failed",
   "needs-auth",
@@ -109,40 +114,40 @@ const SEVERITY: FleetItemState["state"][] = [
 ];
 
 /**
- * A machine's hook report with every placed copy folded onto its hook's id:
- * the worst state of its places, a failure's detail naming the place. Ids
- * that were not placed pass through.
+ * A machine's report with each project row's places folded onto the row's
+ * own key in its section: the worst state of its places, a detail naming
+ * the place it is about. The per-place map itself is not kept.
  */
-export const foldPlacedStates = (
-  states: Record<string, FleetItemState> | undefined,
-  pathOf: (placeId: string) => string | undefined
-): Record<string, FleetItemState> | undefined => {
-  if (!states) {
-    return states;
+export const foldPlaced = (report: FleetSyncReport): FleetSyncReport => {
+  const { placed, ...rest } = report;
+  if (!placed) {
+    return rest;
   }
-  const folded: Record<string, FleetItemState> = {};
-  for (const [key, state] of Object.entries(states)) {
-    const at = key.indexOf(PLACED);
-    const id = at === -1 ? key : key.slice(0, at);
-    const where = at === -1 ? undefined : pathOf(key.slice(at + 1));
-    const next: FleetItemState =
-      where && state.detail
-        ? { ...state, detail: `${where}: ${state.detail}` }
-        : state;
-    const held = folded[id];
-    if (!held || SEVERITY.indexOf(next.state) < SEVERITY.indexOf(held.state)) {
-      folded[id] = next;
+  const folded: FleetSyncReport = { ...rest };
+  for (const section of PLACED_SECTIONS) {
+    const rows = placed[section];
+    if (!rows) {
+      continue;
     }
+    const states: Record<string, FleetItemState> = { ...folded[section] };
+    for (const [key, byPlace] of Object.entries(rows)) {
+      for (const [where, state] of Object.entries(byPlace)) {
+        const next: FleetItemState = state.detail
+          ? { ...state, detail: `${where}: ${state.detail}` }
+          : state;
+        const held = states[key];
+        if (
+          !held ||
+          SEVERITY.indexOf(next.state) < SEVERITY.indexOf(held.state)
+        ) {
+          states[key] = next;
+        }
+      }
+    }
+    folded[section] = states;
   }
   return folded;
 };
-
-/** Whether any of these rows (hooks, MCP servers, skills) would be placed for this project. */
-export const hasProjectRows = (
-  rows: readonly FleetPlacement[],
-  projectId: string
-): boolean =>
-  rows.some((row) => projectBound(row) && row.projectId === projectId);
 
 // --- places changing -----------------------------------------------------------
 
@@ -150,11 +155,12 @@ type PlacesListener = (machineId: string, projectId?: string) => void;
 const listeners = new Set<PlacesListener>();
 
 /**
- * Says a machine's places changed (a place added or removed, a workspace
- * opened or archived), so the hub sends that machine its fleet config again
- * and project-bound rows reach the new place or leave the old one. The hub
- * listens ({@link onPlacesChanged}); anything that adds or removes a place
- * calls this after it does.
+ * Says a machine's checkouts changed (one added, removed or moved), so the
+ * hub sends that machine its fleet config again and the project's rows
+ * reach the new checkout or leave the old one. A workspace is no place of
+ * the hub's: its machine places the rows in its clone as it cuts it. The
+ * hub listens ({@link onPlacesChanged}); anything that adds or removes a
+ * checkout calls this after it does.
  */
 export const placesChanged = (machineId: string, projectId?: string): void => {
   for (const listener of listeners) {
