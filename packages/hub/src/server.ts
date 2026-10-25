@@ -2790,6 +2790,21 @@ const UNREAD = {
 const STORED_TAIL = 50;
 
 /**
+ * How many stored entries a window of history asks for: two of the
+ * dashboard's pages and then some, so a newest page is cut from the first
+ * window read. Ours.
+ */
+const HISTORY_WINDOW = 300;
+
+/**
+ * How far before a pending send's acceptance (the hub's clock) a settle read
+ * reaches (the machine's clock, in the transcript's timestamps). Our call:
+ * clocks a few minutes apart, and the CLI dates an absorbed send when it was
+ * queued.
+ */
+const SETTLE_SKEW_MS = 10 * 60 * 1000;
+
+/**
  * Transcript reads to settle sends ({@link storedIn}) one machine is asked
  * at once; the rest wait their turn, their deadline starting when they are
  * asked. Our call: a machine coming back with hundreds of sessions was
@@ -6007,6 +6022,54 @@ export const createServer = (
   };
 
   /**
+   * The stored transcript a settle read decides the session's pending sends
+   * against: its newest {@link STORED_TAIL} entries, and windows before them
+   * until they reach back past the oldest pending send's acceptance (less
+   * {@link SETTLE_SKEW_MS}), for a send is stored only after it is handed.
+   * A send the CLI absorbed mid-turn is stored where it was read, and the
+   * turn can run on long after: 83 entries on in one session, which a tail
+   * of 50 missed, so the send was owed again and the session read it twice.
+   * Oldest first; a window the machine did not answer is the read's answer.
+   */
+  const settleWindows = async (
+    row: InstanceRow & { sessionId: string }
+  ): Promise<Awaited<ReturnType<typeof readAgent>>> => {
+    const unread = db.sendsIn(row.id, ["pending"]);
+    const since =
+      unread.length > 0
+        ? Math.min(...unread.map((send) => send.acceptedAt.getTime())) -
+          SETTLE_SKEW_MS
+        : Number.POSITIVE_INFINITY;
+    const windows: SessionMessage[][] = [];
+    let ask: WindowAsk = { end: "newest", limit: STORED_TAIL };
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
+      const answer = await readAgent(
+        row.machineId,
+        CONTROL_READ_TRANSCRIPT_WINDOW,
+        [row.sessionId, { dir: row.cwd || undefined, window: ask }],
+        READ_TIMEOUT_MS,
+        row.harness
+      );
+      if (answer.kind !== "answered" || !answer.value.ok) {
+        return answer;
+      }
+      const read = answer.value.result as Partial<TranscriptWindow> | null;
+      const entries = Array.isArray(read?.entries) ? read.entries : [];
+      windows.unshift(entries);
+      const first = entries.find((entry) => entry.timestamp)?.timestamp;
+      const older = read?.older ?? null;
+      if (older === null || !first || Date.parse(first) < since) {
+        return {
+          ...answer,
+          value: { ...answer.value, result: windows.flat() },
+        };
+      }
+      ask = { before: older, limit: HISTORY_WINDOW };
+    }
+  };
+
+  /**
    * One settle read of the session's transcript tail, asked once its backoff
    * is over and its machine has a turn for it. One its machine left
    * unanswered is logged with when it was asked and how long it waited, and
@@ -6021,13 +6084,7 @@ export const createServer = (
     await settleTurn(row.machineId);
     const askedAt = Date.now();
     try {
-      const answer = await readAgent(
-        row.machineId,
-        CONTROL_GET_SESSION_MESSAGES,
-        [row.sessionId, { dir: row.cwd || undefined, tail: STORED_TAIL }],
-        READ_TIMEOUT_MS,
-        row.harness
-      );
+      const answer = await settleWindows(row);
       if (answer.kind !== "unanswered") {
         settleBackoff.delete(row.id);
         return answer;
@@ -22335,13 +22392,6 @@ export const createServer = (
 
   /** A history read that took this long or longer says so in the log, part by part. */
   const SLOW_HISTORY_MS = 1000;
-
-  /**
-   * How many stored entries a window of history asks for: two of the
-   * dashboard's pages and then some, so a newest page is cut from the first
-   * window read. Ours.
-   */
-  const HISTORY_WINDOW = 300;
 
   /**
    * A session's newest stored window, from its machine, with the records of
