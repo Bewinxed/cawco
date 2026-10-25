@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T18:47:13.510Z",
+  "generatedAt": "2026-10-25T05:42:17.284Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.tokens.json",
   "extensions": {
@@ -2374,9 +2374,9 @@
       "name": "Status Pills",
       "kind": "chip",
       "refersTo": "status-pill-live",
-      "description": "The board's state chips: a word inside its status tint; idle carries no fill.",
-      "html": "<div class=\"ds-pills\"><span class=\"ds-pill ds-live\">Working</span><span class=\"ds-pill ds-attn\">Needs you</span><span class=\"ds-pill ds-done\">Done</span><span class=\"ds-pill ds-fail\">Failed</span><span class=\"ds-pill ds-idle\">Idle</span></div>",
-      "css": ".ds-pills { display: flex; gap: 8px; align-items: center; } .ds-pill { display: inline-flex; align-items: center; height: var(--c-pill-h); padding: 0 10px; border-radius: var(--radius-pill); font: var(--type-label); white-space: nowrap; transition: background-color var(--dur-panel) var(--ease-out), color var(--dur-panel) var(--ease-out); } .ds-live { background: var(--status-live-bg); color: var(--status-live-ink); } .ds-attn { background: var(--status-attn-bg); color: var(--status-attn-ink); } .ds-done { background: var(--status-done-bg); color: var(--status-done-ink); } .ds-fail { background: var(--status-fail-bg); color: var(--status-fail-ink); } .ds-idle { background: transparent; padding: 0; color: var(--status-idle-ink); }"
+      "description": "The board's state chips: a word inside its status tint; Needs you is the status dot before its word with no fill; idle carries no fill.",
+      "html": "<div class=\"ds-pills\"><span class=\"ds-pill ds-live\">Working</span><span class=\"ds-pill ds-attn\"><span class=\"ds-dot\" aria-hidden=\"true\"></span>Needs you</span><span class=\"ds-pill ds-done\">Done</span><span class=\"ds-pill ds-fail\">Failed</span><span class=\"ds-pill ds-idle\">Idle</span></div>",
+      "css": ".ds-pills { display: flex; gap: 8px; align-items: center; } .ds-pill { display: inline-flex; align-items: center; height: var(--c-pill-h); padding: 0 10px; border-radius: var(--radius-pill); font: var(--type-label); white-space: nowrap; transition: background-color var(--dur-panel) var(--ease-out), color var(--dur-panel) var(--ease-out); } .ds-live { background: var(--status-live-bg); color: var(--status-live-ink); } .ds-attn { background: transparent; padding: 0; gap: var(--space-2); color: var(--status-attn-ink); } .ds-dot { inline-size: var(--status-dot-size); block-size: var(--status-dot-size); border-radius: var(--radius-pill); background: var(--status-attn-glyph); } .ds-done { background: var(--status-done-bg); color: var(--status-done-ink); } .ds-fail { background: var(--status-fail-bg); color: var(--status-fail-ink); } .ds-idle { background: transparent; padding: 0; color: var(--status-idle-ink); }"
     },
     {
       "name": "Menu",
@@ -2398,9 +2398,9 @@
       "name": "Permission Gate",
       "kind": "custom",
       "refersTo": "permission-card",
-      "description": "Approve and Deny as recessed peers at opposite ends of the row; the standing grant set apart in the warning tint.",
+      "description": "Approve and Deny as untinted peers at opposite ends of the row (recess fill, one outline edge, ink-strong); the standing grant set apart in the warning tint.",
       "html": "<section class=\"ds-gate\" aria-label=\"Permission request\"><p class=\"ds-gate-lede\">Run <code class=\"ds-gate-cmd\">rm -rf apps/dashboard/.svelte-kit</code></p><div class=\"ds-gate-row\"><button class=\"ds-gate-btn ds-grant\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Approve</span></button><button class=\"ds-gate-btn ds-refuse\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Deny</span></button></div><div class=\"ds-gate-widen\"><p>This would allow <code class=\"ds-gate-cmd\">rm -rf</code> for this project, a wider grant than the request above.</p><button class=\"ds-gate-btn ds-widen\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><path d=\"M12 22C10.9807 22 10.6199 21.8425 9.89844 21.5273C7.23883 20.3655 3 17.6292 3 11.9912V11L12 8V22Z\"/><path d=\"M12 2C12.8114 2 13.595 2.26825 15.1621 2.80469L15.7354 3.00098C18.7409 4.02979 20.244 4.54434 20.6221 5.08203C20.9996 5.6199 21 7.21941 21 10.417V11L12 8V2Z\"/><g opacity=\".5\"><path d=\"M21 11V11.9912C21 17.6292 16.7612 20.3655 14.1016 21.5273C13.3801 21.8425 13.0193 22 12 22V8L21 11Z\"/><path d=\"M12 8L3 11V10.417C3 7.21941 3.00041 5.6199 3.37793 5.08203C3.75595 4.54434 5.25909 4.02979 8.26465 3.00098L8.83789 2.80469C10.405 2.26825 11.1886 2 12 2V8Z\"/></g></g></svg><span>Always allow rm</span></button></div></section>",
-      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { display: inline-flex; align-items: center; gap: var(--space-2); height: var(--space-8); padding: 0 var(--space-3); border: 1px solid var(--border-hairline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-gate-btn svg { width: 12px; height: 12px; } .ds-gate-btn:hover { background: var(--surface-hover); } .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-muted); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
+      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { display: inline-flex; align-items: center; gap: var(--space-2); height: var(--space-8); padding: 0 var(--space-3); border: 1px solid var(--border-button-outline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-gate-btn svg { width: 12px; height: 12px; }  .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-strong); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
     },
     {
       "name": "Empty State",
@@ -2434,37 +2434,72 @@
       {
         "name": "The No Ease-In Rule",
         "body": "No ease-in curve exists. Anything that starts slow feels like the interface hesitating.",
-        "section": "motion"
+        "section": "overview"
       },
       {
         "name": "The Fast Exit Rule",
         "body": "Exits are shorter than entrances. A popover opens over 260ms and closes over 160ms. A dialog opens over 280ms and closes over 160ms. A toast rises over 280ms and leaves over 160ms.",
-        "section": "motion"
+        "section": "overview"
       },
       {
         "name": "The One Object Rule",
-        "body": "What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A sidebar row becomes the tab it opens, a section row's title flies into the editor header, a sent message flies from the composer into the transcript row it became. A flight runs 280ms on the drawer curve, as a transform (FLIP) or a clip that opens from the source's box. The source is hidden while its copy flies, so the screen never shows two.",
-        "section": "motion"
+        "body": "What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A sidebar row becomes the tab it opens, a section row's title flies into the editor header, a sent message flies from the composer into the transcript row it became. A flight runs 280ms on the drawer curve, as a transform (FLIP) or a clip that opens from the source's box. The source is hidden while its copy flies, so the screen never shows two. A surface that closes on work still running travels into the place that work is parked, and comes back out of it (The Work Outlives Its Surface Rule).",
+        "section": "overview"
       },
       {
         "name": "The Nothing Jumps Rule",
-        "body": "When a list changes, rows that stay slide to their new places, rows that leave close while fading, and rows that arrive are uncovered top to bottom while what follows makes room (`motion/rows.svelte.ts`). Movement takes 280ms on ease-in-out, arrivals fade over 260ms, departures fade over 160ms, all started on the same frame. A move that happens entirely off screen jumps instead of sliding, so nothing drifts into view behind the reader's scroll.",
-        "section": "motion"
+        "body": "When a list changes, rows that stay slide to their new places, rows that leave close while fading, and rows that arrive are uncovered top to bottom while what follows makes room (`motion/rows.svelte.ts`). Movement takes 280ms on ease-in-out, arrivals fade over 260ms, departures fade over 160ms, all started on the same frame. In a batch a tree's fold paces (closing over `--dur-exit`, opening at its line's speed), a row's fade runs over its own uncovering's or closing's duration, so each row is one clock. A move that happens entirely off screen jumps instead of sliding, so nothing drifts into view behind the reader's scroll.",
+        "section": "overview"
       },
       {
         "name": "The Interruptible Rule",
         "body": "Every transition turns back from where it is drawn. Popovers transition on `data-state` rather than playing keyframes, folds animate from the drawn height, and a segmented thumb caught mid-glide restarts from where it stands.",
-        "section": "motion"
+        "section": "overview"
+      },
+      {
+        "name": "The Stay In Context Rule",
+        "body": "The reader stays where they are and knows what is true, from the moment they ask for something to the moment it is done. The owner: \"This fluid ux is the bar for any part of this project. Keeps the user in context.\" Four questions shape every flow, and their answers decide its form:",
+        "section": "overview"
+      },
+      {
+        "name": "The Open Page Rule",
+        "body": "Almost nothing blurs the page or stops the reader acting elsewhere. A surface that asks or shows something opens in the page, beside what it concerns, and the rest of the page stays live: the reader can scroll, read, or press something else, and the surface waits or follows. The owner: \"standing rule, there should almost never be a dialog or a sheet that blurs the page or prevents the user from taking other actions\". The question to ask: if they press something else now, does anything break? If nothing breaks, nothing blocks. A scrim, a blur or a modal hold is for the rare moment when acting elsewhere would make the open question wrong, and the dialog, sheet and drawer recipes below are for those moments only. Add machine is one by the owner's word (\"IT'S A MODAL, AND IT'S MINIMIZEABLE TO SOMEWHERE IF IT'S DISMISSED WHILE IT'S WORKING, THEN I CAN GO BACK TO WHERE I WAS\"): the kit's dialog, centred over the scrim on a desk and its bottom sheet on a phone, its two ways in as tabs (Over SSH, By a command) over the details, with no question first.",
+        "section": "overview"
+      },
+      {
+        "name": "The Work Outlives Its Surface Rule",
+        "body": "Work started in a surface (a window, a sheet, a tray, a popover, a dialog, a drawer) that runs longer than the surface stays open (an install, a spawn, an upload, a sign-in, an update, any job of more than a few seconds) belongs to the work, not to the surface, and nothing the reader does to the page loses it. Work that is done within a second and leaves nothing behind (a rename, a toggle) is outside it: it just happens (The Stay In Context Rule).",
+        "section": "overview"
+      },
+      {
+        "name": "The Show Don't Tell Rule",
+        "body": "A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, a run of outcomes as marks in their status colours, who runs something as their mark. Words are for what has no shape (a prompt, a reason, a name), and a row of labelled text facts is a sign that something should be drawn. The owner, on a routine's detail written as label and value rows: \"walls of text with no structure, many things can be told with ui or visually rather than spamming text rows\".",
+        "section": "overview"
       },
       {
         "name": "The One Loop Rule",
         "body": "Anything that turns or blinks while something is pending runs one ambient loop, `--dur-loop` (1.2s): a spinner, the task ring's arc, and Tailwind's `animate-spin`, `animate-pulse` and `animate-ping`, which the theme points at the token. A rotation turns linearly; a pulse runs ease-in-out and a ping ease-out. The skeleton's pulse is the one exception, the owner's pick of transitions.dev's recipe exactly: `--dur-skeleton-pulse` (1s), every skeleton on its own one clock. Longer rhythms are multiples of the breath, never new numbers: the thinking indicator's words change every two breaths. Tailwind's default transition timing (`transition-colors` and its siblings) is `--dur-control` on ease-out.",
-        "section": "motion"
+        "section": "overview"
+      },
+      {
+        "name": "The Steady Swap Rule",
+        "body": "A text swap never moves what stands beside it, and runs on one clock. Words change in place through MorphText (`components/ui/morph-text`), the one way the product morphs words: the box takes the wider and taller of the old and new words at once, holds there while the letters cross, and takes the new words' size in one step when the morph has settled; no width or height ever tweens. Every animation of a swap (a letter gliding to its new place, one arriving from 0.95, one leaving to 0.95, a digit rolling in its slot, and their fades) shares one start, `--dur-morph` (180ms) and ease-out. With reduced motion nothing moves and the swap is still not instant: the old words fade out where they stand and the new ones fade in where they lay out, in the same held box, opacity only, over `--dur-morph`. A label with a second wording it is known to take (a button's \"Answer\" and \"Answering…\") stands both in one cell as wide as the wider, so it never changes width at all.",
+        "section": "overview"
       },
       {
         "name": "The Reduced Motion Rule",
         "body": "Motion is opt-in. Every travelling transition and keyframe sits under `prefers-reduced-motion: no-preference`, and JavaScript motion asks the same question through `motionOk` (`motion/curves.svelte.ts`). With reduced motion, opacity and colour fades still run, pages cross-fade in place over 120ms, heights land at once, folds fade instead of opening, list changes only fade, flights do not fly, and loops stop (an indeterminate spinner keeps turning). Reduced motion means stillness. It does not mean an instant swap.",
-        "section": "motion"
+        "section": "overview"
+      },
+      {
+        "name": "The House Helper Rule",
+        "body": "Each kind of motion above has one helper, and a component takes it rather than writing its own (paths from `apps/dashboard/src/lib`). Each already keeps the curves, the clocks, interruption and reduced motion these rules ask for.",
+        "section": "overview"
+      },
+      {
+        "name": "The Quiet Feel Rule",
+        "body": "Sound and touch accompany a gesture the reader is making; they never announce anything on their own, never stand in for a word or a glyph, and never play for something the reader did not do. Sound is Cuelume (synthesized live, no files), always at its `subtle` emphasis. It is off until the reader turns it on with the Sound switch beside the theme in the rail's footer, and the choice is kept in this browser (`feel.svelte.ts`). Touch is web-haptics: the Vibration API on Android, and on iOS Safari, which has none, the system tick of a switch toggled out of sight. It answers only a finger on a coarse pointer and has no setting. Both libraries load on the first press or key, never with the page, and Cuelume's audio graph is built while idle right after with an inaudible play, so the first cue costs no frame (built on the first real cue it cost the frame that cue landed in: 76ms against 4ms warm). The moments, all in the composer today:",
+        "section": "overview"
       },
       {
         "name": "The Dark Flips Polarity Rule",
@@ -2478,7 +2513,7 @@
       },
       {
         "name": "The Coral Is Where You Act Rule",
-        "body": "Coral marks the action, the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. It is never a status: failed is crimson and needs-you is spark, so coral never reads as an alarm and an alarm never reads as a button.",
+        "body": "Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. It is never a status: failed is crimson and needs-you is spark, so coral never reads as an alarm and an alarm never reads as a button.",
         "section": "colors"
       },
       {
@@ -2518,7 +2553,7 @@
       },
       {
         "name": "The Tabular Figure Rule",
-        "body": "A figure that changes (a count, a price, an age, a percentage) carries `.num` and is set in tabular numerals, so a ticking value never moves its neighbours. Tables get tabular numerals by default. The KPI role always carries `.num`, because a `font` shorthand resets `font-variant-numeric`.",
+        "body": "A figure that changes (a count, a price, an age, a percentage) carries `.num` and is set in tabular numerals, so a ticking value never moves its neighbours. Tables get tabular numerals by default. The KPI role always carries `.num`: `type-kpi` is tabular itself, but a component rule that sets the role by the `font` shorthand resets `font-variant-numeric`.",
         "section": "typography"
       },
       {
@@ -2527,9 +2562,24 @@
         "section": "typography"
       },
       {
-        "name": "The 16px Field Rule",
-        "body": "On a phone or a coarse pointer every text field renders at 16px (an `!important` in the base layer), because iOS Safari zooms into any field under 16px.",
+        "name": "The Row Dress Rule",
+        "body": "A list row has at most four dresses, and each part takes the one for its job:",
         "section": "typography"
+      },
+      {
+        "name": "The Mark Line Rule",
+        "body": "Words set beside a mark (an icon, a glyph, an avatar, a status dot, a keycap) have their x-height's middle on the mark's middle, within half a pixel, in every engine. Centring a line box does not do it: Figtree's ascent and descent sit unevenly about its x-height and Blink floors the half-leading, so a centred 13px label sat 0.3px below its mark in Blink and 1.25px below in WebKit and Gecko. The mark line recipe (app.css) trims each run of words to its x-height band (`text-box: trim-both ex alphabetic`) and pads back the room the trim took, half above and half below, so the run keeps its line's height and centring lands on the x-height. The kit's rows draw it by their own class (option and tray chips, menu items, segments, rail lines, and the button, badge and toggle); any other row takes `.mark-line`. Its words are elements, never bare text beside the mark. A box on the line (a mark's tile, a chevron's cell, a pill) says so with `data-box`. A control that holds nothing but marks (an icon-only button, a link that is only its glyph) is told apart by the recipe itself and centred as a box, its glyph on the line's middle within half a pixel; it needs no `data-box`. A selector sees no text, so a child whose only elements are marks is taken for a box whatever words stand bare beside them: a control's words are an element of their own, and a line that sets a mark in running text says `.mark-text`. A run that truncates clips with `overflow: clip`, never `hidden`, which Gecko does not trim. A run that stands alone, such as a pill's own words or a grid cell's label, takes `.mark-text`. A mark beside words that wrap sits in a `.mark-cell`, one line tall at the top of a flex-start row, never nudged down with a margin. A mark set in running text sits on `vertical-align: middle`, and its row says so with `<!-- mark-line: why -->` directly above it, as does any row whose mark is not beside its words. `bun run check` enforces all of this (apps/dashboard/scripts/mark-line-check.ts).",
+        "section": "typography"
+      },
+      {
+        "name": "The 16px Field Rule",
+        "body": "On a phone or a coarse pointer every text field renders at 16px (a floor in the last cascade layer, `overrides`, so no utility takes a field under it), because iOS Safari zooms into any field under 16px.",
+        "section": "typography"
+      },
+      {
+        "name": "The Title Bars Follow Liquid Glass Rule",
+        "body": "The owner: \"this language for titlebars should be scrpaped from all future design, apple's HIG and liquid glass has revised the titlebar model significantly\". Every bar that heads a surface (the top bar, a page, a pane, a side panel or column, a sheet, the peek, the artifact panel, a canvas's band) follows Apple's toolbar model as Liquid Glass revised it, on the web, the phone's web and the native app alike (HIG, Toolbars, updated for Liquid Glass 2025-12-16: developer.apple.com/design/human-interface-guidelines/toolbars): One bar, one row. A surface has one bar, and its title and controls share one line. Facts about the surface (its place, a path, an id, a date, a count, its ask, what it is doing) are content: drawn or said in the surface, or left out. A title stacked over a line of facts beside one row of buttons is the shape this rule retires (the owner, on a project's head: \"on the left you have two rows but on the right u have 1 row of buttons\"). A title only where it helps. \"If titling a toolbar seems redundant, you can leave the title area empty.\" A side panel or column the person opened by its name (Caw's column, the Comments rail, an inspector) carries no title: its title area stays empty and its actions float over its content (the owner, on Caw's column: \"literally useless tiltebar that says nothing, use apple's liquid glass-style HIG floating actions\"). Where a title helps, it is the view's own name, short: \"Aim for a word or short phrase that distills the purpose of the window or view, and keep the title under 15 characters long so you leave enough room for other controls.\" It is never the app's name (\"Don't title windows with your app name\"), an id, a path, a breadcrumb of section names joined by `·` or `›`, or the name of a section the rail already shows chosen. A place shown as a place. Where a surface lives on one machine or in one folder and that matters to it, the place is drawn as a place: the machine as its OS mark and its name, as a control in a group or a fact in the content. A path is never printed in a bar. No bar ground. A bar draws no fill, hairline or shadow of its own: \"Reduce the use of toolbar backgrounds and tinted controls. … use the content layer to inform the color and appearance of the toolbar, and use a ScrollEdgeEffectStyle when necessary to distinguish the toolbar area from the content area.\" The content runs to the surface's top edge, and where it scrolls under the controls the scroll edge effect parts them: the content blurs and fades under the bar (\"Scroll edge effects further enhance legibility by blurring and reducing the opacity of background content\", HIG, Materials), in from the first scroll and absent at rest, as the transcript's head dissolves into its tab. The folder tabs' shelf is the tab strip's own ground, not a bar's. Floating groups of bare symbols. A bar's controls stand in at most three groups, leading, centre and trailing (\"Minimize the number of groups. … In general, aim for a maximum of three\"). Each group is one capsule of the panel's glass floating over the content, the top bar's trailing group its recipe (Navigation, menus and floating surfaces): Liquid Glass \"forms a distinct functional layer for controls and navigation elements … that floats above the content layer\" (HIG, Materials). Its items are bare symbols with no border or fill of their own until hovered or pressed (\"Prefer system-provided symbols without borders. … Borders (like outlined circle symbols) aren't necessary because the section provides a visible container\"), each named for the screen reader and in its tooltip. A control takes words only where no symbol says it (\"except for actions like edit that aren't well-represented by symbols\"), in a group of its own (\"Keep actions with text labels separate\"). Leading holds going back and the title; centre the view's mode or switch; trailing what acts on the view, then More, then the prominent action, with Close after it where the surface closes. One prominent action, trailing. At most one control in a bar is prominent: the one act the view is for, on the coral `action-surface` (Send on a page of picks, Done on a form). A view whose purpose is deciding puts its coral on the decision; Ask Caw takes it only on a view whose purpose is asking him. \"Only specify one primary action, and put it on the trailing side of the toolbar.\" Colour on the glass is for that action and for status alone (\"reserve it for elements that truly benefit from emphasis, such as status indicators or primary actions. … Refrain from adding color to the background of multiple controls\", HIG, Color › Liquid Glass color). Back and Close are symbols. Back is the chevron-left symbol alone and Close the close symbol alone, each named in its tooltip and for the screen reader by where it goes (\"Back to Board\"), never a button whose words say Back, Close or the page it returns to: \"Prefer the standard symbols for each, and don't use a text label that says Back or Close.\"",
+        "section": "layout"
       },
       {
         "name": "The Frame Recesses Rule",
@@ -2548,7 +2598,7 @@
       },
       {
         "name": "The Concentric Rule",
-        "body": "A surface nested in another's corner takes the outer radius less the gap between their edges, the outer's edge counted: outer = inner + gap. It binds where the inner corner stands inside the outer's curve, the same gap in from both edges and less than the outer radius. The dialog tray (18px, 6px padding, no edge) holds a 12px body. A menu (12px, 1px edge, 6px padding) holds 5px items. The segmented groove (10px, 3px padding) holds a 7px thumb. The composer shell (12px, 1px edge, 7px inset) holds 4px controls (`composer-control-r`), its radius less its inset and its edge. A subagent's well (4px padding) holds its 5px rows, so the well is 9px (`inner-well-r`), the rows' `--radius-xs` plus its `--space-1`. Where no radius token is the derived value it is a derived token whose CSS is that sum or difference (`composer-control-r`, `inner-well-r`), never a literal. A probe holds the kit, the new-session form's own popovers and the decision-page kit to it (`scripts/probe-kit/specs/concentric.ts`). The rows standing at a glide popover's own inset (12px, 1px edge, 7px padding) are 4px (`glide-row-r`). A decision page's pane pads past its radius (14px in a 12px pane), so a mockup's corners stand clear of its curve.",
+        "body": "A surface nested in another's corner takes the outer radius less the gap between their edges, the outer's edge counted: outer = inner + gap. It binds where the inner corner stands inside the outer's curve, the same gap in from both edges and less than the outer radius. The dialog tray (18px, 6px padding, no edge) holds a 12px body. A menu (12px, 1px edge, 6px padding) holds 5px items. The segmented groove (10px, 3px padding) holds a 7px thumb. The composer shell (12px, 1px edge, 7px inset) holds 4px controls, its radius less its inset and its edge (`c-inset-composer`). A subagent's well (4px padding) holds its 5px rows, so the well is 9px (`inner-well-r`), the rows' `--radius-xs` plus its `--space-1`. Where no radius token is the derived value it is a derived token whose CSS is that sum or difference (`inner-well-r`), never a literal. A container a highlight stands in says it once (design.css `concentric-in`): it declares its outer radius and its inset, edge counted (`r-outer-lg r-inset-c-inset-floating`), and works out the inner radius, max(0, outer less inset); its rows, segments, controls and parts take it corner by corner (`concentric-<own radius>`), keeping their own radius token where no rounded container holds them. The floating surface (menus, selects, popovers, the bottom sheet's rows: `c-inset-floating`), the composer shell (`c-inset-composer`) and the segmented groove (`c-segmented-pad`) declare it. The hover ghost and the selection pill are drawn from their row's four corners and the focus ring follows the row's radius, so all three take the contour of what they mark; a run's part opened at an edge squares those corners, and the pill under it with them. A probe holds the kit, the new-session form's own popovers and the decision-page kit to it (`scripts/probe-kit/specs/concentric.ts`). The rows standing at a glide popover's own inset (12px, 1px edge, 7px padding) are 4px (`glide-row-r`). A decision page's pane pads past its radius (14px in a 12px pane), so a mockup's corners stand clear of its curve.",
         "section": "shapes"
       },
       {
@@ -2557,8 +2607,18 @@
         "section": "shapes"
       },
       {
+        "name": "The Whole Pixel Border Rule",
+        "body": "A border or an outline is a whole CSS pixel. A browser snaps its width to whole device pixels, so a 1.5px border draws 1px on a 1× screen and on a 3× one. A fractional stroke (the canvas's corner grip, a decision node's ring, DialKit's easing handles on a decision page, which the kit's page.css redraws over the vendored sheet's 1.5px border) is an inset ring, `inset-ring-(length:--x)`, whose spread is never snapped, or an SVG stroke. `scripts/border-width-check.ts` (in `bun run check`) refuses a fractional border or outline width in a token, a class or a declaration.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Earned Count Rule",
+        "body": "A count on a control is drawn only above 0: a count of none says nothing. On the web and in the app alike, at 0 the count element is gone and the control's name drops it too. A figure whose 0 is itself the reading (a measurement, a share, a total the control reports rather than a number of things it opens) is not a count.",
+        "section": "components"
+      },
+      {
         "name": "The Press Rule",
-        "body": "The hand feels a control before release, in one of two ways chosen by size. A compact standalone control (a button, an icon button, a chip, a switch, about 44px tall at most) scales to 0.97 over 160ms on ease-out. Anything wide, large or grouped (rows, cards, card heads, tabs in a strip, segments) tints to `surface-pressed` and moves nothing, because a 0.97 scale pulls a 300px row's edge in by 4.5px; `surface-pressed` is the kit Toggle's on step, the step past the hover (by day the hover step is `surface-fill`'s own, so a press in `surface-fill` would read as the hover; night keeps `surface-fill`). A text link dims to 72% opacity. The scale only runs with motion allowed; the tint always runs.",
+        "body": "The hand feels a control before release, in one of two ways chosen by size. A compact standalone control (a button, an icon button, a chip, a switch, about 44px tall at most) scales to 0.97 over 160ms on ease-out. Anything wide, large or grouped (rows, cards, card heads, tabs in a strip, segments) tints to `surface-pressed` and moves nothing, because a 0.97 scale pulls a 300px row's edge in by 4.5px; `surface-pressed` is the kit Toggle's on step, the step past the hover (by day the hover step is `surface-fill`'s own, so a press in `surface-fill` would read as the hover; night keeps `surface-fill`). A text link dims to 72% opacity. The scale only runs with motion allowed; the tint always runs. The tint outranks a control's own background by specificity (an id's weight through `:is()`), never by an important declaration, which keeps its fade off the compositor.",
         "section": "components"
       },
       {
@@ -2567,8 +2627,28 @@
         "section": "components"
       },
       {
+        "name": "The Empty Starts Work Rule",
+        "body": "An empty state always offers to start the work that would fill it. Its one action starts a session with Caw that already asks him to create the thing, its words written for him and editable before they go. The owner: \"all empty states should have a way to initiate a session that prompts caw to create it\". Where Caw can't start, the empty state says why, and offers the way to do it by hand.",
+        "section": "components"
+      },
+      {
+        "name": "The Caw Stands On The Axis Rule",
+        "body": "Caw's mark sits in the 28px lead column only on a row: a list entry, a notice, a Needs-you row. Everywhere else (an empty page, a hero, a setup or pairing card, a panel's empty state, a fault at a surface's centre) he stands on the composition's own axis: centred over what he heads, never pushed to its leading edge. The lead column is the row grid's; carrying it into a page, a head or a hero left him at the left of an empty page. The owner: \"also again, why is caw left aligned here? u seem to have left aligned him everywhere for some reason\".",
+        "section": "components"
+      },
+      {
         "name": "The Claim Of Nothing Rule",
         "body": "An empty state claims there is nothing to show, so it renders only once the data is known to be empty, never while it is still being read. While data loads, the skeleton stands in at the real layout's size, and the first real read replaces it in the skeleton's reveal (a 400ms cross-fade with a 2px cross-blur) rather than as rows arriving.",
+        "section": "components"
+      },
+      {
+        "name": "The Real Wait Rule",
+        "body": "Caw stands in for a wait (loading, reconnecting) only once it has lasted `--dur-wait-grace` (1s; NN/g: no feedback is needed under 1.0s). Until then the area is its plain surface, with no Caw and no line. Once he appears he stays until his enter (his own clip, about 0.8 s) has played, and what arrives waits for that, so he is never cut off mid-entrance. After that what arrives lands at once under its own `--dur-fade` cross-fade and he is gone within `--dur-fade` from any drawing, his still included: he holds the drawing he is on and fades out (opacity to 0, scale to `--leave-scale`, `--ease-out`), so nothing that has arrived sits under a looping Caw. No exit is drawn. A status change is the same leave, then the new status coming in: by its drawn enter, on every drawing of which he is wholly inside the 3.5% action-safe line or not there at all, or where it has none by a fade up from `--leave-scale` over `--dur-pop` on `--ease-out`; nothing waits for a loop to end (assets/mascot/README.md, Contract). Under Reduce Motion he fades over `--dur-fade`, opacity only. Web: SessionSurface's detail area; Apple: `CawWaiting`.",
+        "section": "components"
+      },
+      {
+        "name": "The Composer Layer Rule",
+        "body": "Nothing that comes out of the composer moves the transcript (owner: \"WHY WOULD ANYTHING THAT COMES OUT OF THE COMPOSER EVEN MOVE THE TRANSCRIPT\"). The slash and @ menu, the delegate tray's \"+N\" and failures shelf and its chip panel, the plan its ring opens, the recall wheel and the grown shape are layers of the composer's dock over the transcript's foot, anchored to what opened them, in no flow and never a size the transcript is told: its box, its scroll and its rows hold still to the pixel while one opens or closes, by construction (probe-kit `composer-layers`). The shelf and the plan are the menu's floating surface across the composer's width, a `space-2` step over the tray row, as tall as what they hold up to the room under the dock's top; each comes in on one `@starting-style` transition (`--dur-pop`, drawer curve, from its foot), which iOS 27.2 Safari applies to an element just added (probe-kit `ios-safari-motion`, 2026-10-23), and leaves by `popOut` over `--dur-exit`. While one stands open, the transcript's foot stands solid under it across the pane (`layer-ground`: `surface-recess`, the foot fade's own, up to the layer's foot, then dissolving over `space-8` under the layer), fading in and out on `transition-fade-show`/`-hide`: the tray row has no surface of its own, so a row scrolled behind would otherwise show as a sliver of a line in the `space-2` step, cut mid-glyph by the layer's foot. Rows pass behind the layer and the tray row as they pass behind the pill, whole or not at all.",
         "section": "components"
       },
       {
@@ -2577,8 +2657,13 @@
         "section": "components"
       },
       {
+        "name": "The One Target Rule",
+        "body": "On a page in Comment mode, coral is the target and nothing else, and no mark on the page is wider than 1px.",
+        "section": "components"
+      },
+      {
         "name": "The Peer Rule",
-        "body": "Approve and Deny are recessed peers: the same secondary fill and hairline edge, the same 32px height (44px on a coarse pointer), the same label type. They differ in kind, never in salience: Approve carries a tick in `ink-strong` and Deny a cross in `ink-muted`. Both clear AA on the recess fill (ink-strong 12.39:1 and ink-muted 5.47:1 by day, 13.92:1 and 8.50:1 at night). They stand at opposite ends of the row with at least 32px between them, and no third control may sit in that gap.",
+        "body": "Approve and Deny are peers: the same size (`sm`, 30px; 44px of touch area on a coarse pointer), the same label type, the same fill, the same edge, and neither is ever made the more inviting. Why the rule exists (4ca69663): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They take one form on every surface (Caw's panel, the transcript's permission card `transcript/Prompt.svelte`, the peek's answer row `PeekPane.svelte`): apart and untinted. Deny and Approve stand at opposite ends of their row, the row's full width between them and never less than `--space-8`, no third control in that gap, so distance guards the thumb. Both take the one recessed fill (`surface-recess`) and one 1px `border-button-outline` edge, and their glyphs (a cross, a tick) and labels are `ink-strong`; they read apart by glyph, word and place, never by hue. No status fill or status ink touches either (The Reserved Hue Rule; the owner, on a red and a green button under a yellow card: \"yellow card on red and green buttons i'm going to VOMIT\"). Neither the fill nor the edge changes under the pointer, so the hand's last move never makes one brighter. In Caw's panel the pair's row is the row's last line: Deny on the text column's start, Approve on the trailing edge.",
         "section": "components"
       },
       {
@@ -2588,17 +2673,22 @@
       },
       {
         "name": "The Solar Duotone Rule",
-        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Minus, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, because Solar has no bare version.",
+        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph keeps its hue (`status-*-glyph`) at that 0.5 and holds 3:1 or more as a whole on the surfaces it sits on, so a row's state reads in colour at a glance (9ca3b2154). Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Minus, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, because Solar has no bare version.",
+        "section": "components"
+      },
+      {
+        "name": "The Caret Rule",
+        "body": "A text field's focus indicator is its caret (\"When text fields receive focus, a vertical bar is displayed in the field, indicating that the user can insert text\", WCAG 2.2 Understanding 2.4.7, w3.org/WAI/WCAG22/Understanding/focus-visible.html). No text field, editor or search strip ever draws the coral focus ring, by a key or by a press: a browser matches `:focus-visible` on any focus of a text field, so a ring there stands the whole time it is typed in. A field with a frame of its own steps that frame's 1px border from `border-control` to `border-control-strong` (3:1, WCAG 1.4.11) while its text has focus, on the frame's own radius (`field-edge`: on the field, or on the frame round a borderless editor). A field that is the whole surface (Find's strip, the composer) shows its caret and nothing else. Under forced colours a text field keeps a transparent outline the system paints (Tailwind's `outline-hidden`).",
         "section": "components"
       },
       {
         "name": "The One Ring Rule",
-        "body": "Every focusable element shows one ring on keyboard focus only: a 2px solid outline in `focus-ring`, 2px outside the element. Text fields, list rows, tabs, options and anything flush against a container or inside a clipping scroller carry the ring inset on their own border box instead, so it never stacks on a border or gets cut. The ring's colour is set at rest, so focus only switches it on. A scroller brings a focused control into view with room for its ring. Pointer focus shows nothing.",
+        "body": "Every control (a button, a tab, a row, an option, a handle, a select, a link) shows one ring on keyboard focus only, on `:focus-visible`: a 2px solid outline in `focus-ring`, 2px outside the element. A press on a button shows none. List rows, tabs, options, a select and anything flush against a container or inside a clipping scroller carry the ring inset on their own border box instead, so it never stacks on a border or gets cut. The ring is for focus alone: nothing that is a selection or a mode borrows its colour or its shape, which take the selected marks instead (`selected-bg` and `selected-ink`, the chosen option's `brand-solid` edge, a page mode's 1px `seam`, a selected canvas frame's label in `selected-ink` and its 1px `border-control-strong` edge). The ring's colour is set at rest, so focus only switches it on. A scroller brings a focused control into view with room for its ring. Pointer focus on a control shows nothing.",
         "section": "components"
       },
       {
         "name": "The 44 Touch Rule",
-        "body": "On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`, WCAG 2.5.8), while its drawn size and the layout stay the same. Where neighbours sit closer, `--hit-gap-x` and `--hit-gap-y` stop each area at the midpoint so areas never overlap; clusters open their gap on touch (8 to 14px for a row's controls, to 16px in the top bar). A scroller that would clip the areas pads into an equal negative margin. Menu items and nav rows are 44px tall on touch.",
+        "body": "On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`, WCAG 2.5.8), while its drawn size and the layout stay the same. Where neighbours sit closer, `--hit-gap-x` and `--hit-gap-y` stop each area at the midpoint so areas never overlap; clusters open their gap on touch (8 to 14px for a row's controls, to 16px in the top bar). A scroller that would clip the areas pads into an equal negative margin. Menu items and nav rows are 44px tall on touch. One exception: a chip set in running text (ui/chip `inline`: a session, mention or skill in the composer or the transcript) takes its line's height as its hit area, as a link does, because a 44px area there would cover the lines above and below it. WCAG 2.2 SC 2.5.8 exempts it: \"Inline: The target is in a sentence or its size is otherwise constrained by the line-height of non-target text\" (w3.org/WAI/WCAG22/Understanding/target-size-minimum). Every other chip keeps its 44px under a finger.",
         "section": "components"
       },
       {
@@ -2608,39 +2698,49 @@
       }
     ],
     "dos": [
-      "**Do** take every colour, radius, type role, spacing step, curve and duration from the tokens in `design/tokens/cawco.tokens.json`. Add a token there and run `bun run tokens` before adding a one-off value.",
-      "**Do** keep the action coral with its top-highlight gradient, and spend other hue only on status, identity and threshold data.",
-      "**Do** check every change in both schemes; neither is the default.",
-      "**Do** measure white on any new coral fill to 4.5:1, top gradient stop included.",
-      "**Do** recess the frame and raise the content; the stat well is the only card-in-card.",
-      "**Do** say status with a glyph or a word before hue, and draw idle as no chip at all.",
-      "**Do** set every changing figure in tabular numerals (`.num`), and keep weights at 400 and 500.",
-      "**Do** use Solar bold-duotone for every product icon, linear only for chevrons and arrows, at 12, 16 or 20px.",
-      "**Do** make a compact control scale to 0.97 on press and a wide or grouped one tint to `surface-pressed`, the step past the hover, so a press never reads as hovered.",
-      "**Do** give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.",
-      "**Do** enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.",
-      "**Do** carry shared objects across a change, and reflow lists rather than letting rows jump.",
-      "**Do** put every travelling motion under `prefers-reduced-motion: no-preference` (or `motionOk` in script), and keep fades for reduced motion.",
-      "**Do** show a skeleton at the real layout's size while data loads, and the empty state only once the data is known to be empty.",
-      "**Do** keep Approve and Deny as equal peers at opposite ends of their row, with the standing grant set apart below."
+      "Do take every colour, radius, type role, spacing step, curve and duration from the tokens in `design/tokens/cawco.tokens.json`. Add a token there and run `bun run tokens` before adding a one-off value.",
+      "Do keep the action coral with its top-highlight gradient, and spend other hue only on status, identity and threshold data.",
+      "Do check every change in both schemes; neither is the default.",
+      "Do measure white on any new coral fill to 4.5:1, top gradient stop included.",
+      "Do recess the frame and raise the content; the stat well is the only card-in-card.",
+      "Do say status with a glyph or a word before hue, and draw idle as no chip at all.",
+      "Do set every changing figure in tabular numerals (`.num`), and keep weights at 400 and 500.",
+      "Do use Solar bold-duotone for every product icon, linear only for chevrons and arrows, at 12, 16 or 20px.",
+      "Do make a compact control scale to 0.97 on press and a wide or grouped one tint to `surface-pressed`, the step past the hover, so a press never reads as hovered.",
+      "Do give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.",
+      "Do enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.",
+      "Do carry shared objects across a change, and reflow lists rather than letting rows jump.",
+      "Do take the house helper for each kind of motion: `morph()` for a size tween, `reflow()` for a list, `unfold` for a disclosure, `NsPopoverGroup` for a popover glide, `fluid-tabs` or the harness `Rail` for a tab switch (The House Helper Rule).",
+      "Do design each flow from the four questions of The Stay In Context Rule, sized to the decision: in place for a light one, the affected things named for a heavy one, and every result taken from the system's word.",
+      "Do keep work that outlives its surface through a reload and a dismissal: the surface back open at the same step, the work parked in one persistent place with live progress, one press back to it, and every failure said in the error formula with a way on (The Work Outlives Its Surface Rule).",
+      "Do open what asks or shows in the page, with the rest still live (The Open Page Rule). Draw facts that have a shape (The Show Don't Tell Rule), and give every empty state the start of Caw's work on it (The Empty Starts Work Rule).",
+      "Do put every travelling motion under `prefers-reduced-motion: no-preference` (or `motionOk` in script), and keep fades for reduced motion.",
+      "Do show a skeleton at the real layout's size while data loads, and the empty state only once the data is known to be empty.",
+      "Do keep sound off until the reader turns it on, play every cue at the subtle emphasis for a gesture the reader made, and give touch only to a finger (The Quiet Feel Rule).",
+      "Do keep Approve and Deny as equal peers at opposite ends of their row, with the standing grant set apart below.",
+      "Do draw every bar as one row on the content's own ground: a short title only where it helps, at most three floating glass groups of bare symbols, one prominent action trailing, Back and Close as symbols (The Title Bars Follow Liquid Glass Rule)."
     ],
     "donts": [
-      "**Don't** use coral for a status, crimson or spark for an action, or introduce indigo anywhere as a brand or accent hue.",
-      "**Don't** use a hue for decoration, or use crimson, spark yellow, olive or blue for anything but status.",
-      "**Don't** set text on `brand-solid`, turn a tooltip or ink tile coral, or put spark, paper or crow ink in product chrome.",
-      "**Don't** set product text in Fredoka, or code in anything but JetBrains Mono with ligatures off.",
-      "**Don't** write a token value in `app.css` or a component, or edit the generated `tokens.css`.",
-      "**Don't** set any text above weight 500, or pick a size without a role.",
-      "**Don't** use `rgba(0,0,0,·)` shadows; shadows come from the warm ink tints.",
-      "**Don't** use an ease-in curve, or let an exit run longer than its entrance.",
-      "**Don't** keep an arrived surface moving: no pulse or attention loop on anything that is not live work.",
-      "**Don't** draw a focus indicator as a box-shadow, a border-colour change or a background, and don't stack a ring on a border.",
-      "**Don't** truncate on the control or link itself, which clips its hit area.",
-      "**Don't** render a text field under 16px on a phone or a coarse pointer.",
-      "**Don't** swap Solar for another icon set or for SF Symbols, or drop the duotone layer.",
-      "**Don't** use pill-shaped buttons; full rounding is for state pills, switches and dots.",
-      "**Don't** put a third control between Approve and Deny, or make one more salient than the other.",
-      "**Don't** show an empty state while data is loading, or claim zero while the hub connection is not live."
+      "Don't use coral for a status, crimson or spark for an action, or introduce indigo anywhere as a brand or accent hue.",
+      "Don't use a hue for decoration, or use crimson, spark yellow, olive or blue for anything but status.",
+      "Don't set text on `brand-solid`, turn a tooltip or ink tile coral, or put spark, paper or crow ink in product chrome.",
+      "Don't set product text in Fredoka, or code in anything but JetBrains Mono with ligatures off.",
+      "Don't write a token value in `app.css` or a component, or edit the generated `tokens.css`.",
+      "Don't set any text above weight 500, or pick a size without a role.",
+      "Don't use `rgba(0,0,0,·)` shadows; shadows come from the warm ink tints.",
+      "Don't use an ease-in curve, or let an exit run longer than its entrance.",
+      "Don't keep an arrived surface moving: no pulse or attention loop on anything that is not live work.",
+      "Don't send the reader away from where they asked, show a result the system hasn't confirmed, drop their state when something fails, or copy one flow's parts onto another that doesn't ask the same questions.",
+      "Don't let a reload, ×, Esc or a press outside cancel or lose work a surface started, or tell a failure in a toast that leaves on a timer.",
+      "Don't play a sound or a tap to announce something, or make one the only sign that something happened.",
+      "Don't draw the coral ring on a text field, editor or search strip (The Caret Rule), draw a control's focus as a box-shadow or a background, stack a ring on a border, or give a selection or a mode the ring's shape.",
+      "Don't truncate on the control or link itself, which clips its hit area.",
+      "Don't render a text field under 16px on a phone or a coarse pointer.",
+      "Don't swap Solar for another icon set or for SF Symbols, or drop the duotone layer.",
+      "Don't use pill-shaped buttons; full rounding is for state pills, switches and dots.",
+      "Don't put a third control between Approve and Deny, or make one more salient than the other.",
+      "Don't show an empty state while data is loading, or claim zero while the hub connection is not live.",
+      "Don't use a `group-has-*` utility anywhere in the dashboard: one such rule in the sheet makes every element put into the page restyle the whole rail, 20ms and more, whether its group is on the page or not. Style from a state the component sets on itself or its group (`group-data-*`), or from a sibling. `grep -rn \"group-has-\" apps/dashboard/src` finds none."
     ]
   }
 }
