@@ -12,7 +12,8 @@
  * budgets then missed at load 24 to 43, the same 555 elements taking 24 ms of
  * style against 10 to 14 on a quiet machine.
  *
- * A leg read over the limit is void and measured again (`LEG_TRIES`); each
+ * A leg read over the limit, or whose run threw {@link VoidTry}, is void and
+ * measured again (`LEG_TRIES`); each
  * leg's line names the files it read, each value at start, middle and end,
  * the try kept, its wait, and the load average beside them for reference.
  * A reading that cannot be taken stops the spec: there is no other gate.
@@ -32,6 +33,13 @@ const WAIT_MS = 20 * 60_000;
 const LEG_SAMPLE_MS = 1000;
 /** How many times a leg read over the limit is measured again. */
 const LEG_TRIES = 3;
+
+/**
+ * Thrown by a leg's run when the machine left that try nothing to read (its
+ * own setup ran past its bound on a loaded host): the try is void and run
+ * again, as a contended one is, and the run goes on to its checks.
+ */
+export class VoidTry extends Error {}
 
 /** The machine's pressure now; throws, naming what it reads, when it cannot be read. */
 export const machineQuiet = (): MachinePressure => {
@@ -96,8 +104,14 @@ export async function quietLeg(
       () => readings.push(machineQuiet()),
       LEG_SAMPLE_MS
     );
+    let voided = "";
     try {
       await run();
+    } catch (error) {
+      if (!(error instanceof VoidTry)) {
+        throw error;
+      }
+      voided = error.message;
     } finally {
       clearInterval(sampler);
     }
@@ -107,9 +121,15 @@ export async function quietLeg(
       readings[Math.floor(readings.length / 2)],
       readings.at(-1),
     ].filter((one): one is MachinePressure => one !== undefined);
-    const quiet = marks.every(isQuiet);
+    const quiet = marks.every(isQuiet) && voided === "";
     const gauge = machineGauge();
-    said = `machine pressure, cpu ${marks.map((one) => one.cpu).join(" / ")}, memory ${marks.map((one) => one.memory).join(" / ")} (${gauge.cpu}; ${gauge.memory}; start / middle / end), try ${attempt} (${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${quiet ? "" : `, CONTENDED (cpu ${gauge.limit.cpu} or more, or memory ${gauge.limit.memory} or more)`}`;
+    let verdict = quiet
+      ? ""
+      : `, CONTENDED (cpu ${gauge.limit.cpu} or more, or memory ${gauge.limit.memory} or more)`;
+    if (voided) {
+      verdict = `, VOID (${voided})`;
+    }
+    said = `machine pressure, cpu ${marks.map((one) => one.cpu).join(" / ")}, memory ${marks.map((one) => one.memory).join(" / ")} (${gauge.cpu}; ${gauge.memory}; start / middle / end), try ${attempt} (${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${verdict}`;
     console.log(`  ${name}: ${said}`);
     if (quiet) {
       break;

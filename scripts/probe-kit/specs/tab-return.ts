@@ -86,7 +86,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Heap, heapOf } from "../heap";
 import { type Kit, open, ROOT, type Spec } from "../kit";
-import { machineQuiet, quietLeg } from "../quiet";
+import { machineQuiet, quietLeg, VoidTry } from "../quiet";
 import {
   type Cost,
   census,
@@ -576,8 +576,10 @@ function sceneModel() {
       await Bun.sleep(50);
     }
     if ((counts.busy ?? 0) <= upTo) {
-      throw new Error(
-        `tab-return: ${turns} busy turns did not run within ${RELEASE_MS / 1000}s`
+      // A loaded host's turns run slow: the leg's try is void, and the
+      // next one's release waits for these as well as its own.
+      throw new VoidTry(
+        `${turns} busy turns did not run within ${RELEASE_MS / 1000}s`
       );
     }
   };
@@ -2142,6 +2144,89 @@ function checkPress(kit: Kit, back: Back): void {
   );
 }
 
+/**
+ * While a tab warms under a resting pointer, its pane is laid out unseen
+ * (`[data-pane-settling]`) and nothing in it is anyone's to reach: the
+ * pointer over the pane's middle lands outside it, no control in it takes
+ * focus (`focus()`, which Tab's order also skips), and on Chromium none of
+ * its nodes stands in the accessibility tree (the DevTools protocol's
+ * `Accessibility.queryAXTree`, every node in the pane, not ignored).
+ */
+async function checkWarmUnreachable(
+  kit: Kit,
+  page: Page,
+  input: CDPSession | null,
+  [front, pane]: [string, string],
+  engine: string
+): Promise<void> {
+  // The quiet tab in front, so the busy one has a pane to warm.
+  await away(page, front);
+  await page.waitForTimeout(SETTLE_MS);
+  await page
+    .locator(`[data-session-tab="${pane}"]`)
+    .filter({ visible: true })
+    .first()
+    .hover();
+  await page.waitForTimeout(REACH_MS);
+  const read = await page.evaluate((id) => {
+    const box = document.querySelector<HTMLElement>(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+    );
+    if (!box) {
+      return null;
+    }
+    const rect = box.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2
+    );
+    const before = document.activeElement as HTMLElement | null;
+    const focusable = [
+      ...box.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+      ),
+    ];
+    const took = focusable.filter((el) => {
+      el.focus({ preventScroll: true });
+      return document.activeElement === el;
+    }).length;
+    before?.focus({ preventScroll: true });
+    return {
+      warming: box.matches("[data-pane-settling]"),
+      hitInside: hit !== null && box.contains(hit),
+      hit: hit
+        ? `${hit.tagName.toLowerCase()}[${hit.getAttribute("data-slot") ?? ""}]`
+        : "nothing",
+      focusable: focusable.length,
+      took,
+    };
+  }, pane);
+  let named = Number.NaN;
+  if (input) {
+    const { root } = await input.send("DOM.getDocument", { depth: 0 });
+    const { nodeId } = await input.send("DOM.querySelector", {
+      nodeId: root.nodeId,
+      selector: `[data-slot="pane"][data-pane="${pane}"]`,
+    });
+    const { nodes } = await input.send("Accessibility.queryAXTree", {
+      nodeId,
+    });
+    named = nodes.filter((node) => !node.ignored).length;
+  }
+  await page.mouse.move(0, 0);
+  const said = read
+    ? `${read.warming ? "warming" : "not warming"}; the pointer over its middle lands on ${read.hit}${read.hitInside ? ", inside it" : ", outside it"}; ${read.took} of its ${read.focusable} focusable controls took focus; ${Number.isNaN(named) ? "accessibility tree not read on this engine" : `${named} of its nodes in the accessibility tree`}`
+    : "no pane";
+  kit.check(
+    `${engine}: while the busy tab warms under the pointer its pane is laid out unseen, and neither the pointer, focus nor the accessibility tree reaches into it`,
+    read?.warming === true &&
+      !read.hitInside &&
+      read.took === 0 &&
+      (Number.isNaN(named) || named === 0),
+    said
+  );
+}
+
 /** Each read of the loops in panes off screen (`hiddenLoopsOf`), by the leg it was read in. */
 type LoopRead = { scene: string } & Awaited<ReturnType<typeof hiddenLoopsOf>>;
 /** Leg 3's readings: each silent session's pane once shown (`silentStateOf`). */
@@ -2655,7 +2740,14 @@ const run = async (kit: Kit) => {
   // The busy tab away (the desk leaves the quiet one in front), its tail
   // streamed full: every row a busy return mounts is a live turn streamed
   // while it was away, whatever a contended leg's retry added since.
-  await scene.release(PRIMED_TURNS);
+  // Run slow on a loaded host, they are left to finish: the first leg's
+  // release waits for them with its own.
+  await scene.release(PRIMED_TURNS).catch((error: unknown) => {
+    if (!(error instanceof VoidTry)) {
+      throw error;
+    }
+    kit.note(`priming: ${error.message}; the first leg waits for them`);
+  });
   await isolated.page.waitForTimeout(LANDED_MS);
 
   const backs: Back[] = [];
@@ -2815,6 +2907,9 @@ const run = async (kit: Kit) => {
     // A keyboard return is untraced on every engine: the strip's own key, timed by the page.
     const traced = how === "pointer" ? input : null;
     const psi = await quietLeg(name, async () => {
+      // A try read only for itself: a void one leaves nothing behind.
+      got.read = undefined;
+      got.page = undefined;
       let before: Clock | null = null;
       if (kind === "past") {
         before = await clockOf(page, to);
@@ -2852,8 +2947,11 @@ const run = async (kit: Kit) => {
         );
       }
     });
+    // Every try void (its turns too slow each time): the leg is a failed
+    // check, and the run goes on to the rest and its checks.
     if (!got.read) {
-      throw new Error(`tab-return: ${name} read nothing`);
+      kit.check(`${name}: a try ran whole`, false, psi);
+      return;
     }
     // Its turns held, nothing moves the busy transcript after its window.
     const after =
@@ -2877,6 +2975,13 @@ const run = async (kit: Kit) => {
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");
   await checkPaneLookup(kit, isolated.page, busy);
+  await checkWarmUnreachable(
+    kit,
+    isolated.page,
+    isolated.input,
+    [front, busy],
+    "Chromium"
+  );
   await leg(
     isolated,
     `1c: busy, back after ${SHORT_MS / 1000}s, pressed ${PRESS_IN_STAGING_MS}ms after the reach, its rows still staged`,
@@ -3004,6 +3109,7 @@ const run = async (kit: Kit) => {
   if (process.env.TAB_RETURN_LEGS === "busy") {
     await isolated.page.close();
     const webkit = await desk([front, busy, previewed], front, "webkit");
+    await checkWarmUnreachable(kit, webkit.page, null, [front, busy], "WebKit");
     await leg(
       webkit,
       `1a (WebKit): busy, back after ${SHORT_MS / 1000}s`,
