@@ -661,8 +661,7 @@ export const STREAM_RELAY_WORDS = {
     `Cloudflare did not add ${name} (${said}). Add the record above by hand, or paste a token that can edit its zone.`,
 
   router: "Forward the ports on the router",
-  routerNote:
-    "Forward these on your router. The last step proves they're open from outside.",
+  routerNote: "The last step proves they're open from outside.",
   forwards: forwardsOf,
   forwardsLabel: "The forwards to make",
   copyRecord: "Copy record",
