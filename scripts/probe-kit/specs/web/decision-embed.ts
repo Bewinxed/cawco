@@ -132,11 +132,21 @@
  *    Needs you), on the dashboard's own stage, in Chromium and
  *    WebKit: every canvas draws, no frame requests `/api/*`, and nothing
  *    logs a console error, answers 400 or more or fails.
+ * 17. A real page of the owner's draws whole: the project page's head and
+ *    view strip (fixtures/decision-pages/project-head.oui, its Previews
+ *    naming the canvases it was published with), each canvas one of the
+ *    project page's states files on the dashboard's own stage, at 1440
+ *    light and 390 dark, in Chromium and WebKit: every Preview draws every
+ *    story it names, each frame drawn with words or a drawing at its own
+ *    width; nothing inside a frame stands past its frame's edges; the page
+ *    never scrolls sideways; and nothing logs a console error, answers 400
+ *    or more or fails.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  *   bun scripts/probe-kit/run.ts web decision-embed --leg one-yjs   # 15 alone
  *   bun scripts/probe-kit/run.ts web decision-embed --leg loads-clean   # 13 alone
  *   bun scripts/probe-kit/run.ts web decision-embed --leg hubless   # 16 alone
+ *   bun scripts/probe-kit/run.ts web decision-embed --leg project-head   # 17 alone
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { cpSync, mkdirSync, readFileSync } from "node:fs";
@@ -2003,7 +2013,7 @@ const SHARED_PROGRAM = [
   `one = Preview("${SHARED_ID}", "The note alone", ["Note"])`,
   `pair = Preview("${SHARED_PAIR_ID}", "The reply beside the pinned note", ["Reply", "Pinned"])`,
 ].join("\n");
-/** `--leg one-yjs`: item 15 alone; `--leg loads-clean`: 13 alone; `--leg hubless`: 16 alone. */
+/** `--leg one-yjs`: item 15 alone; `--leg loads-clean`: 13 alone; `--leg hubless`: 16 alone; `--leg project-head`: 17 alone. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -2367,6 +2377,233 @@ async function hublessOnDashboard(kit: Kit): Promise<void> {
   }
 }
 
+/** 17. The owner's project-head page, as published: each Preview's canvas by the id it names, and the states file it draws. */
+const PROJECT_HEAD_PAGE = "project-head";
+const PROJECT_HEAD_PROGRAM = readFileSync(
+  join(ROOT, "scripts/probe-kit/fixtures/decision-pages/project-head.oui"),
+  "utf8"
+);
+const PROJECT_DIR = "src/lib/cawco/project";
+const PROJECT_HEAD_CANVASES: Record<string, string> = {
+  "0df559ee-02d2-44e7-a671-8a3f85325ed7": "ProjectTopSeatRow",
+  "3e119ce1-32b9-4145-a73a-7eb1eaf6ddd5": "ProjectTopSeatBar",
+  "c46c8204-6257-4565-9b90-cbef08b149c9": "MarkHuesTeal",
+  "ef5daf7a-dcde-40c7-80ca-a1e9344c0ba8": "MarkHuesCrimson",
+  "f5d0e54b-3fa4-4291-912b-14565e5c4c69": "MarkHuesDarkRed",
+  "f934164c-703b-499f-8030-5831841d8d20": "ProjectTopAskChat",
+  "820f59cb-9a92-4b1b-bc8f-5b8c645514ca": "ProjectTopAskSparkles",
+  "b6499294-d34a-4dd7-8114-ed2158c9275d": "ProjectTopCountDot",
+  "19890354-e7a4-480f-8e64-094f48e69e6e": "ProjectTopCountPlain",
+  "42669c34-e632-4a8e-b387-a1150e40f67e": "ProjectTopStripCapsule",
+  "598abc8b-352f-4c8e-9da2-299c4e1199d0": "ProjectTopStripLoose",
+};
+/** Every Preview the program names: one embed each. */
+const PROJECT_HEAD_PREVIEWS = [
+  ...PROJECT_HEAD_PROGRAM.matchAll(/= Preview\("/g),
+].length;
+
+/** What stands past its frame's edges inside each rest frame of an embed, read in the embed (the strip's ruler, out of sight by design, aside). */
+function frameSpills(): string[] {
+  return [
+    ...document.querySelectorAll<HTMLElement>(
+      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-body'
+    ),
+  ].flatMap((body) => {
+    const edge = body.getBoundingClientRect();
+    return [...body.querySelectorAll<HTMLElement>("*")]
+      .filter((el) => {
+        if (el.closest("[data-views-ruler]")) {
+          return false;
+        }
+        const box = el.getBoundingClientRect();
+        return (
+          box.width > 0 &&
+          box.height > 0 &&
+          (box.left < edge.left - 0.5 ||
+            box.right > edge.right + 0.5 ||
+            box.top < edge.top - 0.5 ||
+            box.bottom > edge.bottom + 0.5)
+        );
+      })
+      .map(
+        (el) =>
+          `${el.closest<HTMLElement>(".cawco-frame")?.dataset.cawcoStory}: <${el.tagName.toLowerCase()}${el.dataset.slot ? ` data-slot=${el.dataset.slot}` : ""}> past its frame`
+      );
+  });
+}
+
+async function projectHeadPage(kit: Kit): Promise<void> {
+  let refusal = "";
+  try {
+    checkProgram(PROJECT_HEAD_PROGRAM);
+  } catch (error) {
+    refusal = (error as Error).message;
+  }
+  kit.check(
+    `the hub's check keeps the ${PROJECT_HEAD_PAGE} program`,
+    refusal === "",
+    refusal
+  );
+  const stage = await startDecisionStage(
+    new Map([[PROJECT_HEAD_PAGE, PROJECT_HEAD_PROGRAM]]),
+    Object.fromEntries(
+      Object.entries(PROJECT_HEAD_CANVASES).map(([id, name]) => [
+        id,
+        [`${PROJECT_DIR}/${name}.stories.ts`],
+      ])
+    ),
+    { root: APP, kit: true }
+  );
+  try {
+    for (const engine of ["chromium", "webkit"] as const) {
+      for (const [view, theme] of [
+        ["desk", "light"],
+        ["phone", "dark"],
+      ] as const) {
+        const leg = `${engine} ${view === "desk" ? "1440px light" : "390px dark"}, ${PROJECT_HEAD_PAGE}`;
+        const page = await kit.page(view, {
+          engine,
+          theme,
+          init: [CAWCO_BRIDGE],
+        });
+        const faults = faultsOf(page);
+        await page.goto(stage.pageUrl(PROJECT_HEAD_PAGE, theme), {
+          waitUntil: "load",
+        });
+        await page.waitForFunction(
+          ({ n, selector }) => document.querySelectorAll(selector).length === n,
+          { n: PROJECT_HEAD_PREVIEWS, selector: EMBED_FRAME },
+          { timeout: 60_000 }
+        );
+        // Each embed reached as the person scrolls to it, and read once its
+        // fade has landed in view: WebKit leaves a fade that began out of
+        // view running past the kit's 10 s wait.
+        const waited: string[] = [];
+        for (const handle of await page.$$(EMBED_FRAME)) {
+          await handle.evaluate((el) => el.scrollIntoView({ block: "center" }));
+          const landed = await handle
+            .evaluate(
+              (el, ms) =>
+                new Promise<boolean>((done) => {
+                  const until = performance.now() + ms;
+                  const look = () => {
+                    if (
+                      el.hasAttribute("data-drawn") &&
+                      el.getBoundingClientRect().height > 0 &&
+                      getComputedStyle(el).opacity === "1"
+                    ) {
+                      done(true);
+                    } else if (performance.now() > until) {
+                      done(false);
+                    } else {
+                      requestAnimationFrame(look);
+                    }
+                  };
+                  look();
+                }),
+              STAGE_WAIT_MS
+            )
+            .catch(() => false);
+          if (!landed) {
+            waited.push(
+              await handle.evaluate(
+                (el) =>
+                  `${el.getAttribute("src")?.match(/([A-Za-z]+)\.stories/)?.[1]}: ${Math.round(el.getBoundingClientRect().height)}px tall, opacity ${getComputedStyle(el).opacity}, ${el.hasAttribute("data-drawn") ? "loaded" : "not loaded"}`
+              )
+            );
+          }
+        }
+        kit.check(
+          `${leg}: each Preview, scrolled to, stands drawn and faded in (${waited.length} still waiting)`,
+          waited.length === 0,
+          waited.join("\n    ")
+        );
+        // Once drawn, each picture holds its box: read every frame for 1 s.
+        const moved = await page.evaluate(
+          (selector) =>
+            new Promise<string[]>((done) => {
+              const boxes = () =>
+                [...document.querySelectorAll(selector)].map((el) => {
+                  const box = el.getBoundingClientRect();
+                  return `${el.getAttribute("src")?.match(/([A-Za-z]+)\.stories/)?.[1]} ${Math.round(box.width * 10) / 10}x${Math.round(box.height * 10) / 10}`;
+                });
+              const first = boxes();
+              const seen = new Set<string>();
+              const until = performance.now() + 1000;
+              const look = () => {
+                for (const [i, one] of boxes().entries()) {
+                  if (one !== first[i]) {
+                    seen.add(`${first[i]} became ${one}`);
+                  }
+                }
+                if (performance.now() < until) {
+                  requestAnimationFrame(look);
+                } else {
+                  done([...seen]);
+                }
+              };
+              requestAnimationFrame(look);
+            }),
+          EMBED_FRAME
+        );
+        kit.check(
+          `${leg}: once drawn, every picture holds its box for 1 s (${moved.length} moved)`,
+          moved.length === 0,
+          moved.slice(0, 12).join("\n    ")
+        );
+        const { embeds, undrawn } = await readEmbeds(page);
+        await settle(page, 2000);
+        const drew = embeds.flatMap(embedDrawFaults);
+        kit.check(
+          `${leg}: its ${PROJECT_HEAD_PREVIEWS} Previews each draw every story they name (${embeds.map((one) => `${one.file} ${one.frames.map((f) => `${f.story} ${f.state} ${f.w}px`).join(" ")}`).join(", ")})`,
+          embeds.length === PROJECT_HEAD_PREVIEWS &&
+            undrawn.length === 0 &&
+            drew.length === 0 &&
+            embeds.every(
+              (one) =>
+                one.frames.length === one.named.length &&
+                one.frames.every((f) => f.state === "drawn" && f.zoom === 1)
+            ),
+          [...undrawn, ...drew].join("\n    ")
+        );
+        const spills: string[] = [];
+        for (const handle of await page.$$(EMBED_FRAME)) {
+          const frame = await handle.contentFrame();
+          spills.push(...((await frame?.evaluate(frameSpills)) ?? []));
+        }
+        kit.check(
+          `${leg}: nothing in any frame stands past its edges (${spills.length} found)`,
+          spills.length === 0,
+          [...new Set(spills)].slice(0, 12).join("\n    ")
+        );
+        const sideways = await page.evaluate(() => {
+          const scroller =
+            document.querySelector<HTMLElement>("[data-slot=page-scroll]") ??
+            document.documentElement;
+          return {
+            page: scroller.scrollWidth - scroller.clientWidth,
+            doc:
+              document.documentElement.scrollWidth -
+              document.documentElement.clientWidth,
+          };
+        });
+        kit.check(
+          `${leg}: the page never scrolls sideways (its scroller ${sideways.page}px over, the document ${sideways.doc}px)`,
+          sideways.page <= 0 && sideways.doc <= 0
+        );
+        kit.check(
+          `${leg}: the page and its canvases log no console error, answer no request with 400 or more and fail none (${faults.length} found)`,
+          faults.length === 0,
+          [...new Set(faults)].slice(0, 12).join("\n    ")
+        );
+        await page.close();
+      }
+    }
+  } finally {
+    await stage.stop();
+  }
+}
+
 /** How long an embed of the shared page has to draw: its first load optimizes the fixture's dependencies. */
 const STAGE_WAIT_MS = 120_000;
 
@@ -2374,6 +2611,10 @@ const spec: Spec = {
   name: "decision-embed",
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every assertion in the order the spec's head lists them
   run: async (kit: Kit) => {
+    if (ONLY_LEG === "project-head") {
+      await projectHeadPage(kit);
+      return;
+    }
     for (const [name, program] of [
       [NAME, PROGRAM],
       [NAMED_PAGE, NAMED_PROGRAM],
@@ -3014,6 +3255,7 @@ const spec: Spec = {
       await oneYjs(kit, stage);
       await oneYjsOnDashboard(kit);
       await hublessOnDashboard(kit);
+      await projectHeadPage(kit);
     } finally {
       await stage.stop();
     }

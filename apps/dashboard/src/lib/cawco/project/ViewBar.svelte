@@ -25,7 +25,7 @@
    *
    * The pill and "+" press to --press-scale over --dur-toggle.
    */
-  import { type Snippet, untrack } from "svelte";
+  import { type Component, type Snippet, untrack } from "svelte";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -53,6 +53,7 @@
     ontoggleneeds,
     onnewsession,
     tools,
+    askIcon: IconAsk = IconPlus,
   }: {
     /** What the page sets after the pill: the tasks' filter while one stands. */
     tools?: Snippet;
@@ -66,6 +67,8 @@
     ontoggleneeds: () => void;
     /** Ask Caw: his panel on a new thread. */
     onnewsession: () => void;
+    /** Ask Caw's glyph: the bare "+" unless the page names another. */
+    askIcon?: Component<{ "aria-hidden"?: "true" }>;
   } = $props();
 
   /**
@@ -230,7 +233,7 @@
         title="Ask Caw"
         variant="ghost"
       >
-        <IconPlus aria-hidden="true" />
+        <IconAsk aria-hidden="true" />
       </Button>
     </div>
   </div>
