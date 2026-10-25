@@ -575,7 +575,10 @@ const installAt = async (
     install.dir,
     `command -v ${install.manager} >/dev/null 2>&1 || { echo '${NO_MANAGER}'; exit 127; }\n${command}`,
     STAGE_CLONE_INSTALL_MS,
-    boundary
+    boundary,
+    undefined,
+    // A heavy run: it waits for one of the machine's heavy-work slots.
+    `the stage's install of ${where}@${boundary.id.slice(0, 8)}`
   );
   if (result.stdout.includes(NO_MANAGER)) {
     throw new Error(

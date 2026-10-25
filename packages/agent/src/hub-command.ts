@@ -13,6 +13,12 @@ import {
   queueWords,
   type WorkspaceRef,
 } from "@cawco/core";
+import {
+  HEAVY_SLOT_ENV,
+  machinePlace,
+  SlotWaitStopped,
+  takeSlot,
+} from "@cawco/core/heavy-slots";
 import { workspaceScratchDir } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
@@ -325,6 +331,67 @@ const lines = (each: (line: string) => void) => {
 };
 
 /**
+ * Runs `go` under one of the machine's heavy-work slots (core
+ * heavy-slots.ts), taken for `who` and let go as it ends: what a merge check
+ * and a stage clone's install run under, so a machine runs no more of them,
+ * and of every other heavy run (`bun run check`, a probe run), than it has
+ * room for. `go` gets the lease's words, for the command's environment
+ * ({@link HEAVY_SLOT_ENV}): what it runs (a merge check's `bun run check
+ * --all`) takes no slot of its own. A run past the slots waits in line in
+ * the order it came, each change of its wait told to the hub under the
+ * run's id as the `heavy` slot; its limit's clock has not started then
+ * ({@link spawned} starts it). A cancel while it waits ({@link cancelCommand})
+ * ends the wait, and it answers `cancelled`; a wait past the run's
+ * `queueMaxMs` fails it, naming who held every slot.
+ */
+const underSlot = async (
+  who: string,
+  run: CommandRun | undefined,
+  go: (words: string) => Promise<CommandResult>
+): Promise<CommandResult> => {
+  const stop = new AbortController();
+  const waiting: Running = {
+    runId: run?.id,
+    words: who,
+    stop: () => stop.abort(),
+  };
+  live.add(waiting);
+  let told = false;
+  let lease: Awaited<ReturnType<typeof takeSlot>>;
+  try {
+    lease = await takeSlot(machinePlace(), who, {
+      who,
+      signal: stop.signal,
+      waitMs: run?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
+      say: (line) => console.info(`[heavy-slot] ${line}`),
+      waiting: (holders) => {
+        told = true;
+        tellWait(run, { slot: "heavy", holders });
+      },
+    });
+  } catch (error) {
+    if (error instanceof SlotWaitStopped) {
+      return CANCELLED;
+    }
+    return {
+      exitCode: 124,
+      stdout: "",
+      stderr: `CawCo: the command did not run: ${error instanceof Error ? error.message : String(error)}.\n`,
+    };
+  } finally {
+    live.delete(waiting);
+    if (told) {
+      tellWait(run, null);
+    }
+  }
+  try {
+    return await go(lease.words);
+  } finally {
+    lease.release();
+  }
+};
+
+/**
  * `CONTROL_RUN_COMMAND`: runs `cmd` in `cwd` on this machine, killed with its
  * whole process group after `timeoutMs` of its own work (exit 124): the
  * clock stands while the command waits for a shared machine slot
@@ -349,13 +416,19 @@ const lines = (each: (line: string) => void) => {
  * sandbox, the same scratch dir as `$TMPDIR`, the same pid namespace. A boundary this
  * machine cannot start rejects with its reason; the command never runs
  * outside it.
+ *
+ * A heavy run starts only under one of the machine's heavy-work slots
+ * ({@link underSlot}): a merge check (the run names its `gate`), or a
+ * command its caller here names `heavy` (stage-clone.ts's install), in
+ * these words.
  */
 export async function runHubCommand(
   cwd: unknown,
   cmd: unknown,
   timeoutMs: unknown,
   workspace?: unknown,
-  run?: unknown
+  run?: unknown,
+  heavy?: string
 ): Promise<CommandResult> {
   const named = isCommandRun(run) ? run : undefined;
   if (
@@ -383,16 +456,14 @@ export async function runHubCommand(
   if (named && cancelledEarly.delete(named.id)) {
     return CANCELLED;
   }
-  return await spawned({
-    file,
-    args,
-    cwd,
-    cmd,
-    env: {},
-    timeoutMs,
-    workspace,
-    named,
-  });
+  const start = (env: Record<string, string>) =>
+    spawned({ file, args, cwd, cmd, env, timeoutMs, workspace, named });
+  const who = named?.gate ?? heavy;
+  return who === undefined
+    ? await start({})
+    : await underSlot(who, named, (words) =>
+        start({ [HEAVY_SLOT_ENV]: words })
+      );
 }
 
 const CANCELLED: CommandResult = {

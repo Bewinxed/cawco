@@ -7,7 +7,6 @@
  * passes: the key of the inputs it passed on, which check.ts reads to skip
  * it on inputs it passed on (the last few kept).
  */
-import { availableParallelism } from "node:os";
 import {
   type Pid,
   signalGroup,
@@ -18,7 +17,6 @@ import {
 const TIMEOUT_MS = 240_000;
 /** Grace between asking a timed-out check to stop and killing it. */
 const KILL_GRACE_MS = 5000;
-const AT_ONCE = Math.max(4, Math.floor(availableParallelism() / 2));
 
 export interface Check {
   /** A check, earlier in the list, that ends before this one starts. */
@@ -138,13 +136,14 @@ const report = (outcome: Outcome): void => {
 };
 
 /**
- * Runs `checks`, at most {@link AT_ONCE} at a time in the order given, and
- * exits: 0 when every one passed, 1 when any did not. `what` names the run
- * in its last line.
+ * Runs `checks`, at most `atOnce` at a time in the order given, and exits:
+ * 0 when every one passed, 1 when any did not. `what` names the run in its
+ * last line.
  */
 export const runChecks = async (
   what: string,
   checks: Check[],
+  atOnce: number,
   /** Printed after the verdict line's count. */
   tail = ""
 ): Promise<never> => {
@@ -160,7 +159,7 @@ export const runChecks = async (
   const started = performance.now();
   const ended = new Map<string, Promise<Outcome>>();
   const outcomes: Outcome[] = [];
-  let slots = AT_ONCE;
+  let slots = atOnce;
   const waiting: (() => void)[] = [];
   const slot = async (): Promise<void> => {
     if (slots > 0) {

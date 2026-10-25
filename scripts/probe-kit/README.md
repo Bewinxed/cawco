@@ -22,26 +22,30 @@ session's MCP server's daemon included (`fleet-leaves-nothing`).
 
 ## One machine, so many runs at once
 
-A run takes one of the machine's probe slots (`slot.ts`) before its first
-dashboard build, dev or preview server, browser or scratch fleet, and holds
-it until its process ends, however it ends: the slot is a `flock(2)` on a
-file in `~/.cawco/workspace-cache/probe-slots/`, which every workspace and
-the host share, and the kernel frees it when its holder dies (a SIGKILL
-included). A machine has one slot per 6 cores and per 16 GiB, whichever is
-fewer (8 on obelisk: 48 cores, 188 GiB); `slot.ts` says why. A run past the
-slots waits in line, in the order it came, and says what it waits on:
+A run takes one of the machine's heavy-work slots (`slot.ts`, core
+`heavy-slots.ts`) before its first dashboard build, dev or preview server,
+browser or scratch fleet, and holds it until its process ends, however it
+ends: the slot is a `flock(2)` on a file in
+`~/.cawco/workspace-cache/heavy-slots/`, which every workspace and the host
+share, and the kernel frees it when its holder dies (a SIGKILL included).
+The pool is the machine's one: a work item's merge checks, a stage clone's
+install and every `bun run check` take from it too. A machine has one slot
+per 6 cores and per 16 GiB, whichever is fewer (8 on obelisk: 48 cores,
+188 GiB); `heavy-slots.ts` says why. A run past the slots waits in line, in
+the order it came, and says what it waits on:
 
 ```
-… waiting for a probe slot: 8 of 8 held by composer-canvas@399853c2 (4m02s), …; 2 run(s) ahead in line (1m10s so far)
-… probe slot 3 of 8 taken by decision-embed@7f626068 after waiting 6m14s; it and what it starts run at nice 10 or more
+… waiting for a heavy-work slot: 8 of 8 held by composer-canvas@399853c2 (4m02s), …; 2 run(s) ahead in line (1m10s so far)
+… heavy-work slot 3 of 8 taken by decision-embed@7f626068 after waiting 6m14s
+… it and what it starts run at nice 10 or more
 ```
 
 A wait past an hour fails the run with who held every slot. Whatever a
 holder starts (a fleet, an `ownHome` spec's process, a probe script) runs
 under its slot and takes none of its own, at nice 10, so the person's own
-sessions win the CPU. `bun run check` takes no slot: warm, as a gate runs
-it, it is 9 CPU-s and 0.5 GiB over 8 s; cold, 301 CPU-s and 9.5 GiB over
-60 s on 8 cores, once per workspace.
+sessions win the CPU. `heavy-slots` proves that more merge checks and
+`bun run check` runs than slots wait their turn, and `probe-slots` the
+line itself.
 
 Every browser the kit launches runs under a memory cap (`browser-cap.ts`):
 once its process tree holds more than 6 GiB resident, the tree is killed

@@ -89,6 +89,7 @@
     "./shell-shortcuts": "./src/shell-shortcuts.ts",
     "./paths": "./src/paths.ts",
     "./flock": "./src/flock.ts",
+    "./heavy-slots": "./src/heavy-slots.ts",
     "./no-huge-pages": "./src/no-huge-pages.ts",
     "./state-file": "./src/state-file.ts",
     "./workspace-policy": "./src/workspace-policy.ts",

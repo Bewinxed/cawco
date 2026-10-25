@@ -2689,12 +2689,15 @@ export const QUEUE_MARKER = "CAWCO-QUEUE";
  * are the runner's own, never a marker's: `folder`, a command waiting behind
  * the one running in its directory (the machine runs those one after
  * another), and `boundary`, one waiting for its workspace's boundary to start
- * (agent hub-command.ts).
+ * (agent hub-command.ts). `heavy` is one of the machine's heavy-work slots
+ * (heavy-slots.ts): the runner waits for it before a merge check starts, and
+ * `bun run check` prints its marker when it waits for one itself.
  */
 export const QUEUE_SLOTS = {
   boundary: "its workspace's boundary to start",
   build: "the Mac's build slot",
   folder: "its turn in its folder",
+  heavy: "one of its machine's heavy-work slots",
   sim: "a simulator slot",
   template: "the simulator template lock",
 } as const;

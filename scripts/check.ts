@@ -40,10 +40,24 @@
  *
  * Every pass a step skips by is written by that step's own pass, under
  * node_modules/.cache/cawco/, keyed by the content it read.
+ *
+ * A run holds one of the machine's heavy-work slots (core heavy-slots.ts)
+ * from before it reads the tree until it ends, taken in line behind every
+ * other heavy run on the machine (merge checks, other checks, probe runs);
+ * one run under a merge check's slot (its environment says so) takes none
+ * of its own. Its own parallelism is its share of the machine's cores as it
+ * starts: the cores over the runs holding a slot then ({@link SHARE}).
  */
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { basename, dirname, join, normalize } from "node:path";
+import {
+  coresPerRun,
+  heldAbove,
+  machinePlace,
+  takeSlot,
+} from "../packages/core/src/heavy-slots";
 import { type Check, runChecks } from "./lib/checks";
 import { diskRoomOrExit } from "./lib/disk-room";
 
@@ -54,16 +68,6 @@ const BUN = process.execPath;
 const STAMPS = join(ROOT, "node_modules/.cache/cawco");
 mkdirSync(STAMPS, { recursive: true });
 const DASHBOARD = "apps/dashboard";
-/**
- * `golar tsc -b`'s threads. Measured 2026-10-23 by this workspace's cgroup
- * CPU, every project rebuilt (`--force`), on 48 cores at load 50–66: the
- * default 44.9, 44.8, 49.0, 53.2 CPU-s (5.4–8.7 s); `--builders 8
- * --checkers 1` 36.3, 45.8, 42.3, 39.6 (8.0–19.3 s); `--builders 16
- * --checkers 2` 45.4, 43.2; `--singleThreaded` 33.3, 33.5 but 25.9–28.4 s,
- * longer than the check's longest step (openapi:check, ~20 s). Nothing
- * changed: 1.7–1.8 CPU-s for each.
- */
-const TSC_FLAGS = ["--builders", "8", "--checkers", "1"];
 
 const args = process.argv.slice(2);
 const ALL = args.includes("--all");
@@ -71,6 +75,51 @@ const DRY = args.includes("--dry");
 const baseArg = args.includes("--base")
   ? args[args.indexOf("--base") + 1]
   : undefined;
+
+/* ---------------------------------------------------------- the slot */
+
+const PLACE = machinePlace();
+if (!DRY) {
+  const above = heldAbove(PLACE);
+  if (above) {
+    console.log(`check: runs under its caller's heavy-work ${above}`);
+  } else {
+    // The queue marker (core harness.ts QUEUE_MARKER): a CawCo command's
+    // clock stands from the wait line to the held line.
+    let waited = false;
+    await takeSlot(PLACE, "bun run check", {
+      waiting: (holders) => {
+        waited = true;
+        console.log(`CAWCO-QUEUE wait heavy: ${holders}`);
+      },
+    });
+    if (waited) {
+      console.log("CAWCO-QUEUE held heavy");
+    }
+  }
+}
+/** This run's share of the machine's cores: the cores over the heavy runs holding a slot as it starts. */
+const SHARE = coresPerRun(PLACE);
+/**
+ * `golar tsc -b`'s threads: 8, or the run's {@link SHARE} when the machine
+ * is shared past that. Measured 2026-10-23 by this workspace's cgroup CPU,
+ * every project rebuilt (`--force`), on 48 cores at load 50–66: the default
+ * 44.9, 44.8, 49.0, 53.2 CPU-s (5.4–8.7 s); `--builders 8 --checkers 1`
+ * 36.3, 45.8, 42.3, 39.6 (8.0–19.3 s); `--builders 16 --checkers 2` 45.4,
+ * 43.2; `--singleThreaded` 33.3, 33.5 but 25.9–28.4 s, longer than the
+ * check's longest step (openapi:check, ~20 s). Nothing changed: 1.7–1.8
+ * CPU-s for each.
+ */
+const TSC_FLAGS = ["--builders", String(Math.min(8, SHARE)), "--checkers", "1"];
+/**
+ * Checks run at once: half the cores this process may run on, 4 at least,
+ * and never past the run's {@link SHARE} (6 with obelisk's eight slots
+ * held, where it was 24 before 2026-10-25).
+ */
+const AT_ONCE = Math.min(
+  Math.max(4, Math.floor(availableParallelism() / 2)),
+  SHARE
+);
 
 const git = async (...argv: string[]): Promise<string | undefined> => {
   const result = await Bun.$`git -C ${ROOT} ${argv}`.quiet().nothrow();
@@ -623,9 +672,13 @@ if (DRY) {
   }
   process.exit(0);
 }
+console.log(
+  `check: ${AT_ONCE} checks at once, golar tsc --builders ${TSC_FLAGS[1]}: ${SHARE} core(s) its share of the machine's`
+);
 await runChecks(
   "check",
   checks,
+  AT_ONCE,
   skipped.length > 0
     ? ` (${skipped.length} more unchanged since their last pass)`
     : ""

@@ -1,5 +1,5 @@
 /**
- * The machine's probe slots (slot.ts): runs past the slots wait in line and
+ * The machine's heavy-work slots (slot.ts): runs past the slots wait in line and
  * then run, a dead holder's slot is taken at once, a wait that runs out
  * fails saying who held every slot. Each run is a process of its own
  * (slot-child.ts) on a slot folder of the spec's own, so the machine's own
@@ -9,7 +9,7 @@
  * - (a) Four runs on two slots, started 300 ms apart, each holding 2.5 s:
  *   the spec's own reading of the slot files (every 50 ms, the slots it can't
  *   lock) never finds more than two held and finds two; the third and
- *   fourth each print `waiting for a probe slot: 2 of 2 held by …`, naming
+ *   fourth each print `waiting for a heavy-work slot: 2 of 2 held by …`, naming
  *   both holders, then take a slot in the order they came, the third saying
  *   how long it waited; each holder runs at nice 10, and a child it starts
  *   takes no slot of its own (INHERITED) and runs at nice 10 too.
@@ -17,7 +17,7 @@
  *   named it while it lived, and takes the slot within a second of the kill.
  * - (c) A waiter SIGKILLed in line holds up nobody behind it: once the
  *   holder ends, the run behind the dead one takes the slot.
- * - (d) A wait that runs out: the run ends with `no probe slot came free in
+ * - (d) A wait that runs out: the run ends with `no heavy-work slot came free in
  *   2s for … : 1 of 1 held by …`.
  * - (e) The machine's own count, from its cores and memory.
  *
@@ -31,17 +31,21 @@ import {
   tryLock,
   unlock,
 } from "../../../packages/core/src/flock";
+import {
+  HEAVY_SLOT_ENV,
+  machineSlots,
+} from "../../../packages/core/src/heavy-slots";
 import type { Kit, Spec } from "../kit";
-import { machineSlots, SLOT_HELD_ENV, SLOT_NICE } from "../slot";
+import { SLOT_NICE } from "../slot";
 
 const CHILD = join(import.meta.dir, "..", "slot-child.ts");
 const POLL_MS = 200;
 /** A run's line once it holds a slot of two. */
-const SLOT_TAKEN = /probe slot \d of 2 /;
+const SLOT_TAKEN = /heavy-work slot \d of 2 /;
 const TOOK_AFTER_WAITING =
-  /probe slot \d of 2 taken by third@\S+ after waiting \ds/;
+  /heavy-work slot \d of 2 taken by third@\S+ after waiting \ds/;
 const RAN_OUT =
-  /no probe slot came free in 2s for late@\S+: 1 of 1 held by hog@\S+ \(\ds\)/;
+  /no heavy-work slot came free in 2s for late@\S+: 1 of 1 held by hog@\S+ \(\ds\)/;
 /** A run's nice, from its TAKEN or INHERITED line. */
 const NICE = / nice (\d+)/;
 const niceOf = (line: string): number => Number(NICE.exec(line)?.[1] ?? -1);
@@ -62,7 +66,7 @@ function start(
   waitMs = 60_000
 ): Child {
   const env = { ...process.env };
-  delete env[SLOT_HELD_ENV];
+  delete env[HEAVY_SLOT_ENV];
   const proc = Bun.spawn(
     [
       process.execPath,
@@ -166,13 +170,14 @@ async function inLine(kit: Kit, root: string): Promise<void> {
     `the most held at one reading: ${most}`
   );
   for (const run of [third, fourth]) {
-    const waiting = lineOf(run, "waiting for a probe slot");
+    const waiting = lineOf(run, "waiting for a heavy-work slot");
     kit.check(
       `(a) the ${run.name} run waits with a line naming both holders before it runs`,
-      waiting.includes("waiting for a probe slot: 2 of 2 held by") &&
+      waiting.includes("waiting for a heavy-work slot: 2 of 2 held by") &&
         waiting.includes("first@") &&
         waiting.includes("second@") &&
-        (at(run, "waiting for a probe slot") ?? 0) < (at(run, "TAKEN") ?? 0),
+        (at(run, "waiting for a heavy-work slot") ?? 0) <
+          (at(run, "TAKEN") ?? 0),
       waiting.slice(14)
     );
   }
@@ -214,7 +219,7 @@ async function deadHolder(kit: Kit, root: string): Promise<void> {
   const waiter = start(dir, 1, "patient", 1000);
   const waited = await said(
     waiter,
-    "waiting for a probe slot: 1 of 1 held by doomed@"
+    "waiting for a heavy-work slot: 1 of 1 held by doomed@"
   );
   const killedAt = Date.now();
   holder.proc.kill("SIGKILL");
@@ -236,7 +241,7 @@ async function deadWaiter(kit: Kit, root: string): Promise<void> {
   const holder = start(dir, 1, "holder", 2000);
   await said(holder, "TAKEN");
   const gone = start(dir, 1, "gone", 0);
-  await said(gone, "waiting for a probe slot");
+  await said(gone, "waiting for a heavy-work slot");
   const behind = start(dir, 1, "behind", 0);
   const queued = await said(behind, "1 run(s) ahead in line");
   gone.proc.kill("SIGKILL");
