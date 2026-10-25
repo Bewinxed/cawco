@@ -1168,12 +1168,7 @@ export function startPins(deps: PinsDeps): Pins {
       deps.post("cawco:pin-at", {
         id: tracked,
         ...(shown?.pill
-          ? {
-              mark: shownBox(shown, shown.pill),
-              box: shownStanding(shown),
-              // The host's card hangs from the pill as drawn: its foot keeps the tail corner.
-              tail: shown.pill.tail,
-            }
+          ? { mark: shownBox(shown, shown.pill), box: shownStanding(shown) }
           : {}),
       });
     }

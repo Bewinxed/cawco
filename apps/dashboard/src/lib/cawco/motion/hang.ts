@@ -4,33 +4,27 @@
  * card is a HangCard (components/ui/hang-card), which measures the neck and
  * attaches this: the session card and a finger's tab menu from their tab
  * (PaneTabs), Caw's panel, the machines and the Jump palette from the top
- * bar's glass, and a comment's thread from its pin (PinFloat).
+ * bar's glass.
  *
  * The card is a kit popover with HangCard's recipe (`hangCardVariants`) and stands
- * on the side of its anchor it hangs from (`from`), at side offset 0: under
- * its foot (the top bar's cards, the tab's), or beside its start or end
- * side (a thread beside its pin). The card's edge facing the anchor is cut
- * across the anchor's span and the anchor's flared foot each side of it
- * (the neck: `--neck-start`, `--neck-end`, `--neck-flare-start`,
- * `--neck-flare-end`, in the card's own coordinates along that edge: across
- * for a foot, down for a side), so the anchor's flanks run on into the
- * card's edge; on a flush side (`data-flush`) the card's corner there is
+ * on its anchor's foot, at side offset 0. Its top edge is cut across the
+ * anchor's span and the anchor's flared foot each side of it (the neck:
+ * `--neck-start`, `--neck-end`, `--neck-flare-start`, `--neck-flare-end`, in
+ * the card's own coordinates), so the anchor's flanks run down into the
+ * card's sides; on a flush side (`data-flush`) the card's top corner is
  * square and the anchor's flank runs straight on into the card's side. The
  * anchor draws its own foot (the tab's sheet and `.neck`, Caw's glass's
- * `.join`, the pin's PinFoot); the card writes the neck from what `hang`
- * reports. One mechanism, one axis: everything below that runs across the
- * foot runs down the side for a card hung beside its anchor.
+ * `.join`); the card writes the neck from what `hang` reports.
  *
  * `hang` is the card's attachment. It keeps the neck where the card really
  * stands once bits-ui has placed it (every placement, open, a glide, a
  * resize, a scroll, is a write to its floating wrapper's transform), and it
  * plays the card's open and close:
  *
- * The card comes out of the anchor's foot: its floating wrapper is cut at
- * the card's edge facing the anchor (`data-hang`, app.css), and the card
- * slides out from behind that cut by its own size (down from a foot,
- * sideways from a side), revealing what is in it as the edge passes;
- * nothing inside fades. A finger pulling a tab's menu out draws the
+ * The card comes down out of the anchor's foot: its floating wrapper is cut
+ * at the card's top edge, the anchor's foot, and the card slides down from
+ * behind that cut by its own height, revealing what is in it as the foot
+ * passes; nothing inside fades. A finger pulling a tab's menu out draws the
  * same thing (PaneTabs `drawPull`). Open over --dur-pop, close over
  * --dur-exit (The Fast Exit Rule), both on --ease-out: an entrance and an
  * exit, so the strong ease-out (Emil Kowalski, "Entering or exiting →
@@ -65,26 +59,10 @@ import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
 import { dur, ease, motionOk } from "./curves.svelte";
 
-/** The x and y of a floating wrapper's `translate(Xpx, Ypx)`. */
-const TRANSLATE = /translate(?:3d)?\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px/;
+/** The x of a floating wrapper's `translate(Xpx, Ypx)`. */
+const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/;
 /** The event a card fires once it stands open. */
 export const GROWN = "grown";
-/**
- * The event a card fires as its slide starts, out or back (`detail`: the
- * run, and whether it opens): what draws the anchor's foot in step with it
- * reads the run's clock frame by frame (PinFoot).
- */
-export const SLIDE = "hang-slide";
-export interface SlideDetail {
-  opens: boolean;
-  run: Animation;
-}
-
-/**
- * The side of its anchor a card hangs from: its foot (the card under it),
- * or its start or end side (the card beside it, left or right of it).
- */
-export type HangFrom = "foot" | "start" | "end";
 
 /** The cards standing open, at rest: grown, and nothing running on them since. */
 const standing = new WeakSet<HTMLElement>();
@@ -135,53 +113,35 @@ const flareTail = (flare: number): number =>
   flare > 0 ? Math.sqrt(2 * flare + 1) : 0;
 
 /**
- * The cut across the card's edge row facing its anchor (HangCard's
- * `::before`, a 1px row from one foot's tip to the other's: across the top
- * for a foot, down the side for a side), as a `shape()` in its own box: on
- * a flared side it starts on the flare's stroke's outer edge, the circle of
- * radius f + 1 from the row's inner side at the tip to its outer side
- * √(2f + 1) px in, so the edge shows under the cut exactly where the stroke
- * crosses the row and the anchor's curve runs on into the card's edge as
- * one stroke; a side with no flare starts square. Written along the edge
- * and across it, then laid on the side the card hangs from: a foot's row
- * as written, a side's turned onto its column (its outer side the one
- * facing the anchor), which turns each arc's way round.
+ * The cut across the card's top edge row (HangCard's `::before`, a 1px row from
+ * one foot's tip to the other's), as a `shape()` in its own box: on a flared
+ * side it starts on the flare's stroke's outer edge, the circle of radius
+ * f + 1 from the row's foot at the tip to the row's top √(2f + 1) px in, so
+ * the edge shows under the cut exactly where the stroke crosses the row and
+ * the anchor's curve runs on into the card's edge as one stroke; a side with
+ * no flare starts square.
  */
-function neckCut(neck: Neck, from: HangFrom): string {
+function neckCut(neck: Neck): string {
   const tailStart = flareTail(neck.flareStart);
   const tailEnd = flareTail(neck.flareEnd);
-  /** A point by its place along the row and across it from its outer side (0) to its inner (100%). */
-  const at = (along: string, across: string) => {
-    if (from === "foot") {
-      return `${along} ${across}`;
-    }
-    // A side's column: across is x, from the side facing the anchor.
-    const x =
-      from === "end"
-        ? across
-        : `calc(100% - ${across === "0" ? "0px" : across})`;
-    return `${x} ${along}`;
-  };
-  // Turned onto the end side's column the row is mirrored, so its arcs run the other way round.
-  const way = from === "end" ? "cw" : "ccw";
   const start =
     neck.flareStart > 0
-      ? `arc to ${at(`${tailStart}px`, "0")} of ${neck.flareStart + 1}px ${way}`
-      : `line to ${at("0", "0")}`;
+      ? `arc to ${tailStart}px 0 of ${neck.flareStart + 1}px ccw`
+      : "line to 0 0";
   const end =
     neck.flareEnd > 0
-      ? `arc to ${at("100%", "100%")} of ${neck.flareEnd + 1}px ${way}`
-      : `line to ${at("100%", "100%")}`;
-  return `shape(from ${at("0", "100%")}, ${start}, line to ${at(`calc(100% - ${tailEnd}px)`, "0")}, ${end}, close)`;
+      ? `arc to 100% 100% of ${neck.flareEnd + 1}px ccw`
+      : "line to 100% 100%";
+  return `shape(from 0 100%, ${start}, line to calc(100% - ${tailEnd}px) 0, ${end}, close)`;
 }
 
 /** The neck as the card's style (HangCard): its span, its flares, and the cut's shape. */
-const neckProperties = (neck: Neck, from: HangFrom): [string, string][] => [
+const neckProperties = (neck: Neck): [string, string][] => [
   ["--neck-start", `${neck.start}px`],
   ["--neck-end", `${neck.end}px`],
   ["--neck-flare-start", `${neck.flareStart}px`],
   ["--neck-flare-end", `${neck.flareEnd}px`],
-  ["--neck-cut", neckCut(neck, from)],
+  ["--neck-cut", neckCut(neck)],
 ];
 
 /**
@@ -190,12 +150,8 @@ const neckProperties = (neck: Neck, from: HangFrom): [string, string][] => [
  * popover's props, which each placement of Caw's panel paid as it first
  * opened.
  */
-export function setNeck(
-  node: HTMLElement,
-  neck: Neck,
-  from: HangFrom = "foot"
-): void {
-  for (const [name, value] of neckProperties(neck, from)) {
+export function setNeck(node: HTMLElement, neck: Neck): void {
+  for (const [name, value] of neckProperties(neck)) {
     node.style.setProperty(name, value);
   }
 }
@@ -206,8 +162,6 @@ export interface Hang {
    * nothing left to play (a finger folded it into its anchor).
    */
   folded?: () => boolean;
-  /** The side of its anchor it hangs from; its foot by default. */
-  from?: HangFrom;
   /**
    * A card hanging from a folder tab (motion/hang-shape): it grows out of
    * the tab's foot as one shape with it instead of sliding down from behind
@@ -220,30 +174,12 @@ export interface Hang {
    * of its anchor (a tab's pulled menu), which is its open; nothing plays.
    */
   held?: () => boolean;
-  /**
-   * The neck with the card's edge at `along` (its left edge for a foot, its
-   * top for a side; the floating wrapper's px); null with no anchor.
-   */
-  neckAt: (along: number) => Neck | null;
+  /** The neck with the card's left edge at `left` (viewport px); null with no anchor. */
+  neckAt: (left: number) => Neck | null;
   /** The neck where the card stands now, on every placement: the card draws it. */
   onneck: (neck: Neck) => void;
-  /** Where the card is placed, on every placement: its floating wrapper's x and y. */
-  onplaced?: (x: number, y: number) => void;
   /** The card starts to stand open (true), or to fold back into its anchor (false). */
   onshown?: (shown: boolean) => void;
-}
-
-/** Each hanging card's close, for a site that shuts it itself (a card held on screen by its outro, PinFloat). */
-const folds = new WeakMap<HTMLElement, () => void>();
-
-/**
- * Folds card `node` back into its anchor now, as its close does: for a
- * site whose card leaves with the block that holds it, where the
- * primitive's own close never comes (Svelte holds an outroing block's
- * effects still).
- */
-export function foldNow(node: HTMLElement): void {
-  folds.get(node)?.();
 }
 
 /** The card's attachment: on the popover's content, inside its floating wrapper. */
@@ -260,16 +196,11 @@ export function hang(options: Hang): Attachment<HTMLElement> {
     // anchor and neck it reads are not reasons to attach again.
     const sync = () =>
       untrack(() => {
-        const at = TRANSLATE.exec(wrapper.style.transform);
+        const at = TRANSLATE_X.exec(wrapper.style.transform);
         if (!at) {
           return;
         }
-        const x = Number(at[1]);
-        const y = Number(at[2]);
-        options.onplaced?.(x, y);
-        const neck = options.neckAt(
-          (options.from ?? "foot") === "foot" ? x : y
-        );
+        const neck = options.neckAt(Number(at[1]));
         if (!neck) {
           return;
         }
@@ -471,43 +402,32 @@ function slideMotion(node: HTMLElement, options: Hang) {
   let run: Animation | null = null;
   let placed = false;
   const OPEN = "0px 0px";
-  const from = options.from ?? "foot";
   /**
-   * Behind the cut by the card's whole size across it and the reach of its
-   * shadow past it (`--hang-reach`, the hung shadow's, motion/hung-shadow),
-   * so nothing it draws is left out of the cut: shut up by its height
-   * alone, the shadow under its foot stayed on the page below the glass. Up
-   * for a foot, toward the anchor for a side. A percentage of its own box,
-   * so a size tween in flight (motion/morph) is followed to the end.
+   * Up behind the cut by the card's whole height and the reach of its shadow
+   * under it (`--hang-reach`, the hung shadow's, motion/hung-shadow), so
+   * nothing it draws is left under the cut: shut up by its height alone, the
+   * shadow under its foot stayed on the page below the glass. A percentage
+   * of its own box, so a size tween in flight (motion/morph) is followed to
+   * the end.
    */
-  const shut = () => {
-    const reach =
+  const shut = () =>
+    `0px calc(-100% - ${
       Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--hang-reach")
-      ) || 0;
-    if (from === "end") {
-      return `calc(-100% - ${reach}px) 0px`;
-    }
-    if (from === "start") {
-      return `calc(100% + ${reach}px) 0px`;
-    }
-    return `0px calc(-100% - ${reach}px)`;
-  };
+      ) || 0
+    }px)`;
   /** Where the card is drawn now, mid-animation or at rest. */
   const drawn = (fallback: string) =>
     run ? getComputedStyle(node).translate : fallback;
-  const play = (start: string, to: string, ms: number, opens: boolean) => {
+  const play = (from: string, to: string, ms: number) => {
     standing.delete(node);
-    const next = node.animate([{ translate: start }, { translate: to }], {
+    const next = node.animate([{ translate: from }, { translate: to }], {
       duration: ms,
       easing: ease("--ease-out"),
       fill: "forwards",
     });
     run?.cancel();
     run = next;
-    node.dispatchEvent(
-      new CustomEvent<SlideDetail>(SLIDE, { detail: { opens, run: next } })
-    );
     return next;
   };
   /**
@@ -535,7 +455,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
       grown(node);
       return;
     }
-    const growth = play(drawn(shut()), OPEN, dur("--dur-pop"), true);
+    const growth = play(drawn(shut()), OPEN, dur("--dur-pop"));
     growth.finished
       .then(() => {
         if (run === growth) {
@@ -559,7 +479,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
       rest();
       return;
     }
-    const folding = play(drawn(OPEN), shut(), dur("--dur-exit"), false);
+    const folding = play(drawn(OPEN), shut(), dur("--dur-exit"));
     folding.finished
       .then(() => {
         if (run === folding) {
@@ -569,10 +489,6 @@ function slideMotion(node: HTMLElement, options: Hang) {
       .catch(() => undefined);
   };
   let frame = 0;
-  folds.set(node, () => {
-    cancelAnimationFrame(frame);
-    fold();
-  });
   // Every open once the card is placed: a card caught mid-close, and a card
   // kept mounted while shut (Caw's panel), which bits-ui placed once.
   const state = new MutationObserver(() => {
@@ -607,7 +523,6 @@ function slideMotion(node: HTMLElement, options: Hang) {
       cancelAnimationFrame(frame);
       state.disconnect();
       run?.cancel();
-      folds.delete(node);
     },
   };
 }
