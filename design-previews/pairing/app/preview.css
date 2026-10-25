@@ -1,0 +1,624 @@
+/* The pairing surface (design build spec, pairing-design.md): the object
+   column (Caw on the axis, the one object slot, the letter run) and the
+   words column, standing on the page ground with no card. One frame per
+   window: Desk at 900px and wider, Phone under it, each drawn 1:1. The
+   house's tokens come from the dashboard's app.css, loaded before this
+   sheet; the QR's own tokens and the hero title step are the preview's
+   (the spec's §2 and §8). Motion is preview.js's (Web Animations). */
+
+@layer preview {
+  :root {
+    /* The QR's paper and ink, the same in both schemes, so it scans by night. */
+    --qr-paper: oklch(99.3% 0.004 85);
+    --qr-ink: oklch(29.5% 0.01 70);
+    --qr-dim-opacity: 0.3;
+    /* How far the ping's ring grows past the paper's edge. */
+    --qr-ping-reach: var(--space-3);
+    --qr-ping-opacity: 0.7;
+    --qr-squeeze: 0.84;
+    --qr-pulse-scale: 1.04;
+    /* The hero step for this one-thing screen (spec §2: the Title role's cap dropped here). */
+    --text-hero: clamp(1.5rem, 1.3rem + 0.8vi, 1.75rem);
+  }
+
+  body {
+    margin: 0;
+    min-block-size: 100dvh;
+    background: var(--surface-page);
+  }
+
+  h1,
+  h2,
+  p {
+    margin: 0;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  /* ---- The kit's button: outline by default, the coral primary, a ghost. ---- */
+  .btn {
+    display: inline flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-inline-size: 5.5rem;
+    block-size: var(--c-btn-h);
+    padding-inline: var(--space-4);
+    border: 1px solid var(--border-button-outline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    font: var(--type-button);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      scale var(--dur-toggle) var(--ease-out);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        background-color: var(--surface-hover);
+      }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      &:active:not(:disabled) {
+        scale: 0.97;
+      }
+    }
+    &:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+    &:focus-visible {
+      outline: var(--focus-ring-width) solid var(--focus-ring);
+      outline-offset: var(--focus-ring-offset);
+    }
+    &[data-tone="primary"] {
+      border-color: transparent;
+      background: var(--action-surface), var(--action-solid);
+      color: var(--on-action);
+      box-shadow: var(--action-ring);
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled) {
+          background: var(--action-surface-hover), var(--action-hover);
+        }
+      }
+    }
+    &[data-tone="ghost"] {
+      min-inline-size: 0;
+      padding-inline: 0;
+      border-color: transparent;
+      background: transparent;
+      color: var(--ink-muted);
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled) {
+          background: transparent;
+          color: var(--ink-strong);
+        }
+      }
+    }
+    &[data-size="sm"] {
+      min-inline-size: 0;
+      block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      font: var(--type-label);
+    }
+  }
+
+  /* ---- The preview's own bar: the moments, Replay and the owner's two picks. ---- */
+  .bar {
+    display: block grid;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6) var(--space-4);
+    border-block-end: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    h1 {
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+    }
+    .row {
+      display: block flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-3);
+      min-inline-size: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .label {
+      float: inline-start;
+      min-inline-size: 4.5rem;
+      padding: 0;
+      color: var(--ink-muted);
+      font: var(--type-label);
+    }
+    .note {
+      max-inline-size: 72ch;
+      color: var(--ink-muted);
+      font: var(--type-meta);
+      text-wrap: pretty;
+    }
+  }
+
+  .seg {
+    display: inline flex;
+    flex-wrap: wrap;
+    gap: var(--space-row);
+    min-inline-size: 0;
+    padding: var(--c-segmented-pad);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+    button {
+      min-block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      border: 0;
+      border-radius: var(--radius-well);
+      background: transparent;
+      color: var(--ink-muted);
+      font: var(--type-label);
+      white-space: nowrap;
+      cursor: pointer;
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out);
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--ink-strong);
+        }
+      }
+      &[aria-pressed="true"] {
+        background: var(--surface-lift);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-knob);
+      }
+      &:focus-visible {
+        outline: var(--focus-ring-width) solid var(--focus-ring);
+        outline-offset: var(--focus-ring-offset);
+      }
+    }
+  }
+
+  /* ---- The frame: the page's content area, drawn at its real size. ---- */
+  .frame {
+    /* The sizes of each frame (spec §3, §8): the QR's module, Caw, the
+       device's wire, the app icon on its screen and the letters there. */
+    --m: 10px;
+    --caw: 128px;
+    --wire: 288px;
+    --icon: 72px;
+    --screen-type: 18px;
+    --slot: calc(var(--m) * 39);
+    --wire-at: calc((var(--slot) - var(--wire)) / 2);
+    display: block flow-root;
+    padding-block: var(--space-8);
+    padding-inline: var(--space-7) var(--space-8);
+    &[data-layout="phone"] {
+      --m: 9px;
+      --caw: 96px;
+      --wire: 256px;
+      --icon: 64px;
+      --screen-type: 16px;
+      inline-size: 390px;
+      margin-inline: auto;
+      padding-inline: var(--space-5);
+    }
+  }
+
+  .stage {
+    display: block grid;
+    grid-template-columns: 390px 420px;
+    column-gap: var(--space-8);
+    align-items: start;
+    [data-layout="phone"] & {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: var(--space-4);
+    }
+  }
+
+  /* ---- The object column: Caw on the axis, the slot, the letter run. ---- */
+  .object {
+    display: block grid;
+    justify-items: center;
+    row-gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .caw-slot {
+    inline-size: var(--caw);
+    block-size: var(--caw);
+  }
+
+  /* The one object slot: the paper's footprint in every moment. */
+  .slot {
+    position: relative;
+    inline-size: var(--slot);
+    block-size: var(--slot);
+  }
+
+  /* The ping: one 2px ring leaving the paper's edge once a breath. */
+  .ping {
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--brand-solid);
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    pointer-events: none;
+    &[data-warm] {
+      border-color: var(--data-warn);
+    }
+  }
+
+  /* The paper: the one box on the surface, the code's quiet zone. */
+  .paper {
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--well-edge);
+    border-radius: var(--radius-sm);
+    background: var(--qr-paper);
+  }
+
+  .code {
+    position: absolute;
+    inset: calc(var(--m) - 1px);
+    color: var(--qr-ink);
+    .dots,
+    .eyes {
+      position: absolute;
+      inset: 0;
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      overflow: visible;
+    }
+    .eye {
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+  }
+
+  /* The device: the iPhone's wire, nine strokes on a 96 box at a 1.5px pen. */
+  .device {
+    position: absolute;
+    inset-block-start: var(--wire-at);
+    inset-inline-start: var(--wire-at);
+    inline-size: var(--wire);
+    block-size: var(--wire);
+    overflow: visible;
+    color: var(--ink-muted);
+    stroke: currentColor;
+    stroke-width: 0.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    path {
+      stroke-dasharray: 1;
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* The device's screen (36 × 56 of its 96 box): the icon and the letters
+     stacked, or one outcome mark. */
+  .screen {
+    position: absolute;
+    inset-block-start: calc(var(--wire-at) + var(--wire) * 20 / 96);
+    inset-inline-start: calc(var(--wire-at) + var(--wire) * 30 / 96);
+    display: block grid;
+    place-items: center;
+    inline-size: calc(var(--wire) * 36 / 96);
+    block-size: calc(var(--wire) * 56 / 96);
+    pointer-events: none;
+  }
+  .screen-stack {
+    display: block grid;
+    justify-items: center;
+    gap: var(--space-2);
+  }
+  .icon-spot {
+    display: block;
+    inline-size: var(--icon);
+    block-size: var(--icon);
+  }
+  .screen-letters {
+    display: block grid;
+    justify-items: center;
+    color: var(--ink-stat);
+    font: 500 var(--screen-type) / 1.2 var(--font-mono);
+    font-variant-ligatures: none;
+    letter-spacing: 0.12em;
+    .row {
+      display: block flex;
+      margin-inline-end: -0.12em;
+    }
+    .g {
+      display: inline flow-root;
+      transform-origin: 0 0;
+    }
+  }
+  .screen-mark {
+    position: absolute;
+    inset: 0;
+    display: block grid;
+    place-items: center;
+    svg {
+      grid-area: 1 / 1;
+      inline-size: calc(var(--wire) / 4);
+      block-size: calc(var(--wire) / 4);
+      overflow: visible;
+      stroke-width: 0.5;
+    }
+    .m-check {
+      color: var(--status-done-glyph);
+    }
+    .m-lock {
+      color: var(--status-fail-glyph);
+    }
+    .m-unlink {
+      color: var(--ink-muted);
+    }
+    .tick {
+      stroke-dasharray: 1;
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* The head: Caw's app icon, the one object that travels (preview.js
+     places it on the code's centre or the screen's icon spot). */
+  .head {
+    position: absolute;
+    z-index: 2;
+    transform-origin: 0 0;
+    pointer-events: none;
+    .face {
+      position: absolute;
+      inset: 0;
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      border-radius: 22%;
+    }
+    .face-shut {
+      opacity: 0;
+    }
+  }
+
+  /* The letter run: six letters in two groups of three, no box. */
+  .run {
+    position: relative;
+    display: block flex;
+    justify-content: center;
+    color: var(--ink-stat);
+    font: var(--type-kpi);
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+    letter-spacing: 0.12em;
+    .group {
+      display: inline flex;
+      margin-inline-end: -0.12em;
+      & + .group {
+        margin-inline-start: 0.6em;
+      }
+    }
+    .g {
+      display: inline flow-root;
+    }
+    /* Expired's strike: one line across the run, drawn from its start. */
+    .strike {
+      position: absolute;
+      inset-inline: -0.1em;
+      inset-block-start: 50%;
+      block-size: 1.5px;
+      background: var(--ink-stat);
+      transform-origin: left center;
+      pointer-events: none;
+    }
+  }
+
+  /* ---- The words column: every word on one start edge. ---- */
+  .words {
+    /* What leaves a place it keeps is drawn here as a copy where it stood. */
+    position: relative;
+    display: block grid;
+    align-content: start;
+    justify-items: start;
+    min-inline-size: 0;
+    text-align: start;
+    overflow-wrap: anywhere;
+    > * {
+      max-inline-size: 42ch;
+    }
+    /* Its top on the object slot's top (Desk). */
+    [data-layout="desk"] & {
+      padding-block-start: calc(var(--caw) + var(--space-4));
+    }
+  }
+
+  .title {
+    color: var(--ink-strong);
+    font: 500 var(--text-hero) / 1.2 var(--font-body);
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+
+  /* transitions.dev "Text morph": the changing part's two versions share one cell. */
+  .t-morph-swap {
+    display: inline grid;
+    vertical-align: bottom;
+    justify-items: start;
+    overflow: clip;
+    > span {
+      grid-area: 1 / 1;
+      white-space: pre;
+    }
+  }
+
+  .lines {
+    display: block grid;
+    gap: var(--space-2);
+    margin-block-start: var(--space-3);
+  }
+
+  .line {
+    display: block flex;
+    align-items: start;
+    color: var(--ink-muted);
+    font: var(--type-body);
+    text-wrap: pretty;
+    &[data-tone="verdict"] {
+      color: var(--ink-strong);
+    }
+    &[data-figure] {
+      align-items: baseline;
+      gap: var(--space-2);
+    }
+    /* The words: a line changes as a whole (the old one leaves as a copy where it stood). */
+    .text {
+      display: block flow-root;
+      min-inline-size: 0;
+    }
+    .figure {
+      display: inline flex;
+      color: var(--ink-strong);
+      font: var(--type-kpi);
+      font-variant-numeric: tabular-nums;
+      .d {
+        display: inline flow-root;
+      }
+    }
+  }
+
+  /* The mark line (DESIGN.md, The Mark Line Rule; the dashboard's recipe):
+     a run of words is trimmed to its x-height band and given the room back
+     as padding, so its middle is its x-height's middle; the mark stands in
+     a cell one line tall at the row's start. */
+  .mark-line > .text {
+    text-box: trim-both ex alphabetic;
+    padding-block: calc((1lh - 1ex) / 2);
+  }
+  .mark-cell {
+    display: block grid;
+    flex: none;
+    place-content: center;
+    place-items: center;
+    block-size: 1lh;
+    margin-inline-end: var(--space-2);
+    > * {
+      grid-area: 1 / 1;
+    }
+    svg {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+      overflow: visible;
+    }
+    .m-clock {
+      color: var(--ink-muted);
+    }
+    .m-warn {
+      color: var(--status-attn-glyph);
+    }
+    .m-question {
+      color: var(--status-fail-glyph);
+    }
+    .live {
+      inline-size: 6px;
+      block-size: 6px;
+      border-radius: var(--radius-pill);
+      background: var(--status-live-glyph);
+      @media (prefers-reduced-motion: no-preference) {
+        animation: breath var(--breath) var(--ease-in-out) infinite;
+      }
+    }
+  }
+  @keyframes breath {
+    50% {
+      opacity: var(--breath-floor);
+    }
+  }
+
+  .facts {
+    display: block grid;
+    justify-items: start;
+    gap: var(--space-1);
+    margin-block-start: var(--space-3);
+    min-inline-size: 0;
+    > p {
+      position: relative;
+      max-inline-size: 100%;
+    }
+    .name {
+      color: var(--ink-strong);
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+    }
+    .kind,
+    .alias {
+      color: var(--ink-muted);
+      font: var(--type-body);
+    }
+    .addr {
+      color: var(--ink-strong);
+      font: var(--type-body);
+      code {
+        font: var(--type-code);
+        font-size: var(--text-body);
+        font-size-adjust: cap-height var(--mono-figure-cap);
+        font-variant-numeric: tabular-nums;
+        font-variant-ligatures: none;
+      }
+    }
+    .when {
+      color: var(--ink-muted);
+      font: var(--type-meta);
+      font-variant-numeric: tabular-nums;
+      .text {
+        display: inline grid;
+        > span {
+          grid-area: 1 / 1;
+        }
+      }
+    }
+    /* Until the hub's record lands: each row a skeleton at its size. */
+    [data-skel] {
+      color: transparent;
+    }
+    .skel {
+      position: absolute;
+      inset: 0.2lh 0;
+      border-radius: var(--radius-pill);
+      background: var(--surface-recess-deep);
+    }
+  }
+
+  .after {
+    margin-block-start: var(--space-3);
+    color: var(--ink-muted);
+    font: var(--type-body);
+    text-wrap: pretty;
+  }
+
+  .acts {
+    &.still .btn {
+      transition: none;
+    }
+    display: block flex;
+    flex-wrap: wrap;
+    justify-content: start;
+    gap: var(--space-2);
+    margin-block-start: var(--space-5);
+    [data-layout="phone"] & {
+      justify-self: stretch;
+      max-inline-size: none;
+      .btn {
+        flex: 1 1 0;
+      }
+      .btn[data-tone="ghost"] {
+        flex: 0 1 auto;
+      }
+      @media (pointer: coarse) {
+        .btn {
+          block-size: var(--c-btn-h-lg);
+        }
+      }
+    }
+  }
+}

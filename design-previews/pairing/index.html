@@ -4,22 +4,8 @@
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1" name="viewport" />
     <title>Pairing · preview</title>
-    <link
-      as="font"
-      crossorigin
-      href="./fonts/Figtree.ttf"
-      rel="preload"
-      type="font/ttf"
-    />
-    <link
-      as="font"
-      crossorigin
-      href="./fonts/JetBrainsMono.ttf"
-      rel="preload"
-      type="font/ttf"
-    />
-    <link href="./preview.css" rel="stylesheet" />
-    <script src="./preview.js" type="module"></script>
+    <script type="module" crossorigin src="./assets/index-D0I_2-7x.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D3YM6dNY.css">
   </head>
   <body>
     <header class="bar">
@@ -27,125 +13,70 @@
       <fieldset class="row">
         <legend class="label">Play into</legend>
         <div class="seg" data-slot="moments"></div>
-        <button class="btn" data-size="sm" data-slot="replay" type="button">
-          Replay
-        </button>
+        <button class="btn" data-size="sm" data-slot="replay" type="button">Replay</button>
       </fieldset>
       <fieldset class="row">
-        <legend class="label">Variants</legend>
-        <div class="seg" data-slot="variant-denied"></div>
-        <div class="seg" data-slot="variant-nomatch"></div>
+        <legend class="label">Your picks</legend>
+        <div class="seg" data-slot="pick-denied"></div>
+        <div class="seg" data-slot="pick-removed"></div>
       </fieldset>
       <p class="note">
-        Approve, Deny, Remove device, New code and Retry in the cards play the
-        flow on from where it stands. Open Devices has no page yet. The code is
-        for this hub, obelisk-of-light; its six letters are a sample.
+        One frame per window: Desk at 900px and wider, Phone under it, each drawn at its real size.
+        The acts on the surface play the flow on from where it stands. The code is for this hub,
+        obelisk-of-light; its six letters are a sample.
       </p>
     </header>
 
-    <main class="frames">
-      <figure class="frame">
-        <figcaption>Desk</figcaption>
-        <div class="fit">
-          <div
-            class="viewport"
-            data-layout="desk"
-            style="--frame-w: 544px"
-          ></div>
-        </div>
-      </figure>
-      <figure class="frame">
-        <figcaption>Phone</figcaption>
-        <div class="fit">
-          <div
-            class="viewport"
-            data-layout="phone"
-            style="--frame-w: 390px"
-          ></div>
-        </div>
-      </figure>
-    </main>
-
-    <template id="stage">
+    <main class="frame" data-layout="desk">
       <div class="stage">
-        <img alt="" class="caw" height="80" src="./caw/asking.png" width="80" />
-        <h2 class="title">Scan with the CawCo app</h2>
-        <div class="card-wrap">
-          <div aria-hidden="true" class="ping"></div>
-          <section aria-live="polite" class="card">
-            <div class="scene scene-code">
-              <div class="well">
-                <div aria-label="Pairing QR code" class="code" role="img">
-                  <svg aria-hidden="true" class="eyes"></svg>
-                </div>
-                <img alt="" class="badge" src="./caw/badge.png" />
-                <button class="btn well-act" data-tone="primary" type="button">
-                  New code
-                </button>
-              </div>
-              <div class="letters"><span aria-hidden="true" class="cross"></span></div>
-              <p class="readout mark-line">
-                <span aria-hidden="true" class="slot mark-cell"
-                  ><span class="live"></span
-                  ><svg class="g g-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M6 6l12 12M18 6L6 18" /></svg><svg class="g g-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><circle cx="12" cy="12" r="10" /><path d="M12 8V12L14.5 14.5" /></svg></span
-                ><span class="words">Getting a code…</span>
-              </p>
-            </div>
-            <div class="scene scene-device">
-              <div aria-label="iPhone" class="wire" role="img">
-                <svg aria-hidden="true" class="g wire-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </div>
-              <div class="facts">
-                <p class="name"></p>
-                <p class="kind"></p>
-                <p class="addr"></p>
-                <p class="second alias"></p>
-                <p class="meta">
-                  <span class="verb">asked</span> <span class="ago">8s</span> ago
-                </p>
-              </div>
-              <div class="actions">
-                <button class="btn" data-act="deny" type="button">Deny</button>
-                <button
-                  class="btn"
-                  data-act="approve"
-                  data-tone="primary"
-                  type="button"
-                >
-                  Approve
-                </button>
+        <div class="object">
+          <div class="caw-slot" data-slot="caw"></div>
+          <div class="slot">
+            <div aria-hidden="true" class="ping"></div>
+            <div class="paper">
+              <div aria-label="Pairing QR code" class="code" role="img">
+                <canvas aria-hidden="true" class="dots"></canvas>
+                <svg aria-hidden="true" class="eyes"></svg>
               </div>
             </div>
-            <div class="scene scene-outcome">
-              <span aria-hidden="true" class="mark mark-cell" data-glyph="check">
-                <svg class="g g-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path class="tick" d="M5 12.5l4.5 4.5L19 7.5" pathLength="1" /></svg>
-                <svg class="g g-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </span>
-              <p class="said mark-text"><span class="w lead"></span></p>
-              <p class="record"></p>
-              <p class="means"></p>
-              <div class="acts">
-                <button
-                  class="btn"
-                  data-slot="ghost"
-                  data-tone="ghost"
-                  type="button"
-                >
-                  Remove device
-                </button>
-                <button
-                  class="btn"
-                  data-slot="primary"
-                  data-tone="primary"
-                  type="button"
-                >
-                  Open Devices
-                </button>
+            <svg aria-label="iPhone" class="device" fill="none" role="img" viewBox="0 0 96 96"></svg>
+            <div class="screen">
+              <div class="screen-stack">
+                <span aria-hidden="true" class="icon-spot"></span>
+                <span aria-hidden="true" class="screen-letters"></span>
               </div>
+              <span aria-hidden="true" class="screen-mark"></span>
             </div>
-          </section>
+            <div aria-hidden="true" class="head"></div>
+          </div>
+          <p class="run"><span aria-hidden="true" class="strike"></span></p>
+        </div>
+
+        <div class="words" aria-live="polite">
+          <h2 class="title">Scan with the CawCo app</h2>
+          <div class="lines">
+            <p class="line mark-line" data-line="1">
+              <span aria-hidden="true" class="mark-cell"></span>
+              <span class="text"></span>
+              <span class="figure num"></span>
+            </p>
+            <p class="line" data-line="2"><span class="text"></span></p>
+          </div>
+          <div class="facts">
+            <p class="name"></p>
+            <p class="kind"></p>
+            <p class="addr"></p>
+            <p class="alias"></p>
+            <p class="when num"><span class="text"></span></p>
+          </div>
+          <p class="after"></p>
+          <div class="acts">
+            <button class="btn" data-slot="ghost" data-tone="ghost" type="button"></button>
+            <button class="btn" data-slot="second" type="button"></button>
+            <button class="btn" data-slot="primary" type="button"></button>
+          </div>
         </div>
       </div>
-    </template>
+    </main>
   </body>
 </html>

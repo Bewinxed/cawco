@@ -1,66 +1,47 @@
 /**
- * The pairing design preview (design-previews/pairing/), served as a
- * folder, read from the engine on Chromium and WebKit. These checks prove
- * the motion has no jump, no hold and no overlap; they do not prove it
- * feels right: the owner judges that.
+ * The pairing design preview (design-previews/pairing/, built by its
+ * app/build.ts), served as a folder and read from the engine on Chromium
+ * and WebKit against the build spec's measurable claims
+ * (pairing-design.md):
  *
- * - The QR: every dark module a disc (r = 0.42 of a module) the dots'
- *   canvas draws on its module at rest, the three finder eyes a rounded ring
- *   (rx 1.9) round a dot, and the drawn code decodes (ZXing, as the r4
- *   specs read it) to its text. The dots are one canvas per card, so each
- *   dot is read from the page's own drawing of it (`preview.dotsOf`) at the
- *   time of the dots' clock, a Web Animation the held clock seeks like any
- *   other run; the decode reads the pixels that drawing made.
- * - Every moment's motion on a held clock, sought every 2.5% of its length:
- *   each part moves one way, nothing stands still mid-way, every part rests
- *   where the clock's end drew it, and every run ends once let go.
- * - The arrival: no dot's disc meets the head's square at any read.
- * - No moving part (a dot, a finder eye, a stroke) meets a shown word, and
- *   every word the card shows or brings in stands whole inside it.
- * - The device card: its drawing centred on the card's axis (within 1px),
- *   its facts on one start edge (within 1px) at `text-align: start`.
- * - Paired and Removed (report a8f73fdb note 8): every text row at `text-align:
- *   start`, the verdict, record and means on one start edge, one coral act,
- *   the record never broken inside a part at 390, and the status glyph
- *   starting on the arrival's frame, not drawn at ½ of it, drawn at its end.
- * - The failures (report 0b7eb35b), each variant, both layouts: what
- *   persists (the code, the device or the stopped cloud), the ring's ink,
- *   one coral at most where the design puts it, every glyph bare, and the
- *   card's height (the code card's, or the device card's on Denied).
- * - The scan's exit, held and sought every 1/60s: no piece jumps, nothing
- *   stands still mid-way, and the device starts on the frame it ends.
- * - The ping's ring, its lap held and sought every 2.5%: never meets the
- *   title's box.
- * - Caw centred on the card's axis; his box never meets the card's; each
- *   moment's Caw its own drawing.
- * - Light and dark: the frames whole and visible at 390, 680, 1110 and 1440
- *   (inside the window and every box above them, the page never scrolling
- *   sideways), and the sweep of every moment at 390, 680 and 1440 totalling
- *   no overflow, Caw his night still by night; each night still's paper rim
- *   measured as drawn on both layouts.
- * - Chromium at 1×: no frame takes the main thread over 16.7ms.
- * - No console error.
+ * - a 16px root, the house's type on the body;
+ * - one frame per window width, drawn 1:1 (Desk at 900px and wider, 390px
+ *   wide Phone under it; no transform or zoom on it or above it);
+ * - a constant object slot: 390 × 390 on the Desk, 351 × 351 on the Phone,
+ *   in the same place in every moment;
+ * - one box: the paper is the one element in the stage that draws a fill,
+ *   an edge or a shadow (the kit's buttons aside, and the ping's ring);
+ * - no empty tiles: every box draws something inside it, and no tile is left;
+ * - the words start-aligned: every row of the words column on one start
+ *   edge, at `text-align: start`;
+ * - one coral control per moment, on the act the moment is for (none where
+ *   it has none, and Denied's New code quiet unless the owner picks coral);
+ * - Caw from his Rive file through the dashboard's component, on the axis;
+ * - each storyboard's lead alone at t=0: every Web Animation a board starts
+ *   in its first frame is the lead's (named `lead:*`), read on the held
+ *   clock (the DevTools Animation domain on Chromium);
+ * - the drawn QR decodes to its text;
+ * - the house rules (`HouseRules`) and the overflow sweep in every moment at
+ *   390, 1037 and 1440;
+ * - no console error.
  *
  *   bun scripts/probe-kit/run.ts pairing-preview
- *   PAIRING_ENGINES=chromium PAIRING_MOMENTS=waiting,expired …   # a narrower run
+ *   PAIRING_ENGINES=chromium PAIRING_LEGS=leads …        # a narrower run
+ *   PAIRING_LEGS=captures PAIRING_CAPTURES=<dir> …        # the owner's captures (off by default)
  */
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { cpus, loadavg } from "node:os";
 import { dirname, join, normalize } from "node:path";
 import type { Page } from "playwright-core";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
-import { traceMain } from "../frames";
 import { HouseRules } from "../house-rules";
 import { type Engine, type Kit, ROOT, readMotion, type Spec } from "../kit";
 
 const DIR = join(ROOT, "design-previews", "pairing");
-const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
-/** Reads a moment is sought to: every 2.5% of its clock, so a part crossing words for a frame or two is read there. */
-const STEPS = 40;
-const FINE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
-/** The text the QR carries (design-previews/pairing/lib/qr.js). */
+/** The text the QR carries (app/lib/qr.js). */
 const PAYLOAD = "cawco://pair/JWKHDQ@obelisk-of-light";
+/** The widths the sweep and the house rules read: the phone, a narrow desk, the wide desk. */
+const WIDTHS = [390, 1037, 1440] as const;
 
 const require = createRequire(import.meta.url);
 prepareZXingModule({
@@ -74,441 +55,130 @@ prepareZXingModule({
   },
 });
 
-const MOMENTS = [
-  "asking",
-  "waiting",
-  "lastminute",
-  "checking-public",
-  "checking-tailnet",
-  "checking-lan",
-  "approved",
-  "removed",
-  "denied",
-  "expired",
-  "nomatch",
-  "failed-down",
-] as const;
-/** Paired and Removed, the two ledgers (report a8f73fdb §3). */
-const ENDINGS = ["approved", "removed"] as const;
-/** The failures (report 0b7eb35b), with the preview's variants: each keeps its object and wears the failure. */
-const FAILURES = [
-  { m: "expired", variant: null },
-  { m: "nomatch", variant: ["nomatch", "spent"] },
-  { m: "nomatch", variant: ["nomatch", "foreign"] },
-  { m: "denied", variant: ["denied", "quiet"] },
-  { m: "denied", variant: ["denied", "coral"] },
-  { m: "failed-down", variant: null },
-] as const;
-/** `PAIRING_LEGS=motion,end`: those legs alone (every leg by default). */
 const LEGS = new Set(
-  (
-    process.env.PAIRING_LEGS ??
-    "qr,motion,handoff,ping,device,end,failures,glyphs,poses,frames,cost"
-  ).split(",")
-);
-type Moment = (typeof MOMENTS)[number];
-/** `PAIRING_MOMENTS=denied,expired`: the motion legs of those moments alone (every moment by default). */
-const ONLY = MOMENTS.filter(
-  (m) =>
-    !process.env.PAIRING_MOMENTS ||
-    process.env.PAIRING_MOMENTS.split(",").includes(m)
+  (process.env.PAIRING_LEGS ?? "frames,rest,leads,qr").split(",")
 );
 
-interface Rect {
-  h: number;
-  w: number;
-  x: number;
-  y: number;
-}
-interface Part {
-  /** A dot the cloud's loop drifts now: its rest is a loop, so no end to meet. */
-  drift?: boolean;
-  h: number;
-  inWords: boolean;
-  opacity: number;
-  rot: number;
-  sx: number;
-  top: number;
-  tx: number;
-  ty: number;
-  what: string;
-}
-interface Geo {
-  badge: Rect | null;
-  card: Rect;
-  caw: Rect;
-  /** The dots' discs, where the code is up or arriving. */
-  dots: Rect[];
-  /** Each moving part (a dot, a finder eye, a stroke) as far as it can be drawn: its box cut to every clip above it. */
-  flying: (Rect & { what: string })[];
-  layout: string;
-  /** Boxes stacked over the code, opaque and drawn whole: a moving part's box behind one is hidden there. */
-  shields: Rect[];
-  /** Each shown word box (opacity over 0.02), cut to every clip above it, and whether it stands whole inside the card. */
-  words: (Rect & {
-    inside: boolean;
-    leaving: boolean;
-    outside: string;
-    what: string;
-  })[];
-}
-interface Read {
-  geo: Geo[];
-  parts: Record<string, Part>;
-}
+/** Every moment at rest, with the owner's picks it is read in. */
+const RESTS: { m: string; picks?: [string, string][] }[] = [
+  { m: "asking" },
+  { m: "waiting" },
+  { m: "lastminute" },
+  { m: "checking-public" },
+  { m: "checking-tailnet" },
+  { m: "checking-lan" },
+  { m: "approved" },
+  { m: "approved", picks: [["removed", "kept"]] },
+  { m: "denied" },
+  { m: "denied", picks: [["denied", "coral"]] },
+  { m: "expired" },
+  { m: "nomatch-spent" },
+  { m: "nomatch-foreign" },
+  { m: "failed" },
+  { m: "removed", picks: [["removed", "kept"]] },
+];
 
-/** Every animated element in both stages, and the boxes the rules read. Runs in the page. */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page whole (page.evaluate), so every rule it reads lives inside it
-function readParts(): Read {
-  const w = window as unknown as {
-    __ids?: WeakMap<Element, number>;
-    __n?: { v: number };
-    __seen?: Map<string, Element>;
-    kitRuns: () => Animation[];
-  };
-  w.__seen ??= new Map();
-  const seenEls = w.__seen;
-  w.__ids ??= new WeakMap();
-  w.__n ??= { v: 0 };
-  const ids = w.__ids;
-  const n = w.__n;
-  const idOf = (el: Element) => {
-    if (!ids.has(el)) {
-      n.v += 1;
-      ids.set(el, n.v);
-    }
-    return ids.get(el) as number;
-  };
-  const describe = (el: Element) => {
-    const cls = el.getAttribute("class") ?? "";
-    return `${el.tagName.toLowerCase()}${cls ? `.${cls.split(" ").join(".")}` : ""}`;
-  };
-  const parts: Record<string, Part> = {};
-  // Every element a finite run moves now, and every element read before that is still in the page.
-  const targets = new Map<string, Element>();
-  for (const run of w.kitRuns()) {
-    const el = (run.effect as KeyframeEffect | null)?.target;
-    if (!(
-      el?.isConnected &&
-      Number.isFinite(Number(run.effect?.getComputedTiming().endTime))
-    )) {
-      continue;
-    }
-    const stage = el.closest(".stage") as HTMLElement | null;
-    if (stage) {
-      targets.set(`${stage.dataset.layout}:${idOf(el)}`, el);
-    }
+/** The coral controls each moment holds (spec §1: one, on the act the moment is for). */
+function coralsOf(m: string, picks: [string, string][] = []): number {
+  const coral = picks.some(([n, v]) => n === "denied" && v === "coral");
+  if (
+    m.startsWith("checking") ||
+    ["approved", "expired", "failed"].includes(m)
+  ) {
+    return 1;
   }
-  for (const [key, el] of seenEls) {
-    if (el.isConnected && !targets.has(key) && !key.endsWith(":dots")) {
-      targets.set(key, el);
-    }
-  }
-  // The code's dots, drawn on one canvas per card: each read from the page's
-  // own drawing of them, at the time of the dots' clock (a run the clock holds).
-  const { preview } = window as unknown as { preview: Preview };
-  const dotsDrawn = new Map<
-    string,
-    { k: number; rect: DOMRect; dots: DrawnDot[]; live: boolean }
-  >();
-  for (const stage of document.querySelectorAll<HTMLElement>(".stage")) {
-    const layout = stage.dataset.layout ?? "";
-    const canvas = stage.querySelector(
-      ".code canvas.dots"
-    ) as HTMLCanvasElement;
-    const drawn = preview.dotsOf(layout);
-    const rect = canvas.getBoundingClientRect();
-    dotsDrawn.set(layout, {
-      k: rect.width / canvas.offsetWidth,
-      rect,
-      dots: drawn.dots,
-      live: drawn.live,
-    });
-    if (drawn.live) {
-      seenEls.set(`${layout}:dots`, canvas);
-    }
-    if (seenEls.has(`${layout}:dots`)) {
-      const k = rect.width / canvas.offsetWidth;
-      for (const [i, d] of drawn.dots.entries()) {
-        parts[`${layout}:dot${i}`] = {
-          what: "dot",
-          opacity: d.o,
-          tx: d.tx,
-          ty: d.ty,
-          sx: d.s,
-          rot: 0,
-          h: 0,
-          top: rect.top + (d.cy - d.r) * k,
-          inWords: false,
-          drift: drawn.loop,
-        };
-      }
-    }
-  }
-  for (const [key, el] of targets) {
-    seenEls.set(key, el);
-    const cs = getComputedStyle(el);
-    const m = new DOMMatrixReadOnly(
-      cs.transform === "none" ? undefined : cs.transform
-    );
-    // The `translate` property moves the part too.
-    const [shiftX = 0, shiftY = 0] =
-      cs.translate === "none"
-        ? []
-        : cs.translate.split(" ").map((v) => Number.parseFloat(v));
-    const r = el.getBoundingClientRect();
-    parts[key] = {
-      what: describe(el),
-      opacity: Number(cs.opacity),
-      tx: m.e + shiftX,
-      ty: m.f + shiftY,
-      sx: Math.hypot(m.a, m.b),
-      rot: (Math.atan2(m.b, m.a) * 180) / Math.PI,
-      h: el.classList.contains("card-wrap") ? r.height : 0,
-      top: r.top,
-      // A text change's own spans and what leaves an ending in place are taken away once they land, invisible.
-      inWords: Boolean(
-        el.closest(".title, .words, .verb, .said, .btn, .leaving")
-      ),
-    };
-  }
-  const box = (el: Element | null): Rect | null => {
-    if (!el) {
-      return null;
-    }
-    const r = el.getBoundingClientRect();
-    return { x: r.left, y: r.top, w: r.width, h: r.height };
-  };
-  const cut = (a: Rect, clip: Rect): Rect | null => {
-    const x = Math.max(a.x, clip.x);
-    const y = Math.max(a.y, clip.y);
-    const r = Math.min(a.x + a.w, clip.x + clip.w);
-    const b = Math.min(a.y + a.h, clip.y + clip.h);
-    return r > x && b > y ? { x, y, w: r - x, h: b - y } : null;
-  };
-  /** What of box `rect`, drawn in `el`, can be seen: cut to `el`'s box and every clipping box above it in the stage. */
-  const clipped = (rect: Rect, el: Element): Rect | null => {
-    let at: Rect | null = cut(rect, box(el) as Rect);
-    for (
-      let up = el.parentElement;
-      up && at && !up.classList.contains("stage");
-      up = up.parentElement
-    ) {
-      const style = getComputedStyle(up);
-      if (style.overflow !== "visible") {
-        at = cut(at, box(up) as Rect);
-      }
-    }
-    return at;
-  };
-  /** What of `el` can be drawn: its box cut to every clipping box above it in the stage. */
-  const drawn = (el: Element): Rect | null => clipped(box(el) as Rect, el);
-  /** How opaque `el` is drawn: its opacity and every one above it in the stage, nothing where it is hidden. */
-  const shown = (el: Element): number => {
-    let o = 1;
-    for (let up: Element | null = el; up; up = up.parentElement) {
-      const style = getComputedStyle(up);
-      if (style.visibility === "hidden" || style.display === "none") {
-        return 0;
-      }
-      o *= Number(style.opacity);
-      if (up.classList.contains("stage")) {
-        break;
-      }
-    }
-    return o;
-  };
-  const WORDS =
-    ".title, .card .said .w, .card .well-act, .card .record .part, .card .means, .card .btn, .card .facts p, .card .readout .words, .card .glyph";
-  /** Whether an element's own background is opaque. */
-  const opaque = (el: Element) => {
-    const bg = getComputedStyle(el).backgroundColor;
-    // The alpha of `rgba(r, g, b, a)` or of `oklch(l c h / a)`; none written is 1.
-    // biome-ignore lint/performance/useTopLevelRegex: serialised into the page, where nothing outside the function exists
-    const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(bg);
-    // biome-ignore lint/performance/useTopLevelRegex: serialised into the page, where nothing outside the function exists
-    const comma = /^rgba\([^)]*,\s*([\d.]+)\)$/.exec(bg);
-    let alpha = 1;
-    if (slash) {
-      alpha = Number(slash[1]) / (slash[2] === "%" ? 100 : 1);
-    } else if (comma) {
-      alpha = Number(comma[1]);
-    }
-    return bg !== "transparent" && alpha >= 0.999;
-  };
-  const geo = [...document.querySelectorAll<HTMLElement>(".stage")].map(
-    (stage) => {
-      const cardEl = stage.querySelector(".card") as Element;
-      const cardBox = cardEl.getBoundingClientRect();
-      const words = [...stage.querySelectorAll(WORDS)]
-        .filter(
-          (el) =>
-            !el.closest("[hidden]") &&
-            (el.textContent ?? "").trim() !== "" &&
-            shown(el) > 0.02
-        )
-        .flatMap((el) => {
-          const r = el.getBoundingClientRect();
-          const at = drawn(el);
-          if (!at) {
-            return [];
-          }
-          const inside =
-            !el.closest(".card") ||
-            (r.left >= cardBox.left - 0.5 &&
-              r.right <= cardBox.right + 0.5 &&
-              r.top >= cardBox.top - 0.5 &&
-              r.bottom <= cardBox.bottom + 0.5);
-          // Words of the scene the card is leaving fold away with it.
-          const leaving = Boolean(el.closest(".scene:not([data-on])"));
-          // Where it stands past the card's edges, px (said when it does).
-          const outside = [
-            ["left", cardBox.left - r.left],
-            ["right", r.right - cardBox.right],
-            ["top", cardBox.top - r.top],
-            ["bottom", r.bottom - cardBox.bottom],
-          ]
-            .filter(([, by]) => Number(by) > 0.5)
-            .map(([edge, by]) => `${Number(by).toFixed(1)}px past the ${edge}`)
-            .join(", ");
-          return [{ ...at, inside, leaving, outside, what: describe(el) }];
-        });
-      const canvas = stage.querySelector(".code canvas.dots") as Element;
-      const drawnDots = dotsDrawn.get(stage.dataset.layout ?? "");
-      /** Each dot's disc box on the screen, with its opacity. */
-      const discs = (drawnDots?.dots ?? []).map((d) => {
-        const { k = 1, rect } = drawnDots ?? {};
-        return {
-          o: d.o,
-          // Off its module or changed in size: a dot resting on its module moves nothing.
-          moved: Math.abs(d.tx) > 0.01 || Math.abs(d.ty) > 0.01 || d.s !== 1,
-          box: {
-            x: (rect?.left ?? 0) + (d.cx - d.r) * k,
-            y: (rect?.top ?? 0) + (d.cy - d.r) * k,
-            w: 2 * d.r * k,
-            h: 2 * d.r * k,
-          },
-        };
-      });
-      const canvasShown = shown(canvas);
-      const flying = [
-        ...discs.flatMap(({ o, moved, box: disc }) => {
-          const at =
-            // Only dots a play's clock moves are moving parts: a code at rest, or a cloud held still, moves nothing.
-            drawnDots?.live && moved && canvasShown * o > 0.02 && disc.w > 0
-              ? clipped(disc, canvas)
-              : null;
-          return at ? [{ ...at, what: "dot" }] : [];
-        }),
-        ...[...stage.querySelectorAll(".code .eye, .wire svg")].flatMap(
-          (el) => {
-            const at = shown(el) > 0.02 ? drawn(el) : null;
-            return at ? [{ ...at, what: describe(el) }] : [];
-          }
-        ),
-      ];
-      const code = stage.querySelector(".code") as Element;
-      const dots = shown(code) > 0.02 ? discs.map((d) => d.box) : [];
-      // A tile stacked over the code (its z-index) with an opaque box, drawn whole: a moving part passes behind it.
-      const shields = [...stage.querySelectorAll(".tile")].flatMap((el) => {
-        const z = Number.parseInt(getComputedStyle(el).zIndex, 10);
-        const at =
-          z >= 1 && opaque(el) && shown(el) >= 0.999 ? drawn(el) : null;
-        return at ? [at] : [];
-      });
-      return {
-        words,
-        flying,
-        shields,
-        dots,
-        layout: stage.dataset.layout ?? "",
-        caw: box(stage.querySelector(".caw")) as Rect,
-        card: box(cardEl) as Rect,
-        badge: box(stage.querySelector(".well .badge")),
-      };
-    }
-  );
-  return { parts, geo };
-}
-
-const PROPS = ["opacity", "tx", "ty", "sx", "rot", "h"] as const;
-const EPS: Record<(typeof PROPS)[number], number> = {
-  opacity: 0.005,
-  tx: 0.3,
-  ty: 0.3,
-  sx: 0.003,
-  rot: 0.3,
-  h: 0.3,
-};
-
-/** Where a sequence turns back: each reversal bigger than eps. */
-function reversals(values: number[], eps: number): number[] {
-  const out: number[] = [];
-  let dir = 0;
-  for (let i = 1; i < values.length; i += 1) {
-    const step = (values[i] as number) - (values[i - 1] as number);
-    if (Math.abs(step) <= eps) {
-      continue;
-    }
-    const sign = Math.sign(step);
-    if (dir !== 0 && sign !== dir) {
-      out.push(Math.abs(step));
-    }
-    dir = sign;
-  }
-  return out;
+  return m === "denied" && coral ? 1 : 0;
 }
 
 /**
- * Where a part stands still between two reads after leaving its start and
- * before reaching its end: every property it moves unchanged from one read
- * to the next while one of them is mid-way.
+ * What the object slot draws in each moment (spec §1, §6): the thing the
+ * hub gave, wearing the failure; on the device's screen one thing, the
+ * icon with the code or one outcome's mark.
  */
-function holds(
-  reads: Record<(typeof PROPS)[number], number>[],
-  indices: number[]
-): number[] {
-  const out: number[] = [];
-  const [first] = reads;
-  const lastRead = reads.at(-1);
-  if (!(first && lastRead)) {
-    return out;
+function holdsOf(m: string): string {
+  if (m.startsWith("checking")) {
+    return ".device .head .screen-letters";
   }
-  for (let i = 1; i < reads.length - 1; i += 1) {
-    const now = reads[i] as (typeof reads)[number];
-    const next = reads[i + 1] as (typeof reads)[number];
-    const midway = PROPS.some(
-      (p) =>
-        Math.abs(now[p] - first[p]) > EPS[p] &&
-        Math.abs(now[p] - lastRead[p]) > EPS[p]
-    );
-    const still = PROPS.every((p) => Math.abs(next[p] - now[p]) <= EPS[p] / 10);
-    if (midway && still) {
-      out.push(indices[i] as number);
-    }
+  const mark = { approved: "m-check", denied: "m-lock", removed: "m-unlink" }[
+    m
+  ];
+  if (mark) {
+    return `.device .screen-mark .${mark}`;
   }
-  return out;
+  return ["expired", "failed"].includes(m) ? ".paper" : ".paper .head";
 }
 
-/** Where two boxes overlap, when they do by at least one whole pixel across and down. */
-function meet(a: Rect, b: Rect): Rect | null {
-  const x = Math.max(a.x, b.x);
-  const y = Math.max(a.y, b.y);
-  const w = Math.min(a.x + a.w, b.x + b.w) - x;
-  const h = Math.min(a.y + a.h, b.y + b.h) - y;
-  return w >= 1 && h >= 1 ? { x, y, w, h } : null;
+/** Every board (spec §7), from → to, with the owner's picks it needs and what leads it. */
+const BOARDS: {
+  from: string;
+  to: string;
+  lead: string;
+  picks?: [string, string][];
+}[] = [
+  {
+    from: "open",
+    to: "asking",
+    lead: "Caw's loading enter (Rive, no Web Animation)",
+  },
+  { from: "asking", to: "waiting", lead: "the dots lock on, ink 0.3 → 1" },
+  {
+    from: "waiting",
+    to: "lastminute",
+    lead: '"Expires in 0:59" enters; the ping warms',
+  },
+  { from: "waiting", to: "checking-tailnet", lead: "the pour, the eyes last" },
+  { from: "waiting", to: "checking-public", lead: "the pour, the eyes last" },
+  {
+    from: "checking-tailnet",
+    to: "approved",
+    lead: "Deny exits; Approve morphs to Done",
+  },
+  {
+    from: "checking-tailnet",
+    to: "denied",
+    lead: "Deny exits, Approve 60ms later",
+  },
+  { from: "lastminute", to: "expired", lead: "the figure ticks 0:01 → 0:00" },
+  { from: "expired", to: "asking", lead: "New code exits" },
+  { from: "denied", to: "asking", lead: "New code exits; the lock leaves" },
+  {
+    from: "waiting",
+    to: "nomatch-spent",
+    lead: "the ⚠ arrives in the mark cell",
+  },
+  { from: "asking", to: "failed", lead: "the cloud coasts to a stop" },
+  { from: "failed", to: "asking", lead: "Retry exits" },
+  {
+    from: "approved",
+    to: "removed",
+    lead: "Remove device exits, Done 60ms later",
+    picks: [["removed", "kept"]],
+  },
+  {
+    from: "removed",
+    to: "asking",
+    lead: "New code exits; the broken link leaves",
+    picks: [["removed", "kept"]],
+  },
+];
+
+interface Preview {
+  boardFor: (to: string) => string | null;
+  dotsOf: () => {
+    dots: { cx: number; cy: number; o: number; r: number }[];
+    live: boolean;
+    m: number;
+    r: number;
+  };
+  go: (to: string) => void;
+  landRecord: () => void;
+  manualHub: (on: boolean) => void;
+  moment: string;
+  pick: (name: string, value: string) => Promise<void>;
+  snap: (m: string, options?: { figure?: string }) => Promise<void>;
+  stillClock: (on: boolean) => void;
 }
-
-/** Whether box `a` lies inside box `b` (to half a pixel). */
-const within = (a: Rect, b: Rect) =>
-  a.x >= b.x - 0.5 &&
-  a.y >= b.y - 0.5 &&
-  a.x + a.w <= b.x + b.w + 0.5 &&
-  a.y + a.h <= b.y + b.h + 0.5;
-
-const intersects = (a: Rect, b: Rect) =>
-  Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) *
-  Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+type W = Window & { preview: Preview };
 
 function serve() {
   return Bun.serve({
@@ -533,10 +203,9 @@ function serve() {
 async function openPreview(
   kit: Kit,
   url: string,
-  engine: Engine,
-  view: "desk" | "phone" = "desk"
+  engine: Engine
 ): Promise<{ page: Page; errors: string[] }> {
-  const page = await kit.page(view, { engine, scale: 1 });
+  const page = await kit.page("desk", { engine, scale: 1 });
   const errors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -544,46 +213,16 @@ async function openPreview(
     }
   });
   page.on("pageerror", (error) => errors.push(String(error)));
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(url);
-  await page.waitForSelector("html[data-ready]");
+  await page.waitForSelector("html[data-ready]", { timeout: 30_000 });
   await page.evaluate(() => {
-    const p = (window as unknown as { preview: Preview }).preview;
+    const p = (window as unknown as W).preview;
     p.manualHub(true);
     p.stillClock(true);
   });
   return { page, errors };
 }
-
-/** A dot as the page draws it: its disc's centre and radius in its canvas's px, its move (px), scale and opacity. */
-interface DrawnDot {
-  cx: number;
-  cy: number;
-  o: number;
-  r: number;
-  s: number;
-  tx: number;
-  ty: number;
-}
-interface Preview {
-  dotsOf: (layout: string) => {
-    dots: DrawnDot[];
-    live: boolean;
-    loop: boolean;
-    m: number;
-    r: number;
-  };
-  go: (m: string) => void;
-  landRecord: () => void;
-  manualHub: (on: boolean) => void;
-  play: (m: string) => Promise<void>;
-  snap: (m: string) => void;
-  stillClock: (on: boolean) => void;
-  variant: (name: string, value: string) => void;
-}
-const playIn = (page: Page, m: Moment) =>
-  page.evaluate(async (moment) => {
-    await (window as unknown as { preview: Preview }).preview.play(moment);
-  }, m);
 
 /** Every finite run in the page played out. */
 const settled = (page: Page) =>
@@ -598,1771 +237,662 @@ const settled = (page: Page) =>
     )
   );
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one moment read whole: motion, holds, the end, and the boxes, each said as it is read
-async function motionLeg(kit: Kit, page: Page, engine: Engine, m: Moment) {
-  const tag = `${engine} ${m}`;
-  // Put the card in the moment it plays from, at rest, before the read.
-  await playIn(page, m);
-  await settled(page);
-  await page.evaluate(() => {
-    (window as unknown as { __seen?: Map<string, Element> }).__seen = new Map();
-  });
-  const read = await readMotion(page, () => playIn(page, m), "main.frames", {
-    fractions: FINE,
-    read: () => page.evaluate(readParts),
-  });
-  await settled(page);
-  const resting = await page.evaluate(readParts);
-  const seen = read.at.map((a) => a.value);
-  const quarters = QUARTERS.map((f) => seen[Math.round(f * STEPS)] as Read);
-  const pct = (i: number) => `${((i / STEPS) * 100).toFixed(1)}%`;
-  const keys = new Set(seen.flatMap((s) => Object.keys(s.parts)));
-  const turns: string[] = [];
-  const shakes: string[] = [];
-  const stills: string[] = [];
-  for (const key of keys) {
-    const at0 = seen.find((s) => s.parts[key])?.parts[key] as Part;
-    for (const prop of PROPS) {
-      const q = quarters
-        .map((s) => s.parts[key]?.[prop])
-        .filter((v): v is number => v !== undefined);
-      const back = reversals(q, EPS[prop]);
-      if (back.length) {
-        const said = `${at0.what} ${prop} ${q.map((v) => v.toFixed(2)).join("→")}`;
-        // r4's head as a code dies: it squeezes and shakes once, out and back, and ends as it began.
-        const shake =
-          at0.what === "img.badge" &&
-          (prop === "tx" || prop === "sx") &&
-          Math.abs((q.at(-1) ?? 0) - (q[0] ?? 0)) <= EPS[prop];
-        if (shake) {
-          shakes.push(said);
-        } else {
-          turns.push(said);
-        }
-      }
-    }
-    const present = seen
-      .map((r, i) => [r.parts[key], i] as const)
-      .filter((pair): pair is readonly [Part, number] => pair[0] !== undefined);
-    const held = holds(
-      present.map(([p]) => p),
-      present.map(([, i]) => i)
-    );
-    if (held.length) {
-      stills.push(`${at0.what} at ${held.map(pct).join(",")}`);
-    }
-  }
-  // The end: each part rests where the clock's end drew it; what was taken away was invisible there.
-  const end = seen.at(-1) as Read;
-  const jumps: string[] = [];
-  for (const [key, p] of Object.entries(end.parts)) {
-    const now = resting.parts[key];
-    if (now?.drift) {
-      // Handed on to the cloud's loop (Asking): it drifts on from where the clock's end left it.
-      continue;
-    }
-    if (now) {
-      for (const prop of ["opacity", "tx", "ty", "sx", "h"] as const) {
-        if (Math.abs(now[prop] - p[prop]) > EPS[prop] * 2) {
-          jumps.push(
-            `${p.what} ${prop} ${p[prop].toFixed(2)} → ${now[prop].toFixed(2)}`
-          );
-        }
-      }
-    } else if (p.opacity > 0.01 && !p.inWords) {
-      jumps.push(`${p.what} taken away while drawn`);
-    }
-  }
-  kit.check(
-    `${tag}: every part moves one way at 0, ¼, ½, ¾ and 1`,
-    turns.length === 0,
-    turns.slice(0, 6).join("; ")
-  );
-  if (shakes.length) {
-    kit.note(
-      `${tag}: the head squeezes and shakes once (r4's), out and back to where it began (${shakes.join("; ")})`
-    );
-  }
-  kit.check(
-    `${tag}: nothing stands still mid-way (${STEPS + 1} reads)`,
-    stills.length === 0,
-    stills.slice(0, 6).join("; ")
-  );
-  kit.check(
-    `${tag}: no jump at the end (rest = the clock's last frame)`,
-    jumps.length === 0,
-    jumps.slice(0, 6).join("; ")
-  );
-  kit.check(
-    `${tag}: every run played to its end once let go (${read.runs.length} runs, by ${read.by})`,
-    read.runs.every((r) => r.ended),
-    read.runs
-      .filter((r) => !r.ended)
-      .map((r) => `${r.target} ${r.name}: ${r.missed}`)
-      .slice(0, 4)
-      .join("; ")
-  );
-
-  // Boxes at every read.
-  const meets: string[] = [];
-  const inHead: string[] = [];
-  const over: string[] = [];
-  const clipped: string[] = [];
-  for (const [i, s] of seen.entries()) {
-    for (const g of s.geo) {
-      if (intersects(g.caw, g.card) > 0) {
-        meets.push(`${g.layout} at ${pct(i)}`);
-      }
-      if (m === "waiting" && g.badge) {
-        const n = g.dots.filter(
-          (d) => intersects(d, g.badge as Rect) > 0.01
-        ).length;
-        if (n) {
-          inHead.push(`${g.layout} ${n} dot(s) at ${pct(i)}`);
-        }
-      }
-      for (const w of g.words) {
-        if (!(w.inside || w.leaving)) {
-          clipped.push(`${g.layout} ${w.what} at ${pct(i)} (${w.outside})`);
-        }
-        for (const f of g.flying) {
-          const where = meet(f, w);
-          if (where && !g.shields.some((shield) => within(where, shield))) {
-            over.push(`${g.layout} ${f.what} over ${w.what} at ${pct(i)}`);
-          }
-        }
-      }
-    }
-  }
-  if (m === "waiting") {
-    kit.check(
-      `${tag}: no dot's disc meets the head's square at any read of the arrival (${seen.length} reads)`,
-      inHead.length === 0,
-      inHead.slice(0, 6).join("; ")
-    );
-  }
-  kit.check(
-    `${tag}: nothing moving meets a word while the word shows (${seen.length} reads)`,
-    over.length === 0,
-    [...new Set(over)].slice(0, 6).join("; ")
-  );
-  kit.check(
-    `${tag}: every word the card shows or brings in stands whole inside it`,
-    clipped.length === 0,
-    [...new Set(clipped)].slice(0, 6).join("; ")
-  );
-  kit.check(
-    `${tag}: Caw's box never meets the card's`,
-    meets.length === 0,
-    meets.slice(0, 4).join(", ")
-  );
-  for (const g of resting.geo) {
-    const dx = Math.abs(g.caw.x + g.caw.w / 2 - (g.card.x + g.card.w / 2));
-    kit.check(
-      `${tag}: ${g.layout} Caw's centre x is the card's within 1px (${dx.toFixed(2)}px)`,
-      dx <= 1
-    );
-  }
-}
-
-/** The QR as drawn: its dots circles, its eyes rounded rings, and it decodes. */
-async function qrLeg(kit: Kit, page: Page, engine: Engine) {
-  await playIn(page, "waiting");
-  await settled(page);
-  const shape = await page.evaluate(() => {
-    const code = document.querySelector(
-      '.stage[data-layout="desk"] .code'
-    ) as HTMLElement;
-    // The dots are discs the canvas draws (`arc`): each at rest on its module, whole, of r4's radius (0.42 module).
-    const drawn = (window as unknown as { preview: Preview }).preview.dotsOf(
-      "desk"
-    );
-    const { dots } = drawn;
-    const notRound = dots.filter(
-      (d) =>
-        Math.abs(d.r - 0.42 * drawn.m) > 0.01 ||
-        d.s !== 1 ||
-        d.o !== 1 ||
-        d.tx !== 0 ||
-        d.ty !== 0
-    ).length;
-    const eyes = [...code.querySelectorAll(".eye")].map((g) => {
-      const ring = g.querySelector("rect");
-      const pupil = g.querySelector("circle");
-      return {
-        rx: Number(ring?.getAttribute("rx")),
-        side: Number(ring?.getAttribute("width")),
-        fill: ring?.getAttribute("fill"),
-        pupil: Number(pupil?.getAttribute("r")),
-      };
-    });
-    return { dots: dots.length, notRound, eyes };
-  });
-  kit.check(
-    `${engine}: every dark module is drawn as a disc of r4's radius (0.42 module) resting on its module (${shape.dots} dots, ${shape.notRound} not)`,
-    shape.dots > 0 && shape.notRound === 0
-  );
-  kit.check(
-    `${engine}: the three finder eyes are rounded rings round a dot (${shape.eyes.map((e) => `ring ${e.side} rx ${e.rx} fill ${e.fill}, dot r ${e.pupil}`).join("; ")})`,
-    shape.eyes.length === 3 &&
-      shape.eyes.every(
-        (e) => e.rx > 0 && e.rx < e.side / 2 && e.fill === "none" && e.pupil > 0
+async function setWidth(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 1000 });
+  await page.waitForFunction((w) => window.innerWidth === w, width);
+  await page.evaluate(
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done))
       )
   );
-  const well = await page
-    .locator('.stage[data-layout="desk"] .well')
-    .boundingBox();
-  if (!well) {
-    kit.check(`${engine}: the QR decodes`, false, "no well box");
-    return;
-  }
-  const pad = 36;
-  const png = await page.screenshot({
-    clip: {
-      x: well.x - pad,
-      y: well.y - pad,
-      width: well.width + 2 * pad,
-      height: well.height + 2 * pad,
-    },
-  });
-  const [found] = await readBarcodes(new Uint8Array(png), {
-    formats: ["QRCode"],
-    tryInvert: false,
-  });
-  kit.check(
-    `${engine}: the drawn QR decodes to its text (${JSON.stringify(found?.text ?? null)})`,
-    found?.text === PAYLOAD
-  );
 }
 
-/** The device card: its drawing the hero, centred; its facts on one start edge at text-align start. */
-async function deviceLeg(kit: Kit, page: Page, engine: Engine) {
-  for (const m of [
-    "checking-public",
-    "checking-tailnet",
-    "checking-lan",
-  ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one network case at a time
-    await playIn(page, m);
-    await settled(page);
-    const rows = await page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
-        const card = (
-          stage.querySelector(".card") as Element
-        ).getBoundingClientRect();
-        const wire = (
-          stage.querySelector(".wire") as Element
-        ).getBoundingClientRect();
-        const facts = [
-          ...stage.querySelectorAll<HTMLElement>(
-            ".facts .name, .facts .kind, .facts .addr, .facts .second, .facts .meta"
-          ),
-        ].filter((p) => !p.hidden);
-        return {
-          layout: stage.dataset.layout ?? "",
-          drawingOff: Math.abs(
-            wire.left + wire.width / 2 - (card.left + card.width / 2)
-          ),
-          starts: facts.map((p) => {
-            const range = document.createRange();
-            range.selectNodeContents(p);
-            return range.getClientRects()[0]?.left ?? Number.NaN;
-          }),
-          aligns: facts.map((p) => getComputedStyle(p).textAlign),
-        };
-      })
-    );
-    for (const r of rows) {
-      const spread = Math.max(...r.starts) - Math.min(...r.starts);
-      kit.check(
-        `${engine} ${m}: ${r.layout} the device drawing's centre x is the card's within 1px (${r.drawingOff.toFixed(2)}px)`,
-        r.drawingOff <= 1
-      );
-      kit.check(
-        `${engine} ${m}: ${r.layout} the facts' words start on one edge within 1px (${r.starts.length} rows, ${spread.toFixed(2)}px apart) at text-align ${[...new Set(r.aligns)].join("/")}`,
-        spread <= 1 && r.aligns.every((a) => a === "start" || a === "left")
-      );
-    }
-  }
-}
-
-/**
- * The endings (report a8f73fdb note 8): their words at `text-align: start`
- * on one start edge, exactly one coral act shown, the record never broken
- * inside a part at 390, and the status glyph drawn as the arrival lands: its
- * animations and the arrival's start on one frame, and on the arrival's
- * clock it is not yet drawn at ½ and drawn at 1.
- */
-/** The moment whose drawing of Caw a moment shows: the network cases are Checking's; the hub didn't answer is Failed's. */
-function poseOf(m: Moment): string {
-  if (m.startsWith("checking")) {
-    return "checking";
-  }
-  if (m.startsWith("failed")) {
-    return "failed";
-  }
-  return m;
-}
-
-async function endLeg(kit: Kit, page: Page, engine: Engine) {
-  for (const m of ENDINGS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one ending at a time
-    await playIn(page, m);
-    await settled(page);
-    const rows = await page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
-        const scene = stage.querySelector(".scene-outcome") as HTMLElement;
-        const shownEl = (el: Element) =>
-          !el.closest("[hidden]") && el.getClientRects().length > 0;
-        const textStart = (el: Element) => {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          return range.getClientRects()[0]?.left ?? Number.NaN;
-        };
-        const prose = [
-          ...scene.querySelectorAll(".said, .record .part, .means"),
-        ].filter(shownEl);
-        const ghost = scene.querySelector('.acts [data-tone="ghost"]');
-        const aligned = [...prose, ...(ghost && shownEl(ghost) ? [ghost] : [])];
-        const said = scene.querySelector(".said") as HTMLElement;
-        const column = said.getBoundingClientRect();
-        const firstPart = scene.querySelector(".record .part");
-        const starts = [
-          textStart(said),
-          ...(firstPart && shownEl(firstPart) ? [textStart(firstPart)] : []),
-          ...[...scene.querySelectorAll(".means")]
-            .filter(shownEl)
-            .map(textStart),
-        ];
-        const parts = [...scene.querySelectorAll(".record .part")]
-          .filter(shownEl)
-          .map((p) => ({
-            text: p.textContent ?? "",
-            lines: p.getClientRects().length,
-            w: p.getBoundingClientRect().width,
-          }));
-        return {
-          layout: stage.dataset.layout ?? "",
-          aligns: aligned.map(
-            (el) =>
-              `${(el.className || el.tagName).toString().split(" ")[0]} ${getComputedStyle(el).textAlign}`
-          ),
-          starts,
-          primaries: [
-            ...scene.querySelectorAll('[data-tone="primary"]'),
-          ].filter(shownEl).length,
-          parts,
-          column: column.width,
-        };
-      })
-    );
-    for (const r of rows) {
-      const spread = Math.max(...r.starts) - Math.min(...r.starts);
-      const off = r.aligns.filter(
-        (a) => !(a.endsWith(" start") || a.endsWith(" left"))
-      );
-      kit.check(
-        `${engine} ${m}: ${r.layout} every text row is at text-align start (${r.aligns.length} rows) and the verdict, record and means start on one edge within 1px (${spread.toFixed(2)}px apart)`,
-        off.length === 0 && spread <= 1,
-        off.join("; ")
-      );
-      kit.check(
-        `${engine} ${m}: ${r.layout} exactly one coral act shows (${r.primaries})`,
-        r.primaries === 1
-      );
-      if (r.layout === "phone" && r.parts.length) {
-        const broken = r.parts.filter(
-          (p) => p.lines !== 1 || p.w > r.column + 0.5
-        );
-        kit.check(
-          `${engine} ${m}: at 390 no part of the record breaks inside (${r.parts.map((p) => `"${p.text}" ${p.w.toFixed(0)}px`).join(", ")} in ${r.column.toFixed(0)}px)`,
-          broken.length === 0,
-          broken
-            .map((p) => `${p.text}: ${p.lines} lines, ${p.w.toFixed(1)}px`)
-            .join("; ")
-        );
-      }
-    }
-    if (m === "removed") {
-      continue;
-    }
-    // The glyph against the arrival, on one held clock.
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
-    const glyph = await page.evaluate(async (moment) => {
-      await (window as unknown as { preview: Preview }).preview.play(moment);
-      // A run the compositor plays has its start once the compositor says so, a frame or two on.
-      for (
-        let frame = 0;
-        frame < 30 && document.getAnimations().some((run) => run.pending);
-        frame += 1
-      ) {
-        // biome-ignore lint/performance/noAwaitInLoops: one frame at a time, until every run has started
-        await new Promise((done) =>
-          requestAnimationFrame(() => done(undefined))
-        );
-      }
-      const runs = document.getAnimations();
-      // Each run's start on the timeline, read before the hold (a paused run has none).
-      const begun = new Map(
-        runs.map((run) => [run, run.startTime as number | null])
-      );
-      for (const run of runs) {
-        run.pause();
-      }
-      const desk = document.querySelector(
-        '.stage[data-layout="desk"]'
-      ) as HTMLElement;
-      const mine = runs.filter((run) =>
-        desk.contains((run.effect as KeyframeEffect | null)?.target ?? null)
-      );
-      const arrival = mine.find((run) => run.id === "arrive");
-      const glyphs = mine.filter((run) => run.id === "glyph");
-      const mark = desk.querySelector(".mark") as HTMLElement;
-      const svg = mark.querySelector(
-        `.g-${mark.dataset.glyph}`
-      ) as SVGSVGElement;
-      const tick = svg.querySelector(".tick");
-      const drawnNow = () =>
-        Number(getComputedStyle(svg).opacity) >= 0.999 &&
-        (!tick ||
-          Number.parseFloat(getComputedStyle(tick).strokeDashoffset) <= 0.001);
-      const arrivalStart = arrival ? begun.get(arrival) : null;
-      if (!(arrival && glyphs.length && typeof arrivalStart === "number")) {
-        for (const run of runs) {
-          run.play();
-        }
-        return {
-          missing: `${mine.length} runs on the desk stage, ids ${[...new Set(mine.map((run) => run.id))].join("/")}, arrival start ${arrivalStart}, ${glyphs.length} glyph runs`,
-        };
-      }
-      const timing = arrival.effect?.getTiming() as {
-        delay: number;
-        duration: number;
-      };
-      const seek = (f: number) => {
-        const at = arrivalStart + timing.delay + f * timing.duration;
-        for (const run of runs) {
-          const start = begun.get(run);
-          if (typeof start === "number") {
-            run.currentTime = at - start;
-          }
-        }
-      };
-      seek(0.5);
-      const half = drawnNow();
-      seek(1);
-      const whole = drawnNow();
-      for (const run of runs) {
-        run.play();
-      }
-      return {
-        same: glyphs.every((run) => begun.get(run) === arrivalStart),
-        glyph: mark.dataset.glyph,
-        half,
-        whole,
-      };
-    }, m);
-    await settled(page);
-    kit.check(
-      `${engine} ${m}: the ${glyph?.glyph ?? "?"} glyph starts on the arrival's frame, is not yet drawn at ½ of the arrival and is drawn at its end`,
-      Boolean(glyph?.same && !glyph.half && glyph.whole),
-      JSON.stringify(glyph)
-    );
-  }
-}
-
-/** One failure as the engine draws it, per layout (`readFailure`). */
-interface FailureRead {
-  badge: number;
-  band: number;
-  bare: number;
-  code: number;
-  coral: number;
-  cross: { o: number; spans: boolean };
-  device: {
-    approve: boolean;
-    deny: string;
-    facts: string[];
-    mark: number;
-    markOff: number;
-    strokes: number[];
-    verb: string;
-  };
-  dots: { n: number; off: number };
-  edge: { ink: string; fail: string };
-  eyes: number[];
-  glyphs: number[];
-  height: { card: number; code: number; device: number };
-  layout: string;
-  line: { mark: string; words: string };
-  ping: string;
-  ring: { ink: string; fail: string; hairline: string };
-  way: { label: string; o: number; off: number };
-}
-
-/** Everything a failure keeps and wears, read from the engine, per layout. Runs in the page. */
-function readFailure(): FailureRead[] {
-  const w = window as unknown as {
-    preview: Preview & {
-      stages: {
-        heights: { code: number; device: Record<string, number> };
-        layout: string;
-        network: string;
-        pingRun: Animation | null;
-      }[];
-    };
-  };
-  const ink = (value: string) => {
-    const probe = document.createElement("span");
-    probe.style.color = value;
-    document.body.append(probe);
-    const out = getComputedStyle(probe).color;
-    probe.remove();
-    return out;
-  };
-  const shown = (el: Element | null): number => {
-    let o = 1;
-    for (let up: Element | null = el; up; up = up.parentElement) {
-      const style = getComputedStyle(up);
-      if (style.display === "none" || style.visibility === "hidden") {
-        return 0;
-      }
-      o *= Number(style.opacity);
-      if (up.classList.contains("stage")) {
-        break;
-      }
-    }
-    return o;
-  };
-  const centre = (el: Element) => {
-    const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  };
-  return [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
-    const layout = stage.dataset.layout ?? "";
-    const S = w.preview.stages.find((x) => x.layout === layout);
-    const $ = (sel: string) => stage.querySelector(sel) as HTMLElement;
-    const card = $(".card");
-    const well = $(".well");
-    const way = $(".well-act");
-    const drawn = w.preview.dotsOf(layout);
-    const letters = $(".letters").getBoundingClientRect();
-    const cross = $(".letters .cross").getBoundingClientRect();
-    const glyphs = [...stage.querySelectorAll(".tile .glyph")];
-    const first = glyphs[0]?.getBoundingClientRect();
-    const lastGlyph = glyphs.at(-1)?.getBoundingClientRect();
-    // The one mark the line shows: drawn whole, every other one not drawn at all.
-    const marks = (["live", "close", "clock"] as const).map((k) => ({
-      k,
-      o: shown($(k === "live" ? ".readout .live" : `.readout .g-${k}`)),
-    }));
-    const whole = marks.filter((x) => x.o > 0.98);
-    const markOn =
-      whole.length === 1 && marks.every((x) => x.o > 0.98 || x.o < 0.02)
-        ? whole[0]?.k
-        : undefined;
-    const wire = $(".wire");
-    const mark = $(".wire .wire-mark");
-    const wc = centre(wire);
-    const mc = centre(mark);
-    const wellC = centre(well);
-    const wayC = centre(way);
-    return {
-      layout,
-      code: shown($(".code")),
-      dots: {
-        n: drawn.dots.length,
-        off: drawn.dots.filter(
-          (d) => Math.abs(d.tx) > 0.5 || Math.abs(d.ty) > 0.5 || d.o < 0.99
-        ).length,
-      },
-      eyes: [...stage.querySelectorAll(".code .eye")].map(shown),
-      glyphs: glyphs.map(shown),
-      cross: {
-        o: shown($(".letters .cross")),
-        spans: Boolean(
-          first &&
-          lastGlyph &&
-          cross.left <= first.left + 0.5 &&
-          cross.right >= lastGlyph.right - 0.5 &&
-          cross.width <= letters.width + 0.5
-        ),
-      },
-      badge: shown($(".well .badge")),
-      way: {
-        label: (way.textContent ?? "").trim(),
-        o: shown(way),
-        off: Math.hypot(wayC.x - wellC.x, wayC.y - wellC.y),
-      },
-      line: {
-        mark: markOn ?? "",
-        words: ($(".readout .words").textContent ?? "").trim(),
-      },
-      ring: {
-        ink: getComputedStyle(card).getPropertyValue("--ring").trim(),
-        fail: ink("var(--status-fail-ink)"),
-        hairline: ink("var(--border-hairline)"),
-      },
-      edge: {
-        ink: getComputedStyle(well, "::before").boxShadow,
-        fail: ink("var(--status-fail-ink)"),
-      },
-      band: Number.parseFloat(
-        getComputedStyle(card).getPropertyValue("--band")
-      ),
-      ping: S?.pingRun?.playState ?? "none",
-      coral: [...stage.querySelectorAll('[data-tone="primary"]')].filter(
-        (el) => shown(el) > 0.02 && el.getBoundingClientRect().width > 0
-      ).length,
-      // A disc or box behind a glyph is a filled shape; the clock's dial is a stroke, no fill.
-      bare: [
-        ...stage.querySelectorAll("svg.g circle, svg.g rect, svg.g ellipse"),
-      ].filter((el) => getComputedStyle(el).fill !== "none").length,
-      device: {
-        strokes: [...stage.querySelectorAll(".wire svg:not(.wire-mark)")].map(
-          shown
-        ),
-        mark: shown(mark),
-        markOff: Math.hypot(mc.x - wc.x, mc.y - wc.y),
-        facts: [...stage.querySelectorAll(".facts p")]
-          .filter((p) => shown(p) > 0.98)
-          .map((p) => (p.textContent ?? "").replace(/\s+/g, " ").trim()),
-        verb: ($(".meta .verb").textContent ?? "").trim(),
-        approve: shown($('[data-act="approve"]')) > 0.02,
-        deny: ($(".actions .btn").textContent ?? "").trim(),
-      },
-      height: {
-        card: card.getBoundingClientRect().height,
-        code: S?.heights.code ?? Number.NaN,
-        device: S?.heights.device[S.network] ?? Number.NaN,
-      },
-    };
-  });
-}
-
-/**
- * The failures (report 0b7eb35b, "the well keeps what the hub gave"), each
- * at rest and read from the engine on both layouts: what persists (the
- * code, the device or the cloud), the ring's ink, one coral at most, every
- * glyph bare, and the card's height (the code card's on the three code
- * moments, the device card's on Denied). The hub didn't answer's cloud is
- * read twice, 300ms apart, to show it stopped.
- */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one case a branch, each said as it is read
-async function failuresLeg(kit: Kit, page: Page, engine: Engine) {
-  for (const c of FAILURES) {
-    const name = c.variant ? `${c.m} (${c.variant[1]})` : c.m;
-    if (c.variant) {
-      // biome-ignore lint/performance/noAwaitInLoops: one case at a time
-      await page.evaluate(
-        ([n, v]) =>
-          (window as unknown as { preview: Preview }).preview.variant(n, v),
-        c.variant as readonly [string, string]
-      );
-    }
-    await playIn(page, c.m);
-    await settled(page);
-    const reads = await page.evaluate(readFailure);
-    const before =
-      c.m === "failed-down"
-        ? await page.evaluate(() => {
-            const p = (window as unknown as { preview: Preview }).preview;
-            return ["desk", "phone"].map((l) =>
-              p
-                .dotsOf(l)
-                .dots.map((d) => `${d.cx.toFixed(2)},${d.cy.toFixed(2)}`)
-                .join(" ")
-            );
-          })
-        : null;
-    const later =
-      c.m === "failed-down"
-        ? await page.evaluate(async () => {
-            await new Promise((done) => setTimeout(done, 300));
-            const p = (window as unknown as { preview: Preview }).preview;
-            return ["desk", "phone"].map((l) =>
-              p
-                .dotsOf(l)
-                .dots.map((d) => `${d.cx.toFixed(2)},${d.cy.toFixed(2)}`)
-                .join(" ")
-            );
-          })
-        : null;
-    for (const [i, r] of reads.entries()) {
-      const tag = `${engine} ${name}: ${r.layout}`;
-      const near = (a: number, b: number, by = 0.02) => Math.abs(a - b) <= by;
-      const all = (xs: number[], v: number) => xs.every((x) => near(x, v));
-      let persists = false;
-      let said = "";
-      if (c.m === "expired") {
-        persists =
-          near(r.code, 0.3) &&
-          r.dots.off === 0 &&
-          all(r.eyes, 0.3) &&
-          all(r.glyphs, 1) &&
-          near(r.cross.o, 1) &&
-          r.cross.spans &&
-          near(r.badge, 0) &&
-          r.line.mark === "clock" &&
-          r.way.label === "New code" &&
-          near(r.way.o, 1) &&
-          r.way.off <= 1;
-        said = `the code dimmed to ${r.code.toFixed(2)} with its ${r.dots.n} dots on their modules (${r.dots.off} off) and ${r.eyes.length} eyes; the six letters drawn and struck across; the head gone; the clock on the line ("${r.line.words}"); ${r.way.label} at the code's centre (${r.way.off.toFixed(2)}px off)`;
-      } else if (c.m === "nomatch") {
-        persists =
-          near(r.code, 1) &&
-          r.dots.off === 0 &&
-          all(r.eyes, 1) &&
-          all(r.glyphs, 1) &&
-          near(r.badge, 1) &&
-          r.ping === "running" &&
-          r.line.mark === "close" &&
-          r.edge.ink.includes(r.edge.fail) &&
-          near(r.way.o, 0);
-        said = `the live code at full ink, its ${r.dots.n} dots on their modules (${r.dots.off} off), eyes, letters and head drawn, the ping ${r.ping}; the paper's edge in the fail ink; the ✕ on the line ("${r.line.words}"); no button`;
-      } else if (c.m === "denied") {
-        persists =
-          all(r.device.strokes, 0.5) &&
-          near(r.device.mark, 1) &&
-          r.device.markOff <= 1 &&
-          r.device.facts.length >= 3 &&
-          r.device.facts[0] === "iPhone" &&
-          r.device.verb === "denied" &&
-          !r.device.approve &&
-          r.device.deny === "New code";
-        said = `the phone's ${r.device.strokes.length} strokes at ${r.device.strokes[0]?.toFixed(2)} with the ✕ at its screen's centre (${r.device.markOff.toFixed(2)}px off); its facts kept (${r.device.facts.join(" | ")}); Approve gone, "${r.device.deny}" in Deny's place`;
-      } else {
-        const stopped = Boolean(
-          before && later && before[i] === later[i] && r.dots.off > 0
-        );
-        persists =
-          near(r.code, 0.3) &&
-          stopped &&
-          all(r.glyphs, 0) &&
-          near(r.badge, 0) &&
-          r.line.mark === "close" &&
-          near(r.band, 0) &&
-          r.way.label === "Retry" &&
-          near(r.way.o, 1) &&
-          r.way.off <= 1;
-        said = `the cloud held where it stood (${r.dots.off} of ${r.dots.n} dots off their modules, unmoved over 300ms: ${stopped}) at ${r.code.toFixed(2)}; the band at ${r.band}; the head gone; the ✕ on the line ("${r.line.words}"); ${r.way.label} at the code's centre (${r.way.off.toFixed(2)}px off)`;
-      }
-      kit.check(`${tag} what persists: ${said}`, persists, JSON.stringify(r));
-      const faulty = c.m !== "expired";
-      kit.check(
-        `${tag} the ring is ${faulty ? "the fail ink" : "the hairline"} (${r.ring.ink})`,
-        r.ring.ink === (faulty ? r.ring.fail : r.ring.hairline),
-        JSON.stringify(r.ring)
-      );
-      // New code on Expired, Retry when the hub didn't answer, coral on Denied only by the switch; no button on a wrong scan.
-      let corals = 1;
-      if (c.m === "nomatch") {
-        corals = 0;
-      } else if (c.m === "denied") {
-        corals = c.variant?.[1] === "coral" ? 1 : 0;
-      }
-      kit.check(
-        `${tag} ${corals} coral at most where the design puts it (${r.coral})`,
-        r.coral === corals && r.coral <= 1
-      );
-      kit.check(
-        `${tag} every glyph bare, no disc or box (${r.bare} found)`,
-        r.bare === 0
-      );
-      const want = c.m === "denied" ? r.height.device : r.height.code;
-      kit.check(
-        `${tag} the card stands at ${c.m === "denied" ? "the device card's" : "the code card's"} height (${r.height.card.toFixed(1)} against ${want.toFixed(1)})`,
-        near(r.height.card, want, 0.5)
-      );
-    }
-  }
-  await page.evaluate(() => {
-    const p = (window as unknown as { preview: Preview }).preview;
-    p.variant("denied", "quiet");
-    p.variant("nomatch", "spent");
-  });
-}
-
-/** One glyph as drawn: its box, and how far its middle stands from the x-height middle of the words beside it. */
-interface GlyphRead {
-  box: { h: number; w: number };
-  layout: string;
-  off: number;
-  want: number;
-  what: string;
-}
-
-/**
- * The glyph a moment shows, read from the engine per layout: its box, and
- * its middle against the first line of the words it stands beside (the
- * baseline, from the first glyph's text box and the face's ascent, less half
- * the face's x-height, both from canvas metrics), or against the phone
- * drawing's centre for Denied's ✕. Runs in the page.
- */
-function readGlyph(which: string): GlyphRead[] {
-  const shown = (el: Element) => {
-    let o = 1;
-    for (let up: Element | null = el; up; up = up.parentElement) {
-      const style = getComputedStyle(up);
-      if (style.display === "none") {
-        return 0;
-      }
-      o *= Number(style.opacity);
-      if (up.classList.contains("stage")) {
-        break;
-      }
-    }
-    return o;
-  };
-  const xMiddle = (host: Element) => {
-    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, {
-      acceptNode: (n) =>
-        (n.textContent ?? "").trim() && shown(n.parentElement as Element) > 0.98
-          ? NodeFilter.FILTER_ACCEPT
-          : NodeFilter.FILTER_SKIP,
-    });
-    const text = walker.nextNode() as Text | null;
-    if (!text) {
-      return Number.NaN;
-    }
-    const range = document.createRange();
-    // biome-ignore lint/performance/useTopLevelRegex: serialised into the page, where nothing outside the function exists
-    const at = (text.textContent ?? "").search(/\S/);
-    range.setStart(text, at);
-    range.setEnd(text, at + 1);
-    const [box] = range.getClientRects();
-    const cs = getComputedStyle(text.parentElement as Element);
-    const pen = document
-      .createElement("canvas")
-      .getContext("2d") as CanvasRenderingContext2D;
-    pen.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-    const face = pen.measureText("x");
-    const baseline = (box?.top ?? Number.NaN) + face.fontBoundingBoxAscent;
-    return baseline - face.actualBoundingBoxAscent / 2;
-  };
-  return [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
-    const layout = stage.dataset.layout ?? "";
-    const pick = (sel: string) =>
-      [...stage.querySelectorAll(sel)].find((el) => shown(el) > 0.98) as
-        SVGSVGElement | undefined;
-    let glyph: SVGSVGElement | undefined;
-    let mid = Number.NaN;
-    let want = 16;
-    if (which === "readout") {
-      glyph = pick(".readout .slot svg.g");
-      mid = xMiddle(stage.querySelector(".readout .words") as Element);
-    } else if (which === "ledger") {
-      glyph = pick(".scene-outcome .mark svg.g");
-      mid = xMiddle(stage.querySelector(".scene-outcome .said") as Element);
-    } else {
-      glyph = pick(".wire .wire-mark");
-      const wire = (
-        stage.querySelector(".wire") as Element
-      ).getBoundingClientRect();
-      mid = wire.top + wire.height / 2;
-      want = wire.width / 4;
-    }
-    const r = glyph?.getBoundingClientRect();
-    return {
-      layout,
-      what: glyph?.getAttribute("class") ?? "none",
-      box: { w: r?.width ?? 0, h: r?.height ?? 0 },
-      want,
-      off: r ? r.top + r.height / 2 - mid : Number.NaN,
-    };
-  });
-}
-
-/**
- * The glyphs (the designer's ruling): the house's bare Close and Tick and
- * Solar's linear clock, each read where it is shown, both layouts: a 16px
- * box (--icon-md) on the line and in Paired's and Removed's ledger, a
- * quarter of the phone's box on Denied's screen; its middle on the x-height
- * middle of the words beside it (the Mark Line Rule) within half a pixel,
- * or on the drawing's centre on Denied's screen.
- */
-async function glyphsLeg(kit: Kit, page: Page, engine: Engine) {
-  const cases = [
-    ["expired", "readout", "the clock on the line"],
-    ["nomatch", "readout", "the ✕ on the line"],
-    ["failed-down", "readout", "the ✕ on the line"],
-    ["approved", "ledger", "the check on the verdict"],
-    ["removed", "ledger", "the ✕ on the verdict"],
-    ["denied", "wire", "the ✕ on the phone's screen"],
-  ] as const;
-  for (const [m, which, said] of cases) {
-    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
-    await playIn(page, m);
-    await settled(page);
-    const reads = await page.evaluate(readGlyph, which);
-    for (const g of reads) {
-      kit.check(
-        `${engine} ${m}: ${g.layout} ${said} (${g.what}) is ${g.box.w.toFixed(2)}×${g.box.h.toFixed(2)}px against ${g.want}px, its middle ${g.off.toFixed(2)}px from ${which === "wire" ? "the drawing's centre" : "the words' x-height middle"}`,
-        Math.abs(g.box.w - g.want) <= 0.01 &&
-          Math.abs(g.box.h - g.want) <= 0.01 &&
-          Math.abs(g.off) <= 0.5
-      );
-    }
-  }
-}
-
-/** Each moment's Caw is a drawing of its own: the three network cases are one moment, Checking. */
-async function posesLeg(kit: Kit, page: Page, engine: Engine) {
-  const drawn = new Map<string, string[]>();
-  const house = new HouseRules(kit, engine, {
-    scope: "main.frames",
-    views: ".viewport",
-    marks: ".mark",
-    except: [
-      {
-        rule: "contrast",
-        text: "(gradient on section.card)",
-        reason:
-          "impeccable takes the card's gradient edge (a conic ring under its opaque paper fill) for the words' ground; the kit's own read of that paper holds every word at 4.5:1 or more",
-      },
-    ],
-  });
-  for (const m of MOMENTS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
-    await playIn(page, m);
-    await settled(page);
-    await house.at(page, m);
-    const srcs = await page.evaluate(() =>
-      [...document.querySelectorAll<HTMLImageElement>(".stage .caw")].map(
-        (img) => new URL(img.src).pathname.split("/").pop() ?? ""
-      )
-    );
-    // One moment each: the network cases are Checking, the two causes are Failed.
-    const moment = poseOf(m);
-    drawn.set(moment, [...new Set([...(drawn.get(moment) ?? []), ...srcs])]);
-  }
-  const each = [...drawn.entries()];
-  const shared = each.filter(
-    ([m, srcs]) =>
-      srcs.length !== 1 ||
-      each.some(([other, o]) => other !== m && o[0] === srcs[0])
-  );
-  house.report();
-  kit.check(
-    `${engine}: every moment's Caw is its own drawing (${each.map(([m, srcs]) => `${m} ${srcs.join("|")}`).join(", ")})`,
-    shared.length === 0,
-    shared.map(([m, srcs]) => `${m}: ${srcs.join("|")}`).join("; ")
-  );
-}
-
-/** One exit read: each piece of the code leaving, and the device arriving, on one layout. */
-interface ExitRead {
-  badge: number;
-  device: number;
-  dotsFar: number;
-  dotsO: number;
-  eyes: { o: number; x: number; y: number }[];
-  layout: string;
-  paper: number;
-}
-
-/** Every piece of the code as drawn now, and the device's opacity, per layout. Runs in the page. */
-function readExit(): ExitRead[] {
-  const { preview } = window as unknown as { preview: Preview };
-  return [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
-    const layout = stage.dataset.layout ?? "";
-    const badge = (
-      stage.querySelector(".well .badge") as HTMLElement
-    ).getBoundingClientRect();
-    const head = {
-      x: badge.left + badge.width / 2,
-      y: badge.top + badge.height / 2,
-    };
-    const canvas = (
-      stage.querySelector(".code canvas.dots") as HTMLElement
-    ).getBoundingClientRect();
-    const drawn = preview.dotsOf(layout);
-    const k =
-      canvas.width /
-      (stage.querySelector(".code canvas.dots") as HTMLElement).offsetWidth;
-    const n = Math.max(1, drawn.dots.length);
-    const opacity = (sel: string) =>
-      Number(getComputedStyle(stage.querySelector(sel) as HTMLElement).opacity);
-    return {
-      layout,
-      dotsFar:
-        drawn.dots.reduce(
-          (sum, d) =>
-            sum +
-            Math.hypot(
-              canvas.left + d.cx * k - head.x,
-              canvas.top + d.cy * k - head.y
-            ),
-          0
-        ) / n,
-      dotsO: drawn.dots.reduce((sum, d) => sum + d.o, 0) / n,
-      eyes: [...stage.querySelectorAll<SVGGElement>(".code .eye")].map(
-        (eye) => {
-          const r = eye.getBoundingClientRect();
-          return {
-            x: r.left + r.width / 2,
-            y: r.top + r.height / 2,
-            o: Number(getComputedStyle(eye).opacity),
-          };
-        }
-      ),
-      badge: badge.width,
-      paper: opacity(".scene-code"),
-      device: opacity(".scene-device"),
-    };
-  });
-}
-
-/**
- * The exit's faults, read by read: each piece's one-read steps against an
- * eighth of its whole change (1.5px at least; 0.125 for an opacity), and
- * every read between the first move and the last where no piece moved.
- */
-function exitFaults(seen: ExitRead[], ms: number[]) {
-  const channels: { name: string; px: boolean; v: number[] }[] = [
-    {
-      name: "dots' distance from the head",
-      px: true,
-      v: seen.map((s) => s.dotsFar),
-    },
-    { name: "dots' opacity", px: false, v: seen.map((s) => s.dotsO) },
-    { name: "the head's size", px: true, v: seen.map((s) => s.badge) },
-    { name: "the paper's opacity", px: false, v: seen.map((s) => s.paper) },
-    ...(seen[0]?.eyes ?? []).flatMap((_, e) => [
-      {
-        name: `eye ${e + 1} x`,
-        px: true,
-        v: seen.map((s) => s.eyes[e]?.x ?? 0),
-      },
-      {
-        name: `eye ${e + 1} y`,
-        px: true,
-        v: seen.map((s) => s.eyes[e]?.y ?? 0),
-      },
-      {
-        name: `eye ${e + 1} opacity`,
-        px: false,
-        v: seen.map((s) => s.eyes[e]?.o ?? 0),
-      },
-    ]),
-  ];
-  const jumps: string[] = [];
-  let first = Number.POSITIVE_INFINITY;
-  let last = -1;
-  const moving = new Set<number>();
-  for (const c of channels) {
-    const whole = Math.max(...c.v) - Math.min(...c.v);
-    const limit = c.px ? Math.max(whole / 8, 1.5) : 0.125;
-    const eps = c.px ? 0.05 : 0.002;
-    for (let i = 1; i < c.v.length; i += 1) {
-      const step = Math.abs((c.v[i] as number) - (c.v[i - 1] as number));
-      if (step > eps) {
-        moving.add(i);
-        first = Math.min(first, i);
-        last = Math.max(last, i);
-      }
-      if (step > limit) {
-        jumps.push(
-          `${c.name} ${step.toFixed(2)} in one read at ${(ms[i] ?? 0).toFixed(0)}ms (of ${whole.toFixed(2)})`
-        );
-      }
-    }
-  }
-  const stills: string[] = [];
-  for (let i = first + 1; i < last; i += 1) {
-    if (!moving.has(i)) {
-      stills.push(`${(ms[i] ?? 0).toFixed(0)}ms`);
-    }
-  }
-  return { channels, jumps, stills, first, last };
-}
-
-/**
- * The scan's exit (the owner, picking "The device, at Approve": "at the end
- * of the qr parts that animate out there's a lag then it jumps to the end of
- * animation"), its clock held and sought every 1/60s from the play to the
- * device's arrival landing, with the exit's 0, ¼, ½, ¾ and 1 among the reads.
- * Each piece (the dots' mean distance from the head and their mean opacity,
- * each finder eye's place and opacity, the head's size, the paper's
- * opacity) moves no more in one frame than an eighth of its whole change
- * (DESIGN's --ease-crossfade note: more than an eighth in one frame "reads as
- * the change lurching") or 1.5px, an opacity no more than 0.125; no frame
- * between the exit's first move and its last stands still; and the device
- * starts to arrive on the frame the exit ends, every piece gone.
- */
-async function handoffLeg(kit: Kit, page: Page, engine: Engine) {
-  const m = "checking-public";
-  const t = await page.evaluate(() => {
-    const ms = (name: string) =>
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue(name)
-      );
-    return {
-      panel: ms("--dur-panel"),
-      pop: ms("--dur-pop"),
-      settle: ms("--dur-settle"),
-    };
-  });
-  // The exit ends as the pour does; the device's arrival ("reveal") runs on from there.
-  const exitEnd = t.panel + t.pop;
-  const length = exitEnd + t.settle;
-  const FRAME = 1000 / 60;
-  const at = [
-    ...Array.from(
-      { length: Math.floor(length / FRAME) + 1 },
-      (_, i) => (i * FRAME) / length
-    ),
-    ...QUARTERS.map((q) => (q * exitEnd) / length),
-    1,
-  ]
-    .map((f) => Math.round(f * 1e6) / 1e6)
-    .filter((f, i, all) => all.indexOf(f) === i)
-    .sort((a, b) => a - b);
-  await playIn(page, m);
+async function picksTo(page: Page, picks: [string, string][] = []) {
+  await page.evaluate(async (list) => {
+    const p = (window as unknown as W).preview;
+    const want = Object.fromEntries(list);
+    await p.pick("denied", want.denied ?? "quiet");
+    await p.pick("removed", want.removed ?? "retired");
+  }, picks);
   await settled(page);
-  const read = await readMotion(page, () => playIn(page, m), "main.frames", {
-    fractions: at,
-    of: "reveal",
-    read: () => page.evaluate(readExit),
-  });
-  await settled(page);
-  for (const layout of ["desk", "phone"]) {
-    const seen = read.at.map(
-      (r) =>
-        (r.value as ExitRead[]).find((x) => x.layout === layout) as ExitRead
-    );
-    const ms = read.at.map((r) => r.fraction * length);
-    const { channels, jumps, stills, first, last } = exitFaults(seen, ms);
-    const arrives = seen.findIndex((s) => s.device > 0.01);
-    const there = seen[arrives];
-    const gone =
-      there !== undefined &&
-      there.paper <= 0.02 &&
-      there.dotsO <= 0.02 &&
-      there.eyes.every((e) => e.o <= 0.02);
-    // The device's first step comes within one frame of the exit's last, in time (a quarter read can fall between).
-    const gap = (ms[arrives] ?? Number.NaN) - (ms[last] ?? Number.NaN);
-    const quarter = (q: number) =>
-      seen[
-        read.at.findIndex(
-          (r) => Math.abs(r.fraction * length - q * exitEnd) < 0.01
-        )
-      ];
-    const said = QUARTERS.map((q) => {
-      const s = quarter(q);
-      return s
-        ? `${q}: dots ${s.dotsO.toFixed(2)}, eyes ${s.eyes.map((e) => e.o.toFixed(2)).join("/")}, paper ${s.paper.toFixed(2)}`
-        : `${q}: unread`;
-    }).join("; ");
-    kit.check(
-      `${engine} ${m}: ${layout} the code's exit has no jump (${channels.length} pieces, ${read.at.length} reads every 1/60s to ${length.toFixed(0)}ms; at the exit's ${said})`,
-      read.at.length > 10 && jumps.length === 0,
-      jumps.slice(0, 6).join("; ")
-    );
-    kit.check(
-      `${engine} ${m}: ${layout} the code's exit never stands still between its first move and its last (${(ms[first] ?? 0).toFixed(0)}–${(ms[last] ?? 0).toFixed(0)}ms)`,
-      last > first && stills.length === 0,
-      stills.slice(0, 8).join(", ")
-    );
-    kit.check(
-      `${engine} ${m}: ${layout} the device starts where the exit ends (its last step at ${(ms[last] ?? 0).toFixed(0)}ms, the device's first at ${(ms[arrives] ?? 0).toFixed(0)}ms, every piece gone there)`,
-      arrives >= 0 && gone && gap >= 0 && gap <= FRAME + 0.5,
-      JSON.stringify({ gap, there })
-    );
-  }
 }
 
-/**
- * The ping's ring, its loop held and sought every 2.5% of a lap (WAAPI's
- * own clock): its box never meets the title's, on both layouts, in the two
- * moments it runs in.
- */
-async function pingLeg(kit: Kit, page: Page, engine: Engine) {
-  for (const m of ["waiting", "lastminute"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
-    await playIn(page, m);
-    await settled(page);
-    const reads = await page.evaluate((steps) => {
-      return [...document.querySelectorAll<HTMLElement>(".stage")].map(
-        (stage) => {
-          const layout = stage.dataset.layout ?? "";
-          const ping = stage.querySelector(".ping") as HTMLElement;
-          const title = (
-            stage.querySelector(".title") as HTMLElement
-          ).getBoundingClientRect();
-          const run = ping.getAnimations().find((a) => a.id === "ping");
-          if (!run) {
-            return { layout, missing: true, worst: Number.NaN, at: 0, met: 0 };
-          }
-          const { delay = 0, duration } = (
-            run.effect as KeyframeEffect
-          ).getTiming() as {
-            delay: number;
-            duration: number;
-          };
-          const was = run.currentTime;
-          run.pause();
-          let worst = Number.POSITIVE_INFINITY;
-          let at = 0;
-          let met = 0;
-          for (let i = 0; i <= steps; i += 1) {
-            // The lap's last frame is read a hair before it wraps to the next.
-            const f = Math.min(i / steps, 0.9999);
-            run.currentTime = delay + f * duration;
-            const r = ping.getBoundingClientRect();
-            const across =
-              Math.min(r.right, title.right) - Math.max(r.left, title.left);
-            const down =
-              Math.min(r.bottom, title.bottom) - Math.max(r.top, title.top);
-            if (across > 0 && down > 0) {
-              met += 1;
-            }
-            const clear = r.top - title.bottom;
-            if (clear < worst) {
-              worst = clear;
-              at = f;
-            }
-          }
-          run.currentTime = was;
-          run.play();
-          return { layout, missing: false, worst, at, met };
-        }
-      );
-    }, STEPS);
-    for (const r of reads) {
-      kit.check(
-        `${engine} ${m}: ${r.layout} the ping's ring stays clear of the title's box at every read of its lap (${STEPS + 1} reads; closest ${r.worst.toFixed(2)}px under it at ${(r.at * 100).toFixed(1)}%)`,
-        !r.missing && r.met === 0 && r.worst > 0,
-        r.missing ? "no ping run" : `${r.met} reads meet it`
-      );
-    }
-  }
-}
-
-/**
- * Night: every pose's night still carries the paper rim, measured as the
- * page draws him: the median distance from the night drawing's outer edge to
- * his day drawing, in the still's px, times the px he is drawn at on each
- * layout. The house's night stills (the Decisions list's hero) read 0.75px
- * at 80 on the same rule.
- */
-async function nightRims(kit: Kit, page: Page, engine: Engine) {
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
-  const read = await page.evaluate(async (poses) => {
-    const load = (src: string) =>
-      new Promise<HTMLImageElement>((done, fail) => {
-        const img = new Image();
-        img.onload = () => done(img);
-        img.onerror = fail;
-        img.src = src;
-      });
-    const inked = (img: HTMLImageElement) => {
-      const c = document.createElement("canvas");
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      const g = c.getContext("2d") as CanvasRenderingContext2D;
-      g.drawImage(img, 0, 0);
-      const d = g.getImageData(0, 0, c.width, c.height).data;
-      return Array.from(
-        { length: c.width * c.height },
-        (_, i) => (d[i * 4 + 3] ?? 0) > 127
-      );
-    };
-    const sizes = [...document.querySelectorAll<HTMLElement>(".stage")].map(
-      (stage) => ({
-        layout: stage.dataset.layout ?? "",
-        w: (stage.querySelector(".caw") as HTMLElement).getBoundingClientRect()
-          .width,
-      })
-    );
-    const out: Record<string, Record<string, number>> = {};
-    for (const pose of poses) {
-      // biome-ignore lint/performance/noAwaitInLoops: one pose at a time
-      const [day, night] = await Promise.all([
-        load(`./caw/${pose}.png`),
-        load(`./caw/${pose}-night.png`),
-      ]);
-      const side = day.naturalWidth;
-      const a = inked(day);
-      const b = inked(night);
-      const K = 10;
-      const offs: [number, number, number][] = [];
-      for (let dy = -K; dy <= K; dy += 1) {
-        for (let dx = -K; dx <= K; dx += 1) {
-          offs.push([dx, dy, Math.hypot(dx, dy)]);
-        }
-      }
-      offs.sort((p, q) => p[2] - q[2]);
-      const far: number[] = [];
-      for (let i = 0; i < side * side; i += 1) {
-        const x = i % side;
-        const y = Math.floor(i / side);
-        const edge =
-          b[i] &&
-          !a[i] &&
-          [
-            [1, 0],
-            [-1, 0],
-            [0, 1],
-            [0, -1],
-          ].some(([dx = 0, dy = 0]) => {
-            const xx = x + dx;
-            const yy = y + dy;
-            return (
-              xx < 0 || yy < 0 || xx >= side || yy >= side || !b[yy * side + xx]
-            );
-          });
-        if (!edge) {
-          continue;
-        }
-        for (const [dx, dy, r] of offs) {
-          const xx = x + dx;
-          const yy = y + dy;
-          if (
-            xx >= 0 &&
-            yy >= 0 &&
-            xx < side &&
-            yy < side &&
-            a[yy * side + xx]
-          ) {
-            far.push(r);
-            break;
-          }
-        }
-      }
-      far.sort((p, q) => p - q);
-      const median = far[Math.floor(far.length / 2)] ?? 0;
-      out[pose] = Object.fromEntries(
-        sizes.map((s) => [s.layout, (median * s.w) / side])
-      );
-    }
-    return out;
-  }, POSES);
-  for (const [pose, at] of Object.entries(read)) {
-    kit.check(
-      `${engine} night: ${pose}'s night still carries the paper rim at about 0.83px on screen (${Object.entries(
-        at
-      )
-        .map(([layout, px]) => `${layout} ${px.toFixed(2)}px`)
-        .join(", ")})`,
-      Object.values(at).every((px) => px >= 0.6 && px <= 1.1)
-    );
-  }
-}
-
-/** Every drawing of Caw the moments show. */
-const POSES = [...new Set(MOMENTS.map(poseOf))];
-
-/**
- * The sweep, one scheme at a time, every moment at 390, 680 and 1440: no
- * word stands past the card, no text box overflows, the page never scrolls
- * sideways, and Caw is his day still by day and his night still by night.
- */
-async function sweep(
-  kit: Kit,
-  page: Page,
-  engine: Engine,
-  scheme: "light" | "dark"
-) {
-  const found: string[] = [];
-  let reads = 0;
-  for (const width of [390, 680, 1440]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
-    await page.setViewportSize({ width, height: 900 });
-    for (const m of MOMENTS) {
-      // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
-      await playIn(page, m);
-      await settled(page);
-      reads += 1;
-      const out = await page.evaluate(
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
-        ({ night }) => {
-          const said: string[] = [];
-          const doc = document.documentElement;
-          if (doc.scrollWidth > doc.clientWidth) {
-            said.push(
-              `page scrolls sideways (${doc.scrollWidth}/${doc.clientWidth})`
-            );
-          }
-          // The page offers both schemes, and the reader's is the one asked.
-          const offered = getComputedStyle(doc).colorScheme.split(" ");
-          if (
-            offered.length !== 2 ||
-            matchMedia("(prefers-color-scheme: dark)").matches !== night
-          ) {
-            said.push(`scheme ${getComputedStyle(doc).colorScheme}`);
-          }
-          for (const stage of document.querySelectorAll<HTMLElement>(
-            ".stage"
-          )) {
-            const layout = stage.dataset.layout ?? "";
-            const card = (
-              stage.querySelector(".card") as HTMLElement
-            ).getBoundingClientRect();
-            const words = stage.querySelectorAll<HTMLElement>(
-              ".scene[data-on] :is(.said, .record, .means, .btn, .facts p, .readout .words, .letters), .title"
-            );
-            for (const el of words) {
-              if (el.closest("[hidden]") || el.getClientRects().length === 0) {
-                continue;
-              }
-              const r = el.getBoundingClientRect();
-              const inCard = el.closest(".card");
-              if (
-                inCard &&
-                (r.left < card.left - 0.5 ||
-                  r.right > card.right + 0.5 ||
-                  r.bottom > card.bottom + 0.5)
-              ) {
-                said.push(`${layout} ${el.className} past the card`);
-              }
-              if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
-                said.push(
-                  `${layout} ${el.className} overflows (${el.scrollWidth}/${el.clientWidth})`
-                );
-              }
-            }
-            const src =
-              (stage.querySelector(".caw") as HTMLImageElement).src
-                .split("/")
-                .pop() ?? "";
-            if (src.endsWith("-night.png") !== night) {
-              said.push(`${layout} Caw is ${src}`);
-            }
-          }
-          return said;
-        },
-        { night: scheme === "dark" }
-      );
-      found.push(...out.map((s) => `${m}@${width}: ${s}`));
-    }
-  }
-  kit.check(
-    `${engine} ${scheme}: the overflow sweep totals 0 (${reads} reads: ${MOMENTS.length} moments at 390, 680 and 1440, both layouts each), and every Caw is his ${scheme === "dark" ? "night still on the paper rim" : "day still"}`,
-    found.length === 0,
-    found.slice(0, 6).join("; ")
-  );
-}
-
-/** Light and dark: at 390, 680, 1110 and 1440 the frames stand whole and visible (inside the window and every box above them; the page never scrolls sideways), then the sweep; by night the rims. */
-async function framesLeg(kit: Kit, url: string, engine: Engine) {
-  const { page, errors } = await openPreview(kit, url, engine, "phone");
-  for (const scheme of ["light", "dark"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
-    await page.emulateMedia({ colorScheme: scheme });
-    await framesWhole(kit, page, engine, scheme);
-    await sweep(kit, page, engine, scheme);
-    if (scheme === "dark") {
-      await nightRims(kit, page, engine);
-    }
-  }
-  kit.check(
-    `${engine} (frames page): no console error`,
-    errors.length === 0,
-    errors.slice(0, 4).join(" | ")
-  );
-}
-
-async function framesWhole(
-  kit: Kit,
-  page: Page,
-  engine: Engine,
-  scheme: string
-) {
-  for (const width of [390, 680, 1110, 1440]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
-    await page.setViewportSize({ width, height: 900 });
-    // The window at its new width, then two frames for the page's refit (its resize listener):
-    // WebKit can draw a frame or two at the old width after the resize is asked.
-    await page.waitForFunction((w) => window.innerWidth === w, width);
-    // Frames until the page has refit (its resize listener), at most 60: said with the read.
-    const refit = await page.evaluate(async () => {
-      const doc = document.documentElement;
-      const fit = () =>
-        [...document.querySelectorAll<HTMLElement>(".fit")]
-          .map((f) => f.style.getPropertyValue("--fit"))
-          .join("/");
-      const first = { scroll: doc.scrollWidth, fit: fit() };
-      let frames = 0;
-      while (frames < 60) {
-        // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
-        await new Promise((done) => requestAnimationFrame(done));
-        frames += 1;
-        if (frames >= 2 && doc.scrollWidth <= doc.clientWidth) {
-          break;
-        }
-      }
-      return { frames, first, fit: fit() };
-    });
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
-    const found = await page.evaluate(() => {
-      const out: string[] = [];
-      const doc = document.documentElement;
-      if (doc.scrollWidth !== doc.clientWidth) {
-        out.push(
-          `page scrollWidth ${doc.scrollWidth} against ${doc.clientWidth}`
-        );
-      }
-      for (const frame of document.querySelectorAll<HTMLElement>(".frame")) {
-        const r = frame.getBoundingClientRect();
-        const name = frame.querySelector("figcaption")?.textContent ?? "frame";
-        if (r.left < -0.5 || r.right > doc.clientWidth + 0.5) {
-          out.push(
-            `${name} ${r.left.toFixed(1)}–${r.right.toFixed(1)} past the window`
-          );
-        }
-        for (
-          let up = frame.parentElement;
-          up && up !== doc;
-          up = up.parentElement
-        ) {
-          const style = getComputedStyle(up);
-          if (style.overflowX !== "visible" || style.overflowY !== "visible") {
-            const u = up.getBoundingClientRect();
-            if (
-              r.left < u.left - 0.5 ||
-              r.right > u.right + 0.5 ||
-              up.scrollWidth > up.clientWidth + 1
-            ) {
-              out.push(
-                `${name} cut or scrolled by ${up.tagName.toLowerCase()}.${up.className}`
-              );
-            }
-          }
-        }
-      }
-      return out;
-    });
-    kit.check(
-      `${engine} ${scheme} at ${width}: both frames stand whole and visible, and the page never scrolls sideways (refit in ${refit.frames} frame(s): scrollWidth ${refit.first.scroll} and --fit ${refit.first.fit || "unset"} as the width landed, --fit ${refit.fit} now)`,
-      found.length === 0,
-      found.join("; ")
-    );
-  }
-}
-
-async function frameCost(kit: Kit, page: Page, m: Moment) {
-  await playIn(page, m);
-  await settled(page);
-  // The from-state, drawn before the trace: the preview's own step, not the moment's motion.
+/** Puts the surface in `m` at rest, the hub's record landed, every finite run played out. */
+async function restIn(page: Page, m: string) {
   await page.evaluate(async (moment) => {
-    (window as unknown as { preview: Preview }).preview.snap(moment);
-    await new Promise((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => r(undefined)))
-    );
+    const p = (window as unknown as W).preview;
+    await p.snap(moment);
+    p.landRecord();
   }, m);
-  const main = await traceMain(
-    page,
-    async () => {
-      await page.evaluate((moment) => {
-        performance.mark("pairing:play");
-        (window as unknown as { preview: Preview }).preview.go(moment);
-      }, m);
-      await settled(page);
-      await page.evaluate(() => performance.mark("pairing:done"));
+  await settled(page);
+}
+
+/* ------------------------------------------------------------ frames */
+
+/** One frame per width, drawn 1:1; a 16px root and the house's type on the body. */
+async function framesLeg(kit: Kit, page: Page, engine: Engine) {
+  for (const width of [390, 899, 900, 1037, 1440]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
+    await setWidth(page, width);
+    const read = await page.evaluate(() => {
+      const frames = [
+        ...document.querySelectorAll<HTMLElement>(".frame"),
+      ].filter((f) => f.getClientRects().length > 0);
+      const frame = frames[0] as HTMLElement;
+      const scaled: string[] = [];
+      for (let el: Element | null = frame; el; el = el.parentElement) {
+        const cs = getComputedStyle(el);
+        if (
+          cs.transform !== "none" ||
+          cs.scale !== "none" ||
+          (cs as unknown as { zoom: string }).zoom !== "1"
+        ) {
+          scaled.push(
+            `${el.tagName.toLowerCase()}.${el.className} transform ${cs.transform} scale ${cs.scale}`
+          );
+        }
+      }
+      const slot = (
+        document.querySelector(".slot") as HTMLElement
+      ).getBoundingClientRect();
+      return {
+        frames: frames.length,
+        layout: frame.dataset.layout,
+        width: frame.getBoundingClientRect().width,
+        offset: frame.offsetWidth,
+        root: getComputedStyle(document.documentElement).fontSize,
+        body: getComputedStyle(document.body).fontSize,
+        scaled,
+        slot: `${slot.width}×${slot.height}`,
+        scroll:
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      };
+    });
+    const want = width >= 900 ? "desk" : "phone";
+    kit.check(
+      `${engine} at ${width}: one frame (${read.frames}), the ${want} frame (${read.layout}), drawn 1:1 (${read.width}px drawn, ${read.offset}px laid out, nothing scaled above it), slot ${read.slot}, the page never scrolling sideways (${read.scroll}px)`,
+      read.frames === 1 &&
+        read.layout === want &&
+        Math.abs(read.width - read.offset) < 0.01 &&
+        read.scaled.length === 0 &&
+        (want === "phone" ? read.width === 390 || width < 390 : true) &&
+        read.slot === (want === "desk" ? "390×390" : "351×351") &&
+        read.scroll === 0,
+      read.scaled.join("; ")
+    );
+    if (width === 1440) {
+      kit.check(
+        `${engine}: a 16px root (${read.root}) and the house's body type on the body (${read.body}, --text-body)`,
+        read.root === "16px" && read.body === "14px"
+      );
+    }
+  }
+}
+
+/* -------------------------------------------------------------- rest */
+
+interface RestRead {
+  acts: number;
+  boxes: string[];
+  caw: { canvas: boolean; dx: number; ink: number; meets: boolean };
+  corals: string[];
+  empty: string[];
+  /** What the object slot draws: the paper (and the head on it), or the device with its screen's one thing. */
+  holds: string;
+  slot: string;
+  starts: { edges: number[]; misaligned: string[] };
+  tiles: number;
+}
+
+/** The claims read at rest in one moment. Runs in the page. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page whole, so every rule it reads lives inside it
+function readRest(): RestRead {
+  const stage = document.querySelector(".stage") as HTMLElement;
+  const frame = document.querySelector(".frame") as HTMLElement;
+  const fr = frame.getBoundingClientRect();
+  const describe = (el: Element) =>
+    `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`;
+  const drawn = (el: Element) => {
+    if (el.getClientRects().length === 0 || el.closest("[hidden]")) {
+      return false;
+    }
+    let o = 1;
+    for (
+      let up: Element | null = el;
+      up && up !== document.body;
+      up = up.parentElement
+    ) {
+      const cs = getComputedStyle(up);
+      if (cs.visibility === "hidden" || cs.display === "none") {
+        return false;
+      }
+      o *= Number(cs.opacity);
+    }
+    return o > 0.02;
+  };
+  const alpha = (c: string) => {
+    if (c === "transparent") {
+      return 0;
+    }
+    // biome-ignore lint/performance/useTopLevelRegex: serialised into the page
+    const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(c);
+    // biome-ignore lint/performance/useTopLevelRegex: serialised into the page
+    const comma = /^rgba\([^)]*,\s*([\d.]+)\)$/.exec(c);
+    if (slash) {
+      return Number(slash[1]) / (slash[2] === "%" ? 100 : 1);
+    }
+    return comma ? Number(comma[1]) : 1;
+  };
+  const boxOf = (el: Element) => {
+    const cs = getComputedStyle(el);
+    const fill =
+      alpha(cs.backgroundColor) > 0.01 || cs.backgroundImage !== "none";
+    const edge = ["Top", "Right", "Bottom", "Left"].some(
+      (s) =>
+        Number.parseFloat(
+          cs.getPropertyValue(`border-${s.toLowerCase()}-width`)
+        ) > 0 &&
+        alpha(cs.getPropertyValue(`border-${s.toLowerCase()}-color`)) > 0.01 &&
+        cs.getPropertyValue(`border-${s.toLowerCase()}-style`) !== "none"
+    );
+    const shadow = cs.boxShadow !== "none";
+    return fill || edge || shadow;
+  };
+  const boxes: string[] = [];
+  const empty: string[] = [];
+  for (const el of stage.querySelectorAll("*")) {
+    if (!(el instanceof HTMLElement && drawn(el) && boxOf(el))) {
+      continue;
+    }
+    const r = el.getBoundingClientRect();
+    if (r.width <= 24 || r.height <= 24) {
+      continue;
+    }
+    // The ping is the hub listening: a ring leaving the paper's edge, never a container.
+    if (el.matches(".ping")) {
+      continue;
+    }
+    if (!el.matches(".btn")) {
+      boxes.push(describe(el));
+    }
+    const holds =
+      (el.textContent ?? "").trim() !== "" ||
+      [...el.querySelectorAll("canvas, img, svg")].some((one) => drawn(one));
+    if (!holds) {
+      empty.push(describe(el));
+    }
+  }
+  // The words column: every row on one start edge, at text-align start.
+  const rows = [
+    ...stage.querySelectorAll(
+      ".words > .title, .words > .lines > .line, .words > .facts > p, .words > .after, .words > .acts"
+    ),
+  ].filter((el) => drawn(el));
+  const edges = rows.map(
+    (el) => Math.round(el.getBoundingClientRect().left * 100) / 100
+  );
+  const first = edges[0] ?? 0;
+  const misaligned = rows.flatMap((el, i) => {
+    const align = getComputedStyle(el).textAlign;
+    const off = Math.abs((edges[i] ?? 0) - first);
+    return off > 1 || !["start", "left"].includes(align)
+      ? [`${describe(el)} at ${edges[i]} (${align})`]
+      : [];
+  });
+  // Coral: a control whose fill is the action's.
+  const probe = document.createElement("span");
+  probe.style.color = "var(--action-solid)";
+  document.body.append(probe);
+  const action = getComputedStyle(probe).color;
+  probe.remove();
+  const corals = [...stage.querySelectorAll("button")]
+    .filter((b) => drawn(b) && getComputedStyle(b).backgroundColor === action)
+    .map((b) => (b.textContent ?? "").trim());
+  const holds = [
+    ".paper",
+    ".device",
+    ".head",
+    ".screen-letters",
+    ".screen-mark .m-check",
+    ".screen-mark .m-lock",
+    ".screen-mark .m-unlink",
+  ]
+    .filter((s) => {
+      const el = stage.querySelector(s);
+      return el ? drawn(el) : false;
+    })
+    .join(" ");
+  const slot = (
+    stage.querySelector(".slot") as HTMLElement
+  ).getBoundingClientRect();
+  const cawSlot = (
+    stage.querySelector(".caw-slot") as HTMLElement
+  ).getBoundingClientRect();
+  const canvas = stage.querySelector<HTMLCanvasElement>(
+    ".caw-slot canvas[data-caw-shown]"
+  );
+  // Whether Rive drew him: the share of his canvas's pixels with ink in them.
+  let ink = 0;
+  if (canvas && canvas.width > 0) {
+    const copy = document.createElement("canvas");
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    const pen = copy.getContext("2d") as CanvasRenderingContext2D;
+    pen.drawImage(canvas, 0, 0);
+    const { data } = pen.getImageData(0, 0, copy.width, copy.height);
+    let lit = 0;
+    for (let i = 3; i < data.length; i += 4) {
+      lit += (data[i] ?? 0) > 32 ? 1 : 0;
+    }
+    ink = lit / (copy.width * copy.height);
+  }
+  return {
+    holds,
+    boxes,
+    empty,
+    tiles: stage.querySelectorAll(".tile, .letters, .card").length,
+    starts: { edges, misaligned },
+    corals,
+    acts: [...stage.querySelectorAll(".acts .btn")].filter((b) => drawn(b))
+      .length,
+    slot: `${(slot.left - fr.left).toFixed(1)},${(slot.top - fr.top).toFixed(1)} ${slot.width}×${slot.height}`,
+    caw: {
+      canvas: Boolean(canvas && drawn(canvas)),
+      ink,
+      dx: Math.abs(
+        cawSlot.left + cawSlot.width / 2 - (slot.left + slot.width / 2)
+      ),
+      meets: cawSlot.bottom > slot.top + 0.5,
     },
-    { passes: true, restyles: true }
-  );
-  const from = main.marks.find((mk) => mk.name === "pairing:play")?.at ?? 0;
-  const to =
-    main.marks.find((mk) => mk.name === "pairing:done")?.at ??
-    Number.POSITIVE_INFINITY;
-  const tasks = main.tasks.filter((t) => t.end >= from && t.at <= to);
-  // A frame's cost is the main thread's own time in it (the trace's thread
-  // clock, `tdur`): on a shared host the wall clock also counts the turns
-  // other processes take. Both are said.
-  const longest = tasks.reduce((a, t) => (t.cpu > a.cpu ? t : a), tasks[0]);
-  const longestWall = Math.max(...tasks.map((t) => t.wall));
-  const over = tasks.filter((t) => t.cpu > 16.7);
-  // Each frame over budget: when it ran after the play (ms), its thread time, and where that time went.
-  const said = over
-    .slice(0, 4)
-    .map(
-      (t) =>
-        `+${((t.at - from) / 1000).toFixed(0)}ms ${t.cpu.toFixed(1)}ms (style ${t.styleMs.toFixed(1)}ms over ${t.restyled} elements; ${t.rendering
-          .slice(0, 3)
-          .map(([phase, phaseMs]) => `${phase} ${phaseMs.toFixed(1)}`)
-          .join(", ")}; passes ${t.passes
-          .filter((p) => p.ms > 1)
-          .map((p) => `${p.name} ${p.ms.toFixed(1)}ms/${p.elements} at ${p.at}`)
-          .join(", ")}; asked by ${t.invalidated
-          .slice(0, 3)
-          .map(([why, n]) => `${why} ×${n}`)
-          .join(", ")})`
-    )
-    .join("; ");
-  kit.check(
-    `chromium ${m}: no frame takes the main thread over 16.7ms while it plays (longest ${longest?.cpu.toFixed(1)}ms of thread time, ${longest?.ran}; longest wall ${longestWall.toFixed(1)}ms; ${tasks.length} tasks; load ${(loadavg()[0] ?? 0).toFixed(0)} on ${cpus().length} cores)`,
-    (longest?.cpu ?? 0) <= 16.7,
-    `${over.length} frames over: ${said}`
-  );
+  };
 }
 
-/** One capture as the manifest says it. */
-interface Capture {
-  caption: string;
-  file: string;
-  frame: string;
-  moment: string;
-  scheme: string;
-  variant: string;
-  width: number;
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every moment at rest, each claim said as it is read
+async function restLeg(kit: Kit, page: Page, engine: Engine) {
+  const house = new HouseRules(kit, engine, {
+    scope: ".stage",
+    views: ".stage",
+    marks: ".mark-cell svg, .screen-mark svg",
+  });
+  for (const width of WIDTHS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
+    await setWidth(page, width);
+    const layout = width >= 900 ? "Desk" : "Phone";
+    const slots = new Set<string>();
+    const inks: number[] = [];
+    const faults: Record<string, string[]> = {
+      holds: [],
+      box: [],
+      empty: [],
+      starts: [],
+      coral: [],
+      caw: [],
+    };
+    for (const { m, picks } of RESTS) {
+      // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
+      await picksTo(page, picks);
+      await restIn(page, m);
+      const name = `${m}${picks ? ` (${picks.map(([n, v]) => `${n} ${v}`).join(", ")})` : ""}`;
+      const r = await page.evaluate(readRest);
+      slots.add(r.slot);
+      if (r.holds !== holdsOf(m)) {
+        faults.holds.push(`${name}: ${r.holds}, want ${holdsOf(m)}`);
+      }
+      const wantBoxes = [
+        "asking",
+        "waiting",
+        "lastminute",
+        "expired",
+        "nomatch-spent",
+        "nomatch-foreign",
+        "failed",
+      ].includes(m)
+        ? ["div.paper"]
+        : [];
+      if (JSON.stringify(r.boxes) !== JSON.stringify(wantBoxes)) {
+        faults.box.push(`${name}: ${r.boxes.join(", ") || "none"}`);
+      }
+      if (r.empty.length > 0 || r.tiles > 0) {
+        faults.empty.push(
+          `${name}: ${[...r.empty, ...(r.tiles ? [`${r.tiles} tile(s)`] : [])].join(", ")}`
+        );
+      }
+      if (r.starts.misaligned.length > 0) {
+        faults.starts.push(`${name}: ${r.starts.misaligned.join(", ")}`);
+      }
+      const want = coralsOf(m, picks);
+      if (r.corals.length !== want) {
+        faults.coral.push(
+          `${name}: ${r.corals.length} (${r.corals.join(", ")}), want ${want}`
+        );
+      }
+      inks.push(r.caw.ink);
+      if (!r.caw.canvas || r.caw.ink < 0.05 || r.caw.dx > 1 || r.caw.meets) {
+        faults.caw.push(
+          `${name}: canvas ${r.caw.canvas}, ${(r.caw.ink * 100).toFixed(1)}% of it inked, off the axis ${r.caw.dx.toFixed(2)}px, meets the slot ${r.caw.meets}`
+        );
+      }
+      await house.at(page, `${name} at ${width}`);
+    }
+    const tag = `${engine} ${layout} at ${width}`;
+    kit.check(
+      `${tag}: a constant object slot in all ${RESTS.length} moments (${[...slots].join(" | ")})`,
+      slots.size === 1
+    );
+    kit.check(
+      `${tag}: the slot holds its one object in every moment: the paper (its head on it while the code is good), or the device with the icon and the code on its screen or one outcome's mark`,
+      faults.holds.length === 0,
+      faults.holds.slice(0, 4).join("; ")
+    );
+    kit.check(
+      `${tag}: one box: the paper on the code's moments, none on the device's (the kit's buttons and the ping's ring aside)`,
+      faults.box.length === 0,
+      faults.box.slice(0, 4).join("; ")
+    );
+    kit.check(
+      `${tag}: no empty tiles: every box holds what it draws`,
+      faults.empty.length === 0,
+      faults.empty.slice(0, 4).join("; ")
+    );
+    kit.check(
+      `${tag}: the words start-aligned: every row of the words column on one start edge at text-align start`,
+      faults.starts.length === 0,
+      faults.starts.slice(0, 4).join("; ")
+    );
+    kit.check(
+      `${tag}: one coral control per moment where it has an act (Checking, Paired, Expired, the hub down; Denied only when picked coral), none elsewhere`,
+      faults.coral.length === 0,
+      faults.coral.slice(0, 4).join("; ")
+    );
+    kit.check(
+      `${tag}: Caw drawn by Rive through the dashboard's component (his canvas inked ${(Math.min(...inks) * 100).toFixed(1)}–${(Math.max(...inks) * 100).toFixed(1)}%), on the object slot's axis within 1px, his box clear of the slot`,
+      faults.caw.length === 0,
+      faults.caw.slice(0, 4).join("; ")
+    );
+  }
+  await picksTo(page);
+  house.report();
 }
 
-/** Each variant's words for the manifest. */
-const VARIANT_SAID: Record<string, string> = {
-  spent: "its line for a spent code of this hub",
-  foreign: "its line for a code not from this hub",
-  quiet: "New code in the quiet outline",
-  coral: "New code in coral",
+/* ------------------------------------------------------------- leads */
+
+/** Each board's runs in its first frame: every one the lead's. */
+async function leadsLeg(kit: Kit, page: Page, engine: Engine) {
+  await setWidth(page, 1440);
+  for (const b of BOARDS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one held clock at a time
+    await picksTo(page, b.picks);
+    await page.evaluate(
+      async ({ from, to }) => {
+        const p = (window as unknown as W).preview;
+        await p.snap(from, { figure: to === "expired" ? "0:01" : undefined });
+        p.landRecord();
+      },
+      { from: b.from, to: b.to }
+    );
+    await settled(page);
+    const board = await page.evaluate(
+      (to) => (window as unknown as W).preview.boardFor(to),
+      b.to
+    );
+    kit.check(
+      `${engine} ${b.from} → ${b.to}: a storyboard plays it (${board})`,
+      board !== null
+    );
+    const read = await readMotion(
+      page,
+      () =>
+        page.evaluate((to) => (window as unknown as W).preview.go(to), b.to),
+      ".frame",
+      { fractions: [0] }
+    );
+    // Every run the board draws (a cue draws nothing), timed from the trigger: its start on the
+    // timeline (the frame it was made in) and its delay. The lead's frame is the first any of them
+    // moves in: the pour's inner dots move at far × 280ms, never at 0, as the spec writes it.
+    const drawnRuns = read.runs.filter((run) => !run.name.startsWith("cue:"));
+    const starts = read.runs
+      .map((run) => run.start)
+      .filter((s): s is number => s !== null);
+    const t0 = starts.length ? Math.min(...starts) : 0;
+    const at = (run: (typeof drawnRuns)[number]) =>
+      run.delay + (run.start === null ? 0 : run.start - t0);
+    const rive = b.from === "open";
+    // Opening, the lead is Caw's own drawn enter at 0, which no Web Animation carries.
+    const lead =
+      rive || drawnRuns.length === 0 ? 0 : Math.min(...drawnRuns.map(at));
+    const first = drawnRuns.filter((run) => at(run) - lead < 17);
+    const others = first.filter((run) => !run.name.startsWith("lead"));
+    const leads = [
+      ...new Set(
+        first
+          .filter((run) => run.name.startsWith("lead"))
+          .map((run) => `${run.name} on ${run.target}`)
+      ),
+    ];
+    kit.check(
+      `${engine} ${b.from} → ${b.to}: the lead alone in its frame (${b.lead}, first moving at ${lead.toFixed(0)}ms): ${leads.length ? leads.slice(0, 4).join(", ") : "no Web Animation"}; nothing else starts in that frame (${drawnRuns.length} runs, by ${read.by})`,
+      others.length === 0 && (rive || leads.length > 0),
+      others
+        .slice(0, 6)
+        .map((run) => `${run.name} on ${run.target} at ${at(run).toFixed(0)}ms`)
+        .join("; ")
+    );
+    kit.check(
+      `${engine} ${b.from} → ${b.to}: every run played to its end once let go`,
+      read.runs.every((run) => run.ended),
+      read.runs
+        .filter((run) => !run.ended)
+        .slice(0, 4)
+        .map((run) => `${run.name} on ${run.target}: ${run.missed}`)
+        .join("; ")
+    );
+    await settled(page);
+  }
+  await picksTo(page);
+}
+
+/* ---------------------------------------------------------------- qr */
+
+async function qrLeg(kit: Kit, page: Page, engine: Engine) {
+  for (const width of [1440, 390]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
+    await setWidth(page, width);
+    await restIn(page, "waiting");
+    const shape = await page.evaluate(() => {
+      const drawn = (window as unknown as W).preview.dotsOf();
+      return {
+        m: drawn.m,
+        dots: drawn.dots.length,
+        off: drawn.dots.filter(
+          (d) => Math.abs(d.r - 0.42 * drawn.m) > 0.01 || d.o !== 1
+        ).length,
+        paper: (
+          document.querySelector(".paper") as HTMLElement
+        ).getBoundingClientRect().width,
+        head: (
+          document.querySelector(".head") as HTMLElement
+        ).getBoundingClientRect().width,
+      };
+    });
+    const paper = await page.locator(".paper").boundingBox();
+    const png = paper
+      ? await page.screenshot({
+          clip: {
+            x: paper.x - 24,
+            y: paper.y - 24,
+            width: paper.width + 48,
+            height: paper.height + 48,
+          },
+        })
+      : null;
+    const [found] = png
+      ? await readBarcodes(new Uint8Array(png), {
+          formats: ["QRCode"],
+          tryInvert: false,
+        })
+      : [];
+    kit.check(
+      `${engine} at ${width}: the code is ${shape.dots} discs of 0.42 module at m ${shape.m}px on a ${shape.paper}px paper with a ${shape.head}px head, and decodes to its text (${JSON.stringify(found?.text ?? null)})`,
+      shape.off === 0 &&
+        found?.text === PAYLOAD &&
+        shape.paper === shape.m * 39 &&
+        Math.abs(shape.head - shape.m * 9) < 0.5
+    );
+  }
+}
+
+/* ---------------------------------------------------------- captures */
+
+const LABEL: Record<string, string> = {
+  asking: "Asking",
+  waiting: "Waiting",
+  lastminute: "Last minute",
+  "checking-public": "Checking, public",
+  "checking-tailnet": "Checking, tailnet",
+  "checking-lan": "Checking, LAN",
+  approved: "Paired",
+  denied: "Denied",
+  expired: "The code expired",
+  "nomatch-spent": "Wrong code scanned, an expired code",
+  "nomatch-foreign": "Wrong code scanned, not this hub's",
+  failed: "The hub didn't answer",
+  removed: "Removed",
 };
 
-/** A failure played (in its variant) and held still, its Desk and Phone frames each shot alone, by day. */
-async function shoot(
-  page: Page,
-  {
-    out,
-    c,
-    width,
-    labels,
-  }: {
-    c: (typeof FAILURES)[number];
-    labels: Record<string, string>;
-    out: string;
-    width: number;
-  }
-): Promise<Capture[]> {
-  if (c.variant) {
-    await page.evaluate(
-      ([n, value]) =>
-        (window as unknown as { preview: Preview }).preview.variant(n, value),
-      c.variant as readonly [string, string]
-    );
-  }
-  await playIn(page, c.m);
-  await settled(page);
-  await page.evaluate(() => {
-    for (const run of document.getAnimations()) {
-      run.pause();
-    }
-  });
-  const v = c.variant?.[1] ?? "";
-  const shot: Capture[] = [];
-  for (const frame of ["desk", "phone"] as const) {
-    const name = frame === "desk" ? "Desk" : "Phone";
-    const file = `${c.m}${v ? `-${v}` : ""}-${frame}-${width}-day.png`;
-    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
-    await page
-      .locator(`.frame:has(.viewport[data-layout="${frame}"])`)
-      .screenshot({ path: join(out, file) });
-    shot.push({
-      file,
-      moment: c.m,
-      variant: v,
-      frame: name,
-      width,
-      scheme: "day",
-      caption: `${labels[c.m] ?? c.m}${v ? `, ${VARIANT_SAID[v]}` : ""}, the ${name} frame, in a window ${width}px wide, by day`,
-    });
-  }
-  await page.evaluate(() => {
-    for (const run of document.getAnimations()) {
-      run.play();
-    }
-  });
-  return shot;
+/**
+ * The owner's captures (`PAIRING_LEGS=captures`, off by default): every
+ * moment at rest, Desk at 1440 and Phone at 390, by day and by night, at
+ * DPR 1, the frame alone; and the Expired, Checking and Paired boards
+ * scrubbed at ¼, ½ and ¾ on the DevTools Animation domain. Pictures for a
+ * person to read, never compared with anything.
+ */
+interface Shot {
+  caption: string;
+  file: string;
 }
 
-/**
- * The designer's captures (`PAIRING_LEGS=captures`, off by default): the
- * four failures at rest (Wrong code scanned with each of its two lines,
- * Denied with its quiet and its coral New code), the Desk and the Phone
- * frame each shot alone, in a window 390 and 1440 wide, by day, at DPR 1,
- * into design-previews/pairing/captures/ with a manifest.json. Every run is
- * held where it stands for the shot (the ping). Pictures for a person to
- * read, never compared with anything.
- */
-async function capturesLeg(kit: Kit, url: string, engine: Engine) {
-  const out = join(DIR, "captures");
-  rmSync(out, { recursive: true, force: true });
-  mkdirSync(out, { recursive: true });
-  const { page, errors } = await openPreview(kit, url, engine, "phone");
-  await page.emulateMedia({ colorScheme: "light" });
-  const labels = await page.evaluate(() =>
-    Object.fromEntries(
-      [...document.querySelectorAll<HTMLElement>("[data-moment]")].map((b) => [
-        b.dataset.moment ?? "",
-        (b.textContent ?? "").trim(),
-      ])
-    )
+/** Every moment at rest in one scheme and frame, every run held where it stands for the shot. */
+async function shootRests(
+  page: Page,
+  out: string,
+  scheme: "light" | "dark",
+  width: number
+): Promise<Shot[]> {
+  const frame = width === 1440 ? "desk" : "phone";
+  const shots: Shot[] = [];
+  for (const { m, picks } of RESTS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time on one page
+    await picksTo(page, picks);
+    await restIn(page, m);
+    await page.evaluate(() => {
+      for (const run of document.getAnimations()) {
+        run.pause();
+      }
+    });
+    const v = picks ? `-${picks.map(([, value]) => value).join("-")}` : "";
+    const file = `${m}${v}-${frame}-${width}-${scheme === "light" ? "day" : "night"}.png`;
+    await page.locator(".frame").screenshot({ path: join(out, file) });
+    const said = picks
+      ? ` (${picks.map(([n, value]) => `${n}: ${value}`).join(", ")})`
+      : "";
+    shots.push({
+      file,
+      caption: `${LABEL[m]}${said}, the ${frame === "desk" ? "Desk" : "Phone"} frame at ${width}, by ${scheme === "light" ? "day" : "night"}`,
+    });
+  }
+  return shots;
+}
+
+/** One board scrubbed to ¼, ½ and ¾ of its length on the held clock, the frame shot at each. */
+async function shootBoard(
+  page: Page,
+  out: string,
+  width: number,
+  from: string,
+  to: string
+): Promise<Shot[]> {
+  const frame = width === 1440 ? "desk" : "phone";
+  const shots: Shot[] = [];
+  await page.evaluate(
+    async ({ f, t }) => {
+      const p = (window as unknown as W).preview;
+      await p.snap(f, { figure: t === "expired" ? "0:01" : undefined });
+      p.landRecord();
+    },
+    { f: from, t: to }
   );
-  const manifest: Capture[] = [];
-  for (const width of [390, 1440]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
-    await page.setViewportSize({ width, height: 1000 });
-    await page.waitForFunction((w) => window.innerWidth === w, width);
-    for (const c of FAILURES) {
-      // biome-ignore lint/performance/noAwaitInLoops: one case at a time
-      const shot = await shoot(page, { out, c, width, labels });
-      manifest.push(...shot);
+  await settled(page);
+  const fractions = [0.25, 0.5, 0.75];
+  let i = 0;
+  await readMotion(
+    page,
+    () => page.evaluate((t) => (window as unknown as W).preview.go(t), to),
+    ".frame",
+    {
+      fractions,
+      of: "cue:end",
+      read: async () => {
+        const f = fractions[i] ?? 0;
+        i += 1;
+        const file = `board-${to}-${frame}-${width}-at-${Math.round(f * 100)}.png`;
+        await page
+          .locator(".frame")
+          .screenshot({ path: join(out, file), animations: "allow" });
+        shots.push({
+          file,
+          caption: `${LABEL[from]} → ${LABEL[to]}, scrubbed to ${f * 100}% on the Animation domain, ${frame} at ${width}`,
+        });
+      },
+    }
+  );
+  await settled(page);
+  return shots;
+}
+
+/** The boards the owner judges scrubbed (spec §8): Expired, Checking and Paired. */
+const SCRUBBED = [
+  ["lastminute", "expired"],
+  ["waiting", "checking-tailnet"],
+  ["checking-tailnet", "approved"],
+] as const;
+
+async function capturesLeg(kit: Kit, page: Page, engine: Engine) {
+  const out = process.env.PAIRING_CAPTURES ?? join(kit.out, "captures");
+  mkdirSync(out, { recursive: true });
+  const shots: Shot[] = [];
+  for (const scheme of ["light", "dark"] as const) {
+    for (const width of [1440, 390]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one scheme and window width at a time on one page
+      await page.emulateMedia({ colorScheme: scheme });
+      await setWidth(page, width);
+      shots.push(...(await shootRests(page, out, scheme, width)));
+    }
+  }
+  await page.emulateMedia({ colorScheme: "light" });
+  await picksTo(page);
+  // The Animation domain's clock is Chromium's.
+  if (engine === "chromium") {
+    for (const width of [1440, 390]) {
+      for (const [from, to] of SCRUBBED) {
+        // biome-ignore lint/performance/noAwaitInLoops: one held clock at a time
+        await setWidth(page, width);
+        shots.push(...(await shootBoard(page, out, width, from, to)));
+      }
     }
   }
   writeFileSync(
-    join(out, "manifest.json"),
-    `${JSON.stringify(manifest, null, 2)}\n`
+    join(out, `manifest-${engine}.json`),
+    `${JSON.stringify(shots, null, 2)}\n`
   );
   kit.check(
-    `${engine}: ${manifest.length} captures written to design-previews/pairing/captures/ (${FAILURES.length} failure cases × Desk and Phone × 390 and 1440, by day, DPR 1) with their manifest`,
-    manifest.length === FAILURES.length * 4 && errors.length === 0,
-    errors.slice(0, 4).join(" | ")
+    `${engine}: ${shots.length} captures written to ${out}`,
+    shots.length > 0
   );
 }
 
-/** The legs PAIRING_LEGS names, in order, on one engine's page. */
-async function runLegs(kit: Kit, page: Page, url: string, engine: Engine) {
-  if (LEGS.has("qr")) {
-    await qrLeg(kit, page, engine);
-  }
-  if (LEGS.has("motion")) {
-    for (const m of ONLY) {
-      // biome-ignore lint/performance/noAwaitInLoops: one held clock at a time
-      await motionLeg(kit, page, engine, m);
-    }
-  }
-  if (LEGS.has("handoff")) {
-    await handoffLeg(kit, page, engine);
-  }
-  if (LEGS.has("ping")) {
-    await pingLeg(kit, page, engine);
-  }
-  if (LEGS.has("device")) {
-    await deviceLeg(kit, page, engine);
-  }
-  if (LEGS.has("end")) {
-    await endLeg(kit, page, engine);
-  }
-  if (LEGS.has("failures")) {
-    await failuresLeg(kit, page, engine);
-  }
-  if (LEGS.has("glyphs")) {
-    await glyphsLeg(kit, page, engine);
-  }
-  if (LEGS.has("poses")) {
-    await posesLeg(kit, page, engine);
-  }
-  if (LEGS.has("frames")) {
-    await framesLeg(kit, url, engine);
-  }
-  if (LEGS.has("captures")) {
-    await capturesLeg(kit, url, engine);
-  }
-  if (engine === "chromium" && LEGS.has("cost")) {
-    for (const m of ONLY) {
-      // biome-ignore lint/performance/noAwaitInLoops: one trace at a time
-      await frameCost(kit, page, m);
-    }
-  }
-}
+/* -------------------------------------------------------------- spec */
 
 const spec: Spec = {
   name: "pairing-preview",
@@ -2376,7 +906,21 @@ const spec: Spec = {
       for (const engine of engines) {
         // biome-ignore lint/performance/noAwaitInLoops: one engine's browser at a time
         const { page, errors } = await openPreview(kit, url, engine);
-        await runLegs(kit, page, url, engine);
+        if (LEGS.has("frames")) {
+          await framesLeg(kit, page, engine);
+        }
+        if (LEGS.has("qr")) {
+          await qrLeg(kit, page, engine);
+        }
+        if (LEGS.has("rest")) {
+          await restLeg(kit, page, engine);
+        }
+        if (LEGS.has("leads")) {
+          await leadsLeg(kit, page, engine);
+        }
+        if (LEGS.has("captures")) {
+          await capturesLeg(kit, page, engine);
+        }
         kit.check(
           `${engine}: no console error`,
           errors.length === 0,

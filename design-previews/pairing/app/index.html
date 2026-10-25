@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>Pairing · preview</title>
+    <script src="./main.js" type="module"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>Pairing</h1>
+      <fieldset class="row">
+        <legend class="label">Play into</legend>
+        <div class="seg" data-slot="moments"></div>
+        <button class="btn" data-size="sm" data-slot="replay" type="button">Replay</button>
+      </fieldset>
+      <fieldset class="row">
+        <legend class="label">Your picks</legend>
+        <div class="seg" data-slot="pick-denied"></div>
+        <div class="seg" data-slot="pick-removed"></div>
+      </fieldset>
+      <p class="note">
+        One frame per window: Desk at 900px and wider, Phone under it, each drawn at its real size.
+        The acts on the surface play the flow on from where it stands. The code is for this hub,
+        obelisk-of-light; its six letters are a sample.
+      </p>
+    </header>
+
+    <main class="frame" data-layout="desk">
+      <div class="stage">
+        <div class="object">
+          <div class="caw-slot" data-slot="caw"></div>
+          <div class="slot">
+            <div aria-hidden="true" class="ping"></div>
+            <div class="paper">
+              <div aria-label="Pairing QR code" class="code" role="img">
+                <canvas aria-hidden="true" class="dots"></canvas>
+                <svg aria-hidden="true" class="eyes"></svg>
+              </div>
+            </div>
+            <svg aria-label="iPhone" class="device" fill="none" role="img" viewBox="0 0 96 96"></svg>
+            <div class="screen">
+              <div class="screen-stack">
+                <span aria-hidden="true" class="icon-spot"></span>
+                <span aria-hidden="true" class="screen-letters"></span>
+              </div>
+              <span aria-hidden="true" class="screen-mark"></span>
+            </div>
+            <div aria-hidden="true" class="head"></div>
+          </div>
+          <p class="run"><span aria-hidden="true" class="strike"></span></p>
+        </div>
+
+        <div class="words" aria-live="polite">
+          <h2 class="title">Scan with the CawCo app</h2>
+          <div class="lines">
+            <p class="line mark-line" data-line="1">
+              <span aria-hidden="true" class="mark-cell"></span>
+              <span class="text"></span>
+              <span class="figure num"></span>
+            </p>
+            <p class="line" data-line="2"><span class="text"></span></p>
+          </div>
+          <div class="facts">
+            <p class="name"></p>
+            <p class="kind"></p>
+            <p class="addr"></p>
+            <p class="alias"></p>
+            <p class="when num"><span class="text"></span></p>
+          </div>
+          <p class="after"></p>
+          <div class="acts">
+            <button class="btn" data-slot="ghost" data-tone="ghost" type="button"></button>
+            <button class="btn" data-slot="second" type="button"></button>
+            <button class="btn" data-slot="primary" type="button"></button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
