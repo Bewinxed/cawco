@@ -544,7 +544,10 @@ interface JudgeAt {
  * `Socket` as the agent writes the hook ({@link socketAddress}), and AF_UNIX
  * and SOCK_STREAM are 1 on Linux and macOS alike. The call's JSON goes over
  * on one line (a line break in JSON is whitespace or invalid), the prefix on
- * the next, in hex, or `-` when the CLI's environment names none.
+ * the next, in hex, or `-` when the CLI's environment names none. The answer
+ * is read up to the judge's end mark (boundary-judge.ts `ANSWER_END`), or the
+ * connection's end, whichever comes first: never the end alone, which on
+ * macOS at times never came once the answer was written.
  */
 const hookScript = (
   id: string,
@@ -569,7 +572,10 @@ socket(JUDGE, 1, 1, 0) or refuse("cawco: the boundary hook could not open a sock
 connect(JUDGE, pack('H*', '${judge.address}')) or refuse("cawco: the workspace's judge at $judge did not answer ($!), so this call did not run");
 select((select(JUDGE), $| = 1)[0]);
 print JUDGE $call, "\\n", $prefix, "\\n" or refuse("cawco: the call could not be handed to the workspace's judge at $judge ($!), so it did not run");
-$answer = do { local $/; <JUDGE> };
+$answer = do { local $/ = "\\0"; <JUDGE> };
+defined $answer or refuse("cawco: the workspace's judge at $judge answered nothing, so this call did not run");
+$answer =~ s/\\0\\z//;
+close JUDGE;
 $answer =~ /\\A([02])\\n/ or refuse("cawco: the workspace's judge at $judge answered nothing, so this call did not run");
 $allowed = $1 eq '0';
 $said = substr($answer, 2);
@@ -6778,8 +6784,17 @@ const judgeSays = (socket: string): Promise<Bounded<string>> =>
         connection.on("connect", () => {
           connection.write(`${JUDGE_BUILD_QUESTION}\n`);
         });
+        // Its answer is whole at its end mark (boundary-judge.ts
+        // `ANSWER_END`), or at the connection's end, which a judge on macOS
+        // at times never sent.
         connection.on("data", (chunk: Buffer) => {
           chunks.push(chunk);
+          const read = Buffer.concat(chunks);
+          const end = read.indexOf(0);
+          if (end >= 0) {
+            connection.destroy();
+            resolve(read.subarray(0, end).toString("utf8"));
+          }
         });
         connection.on("end", () => {
           resolve(Buffer.concat(chunks).toString("utf8"));
