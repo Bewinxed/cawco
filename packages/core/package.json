@@ -68,6 +68,7 @@
     "./words/loop": "./src/words/loop.ts",
     "./words/gate": "./src/words/gate.ts",
     "./words/turns": "./src/words/turns.ts",
+    "./words/relaunch": "./src/words/relaunch.ts",
     "./words/notices": "./src/words/notices.ts",
     "./words/containers": "./src/words/containers.ts",
     "./words/spawn": "./src/words/spawn.ts",

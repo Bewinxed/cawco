@@ -22,6 +22,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { relaunchWords } from "../../../packages/core/src/words/relaunch";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { KitFleet, Spec } from "../kit";
 
@@ -126,7 +127,7 @@ const spec: Spec = {
           const lines = (await hubAt.since())
             .split("\n")
             .filter((line) =>
-              line.includes(`[hub] compact: relaunching ${id}`)
+              line.includes(relaunchWords.relaunching("compact", id))
             );
           return lines.length >= round ? lines : undefined;
         },

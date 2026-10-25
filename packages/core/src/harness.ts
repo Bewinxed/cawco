@@ -247,7 +247,13 @@ export const BOUNDARY_RELAUNCH = "boundary_relaunch";
  * message the process has held"). Claude Code 2.1.309 in a probe session:
  * two compactions in one process wrote 19 rows twice (6.2 MB); with the
  * process resumed after each, none. `CLAUDE_CODE_DISABLE_PRECOMPACT_SKIP`
- * does not stop it (20 rows twice). It never reaches a screen.
+ * does not stop it (20 rows twice). An automatic compaction leaves no
+ * epoch behind to replay: in one process an auto one followed by a manual
+ * one wrote 2 rows twice, two auto ones 4, each the prompt that set off an
+ * auto compaction and its attachment, written again beside its boundary,
+ * the first one in a fresh process too; so none asks for a relaunch. A
+ * manual one followed by an auto one replays (21 rows), and is relaunched
+ * by the manual one's ask. It never reaches a screen.
  */
 export const COMPACT_RELAUNCH = "compact_relaunch";
 

@@ -481,6 +481,7 @@ import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
+import { type RelaunchFor, relaunchWords } from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { turnWords } from "@cawco/core/words/turns";
 import { isPlace } from "@cawco/core/workspace-policy";
@@ -25880,18 +25881,21 @@ export const createServer = (
     );
   };
 
-  /** Sessions a boundary relaunch was sent for, so a second word on it before the spawn lands sends no second one. */
-  const relaunching = new Set<string>();
+  /**
+   * Sessions a boundary relaunch was sent for, held {@link RELAUNCH_SETTLE_MS}
+   * so a second word on it before the spawn lands sends no second one. An ask
+   * that comes while it is held is said in the log and asked again as the
+   * hold ends (`askedAgain`, the machine it came from), rather than left to
+   * the session's next turn's end; once only: a relaunch that was itself
+   * that second ask (`second`) leaves a further one to its next turn's end,
+   * so a process that comes back on a hook that fails open is not relaunched
+   * every hold while it is idle.
+   */
+  const relaunching = new Map<
+    string,
+    { askedAgain?: string; second: boolean }
+  >();
   const RELAUNCH_SETTLE_MS = 60_000;
-
-  /** What a relaunch at rest is for, as its log lines say it ({@link relaunchAtRest}). */
-  const RELAUNCH_FOR = {
-    boundary: { tag: "boundary", onto: "onto the fail-closed hook" },
-    compact: {
-      tag: "compact",
-      onto: "into a process that never held its compacted history",
-    },
-  } as const;
 
   /**
    * A session its machine asks to have relaunched at a turn's end: its CLI
@@ -25908,16 +25912,25 @@ export const createServer = (
   const relaunchAtRest = async (
     machineId: string,
     instanceId: string,
-    why: keyof typeof RELAUNCH_FOR
+    why: RelaunchFor,
+    /** The ask a hold kept back, asked again as it ended ({@link relaunching}). */
+    second = false
   ): Promise<void> => {
     // A compaction's ask comes only from the process that ran it, and a
     // launch on its way already refuses a second ({@link inFlightRefusal}):
     // held for {@link RELAUNCH_SETTLE_MS}, a second `/compact` within it
     // would run in the process its first was relaunched into, and go on.
-    if (why === "boundary" && relaunching.has(instanceId)) {
+    const held = why === "boundary" ? relaunching.get(instanceId) : undefined;
+    if (held) {
+      const holdSeconds = RELAUNCH_SETTLE_MS / 1000;
+      if (held.second) {
+        console.info(relaunchWords.heldTwice(instanceId, holdSeconds));
+      } else if (held.askedAgain === undefined) {
+        console.info(relaunchWords.heldBack(instanceId, holdSeconds));
+        held.askedAgain = machineId;
+      }
       return;
     }
-    const { tag, onto } = RELAUNCH_FOR[why];
     const [row] = db.getInstancesByIds([instanceId]);
     const agent = registry.agent(machineId);
     // One put to sleep at that boundary has no process left to replace: its
@@ -25929,18 +25942,30 @@ export const createServer = (
       return;
     }
     if (!(await sessionIdle(row))) {
-      console.info(
-        `[hub] ${tag}: ${instanceId} is mid-turn; it is relaunched ${onto} at its next turn's end`
-      );
+      console.info(relaunchWords.midTurn(why, instanceId));
       return;
     }
     const { sessionId } = row;
     if (why === "boundary") {
-      relaunching.add(instanceId);
-      lifetime.after(RELAUNCH_SETTLE_MS, () => relaunching.delete(instanceId));
+      const hold: { askedAgain?: string; second: boolean } = { second };
+      relaunching.set(instanceId, hold);
+      lifetime.after(RELAUNCH_SETTLE_MS, () => {
+        relaunching.delete(instanceId);
+        const from = hold.askedAgain;
+        if (from === undefined) {
+          return;
+        }
+        console.info(relaunchWords.holdEnded(instanceId));
+        relaunchAtRest(from, instanceId, "boundary", true).catch(
+          (error: unknown) =>
+            console.error(
+              `[hub] boundary: relaunching ${instanceId} failed: ${String(error)}`
+            )
+        );
+      });
     }
     resumeSpawn(agent, machineId, { ...row, sessionId }, true);
-    console.info(`[hub] ${tag}: relaunching ${instanceId} ${onto}`);
+    console.info(relaunchWords.relaunching(why, instanceId));
   };
 
   /**
