@@ -1217,17 +1217,21 @@ function fitFacts() {
     if (need() > room + 0.5) f.dataset.drop = "tok word";
   }
 }
-// The timeline's top fade starts under what holds at its top: the ruler, and an open row's head wherever it stands
-// within the fade's reach under the ruler (held there, or just opened a row's padding below it), so that head
-// stays whole ink and the fade runs under it.
+// The timeline's top fade starts under what holds at its top: the ruler, then an open row's head and its lane,
+// each wherever it stands within the fade's reach under what is above it (the head held under the ruler or just
+// opened a row's padding below it; the lane under the head, until it scrolls in behind the held head). So the
+// head and the lane stay whole ink and the fade runs on under them, over the controls.
 function tlFadeFrom() {
   const t = $("tl"), rrow = t && t.querySelector(".ruler-row");
   if (!rrow) return;
   let from = rrow.offsetHeight;
-  const name = $("rows").querySelector(".clip:has(> .ctl-row) > .clip-name");
+  const name = $("rows").querySelector(".clip:has(> .ctl) > .clip-name");
   if (name && getComputedStyle(name).position === "sticky") {
-    const top = name.getBoundingClientRect().top - t.getBoundingClientRect().top, bottom = top + name.offsetHeight;
-    if (top < from + px("--c-edge-fade-len") && bottom > from) from = bottom;
+    const tt = t.getBoundingClientRect().top, reach = px("--c-edge-fade-len");
+    for (const part of [name, name.parentElement.querySelector(".lane")]) {
+      const r = part.getBoundingClientRect(), top = r.top - tt, bottom = r.bottom - tt;
+      if (top < from + reach && bottom > from) from = bottom;
+    }
   }
   t.style.setProperty("--tl-fade-from", from + "px");
 }
@@ -1629,18 +1633,13 @@ function barKey(bar, e) {
   if (commit(km.e, next)) afterEdit(km, { replay: false });
 }
 
-// ---- A clip's controls (round 29, section C): in its row, or in the dock's inspector ----
-// The owner's note on the popover ("popover? lol..") left two answers on the decision card, and both are drawn
-// here (html[data-ctl], the review bar's switch): "row" opens the controls inside the clip's own row, under its
-// facts, the row's chosen wash round both; "inspector" opens them in an inspector beside the timeline, and on a
-// dock too narrow for both, in the timeline's place with Back to return to it.
-// One thing at a time: the clip's controls and nothing else. The inspector's head is the row's first line (in
-// the row the row itself is the head); then the length (a slider with a detent at every --dur-* token, and a
+// ---- A clip's controls (round 29, section C): in the clip's own row ----
+// The owner's pick: a clip's controls open inside its row, under its facts and lane, the row's chosen wash round
+// both. One thing at a time: the clip's controls and nothing else. The row itself is their head; then the length (a slider with a detent at every --dur-* token, and a
 // figure that takes any number), the curve (the house curves as glyphs, Spring, Custom, the chosen one drawn
 // large with its handles), a spring's every parameter as a figure, and the delta. A change applies at once and
 // the stage replays; there is no foot and no Save.
 let ctl = null;
-const ctlMode = () => (rootEl.dataset.ctl === "inspector" ? "inspector" : "row");
 const floatInset = () => (compact() ? px("--c-screen-margin") : px("--space-5"));
 function clipNow(key, work) { const km = keptMove(); return (work || km.e.cur).find((x) => x.key === key); }
 // The pressed thing, found again by what it is (a fact by its field, the name, or the bar), so a redrawn row
@@ -1651,40 +1650,36 @@ function anchorEl(p = ctl) {
   const a = p.anchor;
   return (a && a.open && row.querySelector('.fact[data-open="' + a.open + '"]')) || (a && a.name && row.querySelector(".l1")) || row.querySelector(".bar");
 }
-// Its home: the clip's own row (its last child, across both columns), or the inspector. A redraw of the rows
-// patches each row in place and leaves the controls standing, so a held slider keeps its pointer.
+// Its home: the clip's own row (its last child, across both columns). A redraw of the rows patches each row in
+// place and leaves the controls standing, so a held slider keeps its pointer.
 function mountCtl() {
-  const dock = $("dock");
-  dock.toggleAttribute("data-insp", !!ctl && ctlMode() === "inspector");
   if (!ctl) return;
-  if (ctlMode() === "row") {
-    const row = $("rows") && $("rows").querySelector('.clip[data-key="' + ctl.key + '"]');
-    if (row && ctl.el.parentNode !== row) row.append(ctl.el);
-    // Its actions: on a narrow dock in the row's head line beside the name (held with it under the ruler); on a
-    // wide one at the controls' own top corner, so the name column keeps its facts and their token badges.
-    const home = stacked() ? row && row.querySelector(".clip-name") : ctl.el;
-    if (home && ctl.headEl && ctl.headEl.parentNode !== home) home.append(ctl.headEl);
-  } else if (ctl.el.parentNode !== $("insp")) $("insp").append(ctl.el);
+  const row = $("rows") && $("rows").querySelector('.clip[data-key="' + ctl.key + '"]');
+  if (row && ctl.el.parentNode !== row) row.append(ctl.el);
+  // Its actions: on a narrow dock in the row's head line beside the name (held with it under the ruler); on a
+  // wide one at the controls' own top corner, so the name column keeps its facts and their token badges.
+  const home = stacked() ? row && row.querySelector(".clip-name") : ctl.el;
+  if (home && ctl.headEl && ctl.headEl.parentNode !== home) home.append(ctl.headEl);
 }
 function openCtl(key, origin, anchor) {
   const km = keptMove();
   if (!km || km.e.view === "original") return;
   // The same clip, open: it stays, and a key's press puts the focus in it.
-  if (ctl && ctl.key === key && ctl.mode === ctlMode()) { ctl.anchor = anchor || null; if (origin === "key") focusFirst(); return; }
+  if (ctl && ctl.key === key) { ctl.anchor = anchor || null; if (origin === "key") focusFirst(); return; }
   closeCtl();
-  const mode = ctlMode(), el = document.createElement(mode === "row" ? "div" : "section"), c = clipNow(key);
-  el.className = "ctl ctl-" + mode; el.dataset.key = key;
+  const el = document.createElement("div"), c = clipNow(key);
+  el.className = "ctl"; el.dataset.key = key;
   el.setAttribute("role", "region"); el.setAttribute("aria-label", "Controls, " + c.of + " " + c.does);
   el.innerHTML = '<div class="ctl-body"></div>';
-  ctl = { key, el, mode, origin, committed: {}, anchor: anchor || null };
+  ctl = { key, el, origin, committed: {}, anchor: anchor || null };
   mountCtl();
   renderCtl();
   // The rows under an opened row move down: their ties follow, and the timeline shows the controls whole.
-  ctl.ro = new ResizeObserver(() => requestAnimationFrame(() => { if (tl) layoutDock(); scrollFade($("insp")); }));
+  ctl.ro = new ResizeObserver(() => requestAnimationFrame(() => { if (tl) layoutDock(); }));
   ctl.ro.observe(el);
-  // Scrolled into the timeline's view as far as it fits, its head never under the sticky ruler.
-  // Stacked, the row's head holds under the ruler, so the row opens with its head there and its controls under it.
-  if (mode === "row") {
+  // Scrolled into the timeline's view as far as it fits, its head never under the sticky ruler. Stacked, the
+  // row's head holds under the ruler, so the row opens with its head there and its controls under it.
+  {
     const t = $("tl"), b = el.getBoundingClientRect(), tb = t.getBoundingClientRect(), ruler = t.querySelector(".ruler-row").offsetHeight;
     if (stacked()) {
       t.scrollTop += el.parentElement.getBoundingClientRect().top - tb.top - ruler;
@@ -1699,9 +1694,8 @@ function openCtl(key, origin, anchor) {
   playLive();
 }
 function focusFirst() { const i = ctl.el.querySelector(".dslider") || ctl.el.querySelector("input, button"); if (i) i.focus({ preventScroll: true }); }
-// Closed by Esc, its Close (Back on a narrow dock), a press outside the dock, a press on its own fact again, or
-// another clip's: it goes at once and the timeline is whole again.
-$("insp").onscroll = () => scrollFade($("insp"));
+// Closed by Esc, its Close, a press outside the dock, a press on its own fact again, or another clip's: it goes
+// at once and the timeline is whole again.
 function closeCtl() {
   closeMenu();
   if (!ctl) return;
@@ -1735,9 +1729,8 @@ function labelTicks() {
   const box = (n) => { const x = (parseFloat(n.style.left) / 100) * W, w = n.offsetWidth; return [x - w / 2, x + w / 2]; };
   const taken = [];
   const fits = ([a, b]) => a >= 0 && b <= W && taken.every(([c, d]) => b + gap <= c || a >= d + gap);
-  // One set of names on every width and wherever the controls open, so the scale reads the same in the row, in
-  // the inspector and on a phone: ghost, fade, panel and settle (the house spring's length), spaced to stand
-  // whole on the narrowest track; the chosen detent's own name first, where a value stands on one. A name that
+  // One set of names on every width, so the scale reads the same at a desk and on a phone: ghost, fade, panel
+  // and settle (the house spring's length), spaced to stand whole on the narrowest track; the chosen detent's own name first, where a value stands on one. A name that
   // still can't stand whole keeps its tick alone.
   const named = ["ghost", "fade", "panel", "settle"], rank = (n) => (n.hasAttribute("data-on") ? -1 : named.indexOf(n.textContent));
   const order = names.filter((n) => rank(n) !== -1 || n.hasAttribute("data-on")).sort((a, b) => rank(a) - rank(b));
@@ -1824,19 +1817,14 @@ function renderCtl(work) {
   const el = ctl.el, body = el.querySelector(".ctl-body"), c = clipNow(ctl.key, work), km = keptMove(), e = km.e;
   const o = e.orig.find((x) => x.key === c.key), isEdited = !same(c, o);
   const mode = isSpring(c.ease) ? "spring" : SEG_CURVES.includes(c.ease) ? c.ease : "custom";
-  const d = msOf(c.dur), narrow = stacked();
-  // The head: in the inspector the row's first line, led by the row's own glyph, so the controls say whose they
-  // are; in the row, the row's own head line is the head, and the actions stand beside the name on a narrow
-  // dock (held with it under the ruler), at the controls' top corner on a wide one. Reset where the clip is edited, then Close (Back where
-  // the inspector stands in the timeline's place), each a bare symbol.
-  const close = narrow && ctl.mode === "inspector" ? '<button class="icon-btn" id="ctlClose" type="button" aria-label="Back to the timeline" data-tip="Back to the timeline">' + icon(ICON.chevronLeft) + "</button>" : '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
-  const actions = (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : close);
+  const d = msOf(c.dur);
+  // The head: the row's own head line, its actions standing beside the name on a narrow dock (held with it under
+  // the ruler) and at the controls' top corner on a wide one: Reset where the clip is edited, then Close, each a
+  // bare symbol.
+  const close = '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
   let html = "";
-  if (ctl.mode === "inspector") html += '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">' + (narrow ? close : "") + '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>" + actions + "</div>";
-  else {
-    if (!ctl.headEl) { ctl.headEl = document.createElement("div"); ctl.headEl.className = "ctl-head ctl-head-row"; }
-    ctl.headEl.innerHTML = actions;
-  }
+  if (!ctl.headEl) { ctl.headEl = document.createElement("div"); ctl.headEl.className = "ctl-head ctl-head-row"; }
+  ctl.headEl.innerHTML = (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + close;
   // Length: the slider and its figure (a spring's length is its perceptual duration: its response), with the
   // delta under it in one column, so the length's short section leaves no hole beside the curve.
   html += '<div class="ctl-col"><div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
@@ -2621,22 +2609,14 @@ if (layoutIs("drawer")) setStop("peek");
 labelSheetHide();
 setFace("graph");
 
-// ---- The round's open choices (the owner's): clip kinds in their own hue or in ink only, and a clip's
-// controls in its row or in an inspector ----
+// ---- The round's open choice (the owner's): clip kinds in their own hue or in ink only ----
 rootEl.dataset.kinds = "hue";
-rootEl.dataset.ctl = "row";
-function reviewSwitch(id, attr, then) {
-  for (const b of $(id).querySelectorAll(".t-tab")) b.onclick = () => {
-    rootEl.dataset[attr] = b.dataset[attr];
-    for (const x of $(id).querySelectorAll(".t-tab")) x.setAttribute("aria-selected", String(x === b));
-    slidePill($(id), !reduced());
-    if (then) then();
-  };
-  requestAnimationFrame(() => slidePill($(id), false));
-}
-reviewSwitch("kinds", "kinds");
-// A clip's controls open stay open across the switch, in their new home.
-reviewSwitch("ctlChoice", "ctl", () => { if (!ctl) return; const { key, anchor } = ctl; closeCtl(); openCtl(key, "pointer", anchor); });
+for (const b of $("kinds").querySelectorAll(".t-tab")) b.onclick = () => {
+  rootEl.dataset.kinds = b.dataset.kinds;
+  for (const x of $("kinds").querySelectorAll(".t-tab")) x.setAttribute("aria-selected", String(x === b));
+  slidePill($("kinds"), !reduced());
+};
+requestAnimationFrame(() => slidePill($("kinds"), false));
 
 render();
 document.fonts.ready.then(() => { if (layoutIs("drawer")) setStop(stop); render(); });

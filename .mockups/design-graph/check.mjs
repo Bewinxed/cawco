@@ -187,8 +187,7 @@ async function deskMotion(browser, scheme) {
   ok(V, "double-press on the corner restores the default width", w2.w === 448 && !w2.inline, JSON.stringify(w2));
   await page.mouse.move(700, 300); await page.waitForTimeout(300);
 
-  // C. A clip's controls open in its row (the review bar's first answer) or in the dock's inspector (its
-  // second): never a dialog over the page.
+  // C. A clip's controls open in its own row (the owner's pick): never a dialog over the page.
   const src = await ev(() => { const f = document.querySelector('.clip[data-key="label"] .fact-dur'); return __k.box(f); });
   await page.mouse.click(src.x + src.w / 2, src.y + src.h / 2); await page.waitForTimeout(350);
   const inRow = await ev(() => { const c = document.querySelector(".ctl"); return c && { inRow: c.parentElement.matches('.clip[data-key="label"]'), role: c.getAttribute("role"), dialogs: document.querySelectorAll('[role="dialog"]').length, wash: c.parentElement.hasAttribute("data-chosen"), span: getComputedStyle(c).gridColumnStart + "/" + getComputedStyle(c).gridColumnEnd }; });
@@ -219,14 +218,9 @@ async function deskMotion(browser, scheme) {
   await page.click('.ctl #curveList [data-curve="custom"]'); await page.waitForTimeout(300);
   const custom = await ev(() => ({ word: document.querySelector('.clip[data-key="label"] .fact-curve .word').textContent, bez: document.querySelector('.ctl input[data-f="bez"]')?.value }));
   ok(V, "Custom: the curve's numbers, editable", custom.word === "custom" && /,/.test(custom.bez || ""), JSON.stringify(custom));
-  // The inspector: the same controls beside the timeline, the clip's line its head.
-  await page.click('#ctlChoice [data-ctl="inspector"]'); await page.waitForTimeout(350);
-  const insp = await ev(() => { const c = document.querySelector(".ctl"), i = document.getElementById("insp"), t = document.getElementById("tl"); return c && { inInsp: c.parentElement === i, dialogs: document.querySelectorAll('[role="dialog"]').length, beside: i.getBoundingClientRect().left >= t.getBoundingClientRect().right, w: Math.round(i.getBoundingClientRect().width), head: c.querySelector(".ctl-head p")?.textContent }; });
-  ok(V, "controls in an inspector: a 296px column beside the timeline, headed by the clip's line; no dialog", !!insp && insp.inInsp && insp.dialogs === 0 && insp.beside && insp.w === 296 && /^Button label/.test(insp.head || ""), JSON.stringify(insp));
-  await page.click('#ctlChoice [data-ctl="row"]'); await page.waitForTimeout(300);
   // Close: Esc closes them at once, the timeline whole again.
   await page.keyboard.press("Escape"); await page.waitForTimeout(200);
-  ok(V, "Esc closes the controls; the inspector's column goes", await ev(() => !document.querySelector(".ctl") && !document.getElementById("dock").hasAttribute("data-insp")));
+  ok(V, "Esc closes the controls; the row is whole again", await ev(() => !document.querySelector(".ctl, .ctl-head")));
   // Leave the move as the agent wrote it for what follows.
   await ev(() => document.getElementById("resetAll")?.click()); await page.waitForTimeout(300);
 
@@ -726,17 +720,9 @@ async function captures(browser) {
     await pick(page, "kinds", "kinds", "ink"); await page.waitForTimeout(300);
     await shot(page, "Clip kinds", "In ink only", w, w + "-kinds-ink.jpg", phone ? "The phone's timeline in ink only: the glyph alone names each kind, the bars one neutral fill." : "The timeline in ink only: the glyph alone names each kind, the bars one neutral fill.");
     await pick(page, "kinds", "kinds", "hue"); await page.waitForTimeout(200);
-    // Clip controls: the reason line's spring (the agent's ad hoc 340 ms, 0.15 bounce) opened each way, the dock
-    // held at one height for both (as a drag of its corner sets it), so the two compare at one size.
-    if (!phone) await page.evaluate(() => { document.documentElement.style.setProperty("--dock-h", "520px"); window.dispatchEvent(new Event("resize")); });
-    await page.waitForTimeout(300);
-    await pick(page, "ctlChoice", "ctl", "row"); await openReveal(page);
+    // Clip controls: the reason line's spring (the agent's ad hoc 340 ms, 0.15 bounce) opened in its row.
+    await openReveal(page);
     await shot(page, "Clip controls", "In the row", w, w + "-controls-row.jpg", phone ? "The reason line's controls open inside its own row, under its facts; the timeline scrolls on past them." : "The reason line's controls open inside its own row, across the timeline, its spring marked ad hoc.");
-    // Esc gives the pressed fact the focus (and, being a key, its ring): the next capture starts with none.
-    await page.keyboard.press("Escape"); await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.waitForTimeout(200);
-    await pick(page, "ctlChoice", "ctl", "inspector"); await openReveal(page);
-    await shot(page, "Clip controls", "In an inspector", w, w + "-controls-inspector.jpg", phone ? "On a phone the inspector takes the timeline's place, Back leading its head." : "The reason line's controls in an inspector beside the timeline, headed by the clip's line.");
-    await page.keyboard.press("Escape"); await page.waitForTimeout(200);
     await page.close();
     // The resize handle (section A), on a page fresh from its load (no clip chosen, nothing focused): the corner
     // arc reaching along the edge the pointer rests on; on a phone, the drawer's grabber, its own resize.
