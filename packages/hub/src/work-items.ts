@@ -7857,22 +7857,23 @@ export const createWorkItems = ({
             .projectAttempts(now.projectId)
             .filter((attempt) => attempt.taskId === now.taskId)
         : [now];
-    let last: { at: number; sha: string } | undefined;
-    for (const { landed, heldPush } of sharing) {
-      const pushes = [
-        ...(landed && landed.onto === null
-          ? [{ sha: landed.sha, at: landed.at ?? 0 }]
-          : []),
-        ...(heldPush ? [heldPush] : []),
-      ];
-      for (const push of pushes) {
-        if (!last || push.at > last.at) {
-          last = push;
-        }
-      }
-    }
-    return last?.sha;
+    const pushes = sharing.flatMap(branchPushesOf);
+    return pushes.reduce<(typeof pushes)[number] | undefined>(
+      (last, push) => (last && last.at >= push.at ? last : push),
+      undefined
+    )?.sha;
   };
+
+  /** What the hub pushed to `item`'s own branch: its branch landing and its held push, each with when. */
+  const branchPushesOf = ({
+    landed,
+    heldPush,
+  }: WorkItemRow): { at: number; sha: string }[] => [
+    ...(landed && landed.onto === null
+      ? [{ sha: landed.sha, at: landed.at ?? 0 }]
+      : []),
+    ...(heldPush ? [heldPush] : []),
+  ];
 
   /**
    * Lands an item that lands `branch` or `pr`: its commits pushed as they are
