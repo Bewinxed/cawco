@@ -23,6 +23,11 @@
  *   checkout is untouched: its HEAD, refs, index, config and working tree.
  * - d. The checkout's untracked `.env` is read in the delegate's copy, and
  *   its write there stays in the copy: the checkout's `.env` is as it was.
+ * - e. A linked worktree of that repository (`git worktree add`, its `.git`
+ *   a file): its delegate's copy has a `.git` folder of its own (agent
+ *   workspace.ts `ownRepository`), its commit lands on the hub's main
+ *   through the merge checks, and the person's repository (refs, config)
+ *   and the worktree (its HEAD, index and working tree) are untouched.
  *
  *   bun scripts/probe-kit/run.ts workspace-any-folder
  */
@@ -35,10 +40,10 @@ import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-FOLDER-(A|B|C1|C2)\b/;
+const TAG = /PROBE-FOLDER-(A|B|C1|C2|E)\b/;
 /** How finish_item answers a folder landing's conflict (hub work-items.ts `conflictText`). */
 const CONFLICT = "Not landed: a file you changed";
-type Tag = "A" | "B" | "C1" | "C2";
+type Tag = "A" | "B" | "C1" | "C2" | "E";
 
 /** Where each tag's folder is, filled once the fleet's sandbox is known. */
 const folders: Partial<Record<Tag, string>> = {};
@@ -58,6 +63,8 @@ const commandOf = (tag: Tag): string => {
       return `cd ${at} && echo one > one.txt && git add one.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate one' && echo DONE-C1`;
     case "C2":
       return `cd ${at} && if test -f one.txt; then echo HAS-ONE; fi && cat .env && echo SECRET=2 > .env && cat .env && echo two > two.txt && git add two.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate two' && echo DONE-C2`;
+    case "E":
+      return `cd ${at} && if test -d .git; then echo DOTGIT-""DIR; fi && echo three > three.txt && git add three.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate three' && echo DONE-E`;
     default: {
       const unhandled: never = tag;
       return unhandled;
@@ -67,10 +74,15 @@ const commandOf = (tag: Tag): string => {
 
 /**
  * What the host's folder holds as `tag`'s command answers: a's config, c's
- * `.env`; for b, the person writes the same file the delegate just wrote.
+ * `.env`; for b, the person writes the same file the delegate just wrote;
+ * e's worktree holds no `.env`, and nothing is noted.
  */
 const noteHost = (tag: Tag): void => {
   const at = folders[tag] as string;
+  if (tag === "E") {
+    hostAt.E = "noted";
+    return;
+  }
   if (tag === "B") {
     writeFileSync(join(at, "notes.txt"), "person\n");
     hostAt.B = "written";
@@ -286,29 +298,28 @@ const run = async (kit: Kit) => {
     JSON.stringify(bRow)
   );
 
-  await repoLegs(kit, fleet, { delegate, ended, env, git });
+  const repoParent = await repoLegs(kit, fleet, { delegate, ended, env, git });
+  await worktreeLeg(kit, fleet, { delegate, ended, env, git }, repoParent);
 };
+
+/** What the legs share of the spec's reads. */
+interface Legs {
+  delegate: (
+    tag: Tag,
+    cwd: string,
+    from: string
+  ) => Promise<{ workItemId: string; text: string }>;
+  ended: (tag: Tag, id: string) => Promise<ItemRow>;
+  env: Record<string, string | undefined>;
+  git: (dir: string, ...args: string[]) => Promise<{ text: () => string }>;
+}
 
 /** c and d: a repository whose checkout lags origin's main. */
 const repoLegs = async (
   kit: Kit,
   fleet: KitFleet,
-  {
-    delegate,
-    ended,
-    env,
-    git,
-  }: {
-    delegate: (
-      tag: Tag,
-      cwd: string,
-      from: string
-    ) => Promise<{ workItemId: string; text: string }>;
-    ended: (tag: Tag, id: string) => Promise<ItemRow>;
-    env: Record<string, string | undefined>;
-    git: (dir: string, ...args: string[]) => Promise<{ text: () => string }>;
-  }
-): Promise<void> => {
+  { delegate, ended, env, git }: Legs
+): Promise<{ parent: string; repo: string; project: string }> => {
   const { check } = kit;
   const repo = join(fleet.sandbox, "repo");
   folders.C1 = repo;
@@ -393,6 +404,67 @@ const repoLegs = async (
     "d: the checkout's untracked .env is read in the copy, and its write stays in the copy",
     c2Said.includes("SECRET=1\nSECRET=2") && after.env === "SECRET=1\n",
     `${c2Said.slice(-300)} | checkout: ${after.env}`
+  );
+  return { parent: repoParent, repo, project: repoProject.id };
+};
+
+/** e: a linked worktree of the repository: its own repository in the copy, landed, nothing of the person's written. */
+const worktreeLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  { delegate, ended, git }: Legs,
+  from: { parent: string; repo: string; project: string }
+): Promise<void> => {
+  const { check } = kit;
+  const wt = join(fleet.sandbox, "repo-wt");
+  folders.E = wt;
+  await git(from.repo, "worktree", "add", "-q", "-b", "feature-wt", wt);
+  const common = join(from.repo, ".git");
+  const wtGit = (
+    await git(wt, "rev-parse", "--path-format=absolute", "--absolute-git-dir")
+  )
+    .text()
+    .trim();
+  const stateOf = async () => ({
+    refs: (await git(from.repo, "for-each-ref")).text().trim(),
+    config: createHash("sha256")
+      .update(readFileSync(join(common, "config")))
+      .digest("hex"),
+    head: (await git(wt, "rev-parse", "HEAD")).text().trim(),
+    branch: (await git(wt, "symbolic-ref", "HEAD")).text().trim(),
+    index: statSync(join(wtGit, "index")).mtimeMs,
+    status: (await git(wt, "status", "--porcelain")).text().trim(),
+  });
+  const before = await stateOf();
+  const e = await delegate("E", wt, from.parent);
+  const row = await ended("E", e.workItemId);
+  const [workspace] = fleet.query<{ kind: string; repo_root: string }>(
+    "SELECT kind, repo_root FROM workspaces WHERE id = (SELECT workspace_id FROM work_items WHERE id = ?)",
+    e.workItemId
+  );
+  const said =
+    fleet.seen.find((one) => one.afterTool && one.all.includes("DONE-E"))
+      ?.all ?? "";
+  const bare = join(fleet.sandbox, "hub", "git", `${from.project}.git`);
+  const main = (await git(bare, "log", "--format=%s", "main"))
+    .text()
+    .trim()
+    .split("\n");
+  check(
+    "e: a linked worktree's delegate works in a repository of its own in its copy, and its commit lands on the hub's main",
+    workspace?.kind === "repo" &&
+      workspace.repo_root === wt &&
+      said.includes("DOTGIT-DIR") &&
+      row.state === "done" &&
+      main[0] === "Delegate three",
+    `${JSON.stringify(workspace)}; ${row.state} ${row.error ?? ""}; main ${main.slice(0, 3).join(" | ")}; ${said.slice(-300)}\n${(row.result ?? "").slice(0, 800)}`
+  );
+  const after = await stateOf();
+  check(
+    "e: the person's repository and worktree are untouched: refs, config, the worktree's HEAD, branch, index and working tree",
+    JSON.stringify(before) === JSON.stringify(after) &&
+      !(await Bun.file(join(wt, "three.txt")).exists()),
+    `${JSON.stringify(before)}\n${JSON.stringify(after)}`
   );
 };
 

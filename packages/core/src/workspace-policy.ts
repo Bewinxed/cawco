@@ -774,9 +774,13 @@ const unique = (paths: string[]): string[] => [...new Set(paths)];
  * alternates too, so a clone of a clone needs the whole chain. A relative
  * entry is relative to the objects dir that names it (gitrepository-layout).
  */
-const alternatesOf = async (clone: string): Promise<string[]> => {
+const alternatesOf = (clone: string): Promise<string[]> =>
+  borrowedBy(join(clone, ".git", "objects"));
+
+/** The objects dirs `objects` borrows from, the whole chain ({@link alternatesOf}). */
+const borrowedBy = async (start: string): Promise<string[]> => {
   const found: string[] = [];
-  const pending = [join(clone, ".git", "objects")];
+  const pending = [start];
   for (let objects = pending.shift(); objects; objects = pending.shift()) {
     // biome-ignore lint/performance/noAwaitInLoops: a chain of one or two borrowed dirs, each named by the one before
     const listed = await readFile(
@@ -1193,6 +1197,28 @@ const linkedModules = async (id: string): Promise<string[]> => {
   return found?.isDirectory() ? [resolveReal(modules)] : [];
 };
 
+/**
+ * The objects a linked worktree's copy borrows (agent workspace.ts
+ * `ownRepository`): its common git dir's `objects`, as the agent's
+ * `layer.json` names that dir (agent layer.ts `LinkedGit`), and every dir
+ * those borrow from in turn, read only. A copy's `.git` is read on the host
+ * by {@link alternatesOf}, where a Linux view's is not its own.
+ */
+const linkedObjects = async (id: string): Promise<string[]> => {
+  const layer = await readRecord<{ linked?: { common?: unknown } }>(
+    join(workspacesDir(), id, "layer.json")
+  ).catch(() => undefined);
+  const common = layer?.linked?.common;
+  if (!(typeof common === "string" && common)) {
+    return [];
+  }
+  const objects = join(common, "objects");
+  const found = await stat(objects).catch(() => undefined);
+  return found?.isDirectory()
+    ? [resolveReal(objects), ...(await borrowedBy(objects)).map(resolveReal)]
+    : [];
+};
+
 const spillDirs = async (id: string): Promise<string[]> =>
   (await workspaceSpills(id)).map(resolveReal);
 
@@ -1315,6 +1341,7 @@ export const workspacePolicy = async (
     ...(await projectFolder(workspace.id)),
     ...(await spillDirs(workspace.id)),
     ...(await linkedModules(workspace.id)),
+    ...(await linkedObjects(workspace.id)),
   ]);
   // A place: what only its owner may read in it is hidden from the
   // shell and file tools in it, for reading and writing (`ownerOnlyIn`).
