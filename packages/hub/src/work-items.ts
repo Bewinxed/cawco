@@ -94,6 +94,7 @@ import {
   machineCalled,
   sessionLink,
   sizeWords,
+  todoLink,
   WORK_ITEM_ORIGIN,
   type WorkspaceLanding,
   withHostLine,
@@ -3420,8 +3421,11 @@ export const createWorkItems = ({
       return;
     }
     todosAsked.add(item.id);
-    return `Not yet: ${open.length === 1 ? "this to-do" : `these ${open.length} to-dos`} of ${task.taskId} ${open.length === 1 ? "is" : "are"} not ticked.\n\n${open
-      .map((todo) => `- [${todo.id ?? todo.path}] ${todo.text}`)
+    return `Not yet: ${open.length === 1 ? "this to-do" : `these ${open.length} to-dos`} of your task ${open.length === 1 ? "is" : "are"} not ticked.\n\n${open
+      .map(
+        (todo) =>
+          `- ${todo.id ? todoLink(task.projectId, task.taskId, todo.id, todo.text) : `${todo.path} ${todo.text}`}`
+      )
       .join(
         "\n"
       )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the merge checks whatever is ticked.`;
@@ -6087,12 +6091,13 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        (workspace.host
-          ? `Started work item ${item.id.slice(0, 8)} with host scope on ${machineName(workspace.machineId)} (${placeOf(workspace)}; nothing lands): `
-          : `Started work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}): `) +
+        `Started ${sessionLink(instanceId, request.title)}, ${label}: ` +
         (settings.forkOf
-          ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${sessionLink(instanceId, request.title)}, ${label}. It starts with every turn of yours so far.`
-          : `a fresh ${harness} session, ${sessionLink(instanceId, request.title)}, ${label}.`) +
+          ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, starting with every turn of yours so far, `
+          : `a fresh ${harness} session, `) +
+        (workspace.host
+          ? `work item ${item.id.slice(0, 8)} with host scope on ${machineName(workspace.machineId)} (${placeOf(workspace)}; nothing lands).`
+          : `work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}).`) +
         ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${label}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate

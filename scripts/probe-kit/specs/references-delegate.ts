@@ -101,13 +101,29 @@ const spec: Spec = {
     });
     const me = await parentSession(fleet, parent);
     // The delegate's session id, from delegate's record (DelegateResult).
-    const cut = await toolRecord<{ instanceId?: string }>(me, "delegate", {
-      prompt: `${BRIEF}: write your plan.`,
-      title: "Plan writer",
-      harness: "claude",
-      lands: "none",
-    });
+    const cut = await toolRecord<{ instanceId?: string; text?: string }>(
+      me,
+      "delegate",
+      {
+        prompt: `${BRIEF}: write your plan.`,
+        title: "Plan writer",
+        harness: "claude",
+        lands: "none",
+      }
+    );
     const delegate = cut.refused ? "" : String(cut.record.instanceId ?? "");
+    // delegate's concise answer is the hub's sentence (presenters/sessions.ts
+    // `delegateWords`): it leads with the delegate's link, labelled by its
+    // title, which is what the parent's agent copies to the person.
+    const [head = ""] = (
+      cut.refused ? "" : String(cut.record.text ?? "")
+    ).split("\n");
+    kit.check(
+      "delegate answers with the delegate's link, labelled by its title, at the head of its first line",
+      !!delegate &&
+        head.startsWith(`Started [Plan writer](cawco:session/${delegate})`),
+      `delegate ${delegate}; first line: ${head.slice(0, 400)}`
+    );
     // delegate_list's words, as the parent's agent reads them.
     const words = async () => (await toolWords(me, "delegate_list")).text;
     const listed = await until(

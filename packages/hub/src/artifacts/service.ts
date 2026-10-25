@@ -644,6 +644,8 @@ export interface ArtifactStatus {
   kind: ArtifactKind;
   /** The delegate that put it in this session's panel, when another session made it. */
   madeBy?: string;
+  /** That delegate's link, `[title](cawco:session/<id>)`, what the agent names it by. */
+  madeByLink?: string;
   name: string;
   /** Whether the person has had its latest revision on screen. */
   opened: boolean;
@@ -657,6 +659,8 @@ export interface ArtifactStatus {
   sent: boolean;
   /** The session that made it, when it is not the caller's own (a lead reading its project's). */
   session?: string;
+  /** That session's link, what the agent names it by. */
+  sessionLink?: string;
   /** Whether its session's panel shows it now. */
   shown: boolean;
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
@@ -5176,9 +5180,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
   };
 
-  /** The delegate that put it in its owner's panel, as `artifact_list` names it; nothing when the owner made it. */
-  const handedBy = (row: ArtifactRow): { madeBy?: string } =>
-    row.madeBy && row.madeBy !== row.instanceId ? { madeBy: row.madeBy } : {};
+  /** A session by its link, labelled by its title, as `artifact_list` names it. */
+  const sessionNamed = (id: string): string => {
+    const session = deps.instance(id);
+    return sessionLink(
+      id,
+      session ? sessionLabel(session).name : "a session since removed"
+    );
+  };
+
+  /** The delegate that put it in its owner's panel, and its link, as `artifact_list` names it; nothing when the owner made it. */
+  const handedBy = (
+    row: ArtifactRow
+  ): { madeBy?: string; madeByLink?: string } =>
+    row.madeBy && row.madeBy !== row.instanceId
+      ? { madeBy: row.madeBy, madeByLink: sessionNamed(row.madeBy) }
+      : {};
 
   /**
    * An answer about a held next version, said as its artifact's: that one's
@@ -5651,7 +5668,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ask: row.ask,
       ...(row.instanceId === null || row.instanceId === caller.id
         ? {}
-        : { session: row.instanceId }),
+        : {
+            session: row.instanceId,
+            sessionLink: sessionNamed(row.instanceId),
+          }),
       ...handedBy(row),
       shown,
       opened,

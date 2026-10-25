@@ -1,21 +1,27 @@
 /**
  * A project's tasks as an agent reads them (task-tools.ts): the board as one
  * line per task, a task's file as its sections and to-dos, an attempt as it
- * started, a plan as its steps. A task by its id (`tsk-12`), a to-do by its
- * marker (`td-3`) or position (`2.1`). What a task leaves unset reads as the
- * default it falls back to.
+ * started, a plan as its steps. A task, a to-do, a plan and a step each by
+ * its link, labelled by its title or words (core references.ts), its id
+ * (`tsk-12`, `td-3`, a step's) inside the link's destination: the person
+ * cannot read an id, and an agent names things as its tools answered them.
+ * A to-do with no marker yet by its position (`2.1`). What a task leaves
+ * unset reads as the default it falls back to.
  */
 import {
   type AttemptResult,
+  artifactLink,
   planLink,
   type ResultArtifact,
   type SessionPlan,
+  sessionLink,
   stepLink,
   type TaskTodo,
   taskLink,
   todoLink,
 } from "@cawco/core";
 import type { AttemptStart } from "../dispatch";
+import type { DuplicateOutcome } from "../jev-tasks";
 import type { TaskComment } from "../task-file";
 import type { TaskHistoryEvent } from "../task-history";
 import type { StagesView, TaskList, TaskView } from "../tasks";
@@ -31,8 +37,13 @@ type TaskLine = TaskList["tasks"][number];
 export interface LinkScope {
   project: string | null;
   session: string | null;
+  /** The titles of the tasks an answer's edges name, by id: each edge reads as its link. */
+  titles?: TaskTitles;
 }
 const NO_LINKS: LinkScope = { project: null, session: null };
+
+/** Tasks' titles by id, what an answer names other tasks by (task-tools.ts reads them with the answer). */
+export type TaskTitles = Readonly<Record<string, string>>;
 
 /** Words cut at `max` characters, a link's label. */
 const cut = (text: string, max: number): string => {
@@ -40,8 +51,8 @@ const cut = (text: string, max: number): string => {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 };
 
-/** A task's title: its link in the project, else its words in quotes. */
-const titleOf = (
+/** A task by its link in the project, labelled by its title; with no project (discovery), its id and its words in quotes. */
+const taskName = (
   links: LinkScope,
   id: string,
   title: string,
@@ -49,7 +60,17 @@ const titleOf = (
 ): string =>
   links.project
     ? taskLink(links.project, id, cut(title, max))
-    : quote(title, max);
+    : `${id} ${quote(title, max)}`;
+
+/** A task an edge names, by its link when its title is known; else its id, the one name there is. */
+const edgeName = (links: LinkScope, id: string): string => {
+  const title = links.titles?.[id];
+  return title === undefined ? id : taskName(links, id, title, 120);
+};
+
+/** Tasks an edge names, in words. */
+const edgesNamed = (links: LinkScope, ids: readonly string[]): string =>
+  listed(ids.map((id) => edgeName(links, id)));
 
 /** A stage as a model reads it: `draft (active, runs writer)`. */
 const stageWords = ({ name, kind, hooks }: StagesView["stages"][number]) => {
@@ -98,19 +119,21 @@ const taskLine = (task: TaskLine, now: number, links: LinkScope): string => {
       ? [`to-dos ${task.todos.done}/${task.todos.total}`]
       : []),
     ...(task.blockedBy.length > 0
-      ? [`waits for ${listed(task.blockedBy)}`]
+      ? [`waits for ${edgesNamed(links, task.blockedBy)}`]
       : []),
     ...attemptWords(task),
     ...(task.startProblem ? [`won't start: ${task.startProblem}`] : []),
     ...(task.type ? [`type ${task.type}`] : []),
-    ...(task.parent ? [`under ${task.parent}`] : []),
+    ...(task.parent ? [`under ${edgeName(links, task.parent)}`] : []),
     ...(task.labels.length > 0 ? [`labels ${task.labels.join(", ")}`] : []),
     ...Object.entries(task.fields).map(([key, value]) => `${key} ${value}`),
-    ...(task.duplicateOf ? [`duplicates ${task.duplicateOf}`] : []),
+    ...(task.duplicateOf
+      ? [`duplicates ${edgeName(links, task.duplicateOf)}`]
+      : []),
     ...(task.problem ? [`its file: ${task.problem}`] : []),
     `changed ${ago(task.updatedAt, now)}${task.updatedBy ? ` by ${task.updatedBy.name}` : ""}`,
   ];
-  return `- ${task.id} ${titleOf(links, task.id, task.title, 120)} · ${facts.join(" · ")}`;
+  return `- ${taskName(links, task.id, task.title, 120)} · ${facts.join(" · ")}`;
 };
 
 /** `task_read` without an id: the stages, then the board. */
@@ -123,20 +146,38 @@ export const taskListWords = (
 ): string => {
   const now = Date.now();
   const { list, stages } = board;
+  // The board's own tasks name the edges between them.
+  const named: LinkScope = {
+    ...links,
+    titles: {
+      ...Object.fromEntries(list.tasks.map((task) => [task.id, task.title])),
+      ...links.titles,
+    },
+  };
   return lines(
     `Stages: ${stages.stages.map(stageWords).join(" → ")}.`,
     list.stagesProblems.length > 0 &&
       `stages.md problems: ${list.stagesProblems.join("; ")}`,
     list.tasks.length === 0
       ? "No tasks match."
-      : `${count(list.tasks.length, "task")}; task_read with id reads one:`,
-    list.tasks.map((task) => taskLine(task, now, links)),
+      : `${count(list.tasks.length, "task")}; task_read with id reads one, the id ending its link:`,
+    list.tasks.map((task) => taskLine(task, now, named)),
     list.problems.length > 0 &&
       `Unreadable task files: ${list.problems.join("; ")}`
   );
 };
 
-/** A task's to-dos, nested, each with its marker, and its link while it has one. */
+/** A to-do: its link, labelled by its words, while it has a marker; else its position and its words. */
+const todoName = (
+  todo: TaskTodo,
+  links: LinkScope,
+  task: string | undefined
+): string =>
+  links.project && task && todo.id
+    ? todoLink(links.project, task, todo.id, todo.text)
+    : `${todo.id ?? todo.path} ${todo.text}`;
+
+/** A task's to-dos, nested, each by its link (its marker ends it). */
 const todoLines = (
   todos: TaskTodo[],
   links: LinkScope = NO_LINKS,
@@ -144,15 +185,16 @@ const todoLines = (
 ): string[] =>
   todos.map(
     (todo) =>
-      `${"  ".repeat(todo.depth)}- [${todo.done ? "x" : " "}] ${todo.id ?? todo.path} ${todo.proposed ? "(proposed) " : ""}${links.project && task && todo.id ? todoLink(links.project, task, todo.id, todo.text) : todo.text}${todo.promoted ? ` → ${todo.promoted}` : ""}`
+      `${"  ".repeat(todo.depth)}- [${todo.done ? "x" : " "}] ${todo.proposed ? "(proposed) " : ""}${todoName(todo, links, task)}${todo.promoted ? ` → ${edgeName(links, todo.promoted)}` : ""}`
   );
 
-/** An attempt at a task, a line. */
+/** An attempt at a task, a line: its session by its link, labelled by the task it works. */
 const attemptLine = (
   attempt: TaskView["attempts"][number],
+  title: string,
   now: number
 ): string =>
-  `- ${attempt.state} · started ${ago(attempt.startedAt, now)}${attempt.endedAt ? ` · ended ${ago(attempt.endedAt, now)}` : ""} · session ${handle(attempt.instanceId)}${attempt.endedHow ? ` · ${attempt.endedHow}` : ""}${attempt.headline ? `: ${quote(attempt.headline, 240)}` : ""}`;
+  `- ${sessionLink(attempt.instanceId, cut(title, 120))} · ${attempt.state} · started ${ago(attempt.startedAt, now)}${attempt.endedAt ? ` · ended ${ago(attempt.endedAt, now)}` : ""}${attempt.endedHow ? ` · ${attempt.endedHow}` : ""}${attempt.headline ? `: ${quote(attempt.headline, 240)}` : ""}`;
 
 const artifactWords = (artifact: ResultArtifact): string => {
   const shown = artifact.name ? `${artifact.name}: ` : "";
@@ -160,7 +202,9 @@ const artifactWords = (artifact: ResultArtifact): string => {
     case "link":
       return `${shown}${artifact.url}`;
     case "artifact":
-      return `${shown}artifact ${handle(artifact.artifactId)}`;
+      return artifact.name
+        ? artifactLink(artifact.artifactId, artifact.name)
+        : `artifact ${handle(artifact.artifactId)}`;
     case "file":
     case "post":
       return `${shown}${artifact.path}`;
@@ -182,16 +226,22 @@ const commentLine = (comment: TaskComment, now: number): string =>
 const historyLine = (event: TaskHistoryEvent, now: number): string =>
   `- ${ago(event.at, now)}, ${event.actor.name}: ${event.what}${event.reason ? ` (${event.reason})` : ""}`;
 
-/** A task's edges to other tasks, in words. */
-const edgeWords = (task: TaskView): string[] => [
-  ...(task.after.length > 0 ? [`waits for ${listed(task.after)}`] : []),
-  ...(task.blockedBy.length > 0
-    ? [`blocked by ${listed(task.blockedBy)}`]
+/** A task's edges to other tasks, each by its link. */
+const edgeWords = (task: TaskView, links: LinkScope): string[] => [
+  ...(task.after.length > 0
+    ? [`waits for ${edgesNamed(links, task.after)}`]
     : []),
-  ...(task.parent ? [`under ${task.parent}`] : []),
-  ...(task.related.length > 0 ? [`related to ${listed(task.related)}`] : []),
-  ...(task.foundIn ? [`found in ${task.foundIn}`] : []),
-  ...(task.duplicateOf ? [`duplicates ${task.duplicateOf}`] : []),
+  ...(task.blockedBy.length > 0
+    ? [`blocked by ${edgesNamed(links, task.blockedBy)}`]
+    : []),
+  ...(task.parent ? [`under ${edgeName(links, task.parent)}`] : []),
+  ...(task.related.length > 0
+    ? [`related to ${edgesNamed(links, task.related)}`]
+    : []),
+  ...(task.foundIn ? [`found in ${edgeName(links, task.foundIn)}`] : []),
+  ...(task.duplicateOf
+    ? [`duplicates ${edgeName(links, task.duplicateOf)}`]
+    : []),
 ];
 
 /** How a task's attempts run, each unset setting as the default it falls back to. */
@@ -239,15 +289,12 @@ const taskResultLine = (task: TaskView, now: number): string | false => {
 };
 
 /** The work on a task: its attempts, its result, its comments, its history. */
-const workLines = (
-  task: TaskView & { history?: TaskHistoryEvent[] },
-  now: number
-): string[] =>
+const workLines = (task: TaskAnswer, now: number): string[] =>
   lines(
     task.attempts.length > 0
       ? lines(
           "## Attempts, newest first",
-          task.attempts.map((attempt) => attemptLine(attempt, now))
+          task.attempts.map((attempt) => attemptLine(attempt, task.title, now))
         )
       : "No attempts yet.",
     task.startProblem && `It won't start: ${task.startProblem}`,
@@ -268,15 +315,27 @@ const workLines = (
         : "No history yet.")
   ).split("\n");
 
-/** One task whole: its fields, sections, to-dos, attempts, result and comments. */
-export const taskWords = (
-  task: TaskView & { history?: TaskHistoryEvent[] },
-  links: LinkScope = NO_LINKS
-): string => {
+/** A task as a tool answers it: its view, its history when asked, and the titles of the tasks its edges name. */
+export type TaskAnswer = TaskView & {
+  history?: TaskHistoryEvent[];
+  titles?: TaskTitles;
+};
+
+/** The links a task's answer writes: the caller's, with the titles its edges name. */
+const scopeOf = (task: TaskAnswer, links: LinkScope): LinkScope =>
+  task.titles
+    ? { ...links, titles: { ...links.titles, ...task.titles } }
+    : links;
+
+/** Where a task stands, after its link on its answer's first line. */
+const standsWords = (task: TaskView): string =>
+  `${task.stage}${task.needsYou ? " · needs the operator" : ""} · ${task.path}`;
+
+/** A task whole below its first line: its fields, sections, to-dos, attempts, result and comments. */
+const taskBody = (task: TaskAnswer, links: LinkScope): string => {
   const now = Date.now();
-  const edges = edgeWords(task);
+  const edges = edgeWords(task, links);
   return lines(
-    `${task.id} ${titleOf(links, task.id, task.title, 200)} · ${task.stage}${task.needsYou ? " · needs the operator" : ""} · ${task.path}`,
     timeWords(task, now),
     edges.length > 0 && `Edges: ${edges.join("; ")}.`,
     `Runs: ${runWords(task).join("; ")}.`,
@@ -285,41 +344,72 @@ export const taskWords = (
   );
 };
 
+/** One task whole, led by its link. */
+export const taskWords = (
+  task: TaskAnswer,
+  links: LinkScope = NO_LINKS
+): string => {
+  const scope = scopeOf(task, links);
+  return lines(
+    `${taskName(scope, task.id, task.title, 200)} · ${standsWords(task)}`,
+    taskBody(task, scope)
+  );
+};
+
 /** `task_read`: the board, or one task. */
 export const taskReadWords = (
-  read:
-    | { list: TaskList; stages: StagesView }
-    | (TaskView & { history?: TaskHistoryEvent[] }),
+  read: { list: TaskList; stages: StagesView } | TaskAnswer,
   links: LinkScope = NO_LINKS
 ): string =>
   "list" in read ? taskListWords(read, links) : taskWords(read, links);
 
-/** `task_create`: the task filed, and what Jev or the hub suggests of it. */
+/** What the duplicates check came to for a task just filed, each task by its link; nothing found, nothing said. */
+const duplicateWords = (
+  outcome: DuplicateOutcome,
+  links: LinkScope
+): string | false => {
+  if ("candidates" in outcome) {
+    return `Possible duplicates, to act on: ${listed(outcome.candidates.map((one) => taskName(links, one.id, one.title, 120)))}. ${outcome.ask}`;
+  }
+  if (outcome.duplicateOf !== null) {
+    return `Judged a duplicate of ${edgeName(links, outcome.duplicateOf)} (${outcome.by}): it is dropped.`;
+  }
+  return outcome.note ?? false;
+};
+
+/** `task_create`: the task filed, by its link, and what Jev or the hub suggests of it. */
 export const taskCreatedWords = (
-  created: TaskView & { duplicates?: unknown; suggest?: unknown },
+  created: TaskAnswer & { duplicates?: DuplicateOutcome; suggest?: unknown },
   links: LinkScope = NO_LINKS
-): string =>
-  lines(
-    `Filed ${created.id} in ${created.stage}.`,
-    taskWords(created, links),
-    created.duplicates !== undefined &&
-      `Possible duplicates, to act on: ${valueWords(created.duplicates, 2000)}`,
+): string => {
+  const scope = scopeOf(created, links);
+  return lines(
+    `Filed ${taskName(scope, created.id, created.title, 200)} in ${standsWords(created)}.`,
+    taskBody(created, scope),
+    created.duplicates && duplicateWords(created.duplicates, scope),
     created.suggest !== undefined &&
       `Suggested, not set: ${valueWords(created.suggest, 600)}`
   );
+};
 
-/** `task_update` and `task_link`: the task as it stands now. */
+/** `task_update` and `task_link`: the task as it stands now, led by its link. */
 export const taskChangedWords = (
-  task: TaskView,
+  task: TaskAnswer,
   links: LinkScope = NO_LINKS
-): string => lines(`${task.id} now:`, taskWords(task, links));
+): string => {
+  const scope = scopeOf(task, links);
+  return lines(
+    `${taskName(scope, task.id, task.title, 200)} now: ${standsWords(task)}`,
+    taskBody(task, scope)
+  );
+};
 
 /** `task_start` and `task_retry`: the attempt as it started, or that it waits. */
 export const attemptStartWords = (start: AttemptStart): string =>
   lines(
     start.text,
     start.instanceId && start.workspaceId
-      ? `Its session ${handle(start.instanceId)}, workspace ${handle(start.workspaceId)}; type ${start.type ?? "the hub's default"}; lands ${start.lands}.`
+      ? `Its workspace ${handle(start.workspaceId)}; type ${start.type ?? "the hub's default"}.`
       : `It has no session yet: it waits for owned files; type ${start.type ?? "the hub's default"}; lands ${start.lands}.`
   );
 
@@ -330,11 +420,11 @@ const STEP_BOX: Record<SessionPlan["steps"][number]["status"], string> = {
   pending: " ",
 };
 
-/** A plan's steps, nested, each with its status and its link. */
+/** A plan's steps, nested, each with its status, by its link (its id ends it). */
 const stepLines = (plan: SessionPlan, links: LinkScope): string[] =>
   plan.steps.map(
     (step) =>
-      `${"  ".repeat(step.depth)}- [${STEP_BOX[step.status]}] ${step.id} ${links.session ? stepLink(links.session, step.id, step.content) : step.content}${step.priority ? ` (${step.priority})` : ""}`
+      `${"  ".repeat(step.depth)}- [${STEP_BOX[step.status]}] ${links.session ? stepLink(links.session, step.id, step.content) : `${step.id} ${step.content}`}${step.priority ? ` (${step.priority})` : ""}`
   );
 
 const HEADING = /^#+\s*/;
@@ -348,11 +438,17 @@ const planName = (plan: SessionPlan): string =>
   plan.steps[0]?.content ||
   "Plan";
 
+/** A task's id and title, what an answer about its to-dos, comments or file names it by. */
+interface TaskNamed {
+  id: string;
+  title: string;
+}
+
 /** `todo_write`: the plan as it stands, or the task's to-dos. */
 export const todoWrittenWords = (
   written:
     | (SessionPlan & { personChanged?: string })
-    | { id: string; todos: TaskTodo[] },
+    | (TaskNamed & { todos: TaskTodo[] }),
   links: LinkScope = NO_LINKS
 ): string => {
   if ("steps" in written) {
@@ -368,25 +464,25 @@ export const todoWrittenWords = (
       written.todos &&
         written.todos.length > 0 &&
         lines(
-          `${written.taskId ?? "Your task"}'s to-dos:`,
+          "Your task's to-dos:",
           todoLines(written.todos, links, written.taskId)
         )
     );
   }
   return lines(
-    `${written.id}'s to-dos:`,
+    `The to-dos of ${taskName(links, written.id, written.title, 200)}:`,
     todoLines(written.todos, links, written.id)
   );
 };
 
 /** `task_comment`: the task's comments, the newest yours. */
-export const taskCommentedWords = (commented: {
-  comments: TaskComment[];
-  id: string;
-}): string => {
+export const taskCommentedWords = (
+  commented: TaskNamed & { comments: TaskComment[] },
+  links: LinkScope = NO_LINKS
+): string => {
   const now = Date.now();
   return lines(
-    `Commented on ${commented.id}; its comments:`,
+    `Commented on ${taskName(links, commented.id, commented.title, 200)}; its comments:`,
     commented.comments.map((comment) => commentLine(comment, now))
   );
 };
@@ -396,11 +492,12 @@ export const taskResultWords = (result: AttemptResult): string =>
   lines(resultLines(result, Date.now()));
 
 /** `task_archive`. */
-export const taskArchivedWords = (archived: {
-  archivedAt: number | null;
-  id: string;
-  path: string;
-}): string =>
-  archived.archivedAt === null
-    ? `${archived.id} is back on the board, at ${archived.path}.`
-    : `Archived ${archived.id} to ${archived.path}.`;
+export const taskArchivedWords = (
+  archived: TaskNamed & { archivedAt: number | null; path: string },
+  links: LinkScope = NO_LINKS
+): string => {
+  const name = taskName(links, archived.id, archived.title, 200);
+  return archived.archivedAt === null
+    ? `${name} is back on the board, at ${archived.path}.`
+    : `Archived ${name} to ${archived.path}.`;
+};

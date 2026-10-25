@@ -91,6 +91,7 @@ import {
   type LandsMode,
   machinesCalled,
   POST_OUTPUT_RULE,
+  taskLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
@@ -1178,7 +1179,11 @@ export const createDispatcher = ({
       // Asked for now: a hook's start that waited for a slot is not needed.
       db.dropQueuedTaskStart(projectId, task.id);
       const now = await moveIn(projectId, task, active, started.item);
-      const opening = startedLine(task.id, started, previous);
+      const opening = startedLine(
+        taskLink(projectId, task.id, task.title),
+        started,
+        previous
+      );
       console.log(
         `[dispatch] ${project.name}: ${task.id} attempt ${started.item.id} ${previous ? "retried" : "started"} (lands ${started.item.lands}), reporting to ${parent.id}`
       );
@@ -1234,22 +1239,22 @@ export const createDispatcher = ({
       workItemId: null,
       workspaceId: null,
       instanceId: null,
-      text: `Queued ${retry ? "a retry of" : "an attempt at"} ${task.id}: ${overlap.message} The hub starts it, reporting to you, when the files are free.`,
+      text: `Queued ${retry ? "a retry of" : "an attempt at"} ${taskLink(project.id, task.id, task.title)}: ${overlap.message} The hub starts it, reporting to you, when the files are free.`,
     };
   };
 
-  /** How an attempt's start opens: started, or retried in the old workspace or a new one. */
+  /** How an attempt's start opens, the task by its link: started, or retried in the old workspace or a new one. */
   const startedLine = (
-    id: string,
+    link: string,
     started: WorkItemStart,
     previous: WorkItemRow | undefined
   ): string => {
     if (!previous) {
-      return `Started an attempt at ${id}.`;
+      return `Started an attempt at ${link}.`;
     }
     return started.workspace.id === previous.workspaceId
-      ? `Retried ${id} in the last attempt's workspace, with a fresh session.`
-      : `Retried ${id} in a new workspace: the last attempt's clone is gone.`;
+      ? `Retried ${link} in the last attempt's workspace, with a fresh session.`
+      : `Retried ${link} in a new workspace: the last attempt's clone is gone.`;
   };
 
   /** The attempt a retry follows: the task's newest, which failed or was cancelled. */

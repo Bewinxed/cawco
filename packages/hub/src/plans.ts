@@ -22,16 +22,18 @@
  * revision. One queue per session orders every read and send, so a snapshot
  * and the deltas after it never cross.
  */
-import type {
-  InstanceRow,
-  PlanChange,
-  PlanDelta,
-  PlanEdit,
-  PlanReceiver,
-  PlanSnapshot,
-  PlanStep,
-  PlanWait,
-  SessionPlan,
+import {
+  artifactLink,
+  type InstanceRow,
+  type PlanChange,
+  type PlanDelta,
+  type PlanEdit,
+  type PlanReceiver,
+  type PlanSnapshot,
+  type PlanStep,
+  type PlanWait,
+  type SessionPlan,
+  stepLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
@@ -43,6 +45,7 @@ import type { TaskEvent, Tasks } from "./tasks";
 export interface PlansDeps {
   db: Pick<
     DbShape,
+    | "artifacts"
     | "getInstancesByIds"
     | "planChangesOf"
     | "putPlanChange"
@@ -179,8 +182,22 @@ const BOX: Record<PlanStep["status"], string> = {
   pending: "[ ]",
 };
 
-/** A plan's steps as a message lists them: a box per status, nested by indent, a wait named. */
-export const stepLines = (steps: PlanStep[]): string =>
+/** The page a step waits on, by its link (its name the label); a page gone, said so. */
+const pageNamed = (db: Pick<DbShape, "artifacts">, id: string): string => {
+  const page = db.artifacts.get(id);
+  return page ? artifactLink(page.id, page.name) : "a page since removed";
+};
+
+/**
+ * A plan's steps as a message lists them: a box per status, nested by
+ * indent, each by its link (session `session`'s, its words the label), a
+ * wait by its page's link.
+ */
+export const stepLines = (
+  db: Pick<DbShape, "artifacts">,
+  session: string,
+  steps: PlanStep[]
+): string =>
   steps.length === 0
     ? "(no steps)"
     : steps
@@ -188,11 +205,11 @@ export const stepLines = (steps: PlanStep[]): string =>
           const box = BOX[step.status];
           let wait = "";
           if (step.waitsOn?.card) {
-            wait = ` (waiting on the person's pick: card ${step.waitsOn.card} on page ${step.waitsOn.artifactId})`;
+            wait = ` (waiting on the person's pick on ${pageNamed(db, step.waitsOn.artifactId)})`;
           } else if (step.waitsOn) {
-            wait = ` (waiting on the person: artifact ${step.waitsOn.artifactId})`;
+            wait = ` (waiting on the person on ${pageNamed(db, step.waitsOn.artifactId)})`;
           }
-          return `${"  ".repeat(step.depth)}- ${box} ${step.content}${wait}`;
+          return `${"  ".repeat(step.depth)}- ${box} ${stepLink(session, step.id, step.content)}${wait}`;
         })
         .join("\n");
 
@@ -563,7 +580,7 @@ export const createPlans = (deps: PlansDeps) => {
         db.settlePlanChanges(row.id);
         if (undone.length > 0) {
           throw new Error(
-            `Not written: the person changed your plan since you last wrote it, and these steps would undo it:\n${undone.map((change) => `- ${changeLine(change)}`).join("\n")}\n\nYour plan as it stands now:\n${stepLines(before)}\n\nWrite your steps again from it: the next write goes through as you give it.`
+            `Not written: the person changed your plan since you last wrote it, and these steps would undo it:\n${undone.map((change) => `- ${changeLine(change)}`).join("\n")}\n\nYour plan as it stands now:\n${stepLines(db, row.id, before)}\n\nWrite your steps again from it: the next write goes through as you give it.`
           );
         }
         db.putSessionSteps(
