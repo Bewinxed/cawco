@@ -38,12 +38,12 @@
  *
  *   bun scripts/probe-kit/run.ts workspace-held
  */
-import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workWords } from "../../../packages/core/src/words/work";
 import { type ToolRecord, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { copyGone, gitInCopy } from "../copy";
 import type { Kit, Spec } from "../kit";
 
 const TAG = /PROBE-HELD-([ASXTUVPQRHZ])/;
@@ -346,14 +346,7 @@ const rebasedPhase = async (
   const wa = workspaceOf(a.workspaceId);
   const original = await until(
     "A's commit in its clone",
-    async () =>
-      (
-        await Bun.$`git -C ${wa.path} log -1 --format=%H%x09%s`
-          .quiet()
-          .nothrow()
-      ).stdout
-        .toString()
-        .trim(),
+    () => gitInCopy(fleet, wa, ["log", "-1", "--format=%H%x09%s"]),
     (line) => line.endsWith("Delegate commit A"),
     ITEM_MS
   )
@@ -384,8 +377,8 @@ const rebasedPhase = async (
   const retiredA = await stateBecomes(wa.id, "archived");
   check(
     "(a) A's workspace retires on its own, not held: row archived, clone gone",
-    retiredA.state === "archived" && !existsSync(wa.path),
-    `${retiredA.state}; clone ${existsSync(wa.path) ? "stands" : "gone"}; ${await workspaceLines(fleet, wa.id)}`
+    retiredA.state === "archived" && copyGone(fleet, wa),
+    `${retiredA.state}; clone ${copyGone(fleet, wa) ? "gone" : "stands"}; ${await workspaceLines(fleet, wa.id)}`
   );
 
   const t = await scene.delegate("T", { from: ws.id });
@@ -403,8 +396,8 @@ const rebasedPhase = async (
   const retiredS = await stateBecomes(ws.id, "archived");
   check(
     "(a) S's workspace, held with the original of that commit, retires on its own: row archived, clone gone",
-    retiredS.state === "archived" && !existsSync(ws.path),
-    `${retiredS.state}; clone ${existsSync(ws.path) ? "stands" : "gone"}; ${await workspaceLines(fleet, ws.id)}`
+    retiredS.state === "archived" && copyGone(fleet, ws),
+    `${retiredS.state}; clone ${copyGone(fleet, ws) ? "gone" : "stands"}; ${await workspaceLines(fleet, ws.id)}`
   );
   const retiredT = await stateBecomes(t.workspaceId, "archived");
   check(
@@ -442,7 +435,7 @@ const leftoversPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const retired = await stateBecomes(wu.id, "archived");
   check(
     "(b) U's workspace retires, not held",
-    retired.state === "archived" && !existsSync(wu.path),
+    retired.state === "archived" && copyGone(fleet, wu),
     `${retired.state}; ${await workspaceLines(fleet, wu.id)}`
   );
 };
@@ -477,8 +470,8 @@ const discardPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const gone = workspaceOf(wv.id);
   check(
     "(d) then V's clone is gone and its row archived",
-    gone.state === "archived" && !existsSync(wv.path),
-    `${gone.state}; clone ${existsSync(wv.path) ? "stands" : "gone"}`
+    gone.state === "archived" && copyGone(fleet, wv),
+    `${gone.state}; clone ${copyGone(fleet, wv) ? "gone" : "stands"}`
   );
 };
 

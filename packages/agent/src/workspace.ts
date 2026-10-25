@@ -15,6 +15,7 @@ import {
   chmod,
   copyFile,
   lstat,
+  lutimes,
   mkdir,
   open,
   readdir,
@@ -719,8 +720,51 @@ const startBranch = async (
     `--set-upstream-to=origin/${base}`,
     branch
   );
+  await freezeTracked(path, plain, access);
   await excludeStart(path, plain, access);
   return { base, branch };
+};
+
+/** How many tracked files {@link freezeTracked} copies up at once. */
+const FREEZE_AT_ONCE = 32;
+
+/**
+ * A repository's Linux view with its tracked tree frozen at its branch:
+ * every tracked file (`git ls-files`) the checkout did not write already
+ * copied up into the view's upper,
+ * so a later edit the person makes to a tracked file in their checkout
+ * never reads as the delegate's change (in its status, its landing's check
+ * for uncommitted changes, an archive's holding), while untracked files and
+ * dependencies stay live through the lower layer. overlayfs copies a file
+ * up on any change of its attributes ("ovl_setattr" copies up before it
+ * sets; overlayfs.rst "Non-standard behavior": data is copied up whole, no
+ * `metacopy` being allowed in a user namespace's mount): here each one's
+ * own times are set again, through the view (`lutimes`, so a link is
+ * copied up as itself), at most {@link FREEZE_AT_ONCE} at once. Every
+ * copied-up file is a new inode, so the index is refreshed after. Nothing
+ * for a copy of its own (macOS), whose files are its own already.
+ */
+const freezeTracked = async (
+  path: string,
+  git: Git,
+  access: CopyAccess
+): Promise<void> => {
+  if (access.layer.form !== "overlay") {
+    return;
+  }
+  const files = (await git(path, "ls-files", "-z")).split("\0").filter(Boolean);
+  const freeze = async (file: string): Promise<void> => {
+    const at = access.at(join(path, file));
+    const info = await lstat(at).catch(() => undefined);
+    if (info) {
+      await lutimes(at, info.atime, info.mtime);
+    }
+  };
+  for (let at = 0; at < files.length; at += FREEZE_AT_ONCE) {
+    // biome-ignore lint/performance/noAwaitInLoops: a bounded batch at a time, each one copied up whole
+    await Promise.all(files.slice(at, at + FREEZE_AT_ONCE).map(freeze));
+  }
+  await git(path, "update-index", "-q", "--refresh").catch(() => undefined);
 };
 
 /**
@@ -2136,18 +2180,25 @@ const processWords = (left: readonly LeftInside[]): string =>
  */
 /**
  * A Linux view's processes, every process in its namespace, ended whole
- * (layer.ts `endView`): its path is the person's folder, whose own processes
- * are never the workspace's. Answers whether `workspace` is such a view.
+ * (layer.ts `endView`), each named in the log as {@link endLeftInside}
+ * names what it ends: its path is the person's folder, whose own processes
+ * run outside the view and are never the workspace's. Answers whether
+ * `workspace` is such a view.
  */
 const endViewProcesses = async (workspace: WorkspaceRef): Promise<boolean> => {
   const layer = await readLayer(workspace.id).catch(() => undefined);
   if (layer?.form !== "overlay") {
     return false;
   }
-  const stayed = await endView(workspace.id);
-  if (stayed.length > 0) {
+  const { ended, left } = await endView(workspace.id);
+  if (ended.length > 0) {
+    console.info(
+      `[workspace] ${workspace.id}: ended ${ended.length} process(es) left running in its view once its boundary was stopped: ${ended.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)})`).join("; ")}`
+    );
+  }
+  if (left.length > 0) {
     throw new Error(
-      `Workspace ${workspace.id} was not archived: pid ${stayed.join(", ")} of its view still ${stayed.length === 1 ? "runs" : "run"} after SIGKILL, so nothing was deleted.`
+      `Workspace ${workspace.id} was not archived: pid ${left.join(", ")} of its view still ${left.length === 1 ? "runs" : "run"} after SIGKILL, so nothing was deleted.`
     );
   }
   return true;
@@ -2309,6 +2360,37 @@ const closeClone = async (
     );
     return { carry: null };
   }
+  try {
+    return await readAndClose(workspace, access, request, {
+      carryHeld,
+      read,
+      skip,
+    });
+  } finally {
+    // A Linux view the reads above ran in (`accessOf` starts it again) ends
+    // with them: a workspace kept holds nothing running, and one removed
+    // ended it already.
+    if (access.layer.form === "overlay") {
+      await endView(request.id).catch(() => undefined);
+    }
+  }
+};
+
+/**
+ * {@link closeClone} once nothing runs in the copy but what reads it: what
+ * it holds read ({@link holding}), then kept, or carried away and removed.
+ */
+const readAndClose = async (
+  workspace: WorkspaceRef,
+  access: CopyAccess,
+  request: WorkspaceArchive,
+  {
+    carryHeld,
+    read,
+    skip,
+  }: { carryHeld: boolean; read: boolean; skip: readonly string[] }
+): Promise<WorkspaceArchived> => {
+  const { path } = workspace;
   if (read && access.layer.kind === "repo") {
     await refreshBase(workspace, access, request.base);
   }

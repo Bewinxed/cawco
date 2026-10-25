@@ -34,6 +34,9 @@
  *     with discard, the folder standing. Once the project is deleted, the
  *     next sweep retires it.
  *
+ * A delegate's copy is read through ../copy.ts: on Linux its path is the
+ * person's folder, and what the delegate wrote is in its view.
+ *
  *   bun scripts/probe-kit/run.ts workspace-excluded
  */
 import { existsSync } from "node:fs";
@@ -42,6 +45,7 @@ import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { copyGone, copyWritePath, inCopyExists } from "../copy";
 import type { Kit, Spec } from "../kit";
 
 /** One request given `ms` to answer: its status and text. */
@@ -304,8 +308,9 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const x = await scene.delegate("X");
   const wx = workspaceOf(x.workspaceId);
   const heldX = await settled(wx.id);
-  const xFile = join(wx.path, X_FILE);
-  const xFolder = join(wx.path, "harness-X", "page.ts");
+  // Read in X's copy, wherever it keeps them (../copy.ts).
+  const xFile = () => inCopyExists(fleet, wx, X_FILE);
+  const xFolder = () => inCopyExists(fleet, wx, "harness-X/page.ts");
   const refusal = steps.X.refused ?? "";
   const listed = refusal.slice(refusal.indexOf(EXCLUDED_LIST));
   check(
@@ -315,9 +320,9 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       listed.includes(X_FOLDER) &&
       x.item.state === "failed" &&
       heldX.state === "held" &&
-      existsSync(xFile) &&
-      existsSync(xFolder),
-    `${JSON.stringify(refusal.slice(0, 600))}; ${x.item.state} ${x.item.error ?? ""}; ${heldX.state}; ${X_FILE} ${existsSync(xFile) ? "stands" : "gone"}; harness-X/page.ts ${existsSync(xFolder) ? "stands" : "gone"}`
+      xFile() &&
+      xFolder(),
+    `${JSON.stringify(refusal.slice(0, 600))}; ${x.item.state} ${x.item.error ?? ""}; ${heldX.state}; ${X_FILE} ${xFile() ? "stands" : "gone"}; harness-X/page.ts ${xFolder() ? "stands" : "gone"}`
   );
   const words = await fleet
     .api<{ holds: string; excluded?: string[] }>(
@@ -356,8 +361,8 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       refused.text.includes(X_FILE) &&
       refused.text.includes(X_FOLDER) &&
       refused.text.includes("nothing was deleted") &&
-      existsSync(xFile) &&
-      existsSync(xFolder) &&
+      xFile() &&
+      xFolder() &&
       workspaceOf(wx.id).state === "held",
     `${refused.status} ${refused.text}; ${workspaceOf(wx.id).state}`
   );
@@ -369,13 +374,18 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(b) Y's work lands with only node_modules/ and dist/ output beside it, and its workspace retires: row archived, clone gone",
     y.item.state === "done" &&
       retiredY.state === "archived" &&
-      !existsSync(wy.path),
-    `${y.item.state} ${y.item.error ?? ""}; ${retiredY.state}; clone ${existsSync(wy.path) ? "stands" : "gone"}`
+      copyGone(fleet, wy),
+    `${y.item.state} ${y.item.error ?? ""}; ${retiredY.state}; clone ${copyGone(fleet, wy) ? "gone" : "stands"}`
   );
 
   // (c) once the excluded work is gone, only X's commit holds it; discard archives it.
-  await rm(xFile, { force: true });
-  await rm(join(wx.path, "harness-X"), { recursive: true, force: true });
+  // X is held, nothing runs in it: removed from its copy as it is kept (a
+  // Linux view's upper, offline; ../copy.ts). Both are X's own new paths.
+  await rm(copyWritePath(fleet, wx, X_FILE), { force: true });
+  await rm(copyWritePath(fleet, wx, "harness-X"), {
+    recursive: true,
+    force: true,
+  });
   const commitOnly = await archiveOver(wx.id);
   check(
     "(c) X's excluded file and folder removed, POST archive answers 409 naming its commit alone, the excluded paths no more",
@@ -390,8 +400,8 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(c) POST archive with discard: true answers 200: row archived, clone gone",
     archived.status === 200 &&
       workspaceOf(wx.id).state === "archived" &&
-      !existsSync(wx.path),
-    `${archived.status} ${archived.text.slice(0, 600)}; ${workspaceOf(wx.id).state}; clone ${existsSync(wx.path) ? "stands" : "gone"}`
+      copyGone(fleet, wx),
+    `${archived.status} ${archived.text.slice(0, 600)}; ${workspaceOf(wx.id).state}; clone ${copyGone(fleet, wx) ? "gone" : "stands"}`
   );
 };
 
@@ -461,7 +471,7 @@ const scratchPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     forgot.status === 200 &&
       again.retired.some((one) => one.workspaceId === wz.id) &&
       workspaceOf(wz.id).state === "archived" &&
-      !existsSync(wz.path) &&
+      copyGone(fleet, wz) &&
       !existsSync(wz.tmp ?? scratch),
     `DELETE ${forgot.status} ${forgot.text.slice(0, 300)}; ${JSON.stringify(again)}; ${workspaceOf(wz.id).state}`
   );

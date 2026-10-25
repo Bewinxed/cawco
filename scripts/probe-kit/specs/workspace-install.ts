@@ -29,13 +29,18 @@
  *   manager's cache and A's `node_modules` before B's install, against the
  *   cache, A's and B's after it. A copied install adds about 2 GB for this
  *   repository, about 115 MB for the pnpm project;
- * - (bun leg) neither boundary can list the other's clone.
+ * - (bun leg) neither boundary can list the other's clone: on the Mac its
+ *   folder; on Linux, where both are views of the one folder at its own
+ *   path (agent layer.ts), the other's writes on the host, its view's upper.
+ *
+ * What a delegate installed is read where its copy keeps it (../copy.ts).
  *
  *   bun scripts/probe-kit/run.ts workspace-install
  */
 import { lstat, readdir, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { inCopyExists, isView, ownWritesOf } from "../copy";
 import type { Kit, Spec } from "../kit";
 
 type Tag = "A" | "B" | "PA" | "PB";
@@ -125,6 +130,7 @@ const respond = (request: Seen): Reply => {
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
 interface Delegated {
+  id: string;
   instanceId: string;
   path: string;
   workspaceId: string;
@@ -300,7 +306,7 @@ const delegate = async (
     (one) => Boolean(one?.path),
     300_000
   );
-  return { ...started, path: row?.path ?? "" };
+  return { ...started, id: started.workspaceId, path: row?.path ?? "" };
 };
 
 /** `tag`'s install: nothing at the cut, its own install finished, its packages linked from the cache. */
@@ -309,7 +315,7 @@ const installed = async (
   fleet: Fleet,
   leg: Leg,
   tag: Tag,
-  clone: string
+  self: Delegated
 ): Promise<boolean> => {
   const said = await until(
     `${tag}'s install finished`,
@@ -329,7 +335,9 @@ const installed = async (
     exit === "0",
     tail ?? "no install read"
   );
-  const store = await leg.linked(clone);
+  // What the delegate installed is its own write: in a Linux view's upper,
+  // its copy's folder elsewhere (../copy.ts).
+  const store = await leg.linked(ownWritesOf(fleet, self));
   kit.check(
     `${tag}: its ${leg.name} packages are links into the workspaces' cache`,
     store.entries > 0 && store.linked / store.entries >= 0.9,
@@ -348,16 +356,16 @@ const runLeg = async (
 ): Promise<[Delegated, Delegated]> => {
   const [tagA, tagB] = leg.tags;
   const a = await delegate(fleet, parent, repo, tagA);
-  const aDone = await installed(kit, fleet, leg, tagA, a.path);
-  const aModules = await nodeModulesOf(a.path);
+  const aDone = await installed(kit, fleet, leg, tagA, a);
+  const aModules = await nodeModulesOf(ownWritesOf(fleet, a));
   const before = await unique([leg.cache, ...aModules]);
 
   const b = await delegate(fleet, parent, repo, tagB);
-  const bDone = await installed(kit, fleet, leg, tagB, b.path);
+  const bDone = await installed(kit, fleet, leg, tagB, b);
   const after = await unique([
     leg.cache,
     ...aModules,
-    ...(await nodeModulesOf(b.path)),
+    ...(await nodeModulesOf(ownWritesOf(fleet, b))),
   ]);
   const added = after - before;
   // Both counts read (du answered), and B within the limit. A second clone
@@ -384,7 +392,13 @@ const cannotList = async (
   self: Delegated,
   other: Delegated
 ): Promise<void> => {
-  await fleet.send(self.instanceId, `PROBE-INSTALL-LIST-${tag}: ${other.path}`);
+  // The other's copy: its own folder on the Mac; on Linux, where both are
+  // views of one folder at its own path, the other's writes on the host, its
+  // view's upper (../copy.ts).
+  await fleet.send(
+    self.instanceId,
+    `PROBE-INSTALL-LIST-${tag}: ${isView(fleet, other) ? ownWritesOf(fleet, other) : other.path}`
+  );
   const said = await until(
     `${tag} listed the other clone`,
     () => read(fleet, `LISTED-${tag}:`),
@@ -463,15 +477,9 @@ const run = async (kit: Kit) => {
     await parentOn(fleet, pnpmRepo, "Workspace install (pnpm)"),
     pnpmRepo
   );
-  const ownStores = (
-    await Promise.all(
-      [pa, pb].map(async (one) =>
-        (await lstat(join(one.path, ".pnpm-store")).catch(() => undefined))
-          ? [one.path]
-          : []
-      )
-    )
-  ).flat();
+  const ownStores = [pa, pb]
+    .filter((one) => inCopyExists(fleet, one, ".pnpm-store"))
+    .map((one) => one.path);
   kit.check(
     "pnpm: neither clone holds a store of its own (.pnpm-store): the store is the workspaces' cache's",
     ownStores.length === 0,

@@ -31,13 +31,13 @@ import {
   readdir,
   readFile,
   readlink,
-  rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
+import { removeTree } from "../packages/agent/src/remove-tree";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
@@ -1211,7 +1211,7 @@ class FleetDirs {
     await this.removeBrowsers();
     for (const dir of this.dirs.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
-      await rm(dir, { recursive: true, force: true });
+      await removeTree(dir);
       // A service HOME's short name in the socket root goes with it (macOS).
       forgetSessiondLink(dir);
     }
@@ -1223,7 +1223,7 @@ class FleetDirs {
   removeNow(): void {
     LIVE.delete(this);
     for (const dir of this.dirs.splice(0)) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTreeSync(dir);
       forgetSessiondLink(dir);
     }
     this.#unlockAll();
@@ -1264,6 +1264,21 @@ class FleetDirs {
 const KEPT_FILE = ".kept.json";
 
 /**
+ * {@link removeTree} where nothing can wait (an exit, a signal): a folder of
+ * the tree its owner may not write (a delegate's Go module cache in its
+ * TMPDIR, under a service HOME) is given back to its owner first, so the
+ * fleet's folders go whole, read-only ones included.
+ */
+const removeTreeSync = (dir: string): void => {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    Bun.spawnSync(["chmod", "-R", "u+rwx", dir], { stderr: "ignore" });
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+/**
  * Removes the sandboxes earlier fleets named `name` kept for reading under
  * `scratch`, and every folder each says it kept ({@link KEPT_FILE}): a
  * failed run's evidence stays until the same spec runs again. Answers the
@@ -1286,7 +1301,7 @@ async function removeKept(scratch: string, name: string): Promise<string[]> {
     const { dirs } = JSON.parse(said) as { dirs: string[] };
     for (const dir of [...dirs.filter((one) => one !== sandbox), sandbox]) {
       // biome-ignore lint/performance/noAwaitInLoops: the sandbox, which says the others, goes last
-      await rm(dir, { recursive: true, force: true });
+      await removeTree(dir);
       forgetSessiondLink(dir);
     }
     removed.push(sandbox);
@@ -1430,7 +1445,7 @@ export async function sweepDeadFleets(): Promise<string[]> {
         await removeFleetBrowsers(dir).catch((error: unknown) =>
           console.log(`… browsers under ${dir} not removed: ${String(error)}`)
         );
-        await rm(dir, { recursive: true, force: true });
+        await removeTree(dir);
         forgetSessiondLink(dir);
         removed.push(dir);
       } finally {

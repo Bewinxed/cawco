@@ -73,6 +73,7 @@ import type {
   WorkspaceKind,
 } from "@cawco/core";
 import { claudeHome, workspacesDir } from "@cawco/core/paths";
+import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -376,6 +377,17 @@ export const viewMember = (
   return pid === undefined ? undefined : { ...record, pid };
 };
 
+/**
+ * Whether process `pid` runs in workspace `id`'s view: in its mount
+ * namespace. The one test of a process being the view's, since its path is
+ * the person's folder, where the person's own processes and every other
+ * view's run at the same path. None is once the view has ended.
+ */
+export const inView = (id: string, pid: number): boolean => {
+  const record = readViewRecord(id);
+  return record !== undefined && nsOf(pid, "mnt") === record.mnt;
+};
+
 const viewing = new Map<string, Promise<number>>();
 
 /** How long a view's holder has to name its namespace. */
@@ -512,30 +524,54 @@ export const viewPath = (pid: number, path: string): string =>
 /** How long the processes of a view have to leave once killed. */
 const VIEW_END_MS = 5000;
 
+/** A process a view's end killed: its pid and command line. */
+export interface ViewProcess {
+  command: string;
+  pid: number;
+}
+
 /**
  * Ends workspace `id`'s view: every process in its mount namespace (the
  * holder, its sessions, its boundary, anything they left), SIGKILLed until
- * none is left. Answers the processes that would not go.
+ * none is left. Answers the processes it ended besides the holder, each
+ * with its command line as it was read before its kill, and those that
+ * would not go.
  */
-export const endView = async (id: string): Promise<number[]> => {
+export const endView = async (
+  id: string
+): Promise<{ ended: ViewProcess[]; left: number[] }> => {
   const record = readViewRecord(id);
   if (!record) {
-    return [];
+    return { ended: [], left: [] };
   }
   const deadline = Date.now() + VIEW_END_MS;
+  const ended = new Map<number, string>();
   let left = membersOf(record.mnt);
   while (left.length > 0 && Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: each round names what it kills, then reads the namespace again
+    const named = await Promise.all(
+      left
+        .filter((pid) => !ended.has(pid))
+        .map(async (pid) => [pid, (await commandLine(pid)) ?? ""] as const)
+    );
+    for (const [pid, command] of named) {
+      ended.set(pid, command);
+    }
     for (const pid of left) {
       signalPid(listedPid(pid), "SIGKILL");
     }
-    // biome-ignore lint/performance/noAwaitInLoops: reads the namespace again after each round of kills
     await Bun.sleep(50);
     left = membersOf(record.mnt);
   }
   if (left.length === 0) {
     await rm(viewFile(id), { force: true });
   }
-  return left;
+  return {
+    ended: [...ended]
+      .filter(([pid]) => pid !== record.pid && !left.includes(pid))
+      .map(([pid, command]) => ({ pid, command })),
+    left,
+  };
 };
 
 // ----------------------------------------------------------------- the copy
@@ -750,7 +786,7 @@ export const markMade = async (id: string): Promise<void> => {
  */
 export const removeLayer = async (id: string, layer: Layer): Promise<void> => {
   if (layer.form === "overlay") {
-    const left = await endView(id);
+    const { left } = await endView(id);
     if (left.length > 0) {
       throw new Error(
         `workspace ${id}'s view still holds pid ${left.join(", ")} after SIGKILL, so its layer was not removed`

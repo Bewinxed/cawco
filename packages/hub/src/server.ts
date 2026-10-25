@@ -12854,25 +12854,14 @@ export const createServer = (
       path,
       kind: "checkout",
     });
-    // The place's repo step is held from here, so a move planned while its
-    // remote is read waits for the folder to settle (place-repo.ts `hold`).
-    const step = placeRepos.hold(machineId, path);
-    try {
-      if (added) {
-        placesChanged(machineId, project.id);
-      }
-      if (!project.remote) {
-        await learnRemote(project.id, machineId, path);
-      }
-      // A plain folder is made a git repository now, off the request: a
-      // machine away, or a place that cannot be one, is tried again, and
-      // refused in its words, when a workspace is first cut from it.
-      detach(
-        step.ensure({ projectId: project.id, machineId, path }),
-        "place-repo"
-      );
-    } finally {
-      step.release();
+    if (added) {
+      placesChanged(machineId, project.id);
+    }
+    // A plain folder stays one: a workspace is a private copy of any folder
+    // (agent layer.ts), a move makes it a repository with the person's yes
+    // (moves.ts `askFor`), and a publish as it reads it (repo-publish.ts).
+    if (!project.remote) {
+      await learnRemote(project.id, machineId, path);
     }
     return {
       ...projectOut(db.project(project.id) ?? project),
@@ -23052,22 +23041,6 @@ export const createServer = (
   };
 
   /**
-   * A project made from a checkout with no remote: a plain folder is made a
-   * git repository now (place-repo.ts), off the request, as a place added
-   * later is. A machine away, or a place that cannot be one, is tried again,
-   * and refused in its words, when a workspace is first cut from it.
-   */
-  const madeFromFolder = (
-    projectId: string,
-    checkout: { machineId: string; path: string } | undefined,
-    remote: string | null
-  ): void => {
-    if (checkout && !remote) {
-      detach(placeRepos.ensure({ projectId, ...checkout }), "place-repo");
-    }
-  };
-
-  /**
    * One repository is one project: a folder whose remote a project already
    * has joins it as a checkout place (`placeAdded`), and the answer is that
    * project, not a second one. Else a new project, its places its folder on
@@ -23195,7 +23168,6 @@ export const createServer = (
     });
     projectsChanged();
     projectStarters.touched(created.id, "project created");
-    madeFromFolder(created.id, checkout || undefined, remote);
     const setupThread = await startProject(created, asked);
     return {
       project: created,

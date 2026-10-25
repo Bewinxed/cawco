@@ -85,6 +85,13 @@
  *     builds on the Mac: from a CawCo workspace on Linux it cannot reach it,
  *     and that part is noted, not run.
  *
+ * On Linux a workspace's path is the person's folder seen through the
+ * workspace's view (agent layer.ts): its "clone" is its layer under its
+ * state dir, read through ../copy.ts, and it has no Apple build root
+ * (build-both.sh builds in no Linux workspace). (f) and (g) delete clones
+ * and leave husks, which a view has none of: they run where a copy is a
+ * folder of its own (macOS), and are noted on Linux.
+ *
  *   bun scripts/probe-kit/run.ts workspace-retire
  */
 import { existsSync } from "node:fs";
@@ -97,6 +104,15 @@ import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { startedSince } from "../agent-records";
+import {
+  copyGone,
+  copyText,
+  copyWritePath,
+  gitInCopy,
+  inCopyExists,
+  isView,
+  stateDirOf,
+} from "../copy";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 /** One request given `ms` to answer: its status and text; one not answered in time throws saying so. */
@@ -573,8 +589,13 @@ const archivePhase = async (
 ): Promise<void> => {
   const { check } = kit;
   const { fleet, workspaceOf, archiveOver } = scene;
-  await writeFile(join(k.path, "README.md"), "changed by the probe\n");
-  await writeFile(join(k.path, "uncommitted-K.txt"), "dirty K\n");
+  // K is held, nothing runs in it: written into its copy as it is kept (a
+  // Linux view's upper, offline; ../copy.ts).
+  await writeFile(
+    copyWritePath(fleet, k, "README.md"),
+    "changed by the probe\n"
+  );
+  await writeFile(copyWritePath(fleet, k, "uncommitted-K.txt"), "dirty K\n");
 
   // A dashboard's raw control, asking to carry: the hub's relay refuses it.
   await fleet.post({
@@ -609,10 +630,9 @@ const archivePhase = async (
   );
   check(
     "(e) after the raw control and the refused POST, K's clone, its commit, its changed files and its held row stand",
-    existsSync(join(k.path, "retire-K.txt")) &&
-      existsSync(join(k.path, "uncommitted-K.txt")) &&
-      (await Bun.file(join(k.path, "README.md")).text()) ===
-        "changed by the probe\n" &&
+    inCopyExists(fleet, k, "retire-K.txt") &&
+      inCopyExists(fleet, k, "uncommitted-K.txt") &&
+      copyText(fleet, k, "README.md") === "changed by the probe\n" &&
       workspaceOf(k.id).state === "held",
     workspaceOf(k.id).state
   );
@@ -665,8 +685,8 @@ const archivePhase = async (
   );
   check(
     "(e) then K's clone is gone and its row archived",
-    !existsSync(k.path) && workspaceOf(k.id).state === "archived",
-    `${existsSync(k.path) ? "clone stands" : "clone gone"}, ${workspaceOf(k.id).state}`
+    copyGone(fleet, k) && workspaceOf(k.id).state === "archived",
+    `${copyGone(fleet, k) ? "clone gone" : "clone stands"}, ${workspaceOf(k.id).state}`
   );
 };
 
@@ -777,8 +797,8 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(r) M's work lands and its workspace retires, its clone gone",
     m.item.state === "done" &&
       retired.state === "archived" &&
-      !existsSync(wm.path),
-    `${m.item.state} ${m.item.error ?? ""}; ${retired.state}; clone ${existsSync(wm.path) ? "stands" : "gone"}`
+      copyGone(fleet, wm),
+    `${m.item.state} ${m.item.error ?? ""}; ${retired.state}; clone ${copyGone(fleet, wm) ? "gone" : "stands"}`
   );
   const head = JSON.parse(
     fleet.query<{ head: string | null }>(
@@ -853,8 +873,8 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const again = await stateBecomes(wm.id, "archived");
   check(
     "(r) with its work over again, the workspace retires again: row archived, clone gone",
-    again.state === "archived" && !existsSync(wm.path),
-    `${again.state}; clone ${existsSync(wm.path) ? "stands" : "gone"}`
+    again.state === "archived" && copyGone(fleet, wm),
+    `${again.state}; clone ${copyGone(fleet, wm) ? "gone" : "stands"}`
   );
 };
 
@@ -895,11 +915,7 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     (row) => Boolean(row?.landing_since),
     300_000
   ).catch(() => itemRow(fleet, started.workItemId));
-  const sha = (
-    await Bun.$`git -C ${wq.path} rev-parse HEAD`.quiet().nothrow()
-  ).stdout
-    .toString()
-    .trim();
+  const sha = await gitInCopy(fleet, wq, ["rev-parse", "HEAD"]);
   const stopped = await callAsParent("stop_delegate", {
     target: started.instanceId,
   });
@@ -932,11 +948,11 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(q) its workspace stays while the landing runs, then retires: row archived, clone gone, head recorded as Q's commit on probe-keep-Q",
     kept === "active" &&
       retired.state === "archived" &&
-      !existsSync(wq.path) &&
+      copyGone(fleet, wq) &&
       sha.length === 40 &&
       head?.commit === sha &&
       head.branch === Q_KEEP,
-    `right after the stop ${kept}; ${retired.state}; clone ${existsSync(wq.path) ? "stands" : "gone"}; HEAD was ${sha}; head ${JSON.stringify(head)}; ${hub
+    `right after the stop ${kept}; ${retired.state}; clone ${copyGone(fleet, wq) ? "gone" : "stands"}; HEAD was ${sha}; head ${JSON.stringify(head)}; ${hub
       .split("\n")
       .filter((line) => line.includes(wq.id))
       .slice(-8)
@@ -1045,7 +1061,7 @@ const previewPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     p.item.state === "done" &&
       fleet.instance(p.instanceId)?.status === "sleeping" &&
       workspaceOf(wp.id).state === "active" &&
-      existsSync(wp.path) &&
+      !copyGone(fleet, wp) &&
       hold.includes("task-review"),
     `${p.item.state}; ${fleet.instance(p.instanceId)?.status}; ${workspaceOf(wp.id).state}; ${JSON.stringify(swept)}`
   );
@@ -1053,8 +1069,8 @@ const previewPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const retired = await stateBecomes(wp.id, "archived");
   check(
     "(p) the artifact deleted, P's workspace retires on its own: row archived, clone gone",
-    status === 200 && retired.state === "archived" && !existsSync(wp.path),
-    `DELETE ${status}; ${retired.state}; clone ${existsSync(wp.path) ? "stands" : "gone"}`
+    status === 200 && retired.state === "archived" && copyGone(fleet, wp),
+    `DELETE ${status}; ${retired.state}; clone ${copyGone(fleet, wp) ? "gone" : "stands"}`
   );
 };
 
@@ -1123,10 +1139,10 @@ const unstartablePhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(u) its preview deleted, B archives all the same: row archived, clone and state dir gone, no boundary of it started",
     status === 200 &&
       retired.state === "archived" &&
-      !existsSync(wb.path) &&
+      copyGone(fleet, wb) &&
       !existsSync(stateDir) &&
       started.filter((procId) => procId.startsWith("boundary-")).length === 0,
-    `DELETE ${status}; ${retired.state}; clone ${existsSync(wb.path) ? "stands" : "gone"}; state dir ${existsSync(stateDir) ? "stands" : "gone"}; on the keeper: ${started.join(", ") || "nothing"}`
+    `DELETE ${status}; ${retired.state}; clone ${copyGone(fleet, wb) ? "gone" : "stands"}; state dir ${existsSync(stateDir) ? "stands" : "gone"}; on the keeper: ${started.join(", ") || "nothing"}`
   );
 };
 
@@ -1166,6 +1182,18 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     Workspace,
   ];
   const three = [wh, wg, ws];
+  if (three.some((workspace) => isView(fleet, workspace))) {
+    // A Linux view has no folder of its own to delete: its path is the
+    // person's folder, which a delete here would take with it.
+    kit.note(
+      "(f) and (g) run where a workspace's copy is a folder of its own (macOS): on Linux each path is the person's folder seen through the workspace's view, with no clone to delete or husk to leave"
+    );
+    for (const preview of previews) {
+      // biome-ignore lint/performance/noAwaitInLoops: three artifacts
+      await scene.closePreview(preview);
+    }
+    return;
+  }
   const boundaries = async (): Promise<string[]> =>
     (await fleet.heldProcs())
       .map(({ procId }) => procId)
@@ -1285,8 +1313,14 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
     "xdg",
     "cawco-apple.noindex"
   );
-  // Each clone's Apple build root, as build-both.sh leaves one, as it starts.
+  // Each clone's Apple build root, as build-both.sh leaves one, as it starts:
+  // a copy of its own's, named by its folder (macOS). A Linux view's path is
+  // the person's folder, and build-both.sh does not build in a Linux
+  // workspace, so a view has none.
   const buildRoot = async (workspace: Workspace) => {
+    if (isView(fleet, workspace)) {
+      return;
+    }
     await mkdir(join(apple, basename(workspace.path), "DerivedData"), {
       recursive: true,
     });
@@ -1306,13 +1340,20 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
   );
   const wl = workspaceOf(l.workspaceId);
   const wk = workspaceOf(k.workspaceId);
+  // A copy of its own: its folder and its build root. A Linux view: its
+  // layer (upper and work dirs) under its state dir, the folder its path
+  // names being the person's.
   const owned = (workspace: Workspace, tag: string) => ({
-    clone: workspace.path,
+    ...(isView(fleet, workspace)
+      ? { clone: join(stateDirOf(fleet, workspace.id), "layer") }
+      : {
+          clone: workspace.path,
+          buildRoot: join(apple, basename(workspace.path)),
+          buildLock: join(apple, ".locks", basename(workspace.path)),
+        }),
     state: join(home, ".cawco", "workspaces", workspace.id),
     tmp: workspace.tmp ?? "",
     left: join(workspace.tmp ?? "", `scratch-fleet-left-${tag}`),
-    buildRoot: join(apple, basename(workspace.path)),
-    buildLock: join(apple, ".locks", basename(workspace.path)),
   });
   const standing = (workspace: Workspace, tag: string) =>
     Object.entries(owned(workspace, tag))

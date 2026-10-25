@@ -3874,9 +3874,14 @@ export const createWorkItems = ({
     }
   };
 
-  /** A workspace's clone and its scratch dir (its commands' `TMPDIR`, which goes with it). */
+  /**
+   * A workspace's own folders, which go with it: its copy ({@link ownCopy})
+   * and its scratch dir (its commands' `TMPDIR`). A Linux view's path is the
+   * person's folder, which its retirement never touches, so nothing there
+   * (a project's place, a preview of it) is the workspace's.
+   */
   const rootsOf = (workspace: WorkspaceRow): string[] => [
-    workspace.path,
+    ...(ownCopy(workspace) ? [workspace.path] : []),
     ...(workspace.tmp ? [workspace.tmp] : []),
   ];
 
