@@ -20,6 +20,26 @@
  *    inside each (`attribute`: WebKit through Playwright has no performance
  *    trace).
  *
+ * EACH OPEN IS READ AT ITS LEAST OF UP TO THREE TAKES. An open whose
+ * heaviest interval runs over the bound is opened again from rest, up to
+ * three takes in all, and is held to the bound at its lightest take's
+ * intervals; every take is said. Every open is the same work, and what the
+ * machine adds to a thread's CPU only ever adds: "these factors only delay
+ * the completion of the original instructions, rather than speed them up",
+ * so "using the minimum estimator for the true run time of a benchmark,
+ * rather than the mean or median, is robust to nonideal statistics"
+ * (Chen and Revels, Robust benchmarking in noisy environments,
+ * https://arxiv.org/html/1608.04295v1). A thread's run time is not the
+ * work it did: on obelisk (a 24-core Threadripper, two threads a core,
+ * 0.4–5.7GHz) the same open's Svelte flush read 9–12ms and, in one open of
+ * twenty, 16ms with 31ms of CPU in its interval, the other nineteen
+ * 16–18ms, as the core it ran on was shared or slowed; the kernel's run
+ * time counts both, and unprivileged hardware counters are off
+ * (perf_event_paranoid 4). The product's own cost comes back on every
+ * take: before 9e3f7a41e (every press restyled html up to the shell
+ * through a :has() anchor) the flush read 19–24ms on every open and its
+ * intervals 23–30ms.
+ *
  * WHAT IS BOUND IS THE PAGE'S CPU, NOT THE ENGINE'S CADENCE. The interval
  * itself was the bound before (no interval over 25ms), and on obelisk it
  * failed with 0ms of the page's code inside: headless WPE composites each
@@ -42,6 +62,8 @@ import { open, type Spec } from "../../kit";
 
 const RUNS = 20;
 const DROPPED_MS = 25;
+/** Takes of an open whose heaviest interval ran over `DROPPED_MS`, the first included. */
+const TAKES = 3;
 const WATCH_MS = 2600;
 const REST_MS = 2600;
 const SOURCE_VERSION = "0.0.0-dev";
@@ -190,18 +212,8 @@ const spec: Spec = {
     );
     const cpu = await pageCpu(page);
     const opened: boolean[] = [];
-    /** Each open's frame intervals, with the page's main-thread CPU and its own code inside each. */
-    const runs: {
-      at: number;
-      cpu: number;
-      heaviest: string;
-      ms: number;
-      ours: number;
-    }[][] = [];
-    /** Each open's raster and compositing, CPU ms. */
-    const beside: { compositing: number; paint: number }[] = [];
-    for (let n = 0; n < RUNS; n += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: one open at a time, each from rest
+    /** One open, from rest: its frame intervals, with the page's main-thread CPU and its own code inside each, and its raster and compositing. */
+    const openOnce = async () => {
       const recording = await cpu.record();
       await tell(page, { rafs: [], calls: [], tap: -1, cadence: true });
       // Frames drawn before the tap too, so the one it lands in is measured.
@@ -211,7 +223,6 @@ const spec: Spec = {
       const seen = await watched(page);
       await tell(page, { cadence: false });
       const ran = await recording.stop();
-      beside.push({ compositing: ran.compositing, paint: ran.paint });
       const before = seen.rafs.findLastIndex((t) => t <= seen.tap);
       const frames = seen.rafs.slice(Math.max(0, before));
       const intervals = frames.slice(1).map((t, k) => {
@@ -236,12 +247,43 @@ const spec: Spec = {
       await page.touchscreen.tap(at.x, at.y);
       // The close's own smile in and out land before the next open.
       await page.waitForTimeout(REST_MS);
-      runs.push(intervals);
+      return {
+        intervals,
+        beside: { compositing: ran.compositing, paint: ran.paint },
+        worst: Math.max(0, ...intervals.map((one) => one.cpu)),
+      };
+    };
+    type Take = Awaited<ReturnType<typeof openOnce>>;
+    /** Each open's frame intervals: its least heavy take's. */
+    const runs: Take["intervals"][] = [];
+    /** Each take's raster and compositing, CPU ms. */
+    const beside: Take["beside"][] = [];
+    /** The opens taken again, each take's heaviest interval. */
+    const retaken: string[] = [];
+    for (let n = 0; n < RUNS; n += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one open at a time, each from rest
+      const takes: Take[] = [await openOnce()];
+      for (
+        let last = takes[0] as Take;
+        last.worst > DROPPED_MS && takes.length < TAKES;
+        last = takes.at(-1) as Take
+      ) {
+        // biome-ignore lint/performance/noAwaitInLoops: each take from rest, after the one before
+        takes.push(await openOnce());
+      }
+      beside.push(...takes.map((one) => one.beside));
+      const [least] = [...takes].sort((a, b) => a.worst - b.worst);
+      if (takes.length > 1) {
+        retaken.push(
+          `open ${n}: ${takes.map((one) => `${one.worst.toFixed(0)}ms`).join(", ")}`
+        );
+      }
+      runs.push((least as Take).intervals);
     }
     kit.check(
-      `the panel opens on every tap (${RUNS})`,
+      `the panel opens on every tap (${opened.length})`,
       opened.every(Boolean),
-      `${opened.filter(Boolean).length} of ${RUNS} opened`
+      `${opened.filter(Boolean).length} of ${opened.length} opened`
     );
     // The heaviest intervals, each with what our code did inside it, so a
     // dropped frame says whose it was; the longest, the raster and the
@@ -257,9 +299,9 @@ const spec: Spec = {
     const median = (values: number[]) =>
       [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
     kit.check(
-      `no interval with over ${DROPPED_MS}ms of the page's main-thread CPU in any of ${RUNS} opens`,
+      `no interval with over ${DROPPED_MS}ms of the page's main-thread CPU in any of ${RUNS} opens, each at its least of up to ${TAKES} takes`,
       worst <= DROPPED_MS,
-      `heaviest: ${heaviest.map(said).join("; ")}. Longest interval: ${longest ? said(longest) : "none"}. An open's raster ${median(beside.map((one) => one.paint)).toFixed(0)}ms and compositing ${median(beside.map((one) => one.compositing)).toFixed(0)}ms of CPU (medians), on threads of their own, not counted`
+      `heaviest: ${heaviest.map(said).join("; ")}. Taken again, each take's heaviest: ${retaken.length > 0 ? retaken.join("; ") : "none"}. Longest interval: ${longest ? said(longest) : "none"}. An open's raster ${median(beside.map((one) => one.paint)).toFixed(0)}ms and compositing ${median(beside.map((one) => one.compositing)).toFixed(0)}ms of CPU (medians), on threads of their own, not counted`
     );
   },
 };
