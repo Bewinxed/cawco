@@ -478,7 +478,28 @@
       inset: calc(var(--m) * -1);
       border-radius: var(--radius-sm);
       background: var(--qr-paper);
-      box-shadow: 0 0 0 1px var(--border-hairline);
+      box-shadow: 0 0 0 1px var(--edge, var(--border-hairline));
+      transition: box-shadow var(--dur-pop) var(--ease-out);
+    }
+    /* Wrong code scanned: the live code's paper takes the fail ink at its
+       edge (the code itself did nothing wrong, so it stays as it is). */
+    &[data-fault] {
+      --edge: var(--status-fail-ink);
+    }
+  }
+
+  /* The way forward when the code is gone (New code on Expired, Retry when
+     the hub didn't answer): the coral act at the code's centre, where the
+     head was. */
+  .well-act {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    z-index: 3;
+    translate: -50% -50%;
+    &:not([data-on]) {
+      opacity: 0;
+      pointer-events: none;
     }
   }
 
@@ -520,8 +541,21 @@
   }
 
   .letters {
+    position: relative;
     display: block flex;
     gap: var(--space-1);
+    /* Expired's strike: one 1px line across the six glyphs, drawn left to
+       right (preview.js holds it at rest drawn or not). */
+    .cross {
+      position: absolute;
+      z-index: 2;
+      inset-inline: var(--space-2);
+      inset-block-start: 50%;
+      block-size: 1px;
+      background: var(--ink-stat);
+      transform-origin: left center;
+      pointer-events: none;
+    }
   }
   /* A tile stands in front of the code: a dot falling past it passes
      behind its box. */
@@ -548,20 +582,48 @@
     display: block flex;
     justify-content: center;
     align-items: start;
-    gap: var(--space-2);
     min-block-size: calc(2lh);
     max-inline-size: 100%;
     color: var(--ink-muted);
     font: var(--type-meta);
     text-align: center;
-    .live {
+    /* The line's mark: the live dot while asking, the clock on Expired, the
+       ✕ on Wrong code and when the hub didn't answer, each bare. Its box is
+       as wide as the mark it shows and none where it shows none (preview.js
+       sizes it and eases it), so the words stay centred. */
+    .slot {
       flex: none;
-      margin-block-start: calc(0.5lh - 3px);
+      display: block grid;
+      place-items: center;
+      inline-size: 0;
+      block-size: 1lh;
+      overflow: visible;
+      > * {
+        grid-area: 1 / 1;
+      }
+      .g {
+        inline-size: 20px;
+        block-size: 20px;
+        overflow: visible;
+      }
+      .g-close {
+        color: var(--status-fail-glyph);
+      }
+      .g-clock {
+        color: var(--ink-muted);
+      }
+    }
+    .live {
       inline-size: 6px;
       block-size: 6px;
       border-radius: var(--radius-pill);
       background: var(--status-live-glyph, var(--ink-muted));
-      @media (prefers-reduced-motion: no-preference) {
+    }
+    /* It breathes only while it is the line's mark: a CSS animation rides over
+       the resting opacity the script sets, so a hidden dot would breathe back
+       into sight under the ✕. */
+    @media (prefers-reduced-motion: no-preference) {
+      .slot[data-mark="live"] .live {
         animation: breath var(--breath) var(--ease-in-out) infinite;
       }
     }
@@ -597,6 +659,15 @@
     svg {
       position: absolute;
       overflow: visible;
+    }
+    /* Denied: the bare ✕ on the phone's screen, at its centre. */
+    .wire-mark {
+      inset-block-start: 50%;
+      inset-inline-start: 50%;
+      inline-size: 20px;
+      block-size: 20px;
+      translate: -50% -50%;
+      color: var(--status-fail-glyph);
     }
   }
 
@@ -638,6 +709,13 @@
       color: var(--ink-muted);
       font: var(--type-meta);
       font-variant-numeric: tabular-nums;
+      /* "asked" and "denied" trade places (Text states swap). */
+      .verb {
+        display: inline grid;
+        > span {
+          grid-area: 1 / 1;
+        }
+      }
     }
   }
 
@@ -658,8 +736,6 @@
      device as one meta line, what it means and the way out, the acts with
      one coral. All text on the column's one start edge at both widths. ---- */
   .scene-outcome {
-    /* Above the code's tiles, so Expired's letters fly over them. */
-    z-index: 2;
     display: block grid;
     grid-template-columns: 20px minmax(0, 1fr);
     align-content: start;
@@ -676,8 +752,9 @@
     }
   }
 
-  /* The status glyph, Solar's mark alone, no disc under it: its three faces
-     share one cell (transitions.dev "Icon swap"), data-glyph shows one. */
+  /* Paired's and Removed's status glyph, Solar's mark alone, no disc under
+     it: its two faces share one cell (transitions.dev "Icon swap"),
+     data-glyph shows one. */
   .mark {
     display: block grid;
     inline-size: 20px;
@@ -693,20 +770,13 @@
       opacity: 0;
     }
     &[data-glyph="check"] .g-check,
-    &[data-glyph="close"] .g-close,
-    &[data-glyph="clock"] .g-clock {
+    &[data-glyph="close"] .g-close {
       opacity: 1;
     }
     .g-check {
       color: var(--status-done-glyph);
     }
     .g-close {
-      color: var(--ink-muted);
-    }
-    &[data-tone="fail"] .g-close {
-      color: var(--status-fail-glyph);
-    }
-    .g-clock {
       color: var(--ink-muted);
     }
     .tick {
@@ -724,28 +794,6 @@
       > span {
         grid-area: 1 / 1;
       }
-    }
-    /* Expired's spent code: the six letters in mono, struck. */
-    .spent {
-      position: relative;
-      display: inline-block;
-      white-space: nowrap;
-      font: var(--type-code);
-      font-size: var(--text-body);
-      font-size-adjust: cap-height var(--mono-figure-cap);
-      font-variant-ligatures: none;
-      .l {
-        display: inline-block;
-        transform-origin: center;
-      }
-    }
-    .strike {
-      position: absolute;
-      inset-inline: 0;
-      inset-block-start: 50%;
-      block-size: 1px;
-      background: currentColor;
-      transform-origin: left center;
     }
   }
 
