@@ -98,13 +98,14 @@ const run = async (kit: Kit) => {
   const path = linux
     ? folder
     : join(home, ".worktrees", `site-${id.slice(0, 8)}`);
-  await mkdir(join(home, ".worktrees"), { recursive: true });
+  // No `~/.worktrees` made here: the scratch HOME has none, as a machine
+  // that never had a workspace has none, and the layer's start makes it.
 
   const startAt = performance.now();
   const layer = await makeLayer(id, folder, path);
   const startMs = ms(startAt);
   check(
-    `v1: a folder that is no repository gets a ${linux ? "view at its own path" : "clone"} in ${startMs} ms, recorded unmade until its create is whole`,
+    `v1: a folder that is no repository gets a ${linux ? "view at its own path" : "clone, in a ~/.worktrees its start made"} in ${startMs} ms, recorded unmade until its create is whole`,
     layer.kind === "folder" &&
       !layer.made &&
       (linux

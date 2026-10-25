@@ -730,6 +730,10 @@ const cloneFolder = async (
   const sources = names
     .filter((name) => name !== LINKED_MODULES)
     .map((name) => join(folder, name));
+  // The folder the copies are cut in first (`~/.worktrees`, which a machine
+  // that never had a workspace has not got), then the copy itself, which
+  // must not be there already.
+  await mkdir(dirname(path), { recursive: true, mode: 0o755 });
   await mkdir(path, { recursive: false, mode: 0o755 });
   await mkdir(base, { recursive: true, mode: 0o700 });
   await Promise.all([cloneInto(sources, path), cloneInto(sources, base)]);
