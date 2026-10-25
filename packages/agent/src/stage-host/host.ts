@@ -22,8 +22,8 @@
  * `ready` with its port once it serves, `errors` with every section's
  * problem standing (a states file that isn't written, a compile error)
  * whenever that changes, `beat` every {@link BEAT_MS}, and `fatal`
- * with why it could not start (`config: true` when the project's config
- * didn't load). Vite's own words go to stderr (its logger at
+ * with why it could not start (the daemon leaves such a stage in error, never
+ * starting it again on its own). Vite's own words go to stderr (its logger at
  * "warn"). Once nothing reads its stdout (the daemon is gone), a beat's
  * write fails and the stage ends. Astro's and Nuxt's own words go to stderr
  * too (their `logLevel` at `warn`).
@@ -3143,9 +3143,6 @@ const onPort = (got: number | undefined, name: string): number => {
   return got;
 };
 
-/** A project's Vite config that Vite's loader could not load: the stage's start ends there, and its daemon does not start it again (agent stage.ts). */
-class ConfigUnread extends Error {}
-
 /**
  * The project's Vite, from its own config file (vite.dev/guide/api-javascript
  * `createServer`), loaded the way the project's own `vite` command loads it:
@@ -3188,7 +3185,7 @@ async function startVite(): Promise<Started> {
     })
     .catch((error: unknown) => {
       throw unread && configFile
-        ? new ConfigUnread(
+        ? new Error(
             // Rolldown colours its parse errors for a terminal; the sheet shows plain text.
             `Vite couldn't load ${relative(root, configFile)}: ${stripVTControlCharacters(error instanceof Error ? error.message : String(error))}`,
             { cause: error }
@@ -3337,8 +3334,6 @@ try {
 } catch (error) {
   say("fatal", {
     message: error instanceof Error ? error.message : String(error),
-    // The same config fails the same load: the daemon leaves it in error.
-    ...(error instanceof ConfigUnread ? { config: true } : {}),
   });
   process.exit(1);
 }

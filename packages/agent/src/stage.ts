@@ -22,8 +22,9 @@
  *   `error`;
  * - is asked {@link HEALTH_PATH} every {@link STAGE_HEALTH_MS}; a stage that
  *   ends or stops answering is started again, {@link STAGE_RESTARTS} times
- *   with a growing wait, then stays in `error`; one whose project config
- *   didn't load is in `error` at once, until the next use starts it;
+ *   with a growing wait, then stays in `error`; one that never served (its
+ *   host said `fatal`, ended, or didn't answer in time) is in `error` at
+ *   once, until the next use starts it;
  * - sleeps once {@link STAGE_IDLE_MS} pass with no viewer (an open socket
  *   through a preview of it) and no use (a request, an agent's read);
  *   the next use wakes it;
@@ -752,7 +753,7 @@ function killLeft(stage: Stage, leader: Pid): void {
   }
 }
 
-/** The stage ended, or stopped answering, on its own: started again after its wait, or in `error` once its restarts are spent. */
+/** The stage ended, or stopped answering, on its own after it served: started again after its wait, or in `error` once its restarts are spent. */
 function crashed(stage: Stage, why: string): void {
   if (stage.stopping) {
     return;
@@ -864,8 +865,6 @@ function sleep(stage: Stage): void {
 /** One of the host's words (stage-host/host.ts `say`); null for a line of anyone else's (a config's own console.log). */
 interface HostWord {
   cawco?: string;
-  /** On `fatal`: the project's config didn't load. */
-  config?: boolean;
   errors?: StageError[];
   message?: string;
 }
@@ -980,6 +979,21 @@ function inError(stage: Stage, why: string): void {
   tell(stage);
 }
 
+/**
+ * A start that never served (its host said `fatal`, ended, or didn't answer
+ * in time): ended, and in `error` with why. It is not started again on its
+ * own, since the same start fails the same way (a config that doesn't load,
+ * a plugin throwing in `configureServer`, a missing package); the next use
+ * starts it ({@link wake}).
+ */
+function failedStart(stage: Stage, why: string): void {
+  if (stage.stopping) {
+    return;
+  }
+  kill(stage);
+  inError(stage, why);
+}
+
 /** A start found its port held: in `error` with why, and the hub told. */
 function refusedStart(stage: Stage, why: string): never {
   inError(stage, why);
@@ -1062,9 +1076,9 @@ async function start(stage: Stage): Promise<void> {
   }
   let said = "";
   let fatal: string | undefined;
-  // The host's config didn't load: the same config fails the same load, so
-  // its exit is the stage's error, not a crash to start again.
-  let unread = false;
+  // Whether this start served: only a stage that served and then ended is
+  // started again; one that never served fails the same way again.
+  let served = false;
   const keep = (chunk: Buffer) => {
     said = (said + chunk.toString("utf8")).slice(-STDERR_KEPT);
   };
@@ -1082,6 +1096,7 @@ async function start(stage: Stage): Promise<void> {
           if (error) {
             fail(error);
           } else {
+            served = true;
             done();
           }
         };
@@ -1115,7 +1130,6 @@ async function start(stage: Stage): Promise<void> {
               const word = hostWord(line);
               if (word?.cawco === "fatal") {
                 fatal = word.message;
-                unread = word.config === true;
               } else if (word && heard(stage, word)) {
                 settle();
               }
@@ -1129,7 +1143,7 @@ async function start(stage: Stage): Promise<void> {
             return;
           }
           settle(error);
-          crashed(stage, error.message);
+          (served ? crashed : failedStart)(stage, error.message);
         });
         child.on("exit", (code, ended) => {
           if (stage.child !== child) {
@@ -1145,12 +1159,7 @@ async function start(stage: Stage): Promise<void> {
               .slice(0, 400) ||
               `it ended (${ended ?? `status ${code}`})`);
           settle(new Error(why));
-          if (unread && !stage.stopping) {
-            kill(stage);
-            inError(stage, why);
-          } else {
-            crashed(stage, why);
-          }
+          (served ? crashed : failedStart)(stage, why);
         });
       })
   );
@@ -1159,7 +1168,7 @@ async function start(stage: Stage): Promise<void> {
       return;
     case "unanswered": {
       const why = `${stage.runs.kind === "sheet" ? sheetWords.toolchains[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
-      crashed(stage, why);
+      failedStart(stage, why);
       throw new Error(why);
     }
     default: {

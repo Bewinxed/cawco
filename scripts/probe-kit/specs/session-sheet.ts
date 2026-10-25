@@ -164,6 +164,10 @@
  *     `vite.config.ts`, with Vite's parse error and no
  *     terminal colour codes; past every restart's wait the agent has put the
  *     stage in error once and never started it again.
+ * 29. One whose config loads and whose plugin throws in `configureServer`:
+ *     the same, refused once with the plugin's error; a start that never
+ *     served is not started again (stage.ts `failedStart`), only a host
+ *     that served and then ended is (leg 5d).
  *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
@@ -486,6 +490,26 @@ export default defineConfig({
 
 /** Leg 28's config: it never parses. */
 const BROKEN_CONFIG = "export default {\n  plugins: [,\n";
+
+/** What leg 29's plugin throws as Vite starts its server. */
+const PLUGIN_THROWS = "the probe's plugin refuses to serve";
+
+/** Leg 29's config: it loads, and a plugin of it throws in `configureServer`. */
+const THROWING_CONFIG = `import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    svelte(),
+    {
+      name: "probe-throws",
+      configureServer() {
+        throw new Error(${JSON.stringify(PLUGIN_THROWS)});
+      },
+    },
+  ],
+});
+`;
 
 /** A Vite + Svelte project whose `vite.config.ts` is `config` (legs 27 and 28). */
 const configProject = (config: string): Record<string, string> => ({
@@ -1467,6 +1491,8 @@ const run = async (kit: Kit) => {
   await writeCommitted(enumDir, configProject(ENUM_CONFIG));
   const brokenDir = join(fleet.sandbox, "broken-config");
   await writeCommitted(brokenDir, configProject(BROKEN_CONFIG));
+  const throwingDir = join(fleet.sandbox, "throwing-plugin");
+  await writeCommitted(throwingDir, configProject(THROWING_CONFIG));
   // Short enough that the npm stage sleeps within a minute of its last use (legs 10–12).
   fleet.launch("agent", [], { CAWCO_STAGE_IDLE_MS: String(IDLE_MS) });
   await fleet.agentUp();
@@ -1730,46 +1756,64 @@ const run = async (kit: Kit) => {
       `${short(enumCreated).slice(0, 300)}; clone ${enumClone?.path ?? "not found"}; written since the host: ${JSON.stringify(written)}; .vite-temp holds ${JSON.stringify(temp)}`
     );
 
-    // 28. A config that never parses: refused once, in plain words, and never started again.
-    const brokenSession = await fleet.spawn(
-      "claude",
-      "Broken config",
-      brokenDir
-    );
-    const brokenCreated = await call(
-      "28",
-      "mcp__cawco__artifact_create",
-      {
-        kind: "component",
-        name: "broken-cards",
-        file: STORY,
-        does: "judge",
-        ask: "Judge the card of the project whose config never parses",
-      },
-      brokenSession
+    // 28 and 29. A start that fails the same way each time: refused once, in plain words, and never started again.
+    /** Leg `n`'s sheet asked of a session in `dir`: what artifact_create answered. */
+    const createIn = async (n: string, dir: string, title: string) =>
+      await call(
+        n,
+        "mcp__cawco__artifact_create",
+        {
+          kind: "component",
+          name: `${title.toLowerCase().replaceAll(" ", "-")}-cards`,
+          file: STORY,
+          does: "judge",
+          ask: `Judge the card of the project whose ${title.toLowerCase()} fails`,
+        },
+        await fleet.spawn("claude", title, dir)
+      );
+    const brokenCreated = await createIn("28", brokenDir, "Broken config");
+    const throwingCreated = await createIn(
+      "29",
+      throwingDir,
+      "Throwing plugin"
     );
     // Past every restart's wait (stage.ts `BACKOFF_MS`, 1 s + 4 s + 16 s), so a restart would have logged.
     await Bun.sleep(30_000);
-    const unread = "Vite couldn't load vite.config.ts";
-    const lines = (await fleet.logs("agent"))
+    const log = (await fleet.logs("agent"))
       .split("\n")
-      .filter((line) => line.includes("[stage]") && line.includes(unread));
-    // The stage's words for each move (stage.ts `tell`): `error (why)` once in error, `starting (why)` at each restart after a crash.
-    const errored = lines.filter((line) => line.includes(`: error (${unread}`));
-    const restarted = lines.filter((line) =>
-      line.includes(`: starting (${unread}`)
-    );
+      .filter((line) => line.includes("[stage]"));
+    /** The stage's moves for a failure saying `why` (stage.ts `tell`): `error (why)` once in error, `starting (why)` at each restart after a crash. */
+    const movesOf = (why: string) => {
+      const lines = log.filter((line) => line.includes(why));
+      return {
+        errored: lines.filter((line) => line.includes(`: error (${why}`))
+          .length,
+        restarted: lines.filter((line) => line.includes(`: starting (${why}`))
+          .length,
+        lines: lines.map((line) => line.slice(0, 160)),
+      };
+    };
+    const unread = movesOf("Vite couldn't load vite.config.ts");
     const ESC = String.fromCharCode(27);
     kit.check(
       "28: a vite.config.ts with a syntax error is refused once in plain words (Vite couldn't load vite.config.ts, Vite's parse error, no colour codes), the stage in error once and never started again",
       !brokenCreated.match(ID)?.[1] &&
-        brokenCreated.includes(unread) &&
+        brokenCreated.includes("Vite couldn't load vite.config.ts") &&
         brokenCreated.includes("PARSE_ERROR") &&
         !brokenCreated.includes(ESC) &&
         !brokenCreated.includes("\\u001b") &&
-        errored.length === 1 &&
-        restarted.length === 0,
-      `${short(brokenCreated).slice(0, 400)}; agent log: ${errored.length} error line(s), ${restarted.length} restart line(s): ${JSON.stringify(lines.map((line) => line.slice(0, 160)))}`
+        unread.errored === 1 &&
+        unread.restarted === 0,
+      `${short(brokenCreated).slice(0, 400)}; agent log: ${JSON.stringify(unread)}`
+    );
+    const thrown = movesOf(PLUGIN_THROWS);
+    kit.check(
+      "29: a plugin throwing in configureServer is refused once with its error, the stage in error once and never started again",
+      !throwingCreated.match(ID)?.[1] &&
+        throwingCreated.includes(PLUGIN_THROWS) &&
+        thrown.errored === 1 &&
+        thrown.restarted === 0,
+      `${short(throwingCreated).slice(0, 400)}; agent log: ${JSON.stringify(thrown)}`
     );
   }
 
