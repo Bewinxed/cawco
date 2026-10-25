@@ -399,7 +399,7 @@ const takeSessionLimits = (
 import { damagedRecords, sweepRecords } from "./damaged-records";
 import { cancelCommand, runHubCommand, setCommandQueue } from "./hub-command";
 import { onToolsMoved, probeTools } from "./tools";
-import { UsageScanner } from "./usage/scanner";
+import { UsageScans } from "./usage/scans";
 import {
   archiveWorkspace,
   clearInterruptedCuts,
@@ -622,9 +622,11 @@ const tellOpencodeAccountsChanged = (): void => {
 
 /**
  * Called whenever this machine's provider accounts changed; the connection
- * fills it in, so the hub hears it and OpenCode takes it.
+ * fills it in, so the hub hears it and OpenCode takes it: with the home
+ * stores' fingerprint when the caller has just read it, else read anew.
  */
-let providerAccountsChanged: () => void = tellOpencodeAccountsChanged;
+let providerAccountsChanged: (homeStores?: string) => void =
+  tellOpencodeAccountsChanged;
 
 /**
  * The providers an account can be for here, as each harness lists them,
@@ -1644,7 +1646,7 @@ const sessionsReader = () => {
 };
 
 const attach = (
-  scanner: UsageScanner,
+  scanner: UsageScans,
   supervisor: SessionSupervisor,
   identity: MachineIdentity,
   url: string,
@@ -1846,8 +1848,8 @@ const attach = (
     let lastPiCheck = Date.now();
     const pi = harness("pi");
     let reportedProviderAccounts = providerAccountReports();
-    /** The fingerprint of pi's and OpenCode's own stores this connection last sent. */
-    let reportedHomeStores = homeStoresStamp();
+    /** The fingerprint of pi's and OpenCode's own stores this connection last sent; undefined until one is read. */
+    let reportedHomeStores: string | undefined;
     /** `report` in place of the one of its harness this connection last read, or beside the others. */
     const keepReport = (report: MachineHarnessReport): void => {
       // A machine with no Claude Code has its sentence in the report's
@@ -1995,13 +1997,13 @@ const attach = (
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own sends
       void (async () => {
         reportedProviderAccounts = providerAccountReports();
-        reportedHomeStores = homeStoresStamp();
+        reportedHomeStores = (await homeStoresStamp()) ?? reportedHomeStores;
         beat({
           ...(latestBinaryUpdate()
             ? { binaryUpdate: latestBinaryUpdate() }
             : {}),
           providerAccounts: reportedProviderAccounts,
-          homeStores: reportedHomeStores,
+          ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
         });
         await Promise.all([
           ...harnesses().map(async (adapter) => {
@@ -2044,9 +2046,9 @@ const attach = (
     // An account signed in, keyed, moved in or forgotten here: the hub hears
     // it on the next beat, and each account's OpenCode server is squared with
     // its credential.
-    providerAccountsChanged = () => {
+    providerAccountsChanged = (homeStores?: string) => {
       reportedProviderAccounts = providerAccountReports();
-      reportedHomeStores = homeStoresStamp();
+      reportedHomeStores = homeStores ?? reportedHomeStores;
       if (socket.readyState === WebSocket.OPEN) {
         send(socket, {
           verb: "heartbeat",
@@ -2055,12 +2057,20 @@ const attach = (
             at: Date.now(),
             instances: supervisor.instanceIds,
             providerAccounts: reportedProviderAccounts,
-            homeStores: reportedHomeStores,
+            ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
           } satisfies HeartbeatPayload,
         });
       }
       tellOpencodeAccountsChanged();
       reportPiSoon();
+      if (homeStores === undefined) {
+        // The stores read again, off the loop: the next beat carries it.
+        homeStoresStamp()
+          .then((stamp) => {
+            reportedHomeStores = stamp ?? reportedHomeStores;
+          })
+          .catch(() => undefined);
+      }
     };
     // An install this agent ran, or a harness finding its binary at another
     // version than it last did (tools.ts `toolsMoved`): the tools are probed
@@ -2242,14 +2252,15 @@ const attach = (
         Effect.promise(async () => {
           // A login made, refreshed or moved in pi's or OpenCode's own store
           // reaches the hub too, which moves it into an account.
+          const homeStores = await homeStoresStamp();
           if (
             !Bun.deepEquals(
               providerAccountReports(),
               reportedProviderAccounts
             ) ||
-            homeStoresStamp() !== reportedHomeStores
+            (homeStores !== undefined && homeStores !== reportedHomeStores)
           ) {
-            providerAccountsChanged();
+            providerAccountsChanged(homeStores);
           }
           if (!announced) {
             return;
@@ -3381,7 +3392,7 @@ export const startDaemon = (rediscover = false) =>
 
     // The usage scanner outlives connections too: its store (usage.db) is the
     // machine's, so a reconnect picks up where the last scan stopped.
-    const scanner = yield* Effect.sync(() => new UsageScanner());
+    const scanner = yield* Effect.sync(() => new UsageScans());
     supervisor.registerDaemonFunction("probeCapabilities", probeCapabilities);
 
     // Updates arrive only as signed builds from the hub: this one object owns

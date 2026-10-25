@@ -101,6 +101,31 @@ async function loopHeldSaid() {
   console.log(atTen);
   console.log(again);
 }
+/**
+ * The agent's stores thread, started from the binary's embedded entry,
+ * answers its reads, and the transcript index it holds parses on threads
+ * it starts itself (proof-stores.ts).
+ */
+async function storesAnswer() {
+  const child = Bun.spawn([process.execPath, "proof-stores"], {
+    env: process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
+  });
+  children.push(child);
+  const [err, out, code] = await Promise.all([
+    new Response(child.stderr).text(),
+    new Response(child.stdout).text(),
+    child.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(
+      `The binary's stores thread did not answer (exit ${code}): ${out}\n${err}`
+    );
+  }
+  console.log(out.trim().split("\n").at(-1));
+}
 async function command(args: string[]) {
   const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
   const text = await new Response(child.stdout).text();
@@ -372,6 +397,7 @@ try {
   console.log("cross-origin form refused with 403");
   await exec("proof-worker");
   await loopHeldSaid();
+  await storesAnswer();
   // The packages the binary runs from their published trees, and pi's
   // workers by the names pi gives them (proof-runtime.ts).
   await exec("proof-playwright");

@@ -822,7 +822,8 @@ export class SessiondServer {
           this.#children,
           procId,
           `${this.epoch.slice(0, 8)}-${this.#groupSerial}`,
-          this.#limits
+          this.#limits,
+          spec.workspace === true
         );
       } catch (error) {
         return ack(

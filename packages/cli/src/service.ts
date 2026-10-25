@@ -855,6 +855,26 @@ export interface ServiceSpec {
   readonly workingDirectory: string;
 }
 
+/**
+ * The CPU weight of CawCo's own services, the agent, the hub and the
+ * dashboard, the board every session and the phone are answered through:
+ * against the keeper's unit at 20, which holds every session and every
+ * build, probe and scratch fleet a delegate runs (sessiond's `cpuWeight`),
+ * and the person's own units at the kernel's 100. systemd.resource-control(5),
+ * CPUWeight=: "The allowed range is 1 to 10000. Defaults to unset, but the
+ * kernel default is 100 … The available CPU time is split up among all
+ * units within one slice relative to their CPU time weight. A higher weight
+ * means more CPU time" (freedesktop.org/software/systemd/man/latest/
+ * systemd.resource-control.html). They use little CPU, so the weight buys
+ * them their turn when they need one: on obelisk (48 cores, 2026-10-25) the
+ * agent's loop was held for seconds at a time at load 140–194 from
+ * delegates' work. Fifty to one against the fleet is our call. launchd has no
+ * weights: there these run `Interactive` ({@link ServiceSpec.processType}),
+ * not throttled, and the keeper's children inherit its `Interactive` with
+ * nothing below it.
+ */
+const OWN_CPU_WEIGHT = 1000;
+
 const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   const { root: LAYOUT_ROOT, dashboardBuild: DASHBOARD_BUILD } = layout;
   /** A unit whose process cannot start is refused, naming what is missing. */
@@ -908,6 +928,8 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       wants: [],
       restartOnSuccess: true,
       restartSec: 2,
+      cpuWeight: OWN_CPU_WEIGHT,
+      processType: "Interactive",
       check: needs(layout.hub, "hub"),
       probe: probeHub,
     },
@@ -930,6 +952,8 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       requires: [socketName("dashboard")],
       restartOnSuccess: true,
       restartSec: 2,
+      cpuWeight: OWN_CPU_WEIGHT,
+      processType: "Interactive",
       // A unit without its build can only crash-loop, so none is written. What
       // is checked is the BUILD as well as the entry: `serve.js` is there in any
       // checkout or release, and the thing that can actually be absent is the
@@ -1076,6 +1100,8 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       wants: [unitName("hub")],
       restartOnSuccess: false,
       restartSec: 5,
+      cpuWeight: OWN_CPU_WEIGHT,
+      processType: "Interactive",
       launchAgentNote: [
         "A LaunchAgent runs inside your desktop session, so it can read the login",
         "keychain Claude Code keeps its credentials in. No token needed.",

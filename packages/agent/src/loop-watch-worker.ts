@@ -21,9 +21,23 @@
  * of it, or asleep in the kernel and where), the agent's phase, the work in
  * flight and the marked section entered last, as the loop last posted them,
  * and the process's memory. Its end is said once.
+ *
+ * Where the main thread sleeps names a kernel function, not what the agent
+ * asked of it: obelisk's holds of 2026-10-25 slept in `os_acquire_mutex`,
+ * which is the NVIDIA driver's (`/proc/kallsyms`: `os_acquire_mutex
+ * [nvidia]`), its system-memory pool's shrinker taken by a task in direct
+ * reclaim, and "most of the stall is in no marked section". So each look
+ * also reads the thread's system call (`/proc/<pid>/task/<tid>/syscall`,
+ * which a process may read of itself: proc(5), "the number of the system
+ * call being executed, followed by the values of the argument registers
+ * … If the thread is blocked, but not in a system call, then the file
+ * contains -1"), the file its first argument names when that is a
+ * descriptor, and so "outside any system call" for a page fault. A hold
+ * shorter than {@link SAY_MS} is said once it ends with what the looks
+ * during it read.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, readlink } from "node:fs/promises";
 import { loopWords } from "@cawco/core/words/loop";
 import { BEAT, LEFT, SECTION, type WatchdogMessage } from "./loop-watch-shared";
 
@@ -39,6 +53,105 @@ const SAY_MS = 10_000;
 const SAY_AT_S = [10, 30, 60];
 /** Linux's clock ticks per second, in which `/proc` counts CPU time (`getconf CLK_TCK`). */
 const CLOCK_TICKS = 100;
+/** A beat this old at a look is a hold this thread reads the main thread through; one that ends before {@link SAY_MS} is said with what it read. The loop's own watch's `LATE_MS`. */
+const NOTE_MS = 1000;
+
+/**
+ * The system calls a held main thread is found in, by number, as
+ * `/proc/<pid>/task/<tid>/syscall` gives it: x86-64's
+ * (arch/x86/entry/syscalls/syscall_64.tbl) and arm64's
+ * (include/uapi/asm-generic/unistd.h). Any other is said by its number.
+ */
+const SYSCALLS: Partial<Record<string, Record<number, string>>> = {
+  x64: {
+    0: "read",
+    1: "write",
+    3: "close",
+    4: "stat",
+    5: "fstat",
+    6: "lstat",
+    7: "poll",
+    9: "mmap",
+    10: "mprotect",
+    11: "munmap",
+    12: "brk",
+    16: "ioctl",
+    17: "pread64",
+    18: "pwrite64",
+    19: "readv",
+    20: "writev",
+    23: "select",
+    28: "madvise",
+    56: "clone",
+    59: "execve",
+    61: "wait4",
+    62: "kill",
+    72: "fcntl",
+    73: "flock",
+    74: "fsync",
+    75: "fdatasync",
+    76: "truncate",
+    77: "ftruncate",
+    82: "rename",
+    87: "unlink",
+    89: "readlink",
+    202: "futex",
+    217: "getdents64",
+    230: "clock_nanosleep",
+    232: "epoll_wait",
+    257: "openat",
+    262: "newfstatat",
+    270: "pselect6",
+    271: "ppoll",
+    281: "epoll_pwait",
+    285: "fallocate",
+    332: "statx",
+    435: "clone3",
+    441: "epoll_pwait2",
+  },
+  arm64: {
+    17: "getcwd",
+    22: "epoll_pwait",
+    25: "fcntl",
+    29: "ioctl",
+    32: "flock",
+    35: "unlinkat",
+    38: "renameat",
+    45: "truncate",
+    46: "ftruncate",
+    47: "fallocate",
+    56: "openat",
+    57: "close",
+    61: "getdents64",
+    63: "read",
+    64: "write",
+    65: "readv",
+    66: "writev",
+    67: "pread64",
+    68: "pwrite64",
+    72: "pselect6",
+    73: "ppoll",
+    78: "readlinkat",
+    79: "newfstatat",
+    80: "fstat",
+    82: "fsync",
+    83: "fdatasync",
+    98: "futex",
+    115: "clock_nanosleep",
+    129: "kill",
+    214: "brk",
+    215: "munmap",
+    220: "clone",
+    221: "execve",
+    222: "mmap",
+    226: "mprotect",
+    233: "madvise",
+    260: "wait4",
+    291: "statx",
+    435: "clone3",
+    441: "epoll_pwait2",
+  },
+};
 
 let shared: Float64Array | undefined;
 const sections = new Map<number, string>();
@@ -50,16 +163,43 @@ let owed: number | undefined;
 /** The main thread's CPU time (ticks) and when it was read, for its share since. */
 let lastCpu: { at: number; ticks: number } | undefined;
 
-/** The main thread as `/proc` says it: its state, its CPU share since the last read, where it sleeps. Empty off Linux. */
+/**
+ * The system call the main thread is in, as `/proc` says it, with the file
+ * its first argument names when that is one of this process's descriptors;
+ * "outside any system call" when blocked in the kernel without one (a page
+ * fault); empty while it runs, or when it cannot be read.
+ */
+const systemCall = async (task: string): Promise<string> => {
+  const fields = (await readFile(`${task}/syscall`, "utf8").catch(() => ""))
+    .trim()
+    .split(" ");
+  const [number] = fields;
+  if (!number || number === "running") {
+    return "";
+  }
+  if (number === "-1") {
+    return loopWords.noSyscall();
+  }
+  const name = SYSCALLS[process.arch]?.[Number(number)] ?? `#${number}`;
+  const first = Number(fields[1]);
+  const fd =
+    Number.isSafeInteger(first) && first >= 0 && first < 65_536
+      ? await readlink(`/proc/self/fd/${first}`).catch(() => "")
+      : "";
+  return loopWords.inSyscall(name, fd ? `fd ${first}, ${fd}` : "");
+};
+
+/** The main thread as `/proc` says it: its state, its CPU share since the last read, where it sleeps and in which system call. Empty off Linux. */
 const mainThread = async (): Promise<string> => {
   if (process.platform !== "linux") {
     return "";
   }
   const task = `/proc/self/task/${process.pid}`;
   try {
-    const [stat, wchan] = await Promise.all([
+    const [stat, wchan, call] = await Promise.all([
       readFile(`${task}/stat`, "utf8"),
       readFile(`${task}/wchan`, "utf8").catch(() => ""),
+      systemCall(task),
     ]);
     // After the command's closing paren: state, then 10 fields to utime and stime.
     const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
@@ -80,10 +220,11 @@ const mainThread = async (): Promise<string> => {
     if (state === "R") {
       return loopWords.onCpu(share);
     }
-    if (state === "D") {
-      return loopWords.onDisk(where);
-    }
-    return loopWords.asleep(state, where, share);
+    const asleep =
+      state === "D"
+        ? loopWords.uninterruptible(where)
+        : loopWords.asleep(state, where, share);
+    return call ? `${asleep}, ${call}` : asleep;
   } catch {
     return "";
   }
@@ -139,6 +280,28 @@ const say = async (kind: "held" | "deaf", ms: number): Promise<void> => {
 
 /** The main thread as the last look read it: read each look, so its CPU share spans one second. */
 let thread = "";
+/** A hold under way that has not been said: when it began, and what each look during it read of the main thread. */
+let noted: { seen: Map<string, number>; since: number } | undefined;
+
+/** A hold that ended before it was said, said once with what the looks during it read. */
+const sayNoted = (now: number): void => {
+  if (!noted) {
+    return;
+  }
+  if (noted.seen.size === 0) {
+    noted = undefined;
+    return;
+  }
+  const looks = [...noted.seen.values()].reduce((sum, n) => sum + n, 0);
+  const seen = [...noted.seen]
+    .sort((a, b) => b[1] - a[1])
+    .map(([what, n]) => `${what} (${n} of ${looks})`)
+    .join("; ");
+  console.warn(
+    `${loopWords.heldSeen(Math.round((now - noted.since) / 1000))}: ${seen}`
+  );
+  noted = undefined;
+};
 
 const look = async (): Promise<void> => {
   if (!shared) {
@@ -154,6 +317,14 @@ const look = async (): Promise<void> => {
   } else if (deaf >= SAY_MS) {
     kind = "deaf";
   }
+  if (held >= NOTE_MS && !kind) {
+    noted ??= { seen: new Map(), since: now - held };
+    if (thread) {
+      noted.seen.set(thread, (noted.seen.get(thread) ?? 0) + 1);
+    }
+  } else if (held < NOTE_MS) {
+    sayNoted(now);
+  }
   if (!kind) {
     if (stall && stall.said > 0) {
       console.warn(
@@ -163,6 +334,8 @@ const look = async (): Promise<void> => {
     stall = undefined;
     return;
   }
+  // Said while it lasts from here on: not again once it ends.
+  noted = undefined;
   const ms = kind === "held" ? held : deaf;
   if (stall?.kind !== kind) {
     stall = { kind, since: now - ms, said: 0 };

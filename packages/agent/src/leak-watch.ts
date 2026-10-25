@@ -108,8 +108,8 @@ const WORKING_SHARE = 0.25;
 const NAMED = 8;
 /** Where the cgroup v2 hierarchy is mounted. */
 const CGROUP_ROOT = "/sys/fs/cgroup";
-/** The keeper's group of its children's own groups (sessiond cgroup.ts `CHILDREN_GROUP`). */
-const CHILDREN_GROUP = "children";
+/** The keeper's groups of its children's own groups: `children`, and `children/workspaces` for a workspace's own processes (sessiond cgroup.ts `CHILDREN_GROUP`, `WORKSPACES_GROUP`). */
+const CHILDREN_GROUPS = ["/children", "/children/workspaces"];
 /** `/proc/<pid>/status`'s pids of a process, one per pid namespace it is in, innermost last. */
 const NS_PID = /^NSpid:\s*(.+)$/m;
 const BLANKS = /\s+/;
@@ -156,7 +156,8 @@ const UNNAMEABLE = /[^A-Za-z0-9_-]/g;
 
 /**
  * Linux: the cgroup dir the keeper made for child `procId` (process `pid`),
- * when it made one: `children/<procId>-<serial>` (sessiond cgroup.ts
+ * when it made one: `children/<procId>-<serial>`, or
+ * `children/workspaces/<procId>-<serial>` (sessiond cgroup.ts
  * `openChildGroup`). A keeper with no cgroups of its own runs its children
  * in its own group, which may itself be another keeper's child's (a scratch
  * fleet inside a workspace's boundary): that group is not this child's.
@@ -170,7 +171,7 @@ const ownGroup = async (
   }
   const path = await cgroupOf(pid);
   return path &&
-    dirname(path).endsWith(`/${CHILDREN_GROUP}`) &&
+    CHILDREN_GROUPS.some((group) => dirname(path).endsWith(group)) &&
     basename(path).startsWith(`${procId.replace(UNNAMEABLE, "_")}-`)
     ? join(CGROUP_ROOT, path)
     : undefined;

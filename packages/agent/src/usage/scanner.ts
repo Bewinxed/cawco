@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { UsageBucket, UsageTokens } from "@cawco/core";
@@ -15,8 +15,6 @@ import {
   listClaudeFiles,
   opencodeDatabases,
 } from "@cawco/core/paths";
-import { syncSection } from "../loop-watch";
-import { gauge } from "../memory";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";
@@ -26,7 +24,8 @@ import type { ScannedRecord } from "./types";
  * usage into absolute bucket totals the hub upserts by bucket id. Incremental
  * scans compare `(mtimeMs, size)` per Claude transcript and a `time_updated`
  * watermark per OpenCode database; a full rebuild re-heals and re-costs the store when
- * its result could differ ({@link UsageScanner.scan}).
+ * its result could differ ({@link UsageScanner.scan}). It runs on the
+ * agent's stores thread (stores/usage-host.ts), never on its loop.
  *
  * Its state lives on disk, in `usage.db` under the agent's data dir: the dedup
  * set holds one row per assistant message the machine ever wrote, so it grows
@@ -272,7 +271,6 @@ const eachLine = async (
     // the loop gets no turn between them unless given one, and a 413 MB
     // transcript's first read held it 560 ms.
     if (performance.now() - turnAt > YIELD_MS) {
-      // biome-ignore lint/performance/noAwaitInLoops: the await is the loop's turn
       await new Promise((resolve) => setImmediate(resolve));
       turnAt = performance.now();
     }
@@ -303,9 +301,6 @@ const eachLine = async (
 export class UsageScanner {
   readonly #db: Database;
   readonly #path: string;
-  readonly #firstScan = Promise.withResolvers<void>();
-  /** Settles once the first scan, full or incremental, has ended. */
-  readonly scanned = this.#firstScan.promise;
 
   /** Where each kept message's `claude` row is, by its key. */
   readonly #claudeRows = new RowIndex();
@@ -434,11 +429,6 @@ export class UsageScanner {
     );
     this.#untouch = db.query<unknown, []>(
       "UPDATE buckets SET touched = 0 WHERE touched = 1"
-    );
-    gauge("usage.dbMB", () => Math.round(statSync(this.#path).size / 2 ** 20));
-    gauge(
-      "usage.rowIndexKeys",
-      () => this.#claudeRows.size + this.#sideRows.size
     );
     this.#loadRows();
   }
@@ -669,11 +659,9 @@ export class UsageScanner {
     // a 413 MB transcript's 28,000 usage records held the agent's loop
     // 700 ms (1.0-1.5 s on a loaded machine) at its first scan.
     for (let at = 0; at < records.length; at += INGEST_PART) {
-      syncSection("usage records folded in", () => {
-        for (const rec of records.slice(at, at + INGEST_PART)) {
-          this.#ingest(rec);
-        }
-      });
+      for (const rec of records.slice(at, at + INGEST_PART)) {
+        this.#ingest(rec);
+      }
       // biome-ignore lint/performance/noAwaitInLoops: the await is the loop's turn between parts
       await new Promise((resolve) => setImmediate(resolve));
     }
@@ -779,28 +767,36 @@ export class UsageScanner {
    * that differ from the store's are what make a rebuild due.
    */
   async scan(now: number): Promise<UsageBucket[]> {
-    try {
-      await refreshPricing();
-      if (this.#rebuildDue()) {
-        await this.#rebuild();
-      }
-      let failure: unknown;
-      let buckets: UsageBucket[] = [];
-      await this.#inTransaction(async () => {
-        failure = await this.#incremental();
-        // A failed tick reports nothing, so it untouches nothing: what it
-        // folded in is reported by the next one.
-        if (failure === undefined) {
-          buckets = this.#reportBuckets(now);
-        }
-      });
-      if (failure !== undefined) {
-        throw failure;
-      }
-      return buckets;
-    } finally {
-      this.#firstScan.resolve();
+    await refreshPricing();
+    if (this.#rebuildDue()) {
+      await this.#rebuild();
     }
+    let failure: unknown;
+    let buckets: UsageBucket[] = [];
+    await this.#inTransaction(async () => {
+      failure = await this.#incremental();
+      // A failed tick reports nothing, so it untouches nothing: what it
+      // folded in is reported by the next one.
+      if (failure === undefined) {
+        buckets = this.#reportBuckets(now);
+      }
+    });
+    if (failure !== undefined) {
+      throw failure;
+    }
+    return buckets;
+  }
+
+  /** The store's size on disk (MB) and the keys its row indexes hold, as the memory line says them. */
+  async gauges(): Promise<{ dbMB: number; rowIndexKeys: number }> {
+    const size = await stat(this.#path).then(
+      (info) => info.size,
+      () => 0
+    );
+    return {
+      dbMB: Math.round(size / 2 ** 20),
+      rowIndexKeys: this.#claudeRows.size + this.#sideRows.size,
+    };
   }
 
   /**

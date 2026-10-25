@@ -43,6 +43,27 @@ async function shardBySize(files: string[], shardCount: number): Promise<string[
   return shards.filter((s) => s.files.length > 0).map((s) => s.files);
 }
 
+/**
+ * Where the parse worker is. Compiled, it is the binary's entry
+ * `scripts/binary/transcript-worker.js`, found from the binary's root: this
+ * code runs both in the binary's own entry, at the root, and in the agent's
+ * stores thread (agent stores/worker.ts), whose entry is itself under
+ * `scripts/binary/`, so a path from `import.meta.url` alone names
+ * `scripts/binary/scripts/binary/…` there, which is no entry. From source
+ * (Bun, .ts) or from dist (built .js), it is beside this file.
+ */
+function workerUrl(): URL {
+  const here = import.meta.url;
+  if (STANDALONE) {
+    const root = "/root/";
+    return new URL(
+      "scripts/binary/transcript-worker.js",
+      here.slice(0, here.lastIndexOf(root) + root.length),
+    );
+  }
+  return new URL(here.endsWith(".ts") ? "./worker.ts" : "./worker.js", here);
+}
+
 function defaultWorkerCount(fileCount: number): number {
   const cores =
     typeof navigator !== "undefined" && navigator.hardwareConcurrency
@@ -74,9 +95,7 @@ export async function parseMany(
     shards.map(
       (shard) =>
         new Promise<WorkerFileResult[]>((resolve, reject) => {
-          // Running from source (Bun, .ts) or from dist (built .js).
-          const workerFile = STANDALONE ? "./scripts/binary/transcript-worker.js" : import.meta.url.endsWith(".ts") ? "./worker.ts" : "./worker.js";
-          const worker = new Worker(new URL(workerFile, import.meta.url));
+          const worker = new Worker(workerUrl());
           // The shard's files, gathered from the worker's parts, each part
           // taken in on a turn of its own (worker.ts `PART_ITEMS`).
           const results: WorkerFileResult[] = [];

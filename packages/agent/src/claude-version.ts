@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core";
 import { writeJsonAtomic } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -58,16 +58,16 @@ interface VersionRead {
 
 /** The read of the binary `claude` resolved to last; the one kept on disk until the first call. */
 let read: VersionRead | undefined;
-/** Whether the version kept on disk has been taken up ({@link keptRead}). */
-let loaded = false;
+/** The version kept on disk, read once, off the loop ({@link keptRead}). */
+let loaded: Promise<VersionRead | undefined> | undefined;
 /** The last version a read answered, which a change is said against. */
 let known: string | undefined;
 
 /** The version kept on disk by the last read that answered, on this agent or one before it. */
-const keptRead = (): VersionRead | undefined => {
+const keptRead = async (): Promise<VersionRead | undefined> => {
   let kept: { binary?: unknown; version?: unknown };
   try {
-    kept = JSON.parse(readFileSync(claudeVersionPath(), "utf8"));
+    kept = JSON.parse(await readFile(claudeVersionPath(), "utf8"));
   } catch {
     return undefined;
   }
@@ -137,23 +137,29 @@ const readVersion = (path: string, binary: string): VersionRead => {
  * the last says so in the agent's log; the sessions on the old one find out
  * on the supervisor's next sweep ({@link import("./harness").HarnessSession.outdated}).
  */
-export const claudeHostVersion = (): Promise<Bounded<string | undefined>> => {
-  const none = Promise.resolve({ kind: "answered" as const, value: undefined });
+export const claudeHostVersion = async (): Promise<
+  Bounded<string | undefined>
+> => {
+  const none = { kind: "answered" as const, value: undefined };
   const path = resolveClaudeExecutable();
   if (!path) {
     return none;
   }
+  // The binary and the version kept on disk, read off the loop; from here
+  // to the read's start nothing awaits, so calls at once share one read.
   let binary: string;
   try {
-    const real = realpathSync(path);
-    const { mtimeMs, size } = statSync(real);
+    const real = await realpath(path);
+    const { mtimeMs, size } = await stat(real);
     binary = `${real}:${mtimeMs}:${size}`;
   } catch {
     return none;
   }
-  if (!loaded) {
-    loaded = true;
-    read = keptRead();
+  if (loaded) {
+    await loaded;
+  } else {
+    loaded = keptRead();
+    read = await loaded;
   }
   if (read?.binary !== binary) {
     if (read?.child && read.child.exitCode === null) {

@@ -17,7 +17,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AccountBorrowFrame,
@@ -32,7 +32,7 @@ import {
   type ProviderSigninResult,
   sameIdentity,
 } from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   accountCredentialPath,
   credentialAccountIds,
@@ -51,8 +51,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { removeAccountDir } from "./accounts";
-import { readOpencodeDb } from "./harnesses/opencode-db";
-import { syncSection } from "./loop-watch";
+import { storeRead } from "./stores/client";
 
 // ── The store ────────────────────────────────────────────────────────────
 
@@ -962,62 +961,51 @@ export const setOpencodeAccountsHost = (host: OpencodeAccountsHost): void => {
   opencodeHost = host;
 };
 
-/** The database of the machine's OpenCode server, where OpenCode's own sign-ins are. */
-const machineOpencodeDb = (): string => join(opencodeDataDir(), "opencode.db");
-
 /**
- * OpenCode's own sign-ins as their rows stand, read-only: each one's id and
- * when it last changed (a sign-in, a refresh, a switch, a removal all move
- * it). Never their values. "absent" for a database 2.0 has not made or
- * converted yet.
+ * How long a read of OpenCode's own sign-ins is given on the agent's stores
+ * thread (stores/opencode-reads.ts), ms: the machine's OpenCode database is
+ * another process's live store, multi-gigabyte on obelisk, and a read of it
+ * waits on its disk and its writer's locks there, never on the loop. Past
+ * this the read is unanswered and its caller keeps what it had. Our call:
+ * five times the thread's own wait on a lock.
  */
-const opencodeOwnRows = (): string =>
-  syncSection("OpenCode's own sign-ins read (SQLite)", () =>
-    readOpencodeDb(machineOpencodeDb(), "absent", (db) =>
-      JSON.stringify(
-        db.query("SELECT id, time_updated FROM credential ORDER BY id").all()
-      )
-    )
-  );
+const OWN_READ_MS = 5000;
+
+/** A read of OpenCode's own sign-ins that must answer: its value, or a refusal saying it did not. */
+const answered = <T>(read: Bounded<T>): T => {
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `OpenCode's own sign-ins were not read within ${Math.round(read.after / 1000)} s (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /**
  * When each of OpenCode's own sign-ins on this machine last changed (a
  * sign-in, a refresh, a removal), by credential id, read-only, never their
- * values. Empty for a database 2.0 has not made yet.
+ * values. Empty for a database 2.0 has not made yet; unanswered while the
+ * stores thread is held.
  */
-export const opencodeOwnChanges = (): Record<string, number> =>
-  syncSection("OpenCode's own sign-ins read (SQLite)", () =>
-    readOpencodeDb(machineOpencodeDb(), {}, (db) =>
-      Object.fromEntries(
-        (
-          db.query("SELECT id, time_updated FROM credential").all() as {
-            id: string;
-            time_updated: number;
-          }[]
-        ).map((row) => [row.id, row.time_updated])
-      )
-    )
-  );
+export const opencodeOwnChanges = (): Promise<
+  Bounded<Record<string, number>>
+> => storeRead("opencode.ownChanges", undefined, OWN_READ_MS);
 
 /**
  * What kind each of OpenCode's own active sign-ins on this machine is
  * (`oauth`, `key`, …), by its integration, read-only: the type alone, never
  * its value. Empty for a database 2.0 has not made yet.
  */
-export const opencodeOwnSignInTypes = (): Record<string, string> =>
-  readOpencodeDb(machineOpencodeDb(), {}, (db) =>
-    Object.fromEntries(
-      (
-        db
-          .query(
-            "SELECT integration_id, json_extract(value, '$.type') AS type FROM credential WHERE active = 1"
-          )
-          .all() as { integration_id: string | null; type: string | null }[]
-      ).flatMap((row) =>
-        row.integration_id && row.type ? [[row.integration_id, row.type]] : []
-      )
-    )
-  );
+export const opencodeOwnSignInTypes = async (): Promise<
+  Record<string, string>
+> =>
+  answered(await storeRead("opencode.ownSignInTypes", undefined, OWN_READ_MS));
 
 /**
  * The providers OpenCode's own sign-ins on this machine are for (each active
@@ -1025,40 +1013,40 @@ export const opencodeOwnSignInTypes = (): Record<string, string> =>
  * machine's server sends requests to with them. None for a database 2.0 has
  * not made yet.
  */
-export const opencodeOwnIntegrations = (): string[] =>
-  readOpencodeDb(machineOpencodeDb(), [] as string[], (db) =>
-    (
-      db
-        .query(
-          "SELECT DISTINCT integration_id FROM credential WHERE active = 1"
-        )
-        .all() as { integration_id: string | null }[]
-    ).flatMap((row) => (row.integration_id ? [row.integration_id] : []))
-  );
+export const opencodeOwnIntegrations = async (): Promise<string[]> =>
+  answered(await storeRead("opencode.ownIntegrations", undefined, OWN_READ_MS));
 
 /**
  * A fingerprint of pi's and OpenCode's own stores as they are now: it
  * changes whenever a login is made, refreshed or moved out there, so the hub
  * moves a login made under a connected machine at once
  * ({@link HeartbeatPayload.homeStores}). Never the stores' contents.
+ * OpenCode's are its sign-ins' ids and when each last changed, read on the
+ * stores thread; undefined when that read is unanswered, so nothing is
+ * taken for a change.
  */
-export const homeStoresStamp = (): string => {
-  const hash = createHash("sha256");
-  try {
-    hash.update(readFileSync(piStorePath()));
-  } catch {
-    hash.update("absent");
+export const homeStoresStamp = async (): Promise<string | undefined> => {
+  const [pi, own] = await Promise.all([
+    readFile(piStorePath()).catch(() => "absent"),
+    storeRead("opencode.ownRows", undefined, OWN_READ_MS),
+  ]);
+  if (own.kind === "unanswered") {
+    return;
   }
-  hash.update("\u0000");
-  hash.update(opencodeOwnRows());
-  return hash.digest("hex").slice(0, 16);
+  return createHash("sha256")
+    .update(pi)
+    .update("\u0000")
+    .update(own.value)
+    .digest("hex")
+    .slice(0, 16);
 };
 
 type Json = Record<string, Record<string, unknown>>;
 
-const readJson = (path: string): Json => {
+/** pi's or OpenCode's own store at `path`, read off the loop; empty when absent or unreadable. */
+const readJson = async (path: string): Promise<Json> => {
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as Json;
+    return JSON.parse(await readFile(path, "utf8")) as Json;
   } catch {
     return {};
   }
@@ -1189,7 +1177,7 @@ const readStoreEntry = async (
     return await opencodeEntry(storeProvider);
   }
   const path = piStorePath();
-  const entry = readJson(path)[storeProvider];
+  const entry = (await readJson(path))[storeProvider];
   const credential = entry ? piCredentialOf(entry) : undefined;
   return credential
     ? { credential, drop: () => dropPiEntry(path, storeProvider, credential) }
@@ -1216,7 +1204,7 @@ const providerOfEntry = (
  * answering for a Copilot sign-in) is not listed, and the agent says why.
  */
 export const readHomeCredentials = async (): Promise<HomeCredential[]> => {
-  const pi = Object.entries(readJson(piStorePath())).map(
+  const pi = Object.entries(await readJson(piStorePath())).map(
     ([storeProvider, entry]) => ({
       store: "pi" as const,
       storeProvider,
@@ -1424,7 +1412,7 @@ const dropPiEntry = async (
   storeProvider: string,
   taken: Credential
 ): Promise<boolean> => {
-  const now = readJson(path);
+  const now = await readJson(path);
   const entry = now[storeProvider];
   const still = entry ? piCredentialOf(entry) : undefined;
   if (!(still && sameGrant(still, taken))) {
@@ -1716,7 +1704,7 @@ export const dropOpencodeMarkers = async (): Promise<void> => {
     stale.map((file) => rm(join(sessionIdentityDir(), file), { force: true }))
   );
   const path = join(opencodeDataDir(), "auth.json");
-  const store = readJson(path);
+  const store = await readJson(path);
   const kept = Object.fromEntries(
     Object.entries(store).filter(
       ([, entry]) =>

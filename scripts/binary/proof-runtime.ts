@@ -377,6 +377,12 @@ globalThis.__cawcoCanvas = {
   const { HOLD_MS, SHORT_HOLD_MS, holdLoop } =
     await import("./proof-loop-held");
   holdLoop(Bun.argv[3] === "short" ? SHORT_HOLD_MS : HOLD_MS);
+} else if (verb === "proof-stores") {
+  // The agent's stores thread from the binary's own entry, and the parse
+  // threads its transcript index starts from inside it (proof-stores.ts).
+  const { proveStores } = await import("./proof-stores");
+  await proveStores();
+  process.exit(0);
 } else {
   throw new Error(`Unknown proof command ${verb}`);
 }

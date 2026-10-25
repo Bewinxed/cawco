@@ -812,6 +812,7 @@ const judgeFor = async (
           ...BUN_SCRIPT_ENV,
           PATH: SYSTEM_PATH,
         },
+        workspace: true,
       });
       await ready(client, procId, JUDGE_READY, "its judge").catch(
         (error: Error) => {
@@ -7933,7 +7934,7 @@ const launch = async (
   if (made.exitCode !== 0) {
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
-  await client.spawnProc(procId, plan.spec);
+  await client.spawnProc(procId, { ...plan.spec, workspace: true });
   const readyAt = await ready(client, procId, READY, "the boundary").catch(
     (error: Error) => {
       throw refusal(ref.id, error.message);

@@ -1,6 +1,4 @@
-import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -314,48 +312,6 @@ const ACCOUNT_RECORD =
 /** Every record file, of any keeper of this home, the machine's server's or an account's. */
 const ANY_RECORD =
   /^opencode-server-[0-9a-f]{16}(-account-[A-Za-z0-9_-]+)?\.json$/;
-
-/**
- * The OpenCode 1.x database in `dataHome` (`<dataHome>/opencode/opencode.db`,
- * the same file 2.0 opens), copied whole beside itself before a 2.0 server
- * first starts on it, and the copy's path; undefined when there is nothing of
- * 1.x's to keep. 2.0 converts a 1.x database in place on its first start,
- * once and one way, adding its own tables beside 1.x's (settled #10). Its
- * sessions table, `session_v2`, is the one a 1.x database lacks: 1.18.34's
- * own schema already has `session_message`, `credential` and `event`
- * (observed on a database 1.18.34 made fresh), so a file with `session_v2`
- * is converted already, and a file 1.x never wrote (no `message` table)
- * holds no 1.x history. The copy is SQLite's own `VACUUM INTO`, consistent
- * whatever else has the file open.
- */
-export const backupV1Database = (dataHome: string): string | undefined => {
-  const path = join(dataHome, "opencode", "opencode.db");
-  if (!existsSync(path)) {
-    return;
-  }
-  const db = new Database(path, { readonly: true });
-  try {
-    const tables = new Set(
-      db
-        .query<{ name: string }, []>(
-          "SELECT name FROM sqlite_master WHERE type = 'table'"
-        )
-        .all()
-        .map((row) => row.name)
-    );
-    if (tables.has("session_v2") || !tables.has("message")) {
-      return;
-    }
-    const backup = `${path}.v1-backup-${new Date().toISOString().replaceAll(":", "-")}`;
-    db.run("VACUUM INTO ?", [backup]);
-    console.info(
-      `[opencode] ${path} is OpenCode 1.x's: backed up to ${backup} before OpenCode 2.0 converts it`
-    );
-    return backup;
-  } finally {
-    db.close();
-  }
-};
 
 /** A record holds each generation's password: written whole, owner-only. */
 const writeRecord = async (path: string, record: unknown): Promise<void> => {

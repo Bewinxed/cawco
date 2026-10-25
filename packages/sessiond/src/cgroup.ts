@@ -18,11 +18,25 @@
  * Claude session 199 tasks and 1.7 GB, an OpenCode server 117 tasks and
  * 1.5 GB. {@link CHILD_TASKS} is sized from that.
  *
- * Memory and CPU limits are the operator's to set, on the hub, and off until
- * they are (core `SessionLimits`): with none set, nothing is written for
- * them, and neither controller is turned on below `children`. The cpu
- * controller is on in the delegated cgroup itself, for the keeper's weight
- * against the children's ({@link KEEPER_CPU_WEIGHT}).
+ * Memory and CPU limits per child are the operator's to set, on the hub,
+ * and off until they are (core `SessionLimits`): with none set, nothing is
+ * written for them. The cpu controller is on in the delegated cgroup itself,
+ * for the keeper's weight against the children's ({@link KEEPER_CPU_WEIGHT}).
+ *
+ * A workspace's own processes (its boundary and its judge: core `ProcSpec`
+ * `workspace`) start in {@link WORKSPACES_GROUP} inside `children`, under one
+ * memory ceiling, `memory.high` at {@link WORKSPACES_MEMORY_SHARE} of the
+ * machine, when the unit delegates memory. Why (2026-10-25, obelisk, 188 GB,
+ * no swap): delegates' builds and probes held 121 GB, the machine's free
+ * memory sat at its minimum, and every task that allocated went into the
+ * kernel's direct reclaim, where one shrinker of the NVIDIA driver's takes a
+ * sleeping lock (kernel-open/nvidia/nv-vm.c `nv_mem_pool_shrinker_count`:
+ * `os_acquire_mutex(mem_pool->lock)`): the agent's main thread queued there
+ * behind every other reclaimer for up to 105 s. Past `memory.high` a group's
+ * own tasks are "throttled and put under heavy reclaim pressure", inside the
+ * group: a reclaim the group runs for itself calls only the shrinkers that
+ * reclaim per group, which the NVIDIA one is not, and the rest of the machine
+ * keeps its memory.
  *
  * The rules this relies on, from the kernel's cgroup v2 document
  * (https://docs.kernel.org/admin-guide/cgroup-v2.html):
@@ -90,6 +104,20 @@ import { TASK_RESERVE } from "./tasks";
 export const KEEPER_LEAF = "keeper";
 /** Where its children's groups are. */
 export const CHILDREN_GROUP = "children";
+/** Inside `children`, where the groups of the workspaces' own processes are (core `ProcSpec` `workspace`). */
+export const WORKSPACES_GROUP = "workspaces";
+/**
+ * The share of the machine's memory the workspaces' processes hold before
+ * they are throttled and reclaimed inside their own group: `memory.high`,
+ * "the main mechanism to control memory usage. If a cgroup's usage goes
+ * over the high boundary, the processes of the cgroup are throttled and put
+ * under heavy reclaim pressure", which, unlike `memory.max`, invokes no OOM
+ * killer (https://docs.kernel.org/admin-guide/cgroup-v2.html, memory.high).
+ * The rest is the person's own sessions and apps and CawCo's services: on
+ * obelisk (188 GB) those held about 37 GB on 2026-10-25, and 15% is 28 GB
+ * with the services' page cache reclaimable. Our call.
+ */
+export const WORKSPACES_MEMORY_SHARE = 0.85;
 /**
  * Each child's task ceiling: about 17 times the largest child tree measured
  * on obelisk (469 tasks, 2026-10-13; the largest Claude session was 199, an
@@ -137,6 +165,8 @@ export interface Children {
   root: string;
   /** The delegated cgroup above it. */
   top: string;
+  /** `children/workspaces`, which holds the group of each workspace's own process ({@link WORKSPACES_GROUP}). */
+  workspaces: string;
 }
 
 /** One child's cgroup, as {@link openChildGroup} made it. */
@@ -167,6 +197,8 @@ export interface CgroupSystem {
     unit: string,
     manager: "user" | "system"
   ) => Promise<"yes" | "no" | { asked: string }>;
+  /** Bytes of RAM, which the workspaces' memory ceiling is a share of. */
+  memory: number;
   pid: number;
   /** The cgroup v2 mount. */
   root: string;
@@ -205,6 +237,7 @@ const askSystemd: CgroupSystem["delegation"] = async (unit, manager) => {
 /** This machine, as the keeper finds it. */
 export const LINUX: CgroupSystem = {
   root: "/sys/fs/cgroup",
+  memory: totalmem(),
   pid: process.pid,
   selfCgroup: () => readFile("/proc/self/cgroup", "utf8"),
   delegation: askSystemd,
@@ -329,30 +362,38 @@ export async function placeChildren(
     const limit = await tightestLimit(system.root, top);
     const group = join(top, CHILDREN_GROUP);
     const max = limit === undefined ? undefined : limit - TASK_RESERVE;
+    const workspaces = join(group, WORKSPACES_GROUP);
     await mkdir(group, { recursive: true });
+    await sweepGroups(workspaces);
     await sweepGroups(group);
     if (max !== undefined) {
       await writeFile(join(group, "pids.max"), String(max));
     }
     // Each child's own pids.max needs the controller on below `children`,
-    // which therefore holds no process of its own: only their groups.
+    // and below `workspaces`, which therefore hold no process of their own:
+    // only their groups.
     await writeFile(join(group, "cgroup.subtree_control"), "+pids");
+    await mkdir(workspaces, { recursive: true });
+    await writeFile(join(workspaces, "cgroup.subtree_control"), "+pids");
     const pool =
       max === undefined
         ? "no task limit applies above them"
         : `all of them under pids.max ${max} (${limit}, less ${TASK_RESERVE} kept for the keeper)`;
     const weighed = await weighKeeper(top, cpu);
+    const children: Children = {
+      root: system.root,
+      top,
+      group,
+      workspaces,
+      cpu,
+      memory,
+      enabled: new Set(),
+      ...(max === undefined ? {} : { max }),
+    };
+    const ceiled = await ceilWorkspaces(children, system.memory);
     return {
-      children: {
-        root: system.root,
-        top,
-        group,
-        cpu,
-        memory,
-        enabled: new Set(),
-        ...(max === undefined ? {} : { max }),
-      },
-      said: `each child runs in a cgroup of its own under ${group}, under pids.max ${CHILD_TASKS}, ${pool}; ${weighed}; ${optionalSaid(memory, cpu)}`,
+      children,
+      said: `each child runs in a cgroup of its own under ${group}, under pids.max ${CHILD_TASKS}, ${pool}; ${weighed}; ${ceiled}; ${optionalSaid(memory, cpu)}`,
     };
   } catch (error) {
     return {
@@ -382,7 +423,7 @@ async function weighKeeper(top: string, cpu: boolean): Promise<string> {
   }
 }
 
-/** Turns an optional controller on for the children: in the delegated cgroup, then in `children`. Once. */
+/** Turns an optional controller on for the children: in the delegated cgroup, then in `children` and `workspaces`. Once. */
 async function enable(
   children: Children,
   controller: "memory" | "cpu"
@@ -390,15 +431,33 @@ async function enable(
   if (children.enabled.has(controller)) {
     return;
   }
-  await writeFile(
-    join(children.top, "cgroup.subtree_control"),
-    `+${controller}`
-  );
-  await writeFile(
-    join(children.group, "cgroup.subtree_control"),
-    `+${controller}`
-  );
+  for (const group of [children.top, children.group, children.workspaces]) {
+    // biome-ignore lint/performance/noAwaitInLoops: each level's controller needs the one above it on first
+    await writeFile(join(group, "cgroup.subtree_control"), `+${controller}`);
+  }
   children.enabled.add(controller);
+}
+
+/**
+ * The workspaces' processes' memory ceiling ({@link WORKSPACES_MEMORY_SHARE}
+ * of `memory` bytes) on `workspaces`, when the unit delegates memory. What
+ * the start-up line says of it, including why it could not be.
+ */
+async function ceilWorkspaces(
+  children: Children,
+  memory: number
+): Promise<string> {
+  if (!children.memory) {
+    return `the workspaces' processes have no memory ceiling: memory isn't delegated here (the unit needs ${DELEGATE_LINE})`;
+  }
+  const high = Math.floor(memory * WORKSPACES_MEMORY_SHARE);
+  try {
+    await enable(children, "memory");
+    await writeFile(join(children.workspaces, "memory.high"), String(high));
+    return `the workspaces' processes run under ${children.workspaces}, memory.high ${Math.round(high / 2 ** 30)} GiB (${WORKSPACES_MEMORY_SHARE * 100}% of the machine)`;
+  } catch (error) {
+    return `the workspaces' processes have no memory ceiling: memory.high could not be written (${error instanceof Error ? error.message : String(error)})`;
+  }
 }
 
 /** What the machine has to give, which the hub's percents are of. */
@@ -418,7 +477,8 @@ export const THIS_MACHINE: Machine = {
  * child is in it: its task ceiling always ({@link CHILD_TASKS}), and the
  * memory and CPU the hub set, when it set them and the unit delegates them.
  * `serial` keeps the name unique: a relaunch reuses its procId while the
- * child before it may still be ending in its own group. Throws when the
+ * child before it may still be ending in its own group. A workspace's own
+ * process (`workspace`) goes under {@link WORKSPACES_GROUP}. Throws when the
  * group cannot be made: the child is then not started, rather than started
  * without its ceiling.
  */
@@ -427,10 +487,11 @@ export async function openChildGroup(
   procId: string,
   serial: string,
   limits: SessionLimits | undefined,
+  workspace: boolean,
   machine: Machine = THIS_MACHINE
 ): Promise<ChildGroup> {
   const name = `${procId.replace(UNNAMEABLE, "_")}-${serial}`;
-  const path = join(children.group, name);
+  const path = join(workspace ? children.workspaces : children.group, name);
   await mkdir(path);
   const unapplied: string[] = [];
   try {

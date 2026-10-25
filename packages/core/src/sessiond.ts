@@ -45,6 +45,13 @@ export interface ProcSpec {
    * harness server's (`serverEnvironment`: no `CAWCO_*` at all).
    */
   inherit?: "server" | "session";
+  /**
+   * A workspace's own process (its boundary, where a delegate's builds,
+   * probes and scratch fleets run, or its judge): on Linux the keeper starts
+   * it under the workspaces' memory ceiling (sessiond cgroup.ts
+   * `WORKSPACES_GROUP`), apart from the person's own sessions.
+   */
+  workspace?: true;
 }
 
 /**

@@ -165,12 +165,15 @@ const startWatchdog = (): void => {
 };
 
 /**
- * Starts the watch: each stall of {@link LATE_MS} or more is one line
- * through `say` once it ends, and one that lasts, or a loop that runs its
- * timers but takes in nothing, is said while it lasts, from a thread of its
- * own ({@link startWatchdog}).
+ * Starts the watch: each stall of `lateMs` ({@link LATE_MS} unless a
+ * probe asks finer) or more is one line through `say` once it ends, and one
+ * that lasts, or a loop that runs its timers but takes in nothing, is said
+ * while it lasts, from a thread of its own ({@link startWatchdog}).
  */
-export const watchLoop = (say: (line: string) => void): (() => void) => {
+export const watchLoop = (
+  say: (line: string) => void,
+  lateMs = LATE_MS
+): (() => void) => {
   startWatchdog();
   let expected = performance.now() + TICK_MS;
   let posted = "";
@@ -178,7 +181,7 @@ export const watchLoop = (say: (line: string) => void): (() => void) => {
     const now = performance.now();
     const late = now - expected;
     expected = now + TICK_MS;
-    if (late >= LATE_MS) {
+    if (late >= lateMs) {
       say(stallLine(late));
     }
     longest = undefined;

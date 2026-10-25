@@ -1,11 +1,10 @@
 /**
- * Transcript search service. Owns a `TranscriptIndex` at a stable
- * agent-local path and keeps it in sync with Claude Code transcripts
- * and OpenCode sessions: in the background, and before a search.
+ * Transcript search service: keeps the transcript index (held on the
+ * agent's stores thread, stores/search-host.ts) in sync with Claude Code
+ * transcripts and OpenCode sessions, in the background and before a search,
+ * and asks it each search. Nothing of the index's SQLite runs on the loop.
  */
 
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
 import type {
   TranscriptAnswer,
   TranscriptQuery,
@@ -13,25 +12,9 @@ import type {
   TranscriptTurnsQuery,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
-import {
-  listClaudeFiles,
-  opencodeDatabases,
-  transcriptIndexPath,
-} from "@cawco/core/paths";
-import type { TranscriptDoc } from "@cawco/jsonl-parser";
-import { TranscriptIndex } from "@cawco/jsonl-parser/fts5";
-import { readOpenCodeDocs } from "@cawco/jsonl-parser/opencode";
 import { inFlight } from "../loop-watch";
-
-/** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
-const WATERMARK = "opencode_watermark:";
-/**
- * The `meta` key of when the index's last finished sync began, ms epoch:
- * written with that sync's commit, so a restart knows the index is whole up
- * to then, not catching up. A sync that wrote nothing writes none (fts5.ts
- * `SyncOptions.ended`), so it may name an older sync than the last.
- */
-const INDEXED_THROUGH = "indexed_through";
+import { storeRead, storeWork } from "../stores/client";
+import type { StoreAnswer, StoreArg, StoreOp } from "../stores/ops";
 
 /**
  * How often the index takes in what the transcripts gained when nobody is
@@ -69,6 +52,14 @@ const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_LISTED_DOCS = 200;
 /** The most turns either side of a centre `turns` answers with: `find`'s detailed `around` asks five. */
 const MAX_TURNS_SIDE = 10;
+/**
+ * How long a question of the index (a search, a listing, a conversation's
+ * turns) is given on the stores thread, ms. A sync running there takes turns
+ * between its parts, so a question answers between them; a thread held past
+ * this (a disk that does not answer) refuses the question rather than
+ * leaving it owed. Our call: far past the hub's own window for a machine.
+ */
+const QUERY_MS = 10_000;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -81,8 +72,32 @@ function syncFailure(error: unknown): string {
     : error.message;
 }
 
+/**
+ * `op` asked of the index on the stores thread, given {@link QUERY_MS}:
+ * its answer, or a refusal that says the index did not answer in time.
+ */
+const askIndex = async <K extends StoreOp>(
+  op: K,
+  arg: StoreArg<K>
+): Promise<StoreAnswer<K>> => {
+  const read = await storeRead(op, arg, QUERY_MS);
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        read.reason === "dead"
+          ? "its index's thread ended before it answered"
+          : `its index did not answer within ${Math.round(read.after / 1000)} s`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
 export class TranscriptSearchService {
-  readonly #index: TranscriptIndex;
   #timer: ReturnType<typeof setInterval> | null = null;
   /** The sync in flight: one at a time, which the timer and searches share. */
   #syncing: Promise<void> | null = null;
@@ -97,32 +112,18 @@ export class TranscriptSearchService {
   #indexedThrough = 0;
   /** A sync of this index has ever finished: else one running is a catch-up. */
   #whole = false;
-  /** Each OpenCode database's watermark, under its `meta` key ({@link WATERMARK} and its path). */
-  readonly #openCodeWatermarks = new Map<string, number>();
   /** The last failed sync's reason, logged once; null once a sync succeeds. */
   #failing: string | null = null;
   readonly #firstSync = Promise.withResolvers<void>();
   /** Settles once the first sync has ended, however it ended. */
   readonly synced = this.#firstSync.promise;
 
-  private constructor(index: TranscriptIndex) {
-    this.#index = index;
-  }
-
+  /** The service, its index opened on the stores thread, knowing how far that index is whole. */
   static async create(): Promise<TranscriptSearchService> {
-    const dbPath = transcriptIndexPath();
-    await mkdir(dirname(dbPath), { recursive: true });
-    const index = new TranscriptIndex(dbPath);
-    const svc = new TranscriptSearchService(index);
-    const through = Number(index.meta(INDEXED_THROUGH) ?? 0);
+    const svc = new TranscriptSearchService();
+    const through = await storeWork("search.open", undefined);
     svc.#indexedThrough = through;
     svc.#whole = through > 0;
-    const rows = index.db
-      .query("SELECT key, value FROM meta WHERE key LIKE ?")
-      .all(`${WATERMARK}%`) as { key: string; value: string }[];
-    for (const row of rows) {
-      svc.#openCodeWatermarks.set(row.key, Number(row.value));
-    }
     return svc;
   }
 
@@ -164,37 +165,9 @@ export class TranscriptSearchService {
 
   async #syncOnce(): Promise<void> {
     const startedAt = Date.now();
-    // Every OpenCode server's database: the machine's and each account's.
-    const docs: TranscriptDoc[] = [];
-    const meta: Record<string, string> = {};
-    const watermarks = new Map<string, number>();
-    for (const dbPath of opencodeDatabases()) {
-      const key = `${WATERMARK}${dbPath}`;
-      // biome-ignore lint/performance/noAwaitInLoops: one database at a time, each a rowid range at a time
-      const read = await readOpenCodeDocs(dbPath, {
-        since: this.#openCodeWatermarks.get(key) ?? 0,
-      });
-      for (const doc of read.docs) {
-        docs.push(doc);
-      }
-      meta[key] = String(read.watermark);
-      watermarks.set(key, read.watermark);
-    }
-    const claudeFiles = await listClaudeFiles();
-    await this.#index.sync(
-      claudeFiles.map((f) => f.path),
-      {
-        docs,
-        meta,
-        ended: { [INDEXED_THROUGH]: String(startedAt) },
-        progress: (through) => {
-          this.#indexedThrough = Math.max(this.#indexedThrough, through);
-        },
-      }
-    );
-    for (const [key, watermark] of watermarks) {
-      this.#openCodeWatermarks.set(key, watermark);
-    }
+    await storeWork("search.sync", startedAt, (through) => {
+      this.#indexedThrough = Math.max(this.#indexedThrough, Number(through));
+    });
     this.#syncedAt = startedAt;
     this.#indexedThrough = startedAt;
     this.#whole = true;
@@ -207,7 +180,7 @@ export class TranscriptSearchService {
    */
   async forget(sessionId: string): Promise<void> {
     await this.#syncing?.catch(() => undefined);
-    const gone = this.#index.forgetSession(sessionId);
+    const gone = await storeWork("search.forget", sessionId);
     console.info(
       `[search] transcript ${sessionId} deleted: ${gone} indexed document${gone === 1 ? "" : "s"} forgotten`
     );
@@ -247,7 +220,7 @@ export class TranscriptSearchService {
     );
     // No words and an author: that author's words, newest first, off the
     // index's author-and-time order (fts5.ts `listed`), never a scan.
-    const conversations = this.#conversations(query, limit, options);
+    const conversations = await this.#conversations(query, limit, options);
     return {
       conversations,
       // Only a sync of an index that was never whole is a catch-up: a slow
@@ -307,7 +280,7 @@ export class TranscriptSearchService {
    */
   async turns(query: TranscriptTurnsQuery): Promise<TranscriptTurns> {
     await this.#fresh();
-    return this.#index.turns({
+    return askIndex("search.turns", {
       sessions: query.sessions,
       side: Math.min(Math.max(0, query.side), MAX_TURNS_SIDE),
       ...(query.docId ? { docId: query.docId } : {}),
@@ -327,7 +300,7 @@ export class TranscriptSearchService {
       ...(options?.before ? { before: options.before } : {}),
     };
     if (query.trim() === "" && author !== undefined) {
-      return this.#index.listed({
+      return askIndex("search.listed", {
         author,
         limit: Math.min(options?.limit ?? MAX_LISTED_DOCS, MAX_LISTED_DOCS),
         ...narrowed,
@@ -336,25 +309,28 @@ export class TranscriptSearchService {
         ...(options?.context ? { context: true } : {}),
       });
     }
-    return this.#index.search(query, {
-      limit,
-      ...(author ? { author } : {}),
-      ...narrowed,
-      ...(options?.toolOutput ? { toolOutput: true } : {}),
-      ...(options?.context ? { context: true } : {}),
+    return askIndex("search.search", {
+      query,
+      options: {
+        limit,
+        ...(author ? { author } : {}),
+        ...narrowed,
+        ...(options?.toolOutput ? { toolOutput: true } : {}),
+        ...(options?.context ? { context: true } : {}),
+      },
     });
   }
 
   /** Document count in the index. */
-  count(): number {
-    return this.#index.count();
+  count(): Promise<number> {
+    return askIndex("search.count", undefined);
   }
 
-  close(): void {
+  close(): Promise<void> {
     if (this.#timer) {
       clearInterval(this.#timer);
       this.#timer = null;
     }
-    this.#index.close();
+    return storeWork("search.close", undefined);
   }
 }

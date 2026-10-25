@@ -68,7 +68,6 @@ import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import {
   credentialAccountIds,
   opencodeAccountHome,
-  opencodeDatabases,
   opencodeDataDir,
   workspaceScratchDir,
   workspaceSpillDir,
@@ -133,6 +132,8 @@ import { readAccountSoon } from "../provider-usage";
 import { fenced } from "../restart";
 import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
+import { storeRead, storeWork } from "../stores/client";
+import type { SessionQuery, StoredSession } from "../stores/opencode-reads";
 import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
 import {
@@ -159,7 +160,6 @@ import {
   unreachable,
   waitForMcp,
 } from "./opencode-client";
-import { readOpencodeDb } from "./opencode-db";
 import {
   catalogLaunchEnv,
   holdsCatalog,
@@ -175,7 +175,6 @@ import {
   writePlugin,
 } from "./opencode-plugin";
 import {
-  backupV1Database,
   isV1,
   launchOf,
   OpencodeServerOwner,
@@ -1148,48 +1147,15 @@ const writeTag = async (
  */
 const SESSION_HOMES = join(OPENCODE_DIR, "cawco-session-homes.json");
 
-/** A root session as its server's database keeps it (2.0's `session_v2` row). */
-interface StoredSession {
-  directory: string;
-  id: string;
-  time_created: number;
-  time_updated: number;
-  title: string | null;
-}
-
 /**
- * The root sessions in one OpenCode database, read-only, as the session list
- * reads them: every server's database is read in place, so listing never
- * starts a server (an account's that is not running stays stopped). `query`
- * narrows them to one directory, or names one session, root or not.
+ * How long the session listing of every database is given on the agent's stores
+ * thread (stores/opencode-reads.ts), ms: each database is a live OpenCode
+ * server's, multi-gigabyte on obelisk, read there and never on the loop.
+ * One unanswered past it refuses the listing, saying so, rather than
+ * listing a database's sessions as none. Our call.
  */
-const storedSessions = (
-  dbPath: string,
-  query: { directory?: string; id?: string }
-): StoredSession[] => {
-  return readOpencodeDb(dbPath, [] as StoredSession[], (db) => {
-    // A database 2.0 is still making (an account server's first start) has
-    // no sessions table yet, and so no session.
-    if (
-      !db
-        .query(
-          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'"
-        )
-        .get()
-    ) {
-      return [];
-    }
-    return db
-      .query<StoredSession, [string | null, string | null]>(
-        `SELECT id, title, directory, time_created, time_updated FROM session_v2
-         WHERE (CASE WHEN ?2 IS NULL THEN parent_id IS NULL ELSE id = ?2 END)
-           AND (?1 IS NULL OR directory = ?1)`
-      )
-      .all(query.directory ?? null, query.id ?? null);
-  });
-};
+const SESSIONS_READ_MS = 5000;
 
-/** Every database's sessions `query` names, each once (a session a move left half-way is in two). */
 /**
  * One read of an OpenCode 1.x server ({@link readV1Activity}), said through
  * `say`: false while it is out of reach or runs something, true when it will
@@ -1230,21 +1196,30 @@ const v1Decision = async (
   }
 };
 
-const sessionsOnMachine = (query: {
-  directory?: string;
-  id?: string;
-}): StoredSession[] => {
-  const seen = new Map<string, StoredSession>();
-  for (const dbPath of opencodeDatabases()) {
-    for (const session of syncSection("OpenCode sessions listed (SQLite)", () =>
-      storedSessions(dbPath, query)
-    )) {
-      if (!seen.has(session.id)) {
-        seen.set(session.id, session);
-      }
+/**
+ * The root sessions in every OpenCode database on the machine, the
+ * machine's server's and each account's, read-only on the stores thread, as
+ * the session list reads them: every server's database is read in place, so
+ * listing never starts a server (an account's that is not running stays
+ * stopped). `query` narrows them to one directory, or names one session,
+ * root or not. Each once (a session a move left half-way is in two).
+ */
+const sessionsOnMachine = async (
+  query: SessionQuery
+): Promise<StoredSession[]> => {
+  const read = await storeRead("opencode.sessions", query, SESSIONS_READ_MS);
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `OpenCode's sessions were not read within ${Math.round(read.after / 1000)} s (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
-  return [...seen.values()];
 };
 
 const sessionToInfo = (
@@ -2204,7 +2179,7 @@ export class OpencodeHarness implements Harness {
         providers.add(opencodeProviderOf(held.provider));
       }
     }
-    for (const integration of opencodeOwnIntegrations()) {
+    for (const integration of await opencodeOwnIntegrations()) {
       providers.add(integration);
     }
     for (const keyed of opencodeModels.providersKeyedIn(process.env)) {
@@ -3412,7 +3387,7 @@ export class OpencodeHarness implements Harness {
    * from its integration's methods, and whether the sign-in is an OAuth one.
    */
   async #recordFault(provider: string, why: string): Promise<void> {
-    const kind = opencodeOwnSignInTypes()[provider];
+    const kind = (await opencodeOwnSignInTypes())[provider];
     if (!kind) {
       return;
     }
@@ -3465,20 +3440,14 @@ export class OpencodeHarness implements Harness {
   /**
    * The machine's own OpenCode sign-ins checked, before any turn finds them
    * refused: when the agent starts, every {@link SIGN_IN_CHECK_MS}, and when
-   * one of them changed (a sign-in, a refresh, a removal). One at a time.
+   * one of them changed (a sign-in, a refresh, a removal). One at a time,
+   * the rows read on the stores thread: the tick never waits on them.
    */
   #signInChecksDue(): void {
-    const rows = JSON.stringify(opencodeOwnChanges());
-    if (
-      this.#checkingSignIns ||
-      (rows === this.#signInRows &&
-        Date.now() < this.#signInsCheckedAt + SIGN_IN_CHECK_MS)
-    ) {
+    if (this.#checkingSignIns) {
       return;
     }
-    this.#signInRows = rows;
-    this.#signInsCheckedAt = Date.now();
-    this.#checkingSignIns = this.#checkOwnSignIns()
+    this.#checkingSignIns = this.#checkSignInsIfDue()
       .catch((error: unknown) =>
         console.warn(
           `[opencode] the machine's own sign-ins were not checked: ${errorText(error)}`
@@ -3487,6 +3456,24 @@ export class OpencodeHarness implements Harness {
       .finally(() => {
         this.#checkingSignIns = null;
       });
+  }
+
+  /** The sign-ins' rows read, and checked when one moved or the hour is up; a read the stores thread does not answer waits for a later tick. */
+  async #checkSignInsIfDue(): Promise<void> {
+    const read = await opencodeOwnChanges();
+    if (read.kind === "unanswered") {
+      return;
+    }
+    const rows = JSON.stringify(read.value);
+    if (
+      rows === this.#signInRows &&
+      Date.now() < this.#signInsCheckedAt + SIGN_IN_CHECK_MS
+    ) {
+      return;
+    }
+    this.#signInRows = rows;
+    this.#signInsCheckedAt = Date.now();
+    await this.#checkOwnSignIns();
   }
 
   /**
@@ -3517,7 +3504,13 @@ export class OpencodeHarness implements Harness {
       )
     );
     this.#oauthIntegrations = oauthIntegrationsOf(integrations);
-    const changed = opencodeOwnChanges();
+    const changes = await opencodeOwnChanges();
+    if (changes.kind === "unanswered") {
+      throw new Error(
+        `its sign-ins were not read within ${Math.round(changes.after / 1000)} s (${changes.reason})`
+      );
+    }
+    const changed = changes.value;
     const faults = this.#faultsHeld();
     let moved = false;
     for (const provider of [...faults.keys()]) {
@@ -3755,9 +3748,12 @@ export class OpencodeHarness implements Harness {
         }
         await Bun.sleep(5000);
       }
-      syncSection("OpenCode 1.x database backed up (SQLite)", () =>
-        backupV1Database(xdgDataHome())
-      );
+      const backup = await storeWork("opencode.backupV1", xdgDataHome());
+      if (backup) {
+        console.info(
+          `[opencode] ${join(xdgDataHome(), "opencode", "opencode.db")} is OpenCode 1.x's: backed up to ${backup} before OpenCode 2.0 converts it`
+        );
+      }
       await retireV1Plugins();
     })().catch((error: unknown) => {
       this.#cutover = null;
@@ -5638,8 +5634,8 @@ export class OpencodeHarness implements Harness {
     }
     await this.#ensure();
     const tags = await readTags();
-    return sessionsOnMachine(dir ? { directory: dir } : {}).map((session) =>
-      sessionToInfo(session, tags[session.id])
+    return (await sessionsOnMachine(dir ? { directory: dir } : {})).map(
+      (session) => sessionToInfo(session, tags[session.id])
     );
   }
 
@@ -5656,7 +5652,7 @@ export class OpencodeHarness implements Harness {
       return;
     }
     await this.#ensure();
-    const [session] = sessionsOnMachine({ id: sessionKey });
+    const [session] = await sessionsOnMachine({ id: sessionKey });
     return session
       ? sessionToInfo(session, (await readTags())[sessionKey])
       : undefined;

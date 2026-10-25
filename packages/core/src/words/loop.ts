@@ -19,9 +19,21 @@ export const loopWords = {
   /** The main thread on the CPU, with its share of a core since the last look when known. */
   onCpu: (share?: number) =>
     `its main thread is on the CPU${share === undefined ? "" : ` (${share}% of a core since the last look)`}`,
-  /** The main thread in uninterruptible sleep. */
-  onDisk: (where: string) =>
-    `its main thread waits on the disk${where ? ` (${where})` : ""}`,
+  /**
+   * The main thread in uninterruptible sleep (`D`): a disk's answer, or a
+   * kernel lock (obelisk's of 2026-10-25 was the NVIDIA driver's, taken in
+   * memory reclaim), as where it sleeps and its system call say.
+   */
+  uninterruptible: (where: string) =>
+    `its main thread sleeps uninterruptibly in the kernel${where ? ` (${where})` : ""}`,
+  /** The system call the main thread is in, and the file its first argument names. */
+  inSyscall: (name: string, file: string) =>
+    `in the system call ${name}${file ? ` (${file})` : ""}`,
+  /** The main thread blocked in the kernel outside any system call: a page fault. */
+  noSyscall: () => "outside any system call (a page fault, or memory reclaim)",
+  /** A hold under the watch's own saying, said once it ended, with what the looks during it read. */
+  heldSeen: (seconds: number) =>
+    `[loop] the agent's loop was held about ${seconds} s; its main thread, as the watch's looks found it`,
   /** The main thread asleep in the kernel. */
   asleep: (state: string, where: string, share?: number) =>
     `its main thread sleeps in the kernel (state ${state}${where ? `, ${where}` : ""}${share === undefined ? "" : `, ${share}% of a core since the last look`})`,
