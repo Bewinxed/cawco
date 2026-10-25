@@ -66,15 +66,9 @@ export class TabRects {
   readonly #values = new Map<HTMLElement, string>();
   readonly #onOrder: (values: string[]) => void;
   #container: HTMLElement | null = null;
-  #frame: number | null = null;
   #sizes: FrameObserver | null = null;
   /** What the last measure in a delivery read, written in the next frame. */
   #pending: (() => void) | null = null;
-  /**
-   * The track and the tabs observed whose first report has not come: a
-   * measure asked for meanwhile is taken in that report (`#schedule`).
-   */
-  readonly #unreported = new Set<Element>();
   #moves: MutationObserver | null = null;
 
   /** `onOrder` hears the tabs' values in the order they stand. */
@@ -106,12 +100,7 @@ export class TabRects {
     };
     this.#sizes = frameObserver(write, {
       read: () => this.#measureLaidOut(),
-      first: (entries) => {
-        for (const entry of entries) {
-          this.#unreported.delete(entry.target);
-        }
-        return write;
-      },
+      first: () => write,
     });
     this.#watch(node);
     for (const el of this.#values.keys()) {
@@ -134,13 +123,9 @@ export class TabRects {
       destroy: () => {
         this.#sizes?.disconnect();
         this.#sizes = null;
-        this.#unreported.clear();
         this.#moves?.disconnect();
         this.#moves = null;
         this.#container = null;
-        if (this.#frame !== null) {
-          cancelAnimationFrame(this.#frame);
-        }
       },
     };
   };
@@ -161,7 +146,6 @@ export class TabRects {
       untrack(() => {
         this.#values.delete(element);
         this.#sizes?.unobserve(element);
-        this.#unreported.delete(element);
         this.#sort();
         this.#schedule();
       });
@@ -236,59 +220,37 @@ export class TabRects {
     this.#schedule();
   }
 
-  /** Observes a box, its first report still to come (`#unreported`). */
+  /** Observes a box: its first report, and each resize after it. */
   #watch(element: Element): void {
-    if (this.#sizes) {
-      this.#unreported.add(element);
-      this.#sizes.observe(element);
-    }
+    this.#sizes?.observe(element);
   }
 
   /**
-   * One measure per frame, at the frame's own time, however many changes
-   * ask for it. A pending frame is kept, never cancelled and asked for
-   * again: a gesture restyles the tabs from a frame callback queued ahead
-   * of this one, so cancelling on every change put the measure off in the
-   * very frame it was due, every frame, for as long as the gesture ran.
-   *
-   * With a box's first report due (a tab arriving), that frame's measure is
-   * that report's (`first`), on the layout the frame has done: taken in its
-   * callbacks, ahead of that layout, it laid out the page the arrival had
-   * just changed (a turn's Working tab arriving in the rail: up to 60ms of
-   * layout at 4x on the phone). The frame after it measures if no report
-   * came: a box laid out at no size is reported by no ResizeObserver.
+   * One measure per frame, read in the next delivery on the layout that
+   * frame does (frameObserver `readNext`), however many changes ask for it,
+   * and written in the frame after. Taken in a frame callback, ahead of the
+   * frame's layout, it laid out the page the change had just made: a turn's
+   * Working tab arriving in the rail (up to 60ms of layout at 4x on the
+   * phone), a reply arriving (decision-pages (o)). A box's first report (a
+   * tab arriving) comes in that same delivery (`first`), which writes what
+   * the read measured; a box laid out at no size is reported by no
+   * ResizeObserver, and is read all the same.
    */
   #schedule(): void {
-    this.#frame ??= requestAnimationFrame(() => {
-      this.#frame = null;
-      if (this.#unreported.size > 0) {
-        this.#unreported.clear();
-        this.#schedule();
-        return;
-      }
-      this.#measure();
-    });
+    this.#sizes?.readNext();
   }
 
   /**
-   * A tab or the track resized, heard where the frame has just laid them
-   * out (the observer's own call): measured there, on layout already done.
-   * Measured in the next frame's callbacks instead, after a streamed reply
-   * had changed the page again, every resize of a tab laid the page out
-   * there (two-pane-perf's stream, 83–135ms of `offsetParent`). A measure
-   * still due that frame is the same one, taken now. What it read is
-   * written in the next frame (`#pending`).
+   * Inside the delivery, where the frame has just laid the tabs out (the
+   * observer's own call, a tab or the track resized, or a read asked for):
+   * measured there, on layout already done. Measured in the next frame's
+   * callbacks instead, after a streamed reply had changed the page again,
+   * every resize of a tab laid the page out there (two-pane-perf's stream,
+   * 83–135ms of `offsetParent`). What it read is written in the next frame
+   * (`#pending`).
    */
   #measureLaidOut(): void {
-    if (this.#frame !== null) {
-      cancelAnimationFrame(this.#frame);
-      this.#frame = null;
-    }
     this.#pending = this.#read();
-  }
-
-  #measure(): void {
-    this.#read()?.();
   }
 
   /** Reads the tabs' boxes; answers the write that keeps them, or null with no track. */

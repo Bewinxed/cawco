@@ -29,6 +29,14 @@ import type { Attachment } from "svelte/attachments";
  * the other things a site hears (a scroll, rows arriving, the window) share
  * its one frame.
  *
+ * `readNext()` asks for `read` in the next delivery with nothing resized,
+ * then the answer: a change no box's size reports (a tab moved, not
+ * resized) is measured on the layout that frame does. Measured in a frame
+ * callback instead, it laid the page out ahead of that layout, under what
+ * the frame had just changed (decision-pages (o): fluid-tabs `rects`'
+ * `offsetParent`, a reply arriving on the phone at 4x). The page's root is
+ * observed again for it, so a delivery comes.
+ *
  * `first`, when given, takes a target's first report inside the delivery
  * itself, for a box mounting: the frame it mounts in has laid it out and not
  * painted, so what it reads there costs no layout of its own, and what it
@@ -47,6 +55,8 @@ import type { Attachment } from "svelte/attachments";
 export interface FrameObserver {
   disconnect: () => void;
   observe: (target: Element, options?: ResizeObserverOptions) => void;
+  /** `read` in the next delivery, on that frame's layout, then the answer in the frame after, with nothing resized. */
+  readNext: () => void;
   /** The answer in the next frame, with nothing resized (`changed` empty unless something also was). */
   request: () => void;
   unobserve: (target: Element) => void;
@@ -103,6 +113,8 @@ interface Inside {
 
 /** One site: a frameObserver's own state, or another observer's (`ForeignResizeObserver`). */
 interface Site {
+  /** Asks for its answer in the next frame (`request`): after a read it asked for (`readNext`). */
+  ask?: () => void;
   /** Its targets in this delivery, from the shared observer. */
   delivered: ResizeObserverEntry[];
   /** Another ResizeObserver's callback (a library's): called with its entries once the sites have read, before their writes. */
@@ -122,6 +134,9 @@ interface Hold {
 
 /** Every target observed, and each site's hold on it. */
 const holds = new Map<Element, Map<Site, Hold>>();
+
+/** The sites that asked to read in the next delivery (`readNext`). */
+const wanting = new Set<Site>();
 
 /** The size of `box` an entry reports, as one string. */
 const sizeOf = (entry: ResizeObserverEntry, box: ResizeObserverBoxOptions) => {
@@ -199,10 +214,16 @@ const readInside = (site: Site, writes: (() => void)[]) => {
 };
 
 const deliver = (entries: ResizeObserverEntry[]) => {
-  const sites = [...sitesOf(entries)];
+  const reported = sitesOf(entries);
+  const asked = [...wanting];
+  wanting.clear();
+  const sites = [...new Set([...reported, ...asked])];
   const own = sites.filter((site) => !site.foreign);
   for (const site of own) {
     site.options.read?.(site.delivered);
+  }
+  for (const site of asked) {
+    site.ask?.();
   }
   const writes: (() => void)[] = [];
   for (const site of own) {
@@ -347,6 +368,7 @@ export function frameObserver(
     }
   };
   const site: Site = {
+    ask: request,
     delivered: [],
     options,
     reported: new WeakSet(),
@@ -358,6 +380,10 @@ export function frameObserver(
   const held = holdsOf(site);
   return {
     observe: held.observe,
+    readNext: () => {
+      wanting.add(site);
+      deliverWithRoot();
+    },
     request,
     unobserve: (target) => {
       held.release(target);
@@ -366,6 +392,7 @@ export function frameObserver(
     disconnect: () => {
       cancelAnimationFrame(frame);
       frame = 0;
+      wanting.delete(site);
       held.releaseAll();
       changed.clear();
     },
