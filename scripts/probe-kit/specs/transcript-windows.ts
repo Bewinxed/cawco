@@ -43,6 +43,7 @@ import {
 import type {
   SessionMessage,
   TranscriptBlock,
+  TranscriptEvent,
   WindowAsk,
 } from "../../../packages/core/src";
 import { TranscriptBuilder } from "../../../packages/core/src/transcript";
@@ -122,6 +123,20 @@ const entriesDiffer = (
     : `entry ${at} differs: whole ${whole[at]?.uuid}, windows ${joined[at]?.uuid}`;
 };
 
+/** The blocks `events` remove, taken out of the pages already served. */
+const dropRemoved = (
+  pages: TranscriptBlock[][],
+  events: readonly TranscriptEvent[]
+): void => {
+  for (const event of events) {
+    if (event.type === "block.remove") {
+      for (const [at, served] of pages.entries()) {
+        pages[at] = served.filter((block) => block.id !== event.id);
+      }
+    }
+  }
+};
+
 /**
  * The hub's page walk over a builder fed the newest window: older windows
  * read as a page reaches past what is held. The pages' blocks, oldest
@@ -139,7 +154,14 @@ const walkPages = (
       const window = older[next];
       next += 1;
       if (window) {
-        paged.prepend(window.entries, {}, window.older === null);
+        // A row the older window names first moves there: it leaves the
+        // pages already served, as the dashboard drops it on the remove.
+        const { events } = paged.prepend(
+          window.entries,
+          {},
+          window.older === null
+        );
+        dropRemoved(pages, events);
       }
     }
     const page = paged.page(PAGE, before);

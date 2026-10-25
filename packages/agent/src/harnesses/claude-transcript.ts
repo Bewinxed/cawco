@@ -1056,7 +1056,13 @@ function joinedCounts(raw: readonly ChainNode[]): Map<string, number> {
 // Line index
 // ---------------------------------------------------------------------------
 
-/** The tool calls a message makes, answers, or the task its notification ends: {@link ChainNode.ids}. */
+/**
+ * The tool calls a message makes, answers, or the task its notification
+ * ends, and the row a reader's message draws ({@link ChainNode.ids}): a send
+ * the CLI absorbed mid-turn names its row by the send (`sourceUuid`), and the
+ * same send handed again after a restart is a user record of that uuid, the
+ * one row both draw (core `TranscriptBuilder`: the first wins).
+ */
 function namedIds(msg: SDKSessionMessage): string[] {
   const ids: string[] = [];
   const frame = msg.message as {
@@ -1171,12 +1177,16 @@ function messageFacts(r: RawRecord): Partial<ChainNode> {
   }
   const frame = msg.message as { subtype?: unknown } | null;
   const ids = namedIds(msg);
+  const opens = opensTurn(msg);
+  if (opens) {
+    ids.push(msg.sourceUuid ?? msg.uuid);
+  }
   return {
     shows:
       msg.type === "system" && frame?.subtype === "hook_response"
         ? "hook"
         : msg.type,
-    ...(opensTurn(msg) ? { opens: true as const } : {}),
+    ...(opens ? { opens: true as const } : {}),
     ...(msg.sourceUuid ? { sourceUuid: msg.sourceUuid } : {}),
     ...(ids.length > 0 ? { ids } : {}),
   };
@@ -1501,9 +1511,17 @@ function localCut(
   return found;
 }
 
-/** Whether `node` opens `id` rather than answering it: a tool call it makes, a task it ends. */
+/**
+ * Whether `node` opens `id` rather than answering it: a tool call it makes, a
+ * task it ends, the row its message draws. A row's first mention may stand
+ * before what a suffix read holds (a send absorbed long before it was handed
+ * again); the older window that holds it moves the row there (core
+ * `TranscriptBuilder.prepend`).
+ */
 const opensId = (node: ChainNode, id: string): boolean =>
-  node.shows === "assistant" || id.startsWith("task:");
+  node.shows === "assistant" ||
+  id.startsWith("task:") ||
+  id === (node.sourceUuid ?? node.uuid);
 
 /**
  * Read the newest records from a session transcript, starting from EOF.

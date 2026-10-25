@@ -74,6 +74,8 @@ class TranscriptWriter {
   parent: string | null = null;
   turn = 0;
   readonly running: Task[] = [];
+  /** Sends absorbed mid-turn, one of which the next session start may hand again. */
+  readonly absorbed: { source: string; prompt: string }[] = [];
 
   constructor(path: string, shape: TranscriptShape) {
     this.#shape = shape;
@@ -123,7 +125,8 @@ class TranscriptWriter {
 
   /** A chained record: hung from the chain's last, and the chain's last from now on. */
   chained(record: Record<string, unknown>, keep = true): string {
-    const uuid = this.id("uuid");
+    const uuid =
+      typeof record.uuid === "string" ? record.uuid : this.id("uuid");
     this.line({
       ...this.envelope(this.parent),
       ...record,
@@ -334,16 +337,18 @@ const midTurn = (writer: TranscriptWriter, ending: Task[]): void => {
   }
   if (writer.chance(0.04)) {
     const source = writer.id("uuid");
+    const prompt = `mid-turn ${writer.words(8)}`;
     writer.queue("enqueue", { content: writer.words(8) });
     writer.chained({
       type: "attachment",
       attachment: {
         type: "queued_command",
-        prompt: `mid-turn ${writer.words(8)}`,
+        prompt,
         source_uuid: source,
         timestamp: writer.at(),
       },
     });
+    writer.absorbed.push({ source, prompt });
     writer.queue("remove", { reason: "absorbed_mid_turn" });
   }
 };
@@ -436,13 +441,20 @@ const turnOf = (writer: TranscriptWriter): void => {
     writer.running.splice(writer.running.indexOf(task), 1);
   }
   const notice = ending.shift();
+  // Now and then a send the CLI absorbed mid-turn is handed again after a
+  // restart: a user record under the send's own uuid, the same words (as a
+  // real session's hand-off was, an hour after its absorbed line).
+  const again =
+    !notice && writer.chance(0.3) ? writer.absorbed.shift() : undefined;
   writer.chained({
     type: "user",
+    ...(again ? { uuid: again.source } : {}),
     message: {
       role: "user",
       content: notice
         ? noticeOf(writer, notice)
-        : `${writer.turn}: ${writer.words(writer.between(20, 80))}`,
+        : (again?.prompt ??
+          `${writer.turn}: ${writer.words(writer.between(20, 80))}`),
     },
   });
   const steps = writer.between(1, 6);
