@@ -557,8 +557,8 @@ try {
     auth: "bearer",
   });
   await send("PUT", "/api/connections/gh-probe/key", { key: TOKEN });
-  await send("PUT", `/api/projects/${projectId}/ingress/github`, {
-    connection: "gh-probe",
+  await send("PATCH", "/api/connections/gh-probe", {
+    projects: [projectId],
   });
   // The poller's first poll only sets its mark.
   await pollNow();

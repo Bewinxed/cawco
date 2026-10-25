@@ -550,8 +550,8 @@ try {
   await section(
     "1: the poller stores each event once; 304s are no-ops",
     async () => {
-      await send("PUT", `/api/projects/${projectId}/ingress/github`, {
-        connection: "gh-probe",
+      await send("PATCH", "/api/connections/gh-probe", {
+        projects: [projectId],
       });
       const primed = await pollNow();
       check(

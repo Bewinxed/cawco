@@ -9178,17 +9178,8 @@ const make = async (path: string): Promise<DbShape> => {
           .set({ delegateTypeProject: keepId })
           .where(eq(instances.delegateTypeProject, dupId))
           .run();
-        // The connections it was granted, each once.
-        for (const grant of tx
-          .select()
-          .from(connectionProjects)
-          .where(eq(connectionProjects.projectId, dupId))
-          .all()) {
-          tx.insert(connectionProjects)
-            .values({ ...grant, projectId: keepId })
-            .onConflictDoNothing()
-            .run();
-        }
+        // The connections it was granted go with its row: project-merge.ts
+        // grants them to the kept project through connections.ts.
         tx.delete(connectionProjects)
           .where(eq(connectionProjects.projectId, dupId))
           .run();

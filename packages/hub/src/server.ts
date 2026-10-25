@@ -23410,6 +23410,11 @@ export const createServer = (
   // One repository is one project: duplicates fold into the oldest
   // (project-merge.ts), at start and when a project learns its remote.
   const merging: MergeDeps = {
+    // Made further down; a fold runs off the boot path, once it is.
+    connections: {
+      projectFolded: (grants, keepId) =>
+        connections.projectFolded(grants, keepId),
+    },
     db,
     tasks: {
       adopt: (...args) => tasks.adopt(...args),

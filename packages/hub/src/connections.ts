@@ -2805,6 +2805,21 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return view(r);
   };
 
+  /**
+   * A project folded into another (project-merge.ts): each connection the
+   * duplicate was granted is granted to the project it joined, through the
+   * one write, so the kept project's GitHub poller follows it.
+   */
+  const projectFolded = (grants: readonly string[], keepId: string): void => {
+    for (const name of grants) {
+      const r = row(name);
+      writeProjects(r, [...db.projectsOf(r.id), keepId]);
+    }
+    if (grants.length > 0) {
+      deps.changed();
+    }
+  };
+
   deps.lifetime.onClose(() => {
     for (const id of [...clients.keys()]) {
       drop(id);
@@ -2840,6 +2855,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     appInstalled,
     remove,
     returned,
+    projectFolded,
     /**
      * At hub start: each connection with a secret (or none needed) is looked
      * at once, off the boot path, and each code sign-in under way polled on.

@@ -1002,37 +1002,15 @@ export const createIngress = ({
     };
   };
 
-  /** Names the `github` connection a project's repository is polled with; null stops it. */
+  /** Names the connection a project's repository is polled with; null stops it. */
   const setGitHubConnection = (
     projectId: string,
     connection: string | null
-  ): IngressView => {
-    projectOf(projectId);
-    if (connection !== null) {
-      let found: ReturnType<Connections["get"]>;
-      try {
-        found = connections.get(connection);
-      } catch {
-        return refuse(404, `There is no connection ${connection}.`);
-      }
-      if (found.service.trim().toLowerCase() !== "github") {
-        refuse(
-          400,
-          `${connection} is a ${found.service} connection; name one of service github.`
-        );
-      }
-      if (!readsGitHubApi(found.auth)) {
-        refuse(
-          400,
-          `${connection} signs in with ${found.auth}; GitHub polling takes gh on a machine, a code sign-in, a GitHub App or a token.`
-        );
-      }
-    }
+  ): void => {
     store.setGitHubConnection(projectId, connection);
     console.log(
       `[ingress] project ${projectId}: ${connection ? `polls GitHub with ${connection}` : "no longer polls GitHub"}`
     );
-    return view(projectId);
   };
 
   /**
@@ -1530,7 +1508,6 @@ export const createIngress = ({
     ingest,
     pollConnectorNow,
     pollGitHubNow,
-    setGitHubConnection,
     start,
     tools,
     updatePoll,
@@ -1589,17 +1566,11 @@ const POLL_FIELDS = {
   enabled: t.Optional(t.Boolean()),
 };
 
-/** The dashboard's routes for a project's ingress (no view yet: a dashboard pick waits for the owner). */
+/** The dashboard's routes for a project's ingress: its GitHub poller follows the connections that name the project, never a route of its own. */
 export const ingressRoutes = (ingress: Ingress) =>
   new Elysia()
     .get("/api/projects/:id/ingress", ({ params }) =>
       attempt(() => ingress.view(params.id))
-    )
-    .put(
-      "/api/projects/:id/ingress/github",
-      { body: t.Object({ connection: t.Nullable(t.String()) }) },
-      ({ params, body }) =>
-        attempt(() => ingress.setGitHubConnection(params.id, body.connection))
     )
     .post("/api/projects/:id/ingress/github/poll", ({ params }) =>
       attempt(() => ingress.pollGitHubNow(params.id))

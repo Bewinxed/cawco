@@ -10,13 +10,16 @@
  * lacks are copied in (one commit; a file both have keeps the kept project's
  * copy, and the duplicate's goes to the trash with its folder), then its
  * places, sessions, work items, threads and fleet rows move and its row goes
- * (db `foldProject`), and its folder is trashed. A duplicate that could not
+ * (db `foldProject`), its connections are granted to the kept project
+ * (connections.ts `projectFolded`, so its GitHub poller follows them), and
+ * its folder is trashed. A duplicate that could not
  * be read whole or whose tasks did not move is left as it is, said in the
  * log, and tried again at the next start: only an emptied duplicate is
  * removed. Run once at hub start and whenever a project learns its remote;
  * with nothing to fold it does nothing.
  */
 import { join } from "node:path";
+import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
 import {
   hasProjectFolder,
@@ -31,7 +34,9 @@ import { CHANGES, TRAILERS } from "./task-history";
 import { hubActor, STAGES_FILE, type Tasks } from "./tasks";
 
 export interface MergeDeps {
-  readonly db: Pick<DbShape, "foldProject" | "listProjects">;
+  /** A duplicate's connections, granted to the project it joined (connections.ts `projectFolded`). */
+  readonly connections: Pick<Connections, "projectFolded">;
+  readonly db: Pick<DbShape, "connections" | "foldProject" | "listProjects">;
   /** Says a project's folder was moved away: every machine checks its boundaries' access (server.ts `projectFolderMoved`). */
   readonly folderMoved: () => void;
   /** Says a machine's places changed: its fleet config goes again (project-placements.ts). */
@@ -193,7 +198,9 @@ const fold = async (
       );
     }
   }
+  const grants = deps.db.connections.namesForProject(dup.id);
   const moved = deps.db.foldProject(dup.id, keep.id, ids);
+  deps.connections.projectFolded(grants, keep.id);
   if (await hasProjectFolder(dup.id)) {
     await trashProjectFolder(dup.id);
     deps.folderMoved();

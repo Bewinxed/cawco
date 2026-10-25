@@ -304,8 +304,8 @@ try {
         routineId: each.id,
       });
     }
-    await send("PUT", `/api/projects/${p}/ingress/github`, {
-      connection: "gh-probe",
+    await send("PATCH", "/api/connections/gh-probe", {
+      projects: [p],
     });
     await send("POST", `/api/projects/${p}/ingress/github/poll`);
     issues.push({

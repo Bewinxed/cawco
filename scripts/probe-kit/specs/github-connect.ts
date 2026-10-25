@@ -34,8 +34,10 @@
  *     refuses a GitHub App's old registration body in words.
  *  A4 its sign-in started again from the row (no organization named)
  *     registers under the organization the first one named.
- * Polling (P): a project's GitHub poller takes each of the three, and
- *  follows its connections (hub ingress.ts `followConnection`):
+ * Polling (P): a project's GitHub poller follows the connections that name
+ *  it (hub ingress.ts `followConnection`), never a route of its own:
+ *  P  each of the three granted a project of its own in its project list:
+ *     each project's ingress names it.
  *  P1 a code connection and a GitHub App made with a project each: the
  *     project's ingress names it.
  *  P2 the gh connection granted a project that names none and one that
@@ -46,6 +48,9 @@
  *     other still names github-code.
  *  P5 gh connected again with the project: it names github-bewinxed at
  *     once and a poll runs with gh's token.
+ *  P6 a project granted github-bewinxed learns the remote an older project
+ *     has, and is folded into it (project-merge.ts): the kept project is
+ *     granted github-bewinxed, names it and is polled at once.
  * The page (U): Chromium and WebKit at 1440 and 390, the gh list inside the
  *  form with nothing spilling sideways; no console error on any page.
  *
@@ -119,6 +124,7 @@ interface Connection {
   gh?: { host: string; login: string; machine: string; machineId: string };
   hasSecret: boolean;
   name: string;
+  projects: string[];
   reason?: string;
   signIn?: { expiresAt: number; url: string };
   state: string;
@@ -518,23 +524,20 @@ const legs = async (kit: Kit, github: ReturnType<typeof githubStub>) => {
     JSON.stringify({ manualFields, orgField, oldBody })
   );
 
-  // ── P: a project's GitHub poller takes each of the three ────────────
-  const projectId = (
-    await fleet.api<{ id: string }>("/api/projects", {
-      name: "Cawco-Dev probe",
-    })
-  ).id;
-  const polled: Record<string, number> = {};
+  // ── P: each of the three, granted a project, polls it ────────────────
+  const polled: Record<string, IngressGitHub & { status: number }> = {};
   for (const name of ["github-bewinxed", "github-code", "github-app"]) {
-    polled[name] = (
-      await hub("PUT", `/api/projects/${projectId}/ingress/github`, {
-        connection: name,
-      })
-    ).status;
+    const fresh = await projectOn(`${name} probe`, `${name}-way`);
+    const granted = await hub("PATCH", `/api/connections/${name}`, {
+      projects: [...((await connectionNamed(name))?.projects ?? []), fresh],
+    });
+    polled[name] = { ...(await ingressOf(fresh)), status: granted.status };
   }
   check(
-    "P: a project's GitHub poller takes gh, a code and a GitHub App alike",
-    Object.values(polled).every((code) => code === 200),
+    "P: gh, a code and a GitHub App, each granted a project in its project list: each project's ingress names it",
+    Object.entries(polled).every(
+      ([name, one]) => one.status === 200 && one.connection === name
+    ),
     JSON.stringify(polled)
   );
 
@@ -658,6 +661,64 @@ const legs = async (kit: Kit, github: ReturnType<typeof githubStub>) => {
       atOnce,
       repolled,
       pollsBefore,
+    })
+  );
+
+  // ── P6: a project folded into another hands it its connection ────────
+  const MERGED = "merged-app";
+  const keptProject = await projectOn("Kept probe", MERGED);
+  const dupCwd = join(fleet.sandbox, "checkout-dup");
+  await mkdir(dupCwd, { recursive: true });
+  await Bun.$`git init -q -b main`.cwd(dupCwd).quiet();
+  const { id: dupProject } = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Dup probe",
+    machineId,
+    cwd: dupCwd,
+  });
+  await hub("PATCH", "/api/connections/github-bewinxed", {
+    projects: [polledProject, dupProject],
+  });
+  const keptBefore = await ingressOf(keptProject);
+  // The duplicate's checkout learns the kept project's remote: adding it
+  // again reads it, and the two fold into the older.
+  await Bun.$`git remote add origin https://github.com/${OWNER}/${MERGED}.git`
+    .cwd(dupCwd)
+    .quiet();
+  const placed = await hub("POST", `/api/projects/${dupProject}/places`, {
+    machineId,
+    path: dupCwd,
+  });
+  const folded = await until(
+    "P6: the duplicate folded into the kept project",
+    () => connectionNamed("github-bewinxed"),
+    (one) =>
+      Boolean(one?.projects.includes(keptProject)) &&
+      !one?.projects.includes(dupProject),
+    30_000
+  ).catch(() => connectionNamed("github-bewinxed"));
+  const keptPolled = await until(
+    "P6: the kept project polled",
+    () => ingressOf(keptProject),
+    (one) => one.connection === "github-bewinxed" && one.polledAt !== null,
+    30_000
+  ).catch(() => ingressOf(keptProject));
+  const dupGone = await hub("GET", `/api/projects/${dupProject}/ingress`);
+  check(
+    "P6: a project granted github-bewinxed folded into an older one of its remote: the kept project is granted it, names it and is polled at once",
+    keptBefore.connection === null &&
+      placed.status === 200 &&
+      Boolean(folded?.projects.includes(keptProject)) &&
+      !folded?.projects.includes(dupProject) &&
+      keptPolled.connection === "github-bewinxed" &&
+      keptPolled.repo === `${OWNER}/${MERGED}` &&
+      keptPolled.polledAt !== null &&
+      dupGone.status === 404,
+    JSON.stringify({
+      keptBefore,
+      placed: placed.status,
+      folded: folded?.projects,
+      keptPolled,
+      dupGone: dupGone.status,
     })
   );
 
