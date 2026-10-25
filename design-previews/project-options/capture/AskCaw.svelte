@@ -15,7 +15,9 @@
   Its word and coral come back when nothing else holds the view's act.
 
   `seat`: idle, working, asking-a or asking-b (the two asking takes; the
-  owner picks). `phone` sizes it for the docked foot bar.
+  owner picks). `phone` draws it for a docked foot bar: coral, it is the
+  dock's Button; without its coral, the face alone with no glass round it
+  (glass is a title bar's, and a dock is content's ground).
 -->
 <script>
   import { BarGlass, Button } from "./kit.js";
@@ -47,6 +49,23 @@
     {@render face()}
     <span>Ask Caw</span>
   </Button>
+{:else if phone}
+  <!-- In a docked bar (the phone's foot, a narrow page's foot) the dock is
+       content's ground, not a title bar: the face is the glyph alone, a
+       bare item at the field's height, no glass of its own. -->
+  <button
+    data-ask-caw={open === "caw" ? "selected" : "plain"}
+    aria-label="Ask Caw"
+    aria-pressed={open === "caw"}
+    class={[
+      "grid h-c-composer-field min-w-c-composer-field flex-none place-items-center rounded-sm border-0 p-0 select-none touch-hit press-tint",
+      open === "caw" ? "bg-selected-bg" : "bg-transparent",
+    ]}
+    title="Ask Caw"
+    type="button"
+  >
+    {@render face()}
+  </button>
 {:else}
   <BarGlass>
     {#snippet head()}

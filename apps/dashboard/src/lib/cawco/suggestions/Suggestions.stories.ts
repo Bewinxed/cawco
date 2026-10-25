@@ -112,3 +112,19 @@ export const ChipsPhone = {
 export const ChipsPanel = {
   args: { look: "chips", placement: "panel", set: "decisions" },
 };
+
+/** Row: the chips on one line scrolling sideways under the house edge fade, the next always peeking (the project page options' S2, on a composer). */
+export const Row = {
+  args: { look: "row", placement: "composer", set: "many" },
+};
+
+/** Row: the longest the hub writes, each wrapping inside its chip at four fifths of the row. */
+export const RowLong = {
+  args: { look: "row", placement: "composer", set: "long" },
+};
+
+/** Row: at a phone's width. */
+export const RowPhone = {
+  args: { look: "row", placement: "composer", set: "long" },
+  parameters: { viewport: 390 },
+};

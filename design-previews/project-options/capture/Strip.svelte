@@ -3,7 +3,10 @@
   chip per stage with its count and the hand on the you-kind stage, the
   kit's option chip on its wrapping row (a chip cloud, never a scroller).
   `chosen` is the stage a phone shows; on a desk a press snaps the board to
-  its column, so none is chosen.
+  its column, so none is chosen. The chosen chip is a place chosen, not an
+  answer picked: it wears the house selected state (`selected-bg`,
+  `selected-ink`, the rail's chosen row), never the option chip's coral edge,
+  so the view's one coral stays its act.
 -->
 <script>
   import { STAGES } from "./data.js";
@@ -17,7 +20,10 @@
     <button
       data-chip={stage.key}
       aria-pressed={chosen === null ? undefined : chosen === stage.key}
-      class={chipVariants({ variant: "option" })}
+      class={chipVariants({
+        variant: "option",
+        class: "aria-pressed:border-transparent aria-pressed:bg-selected-bg aria-pressed:text-selected-ink",
+      })}
       type="button"
     >
       {#if stage.kind === "you"}

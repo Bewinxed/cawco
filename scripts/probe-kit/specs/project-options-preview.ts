@@ -18,7 +18,12 @@
  *    05:06 in Asia/Qatar); the retry ring's wait is the client's for its
  *    attempt (1000ms × 2^attempt, capped at 30000ms).
  * 3. One coral per view: exactly one visible, topmost element painted in the
- *    action hue (`--action-solid`).
+ *    action or brand hue (`--action-solid`, `--brand-solid`), as a fill or
+ *    as a drawn edge (a chosen chip's coral outline counts).
+ * 3a. The starters' row (S2) is one line whose next chip peeks past its
+ *    edge; Ask Caw in a docked bar, without its coral, is the glyph alone
+ *    with no glass round it; Today at 1440 stands its rail in the crisp
+ *    slice.
  * 4. No bar ground: every bar (the page's, a pane's, Caw's column's, the
  *    phone's top bar, H2′'s tab row) draws no fill, hairline or shadow at
  *    rest, and every top edge layer stands at opacity 0 while its scroller
@@ -189,6 +194,7 @@ interface FrameRead {
   boxesTicked: { done: boolean; ticked: boolean }[];
   cawLine: boolean | null;
   coral: string[];
+  docked: string[];
   fits: string[];
   ground: string[];
   guillemets: string[];
@@ -240,16 +246,26 @@ function readFrame(): FrameRead {
       };
     }
   );
-  // One coral: the visible, topmost boxes painted in the action hue.
-  const probe = document.createElement("span");
-  probe.style.color = "var(--action-solid)";
-  document.body.append(probe);
-  const coralHue = getComputedStyle(probe).color;
-  probe.remove();
+  // One coral: the visible, topmost boxes painted in the action or brand hue, a fill or a drawn edge.
+  const hue = (token: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${token})`;
+    document.body.append(probe);
+    const { color } = getComputedStyle(probe);
+    probe.remove();
+    return color;
+  };
+  const corals = new Set([hue("--action-solid"), hue("--brand-solid")]);
   const coral: string[] = [];
   for (const el of document.querySelectorAll<HTMLElement>("body *")) {
     const style = getComputedStyle(el);
-    if (style.backgroundColor !== coralHue) {
+    const edged = ["top", "right", "bottom", "left"].some(
+      (side) =>
+        Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) > 0 &&
+        style.getPropertyValue(`border-${side}-style`) !== "none" &&
+        corals.has(style.getPropertyValue(`border-${side}-color`))
+    );
+    if (!(corals.has(style.backgroundColor) || edged)) {
       continue;
     }
     const r = el.getBoundingClientRect();
@@ -348,6 +364,43 @@ function readFrame(): FrameRead {
   const fits = [...document.querySelectorAll<HTMLElement>("[data-head]")]
     .filter((head) => head.dataset.fits !== "true")
     .map((head) => `${head.dataset.head} folded "${head.dataset.fold}"`);
+  // Ask Caw in a docked bar without its coral is the glyph alone: no glass round it.
+  const docked = [
+    ...document.querySelectorAll<HTMLElement>(
+      "[data-phone-bar='foot'] [data-ask-caw]:not([data-ask-caw='coral'])"
+    ),
+  ]
+    .filter((el) => el.closest("[data-slot='tools']"))
+    .map(
+      (el) => `Ask Caw (${el.dataset.askCaw}) stands in a glass in the dock`
+    );
+  // The starters' row: one line, the next chip peeking past the row's edge.
+  const row = document.querySelector<HTMLElement>("[data-row]");
+  if (row && row.children.length > 1) {
+    const r = row.getBoundingClientRect();
+    const first = row.children[0]?.getBoundingClientRect();
+    const next = row.children[1]?.getBoundingClientRect();
+    if (!(
+      first &&
+      next &&
+      first.right <= r.right &&
+      next.left < r.right - 16 &&
+      Math.abs(next.top - first.top) < 1
+    )) {
+      docked.push(
+        `the starters' row: first chip ${Math.round(first?.left ?? 0)}–${Math.round(first?.right ?? 0)}, next at ${Math.round(next?.left ?? 0)}, row ${Math.round(r.left)}–${Math.round(r.right)}`
+      );
+    }
+  }
+  // Today at 1440 stands its rail in the crisp slice.
+  const todayRail = document.querySelector<HTMLElement>("[data-today-rail]");
+  if (
+    document.querySelector(".po-today") &&
+    innerWidth === 1440 &&
+    Math.round(todayRail?.getBoundingClientRect().width ?? 0) !== 228
+  ) {
+    docked.push("Today at 1440 has no crisp rail over its own");
+  }
   // Caw's line stands whole inside what his column's thread shows.
   const line = document.querySelector<HTMLElement>("[data-hero] p");
   const thread = line?.closest<HTMLElement>("[data-edge-scroller]");
@@ -395,6 +448,7 @@ function readFrame(): FrameRead {
     records,
     axis,
     coral,
+    docked,
     fits,
     layering,
     ground,
@@ -644,6 +698,7 @@ const spec: Spec = {
         const corals: string[] = [];
         const crowded: string[] = [];
         const layered: string[] = [];
+        const placed: string[] = [];
         const grounds: string[] = [];
         const edges: string[] = [];
         let records = 0;
@@ -684,6 +739,9 @@ const spec: Spec = {
                   `${frame.at}: ${reading.coral.length} (${reading.coral.join(", ")})`
                 );
               }
+              placed.push(
+                ...reading.docked.map((one) => `${frame.at}: ${one}`)
+              );
               layered.push(
                 ...reading.layering.map((one) => `${frame.at}: ${one}`)
               );
@@ -736,6 +794,11 @@ const spec: Spec = {
           `${engine}: no bar draws a fill, hairline or shadow at rest, and the edge effect is absent at rest and on 30px into every scroller (${scrolled} frames scrolled)`,
           grounds.length === 0 && edges.length === 0,
           [...grounds, ...edges].slice(0, 4).join(" | ")
+        );
+        kit.check(
+          `${engine}: the starters' row peeks its next chip, a docked Ask Caw is its glyph alone, Today's 1440 rail is the crisp one`,
+          placed.length === 0,
+          placed.slice(0, 4).join(" | ")
         );
         kit.check(
           `${engine}: K1-review opens with its jump strip stuck under the bar and the Result head between the strip and the docked verdict`,

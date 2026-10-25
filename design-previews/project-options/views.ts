@@ -287,7 +287,7 @@ export const OPTION_VIEWS: OptionView[] = [
     widths: DESK,
     choice: { S: "S1", open: "caw", ...SIDE },
     caption: {
-      1440: "S1: Caw's column, Caw at the top on its axis, his line, then your six board starters stacked as sentences; Ask Caw wears the selected wash and Send is the one coral.",
+      1440: "S1: Caw's column, Caw at the top on its axis over the live hero's title, “What’s next for Cawco-Dev?”, then your six board starters stacked as sentences; Ask Caw wears the selected wash and Send is the one coral.",
       1037: "S1 at your window.",
     },
   },
@@ -297,7 +297,7 @@ export const OPTION_VIEWS: OptionView[] = [
     widths: DESK,
     choice: { S: "S2", open: "caw", ...SIDE },
     caption: {
-      1440: "S2: Caw at the top, his line, and your six starters as chips sitting on the composer.",
+      1440: "S2: Caw and the same title at the top; your six starters as one row on the composer, scrolling sideways, the next chip peeking under the edge fade.",
       1037: "S2 at your window. On the phone the sheet draws this whichever you pick.",
     },
   },
@@ -347,7 +347,7 @@ export const OPTION_VIEWS: OptionView[] = [
 export const TODAY_WIDTHS: Width[] = ALL;
 
 export const TODAY_CAPTION: Record<Width, string> = {
-  1440: "Today at 1440: the view strip over a two-row head with the path, five columns with kind words under each name.",
+  1440: "Today at 1440: the view strip over a two-row head with the path, five columns with kind words under each name. Its rail is the crisp one the options use (the desk capture's own was blurred mid-list).",
   1037: "Today at your window: the strip cut at Dec…, the head's two rows, three columns in view.",
   390: "Today on the phone: Ready's cards in full and the other stages a sliver at the right edge.",
 };
