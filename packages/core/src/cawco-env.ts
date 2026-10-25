@@ -100,6 +100,12 @@ export const CAWCO_ENV = {
    * routes, which `cawco tools` and `cawco tool` go through instead of the hub.
    */
   toolSocket: "CAWCO_TOOL_SOCKET",
+  /**
+   * The workspace whose Linux view an OpenCode server runs in (agent
+   * opencode.ts, layer.ts): CawCo's plugin there takes every session of the
+   * server as that workspace's, since views of one folder share its path.
+   */
+  viewWorkspace: "CAWCO_VIEW_WORKSPACE",
   /** Which service manager the installer targets: `systemd`, `launchd`, … */
   serviceMode: "CAWCO_SERVICE_MODE",
   /**

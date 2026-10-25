@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -249,14 +249,10 @@ const TRY_PROC = / from opencode-server-[\w-]+/;
  * words (WORDS.md's error formula: what happened, why, how to fix it, what
  * happens next).
  */
-const startRefused = (error: unknown, account: string | undefined): Error => {
+const startRefused = (error: unknown, whose: string): Error => {
   const detail = (error instanceof Error ? error.message : String(error))
     .replace(LOG_TAG, "")
     .replace(TRY_PROC, "");
-  const whose =
-    account === undefined
-      ? "OpenCode's server"
-      : `Account ${account}'s OpenCode server`;
   return new Error(
     `${whose} did not start: ${detail}. Fix OpenCode, its config or its sign-in, or start an OpenCode session or send one a message, and it is tried again.`
   );
@@ -266,13 +262,9 @@ const startRefused = (error: unknown, account: string | undefined): Error => {
  * A start that did not answer within its time: no refusal, so nothing holds
  * the next start back.
  */
-const startUnanswered = (
-  what: string,
-  after: number,
-  account: string | undefined
-): Error =>
+const startUnanswered = (what: string, after: number, whose: string): Error =>
   new Error(
-    `${account === undefined ? "OpenCode's server" : `Account ${account}'s OpenCode server`} did not answer ${what} within ${Math.round(after / 1000)} s. Its next start is tried at the next OpenCode session or message.`
+    `${whose} did not answer ${what} within ${Math.round(after / 1000)} s. Its next start is tried at the next OpenCode session or message.`
   );
 
 interface ServerRecord {
@@ -309,9 +301,43 @@ const recordStem = (): string =>
 const ACCOUNT_ID = /^[A-Za-z0-9_-]+$/;
 const ACCOUNT_RECORD =
   /^(opencode-server-[0-9a-f]{16})-account-([A-Za-z0-9_-]+)\.json$/;
-/** Every record file, of any keeper of this home, the machine's server's or an account's. */
+/** A workspace id as a view's server's record names it. */
+const VIEW_ID = /^[0-9a-f-]{36}$/;
+/** What a workspace's view's own server is recorded under: its workspace id, its account's after a dot. */
+const VIEW_RECORD =
+  /^(opencode-server-[0-9a-f]{16})-view-([0-9a-f-]{36})(?:\.([A-Za-z0-9_-]+))?\.json$/;
+/** Every record file, of any keeper of this home: the machine's server's, an account's or a view's. */
 const ANY_RECORD =
-  /^opencode-server-[0-9a-f]{16}(-account-[A-Za-z0-9_-]+)?\.json$/;
+  /^opencode-server-[0-9a-f]{16}(-account-[A-Za-z0-9_-]+|-view-[0-9a-f-]{36}(\.[A-Za-z0-9_-]+)?)?\.json$/;
+
+/**
+ * A server of a workspace's Linux view (layer.ts): the workspace, and how a
+ * spawn of its server is run there: entered into the view while it runs,
+ * on the host otherwise (one that only reads or moves the view's sessions).
+ */
+export interface ViewServer {
+  enter: (spec: ProcSpec) => ProcSpec;
+  workspace: string;
+}
+
+/** A server in words, as its errors and log lines name it. */
+const serverWords = (
+  account: string | undefined,
+  view: string | undefined
+): { name: string; whose: string } => {
+  if (view !== undefined) {
+    return {
+      name: `workspace ${view.slice(0, 8)}'s view's`,
+      whose: `Workspace ${view.slice(0, 8)}'s OpenCode server`,
+    };
+  }
+  return account === undefined
+    ? { name: "the machine's", whose: "OpenCode's server" }
+    : {
+        name: `account ${account}'s`,
+        whose: `Account ${account}'s OpenCode server`,
+      };
+};
 
 /** A record holds each generation's password: written whole, owner-only. */
 const writeRecord = async (path: string, record: unknown): Promise<void> => {
@@ -407,10 +433,27 @@ const strayServer = async (
 
 /**
  * The only launcher/adopter of one OpenCode server: the machine's own
- * (`account` undefined), or one account's. Publish a replacement before
+ * (`account` undefined), one account's, or one a workspace's Linux view runs
+ * (`view`), for its sessions on an account or none. Publish a replacement before
  * retiring its predecessor.
  */
 export class OpencodeServerOwner {
+  /** The views whose servers this keeper has a record of, each with its account, for an agent that starts up. */
+  static async recordedViews(): Promise<
+    { account: string | undefined; workspace: string }[]
+  > {
+    const stem = recordStem();
+    const files = await readdir(join(homedir(), ".cawco")).catch(
+      () => [] as string[]
+    );
+    return files.flatMap((file) => {
+      const match = file.match(VIEW_RECORD);
+      return match?.[1] === stem && match[2]
+        ? [{ workspace: match[2], account: match[3] }]
+        : [];
+    });
+  }
+
   /** The accounts whose servers this keeper has a record of, for an agent that starts up. */
   static async recordedAccounts(): Promise<string[]> {
     const stem = recordStem();
@@ -425,6 +468,11 @@ export class OpencodeServerOwner {
 
   /** The account whose server this owner keeps; undefined for the machine's own. */
   readonly account: string | undefined;
+  /** The workspace whose Linux view this owner's server runs in; undefined for one on the host. */
+  readonly view: string | undefined;
+  readonly #enter: (spec: ProcSpec) => ProcSpec;
+  /** This server in words ({@link serverWords}). */
+  readonly #words: { name: string; whose: string };
   readonly #path: string;
   /** The current keeper: where a server starts. */
   readonly #sessiond: () => Promise<SessiondClient>;
@@ -460,17 +508,26 @@ export class OpencodeServerOwner {
     attach: Attach,
     mayManage: () => Promise<boolean>,
     whyNotIdle: (identity: ServerIdentity) => Promise<string | undefined>,
-    account?: string
+    account?: string,
+    view?: ViewServer
   ) {
     if (account !== undefined && !ACCOUNT_ID.test(account)) {
       throw new Error(`"${account}" cannot name an OpenCode server's record.`);
     }
+    if (view && !VIEW_ID.test(view.workspace)) {
+      throw new Error(
+        `"${view.workspace}" cannot name an OpenCode server's record.`
+      );
+    }
     this.account = account;
-    this.#path = join(
-      homedir(),
-      ".cawco",
-      `${recordStem()}${account === undefined ? "" : `-account-${account}`}.json`
-    );
+    this.view = view?.workspace;
+    this.#enter = view?.enter ?? ((spec) => spec);
+    this.#words = serverWords(account, view?.workspace);
+    let suffix = account === undefined ? "" : `-account-${account}`;
+    if (view) {
+      suffix = `-view-${view.workspace}${account === undefined ? "" : `.${account}`}`;
+    }
+    this.#path = join(homedir(), ".cawco", `${recordStem()}${suffix}.json`);
     this.#sessiond = sessiond;
     this.#keeperOf = keeperOf;
     this.#attach = attach;
@@ -573,6 +630,21 @@ export class OpencodeServerOwner {
   }
 
   /**
+   * This server's record taken away once it names no generation (after
+   * {@link endAll}): a view's whose workspace is gone. One that still names
+   * a generation stays, for the sweep to end it.
+   */
+  async forget(): Promise<void> {
+    const record = await this.#load();
+    if (record.active || record.retired.length > 0) {
+      return;
+    }
+    await this.#writes;
+    await rm(this.#path, { force: true });
+    this.#record = null;
+  }
+
+  /**
    * The same process still runs, whoever holds it: its pid, with the start the
    * OS gave it when it was recorded. Unlike {@link #matches} this outlives the
    * keeper that started it.
@@ -665,14 +737,19 @@ export class OpencodeServerOwner {
     signal: AbortSignal
   ): Promise<ServerIdentity> {
     const client = await this.#sessiond();
-    const procId = `${OPENCODE_SERVER_PROC_ID}-${this.account === undefined ? "" : `account-${this.account}-`}${crypto.randomUUID()}`;
+    let kind = this.account === undefined ? "" : `account-${this.account}-`;
+    if (this.view !== undefined) {
+      kind = `view-${this.view.slice(0, 8)}-`;
+    }
+    const procId = `${OPENCODE_SERVER_PROC_ID}-${kind}${crypto.randomUUID()}`;
     const password = randomBytes(24).toString("base64url");
     signal.throwIfAborted();
     try {
+      // A view's server is entered into the view as it starts (`#enter`).
       const url = await this.#attach(
         client,
         procId,
-        {
+        this.#enter({
           ...launch.spec,
           args: [
             ...launch.spec.args.filter((arg) => !arg.startsWith("--port=")),
@@ -680,7 +757,7 @@ export class OpencodeServerOwner {
           ],
           env: { ...launch.spec.env, [PASSWORD_ENV]: password },
           inherit: "server",
-        },
+        }),
         signal
       );
       const identity = {
@@ -776,7 +853,7 @@ export class OpencodeServerOwner {
         );
       } catch (error) {
         this.#refused = {
-          error: startRefused(error, this.account),
+          error: startRefused(error, this.#words.whose),
           inputs: start.inputs,
         };
         throw this.#refused.error;
@@ -787,7 +864,7 @@ export class OpencodeServerOwner {
           identity = launched.value;
           break;
         case "unanswered":
-          throw startUnanswered("its start", launched.after, this.account);
+          throw startUnanswered("its start", launched.after, this.#words.whose);
         default: {
           const unhandled: never = launched;
           throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
@@ -842,7 +919,7 @@ export class OpencodeServerOwner {
           candidate = launched.value;
           break;
         case "unanswered":
-          throw startUnanswered("its start", launched.after, this.account);
+          throw startUnanswered("its start", launched.after, this.#words.whose);
         default: {
           const unhandled: never = launched;
           throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
@@ -867,7 +944,7 @@ export class OpencodeServerOwner {
             throw startUnanswered(
               "its verification",
               SERVER_CUTOVER_TIMEOUT_MS,
-              this.account
+              this.#words.whose
             );
           default: {
             const unhandled: never = verified;
@@ -890,7 +967,7 @@ export class OpencodeServerOwner {
         const [was, now] = [old?.launch, candidate.launch].map(launchGateForm);
         if (old && was !== now) {
           console.info(
-            `[opencode] gate: ${this.account ? `account ${this.account}'s` : "the machine's"} server relaunched from gate form ${was} onto ${now}; its sessions move over as each comes to rest`
+            `[opencode] gate: ${this.#words.name} server relaunched from gate form ${was} onto ${now}; its sessions move over as each comes to rest`
           );
         }
         return candidate;
@@ -926,7 +1003,7 @@ export class OpencodeServerOwner {
     this.#record = { active: null, retired: [...record.retired, active] };
     await this.#save();
     console.info(
-      `[opencode] ${this.account ? `account ${this.account}'s` : "the machine's"} server ${active.procId}/${active.pid}: retiring`
+      `[opencode] ${this.#words.name} server ${active.procId}/${active.pid}: retiring`
     );
     this.maintain();
   }
@@ -969,7 +1046,7 @@ export class OpencodeServerOwner {
     );
     if (left.length > 0 || still.length > 0) {
       throw new Error(
-        `${this.account ? `Account ${this.account}'s` : "The machine's"} OpenCode server did not end: ${[...left, ...still.map((identity) => `${identity.procId}/${identity.pid} is still running`)].join("; ")}`
+        `${this.#words.whose} did not end: ${[...left, ...still.map((identity) => `${identity.procId}/${identity.pid} is still running`)].join("; ")}`
       );
     }
   }
@@ -990,7 +1067,11 @@ export class OpencodeServerOwner {
     cawcoMcp: string,
     held: () => Promise<ReadonlySet<number>>
   ): Promise<void> {
-    if (this.account !== undefined || !(await this.#mayManage())) {
+    if (
+      this.account !== undefined ||
+      this.view !== undefined ||
+      !(await this.#mayManage())
+    ) {
       return;
     }
     const found: ServerIdentity[] = [];
