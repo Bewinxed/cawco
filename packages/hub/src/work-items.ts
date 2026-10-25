@@ -6430,7 +6430,7 @@ export const createWorkItems = ({
    */
   const holdForPicks = async (
     item: WorkItemRow,
-    request: WorkItemSubmission
+    submission: WorkItemSubmission
   ): Promise<string | undefined> => {
     if (item.lands !== "main" || !item.buildsFrom?.length) {
       return;
@@ -6441,9 +6441,8 @@ export const createWorkItems = ({
     if (owed.length === 0 || !workspace || workspace.host || !row) {
       return;
     }
-    // The commit an earlier hold of this item pushed, which this push replaces.
-    const last = lastBranchPush(item) ?? item.submission?.heldPush;
-    const { heldPush: _, ...submission } = request;
+    // The hub's last push there, an earlier hold's included, which this push replaces.
+    const last = lastBranchPush(item);
     const held =
       update(item.id, {
         submission,
@@ -6488,9 +6487,7 @@ export const createWorkItems = ({
         );
         break;
       case "pushed":
-        update(item.id, {
-          submission: { ...submission, heldPush: pushed.sha },
-        });
+        update(item.id, { heldPush: { sha: pushed.sha, at: Date.now() } });
         line = `Pushed to branch ${branch} at ${pushed.sha.slice(0, 9)} on origin; ${workspace.base} is untouched.`;
         break;
     }
@@ -7847,9 +7844,10 @@ export const createWorkItems = ({
 
   /**
    * The commit the hub last pushed to `item`'s own branch
-   * ({@link landingBranch}): the newest branch landing of every attempt at
-   * its task in its project, the item's own earlier rounds among them, or of
-   * the item alone when it is no task's. Undefined: the hub never pushed there.
+   * ({@link landingBranch}): the newest branch landing or held push
+   * ({@link holdForPicks}) of every attempt at its task in its project, the
+   * item's own earlier rounds among them, or of the item alone when it is no
+   * task's. Undefined: the hub never pushed there.
    */
   const lastBranchPush = (item: WorkItemRow): string | undefined => {
     const now = db.workItem(item.id) ?? item;
@@ -7859,14 +7857,18 @@ export const createWorkItems = ({
             .projectAttempts(now.projectId)
             .filter((attempt) => attempt.taskId === now.taskId)
         : [now];
-    let last: WorkLanding | undefined;
-    for (const { landed } of sharing) {
-      if (
-        landed &&
-        landed.onto === null &&
-        (!last || (landed.at ?? 0) > (last.at ?? 0))
-      ) {
-        last = landed;
+    let last: { at: number; sha: string } | undefined;
+    for (const { landed, heldPush } of sharing) {
+      const pushes = [
+        ...(landed && landed.onto === null
+          ? [{ sha: landed.sha, at: landed.at ?? 0 }]
+          : []),
+        ...(heldPush ? [heldPush] : []),
+      ];
+      for (const push of pushes) {
+        if (!last || push.at > last.at) {
+          last = push;
+        }
       }
     }
     return last?.sha;
@@ -9456,10 +9458,8 @@ export const createWorkItems = ({
      */
     async finishItem(
       instanceId: string,
-      asked: WorkItemSubmission
+      request: WorkItemSubmission
     ): Promise<string> {
-      // Its held push is the hub's to record, never the session's to say.
-      const { heldPush: _, ...request } = asked;
       const open = await finishable(instanceId);
       if (typeof open === "string") {
         return open;

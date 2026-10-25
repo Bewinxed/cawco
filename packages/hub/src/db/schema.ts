@@ -1334,12 +1334,6 @@ export interface WorkItemSubmission {
   /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
   headline: string;
   /**
-   * The hub's alone, never the session's: the commit it pushed to the
-   * item's own branch as it held this submission for the person's picks
-   * (work-items.ts `holdForPicks`), which the next hold's push may replace.
-   */
-  heldPush?: string;
-  /**
    * Ship the work once it lands on main: the project's declared ship command
    * (gate.md `Ship:`, ship.ts) runs on the hub's machine with these end-user
    * release notes.
@@ -1430,6 +1424,17 @@ export const workItems = sqliteTable(
      * A follow-up in its workspace that names none takes its pages.
      */
     buildsFrom: text("builds_from", { mode: "json" }).$type<PlanWait[]>(),
+    /**
+     * The commit the hub pushed to its own branch (`cawco/<task or item>`)
+     * as it held its landing for the person's picks (work-items.ts
+     * `holdForPicks`), and when, epoch ms: kept past its end, so the next
+     * push there, its own or a later attempt's at its task, replaces it as
+     * the hub's own. Null: never held.
+     */
+    heldPush: text("held_push", { mode: "json" }).$type<{
+      at: number;
+      sha: string;
+    }>(),
     /**
      * What its session handed in on its task (`task_result`): its words,
      * what to check, and its artifacts. A later call replaces it. Null:
