@@ -4,7 +4,12 @@
  * limit (agent boundary.ts `hookScript`, boundary-judge.ts). On the Mac
  * (2026-10-25, workspace-any-folder on 779056e68) seven of some 270 Bash
  * calls in a row waited the hook's whole 80 s and were refused, the calls
- * either side of each answered in a tenth of a second.
+ * either side of each answered in a tenth of a second. This spec's first
+ * run there (541bfae5e) stalled 3 of 3000: each hook held its connection
+ * to the judge, the judge held the accepted end, nothing was queued on
+ * either, and the hook read on for the judge's end of the connection,
+ * which never came. The answer now ends at the judge's end mark
+ * (boundary-judge.ts `ANSWER_END`), and no reader waits for the end.
  *
  * The real hook (perl, as boundary.ts writes it) and the real judge (its
  * two scripts in the workspace's state dir, on bun, as armHook starts it),
@@ -15,16 +20,16 @@
  * - j1. {@link CALLS} calls through the hook in a row: each is allowed
  *   (exit 0, nothing said) within {@link CALL_MS}.
  * - j2. The same calls through a client that speaks the hook's wire and
- *   says when each step of it is done (connected, sent, each byte of the
- *   answer, its end): each is answered, and its end read, within
- *   {@link CALL_MS}.
+ *   says when each step of it is done (connected, sent, each chunk of the
+ *   answer, its end mark, or the connection's end): each is answered whole
+ *   within {@link CALL_MS}.
  *
  * A call still waiting at {@link CALL_MS} is read where it stands before it
  * is ended: the step it waits in (j2), the judge's and the client's sockets
  * (lsof), and the kernel's queues on each (netstat on macOS, ss on Linux):
  * whether the judge accepted the connection, holds its bytes unread, or
- * wrote its answer and never its end. All of it goes to the spec's output
- * folder, `stalls.txt`.
+ * wrote no answer. All of it goes to the spec's output folder,
+ * `stalls.txt`.
  *
  *   bun scripts/probe-kit/run.ts judge-answers
  */
@@ -36,8 +41,8 @@ import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
-/** How many calls each leg hands in a row: ten times the 270 that stalled seven times on the Mac. */
-const CALLS = 3000;
+/** How many calls each leg hands in a row: past three times the 3000 that stalled three times on the Mac. */
+const CALLS = 10_000;
 
 /** How long one call may take before it is read as stalled: the judge answers in under a millisecond, and a loaded Mac starts perl within a second or two. */
 const CALL_MS = 10_000;
@@ -48,7 +53,8 @@ const STALLS_READ = 4;
 /**
  * The hook's wire, spoken by a client that says each step on stderr with
  * its time: the call's JSON and the prefix in hex on two lines, then the
- * answer read a chunk at a time until its end.
+ * answer read a chunk at a time up to its end mark (a NUL), or the
+ * connection's end.
  */
 const STEPPED = `use strict; use Socket; use Time::HiRes qw(time);
 my ($path, $prefix) = @ARGV;
@@ -69,6 +75,7 @@ while (1) {
   if ($n == 0) { said("end"); last }
   $answer .= $chunk;
   said("read $n");
+  if ($answer =~ s/\\0.*\\z//s) { said("end mark"); last }
 }
 print STDOUT $answer;
 `;
@@ -304,7 +311,7 @@ const run = async (kit: Kit) => {
       (ran) => ran.status === 0 && ran.out === "0\n"
     );
     check(
-      `j2: ${CALLS} calls on the hook's wire are each answered, and the answer's end read, within ${CALL_MS / 1000} s`,
+      `j2: ${CALLS} calls on the hook's wire are each answered whole within ${CALL_MS / 1000} s`,
       steps.bad.length === 0,
       `${steps.bad.length} not: ${steps.bad
         .slice(0, 3)

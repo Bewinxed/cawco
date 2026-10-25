@@ -39,10 +39,14 @@
  *
  * The wire: the hook sends the call's JSON on one line and its CLI's shell
  * prefix, in hex, on the next (`-` when it names none); the judge answers
- * `0` and what the hook prints
- * on stdout, or `2` and why the call is refused, and closes. Anything it
+ * `0` and what the hook prints on stdout, or `2` and why the call is
+ * refused, then its end mark ({@link ANSWER_END}), and closes. Anything it
  * cannot do answers `2`: a call never runs outside the boundary or the
- * policy.
+ * policy. A reader takes the answer whole at its end mark, and never waits
+ * for the connection's end: on macOS Bun's server at times never sent it
+ * once the answer was written (2026-10-25, judge-answers j1: 3 of 3000
+ * calls in a row, each hook holding its connection with nothing queued on
+ * either end until its 80 s ran out; in a scratch fleet, 7 of some 270).
  *
  * A judge of another form (another build's) is replaced by starting the new
  * one on its own socket and pointing the hook at it. A hook already running
@@ -90,6 +94,12 @@ const { judgeCall, readPolicy } = (await import(
 const SHELL_TOOLS = new Set(["Bash", "Monitor"]);
 
 const refuse = (reason: string): string => `2\n${reason}`;
+
+/**
+ * What ends every answer: a NUL, which no answer holds (JSON escapes one,
+ * and no path or reason has one; any is taken out before it is sent).
+ */
+const ANSWER_END = "\0";
 
 /** What the model reads when its CLI's shell prefix is not the workspace's. */
 const UNPREFIXED =
@@ -212,7 +222,7 @@ const server = createServer((connection) => {
       return;
     }
     connection.removeAllListeners("data");
-    connection.end(answered);
+    connection.end(`${answered.replaceAll(ANSWER_END, "")}${ANSWER_END}`);
   });
   // A hook killed mid-call leaves nothing to answer.
   connection.on("error", () => connection.destroy());
