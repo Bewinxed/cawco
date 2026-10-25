@@ -55,7 +55,7 @@ import { dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { taskOf, traceMain } from "../frames";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { type Kit, type KitFleet, open, readMotion, type Spec } from "../kit";
 import { quietLeg } from "../quiet";
 import { asleep, conversationFile, seedRows } from "./no-wake-at-rest";
 import { SLOWER } from "./two-pane-perf";
@@ -91,9 +91,10 @@ const respond = (request: Seen): Reply => {
 interface Reorder {
   /**
    * The page's frames in the 3 s before it, the turn's own among them:
-   * their median and most, ms, and how many.
+   * their median and most, ms, how many, how many past the display's
+   * frame, and their time summed, ms.
    */
-  ambient: [number, number, number];
+  ambient: [number, number, number, number, number];
   /** When its task started, the page's clock; NaN when it moved rows outside a task we wrap. */
   at: number;
   /** The frame after it, ms: its first callback to a message posted from there. -1 until read. */
@@ -307,8 +308,10 @@ const takeReorders = (page: Page): Promise<Reorder[]> =>
             before[Math.floor(before.length / 2)] as number,
             before.at(-1) as number,
             before.length,
+            before.filter((ms) => ms > 1000 / 60).length,
+            before.reduce((sum, ms) => sum + ms, 0),
           ]
-        : [0, 0, 0];
+        : [0, 0, 0, 0, 0];
     }
     return done;
   });
@@ -525,6 +528,7 @@ async function reorders(
       60_000
     );
     const [turned, other] = lower === 1 ? [live[1], live[0]] : live;
+    await page.evaluate(() => performance.mark("held-turn"));
     const sent = Date.now();
     await fleet.send(turned, "Say ok.");
     const landed = await until(
@@ -563,7 +567,7 @@ const said = (runs: Reorder[]) =>
   runs
     .map(
       (run) =>
-        `${run.kind} ${round(run.taskMs)}+${round(run.frameMs)}ms (${run.moved} moved in ${run.where.join("/")}; frames in the 3 s before ${round(run.ambient[0])}ms median, ${round(run.ambient[1])}ms most of ${run.ambient[2]})`
+        `${run.kind} ${round(run.taskMs)}+${round(run.frameMs)}ms (${run.moved} moved in ${run.where.join("/")}; frames in the 3 s before ${round(run.ambient[0])}ms median, ${round(run.ambient[1])}ms most of ${run.ambient[2]}, ${run.ambient[3]} past a frame, ${round(run.ambient[4])}ms in all)`
     )
     .join("; ");
 
@@ -585,18 +589,25 @@ const holds = (
   const task = Math.max(0, ...runs.map((run) => run.taskMs));
   const whole = Math.max(0, ...runs.map((run) => run.taskMs + run.frameMs));
   const before = Math.max(0, ...runs.map((run) => run.ambient[1]));
+  const frames = runs.map((run) => run.frameMs).sort((a, b) => a - b);
+  const median = frames[Math.floor(frames.length / 2)] ?? 0;
+  const turnMs = runs.reduce((sum, run) => sum + run.ambient[4], 0);
+  const turnLong = runs.reduce((sum, run) => sum + run.ambient[3], 0);
   kit.check(
     `${label}: every reorder's own task${scale === 1 ? "" : ` ×${scale}`} under ${round(budget)}ms`,
     runs.length > 0 && task * scale < budget,
     `${runs.length} reorders, the longest task ${round(task)}ms (task+frame): ${said(runs)}`
   );
   kit.note(
-    `${label}: with the frame after it, the most ${round(whole)}ms; the dearest frame of the turns before them ${round(before)}ms`
+    `${label}: with the frame after it, the most ${round(whole)}ms; the reorder's frame ${round(median)}ms median; the turns' frames before them ${round(before)}ms at most, ${turnLong} past a frame, ${round(turnMs)}ms in all`
   );
   return {
     task: round(task),
     taskAndFrame: round(whole),
+    reorderFrame: round(median),
     turnFrame: round(before),
+    turnLong,
+    turnMs: round(turnMs),
     runs,
   };
 };
@@ -646,6 +657,9 @@ async function traceLeg(kit: Kit, fleet: KitFleet, live: [string, string]) {
   const page = await kit.page("desk", { init: [watchReorders] });
   await open(page, base, `${RAIL_LIST} a[href^="/session/"]`, 180_000);
   await page.waitForTimeout(5000);
+  // One reorder untraced first: what a page does once (a token's first read,
+  // the first echo) is no turn's steady cost.
+  await reorders(kit, page, fleet, live, "trace warm-up", 1);
   let runs: Reorder[] = [];
   const main = await traceMain(
     page,
@@ -670,6 +684,38 @@ async function traceLeg(kit: Kit, fleet: KitFleet, live: [string, string]) {
   kit.note(
     `trace: hot stacks: ${stacks.map(([stack, ms]) => `${round(ms)}ms ${stack}`).join(" || ")}`
   );
+  // The turn's own dearest tasks, from its send to the reorder: what the
+  // rail's rows cost the frames that draw their state changing.
+  const turnAt = main.marks.find((one) => one.name === "held-turn")?.at;
+  const turnTop = (
+    turnAt === undefined
+      ? []
+      : main.tasks.filter((one) => one.at >= turnAt && one.end <= task.at)
+  )
+    .sort((a, b) => b.cpu - a.cpu)
+    .slice(0, 3);
+  for (const one of turnTop) {
+    kit.note(
+      `trace: a turn task ${round(one.cpu)}ms of thread time, ran ${one.ran}; style ${round(one.styleMs)}ms, layout ${round(one.layoutMs)}ms, ${one.restyled} elements restyled; its rendering: ${one.rendering
+        .slice(0, 6)
+        .map(([name, ms]) => `${name} ${round(ms)}ms`)
+        .join(", ")}; its passes: ${[...one.passes]
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, 3)
+        .map(
+          (pass) =>
+            `${pass.name} ${round(pass.ms)}ms ${pass.elements} elements (${pass.at})`
+        )
+        .join("; ")}; restyled by ${one.invalidated
+        .slice(0, 5)
+        .map(([why, n]) => `${n}× ${why}`)
+        .join("; ")}; its script: ${main
+        .selfTime(one.at, one.end)
+        .slice(0, 6)
+        .map(([fn, ms]) => `${fn} ${round(ms)}ms`)
+        .join("; ")}`
+    );
+  }
   const frame = taskOf(main, "held-reorder-frame");
   if (frame) {
     const passes = [...frame.passes]
@@ -702,10 +748,17 @@ async function traceLeg(kit: Kit, fleet: KitFleet, live: [string, string]) {
     const marks = frame.invalidated
       .filter(([why]) => why.endsWith("on SPAN.group/mark"))
       .reduce((sum, [, n]) => sum + n, 0);
+    const projectMarks = await page.evaluate(
+      ([list, one]) =>
+        document
+          .querySelector(`${list}:has(a[href="/session/${one}"])`)
+          ?.querySelectorAll("[data-tree-mark]").length ?? 0,
+      [RAIL_LIST, live[0]] as const
+    );
     kit.check(
-      "trace: the reorder's frame restyles the moved row's tree marks, not the project's every one",
-      marks <= 2 * Math.max(1, ...runs.map((run) => run.moved)),
-      `${marks} tree marks restyled, ${frame.restyled} elements in all`
+      "trace: the reorder's frame restyles the moved rows' tree marks, not the project's every one",
+      projectMarks > 8 && marks * 4 <= projectMarks,
+      `${marks} tree marks restyled of the project's ${projectMarks}, ${frame.restyled} elements in all`
     );
     kit.note(
       `trace: the frame's script by self time: ${main
@@ -731,6 +784,254 @@ async function traceLeg(kit: Kit, fleet: KitFleet, live: [string, string]) {
   };
 }
 
+/** The served module that holds lists' order (motion/held-order), on the dev server. */
+const HELD_MODULE = /\/held-order\.svelte\.ts(\?|$)/;
+/** Where the served module's `heldOrder` begins. */
+const HELD_HEAD = /export function heldOrder\(([^)]*)\)\s*\{/;
+
+/**
+ * The dev server's held-order module, served with a count of every list it
+ * orders: `window.__heldRuns` goes up by one each time any list re-derives
+ * its order (`heldOrder`). The page's own code, unchanged otherwise.
+ */
+async function countHeldRuns(page: Page): Promise<() => boolean> {
+  let counted = false;
+  await page.route(HELD_MODULE, async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    const with_ = body.replace(
+      HELD_HEAD,
+      (head) =>
+        `${head}\n  globalThis.__heldRuns = (globalThis.__heldRuns ?? 0) + 1;`
+    );
+    counted ||= with_ !== body;
+    await route.fulfill({ response, body: with_ });
+  });
+  return () => counted;
+}
+
+const heldRuns = (page: Page) =>
+  page.evaluate(
+    () => (globalThis as unknown as { __heldRuns?: number }).__heldRuns ?? 0
+  );
+
+/**
+ * The pointer onto the rail and off it again, no reorder waiting: how many
+ * held lists re-derive their order. Each list read the scopes the pointer is
+ * in, so the pointer crossing the rail re-ran every list on it; a list now
+ * reads them only while a reorder of its own waits.
+ */
+async function hoverLeg(kit: Kit, fleet: KitFleet) {
+  const base = await fleet.devDashboard();
+  const page = await kit.page("desk", { init: [watchReorders] });
+  const counted = await countHeldRuns(page);
+  await open(page, base, `${RAIL_LIST} a[href^="/session/"]`, 180_000);
+  // Past every list's settle and gap: nothing waits.
+  await page.waitForTimeout(8000);
+  const lists = await heldRuns(page);
+  const row = page.locator(`${RAIL_LIST} a[href^="/session/"]`).first();
+  const box = await row.boundingBox();
+  if (!(box && counted())) {
+    kit.check(
+      "hover: the held-order module is counted and a rail row is in reach",
+      false,
+      `counted ${counted()}, row ${JSON.stringify(box)}`
+    );
+    await page.close();
+    return null;
+  }
+  await page.mouse.move(1200, 450);
+  await page.waitForTimeout(1000);
+  const before = await heldRuns(page);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
+    steps: 4,
+  });
+  await page.waitForTimeout(1000);
+  const inside = await heldRuns(page);
+  await page.mouse.move(1200, 450, { steps: 4 });
+  await page.waitForTimeout(1000);
+  const after = await heldRuns(page);
+  kit.check(
+    "hover: the pointer onto the rail and off it re-derives no held list",
+    inside === before && after === before,
+    `${inside - before} lists re-derived as it came on, ${after - inside} as it left (${lists} derivations since the page loaded)`
+  );
+  await page.close();
+  return { on: inside - before, off: after - inside, loaded: lists };
+}
+
+/** The house's travel (motion/rows `travel`): --ease-in-out over --dur-panel. */
+const TRAVEL = { easing: "cubic-bezier(0.77, 0, 0.175, 1)", ms: 280 };
+
+/**
+ * One reorder on a held clock (kit `readMotion`, the DevTools Animation
+ * domain): the runs it starts in the live sessions' project list, and the
+ * turned row's place against where it lands at the start, middle and end of
+ * the clock. The Nothing Jumps Rule: the row glides there on the house's
+ * travel; it is never drawn where it jumped to.
+ */
+async function motionLeg(
+  kit: Kit,
+  page: Page,
+  fleet: KitFleet,
+  live: [string, string]
+) {
+  const lower = await lowerOf(page, live);
+  const [turned, other] = lower === 1 ? [live[1], live[0]] : live;
+  const list = `${RAIL_LIST}:has(a[href="/session/${turned}"])`;
+  await page.mouse.move(1200, 450);
+  const read = await readMotion(
+    page,
+    async () => {
+      await fleet.send(turned, "Say ok.");
+      await until(
+        "motion: the reorder lands",
+        async () =>
+          (await lowerOf(page, [turned, other])) === 1 ? true : undefined,
+        Boolean,
+        LANDS_MS
+      );
+    },
+    list,
+    {
+      ms: LANDS_MS + 10_000,
+      fractions: [0, 0.5, 1],
+      read: () =>
+        page.evaluate(
+          ([group, one]) => {
+            const li = document
+              .querySelector(group)
+              ?.querySelector(`a[href="/session/${one}"]`)
+              ?.closest("li");
+            const parent = li?.parentElement;
+            return li && parent
+              ? li.getBoundingClientRect().top -
+                  parent.getBoundingClientRect().top -
+                  (li as HTMLElement).offsetTop
+              : Number.NaN;
+          },
+          [list, turned] as const
+        ),
+    }
+  );
+  const slides = read.runs.filter(
+    (run) => run.target.startsWith("li") && run.type === "WebAnimation"
+  );
+  const runs = read.runs
+    .map(
+      (run) =>
+        `${run.type} ${run.name} on ${run.target}, ${run.end}ms ${run.easing}${run.ended ? "" : ` (${run.missed})`}`
+    )
+    .join("; ");
+  const off = read.at.map(
+    ({ fraction, value }) => `${fraction}: ${round(value)}px`
+  );
+  const [start, middle, end] = read.at.map(({ value }) => value);
+  kit.check(
+    "motion: the reorder glides its rows on the house's travel (--ease-in-out, --dur-panel)",
+    slides.length > 0 &&
+      slides.every(
+        (run) =>
+          run.easing.replaceAll(" ", "") ===
+            TRAVEL.easing.replaceAll(" ", "") &&
+          Math.abs(run.end - TRAVEL.ms) < 2 &&
+          run.ended
+      ),
+    `${read.runs.length} runs on the ${read.by}: ${runs || "none"}`
+  );
+  kit.check(
+    "motion: the turned row is drawn where it stood, then partway, then where it landed (never where it jumped to)",
+    start !== undefined &&
+      middle !== undefined &&
+      end !== undefined &&
+      start > 4 &&
+      middle > 0 &&
+      middle < start &&
+      Math.abs(end) < 1,
+    `its offset from where it lands, by fraction of the clock: ${off.join(", ")}`
+  );
+  await page.waitForTimeout(5000);
+  await takeReorders(page);
+  return { runs: read.runs, at: read.at };
+}
+
+/**
+ * The page's composited layers at rest (DevTools `LayerTree`): how many,
+ * and the most common by element and by why each was made one. Every layer
+ * is assembled again in each frame that paints (Layerize, UpdateLayer).
+ */
+async function layersOf(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("DOM.enable");
+    await cdp.send("DOM.getDocument", { depth: 0 });
+    const tree = new Promise<
+      { backendNodeId?: number; layerId: string; drawsContent: boolean }[]
+    >((resolve) => {
+      cdp.on("LayerTree.layerTreeDidChange", (event) => {
+        if (event.layers) {
+          resolve(event.layers);
+        }
+      });
+    });
+    await cdp.send("LayerTree.enable");
+    // A frame that paints, so the tree is told.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          document.body.style.outline = "0 solid transparent";
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              document.body.style.outline = "";
+              resolve();
+            })
+          );
+        })
+    );
+    const layers = await tree;
+    const kinds = new Map<string, number>();
+    let inRail = 0;
+    for (const layer of layers) {
+      const why = await cdp
+        .send("LayerTree.compositingReasons", { layerId: layer.layerId })
+        .then((reasons) => reasons.compositingReasonIds?.join("+") ?? "")
+        .catch(() => "?");
+      let what = "(none)";
+      if (layer.backendNodeId) {
+        const node = await cdp
+          .send("DOM.resolveNode", { backendNodeId: layer.backendNodeId })
+          .catch(() => null);
+        if (node?.object.objectId) {
+          const told = await cdp.send("Runtime.callFunctionOn", {
+            objectId: node.object.objectId,
+            returnByValue: true,
+            functionDeclaration: `function () {
+              const el = this.nodeType === 1 ? this : this.parentElement;
+              if (!el) return ["?", false];
+              const slot = el.closest("[data-slot]")?.getAttribute("data-slot") ?? "";
+              const own = el.getAttribute("data-slot") ?? [...el.attributes].map((a) => a.name).filter((n) => n.startsWith("data-")).slice(0, 2).join(",");
+              return [el.tagName.toLowerCase() + "[" + own + "] in " + slot, !!el.closest('[data-slot="sidebar-content"], [data-sidebar="content"]')];
+            }`,
+          });
+          const [name, rail] = told.result.value as [string, boolean];
+          what = name;
+          inRail += rail ? 1 : 0;
+        }
+      }
+      const key = `${what} (${why})`;
+      kinds.set(key, (kinds.get(key) ?? 0) + 1);
+    }
+    return {
+      count: layers.length,
+      drawing: layers.filter((layer) => layer.drawsContent).length,
+      inRail,
+      kinds: [...kinds].sort((a, b) => b[1] - a[1]).slice(0, 20),
+    };
+  } finally {
+    await cdp.detach();
+  }
+}
+
 /** A timing leg's reorders, read again while the machine was contended (quiet.ts). */
 async function quietly(
   name: string,
@@ -741,6 +1042,89 @@ async function quietly(
     runs = await leg();
   });
   return runs;
+}
+
+/** The legs a run reads (`HELD_LEGS=chromium,motion,…`); every one unset. */
+const LEGS = [
+  "chromium",
+  "chromium4",
+  "decks",
+  "hold",
+  "motion",
+  "layers",
+  "trace",
+  "hover",
+  "webkit",
+] as const;
+const legs = new Set<string>(
+  process.env.HELD_LEGS?.split(",").map((leg) => leg.trim()) ?? LEGS
+);
+
+/** The built dashboard's home at the desk, on Chromium, its rail drawn. */
+async function chromiumPage(kit: Kit, base: string) {
+  const page = await kit.page("desk", { init: [watchReorders] });
+  await open(page, base, `${RAIL_LIST} a[href^="/session/"]`, 120_000);
+  const rows = await page.evaluate(
+    (list) => document.querySelectorAll(`${list} a[href^="/session/"]`).length,
+    RAIL_LIST
+  );
+  kit.note(`chromium: the home at the desk, ${rows} session rows on the rail`);
+  await page.waitForTimeout(5000);
+  return page;
+}
+
+async function chromiumLegs(
+  kit: Kit,
+  base: string,
+  fleet: KitFleet,
+  live: [string, string],
+  numbers: Record<string, unknown>
+) {
+  const chromium = await chromiumPage(kit, base);
+  if (legs.has("layers")) {
+    const layers = await layersOf(chromium);
+    numbers.layers = layers;
+    kit.note(
+      `layers: ${layers.count} composited layers at rest (${layers.drawing} drawing, ${layers.inRail} in the rail); the most: ${layers.kinds.map(([kind, n]) => `${n}× ${kind}`).join("; ")}`
+    );
+  }
+  if (legs.has("chromium")) {
+    numbers.chromium = holds(
+      kit,
+      "chromium 1×",
+      await quietly("chromium 1×", () =>
+        reorders(kit, chromium, fleet, live, "chromium 1×", REORDERS)
+      ),
+      BUDGET_MS
+    );
+  }
+  if (legs.has("chromium4")) {
+    const cdp = await chromium.context().newCDPSession(chromium);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    try {
+      numbers.chromium4 = holds(
+        kit,
+        "chromium 4× (CPU throttled)",
+        await quietly("chromium 4×", () =>
+          reorders(kit, chromium, fleet, live, "chromium 4×", REORDERS)
+        ),
+        FRAME_MS
+      );
+    } finally {
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+      await cdp.detach();
+    }
+  }
+  if (legs.has("decks")) {
+    await decksHold(kit, chromium, "chromium");
+  }
+  if (legs.has("motion")) {
+    numbers.motion = await motionLeg(kit, chromium, fleet, live);
+  }
+  if (legs.has("hold")) {
+    await holdLeg(kit, chromium, fleet, live);
+  }
+  await chromium.close();
 }
 
 const spec: Spec = {
@@ -758,59 +1142,28 @@ const spec: Spec = {
     const { live } = await board(kit, fleet);
     const base = await fleet.dashboard();
     const numbers: Record<string, unknown> = {};
-
-    const chromium = await kit.page("desk", { init: [watchReorders] });
-    await open(chromium, base, `${RAIL_LIST} a[href^="/session/"]`, 120_000);
-    const rows = await chromium.evaluate(
-      (list) =>
-        document.querySelectorAll(`${list} a[href^="/session/"]`).length,
-      RAIL_LIST
-    );
-    kit.note(
-      `chromium: the home at the desk, ${rows} session rows on the rail`
-    );
-    await chromium.waitForTimeout(5000);
-    numbers.chromium = holds(
-      kit,
-      "chromium 1×",
-      await quietly("chromium 1×", () =>
-        reorders(kit, chromium, fleet, live, "chromium 1×", REORDERS)
-      ),
-      BUDGET_MS
-    );
-    const cdp = await chromium.context().newCDPSession(chromium);
-    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
-    try {
-      numbers.chromium4 = holds(
-        kit,
-        "chromium 4× (CPU throttled)",
-        await quietly("chromium 4×", () =>
-          reorders(kit, chromium, fleet, live, "chromium 4×", REORDERS)
-        ),
-        FRAME_MS
-      );
-    } finally {
-      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-      await cdp.detach();
+    kit.note(`legs: ${[...legs].join(", ")}`);
+    await chromiumLegs(kit, base, fleet, live, numbers);
+    if (legs.has("hover")) {
+      numbers.hover = await hoverLeg(kit, fleet);
     }
-    await decksHold(kit, chromium, "chromium");
-    await holdLeg(kit, chromium, fleet, live);
-    await chromium.close();
-
-    numbers.trace = await traceLeg(kit, fleet, live);
-
-    const webkit = await kit.page("desk", {
-      engine: "webkit",
-      init: [watchReorders],
-    });
-    await open(webkit, base, `${RAIL_LIST} a[href^="/session/"]`, 120_000);
-    await webkit.waitForTimeout(5000);
-    const onWebkit = await quietly("webkit 1×", () =>
-      reorders(kit, webkit, fleet, live, "webkit 1×", REORDERS)
-    );
-    await decksHold(kit, webkit, "webkit");
-    numbers.webkit = holds(kit, "webkit 1×", onWebkit, BUDGET_MS);
-    holds(kit, `webkit at ${SLOWER}× its time`, onWebkit, FRAME_MS, SLOWER);
+    if (legs.has("trace")) {
+      numbers.trace = await traceLeg(kit, fleet, live);
+    }
+    if (legs.has("webkit")) {
+      const webkit = await kit.page("desk", {
+        engine: "webkit",
+        init: [watchReorders],
+      });
+      await open(webkit, base, `${RAIL_LIST} a[href^="/session/"]`, 120_000);
+      await webkit.waitForTimeout(5000);
+      const onWebkit = await quietly("webkit 1×", () =>
+        reorders(kit, webkit, fleet, live, "webkit 1×", REORDERS)
+      );
+      await decksHold(kit, webkit, "webkit");
+      numbers.webkit = holds(kit, "webkit 1×", onWebkit, BUDGET_MS);
+      holds(kit, `webkit at ${SLOWER}× its time`, onWebkit, FRAME_MS, SLOWER);
+    }
     await writeFile(
       join(kit.out, "numbers.json"),
       `${JSON.stringify(numbers, null, 2)}\n`

@@ -116,9 +116,6 @@ export function heldOrder<T>(
   rows: T[],
   id: (row: T) => string
 ): T[] {
-  // Reads its own count and the scopes it is in, so the list re-derives
-  // when its held reorder falls due or the pointer leaves it.
-  const stop = (dues[key] ?? 0) >= 0 && blocked(key);
   const computed = rows.map(id);
   const at = Date.now();
   const list = lists.get(key);
@@ -143,6 +140,11 @@ export function heldOrder<T>(
     stopTimer(list);
     return handBack(list, rows);
   }
+  // A reorder waits: only now does the list read its own count and the
+  // scopes it is in, so it re-derives when that reorder falls due or the
+  // pointer leaves it. A list at rest reads neither, and a pointer crossing
+  // the rail or the home re-derives none of them.
+  const stop = (dues[key] ?? 0) >= 0 && blocked(key);
   if (!sameOrder(list.pending, computed)) {
     list.pending = computed;
     list.since = at;

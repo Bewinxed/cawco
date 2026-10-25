@@ -123,7 +123,20 @@
   } = $props();
 
   const tabs = useTabs();
-  const rects = new TabRects((order) => tabs.setOrder(order));
+  // The track's tokens are read with its boxes, in the size observer's
+  // delivery (rects `onResize`): on the layout just done, they cost no
+  // style or layout of their own. Read in the next frame's callbacks, after
+  // that frame's writes, each resize of the strip (a turn's Working tab
+  // arriving) laid the page out for them there.
+  const rects = new TabRects(
+    (order) => tabs.setOrder(order),
+    (track) => {
+      const read = readTokens(track);
+      return () => {
+        tokens = read;
+      };
+    }
+  );
   const list = new TabsListState(rects);
   provideList(list);
 
@@ -424,9 +437,9 @@
     overlap: number;
   }
   /**
-   * The tokens, as last read off the track: in a frame, each time the track
-   * is measured at a new size (a breakpoint can change them), so a choice
-   * reads them in the task that makes it without styling the page there.
+   * The tokens, as last read off the track: each time the track is measured
+   * at a new size (a breakpoint can change them), so a choice reads them in
+   * the task that makes it without styling the page there.
    */
   let tokens: Measures | null = null;
   const readTokens = (track: HTMLElement): Measures => {
@@ -440,17 +453,6 @@
       overlap: px("--overlap"),
     };
   };
-  $effect(() => {
-    const track = node;
-    const { width, height } = rects.viewport;
-    if (!(track && width + height > 0)) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      tokens = readTokens(track);
-    });
-    return () => cancelAnimationFrame(frame);
-  });
   /** The come-forward's measures: the tokens as last read (read now only before the track's first frame). */
   function measures(track: HTMLElement): Measures {
     tokens ??= readTokens(track);

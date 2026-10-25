@@ -65,15 +65,25 @@ export class TabRects {
 
   readonly #values = new Map<HTMLElement, string>();
   readonly #onOrder: (values: string[]) => void;
+  readonly #onResize: ((track: HTMLElement) => () => void) | undefined;
   #container: HTMLElement | null = null;
   #sizes: FrameObserver | null = null;
   /** What the last measure in a delivery read, written in the next frame. */
   #pending: (() => void) | null = null;
   #moves: MutationObserver | null = null;
 
-  /** `onOrder` hears the tabs' values in the order they stand. */
-  constructor(onOrder: (values: string[]) => void) {
+  /**
+   * `onOrder` hears the tabs' values in the order they stand. `onResize`
+   * reads what the track's size can change (its tokens: a breakpoint sets
+   * them) in the same read as the boxes, on the layout the delivery has
+   * just done, and answers the write that keeps it, made with theirs.
+   */
+  constructor(
+    onOrder: (values: string[]) => void,
+    onResize?: (track: HTMLElement) => () => void
+  ) {
     this.#onOrder = onOrder;
+    this.#onResize = onResize;
   }
 
   /** The box of the tab at a place in the order, both from the same measure. */
@@ -300,7 +310,11 @@ export class TabRects {
     const { items } = this;
     const width = container.clientWidth;
     const height = container.clientHeight;
+    const resized =
+      width !== this.viewport.width || height !== this.viewport.height;
+    const keep = resized ? this.#onResize?.(container) : undefined;
     return () => {
+      keep?.();
       if (changed) {
         this.rects = rects;
       }

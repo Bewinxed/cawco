@@ -112,6 +112,25 @@ const TOKENS = [
   "--pop-rise",
   "--space-1",
   "--space-3",
+  // Read through here as well: each one missing from this pass styled the
+  // page on its own the first time it was asked (a turn's first echo,
+  // `--echo-scale` from echo.svelte.ts, laid the page out for 6.6ms).
+  "--dur-loop",
+  "--dur-mark-hold",
+  "--dur-peek",
+  "--dur-settle",
+  "--dur-wait-grace",
+  "--ease-figure",
+  "--echo-opacity",
+  "--echo-scale",
+  "--deck-shrink",
+  "--deck-step",
+  "--press-scale",
+  "--ride-fade",
+  "--space-2",
+  "--space-4",
+  "--text-meta",
+  "--c-pin-card-w",
 ];
 const tokens = new Map<string, string>();
 let watched = false;
