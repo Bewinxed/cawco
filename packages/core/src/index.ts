@@ -872,6 +872,8 @@ export interface AgentRow {
   /** The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has. */
   home?: string;
   hostname: string;
+  /** The hub runs on this machine, as the hub reads it: live, never stored. */
+  hostsHub?: boolean;
   /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
   lastSeenAt: string | number | Date | null;
   /**

@@ -510,6 +510,8 @@ export interface AdmissionItem {
  * machine does, and the item leaves once it answers.
  */
 export interface LostMachineItem {
+  /** The hub runs on it: what stopped is its agent (core `contactWords`). */
+  hub: boolean;
   key: string;
   kind: "machine";
   /** How long it has been silent, in whole minutes, as the hub said it lost. */
@@ -1430,8 +1432,12 @@ class Home {
               kind: "machine" as const,
               key: `machine:${machine.machineId}`,
               name: machineName(machine.machineId),
+              hub: machine.hostsHub === true,
               minutes: Math.round(MACHINE_LOST_MS / 60_000),
-              title: contactWords.lostTitle(machineName(machine.machineId)),
+              title: contactWords.lostTitle(
+                machineName(machine.machineId),
+                machine.hostsHub === true
+              ),
               place: contactWords.lostMeta,
               raisedAt: machine.lostAt,
             },

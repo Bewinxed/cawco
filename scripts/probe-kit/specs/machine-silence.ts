@@ -55,6 +55,7 @@ import {
 import { signal } from "../../../packages/core/src/signal";
 import { delay, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { frames } from "../ws-frames";
 import { type Phone, standInPhone } from "./turn-push";
 
 /** server.ts `SETTLE_READS_PER_MACHINE`. */
@@ -93,69 +94,6 @@ const WEBSOCKET_UPGRADE = /^upgrade:\s*websocket/im;
 
 /** A transcript ask's request id, as the hub's frame carries it (plain, or inside a wire part's string). */
 const REQUEST_ID = /requestId\\?"\s*:\s*\\?"([0-9a-f-]{36})/g;
-
-/**
- * Where the first WebSocket frame in `bytes` ends, and where its mask and
- * payload start (RFC 6455 §5.2); null until it has come whole.
- */
-const frameAt = (
-  bytes: Buffer
-): { end: number; mask: number | null; payload: number } | null => {
-  if (bytes.length < 2) {
-    return null;
-  }
-  const second = bytes[1] as number;
-  // biome-ignore lint/suspicious/noBitwiseOperators: the frame's length is the second byte's low seven bits
-  const short = second & 0x7f;
-  // biome-ignore lint/suspicious/noBitwiseOperators: its mask bit is the second byte's high bit
-  const masked = (second & 0x80) !== 0;
-  const sizes: Record<number, [number, () => number]> = {
-    126: [4, () => bytes.readUInt16BE(2)],
-    127: [10, () => Number(bytes.readBigUInt64BE(2))],
-  };
-  const [head, read] = sizes[short] ?? [2, () => short];
-  if (bytes.length < head) {
-    return null;
-  }
-  const payload = head + (masked ? 4 : 0);
-  const end = payload + read();
-  return bytes.length < end
-    ? null
-    : { end, mask: masked ? head : null, payload };
-};
-
-/** Two bytes XORed: how a frame's key unmasks it. */
-// biome-ignore lint/suspicious/noBitwiseOperators: unmasking is a byte-wise XOR with the frame's key
-const xor = (a: number, b: number): number => a ^ b;
-
-/** A frame's payload, unmasked: a client masks every frame (RFC 6455 §5.3). */
-const unmasked = (frame: Buffer, mask: number | null, at: number): Buffer => {
-  const payload = Buffer.from(frame.subarray(at));
-  if (mask !== null) {
-    for (let index = 0; index < payload.length; index += 1) {
-      payload[index] = xor(
-        payload[index] as number,
-        frame[mask + (index % 4)] as number
-      );
-    }
-  }
-  return payload;
-};
-
-/** The agent's WebSocket frames, each whole, with its payload read, from what it sends. */
-const frames = () => {
-  let buffered = Buffer.alloc(0);
-  return (data: Buffer): { frame: Buffer; payload: Buffer }[] => {
-    buffered = Buffer.concat([buffered, data]);
-    const out: { frame: Buffer; payload: Buffer }[] = [];
-    for (let at = frameAt(buffered); at; at = frameAt(buffered)) {
-      const frame = Buffer.from(buffered.subarray(0, at.end));
-      out.push({ frame, payload: unmasked(frame, at.mask, at.payload) });
-      buffered = buffered.subarray(at.end);
-    }
-    return out;
-  };
-};
 
 /**
  * A relay the agent reaches the hub through, standing for a machine that
@@ -512,13 +450,14 @@ const relayedLegs = async (
     line.includes(contactWords.backLogged)
   );
   check(
-    `d: frozen past ${MACHINE_LOST_MS / 1000} s, the machine is lost once (Needs you's item, one push: “${contactWords.lostTitle(name)}”), and it is taken down once it answers`,
+    `d: frozen past ${MACHINE_LOST_MS / 1000} s, the machine is lost once (Needs you's item, one push: “${contactWords.lostTitle(name, true)}”), and it is taken down once it answers`,
     raisedBy !== null &&
       Date.now() - raisedBy >= MACHINE_LOST_MS &&
       told.length === 1 &&
       pushed.length === 1 &&
-      alert?.title === contactWords.lostTitle(name) &&
-      alert.body === contactWords.lostLine(name, MACHINE_LOST_MS / 60_000) &&
+      alert?.title === contactWords.lostTitle(name, true) &&
+      alert.body ===
+        contactWords.lostLine(name, MACHINE_LOST_MS / 60_000, true) &&
       down &&
       back.length === 1 &&
       lostLines.filter((line) => line.includes(contactWords.lostLogged))

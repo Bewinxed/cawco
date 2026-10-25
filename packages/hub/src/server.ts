@@ -4198,6 +4198,7 @@ export const createServer = (
       push.machineLost({
         machineId,
         name: machineName(machineId),
+        hub: machineId === ownMachineIdRead,
         minutes: Math.round((Date.now() - since) / 60_000),
         still: () => contact.lostAt(machineId) !== null,
       });
@@ -15615,7 +15616,10 @@ export const createServer = (
     >(
       handle: (ws: S, message: unknown) => Promise<void>
     ) =>
-    (ws: S, incoming: unknown): void =>
+    (ws: S, incoming: unknown): void => {
+      // Word from its machine as it arrives, however long the inbox holds
+      // it (machine-contact.ts).
+      wordFrom(ws);
       // A transcript read, tens of MB, arrives as parts, read in order
       // through the socket's inbox (`wire-socket.ts`).
       receiveFrame(ws, incoming, (message) => {
@@ -15681,6 +15685,7 @@ export const createServer = (
           "agent frame"
         );
       });
+    };
   const recoveringRemoved = new Set<string>();
   const stopDispatches = new Map<
     string,
@@ -18044,6 +18049,7 @@ export const createServer = (
             : "offline",
         // Live, like `status`: since when it has been lost, null while it answers.
         lostAt: contact.lostAt(row.machineId),
+        hostsHub: row.machineId === ownMachineIdRead,
         // Additive and live, like `status` above: present only for a machine that
         // has actually reported one on this connection.
         ...(binaryUpdateStates.get(row.machineId)
@@ -18303,6 +18309,17 @@ export const createServer = (
   const machineNonces = new Map<string, string>();
   /** The machine each socket registered as: it speaks for that one alone. */
   const socketMachines = new Map<string, string>();
+  /**
+   * Word from a machine as its socket takes it (machine-contact.ts): a frame
+   * before the socket's inbox works it, or its agent's ping. Only the
+   * machine's registered connection speaks for it.
+   */
+  const wordFrom = (ws: HubSocket): void => {
+    const machineId = socketMachines.get(ws.id);
+    if (machineId !== undefined && registry.agent(machineId)?.id === ws.id) {
+      contact.heard(machineId);
+    }
+  };
   /** Sockets held waiting for the person, by the machine they claim. */
   const waitingSockets = new Map<string, string>();
   /**
@@ -33242,6 +33259,12 @@ export const createServer = (
         },
         drain(ws) {
           drainLine(ws);
+        },
+        // The agent's ping, each 15 s (agent daemon.ts, the link's
+        // deadline): word from its machine that waits behind no message
+        // (machine-contact.ts). Bun answers it with a pong either way.
+        ping(ws) {
+          wordFrom(ws);
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every agent socket verb (register, frames, pulse, control_result, etc.) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message: guardedAgentMessage(async (ws, message) => {

@@ -2341,6 +2341,8 @@ export const createPush = ({
      * again before it goes out, it is over ({@link machineBack}).
      */
     machineLost(lost: {
+      /** The machine the hub runs on (core `contactWords`). */
+      hub: boolean;
       machineId: string;
       minutes: number;
       name: string;
@@ -2348,9 +2350,9 @@ export const createPush = ({
     }): void {
       const collapseId = machineCollapseId(lost.machineId);
       const alert = alertOf(
-        contactWords.lostTitle(lost.name),
+        contactWords.lostTitle(lost.name, lost.hub),
         null,
-        contactWords.lostLine(lost.name, lost.minutes)
+        contactWords.lostLine(lost.name, lost.minutes, lost.hub)
       );
       console.log(`[push] ${lost.name} is lost: arrives as ${collapseId}`);
       arrive({

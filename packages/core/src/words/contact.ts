@@ -1,25 +1,35 @@
 /**
  * A machine CawCo has lost (hub machine-contact.ts): the one person-facing
  * "didn't answer" there is. A read a machine was slow to answer is logged
- * and said to whoever asked, never pushed; only a machine the hub has heard
- * nothing from for {@link MACHINE_LOST_MS}, with sessions on it, is Needs
- * you's item and its push, the same rule for every machine, the hub's own
- * included. It comes down when the machine is heard from again.
+ * and said to whoever asked, never pushed; only a machine whose agent the
+ * hub has heard nothing from for {@link MACHINE_LOST_MS}, not a frame and
+ * not a ping, with sessions on it, is Needs you's item and its push. It
+ * comes down when the machine is heard from again.
  *
- * Our call (no source sets it): two minutes is eight of a machine's 15 s
- * heartbeats (agent daemon.ts `HEARTBEAT_INTERVAL`) missed in a row, far
- * past one slow moment on a loaded machine (2026-10-23, obelisk: reads of
- * the hub's own machine missed their 10 s deadline for an hour while it
+ * Our call (no source sets it): two minutes is eight of the agent's 15 s
+ * pings (agent daemon.ts `HEARTBEAT_INTERVAL`) missed in a row, far past
+ * one slow moment on a loaded machine (2026-10-23, obelisk: reads of the
+ * hub's own machine missed their 10 s deadline for an hour while it
  * answered its heartbeats).
  */
 export const MACHINE_LOST_MS = 120_000;
 
 export const contactWords = {
-  /** Needs you's item, and its push's title. */
-  lostTitle: (machine: string) => `${machine} stopped answering`,
+  /**
+   * Needs you's item, and its push's title. `hub`: the machine the hub runs
+   * on, which is up while the hub is, so what stopped is its agent
+   * (2026-10-25, obelisk: "obelisk-of-light stopped answering" reached the
+   * owner while he worked on it; its agent's loop was held 45 min).
+   */
+  lostTitle: (machine: string, hub: boolean) =>
+    hub
+      ? `CawCo's agent on ${machine} stopped answering`
+      : `${machine} stopped answering`,
   /** Its line: what happened, what is safe, what to do, what happens next. */
-  lostLine: (machine: string, minutes: number) =>
-    `CawCo hasn't heard from ${machine} for ${minutes} min. Its sessions hold their place. Check that the machine is awake and CawCo runs there: it goes on once it answers.`,
+  lostLine: (machine: string, minutes: number, hub: boolean) =>
+    hub
+      ? `CawCo's agent on ${machine} hasn't answered for ${minutes} min, though the machine is up: the hub runs there. Its sessions hold their place. Restart the agent there if it stays silent: it goes on once it answers.`
+      : `CawCo hasn't heard from ${machine} for ${minutes} min. Its sessions hold their place. Check that the machine is awake and CawCo runs there: it goes on once it answers.`,
   /** The item's meta line. */
   lostMeta: "Machine",
   /** The hub's log, as a machine is lost and as it answers again (hub machine-contact.ts). */

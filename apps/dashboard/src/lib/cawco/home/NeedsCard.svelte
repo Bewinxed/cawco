@@ -224,7 +224,7 @@
       case "mcp":
         return mcpWords.signInEnded(configurePage("mcp"));
       case "machine":
-        return contactWords.lostLine(item.name, item.minutes);
+        return contactWords.lostLine(item.name, item.minutes, item.hub);
       case "task":
         return item.reason === "review"
           ? `Review the draft: it waits on you in ${item.stage}`
