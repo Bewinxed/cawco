@@ -103,7 +103,7 @@ const FAILURES = [
 const LEGS = new Set(
   (
     process.env.PAIRING_LEGS ??
-    "qr,motion,handoff,ping,device,end,failures,poses,frames,cost"
+    "qr,motion,handoff,ping,device,end,failures,glyphs,poses,frames,cost"
   ).split(",")
 );
 type Moment = (typeof MOMENTS)[number];
@@ -1214,9 +1214,10 @@ function readFailure(): FailureRead[] {
       coral: [...stage.querySelectorAll('[data-tone="primary"]')].filter(
         (el) => shown(el) > 0.02 && el.getBoundingClientRect().width > 0
       ).length,
-      bare: stage.querySelectorAll(
-        "svg.g circle, svg.g rect, svg.g ellipse, .mark svg circle"
-      ).length,
+      // A disc or box behind a glyph is a filled shape; the clock's dial is a stroke, no fill.
+      bare: [
+        ...stage.querySelectorAll("svg.g circle, svg.g rect, svg.g ellipse"),
+      ].filter((el) => getComputedStyle(el).fill !== "none").length,
       device: {
         strokes: [...stage.querySelectorAll(".wire svg:not(.wire-mark)")].map(
           shown
@@ -1380,6 +1381,129 @@ async function failuresLeg(kit: Kit, page: Page, engine: Engine) {
     p.variant("denied", "quiet");
     p.variant("nomatch", "spent");
   });
+}
+
+/** One glyph as drawn: its box, and how far its middle stands from the x-height middle of the words beside it. */
+interface GlyphRead {
+  box: { h: number; w: number };
+  layout: string;
+  off: number;
+  want: number;
+  what: string;
+}
+
+/**
+ * The glyph a moment shows, read from the engine per layout: its box, and
+ * its middle against the first line of the words it stands beside (the
+ * baseline, from the first glyph's text box and the face's ascent, less half
+ * the face's x-height, both from canvas metrics), or against the phone
+ * drawing's centre for Denied's ✕. Runs in the page.
+ */
+function readGlyph(which: string): GlyphRead[] {
+  const shown = (el: Element) => {
+    let o = 1;
+    for (let up: Element | null = el; up; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (style.display === "none") {
+        return 0;
+      }
+      o *= Number(style.opacity);
+      if (up.classList.contains("stage")) {
+        break;
+      }
+    }
+    return o;
+  };
+  const xMiddle = (host: Element) => {
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) =>
+        (n.textContent ?? "").trim() && shown(n.parentElement as Element) > 0.98
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP,
+    });
+    const text = walker.nextNode() as Text | null;
+    if (!text) {
+      return Number.NaN;
+    }
+    const range = document.createRange();
+    // biome-ignore lint/performance/useTopLevelRegex: serialised into the page, where nothing outside the function exists
+    const at = (text.textContent ?? "").search(/\S/);
+    range.setStart(text, at);
+    range.setEnd(text, at + 1);
+    const [box] = range.getClientRects();
+    const cs = getComputedStyle(text.parentElement as Element);
+    const pen = document
+      .createElement("canvas")
+      .getContext("2d") as CanvasRenderingContext2D;
+    pen.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const face = pen.measureText("x");
+    const baseline = (box?.top ?? Number.NaN) + face.fontBoundingBoxAscent;
+    return baseline - face.actualBoundingBoxAscent / 2;
+  };
+  return [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
+    const layout = stage.dataset.layout ?? "";
+    const pick = (sel: string) =>
+      [...stage.querySelectorAll(sel)].find((el) => shown(el) > 0.98) as
+        SVGSVGElement | undefined;
+    let glyph: SVGSVGElement | undefined;
+    let mid = Number.NaN;
+    let want = 16;
+    if (which === "readout") {
+      glyph = pick(".readout .slot svg.g");
+      mid = xMiddle(stage.querySelector(".readout .words") as Element);
+    } else if (which === "ledger") {
+      glyph = pick(".scene-outcome .mark svg.g");
+      mid = xMiddle(stage.querySelector(".scene-outcome .said") as Element);
+    } else {
+      glyph = pick(".wire .wire-mark");
+      const wire = (
+        stage.querySelector(".wire") as Element
+      ).getBoundingClientRect();
+      mid = wire.top + wire.height / 2;
+      want = wire.width / 4;
+    }
+    const r = glyph?.getBoundingClientRect();
+    return {
+      layout,
+      what: glyph?.getAttribute("class") ?? "none",
+      box: { w: r?.width ?? 0, h: r?.height ?? 0 },
+      want,
+      off: r ? r.top + r.height / 2 - mid : Number.NaN,
+    };
+  });
+}
+
+/**
+ * The glyphs (the designer's ruling): the house's bare Close and Tick and
+ * Solar's linear clock, each read where it is shown, both layouts: a 16px
+ * box (--icon-md) on the line and in Paired's and Removed's ledger, a
+ * quarter of the phone's box on Denied's screen; its middle on the x-height
+ * middle of the words beside it (the Mark Line Rule) within half a pixel,
+ * or on the drawing's centre on Denied's screen.
+ */
+async function glyphsLeg(kit: Kit, page: Page, engine: Engine) {
+  const cases = [
+    ["expired", "readout", "the clock on the line"],
+    ["nomatch", "readout", "the ✕ on the line"],
+    ["failed-down", "readout", "the ✕ on the line"],
+    ["approved", "ledger", "the check on the verdict"],
+    ["removed", "ledger", "the ✕ on the verdict"],
+    ["denied", "wire", "the ✕ on the phone's screen"],
+  ] as const;
+  for (const [m, which, said] of cases) {
+    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
+    await playIn(page, m);
+    await settled(page);
+    const reads = await page.evaluate(readGlyph, which);
+    for (const g of reads) {
+      kit.check(
+        `${engine} ${m}: ${g.layout} ${said} (${g.what}) is ${g.box.w.toFixed(2)}×${g.box.h.toFixed(2)}px against ${g.want}px, its middle ${g.off.toFixed(2)}px from ${which === "wire" ? "the drawing's centre" : "the words' x-height middle"}`,
+        Math.abs(g.box.w - g.want) <= 0.01 &&
+          Math.abs(g.box.h - g.want) <= 0.01 &&
+          Math.abs(g.off) <= 0.5
+      );
+    }
+  }
 }
 
 /** Each moment's Caw is a drawing of its own: the three network cases are one moment, Checking. */
@@ -2219,6 +2343,9 @@ async function runLegs(kit: Kit, page: Page, url: string, engine: Engine) {
   }
   if (LEGS.has("failures")) {
     await failuresLeg(kit, page, engine);
+  }
+  if (LEGS.has("glyphs")) {
+    await glyphsLeg(kit, page, engine);
   }
   if (LEGS.has("poses")) {
     await posesLeg(kit, page, engine);

@@ -1161,8 +1161,8 @@ function rest(S, m, { still = false, keepPing = false, ping = true, driftFrom = 
   tick(S, m);
 }
 
-/** The line's mark slot: as wide as the mark it shows (the live dot 6px, a glyph 20px), none where it shows none. */
-const SLOT = { live: "6px", close: "20px", clock: "20px", "": "0px" };
+/** The line's mark slot: as wide as the mark it shows (the live dot 6px, a glyph 16px, --icon-md), none where it shows none. */
+const SLOT = { live: "6px", close: "16px", clock: "16px", "": "0px" };
 const slotGap = (mark) => (mark ? V.gap : "0px");
 const markEl = (S, mark) => ({ live: S.live, close: S.rClose, clock: S.rClock })[mark];
 
