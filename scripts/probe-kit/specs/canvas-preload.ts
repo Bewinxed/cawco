@@ -185,6 +185,14 @@ async function threeEmbeds(
   // The page around them: the stage's own origin, a page of no modules.
   await page.goto(`${base}/@cawco/stories?file=${encodeURIComponent(FILE)}`);
   await page.evaluate((src) => {
+    // Each frame's graph told (core CANVAS_EMBED_GRAPH): its whole graph its own share at once, nothing more to wait on.
+    addEventListener("message", (event) => {
+      if (event.data?.type === "cawco:embed-graph") {
+        const to = event.source as Window;
+        to.postMessage({ type: "cawco:embed-go", urls: event.data.urls }, "*");
+        to.postMessage({ type: "cawco:embed-ready", urls: [] }, "*");
+      }
+    });
     for (const _ of [1, 2, 3]) {
       const frame = document.createElement("iframe");
       frame.src = src;
