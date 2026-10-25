@@ -5348,12 +5348,17 @@ export function syncSubscriptions(): void {
 
 /**
  * A watched transcript this tab holds (its rows, or a read of it that went
- * out or failed) and does not follow on the socket open now, read again: its
- * page subscribes it from the page's own `seq` ({@link adoptPage}). Held rows
- * stand for everything the session said up to the moment its stream was let
- * go (its tab closed or re-addressed, its read landing while it was not
- * watched, the socket gone), and a reader shown them again with no read
- * behind them sees that moment for good.
+ * out, landed or failed) and does not follow on the socket open now, read
+ * again: its page subscribes it from the page's own `seq` ({@link adoptPage}).
+ * Held rows stand for everything the session said up to the moment its stream
+ * was let go (its tab closed or re-addressed, its read landing while it was
+ * not watched, the socket gone), and a reader shown them again with no read
+ * behind them sees that moment for good. A read that landed holds the
+ * transcript though it held no rows: a session just started is empty, and a
+ * page's first visit names its tabs again (workspace `restore`), unwatching
+ * the pane's tab while its read is out; landing then, the read follows
+ * nothing, and with nothing read again the pane shows that empty moment for
+ * good, the agent's every word after it never drawn.
  *
  * `reconnect`: the socket is new, so every one of them is read again, and a
  * read in flight was asked of the connection before (a page's first
@@ -5369,6 +5374,7 @@ function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
     const holds = Boolean(
       streamState.cursors[id] ||
       held?.blocks.length ||
+      held?.reads ||
       held?.loading ||
       held?.readFault ||
       held?.behind
