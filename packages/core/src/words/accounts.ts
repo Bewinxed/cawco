@@ -327,7 +327,8 @@ export const accountsWords = {
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
   },
 
-  // ── A delegate stopped at its account's limit (DelegateTray, delegate_list) ─
+  // ── A delegate stopped at its account's limit, on its way or held (delegate_list): a
+  // wait for a reset is core `stallWords` ─
   stalled: {
     /** Moving to an account with room, now or once its turn ends. */
     moving: (from: string, to: string) =>
@@ -350,12 +351,6 @@ export const accountsWords = {
       clock: string
     ) =>
       `Stopped at ${from}’s limit; moves to ${to} when its work in flight ends (${work}), or continues at ${clock}`,
-    /** No account has room: held until its own account resets at `clock` ("15:40"). */
-    waiting: (from: string, clock: string) =>
-      `Stopped at ${from}’s limit; continues at ${clock}`,
-    /** No account has room now: `on` frees first, at `clock`, and takes it. */
-    waitingOn: (from: string, on: string, clock: string) =>
-      `Stopped at ${from}’s limit; continues on ${on} at ${clock}`,
     /** Claude Code refused its account's sign-in, and no other account can take it yet. */
     signedOut: (from: string) =>
       `Stopped: ${from}’s sign-in was refused; continues once an account can take it`,

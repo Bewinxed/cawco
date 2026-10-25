@@ -26,7 +26,7 @@
   } from "#lib/icons.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
+  import { movingTo, movingWords, waitWords } from "../accounts/switch.svelte";
   import {
     answeredOr,
     cawco,
@@ -430,10 +430,9 @@
   }
   function failure(slot: Slot) {
     // A refused move is moveTo's toast, the one place the menu and the card
-    // both say it. Stopped at its account's limit, the account line is the
-    // error and its way out: the picker right above it.
+    // both say it.
     if (slot === "account") {
-      return row ? (stopWords(row) ?? null) : null;
+      return null;
     }
     if (slot === "permission" && relaunchFailure) {
       return relaunchFailure;
@@ -647,6 +646,20 @@
         />
       {/if}
     </div>
+  {:else if slot === "account" && row && waitWords(row)}
+    <!-- Waiting at its account's limit: a wait, said at rest, with the
+         picker right above it the way out. -->
+    <p
+      data-slot="feedback"
+      class="mark-line mt-space-2 flex items-start gap-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+      role="status"
+      in:crossIn
+      out:crossOut
+    >
+      <span class="mark-cell"
+        ><IconRefresh aria-hidden="true" class="size-icon-md flex-none" /></span
+      ><span class="min-w-0">{waitWords(row)}</span>
+    </p>
   {:else if pending(slot)}
     <p
       data-slot="feedback"

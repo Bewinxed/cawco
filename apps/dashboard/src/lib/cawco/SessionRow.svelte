@@ -112,7 +112,7 @@
   import { cn } from "#lib/utils.js";
   import { page } from "$app/state";
   import AskHere from "./AskHere.svelte";
-  import { shownAccount, stopWords } from "./accounts/switch.svelte";
+  import { shownAccount, waitWords } from "./accounts/switch.svelte";
   import { STOPPING_LABEL } from "./activity";
   import { Asker, type AskHereRequest } from "./ask-here.svelte";
   import type { BoardRow } from "./client.svelte";
@@ -205,8 +205,8 @@
   /** The row is a thread with the project's Caw (thread-tabs.ts), not a session. */
   const thread = $derived(instance ? isThreadTab(instance.id) : false);
   const status = $derived(sessionStatus(instance, done));
-  /** Stopped at its account's limit: the error its meta line says (switch.svelte.ts `stopWords`). */
-  const stopped = $derived(instance ? stopWords(instance) : undefined);
+  /** Waiting at its account's limit: what its meta line says (switch.svelte.ts `waitWords`). */
+  const waits = $derived(instance ? waitWords(instance) : undefined);
   /** Where it runs, for its mark's hue: the same seed in every list. */
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId
@@ -389,17 +389,10 @@
       <!-- Both lines stand at the count's height with or without one (a
            context row says nothing on its second), so every row in a list is
            one height and the nesting lines meet each glyph alike. A context
-           row's title reads in muted ink; a session stopped at its
-           account's limit reads in the failure ink, whatever row it is. -->
+           row's title reads in muted ink. -->
       <span
         data-slot="title"
-        data-stopped={stopped ? true : undefined}
-        class={[
-          "block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label",
-          stopped
-            ? "text-status-fail-ink"
-            : "group-data-context/session-row:group-not-data-current/session-row:text-ink-muted",
-        ]}
+        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label group-data-context/session-row:group-not-data-current/session-row:text-ink-muted"
         ><span class="sr-only"
           >{pending ?? statusWord(instance, status)}:
         </span>
@@ -423,12 +416,13 @@
             ><Spinner aria-hidden="true" box="small" />
             <span>{renaming === null ? pending : "Renaming…"}</span></span
           >
-        {:else if stopped}
-          <!-- Stopped at its account's limit: the error and its way out, in
-               the meta line's place; the whole sentence on the pointer. -->
-          <span data-slot="stalled" class="text-status-fail-ink" title={stopped}
-            >{stopped}</span
-          >
+        {:else if waits}
+          <!-- Waiting at its account's limit, in the meta line's place and
+               ink, after the account's dot: whose limit, when it carries on
+               and where, and an account that could take it now. -->
+          <AccountDot
+            accountId={instance ? shownAccount(instance) : undefined}
+          /><span data-slot="stalled">{waits}</span>
         {:else}
           <AccountDot
             accountId={instance ? shownAccount(instance) : undefined}
@@ -538,7 +532,6 @@
     {:else}
       <a
         data-session-row-row
-        title={stopped}
         {...trigger}
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}

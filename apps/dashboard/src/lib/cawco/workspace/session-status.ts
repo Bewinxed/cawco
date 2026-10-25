@@ -6,6 +6,7 @@
  */
 import type { Component } from "svelte";
 import {
+  IconRefresh as AtLimit,
   IconNeedsYou as Attention,
   IconError as Failed,
   IconPauseCircle as Pause,
@@ -18,7 +19,8 @@ import { cawco, isFailed, isStale } from "../client.svelte";
 import { type NamedSession, sessionAnswer } from "../session-names.svelte";
 import { STALLED_LABEL } from "../session-status";
 
-export type StatusTone = "working" | "attention" | "failed" | "quiet";
+/** `held`: waiting at its account's limit, in the muted ink and still (DESIGN.md, Usage: the at-limit glyph). */
+export type StatusTone = "working" | "attention" | "failed" | "held" | "quiet";
 
 export interface SessionStatusOf {
   /** None while it is on its way (stopping): the glyph is StopTray's spinner. */
@@ -48,7 +50,7 @@ export function sessionStatusOf(sessionId: string): SessionStatusOf {
     return { label: "Failed", icon: Failed, tone: "failed" };
   }
   if (row?.stalled) {
-    return { label: STALLED_LABEL, icon: Failed, tone: "failed" };
+    return { label: STALLED_LABEL, icon: AtLimit, tone: "held" };
   }
   if (row && isStale(row)) {
     return { label: "Unreachable", icon: Unknown, tone: "quiet" };

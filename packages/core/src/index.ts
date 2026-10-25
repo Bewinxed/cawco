@@ -1,3 +1,4 @@
+import type { Stall } from "./accounts";
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
 import type { LastErrorKind } from "./relaunch";
@@ -1301,14 +1302,16 @@ export interface InstanceRow {
   /** The harness's own session id, once the session has named itself. */
   sessionId: string | null;
   /**
-   * The session is stopped at its account's limit (or on its refused
-   * sign-in), in words, as the hub's at-limit controller holds it (hub
-   * at-limit.ts `stall`): what happened and when it carries on; `until`,
-   * epoch ms, the moment it does. Absent while it runs. Its row, its head and
-   * its transcript show it as an error with the way out: another account
-   * from its menu.
+   * The session waits at its account's limit (or on its refused sign-in),
+   * as the hub's at-limit controller holds it (hub at-limit.ts `stall`):
+   * the hub's words, `until` (epoch ms) when it carries on, and, while it
+   * waits for a reset, whose limit it is, where it goes then and which
+   * accounts could take it now (`held`), so each reader counts down to
+   * `until` on its own clock (core `stallWords`). Absent while it runs. A
+   * wait, never a failure: its row, its tab and its transcript say it at
+   * rest, with the way out (another account) one press away.
    */
-  stalled?: { until?: number; words: string };
+  stalled?: Stall;
   status: InstanceStatus;
   /**
    * The thread with its project's Caw this session works for, when Caw's
@@ -1420,9 +1423,10 @@ export interface WorkItemSummary {
   /** The later item of the same tray the reader said took over its work; null otherwise. */
   replacedBy: string | null;
   /**
-   * While its account's limit (or a refused sign-in) has stopped its
-   * session: "Stopped at A's limit; continues on B", "…; continues at
-   * 15:40" (core `accountsWords.stalled`). It runs no turn until then; null
+   * While its session waits at its account's limit (or on a refused
+   * sign-in), in the hub's words: "At A's limit · moves to B in 30m" (core
+   * `stallWords`), or "Stopped at A's limit; continues on B" on its way
+   * (core `accountsWords.stalled`). It runs no turn until then; null
    * otherwise.
    */
   stalled: string | null;

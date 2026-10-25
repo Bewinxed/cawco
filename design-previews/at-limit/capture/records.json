@@ -1,0 +1,1515 @@
+{
+ "source": "GET /api/accounts, /api/usage/limits, /api/instances, /api/instances/72e0278e\u2026/transcript on the hub, 2026-10-25 08:16 UTC",
+ "at": 1792915201340,
+ "accounts": {
+  "accounts": [
+   {
+    "id": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+    "provider": "anthropic",
+    "kind": "subscription",
+    "label": null,
+    "email": "bewinxed@gmail.com",
+    "hue": "blue",
+    "order": 0,
+    "neverBackup": false,
+    "reservePct": null,
+    "atPlanLimit": "move",
+    "identity": {
+     "email": "bewinxed@gmail.com",
+     "organization": "Omar Al Matar",
+     "orgId": "c35e9696-b90d-4c54-98b1-96e658e45eba"
+    },
+    "createdAt": 1791526231700
+   },
+   {
+    "id": "1c962620-90eb-4e0e-b487-06c18a98cded",
+    "provider": "anthropic",
+    "kind": "subscription",
+    "label": null,
+    "email": "bewinxed@petralab.ai",
+    "hue": "orange",
+    "order": 1,
+    "neverBackup": false,
+    "reservePct": null,
+    "atPlanLimit": "move",
+    "identity": {
+     "email": "bewinxed@petralab.ai",
+     "organization": "Petralab",
+     "orgId": "669e0d35-b21d-4e76-9605-7a609befd835"
+    },
+    "createdAt": 1791533526711
+   },
+   {
+    "id": "676d0582-43af-4bfc-a2e7-7d513beaabe0",
+    "provider": "anthropic",
+    "kind": "subscription",
+    "label": null,
+    "email": "jude@petralab.ai",
+    "hue": "amber",
+    "order": 2,
+    "neverBackup": false,
+    "reservePct": null,
+    "atPlanLimit": "move",
+    "identity": {
+     "email": "jude@petralab.ai",
+     "organization": "Petralab",
+     "orgId": "669e0d35-b21d-4e76-9605-7a609befd835"
+    },
+    "createdAt": 1791483866533
+   },
+   {
+    "id": "d18c5ce4-e563-4ea3-8be2-12d9fb194009",
+    "provider": "anthropic",
+    "kind": "subscription",
+    "label": null,
+    "email": "rand@petralab.ai",
+    "hue": "cyan",
+    "order": 3,
+    "neverBackup": false,
+    "reservePct": null,
+    "atPlanLimit": "move",
+    "identity": {
+     "email": "rand@petralab.ai",
+     "organization": "Petralab",
+     "orgId": "669e0d35-b21d-4e76-9605-7a609befd835"
+    },
+    "createdAt": 1791535385647
+   },
+   {
+    "id": "61896e03-0178-4a7b-859a-71f0c2e40747",
+    "provider": "anthropic",
+    "kind": "subscription",
+    "label": null,
+    "email": "design@petralab.ai",
+    "hue": "green",
+    "order": 4,
+    "neverBackup": false,
+    "reservePct": null,
+    "atPlanLimit": "move",
+    "identity": {
+     "email": "design@petralab.ai",
+     "organization": "Petralab",
+     "orgId": "669e0d35-b21d-4e76-9605-7a609befd835"
+    },
+    "createdAt": 1791559644259
+   },
+   {
+    "id": "c6b14b4e-67f6-41bf-bb2b-3ce38cd228b1",
+    "provider": "anthropic",
+    "kind": "subscription",
+    "label": null,
+    "email": "marketing@petralab.ai",
+    "hue": "orange",
+    "order": 5,
+    "neverBackup": false,
+    "reservePct": null,
+    "atPlanLimit": "move",
+    "identity": {
+     "email": "marketing@petralab.ai",
+     "organization": "Petralab",
+     "orgId": "669e0d35-b21d-4e76-9605-7a609befd835"
+    },
+    "createdAt": 1791559697587
+   },
+   {
+    "id": "e8b553ef-e57f-429f-9b48-905760f5b675",
+    "provider": "anthropic",
+    "kind": "subscription",
+    "label": null,
+    "email": "bewinxed@petralab.ai",
+    "hue": "rose",
+    "order": 6,
+    "neverBackup": false,
+    "reservePct": null,
+    "atPlanLimit": "move",
+    "identity": {
+     "email": "bewinxed@petralab.ai",
+     "organization": "bewinxed@petralab.ai's Organization",
+     "orgId": "debffe18-b186-48cb-a912-b112e08ac39a"
+    },
+    "createdAt": 1792405465269
+   }
+  ],
+  "signins": [
+   {
+    "accountId": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+    "machineId": "271a214a5d568e4c",
+    "state": "signed-in",
+    "movedAt": 1791526239084,
+    "movedFrom": "claude",
+    "reason": null,
+    "checkedAt": 1792902483540
+   },
+   {
+    "accountId": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+    "machineId": "d04ca118428001f1",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902350145
+   },
+   {
+    "accountId": "1c962620-90eb-4e0e-b487-06c18a98cded",
+    "machineId": "d04ca118428001f1",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902350145
+   },
+   {
+    "accountId": "1c962620-90eb-4e0e-b487-06c18a98cded",
+    "machineId": "271a214a5d568e4c",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902483542
+   },
+   {
+    "accountId": "d18c5ce4-e563-4ea3-8be2-12d9fb194009",
+    "machineId": "d04ca118428001f1",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902350145
+   },
+   {
+    "accountId": "d18c5ce4-e563-4ea3-8be2-12d9fb194009",
+    "machineId": "271a214a5d568e4c",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902483541
+   },
+   {
+    "accountId": "676d0582-43af-4bfc-a2e7-7d513beaabe0",
+    "machineId": "d04ca118428001f1",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902350146
+   },
+   {
+    "accountId": "676d0582-43af-4bfc-a2e7-7d513beaabe0",
+    "machineId": "271a214a5d568e4c",
+    "state": "signed-out",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902483543
+   },
+   {
+    "accountId": "61896e03-0178-4a7b-859a-71f0c2e40747",
+    "machineId": "d04ca118428001f1",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902350144
+   },
+   {
+    "accountId": "61896e03-0178-4a7b-859a-71f0c2e40747",
+    "machineId": "271a214a5d568e4c",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902483541
+   },
+   {
+    "accountId": "c6b14b4e-67f6-41bf-bb2b-3ce38cd228b1",
+    "machineId": "d04ca118428001f1",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902350146
+   },
+   {
+    "accountId": "c6b14b4e-67f6-41bf-bb2b-3ce38cd228b1",
+    "machineId": "271a214a5d568e4c",
+    "state": "signed-out",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902483542
+   },
+   {
+    "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+    "machineId": "d04ca118428001f1",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902350146
+   },
+   {
+    "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+    "machineId": "271a214a5d568e4c",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902483543
+   },
+   {
+    "accountId": "1c962620-90eb-4e0e-b487-06c18a98cded",
+    "machineId": "b106e1516d863601",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902478554
+   },
+   {
+    "accountId": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+    "machineId": "b106e1516d863601",
+    "state": "signed-out",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902478553
+   },
+   {
+    "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+    "machineId": "b106e1516d863601",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902478553
+   },
+   {
+    "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+    "machineId": "50b2e0c25123cc41",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902489091
+   },
+   {
+    "accountId": "1c962620-90eb-4e0e-b487-06c18a98cded",
+    "machineId": "50b2e0c25123cc41",
+    "state": "signed-in",
+    "movedAt": null,
+    "movedFrom": null,
+    "reason": null,
+    "checkedAt": 1792902489090
+   }
+  ],
+  "pending": [],
+  "routing": [
+   {
+    "provider": "anthropic",
+    "yours": {
+     "strategy": "fill-first"
+    },
+    "delegates": {
+     "strategy": "spread"
+    },
+    "atLimit": {
+     "move": true,
+     "waitMinutes": 15,
+     "moveWholeUnderK": 600,
+     "prepareAtPct": 100,
+     "delegateWork": "move"
+    }
+   }
+  ],
+  "readings": [
+   {
+    "accountId": "676d0582-43af-4bfc-a2e7-7d513beaabe0",
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 23,
+      "severity": "normal",
+      "resetsAt": "2026-10-27T21:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:50:00.000Z"
+     }
+    ],
+    "subscription": "Claude Team",
+    "overage": {
+     "status": "rejected",
+     "resetsAt": null,
+     "inUse": false,
+     "disabledReason": "org_level_disabled"
+    },
+    "lastSeenAt": 1792907996492
+   },
+   {
+    "accountId": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 13,
+      "severity": "normal",
+      "resetsAt": "2026-10-29T18:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T09:00:00.000Z"
+     },
+     {
+      "kind": "weekly_all",
+      "scopeLabel": null,
+      "group": "weekly",
+      "isActive": false,
+      "percent": 73,
+      "severity": "normal",
+      "resetsAt": "2026-10-29T18:00:00.000Z"
+     }
+    ],
+    "subscription": "Claude Max",
+    "overage": {
+     "status": "rejected",
+     "resetsAt": null,
+     "inUse": false,
+     "disabledReason": "org_level_disabled"
+    },
+    "lastSeenAt": 1792915201069
+   },
+   {
+    "accountId": "1c962620-90eb-4e0e-b487-06c18a98cded",
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 14.000000000000002,
+      "severity": "normal",
+      "resetsAt": "2026-10-28T17:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ],
+    "subscription": "Claude Team",
+    "overage": {
+     "status": "rejected",
+     "resetsAt": null,
+     "inUse": false,
+     "disabledReason": "org_level_disabled"
+    },
+    "lastSeenAt": 1792907765928
+   },
+   {
+    "accountId": "d18c5ce4-e563-4ea3-8be2-12d9fb194009",
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 3,
+      "severity": "normal",
+      "resetsAt": "2026-10-30T07:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ],
+    "subscription": "Claude Team",
+    "overage": {
+     "status": "rejected",
+     "resetsAt": null,
+     "inUse": false,
+     "disabledReason": "org_level_disabled"
+    },
+    "lastSeenAt": 1792913543096
+   },
+   {
+    "accountId": "61896e03-0178-4a7b-859a-71f0c2e40747",
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 28.000000000000004,
+      "severity": "normal",
+      "resetsAt": "2026-10-27T06:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ],
+    "subscription": "Claude Team",
+    "overage": {
+     "status": "rejected",
+     "resetsAt": null,
+     "inUse": false,
+     "disabledReason": "org_level_disabled"
+    },
+    "lastSeenAt": 1792914306301
+   },
+   {
+    "accountId": "c6b14b4e-67f6-41bf-bb2b-3ce38cd228b1",
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 38,
+      "severity": "normal",
+      "resetsAt": "2026-10-25T16:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ],
+    "subscription": "Claude Team",
+    "overage": {
+     "status": "rejected",
+     "resetsAt": null,
+     "inUse": false,
+     "disabledReason": "org_level_disabled"
+    },
+    "lastSeenAt": 1792906937527
+   },
+   {
+    "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 16,
+      "severity": "normal",
+      "resetsAt": "2026-10-30T20:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": false,
+      "percent": 75,
+      "severity": "normal",
+      "resetsAt": "2026-10-25T12:40:00.000Z"
+     },
+     {
+      "kind": "weekly_all",
+      "scopeLabel": null,
+      "group": "weekly",
+      "isActive": true,
+      "percent": 62,
+      "severity": "warning",
+      "resetsAt": "2026-10-30T20:00:00.000Z"
+     }
+    ],
+    "subscription": "Claude Max",
+    "overage": {
+     "status": "rejected",
+     "resetsAt": null,
+     "inUse": false,
+     "disabledReason": "org_level_disabled"
+    },
+    "lastSeenAt": 1792916193735
+   }
+  ],
+  "bench": [
+   {
+    "accountId": "676d0582-43af-4bfc-a2e7-7d513beaabe0",
+    "scope": null,
+    "until": 1792918200000
+   },
+   {
+    "accountId": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+    "scope": null,
+    "until": 1792918800000
+   },
+   {
+    "accountId": "d18c5ce4-e563-4ea3-8be2-12d9fb194009",
+    "scope": null,
+    "until": 1792917000000
+   },
+   {
+    "accountId": "1c962620-90eb-4e0e-b487-06c18a98cded",
+    "scope": null,
+    "until": 1792917000000
+   },
+   {
+    "accountId": "61896e03-0178-4a7b-859a-71f0c2e40747",
+    "scope": null,
+    "until": 1792917000000
+   },
+   {
+    "accountId": "c6b14b4e-67f6-41bf-bb2b-3ce38cd228b1",
+    "scope": null,
+    "until": 1792917000000
+   }
+  ],
+  "catalogs": [],
+  "catalogFaults": [],
+  "rebalances": []
+ },
+ "usage": [
+  {
+   "accountId": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+   "limits": {
+    "extraUsage": {
+     "on": false,
+     "inUse": false,
+     "offReason": "turned off by the organization",
+     "resetsAt": null
+    },
+    "fetchedAt": 1792915201069,
+    "subscription": "Claude Max",
+    "stale": false,
+    "error": null,
+    "errorKind": null,
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 13,
+      "severity": "normal",
+      "resetsAt": "2026-10-29T18:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T09:00:00.000Z"
+     },
+     {
+      "kind": "weekly_all",
+      "scopeLabel": null,
+      "group": "weekly",
+      "isActive": false,
+      "percent": 73,
+      "severity": "normal",
+      "resetsAt": "2026-10-29T18:00:00.000Z"
+     }
+    ]
+   }
+  },
+  {
+   "accountId": "1c962620-90eb-4e0e-b487-06c18a98cded",
+   "limits": {
+    "extraUsage": {
+     "on": false,
+     "inUse": false,
+     "offReason": "turned off by the organization",
+     "resetsAt": null
+    },
+    "fetchedAt": 1792907765928,
+    "subscription": "Claude Team",
+    "stale": true,
+    "error": null,
+    "errorKind": null,
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 14.000000000000002,
+      "severity": "normal",
+      "resetsAt": "2026-10-28T17:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ]
+   }
+  },
+  {
+   "accountId": "676d0582-43af-4bfc-a2e7-7d513beaabe0",
+   "limits": {
+    "extraUsage": {
+     "on": false,
+     "inUse": false,
+     "offReason": "turned off by the organization",
+     "resetsAt": null
+    },
+    "fetchedAt": 1792907996492,
+    "subscription": "Claude Team",
+    "stale": true,
+    "error": null,
+    "errorKind": null,
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 23,
+      "severity": "normal",
+      "resetsAt": "2026-10-27T21:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:50:00.000Z"
+     }
+    ]
+   }
+  },
+  {
+   "accountId": "d18c5ce4-e563-4ea3-8be2-12d9fb194009",
+   "limits": {
+    "extraUsage": {
+     "on": false,
+     "inUse": false,
+     "offReason": "turned off by the organization",
+     "resetsAt": null
+    },
+    "fetchedAt": 1792913543096,
+    "subscription": "Claude Team",
+    "stale": false,
+    "error": null,
+    "errorKind": null,
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 3,
+      "severity": "normal",
+      "resetsAt": "2026-10-30T07:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ]
+   }
+  },
+  {
+   "accountId": "61896e03-0178-4a7b-859a-71f0c2e40747",
+   "limits": {
+    "extraUsage": {
+     "on": false,
+     "inUse": false,
+     "offReason": "turned off by the organization",
+     "resetsAt": null
+    },
+    "fetchedAt": 1792914306301,
+    "subscription": "Claude Team",
+    "stale": false,
+    "error": null,
+    "errorKind": null,
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 28.000000000000004,
+      "severity": "normal",
+      "resetsAt": "2026-10-27T06:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ]
+   }
+  },
+  {
+   "accountId": "c6b14b4e-67f6-41bf-bb2b-3ce38cd228b1",
+   "limits": {
+    "extraUsage": {
+     "on": false,
+     "inUse": false,
+     "offReason": "turned off by the organization",
+     "resetsAt": null
+    },
+    "fetchedAt": 1792906937527,
+    "subscription": "Claude Team",
+    "stale": true,
+    "error": null,
+    "errorKind": null,
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 38,
+      "severity": "normal",
+      "resetsAt": "2026-10-25T16:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": true,
+      "percent": 100,
+      "severity": "critical",
+      "resetsAt": "2026-10-25T08:30:00.000Z"
+     }
+    ]
+   }
+  },
+  {
+   "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+   "limits": {
+    "extraUsage": {
+     "on": false,
+     "inUse": false,
+     "offReason": "turned off by the organization",
+     "resetsAt": null
+    },
+    "fetchedAt": 1792916193735,
+    "subscription": "Claude Max",
+    "stale": false,
+    "error": null,
+    "errorKind": null,
+    "windows": [
+     {
+      "kind": "weekly_scoped",
+      "scopeLabel": "Fable",
+      "group": "weekly",
+      "isActive": false,
+      "percent": 16,
+      "severity": "normal",
+      "resetsAt": "2026-10-30T20:00:00.000Z"
+     },
+     {
+      "kind": "session",
+      "scopeLabel": null,
+      "group": "session",
+      "isActive": false,
+      "percent": 75,
+      "severity": "normal",
+      "resetsAt": "2026-10-25T12:40:00.000Z"
+     },
+     {
+      "kind": "weekly_all",
+      "scopeLabel": null,
+      "group": "weekly",
+      "isActive": true,
+      "percent": 62,
+      "severity": "warning",
+      "resetsAt": "2026-10-30T20:00:00.000Z"
+     }
+    ]
+   }
+  }
+ ],
+ "stalled": {
+  "lastRequestAt": "2026-10-25T05:59:43.215Z",
+  "modelUsageSeen": {
+   "claude-sonnet-5": {
+    "inputTokens": 3016,
+    "outputTokens": 20,
+    "cacheReadInputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "costUSD": 0.006232
+   },
+   "claude-opus-5-5": {
+    "inputTokens": 216,
+    "outputTokens": 67307,
+    "cacheReadInputTokens": 17759391,
+    "cacheCreationInputTokens": 491216,
+    "costUSD": 8.828610200000002
+   }
+  },
+  "threadId": null,
+  "id": "72e0278e-092d-4c24-826f-45f2cbc98553",
+  "machineId": "d04ca118428001f1",
+  "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+  "sessionId": "2d3d7456-1f00-436f-a5df-987808983ed2",
+  "harness": "claude",
+  "accountId": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+  "forkedFrom": null,
+  "parentInstanceId": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+  "origin": "delegate",
+  "parentToolUseId": null,
+  "cwd": "/home/bewinxed/.worktrees/cockpit-7f292612",
+  "launchDir": "known",
+  "title": "Fix three failing workspace specs",
+  "titleSource": "agent",
+  "derivedTitle": null,
+  "seenAt": null,
+  "turnEndedAt": "2026-10-25T05:59:46.176Z",
+  "kind": "scratch",
+  "permissionMode": "fullSend",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "chosenEffort": "high",
+  "canDelegate": false,
+  "role": null,
+  "delegateType": "high",
+  "delegateTypeProject": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+  "status": "running",
+  "lastError": null,
+  "lastErrorKind": null,
+  "createdAt": "2026-10-25T04:22:44.252Z",
+  "updatedAt": "2026-10-25T07:59:46.360Z",
+  "spawnedAt": "2026-10-25T07:59:43.188Z",
+  "workItemId": "b69dc5b3-6835-45d8-ae45-9cba1d8079ef",
+  "continuedInto": null,
+  "runningDelegates": 0,
+  "keepAlive": {
+   "on": false,
+   "nextAt": null,
+   "sent": 0,
+   "cap": 39,
+   "ttl": "1h",
+   "cold": null,
+   "lastPingUsage": null,
+   "contextTokens": 276024,
+   "contextReadAt": 1792907986174,
+   "state": "off"
+  },
+  "stalled": {
+   "words": "Stopped at bewinxed@gmail.com\u2019s limit; continues on bewinxed@petralab.ai (Petralab) at 11:30",
+   "until": 1792917000000
+  }
+ },
+ "parent": {
+  "lastRequestAt": "2026-10-25T08:15:34.894Z",
+  "modelUsageSeen": {
+   "claude-sonnet-5": {
+    "inputTokens": 24213,
+    "outputTokens": 22,
+    "cacheReadInputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "costUSD": 0.048645999999999995
+   },
+   "claude-opus-5-5": {
+    "inputTokens": 291056,
+    "outputTokens": 12680139,
+    "cacheReadInputTokens": 6946083021,
+    "cacheCreationInputTokens": 56413934,
+    "costUSD": 2095.146517199994
+   },
+   "claude-opus-4-8": {
+    "inputTokens": 8923,
+    "outputTokens": 7705,
+    "cacheReadInputTokens": 866060,
+    "cacheCreationInputTokens": 0,
+    "costUSD": 0.67027
+   }
+  },
+  "threadId": null,
+  "id": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+  "machineId": "d04ca118428001f1",
+  "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+  "sessionId": "781f19ca-afaa-4816-8c4e-5c0cf0170e3e",
+  "harness": "claude",
+  "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+  "forkedFrom": null,
+  "parentInstanceId": null,
+  "origin": "person",
+  "parentToolUseId": null,
+  "cwd": "/home/bewinxed/cockpit",
+  "launchDir": "known",
+  "title": "Orchestrate cockpit fleet work",
+  "titleSource": "agent",
+  "derivedTitle": null,
+  "seenAt": "2026-10-25T07:46:17.192Z",
+  "turnEndedAt": "2026-10-25T08:15:46.421Z",
+  "kind": "mainline",
+  "permissionMode": "fullSend",
+  "model": "claude-opus-5-5",
+  "effort": "xhigh",
+  "chosenEffort": "xhigh",
+  "canDelegate": null,
+  "role": null,
+  "delegateType": null,
+  "delegateTypeProject": null,
+  "status": "running",
+  "lastError": null,
+  "lastErrorKind": null,
+  "createdAt": "2026-10-13T12:26:31.759Z",
+  "updatedAt": "2026-10-25T08:16:35.092Z",
+  "spawnedAt": "2026-10-25T07:40:22.107Z",
+  "workItemId": null,
+  "continuedInto": null,
+  "runningDelegates": 22,
+  "keepAlive": {
+   "on": false,
+   "nextAt": null,
+   "sent": 0,
+   "cap": 39,
+   "ttl": "1h",
+   "cold": null,
+   "lastPingUsage": null,
+   "contextTokens": 359655,
+   "contextReadAt": 1792916146420,
+   "state": "off"
+  }
+ },
+ "neighbours": [
+  {
+   "lastRequestAt": "2026-10-25T07:59:24.592Z",
+   "modelUsageSeen": {
+    "claude-sonnet-5": {
+     "inputTokens": 3500,
+     "outputTokens": 22,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "costUSD": 0.00722
+    },
+    "claude-opus-5-5": {
+     "inputTokens": 716,
+     "outputTokens": 271217,
+     "cacheReadInputTokens": 166164167,
+     "cacheCreationInputTokens": 1938157,
+     "costUSD": 54.165293399999975
+    }
+   },
+   "threadId": null,
+   "id": "5c23e323-91fb-4192-ada4-b2ca0c732a9b",
+   "machineId": "d04ca118428001f1",
+   "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "sessionId": "b5c11018-ad14-4986-a6b3-8d30f90dd656",
+   "harness": "claude",
+   "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+   "forkedFrom": null,
+   "parentInstanceId": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+   "origin": "delegate",
+   "parentToolUseId": null,
+   "cwd": "/home/bewinxed/.worktrees/cockpit-4b2033dc",
+   "launchDir": "known",
+   "title": "Make hub messages cost what changed",
+   "titleSource": "agent",
+   "derivedTitle": null,
+   "seenAt": null,
+   "turnEndedAt": "2026-10-25T07:59:29.413Z",
+   "kind": "scratch",
+   "permissionMode": "fullSend",
+   "model": "claude-opus-5-5",
+   "effort": "xhigh",
+   "chosenEffort": "xhigh",
+   "canDelegate": false,
+   "role": null,
+   "delegateType": "xhigh",
+   "delegateTypeProject": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "status": "running",
+   "lastError": null,
+   "lastErrorKind": null,
+   "createdAt": "2026-10-25T03:47:14.298Z",
+   "updatedAt": "2026-10-25T07:58:34.461Z",
+   "spawnedAt": "2026-10-25T07:58:30.612Z",
+   "workItemId": "0ae45088-5e7c-4df8-a635-855b5964d658",
+   "continuedInto": null,
+   "runningDelegates": 0,
+   "keepAlive": {
+    "on": false,
+    "nextAt": null,
+    "sent": 0,
+    "cap": 39,
+    "ttl": "1h",
+    "cold": null,
+    "lastPingUsage": null,
+    "contextTokens": 752556,
+    "contextReadAt": 1792915169411,
+    "state": "off"
+   }
+  },
+  {
+   "lastRequestAt": "2026-10-25T07:56:12.086Z",
+   "modelUsageSeen": {
+    "claude-sonnet-5": {
+     "inputTokens": 4436,
+     "outputTokens": 21,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "costUSD": 0.009082
+    },
+    "claude-opus-5-5": {
+     "inputTokens": 174,
+     "outputTokens": 51372,
+     "cacheReadInputTokens": 11156769,
+     "cacheCreationInputTokens": 548476,
+     "costUSD": 7.6472978
+    }
+   },
+   "threadId": null,
+   "id": "979b2230-2706-4a0f-b47e-a8c37eaeb513",
+   "machineId": "d04ca118428001f1",
+   "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "sessionId": "dc9caaa6-bc1e-4385-a477-0ef8bc2e6640",
+   "harness": "claude",
+   "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+   "forkedFrom": null,
+   "parentInstanceId": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+   "origin": "delegate",
+   "parentToolUseId": null,
+   "cwd": "/home/bewinxed/.worktrees/cockpit-bd705b31",
+   "launchDir": "known",
+   "title": "Fix leak-notice-workspace on main",
+   "titleSource": "agent",
+   "derivedTitle": null,
+   "seenAt": null,
+   "turnEndedAt": "2026-10-25T07:56:26.786Z",
+   "kind": "scratch",
+   "permissionMode": "fullSend",
+   "model": "claude-opus-5-5",
+   "effort": "high",
+   "chosenEffort": "high",
+   "canDelegate": false,
+   "role": null,
+   "delegateType": "high",
+   "delegateTypeProject": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "status": "sleeping",
+   "lastError": null,
+   "lastErrorKind": null,
+   "createdAt": "2026-10-25T03:37:16.338Z",
+   "updatedAt": "2026-10-25T07:55:40.871Z",
+   "spawnedAt": "2026-10-25T07:53:07.530Z",
+   "workItemId": "a8a8c73a-a30e-4dff-ac80-59a7198dffb2",
+   "continuedInto": null,
+   "runningDelegates": 0,
+   "keepAlive": {
+    "on": false,
+    "nextAt": null,
+    "sent": 0,
+    "cap": 39,
+    "ttl": "1h",
+    "cold": null,
+    "lastPingUsage": null,
+    "contextTokens": 214791,
+    "contextReadAt": 1792914986784,
+    "state": "off"
+   }
+  },
+  {
+   "lastRequestAt": "2026-10-25T07:55:00.823Z",
+   "modelUsageSeen": {
+    "claude-sonnet-5": {
+     "inputTokens": 2407,
+     "outputTokens": 31,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "costUSD": 0.005124
+    },
+    "claude-opus-5-5": {
+     "inputTokens": 20,
+     "outputTokens": 3250,
+     "cacheReadInputTokens": 477744,
+     "cacheCreationInputTokens": 40749,
+     "costUSD": 0.48662080000000013
+    }
+   },
+   "threadId": null,
+   "id": "29c731a6-7cd5-4571-8466-2d3e0d9ae76a",
+   "machineId": "d04ca118428001f1",
+   "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "sessionId": "024c1d22-93f1-4666-a97a-e2e5befeded7",
+   "harness": "claude",
+   "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+   "forkedFrom": null,
+   "parentInstanceId": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+   "origin": "delegate",
+   "parentToolUseId": null,
+   "cwd": "/home/bewinxed/.worktrees/cockpit-36c86253",
+   "launchDir": "known",
+   "title": "Land stage 2 pins rig fix",
+   "titleSource": "agent",
+   "derivedTitle": null,
+   "seenAt": null,
+   "turnEndedAt": "2026-10-25T07:55:07.542Z",
+   "kind": "scratch",
+   "permissionMode": "fullSend",
+   "model": "claude-opus-5-5",
+   "effort": "low",
+   "chosenEffort": "low",
+   "canDelegate": false,
+   "role": null,
+   "delegateType": "low",
+   "delegateTypeProject": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "status": "sleeping",
+   "lastError": null,
+   "lastErrorKind": null,
+   "createdAt": "2026-10-25T07:51:18.278Z",
+   "updatedAt": "2026-10-25T07:55:00.778Z",
+   "spawnedAt": "2026-10-25T07:51:18.278Z",
+   "workItemId": "98683f6e-f858-4ecc-8c4d-b4b7094633f8",
+   "continuedInto": null,
+   "runningDelegates": 0,
+   "keepAlive": {
+    "on": false,
+    "nextAt": null,
+    "sent": 0,
+    "cap": 39,
+    "ttl": "1h",
+    "cold": null,
+    "lastPingUsage": null,
+    "contextTokens": 56013,
+    "contextReadAt": 1792914907541,
+    "state": "off"
+   }
+  },
+  {
+   "lastRequestAt": "2026-10-25T07:55:03.684Z",
+   "modelUsageSeen": {
+    "claude-sonnet-5": {
+     "inputTokens": 3519,
+     "outputTokens": 17,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "costUSD": 0.007208
+    },
+    "claude-fable-5-1": {
+     "inputTokens": 302,
+     "outputTokens": 31017,
+     "cacheReadInputTokens": 1393487,
+     "cacheCreationInputTokens": 185476,
+     "costUSD": 5.61176175
+    }
+   },
+   "threadId": null,
+   "id": "1d4ffca9-3531-4d57-86c8-a349f798bf6c",
+   "machineId": "d04ca118428001f1",
+   "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "sessionId": "d6d76b2f-2b0d-4bfa-b2cf-21e08bdde483",
+   "harness": "claude",
+   "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+   "forkedFrom": null,
+   "parentInstanceId": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+   "origin": "delegate",
+   "parentToolUseId": null,
+   "cwd": "/home/bewinxed/.worktrees/cockpit-94e9997a",
+   "launchDir": "known",
+   "title": "Design the at-limit session look",
+   "titleSource": "agent",
+   "derivedTitle": null,
+   "seenAt": null,
+   "turnEndedAt": "2026-10-25T07:55:11.563Z",
+   "kind": "scratch",
+   "permissionMode": "fullSend",
+   "model": "claude-fable-5-1",
+   "effort": "high",
+   "chosenEffort": "high",
+   "canDelegate": false,
+   "role": null,
+   "delegateType": "advisor",
+   "delegateTypeProject": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "status": "sleeping",
+   "lastError": null,
+   "lastErrorKind": null,
+   "createdAt": "2026-10-25T07:45:49.602Z",
+   "updatedAt": "2026-10-25T07:54:53.700Z",
+   "spawnedAt": "2026-10-25T07:45:49.602Z",
+   "workItemId": "b9646fd6-7cec-4551-b2fd-41c959880aa8",
+   "continuedInto": null,
+   "runningDelegates": 0,
+   "keepAlive": {
+    "on": false,
+    "nextAt": null,
+    "sent": 0,
+    "cap": 80,
+    "ttl": "1h",
+    "cold": null,
+    "lastPingUsage": null,
+    "contextTokens": 201401,
+    "contextReadAt": 1792914911562,
+    "state": "off"
+   }
+  },
+  {
+   "lastRequestAt": "2026-10-25T07:55:12.125Z",
+   "modelUsageSeen": {
+    "claude-sonnet-5": {
+     "inputTokens": 2407,
+     "outputTokens": 21,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "costUSD": 0.005024
+    },
+    "claude-opus-5-5": {
+     "inputTokens": 192,
+     "outputTokens": 62386,
+     "cacheReadInputTokens": 11802075,
+     "cacheCreationInputTokens": 532969,
+     "costUSD": 7.872655000000002
+    }
+   },
+   "threadId": null,
+   "id": "2bdbb699-abe4-433b-89ad-3bb2fc30ac36",
+   "machineId": "d04ca118428001f1",
+   "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "sessionId": "b573cb66-3001-4d91-a601-9d1c650e6868",
+   "harness": "claude",
+   "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+   "forkedFrom": null,
+   "parentInstanceId": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+   "origin": "delegate",
+   "parentToolUseId": null,
+   "cwd": "/home/bewinxed/.worktrees/cockpit-057dacce",
+   "launchDir": "known",
+   "title": "Measure tab-icon wave cost",
+   "titleSource": "agent",
+   "derivedTitle": null,
+   "seenAt": null,
+   "turnEndedAt": "2026-10-25T07:55:24.021Z",
+   "kind": "scratch",
+   "permissionMode": "fullSend",
+   "model": "claude-opus-5-5",
+   "effort": "medium",
+   "chosenEffort": "medium",
+   "canDelegate": false,
+   "role": null,
+   "delegateType": "medium",
+   "delegateTypeProject": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "status": "sleeping",
+   "lastError": null,
+   "lastErrorKind": null,
+   "createdAt": "2026-10-25T03:52:33.025Z",
+   "updatedAt": "2026-10-25T07:54:35.220Z",
+   "spawnedAt": "2026-10-25T07:53:09.214Z",
+   "workItemId": "8fdbd997-055e-4222-b2c1-8f591111c938",
+   "continuedInto": null,
+   "runningDelegates": 0,
+   "keepAlive": {
+    "on": false,
+    "nextAt": null,
+    "sent": 0,
+    "cap": 39,
+    "ttl": "1h",
+    "cold": null,
+    "lastPingUsage": null,
+    "contextTokens": 229429,
+    "contextReadAt": 1792914924020,
+    "state": "off"
+   }
+  },
+  {
+   "lastRequestAt": "2026-10-25T07:53:12.950Z",
+   "modelUsageSeen": {
+    "claude-sonnet-5": {
+     "inputTokens": 2582,
+     "outputTokens": 21,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "costUSD": 0.005374
+    },
+    "claude-sonnet-5-5": {
+     "inputTokens": 40,
+     "outputTokens": 24355,
+     "cacheReadInputTokens": 2079831,
+     "cacheCreationInputTokens": 192386,
+     "costUSD": 1.2211570999999999
+    }
+   },
+   "threadId": null,
+   "id": "048dc645-500d-40a2-8f1b-f0f406109913",
+   "machineId": "d04ca118428001f1",
+   "projectId": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "sessionId": "6328831b-1f64-41cb-88b6-117371cd316f",
+   "harness": "claude",
+   "accountId": "e8b553ef-e57f-429f-9b48-905760f5b675",
+   "forkedFrom": null,
+   "parentInstanceId": "23cb5219-f410-4369-83d2-2e1d1fa3e6a7",
+   "origin": "delegate",
+   "parentToolUseId": null,
+   "cwd": "/home/bewinxed/.worktrees/cockpit-be89b475",
+   "launchDir": "known",
+   "title": "Review design-rule reach captures",
+   "titleSource": "agent",
+   "derivedTitle": null,
+   "seenAt": null,
+   "turnEndedAt": "2026-10-25T07:53:20.088Z",
+   "kind": "scratch",
+   "permissionMode": "fullSend",
+   "model": "claude-sonnet-5-5",
+   "effort": "medium",
+   "chosenEffort": "medium",
+   "canDelegate": false,
+   "role": null,
+   "delegateType": "browser",
+   "delegateTypeProject": "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+   "status": "sleeping",
+   "lastError": null,
+   "lastErrorKind": null,
+   "createdAt": "2026-10-25T07:47:44.018Z",
+   "updatedAt": "2026-10-25T07:53:03.342Z",
+   "spawnedAt": "2026-10-25T07:47:44.018Z",
+   "workItemId": "30bd60f8-3b61-448c-b5cf-c1237dd21b9a",
+   "continuedInto": null,
+   "runningDelegates": 0,
+   "keepAlive": {
+    "on": false,
+    "nextAt": null,
+    "sent": 0,
+    "cap": 39,
+    "ttl": "1h",
+    "cold": null,
+    "lastPingUsage": null,
+    "contextTokens": 208396,
+    "contextReadAt": 1792914800087,
+    "state": "off"
+   }
+  }
+ ],
+ "accountRow": {
+  "id": "limit-34ac29f0-7f8f-47bd-a3ab-ec98f01482cb",
+  "instanceId": "72e0278e-092d-4c24-826f-45f2cbc98553",
+  "timestamp": "2026-10-25T08:00:01.340Z",
+  "sdkUuid": "limit-34ac29f0-7f8f-47bd-a3ab-ec98f01482cb",
+  "type": "system.account_move",
+  "content": "Waiting for bewinxed@petralab.ai (Petralab) to reset \u00b7 30 min",
+  "metadata": {
+   "subtype": "account_move",
+   "accountMove": {
+    "kind": "waiting",
+    "account": {
+     "id": "3c788add-0f48-4fe6-8b05-638c18bdc77a",
+     "name": "bewinxed@gmail.com",
+     "hue": "blue"
+    },
+    "frees": {
+     "id": "1c962620-90eb-4e0e-b487-06c18a98cded",
+     "name": "bewinxed@petralab.ai (Petralab)",
+     "hue": "orange"
+    },
+    "accounts": [
+     {
+      "account": {
+       "id": "1c962620-90eb-4e0e-b487-06c18a98cded",
+       "name": "bewinxed@petralab.ai (Petralab)",
+       "hue": "orange"
+      },
+      "reason": {
+       "kind": "benched"
+      },
+      "backAt": 1792917000000
+     },
+     {
+      "account": {
+       "id": "676d0582-43af-4bfc-a2e7-7d513beaabe0",
+       "name": "jude@petralab.ai",
+       "hue": "amber"
+      },
+      "reason": {
+       "kind": "benched"
+      },
+      "backAt": 1792918200000
+     },
+     {
+      "account": {
+       "id": "d18c5ce4-e563-4ea3-8be2-12d9fb194009",
+       "name": "rand@petralab.ai",
+       "hue": "cyan"
+      },
+      "reason": {
+       "kind": "benched"
+      },
+      "backAt": 1792917000000
+     },
+     {
+      "account": {
+       "id": "61896e03-0178-4a7b-859a-71f0c2e40747",
+       "name": "design@petralab.ai",
+       "hue": "green"
+      },
+      "reason": {
+       "kind": "benched"
+      },
+      "backAt": 1792917000000
+     },
+     {
+      "account": {
+       "id": "c6b14b4e-67f6-41bf-bb2b-3ce38cd228b1",
+       "name": "marketing@petralab.ai",
+       "hue": "orange"
+      },
+      "reason": {
+       "kind": "benched"
+      },
+      "backAt": 1792917000000
+     },
+     {
+      "account": {
+       "id": "e8b553ef-e57f-429f-9b48-905760f5b675",
+       "name": "bewinxed@petralab.ai (bewinxed@petralab.ai's Organization)",
+       "hue": "rose"
+      },
+      "reason": {
+       "kind": "runsOut",
+       "leftPct": 29.18138518796819,
+       "at": 1792915870950.5693
+      }
+     }
+    ],
+    "until": 1792917000000,
+    "why": "full",
+    "tokens": 276024
+   }
+  }
+ }
+}

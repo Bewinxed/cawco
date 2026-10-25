@@ -1,0 +1,122 @@
+[
+  {
+    "file": "tab-today-desk.png",
+    "device": "Desk",
+    "state": "today-tab",
+    "caption": "Tab, today: the held session's tab in the strip, with the failure mark."
+  },
+  {
+    "file": "tab-design-desk.png",
+    "device": "Desk",
+    "state": "tab",
+    "caption": "Tab, design: the same tab with the still grey at-limit glyph."
+  },
+  {
+    "file": "home-row-today-desk.png",
+    "device": "Desk",
+    "state": "today-home",
+    "caption": "Home row, today: the held row in red among its neighbours."
+  },
+  {
+    "file": "home-row-design-desk.png",
+    "device": "Desk",
+    "state": "home-moves",
+    "caption": "Home row, design: the held row in the list's own inks, its meta line saying where it goes and when."
+  },
+  {
+    "file": "home-row-today-phone.png",
+    "device": "Phone",
+    "state": "today-home",
+    "caption": "Home row, today, on a phone."
+  },
+  {
+    "file": "home-row-design-phone.png",
+    "device": "Phone",
+    "state": "phone-row",
+    "caption": "Home row, design, on a phone."
+  },
+  {
+    "file": "line-today-desk.png",
+    "device": "Desk",
+    "state": "today-line",
+    "caption": "Transcript line, today: the account line, its full second line and the red stop sentence."
+  },
+  {
+    "file": "line-design-desk.png",
+    "device": "Desk",
+    "state": "line-rest",
+    "caption": "Transcript line, design: one line at rest."
+  },
+  {
+    "file": "line-today-phone.png",
+    "device": "Phone",
+    "state": "today-line",
+    "caption": "Transcript line, today, on a phone."
+  },
+  {
+    "file": "line-design-phone.png",
+    "device": "Phone",
+    "state": "line-phone-rest",
+    "caption": "Transcript line, design, on a phone at rest."
+  },
+  {
+    "file": "fork-a-dot-rail-desk.png",
+    "device": "Desk",
+    "state": "forka-dot",
+    "caption": "Fork A, muted dot: the rail's tree, the held row's mark wearing a still grey dot."
+  },
+  {
+    "file": "fork-a-nodot-rail-desk.png",
+    "device": "Desk",
+    "state": "forka-nodot",
+    "caption": "Fork A, no dot: the rail's tree, the held row's mark bare like an idle one."
+  },
+  {
+    "file": "fork-a-dot-row-phone.png",
+    "device": "Phone",
+    "state": "forka-dot",
+    "caption": "Fork A, muted dot: the held row on a phone."
+  },
+  {
+    "file": "fork-a-nodot-row-phone.png",
+    "device": "Phone",
+    "state": "forka-nodot",
+    "caption": "Fork A, no dot: the held row on a phone."
+  },
+  {
+    "file": "fork-b-button-hover-desk.png",
+    "device": "Desk",
+    "state": "forkb-button",
+    "caption": "Fork B, text button: the line under the pointer, ending in Move to."
+  },
+  {
+    "file": "fork-b-button-pressed-desk.png",
+    "device": "Desk",
+    "state": "forkb-button",
+    "caption": "Fork B, text button: the line pressed open, the accounts unfolded."
+  },
+  {
+    "file": "fork-b-button-pressed-phone.png",
+    "device": "Phone",
+    "state": "forkb-button",
+    "caption": "Fork B, text button: the line pressed open on a phone."
+  },
+  {
+    "file": "fork-b-words-hover-desk.png",
+    "device": "Desk",
+    "state": "forkb-words",
+    "caption": "Fork B, words only: the line under the pointer, no button."
+  },
+  {
+    "file": "fork-b-words-pressed-desk.png",
+    "device": "Desk",
+    "state": "forkb-words",
+    "caption": "Fork B, words only: the line pressed open, the accounts unfolded."
+  },
+  {
+    "file": "fork-b-words-pressed-phone.png",
+    "device": "Phone",
+    "state": "forkb-words",
+    "caption": "Fork B, words only: the line pressed open on a phone."
+  }
+]

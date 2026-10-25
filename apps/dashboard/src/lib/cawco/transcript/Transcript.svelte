@@ -49,7 +49,6 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { stopWords } from "../accounts/switch.svelte";
   import {
     cawco,
     faultMessage,
@@ -1056,17 +1055,16 @@
   });
   const rows = $derived(built.rows);
   /**
-   * While the session is stopped at its account's limit, its newest account
-   * line is that stop, drawn as an error with its way out
-   * (switch.svelte.ts `stopWords`); every older one stays history.
+   * While the session waits at its account's limit, its newest account line
+   * is that wait, live: it says itself as a status and offers the way out
+   * (AccountMoveDivider `waiting`); every older one stays history.
    */
-  const stop = $derived.by(() => {
+  const waitsHere = $derived.by(() => {
     const instance = cawco.instanceIndex.byId.get(session.instanceId);
-    const words = instance ? stopWords(instance) : undefined;
-    const key = words
+    const key = instance?.stalled
       ? rows.findLast((one) => one.kind === "account")?.key
       : undefined;
-    return words && key ? { key, words } : undefined;
+    return instance && key ? { key, instance } : undefined;
   });
   const cache = untrack(() => {
     // A pane with no saved sizes and no rows has `undefined` on both sides of
@@ -4327,7 +4325,9 @@
             {:else if row.kind === "account"}
               <AccountMoveDivider
                 {row}
-                stop={stop?.key === row.key ? stop.words : undefined}
+                waiting={waitsHere?.key === row.key
+                  ? waitsHere.instance
+                  : undefined}
               />
             {:else if row.kind === "notices"}
               <NoticeRun {row} />

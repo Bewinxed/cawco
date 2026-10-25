@@ -9,6 +9,7 @@ import {
   accountsWords,
   clockWords,
   configurePage,
+  fitsOf,
   type HeldReason,
   keepsGoingOnExtraUsage,
   type LimitWindow,
@@ -18,6 +19,9 @@ import {
   namedAccount,
   type PlacementStrategy,
   type RebalanceNotice,
+  type Stall,
+  type StallHeld,
+  stallWords,
   tokenWords,
   type WaitReason,
   windowWords,
@@ -117,16 +121,6 @@ import { isLive } from "./work-items";
  */
 
 export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
-
-/**
- * A session stopped at its account's limit, as its tray chip and
- * `delegate_list` say it (core `accountsWords.stalled`): the words, and
- * when it carries on (epoch ms): the reset it waits for.
- */
-export interface Stall {
-  until?: number;
-  words: string;
-}
 
 /** The message a session's last turn read: who sent it. */
 export interface Handed {
@@ -2311,17 +2305,22 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         if (carry) {
           return carryStall(name, carry, held.until);
         }
+        // The line the hold was said in: where it goes at `until`, and the
+        // accounts that could take it now.
         const last = db.atLimit.events([instanceId]).at(-1)?.move;
-        const frees =
+        const said =
           last?.kind === "waiting" && last.until === held.until
-            ? last.frees
+            ? last
             : undefined;
-        const clock = clockWords(held.until);
+        const stalled: StallHeld = {
+          account: { id: held.accountId, name },
+          ...(said?.frees ? { frees: said.frees } : {}),
+          fits: fitsOf(said?.accounts).map((one) => one.account),
+        };
         return {
-          words: frees
-            ? words.waitingOn(name, frees.name, clock)
-            : words.waiting(name, clock),
+          words: stallWords(stalled, held.until, Date.now()),
           until: held.until,
+          held: stalled,
         };
       }
       const moving = towards.get(instanceId);

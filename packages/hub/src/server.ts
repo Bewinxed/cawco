@@ -351,6 +351,7 @@ import {
   ruleProblem,
   SESSION_DIR_READ,
   STREAM_SO_FAR,
+  type Stall,
   type StoppedCommands,
   type StreamHeartbeat,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
@@ -542,7 +543,6 @@ import {
   createAtLimit,
   type Kept,
   refusedUntil,
-  type Stall,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";

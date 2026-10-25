@@ -623,11 +623,14 @@ export const createRebalancer = (deps: RebalancerDeps) => {
           const account = db.accounts.get(one.accountId);
           return account
             ? [
-                heldAccountWords({
-                  account: namedAccount(account, accounts),
-                  reason: one.reason,
-                  ...(one.backAt === undefined ? {} : { backAt: one.backAt }),
-                }),
+                heldAccountWords(
+                  {
+                    account: namedAccount(account, accounts),
+                    reason: one.reason,
+                    ...(one.backAt === undefined ? {} : { backAt: one.backAt }),
+                  },
+                  Date.now()
+                ),
               ]
             : [];
         })

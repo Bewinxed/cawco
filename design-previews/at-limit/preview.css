@@ -1,0 +1,216 @@
+/* The preview's own page: its chrome on the house's tokens (house.css,
+   today.css), the captured parts left to the house's own rules. Every
+   colour, type role, space, radius and shadow is a token; the frames'
+   widths (his 1037px window, the home column, the rail, the transcript's
+   column, the 390px phone) are the preview's own. */
+@layer preview {
+  html {
+    color-scheme: light;
+    background: var(--surface-recess);
+    color: var(--ink-strong);
+    -webkit-text-size-adjust: 100%;
+
+    &[data-scheme="dark"] {
+      color-scheme: dark;
+    }
+  }
+
+  body {
+    margin: 0;
+    font: var(--type-body);
+    padding-block: var(--space-6);
+    padding-inline: max(var(--space-3), env(safe-area-inset-left))
+      max(var(--space-3), env(safe-area-inset-right));
+  }
+
+  h1,
+  h2 {
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  /* ---------- The page's head ---------- */
+  .page-head {
+    max-inline-size: 1440px;
+    margin-inline: auto;
+    margin-block-end: var(--space-6);
+  }
+
+  .page-words {
+    display: grid;
+    gap: var(--space-2);
+    max-inline-size: var(--c-measure);
+    min-inline-size: 0;
+
+    & h1 {
+      font: var(--type-title);
+      letter-spacing: var(--track-title);
+    }
+
+    & p {
+      color: var(--ink-muted);
+    }
+  }
+
+  /* ---------- One state beside the switcher ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+    max-inline-size: 1440px;
+    margin-inline: auto;
+
+    @media (width > 1100px) {
+      grid-template-columns: minmax(0, 1fr) 15rem;
+    }
+  }
+
+  .stage {
+    display: grid;
+    align-content: start;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .caption {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+
+  .frames {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: var(--space-5);
+    min-inline-size: 0;
+  }
+
+  .frame {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    inline-size: var(--w);
+
+    & figcaption {
+      font: var(--type-meta);
+      color: var(--ink-muted);
+      overflow-wrap: anywhere;
+
+      & strong {
+        color: var(--ink-strong);
+        font-weight: inherit;
+      }
+    }
+
+    &[data-kind="tabs"] {
+      --w: 1037px;
+    }
+    &[data-kind="home"] {
+      --w: 560px;
+    }
+    &[data-kind="rail"] {
+      --w: 280px;
+    }
+    &[data-kind="line"],
+    &[data-kind="tray"] {
+      --w: 720px;
+    }
+    &[data-device="phone"] {
+      --w: 390px;
+    }
+  }
+
+  /* The surface each part stands on: the page's own ground, as the
+     dashboard lays it under the list, the rail, the transcript. */
+  .well {
+    min-inline-size: 0;
+    padding: var(--space-3);
+    border: var(--border-width) solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-page);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .frame[data-kind="tabs"] .well {
+    padding: var(--space-2) var(--space-2) 0;
+    background: var(--surface-recess);
+  }
+
+  .frame[data-kind="tray"] .well {
+    padding-block-start: var(--space-8);
+  }
+
+  /* Hovered: the house's own group-hover rule, held. */
+  .frame[data-hover] [data-slot="detail"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  /* ---------- The switcher ---------- */
+  .states {
+    display: grid;
+    align-content: start;
+    gap: var(--space-4);
+    min-inline-size: 0;
+
+    @media (width > 1100px) {
+      position: sticky;
+      inset-block-start: var(--space-4);
+    }
+  }
+
+  .group {
+    display: grid;
+    gap: var(--space-1);
+
+    & h2 {
+      font: var(--type-caps);
+      letter-spacing: var(--track-caps);
+      text-transform: uppercase;
+      color: var(--ink-muted);
+    }
+
+    & ul {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    & a {
+      display: block flow;
+      min-block-size: var(--c-btn-h-sm);
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-sm);
+      color: var(--ink-muted);
+      font: var(--type-label);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+
+      @media (hover: hover) {
+        &:hover {
+          background: var(--surface-hover);
+          color: var(--ink-strong);
+        }
+      }
+
+      &[aria-current="page"] {
+        background: var(--surface-lift);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-raised);
+      }
+
+      @media (pointer: coarse) {
+        min-block-size: var(--c-touch-floor);
+      }
+    }
+  }
+}

@@ -17,6 +17,7 @@ const STATUS_WORD: Record<MarkStatus, string> = {
   attn: commonWords.needsYou,
   done: "Finished",
   fail: "Failed",
+  held: "At its limit",
   idle: "Idle",
 };
 
@@ -33,14 +34,13 @@ export function statusWord(
   if (instance?.status === "stopping") {
     return STOPPING_LABEL;
   }
-  if (instance?.stalled) {
-    return STALLED_LABEL;
-  }
-  return instance?.status === "stopped" ? STOPPED_LABEL : STATUS_WORD[status];
+  return instance?.status === "stopped" && status !== "held"
+    ? STOPPED_LABEL
+    : STATUS_WORD[status];
 }
 
-/** A session stopped at its account's limit, in one status word. */
-export const STALLED_LABEL = "Stopped at its limit";
+/** A session waiting at its account's limit, in one status word: a wait, never a failure. */
+export const STALLED_LABEL = STATUS_WORD.held;
 
 /**
  * A session's status, one rule for every row that draws its mark. `done`:
@@ -54,10 +54,13 @@ export function sessionStatus(
   if (!instance) {
     return "idle";
   }
-  // Stopped at its account's limit: an error until it moves or its account
-  // resets, whatever its process is doing.
-  if (isFailed(instance) || instance.stalled) {
+  if (isFailed(instance)) {
     return "fail";
+  }
+  // Waiting at its account's limit, until it moves or its account resets,
+  // whatever its process is doing: its own status, never a failure.
+  if (instance.stalled) {
+    return "held";
   }
   if (isStale(instance)) {
     return "idle";

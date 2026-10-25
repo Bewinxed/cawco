@@ -616,16 +616,6 @@ public enum Words {
                 "Stopped at \(from)’s limit; moves to \(to) when its work in flight ends (\(work)), or continues at \(clock)"
             }
 
-            /// No account has room: held until its own account resets at `clock` ("15:40").
-            public static func waiting(from: String, clock: String) -> String {
-                "Stopped at \(from)’s limit; continues at \(clock)"
-            }
-
-            /// No account has room now: `on` frees first, at `clock`, and takes it.
-            public static func waitingOn(from: String, on: String, clock: String) -> String {
-                "Stopped at \(from)’s limit; continues on \(on) at \(clock)"
-            }
-
             /// Claude Code refused its account's sign-in, and no other account can take it yet.
             public static func signedOut(from: String) -> String {
                 "Stopped: \(from)’s sign-in was refused; continues once an account can take it"

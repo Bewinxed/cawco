@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** What a row is doing, as its mark says it. */
-  export type MarkStatus = "live" | "attn" | "done" | "fail" | "idle";
+  export type MarkStatus = "live" | "attn" | "done" | "fail" | "held" | "idle";
 </script>
 
 <script lang="ts">
@@ -31,11 +31,12 @@
    *   (motion/echo `echoBeat`, on the list), three loops from when it took
    *   the status; then, and with reduced motion, a still dot in the live
    *   ink instead.
-   * - Needs you, failed: a dot on the tile's top-right corner in that
-   *   status's ink, the tile cut away round it so it reads on any hue. The
-   *   failed dot is still; the needs-you dot echoes as a working tile does,
-   *   on the same beat, three loops, then stands still. Idle, finished or
-   *   no status: nothing.
+   * - Needs you, failed, at its limit: a dot on the tile's top-right
+   *   corner in that status's ink, the tile cut away round it so it reads on
+   *   any hue. The failed dot is still, and so is the at-limit one, in the
+   *   muted ink (a wait, never an alarm); the needs-you dot echoes as a
+   *   working tile does, on the same beat, three loops, then stands still.
+   *   Idle, finished or no status: nothing.
    *
    * - `faceAlways`: the tile keeps its face whatever it holds (a thread's
    *   mark is Caw): no count and no chevron on it; the deck behind it and
@@ -93,10 +94,20 @@
   } = $props();
 
   const dot = $derived(
-    status === "live" || status === "attn" || status === "fail"
+    status === "live" ||
+      status === "attn" ||
+      status === "fail" ||
+      status === "held"
       ? status
       : undefined
   );
+  /** Each dot's ink: its status's glyph ink; at its limit, the muted ink. */
+  const DOT_INK = {
+    live: "var(--status-live-glyph)",
+    attn: "var(--status-attn-glyph)",
+    fail: "var(--status-fail-glyph)",
+    held: "var(--ink-muted)",
+  } as const;
   const has = $derived(count > 0);
   /** Its own hit area opens and folds its rows. */
   const switches = $derived(
@@ -140,7 +151,7 @@
   data-open={(parent && open) || undefined}
   data-status-count={countIsStatus ? "" : undefined}
   data-switch={switches || rowToggles ? "" : undefined}
-  style:--dot={dot ? `var(--status-${dot}-glyph)` : undefined}
+  style:--dot={dot ? DOT_INK[dot] : undefined}
   style:--fill={fill}
   style:--n={Math.min(count, 3)}
   style:--size="var(--mark-size, var(--space-5))"
@@ -249,7 +260,8 @@
     style:--skin-fill="var(--pfill, var(--fill))"
   ></span>
   {#if dot}
-    <!-- The status dot, for a row that needs you or has failed: a circle
+    <!-- The status dot, for a row that needs you, has failed or waits at
+         its limit: a circle
          centred on the tile's top-right corner, half of it out of the tile,
          over the tile, its count and its deck. The tile is cut away round it
          (--status-dot-cut wide) rather than ringed in a surface colour: what

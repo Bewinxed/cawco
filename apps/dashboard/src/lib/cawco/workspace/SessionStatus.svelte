@@ -53,6 +53,7 @@
         "loops text-status-live-glyph motion-safe:animate-breath",
       status.tone === "attention" && "text-status-attn-glyph",
       status.tone === "failed" && "text-status-fail-glyph",
+      status.tone === "held" && "text-ink-muted",
       status.tone === "quiet" && "text-status-idle-glyph",
     ]}
     data-box

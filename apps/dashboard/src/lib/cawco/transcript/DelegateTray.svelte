@@ -47,11 +47,12 @@
     IconChevronDown,
     IconClose,
     IconExternal,
+    IconRefresh,
     IconStop,
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
-  import { stopWords } from "../accounts/switch.svelte";
+  import { waitLeft, waitWords } from "../accounts/switch.svelte";
   import {
     cawco,
     dismissWorkItem,
@@ -625,11 +626,11 @@
     if (chip.item.machinePaused) {
       return chip.item.machinePaused;
     }
-    // Its account's limit stopped it: where or when it continues, by itself,
-    // and the way out its row says (switch.svelte.ts `stopWords`).
+    // It waits at its account's limit: as its row says it (switch.svelte.ts
+    // `waitWords`).
     if (chip.item.stalled) {
       const row = cawco.instanceIndex.byId.get(chip.item.instanceId);
-      return (row && stopWords(row)) ?? chip.item.stalled;
+      return (row && waitWords(row)) ?? chip.item.stalled;
     }
     switch (chip.tone) {
       case "needs":
@@ -1252,6 +1253,12 @@
   {@const { item, tone, entry } = chip}
   {@const flies = entry === "fly"}
   {@const failed = owed(chip)}
+  <!-- Waiting at its account's limit: the at-limit glyph before "At its
+       limit · 1h 19m", no tint, its row's line on the pointer. -->
+  {@const row = item.stalled
+    ? cawco.instanceIndex.byId.get(item.instanceId)
+    : undefined}
+  {@const waits = item.stalled ? row && waitLeft(row) : undefined}
   <button
     data-end={failed || undefined}
     aria-controls={failed ? shelfId : panelId}
@@ -1270,7 +1277,8 @@
     data-flip-enter={entry === "fade" ? undefined : "own"}
     data-fly={flies || undefined}
     data-key={item.id}
-    data-status={chip.item.stalled ? "failed" : tone}
+    data-status={chip.item.stalled ? "waiting" : tone}
+    title={item.stalled ? stateWords(chip) : undefined}
     onblur={() => {
       focusedKey = null;
     }}
@@ -1300,7 +1308,20 @@
       >
       <!-- The state gives way like the title, to its floor (`measureFloor`),
            cut with an ellipsis inside the chip, before its glyph. -->
-      {#if item.queued}
+      {#if item.stalled}
+        <span
+          data-slot="note"
+          class="mark-line min-w-0 inline-flex items-center gap-space-1 font-normal overflow-clip whitespace-nowrap"
+          data-box
+          ><IconRefresh
+            aria-hidden="true"
+            class="flex-none size-icon-sm text-ink-muted"
+            data-box
+          /><span class="min-w-0 overflow-clip text-ellipsis num"
+            >{waits ? `At its limit · ${waits}` : "At its limit"}</span
+          ></span
+        >
+      {:else if item.queued}
         <span
           data-slot="note"
           class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
@@ -1329,7 +1350,7 @@
     <span
       data-chip-slot
       aria-hidden="true"
-      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-arrive-late"
+      class="flex-none size-icon-md grid place-items-center group-status-waiting/chip:hidden group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-arrive-late"
       data-box
     >
       {#key slotOf(tone)}
@@ -1520,7 +1541,7 @@
       <span
         class="flex-initial ms-auto text-size-meta text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-status-attn-ink status-failed:text-status-fail-ink"
         data-delegate-tray-tone={tone}
-        data-status={chip.item.stalled ? "failed" : tone}
+        data-status={chip.item.stalled ? "waiting" : tone}
         >{stateWords(chip)}</span
       >
       <span

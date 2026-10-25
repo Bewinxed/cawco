@@ -252,17 +252,20 @@
     // The attention glyph's tone, darker by day, so its rim holds 3:1.
     attention: "var(--tab-rim-attn)",
     failed: "var(--status-fail-glyph)",
+    held: "var(--ink-muted)",
     quiet: "var(--ink-muted)",
   };
   /**
    * Each status's rim strength unchosen (`rest`) and chosen (`full`): an
-   * idle tab wears none unchosen, every other status the subtle strength;
-   * chosen, idle wears the muted ink's own (`.tab`'s `--rim-*`).
+   * idle tab, and one waiting at its limit, wears none unchosen, every other
+   * status the subtle strength; chosen, both wear the muted ink's own
+   * (`.tab`'s `--rim-*`).
    */
   const RIM: Record<StatusTone, { full: string; rest: string }> = {
     working: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
     attention: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
     failed: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
+    held: { rest: "0", full: "var(--rim-idle)" },
     quiet: { rest: "0", full: "var(--rim-idle)" },
   };
   /** A tab's place in the track's stack at rest, until the track ranks it (TabItem's own). */

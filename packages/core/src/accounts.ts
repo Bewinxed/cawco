@@ -1098,6 +1098,191 @@ export const namedAccount = (
   hue: account.hue,
 });
 
+/** An email domain's top level ("gmail.com" → "gmail"). */
+const TOP_DOMAIN = /\.[^.]+$/;
+
+/**
+ * An organization Anthropic names for its owner's email ("x@y.ai's
+ * Organization"): its cell calls it what it is, "Organization".
+ */
+const EMAIL_ORG = /^\S+@\S+'s (Organization)$/;
+
+/**
+ * What each of `accounts` is called on a line that says a session waits at
+ * a limit, as the usage popover's cells name them: its nickname, else its
+ * email's local part ("jude"); then its domain's stem ("bewinxed@gmail")
+ * where another account of its provider shares that first part; then its
+ * organization ("bewinxed@petralab (Petralab)") where another signs in as
+ * the same email.
+ */
+export const cellNames = (
+  accounts: readonly NameableAccount[]
+): Map<string, string> => {
+  const first = (one: NameableAccount): string =>
+    one.label ??
+    (one.email?.includes("@")
+      ? one.email.slice(0, one.email.lastIndexOf("@"))
+      : accountName(one));
+  const peers = (
+    one: NameableAccount,
+    same: (other: NameableAccount) => boolean
+  ) =>
+    accounts.some(
+      (other) =>
+        other.id !== one.id && other.provider === one.provider && same(other)
+    );
+  return new Map(
+    accounts.map((one) => {
+      const name = first(one);
+      const email = one.email?.toLowerCase() ?? null;
+      if (one.label || !email?.includes("@")) {
+        return [one.id, name];
+      }
+      if (
+        !peers(
+          one,
+          (other) => first(other).toLowerCase() === name.toLowerCase()
+        )
+      ) {
+        return [one.id, name];
+      }
+      const stem = `${name}@${email.slice(email.lastIndexOf("@") + 1).replace(TOP_DOMAIN, "")}`;
+      const org = one.identity?.organization;
+      if (!(
+        org && peers(one, (other) => other.email?.toLowerCase() === email)
+      )) {
+        return [one.id, stem];
+      }
+      return [one.id, `${stem} (${org.match(EMAIL_ORG)?.[1] ?? org})`];
+    })
+  );
+};
+
+/** `account` called as `names` call it ({@link cellNames}), else as its line was written. */
+const nameIn =
+  (names: ReadonlyMap<string, string>) =>
+  <T extends Pick<NamedAccount, "id" | "name">>(account: T): T => ({
+    ...account,
+    name: names.get(account.id) ?? account.name,
+  });
+
+/** A stall's accounts called as `names` call them ({@link cellNames}). */
+export const renamedHeld = (
+  held: StallHeld,
+  names: ReadonlyMap<string, string>
+): StallHeld => {
+  const named = nameIn(names);
+  return {
+    account: named(held.account),
+    ...(held.frees ? { frees: named(held.frees) } : {}),
+    fits: held.fits.map(named),
+  };
+};
+
+/**
+ * A wait at a limit (`waiting`, and `stopped` with Caw off) with every
+ * account it names called as `names` call them ({@link cellNames}); any
+ * other line as it was written.
+ */
+export const renamedMove = (
+  move: AccountMove,
+  names: ReadonlyMap<string, string>
+): AccountMove => {
+  const named = nameIn(names);
+  switch (move.kind) {
+    case "waiting":
+      return {
+        ...move,
+        account: named(move.account),
+        ...(move.frees ? { frees: named(move.frees) } : {}),
+        ...(move.accounts
+          ? {
+              accounts: move.accounts.map((one) => ({
+                ...one,
+                account: named(one.account),
+              })),
+            }
+          : {}),
+      };
+    case "stopped":
+      return { ...move, account: named(move.account) };
+    case "continued":
+    case "ended":
+    case "moved":
+    case "signed-out":
+    case "unmoved":
+      break;
+  }
+  return move;
+};
+
+/**
+ * Whose limit a waiting session is at, where it goes when it carries on,
+ * and the accounts that could take it now ({@link HeldReason} `fits`), as
+ * its row says it ({@link stallWords}).
+ */
+export interface StallHeld {
+  account: StallAccount;
+  /** The accounts that could take it now, in the hub's order. */
+  fits: StallAccount[];
+  /** Another account that frees before `account` resets: it moves there at the stall's `until`. */
+  frees?: StallAccount;
+}
+
+/** An account a stall names: its id, and what its line calls it. */
+export type StallAccount = Pick<NamedAccount, "id" | "name">;
+
+/**
+ * A session waiting at its account's limit, as the hub's at-limit
+ * controller holds it (hub at-limit.ts `stall`): the hub's words (for its
+ * tools and logs), `until` (epoch ms) when it carries on, and, while it
+ * waits for a reset, `held`, which every reader says on its own clock.
+ */
+export interface Stall {
+  held?: StallHeld;
+  until?: number;
+  words: string;
+}
+
+/**
+ * "1h 19m", "30m", "2d 4h": a span ahead as the Usage section says it, to
+ * the minute, never under one.
+ */
+export const countdownWords = (ms: number): string => {
+  const m = Math.max(1, Math.round(ms / MINUTE));
+  if (m < 60) {
+    return `${m}m`;
+  }
+  if (m < 1440) {
+    return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+  }
+  return `${Math.floor(m / 1440)}d ${Math.floor((m % 1440) / 60)}h`;
+};
+
+/** "At gmail's limit · moves to Petralab in 1h 19m": the wait and where it goes, counting down to `until` at `now`. */
+const atLimitLine = (
+  account: StallAccount,
+  frees: StallAccount | undefined,
+  until: number,
+  now: number
+): string => {
+  const left = countdownWords(until - now);
+  return `At ${account.name}'s limit · ${frees ? `moves to ${frees.name} in ${left}` : `resets in ${left}`}`;
+};
+
+/**
+ * A waiting session's row, at `now`: "At gmail's limit · moves to Petralab
+ * in 1h 19m", and " · design could take it" when another account could.
+ */
+export const stallWords = (
+  held: StallHeld,
+  until: number,
+  now: number
+): string => {
+  const [fits] = held.fits;
+  return `${atLimitLine(held.account, held.frees, until, now)}${fits ? ` · ${fits.name} could take it` : ""}`;
+};
+
 /**
  * Why a session at its account's limit waits rather than moving: it is a
  * fork (it reads its origin's cache, on its origin's account), moving is
@@ -1377,88 +1562,97 @@ export const tokenWords = (tokens: number | null): string =>
     ? "its whole context"
     : `${Math.round(tokens / 1000).toLocaleString("en")}k tokens`;
 
-/** Why a held session waits, by its reason, for a line that names no accounts (stored before holds named them). */
-const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
-  fork: () => "A fork stays on the account its origin's cache is on",
-  off: () => "Moving to another account at the limit is switched off",
-  full: () => "No other account has room for it",
-  free: (tokens) =>
-    `Its cache lasts past the reset, so waiting costs nothing · moving would re-read ${tokens} cold`,
-  room: (tokens) =>
-    `Another account has room, but re-reading ${tokens} there would take more than half of what it has left`,
-  soon: (tokens) =>
-    `The reset comes sooner than re-reading ${tokens} elsewhere is worth`,
-  work: () => "Its work item carries on here after the reset",
-};
-
 /** "37% left": what an account has left, percent, rounded down to the whole one. */
 const leftWords = (pct: number): string =>
   `${Math.max(0, Math.floor(pct))}% left`;
 
-/** One other account and why it didn't take the session, or that it could: "design@ 1% left, runs out by 11:52". */
-export const heldAccountWords = (one: HeldAccount): string => {
-  const { name } = one.account;
-  const until =
-    one.backAt === undefined ? "" : ` until ${clockWords(one.backAt)}`;
+/**
+ * Why another account didn't take the session, or that it could, at `now`,
+ * as its row under a waiting line says it beside the account's name:
+ * "benched, back in 1h 19m", "0% left, its move takes 8%". Every time a
+ * countdown.
+ */
+export const heldReasonWords = (one: HeldAccount, now: number): string => {
+  const back =
+    one.backAt === undefined
+      ? ""
+      : `, back in ${countdownWords(one.backAt - now)}`;
   const { reason } = one;
   switch (reason.kind) {
     case "signin":
-      return `${name} not signed in here`;
+      return "not signed in here";
     case "allowed":
-      return `${name} not allowed by this ${reason.by}`;
+      return `not allowed by this ${reason.by}`;
     case "benched":
-      return `${name} benched${until}`;
+      return `benched${back}`;
     case "reserve":
-      return `${name} past its ${reason.pct}% reserve`;
+      return `past its ${reason.pct}% reserve`;
     case "unread":
-      return `${name} limits unread`;
+      return "limits unread";
     case "limit":
-      return `${name} at its limit${until}`;
+      return `at its limit${back}`;
     case "backup":
-      return `${name} never a backup`;
+      return "never a backup";
     case "alone":
-      return `${name} takes one move at a time until its window is measured, and one is landing there`;
+      return "takes one move at a time until its window is measured, and one is landing there";
     case "room":
-      return `${name} ${leftWords(reason.leftPct)}, its move takes ${Math.max(1, Math.ceil(reason.movePct))}%`;
+      return `${leftWords(reason.leftPct)}, its move takes ${Math.max(1, Math.ceil(reason.movePct))}%`;
     case "runsOut":
-      return `${name} ${leftWords(reason.leftPct)}, runs out by ${clockWords(reason.at)}`;
+      return `${leftWords(reason.leftPct)}, runs out in ${countdownWords(reason.at - now)}`;
     case "fits":
-      return `${name} could take it, ${leftWords(reason.leftPct)}${reason.carries ? ", its cache carrying" : ""}`;
+      return `could take it, ${leftWords(reason.leftPct)}${reason.carries ? ", its cache carrying" : ""}`;
   }
 };
 
+/** One other account and why it didn't take the session, or that it could, at `now`: "design 1% left, runs out in 12m". */
+export const heldAccountWords = (one: HeldAccount, now: number): string =>
+  `${one.account.name} ${heldReasonWords(one, now)}`;
+
+/** The accounts that could take a held session now ({@link HeldReason} `fits`), in the hub's order. */
+export const fitsOf = (accounts: readonly HeldAccount[] | undefined) =>
+  (accounts ?? []).filter(
+    (one): one is HeldAccount & { reason: { kind: "fits" } } =>
+      one.reason.kind === "fits"
+  );
+
+/** Why a held session waits, by its reason: the one sentence its line's second line says. */
+const WAIT_SAYS: Record<
+  WaitReason,
+  (move: Extract<AccountMove, { kind: "waiting" }>, tokens: string) => string
+> = {
+  full: () => "No other account can take it now",
+  free: (_, tokens) =>
+    `Waiting costs nothing: its cache lasts past the reset, and a move would re-read ${tokens} cold`,
+  soon: (move, tokens) =>
+    `${move.account.name} resets sooner than re-reading ${tokens} elsewhere is worth`,
+  off: () => "Moving at the limit is switched off",
+  fork: () => "A fork stays on the account its origin's cache is on",
+  // History only: lines a hub stored before admission and delegates' work changed.
+  room: (_, tokens) =>
+    `Another account has room, but re-reading ${tokens} there would take more than half of what it has left`,
+  work: () => "Its work item carries on here after the reset",
+};
+
 /**
- * Why a held session waits, under its line, at `now`: its reason, in the
- * words of each (no account can take it; its cache lasts past the reset; the
- * reset is near), then every other account and why it didn't take it, or
- * that it could, and the account that frees first and takes it before its
- * own resets. A line with no list (stored before holds named them) says its
- * reason alone.
+ * Why a held session waits, under its line: one sentence by its reason
+ * ("No other account can take it now"), or that no other account is signed
+ * in on its machine; then each account that could take it now, with what
+ * it has left ("design could take it, 37% left"). A line stored before
+ * holds named the accounts says its reason alone.
  */
 const waitingDetail = (
-  move: Extract<AccountMove, { kind: "waiting" }>,
-  now: number
+  move: Extract<AccountMove, { kind: "waiting" }>
 ): string => {
-  const tokens = tokenWords(move.tokens);
-  const then = move.frees
-    ? `it moves to ${move.frees.name} at ${clockWords(move.until)}, before ${move.account.name} resets`
-    : "";
-  if (!move.accounts) {
-    return [WAIT_WHY[move.why](tokens), ...(then ? [then] : [])].join(" · ");
-  }
-  const left = move.until - now;
-  let lead = WAIT_WHY[move.why](tokens);
-  if (move.why === "full") {
-    lead = "No account can take it now";
-  } else if (move.why === "soon") {
-    lead = `${move.account.name} resets${left > 0 ? ` in ${spanWords(left)}` : ""}, sooner than re-reading ${tokens} elsewhere is worth`;
-  }
+  const lead =
+    move.accounts?.length === 0
+      ? "No other account is signed in on its machine"
+      : WAIT_SAYS[move.why](move, tokenWords(move.tokens));
   return [
     lead,
-    ...(move.accounts.length === 0
-      ? ["no other account is signed in for it"]
-      : move.accounts.map(heldAccountWords)),
-    ...(then ? [then] : []),
+    ...fitsOf(move.accounts).map(
+      (one) =>
+        `${one.account.name} could take it, ${leftWords(one.reason.leftPct)}`
+    ),
   ].join(" · ");
 };
 
@@ -1469,7 +1663,7 @@ const stoppedWords = (
 ): { line: string; detail: string } => {
   const left = move.resetsAt === null ? 0 : move.resetsAt - now;
   return {
-    line: `Stopped at ${move.account.name}'s limit · Caw is off`,
+    line: `At ${move.account.name}'s limit · Caw is off`,
     detail:
       left > 0
         ? `Nothing sends it on while Caw is off · ${move.account.name} resets in ${spanWords(left)}`
@@ -1602,17 +1796,14 @@ export const accountMoveWords = (
   switch (move.kind) {
     case "moved":
       return movedWords(move, now);
-    case "waiting": {
-      const left = move.until - now;
-      const next = move.frees ?? move.account;
+    case "waiting":
       return {
         line:
-          left > 0
-            ? `Waiting for ${next.name} to reset · ${spanWords(left)}`
-            : `Continued on ${next.name}`,
-        detail: waitingDetail(move, now),
+          move.until > now
+            ? atLimitLine(move.account, move.frees, move.until, now)
+            : `Continued on ${(move.frees ?? move.account).name}`,
+        detail: waitingDetail(move),
       };
-    }
     case "stopped":
       return stoppedWords(move, now);
     case "signed-out":

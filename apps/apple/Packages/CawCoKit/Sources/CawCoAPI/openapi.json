@@ -47300,9 +47300,13 @@
         ]
       },
       "Stall": {
-        "description": "A session stopped at its account's limit, as its tray chip and\n`delegate_list` say it (core `accountsWords.stalled`): the words, and\nwhen it carries on (epoch ms): the reset it waits for.",
+        "description": "A session waiting at its account's limit, as the hub's at-limit\ncontroller holds it (hub at-limit.ts `stall`): the hub's words (for its\ntools and logs), `until` (epoch ms) when it carries on, and, while it\nwaits for a reset, `held`, which every reader says on its own clock.",
         "type": "object",
         "properties": {
+          "held": {
+            "$ref": "#/components/schemas/StallHeld",
+            "description": "Whose limit a waiting session is at, where it goes when it carries on,\nand the accounts that could take it now ({@link HeldReason} `fits`), as\nits row says it ({@link stallWords})."
+          },
           "until": {
             "type": "number"
           },
@@ -47312,6 +47316,46 @@
         },
         "required": [
           "words"
+        ]
+      },
+      "StallHeld": {
+        "description": "Whose limit a waiting session is at, where it goes when it carries on,\nand the accounts that could take it now ({@link HeldReason} `fits`), as\nits row says it ({@link stallWords}).",
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/StallAccount"
+          },
+          "fits": {
+            "description": "The accounts that could take it now, in the hub's order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StallAccount"
+            }
+          },
+          "frees": {
+            "$ref": "#/components/schemas/StallAccount",
+            "description": "Another account that frees before `account` resets: it moves there at the stall's `until`."
+          }
+        },
+        "required": [
+          "account",
+          "fits"
+        ]
+      },
+      "StallAccount": {
+        "description": "An account a stall names: its id, and what its line calls it.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
         ]
       },
       "DamagedRow": {
@@ -51097,7 +51141,7 @@
             ]
           },
           "stalled": {
-            "description": "While its account's limit (or a refused sign-in) has stopped its\nsession: \"Stopped at A's limit; continues on B\", \"…; continues at\n15:40\" (core `accountsWords.stalled`). It runs no turn until then; null\notherwise.",
+            "description": "While its session waits at its account's limit (or on a refused\nsign-in), in the hub's words: \"At A's limit · moves to B in 30m\" (core\n`stallWords`), or \"Stopped at A's limit; continues on B\" on its way\n(core `accountsWords.stalled`). It runs no turn until then; null\notherwise.",
             "type": [
               "null",
               "string"
@@ -57702,19 +57746,8 @@
             ]
           },
           "stalled": {
-            "description": "The session is stopped at its account's limit (or on its refused\nsign-in), in words, as the hub's at-limit controller holds it (hub\nat-limit.ts `stall`): what happened and when it carries on; `until`,\nepoch ms, the moment it does. Absent while it runs. Its row, its head and\nits transcript show it as an error with the way out: another account\nfrom its menu.",
-            "type": "object",
-            "properties": {
-              "until": {
-                "type": "number"
-              },
-              "words": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "words"
-            ]
+            "$ref": "#/components/schemas/Stall",
+            "description": "The session waits at its account's limit (or on its refused sign-in),\nas the hub's at-limit controller holds it (hub at-limit.ts `stall`):\nthe hub's words, `until` (epoch ms) when it carries on, and, while it\nwaits for a reset, whose limit it is, where it goes then and which\naccounts could take it now (`held`), so each reader counts down to\n`until` on its own clock (core `stallWords`). Absent while it runs. A\nwait, never a failure: its row, its tab and its transcript say it at\nrest, with the way out (another account) one press away."
           },
           "status": {
             "$ref": "#/components/schemas/InstanceStatus"
