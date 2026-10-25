@@ -32,10 +32,18 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { hostGit } from "./clone";
 import { placedAsMade } from "./fleet";
 import { straysAmong } from "./stand-ins";
+import { workspaceModulesRoot } from "./workspace-modules";
 
-/** A cut under way: the clone's path, the repository it is cut from, and the commit a cut again starts at (none for a first cut). */
+/**
+ * A cut under way: the clone's path, the repository it is cut from, and the
+ * commit a cut again starts at (none for a first cut). `checkedOut` once
+ * its files are checked out: until then no boundary starts on it
+ * (boundary.ts `placeReady`), whose sandbox would make its masks in a
+ * folder that is no clone yet.
+ */
 export interface CutMark {
   at: WorkspaceCut | null;
+  checkedOut?: true;
   path: string;
   source: string;
 }
@@ -145,7 +153,7 @@ const readCut = async ({
   }
   const others = (await entriesAt(path)).filter((name) => name !== ".git");
   const dotGit = join(path, ".git");
-  const early = await beforeRepository(dotGit, others);
+  const early = await beforeRepository(path, dotGit, others);
   if (early.settled) {
     return early.problem;
   }
@@ -160,24 +168,72 @@ const readCut = async ({
 };
 
 /**
+ * Of `entries` beside `.git` in the folder at `path`, those this workspace
+ * did not make: not its own dependency install or the link into its own
+ * folder of the workspaces' cache ({@link workspaceMade}), and not what
+ * CawCo writes in a clone, a sandbox's masks among them (stand-ins.ts
+ * `straysAmong`: each deny path's stand-in as made, a mount point a sandbox
+ * left, the folders above them).
+ */
+const notWorkspaceMade = async (
+  path: string,
+  entries: readonly string[]
+): Promise<string[]> => {
+  const made = await Promise.all(
+    entries.map((entry) => workspaceMade(path, entry))
+  );
+  const left = entries.filter((_, at) => !made[at]);
+  return left.length > 0
+    ? await straysAmong(path, await placedAsMade(path), left)
+    : [];
+};
+
+/**
+ * Whether `entry` beside `.git` in the clone at `path` is the workspace's own
+ * making that no checkout writes: its `node_modules` at the root, a link
+ * into its own folder of the workspaces' cache (workspace-modules.ts, made
+ * at its boundary's start) or the folder its own install wrote. A cut again
+ * owns them; on 2026-10-25 one leaf's `bun install` refused its workspace's
+ * every cut again ("it holds 1 entry (node_modules) that a checkout of
+ * 98c38e438 did not write").
+ */
+const workspaceMade = async (path: string, entry: string): Promise<boolean> => {
+  if (entry !== "node_modules") {
+    return false;
+  }
+  const at = join(path, entry);
+  const found = await lstat(at).catch(() => undefined);
+  if (found?.isSymbolicLink()) {
+    return (
+      (await readlink(at).catch(() => "")) ===
+      join(workspaceModulesRoot(path), "node_modules")
+    );
+  }
+  return found?.isDirectory() ?? false;
+};
+
+/**
  * What a `.git` that is no repository git can read yet settles: none at all,
  * or a clone killed as it began, is the cut's when nothing else is there
- * (nothing committed can be there yet); one that is no folder, or whose
- * config holds what CawCo runs no git under, is not. `settled: false` for a
- * repository, read on.
+ * but what the workspace made ({@link notWorkspaceMade}: nothing committed
+ * can be there yet); one that is no folder, or whose config holds what
+ * CawCo runs no git under, is not. `settled: false` for a repository, read
+ * on.
  */
 const beforeRepository = async (
+  path: string,
   dotGit: string,
   others: readonly string[]
 ): Promise<{ problem?: string; settled: boolean }> => {
   const found = await lstat(dotGit).catch(() => undefined);
   if (!found) {
+    const foreign = await notWorkspaceMade(path, others);
     return {
       settled: true,
       problem:
-        others.length === 0
+        foreign.length === 0
           ? undefined
-          : `it holds ${entryWords(others)} and no .git`,
+          : `it holds ${entryWords(foreign)} and no .git`,
     };
   }
   if (!found.isDirectory()) {
@@ -193,12 +249,13 @@ const beforeRepository = async (
   if (await isGitDir(dotGit)) {
     return { settled: false };
   }
+  const foreign = await notWorkspaceMade(path, others);
   return {
     settled: true,
     problem:
-      others.length === 0
+      foreign.length === 0
         ? undefined
-        : `its .git is no repository, and it holds ${entryWords(others)}`,
+        : `its .git is no repository, and it holds ${entryWords(foreign)}`,
   };
 };
 
@@ -352,11 +409,7 @@ const notCheckedOut = async (
     }
   };
   await walk("");
-  const strays =
-    untracked.length > 0
-      ? await straysAmong(path, await placedAsMade(path), untracked)
-      : [];
-  return [...foreign, ...strays];
+  return [...foreign, ...(await notWorkspaceMade(path, untracked))];
 };
 
 /** A commit's tree as `git ls-tree -r -z` lists it: each file by path, and the folders above them. */

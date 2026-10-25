@@ -85,6 +85,7 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   type ContinuationReadOptions,
   cacheHit,
@@ -1412,7 +1413,8 @@ export class SessionSupervisor {
       control?.method === CONTROL_WORKSPACE_DISCARD ||
       control?.method === CONTROL_WORKSPACE_WORK_END ||
       control?.method === CONTROL_WORKSPACE_BUNDLE ||
-      control?.method === CONTROL_WORKSPACE_AT
+      control?.method === CONTROL_WORKSPACE_AT ||
+      control?.method === CONTROL_WORKSPACE_OUTPUTS
     ) {
       key = `workspace:${(control.args?.[0] as { id?: string } | undefined)?.id}`;
     } else if (

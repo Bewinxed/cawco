@@ -818,6 +818,13 @@ export const createWorkspace = async (
     }
     await copyOwnSecrets(repoRoot, path, plain);
     await placeFirst(id, path, { account, first, projectId });
+    // A clone now: its boundary may start (boundary.ts `placeReady`).
+    await markCut(id, {
+      path,
+      source: repoRoot,
+      at: marked,
+      checkedOut: true,
+    });
     const boundary = await ensureBoundary({ id, path });
     const restored = await applyCarried({ id, path }, carried);
     await cutMade(id);
@@ -1097,12 +1104,18 @@ const bundleName = (): string => `.cawco-bundle-${crypto.randomUUID()}`;
  * commits past `origin/<base>`, made inside the boundary in its scratch dir
  * and read from there here. The file is opened without following a link and
  * taken only as a regular file of one link: the workspace writes that dir.
+ * With `carry`, one of the workspace's own carries ({@link carryOf}), its
+ * clone gone: that carry's HEAD and its `commits.bundle`, read here.
  */
 export const workspaceBundle = async (
   ref: unknown,
-  base: unknown
+  base: unknown,
+  carry?: unknown
 ): Promise<WorkspaceCommit> => {
   const workspace = ref as WorkspaceRef;
+  if (typeof carry === "string") {
+    return await carryBundle(workspace.id, carry);
+  }
   const upstream = shellQuote(`origin/${String(base)}`);
   const git = insideGit(workspace);
   const head = await git("git rev-parse --verify 'HEAD^{commit}'");
@@ -1119,30 +1132,64 @@ export const workspaceBundle = async (
     await git(
       `git bundle create --quiet "$TMPDIR"/${name} HEAD --not ${upstream}`
     );
-    const file = await open(
-      path,
-      // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
-      constants.O_RDONLY | constants.O_NOFOLLOW
-    );
-    try {
-      const info = await file.stat();
-      if (!info.isFile() || info.nlink !== 1) {
-        throw new Error(
-          `the bundle of workspace ${workspace.id} is not a file of its own`
-        );
-      }
-      if (info.size > BUNDLE_LIMIT) {
-        throw new Error(
-          `the commits of workspace ${workspace.id} past ${String(base)} come to ${(info.size / 1024 / 1024).toFixed(1)} MiB, past the ${BUNDLE_LIMIT / 1024 / 1024} MiB another machine takes`
-        );
-      }
-      return { head, bundle: (await file.readFile()).toString("base64") };
-    } finally {
-      await file.close();
-    }
+    return {
+      head,
+      bundle: await bundleBytes(path, workspace.id, `past ${String(base)}`),
+    };
   } finally {
     await rm(path, { force: true });
   }
+};
+
+/**
+ * The bundle at `path` as base64: opened without following a link, taken
+ * only as a regular file of one link, and no larger than {@link
+ * BUNDLE_LIMIT}; `what`, its commits in the refusal's words.
+ */
+const bundleBytes = async (
+  path: string,
+  id: string,
+  what: string
+): Promise<string> => {
+  const file = await open(
+    path,
+    // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
+    constants.O_RDONLY | constants.O_NOFOLLOW
+  );
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.nlink !== 1) {
+      throw new Error(`the bundle of workspace ${id} is not a file of its own`);
+    }
+    if (info.size > BUNDLE_LIMIT) {
+      throw new Error(
+        `the commits of workspace ${id} ${what} come to ${(info.size / 1024 / 1024).toFixed(1)} MiB, past the ${BUNDLE_LIMIT / 1024 / 1024} MiB another machine takes`
+      );
+    }
+    return (await file.readFile()).toString("base64");
+  } finally {
+    await file.close();
+  }
+};
+
+/**
+ * {@link workspaceBundle} of workspace `id` archived into its carry
+ * `folder` ({@link carryOf}): the carry's HEAD and its bundle, which a new
+ * workspace cut `from` it fetches as it would the clone's. Refused for a
+ * carry that holds no commits.
+ */
+const carryBundle = async (
+  id: string,
+  folder: string
+): Promise<WorkspaceCommit> => {
+  const { commits } = await carryOf(id, folder);
+  if (!commits) {
+    throw new Error(`the carry ${folder} of workspace ${id} holds no commits`);
+  }
+  return {
+    head: commits.head,
+    bundle: await bundleBytes(commits.bundle, id, `in its carry ${folder}`),
+  };
 };
 
 /**
@@ -2079,6 +2126,9 @@ const closeClone = async (
             ? await headOnOrigin(workspace, request.base, request.landed)
             : undefined,
       };
+  const carried: WorkspaceHolding | undefined = carry
+    ? { ...held, bytes: await sizeOf(carry) }
+    : undefined;
   const cached = await cacheOfClone(path);
   await closeBoundary(workspace);
   await removeClone(workspace.path);
@@ -2086,7 +2136,11 @@ const closeClone = async (
   console.info(
     `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is cut again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
   );
-  return head ? { carry, head } : { carry };
+  return {
+    carry,
+    ...(head ? { head } : {}),
+    ...(carried ? { carried } : {}),
+  };
 };
 
 /**

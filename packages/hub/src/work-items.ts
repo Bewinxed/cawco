@@ -85,6 +85,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   handoffMarker,
   holdingWords,
@@ -92,6 +93,8 @@ import {
   isWorkspaceNeedsRefusal,
   machineCalled,
   OUTPUTS_DIR,
+  type ScratchOutput,
+  type ScratchOutputsAsk,
   sessionLink,
   sizeWords,
   todoLink,
@@ -1643,34 +1646,6 @@ const outputFilesCommand = (path: string): string =>
 
 /** `$TMPDIR/outputs/` as a delegate is told of it (core `OUTPUTS_DIR`). */
 const SCRATCH_OUTPUTS = `$TMPDIR/${OUTPUTS_DIR}/`;
-
-/**
- * The shell that lists the workspace's `$TMPDIR/outputs/`, a line a file:
- * `file <bytes> <path under outputs/>`, or `link 0 <path>` for a link (which
- * could lead anywhere, so it is never read). Nothing when there is no such
- * folder.
- */
-const SCRATCH_OUTPUTS_LIST = `if [ -n "$TMPDIR" ] && [ -d "$TMPDIR/${OUTPUTS_DIR}" ]; then cd "$TMPDIR/${OUTPUTS_DIR}" && find . -mindepth 1 \\( -type l -o -type f \\) | LC_ALL=C sort | while IFS= read -r f; do f="\${f#./}"; if [ -L "$f" ]; then echo "link 0 $f"; else echo "file $(wc -c < "$f" | tr -d ' ') $f"; fi; done; fi`;
-
-/** One entry of `$TMPDIR/outputs/`: its path under it, its size, whether it is a link. */
-interface ScratchOutput {
-  link: boolean;
-  path: string;
-  size: number;
-}
-
-/** {@link SCRATCH_OUTPUTS_LIST}'s answer, read. */
-const scratchOutputsOf = (stdout: string): ScratchOutput[] =>
-  stdout
-    .split("\n")
-    .filter(Boolean)
-    .flatMap((line) => {
-      const [kind, size, ...rest] = line.split(" ");
-      const path = rest.join(" ");
-      return (kind === "file" || kind === "link") && path
-        ? [{ link: kind === "link", path, size: Number(size) }]
-        : [];
-    });
 
 /**
  * What is wrong with the files in `$TMPDIR/outputs/`, a sentence each: a
@@ -3687,6 +3662,28 @@ export const createWorkItems = ({
     workspace.state === "held" && workspace.holding !== null;
 
   /**
+   * What an archived workspace's retirement carry keeps (its row's
+   * `holding`, its `head` naming the carry a cut again restores): its items
+   * landed none, so its work went to the carry rather than holding the
+   * workspace ({@link carriesOff}), and is still work nowhere else. A cold
+   * check counts it ({@link unlandedOf}), and `from` cuts from its commits
+   * ({@link bundleOf}). Undefined for any other row, a discard's carry
+   * among them: its work was let go.
+   */
+  const carriedWork = (
+    workspace: WorkspaceRow
+  ):
+    | { carry: string; cut: WorkspaceCut; holding: WorkspaceHolding }
+    | undefined =>
+    workspace.state === "archived" && workspace.head?.carry && workspace.holding
+      ? {
+          carry: workspace.head.carry,
+          cut: workspace.head,
+          holding: workspace.holding,
+        }
+      : undefined;
+
+  /**
    * The commits of workspace `id` whose work is on its base branch through a
    * workspace cut `from` it that landed them ({@link vouchLanded}): what its
    * archive does not count as its own (core `WorkspaceArchive.landed`).
@@ -3739,6 +3736,29 @@ export const createWorkItems = ({
       return head;
     }
     return retired ? { ...head, carry } : null;
+  };
+
+  /**
+   * An archived row as its close leaves it ({@link closeWorkspace}): where it
+   * is cut again ({@link cutAgainAt}), and the carry its machine wrote. A
+   * retirement's carry (`carry`, its items landing none) is its work still,
+   * which a cut again restores: the row keeps what it holds
+   * ({@link carriedWork}). A discard's was let go.
+   */
+  const archivedRecord = (
+    closed: WorkspaceArchived,
+    unlanded: WorkspaceUnlanded | "discard" | "carry"
+  ) => {
+    const holding =
+      unlanded === "carry" && closed.carry ? (closed.carried ?? null) : null;
+    return {
+      state: "archived" as const,
+      boundaryPid: null,
+      holding,
+      heldAt: holding ? new Date() : null,
+      head: cutAgainAt(closed.head, closed.carry, unlanded === "carry"),
+      ...(closed.carry ? { carry: closed.carry } : {}),
+    };
   };
 
   /**
@@ -3809,7 +3829,7 @@ export const createWorkItems = ({
     }
     const folder = outputsFolder(item);
     try {
-      const files = await scratchOutputFiles(workspace, item, folder);
+      const files = await scratchOutputFiles(workspace, folder);
       if (files.length === 0) {
         return;
       }
@@ -3860,11 +3880,12 @@ export const createWorkItems = ({
       skip,
       ...(landed.length > 0 ? { landed } : {}),
     };
-    const { carry, head, held } = (await call(
+    const closed = (await call(
       workspace.machineId,
       discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
       [request]
     )) as WorkspaceArchived;
+    const { carry, held } = closed;
     if (held) {
       const kept =
         db.updateWorkspace(workspace.id, {
@@ -3887,14 +3908,8 @@ export const createWorkItems = ({
     db.removeWorkspacePlaces(workspace.machineId, workspace.path);
     placesChanged(workspace.machineId);
     const archived =
-      db.updateWorkspace(workspace.id, {
-        state: "archived",
-        boundaryPid: null,
-        holding: null,
-        heldAt: null,
-        head: cutAgainAt(head, carry, unlanded === "carry"),
-        ...(carry ? { carry } : {}),
-      }) ?? workspace;
+      db.updateWorkspace(workspace.id, archivedRecord(closed, unlanded)) ??
+      workspace;
     workspaceChanged?.(archived);
     return { workspace: archived, carry };
   };
@@ -4399,8 +4414,10 @@ export const createWorkItems = ({
    * something still holds (a live item, an attached session, a preview) is
    * read now, by git inside its boundary, which that hold keeps up; never
    * waiting (a paused machine or a busy folder throws {@link WouldWait}).
-   * Undefined for one archived, gone, or a landing gate's. Throws the
-   * machine's words when git cannot say.
+   * One archived into its retirement's carry is read as that carry keeps
+   * it ({@link carriedWork}): its work is nowhere else still. Undefined for
+   * one archived otherwise, gone, or a landing gate's. Throws the machine's
+   * words when git cannot say.
    */
   const unlandedOf = (
     id: string
@@ -4408,49 +4425,62 @@ export const createWorkItems = ({
     inWorkspaceTurn(id, async () => {
       await settle(id);
       const [workspace] = db.workspacesNamed(id);
-      if (
-        !workspace ||
-        workspace.state === "archived" ||
-        workspace.checksFor ||
-        workspace.host
-      ) {
+      if (!workspace || workspace.checksFor || workspace.host) {
         return;
       }
-      if (isHeld(workspace)) {
-        const { dirty, stashes, ahead } = workspace.holding;
+      const kept = isHeld(workspace)
+        ? workspace.holding
+        : carriedWork(workspace)?.holding;
+      if (kept) {
+        const { dirty, stashes, ahead } = kept;
         return { workspaceId: id, changed: dirty + stashes, ahead };
       }
-      const skip = handedOver(workspace).map(
-        (path) => ` ${quote(`:(exclude,literal)${path}`)}`
-      );
-      const lines = (name: string): string =>
-        `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
-      const read = await command(
-        workspace.machineId,
-        workspace.path,
-        `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
-        GIT_TIMEOUT_MS,
-        refOf(workspace),
-        { noWait: true }
-      );
-      const [ahead, dirty, stashes] = read.stdout
-        .trim()
-        .split(SPACES)
-        .map(Number);
-      if (
-        read.exitCode !== 0 ||
-        [ahead, dirty, stashes].some((count) => !Number.isInteger(count))
-      ) {
-        throw new Error(
-          `git in workspace ${id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
-        );
-      }
-      return {
-        workspaceId: id,
-        changed: (dirty as number) + (stashes as number),
-        ahead: ahead as number,
-      };
+      return workspace.state === "archived"
+        ? undefined
+        : await unlandedRead(workspace);
     });
+
+  /**
+   * What a live workspace holds on no remote, read by git inside its
+   * boundary ({@link unlandedOf}), in its turn: commits by patch past its
+   * base, changed files and stashes. Throws the machine's words when git
+   * cannot say.
+   */
+  const unlandedRead = async (
+    workspace: WorkspaceRow
+  ): Promise<Omit<Unlanded, "live">> => {
+    const { id } = workspace;
+    const skip = handedOver(workspace).map(
+      (path) => ` ${quote(`:(exclude,literal)${path}`)}`
+    );
+    const lines = (name: string): string =>
+      `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
+    const read = await command(
+      workspace.machineId,
+      workspace.path,
+      `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
+      GIT_TIMEOUT_MS,
+      refOf(workspace),
+      { noWait: true }
+    );
+    const [ahead, dirty, stashes] = read.stdout
+      .trim()
+      .split(SPACES)
+      .map(Number);
+    if (
+      read.exitCode !== 0 ||
+      [ahead, dirty, stashes].some((count) => !Number.isInteger(count))
+    ) {
+      throw new Error(
+        `git in workspace ${id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+      );
+    }
+    return {
+      workspaceId: id,
+      changed: (dirty as number) + (stashes as number),
+      ahead: ahead as number,
+    };
+  };
 
   /** The `archive` method's work, in the workspace's turn: the workspace read as it stands then. */
   const archiveNow = async (
@@ -4689,6 +4719,8 @@ export const createWorkItems = ({
           },
           // Its commits are in the clone again: a carry of its next end is its own.
           carry: null,
+          holding: null,
+          heldAt: null,
         }) ?? workspace;
       onCut?.();
       workspaceChanged?.(again);
@@ -4957,9 +4989,35 @@ export const createWorkItems = ({
   };
 
   /**
+   * Why workspace `source` has no branch a `from` cut takes, in words; none
+   * when it has: a host-scope delegate's folder or a merge check's iOS
+   * build has none, and an archived one only in its retirement's carry
+   * ({@link carriedWork}), when that holds commits ({@link bundleOf}).
+   */
+  const noBranchWhy = (source: WorkspaceRow): string | undefined => {
+    if (source.host) {
+      return "it is a host-scope delegate's folder, not a clone";
+    }
+    if (source.checksFor) {
+      return "it runs the iOS build of the merge checks";
+    }
+    if (source.state !== "archived") {
+      return;
+    }
+    const carried = carriedWork(source);
+    if (!carried) {
+      return "it is archived, its clone gone";
+    }
+    return carried.holding.ahead > 0
+      ? undefined
+      : "it is archived, and its carry holds no commit";
+  };
+
+  /**
    * The workspace a `delegate` call's `from` names: one of the caller's
    * (its own delegates' workspace), with no live item, whose clone is still
-   * on its machine. Refused in a sentence naming what to do otherwise.
+   * on its machine, or whose retirement's carry holds its commits
+   * ({@link carriedWork}). Refused in a sentence naming what to do otherwise.
    */
   const fromSource = (needle: string, parent: Parent): WorkspaceRow => {
     const named = db.workspacesNamed(needle.trim());
@@ -4982,13 +5040,8 @@ export const createWorkItems = ({
         `Workspace ${handle(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`
       );
     }
-    if (source.state === "archived" || source.checksFor || source.host) {
-      let why = "it is archived, its clone gone";
-      if (source.host) {
-        why = "it is a host-scope delegate's folder, not a clone";
-      } else if (source.checksFor) {
-        why = "it runs the iOS build of the merge checks";
-      }
+    const why = noBranchWhy(source);
+    if (why) {
       throw new WorkItemRefusal(
         409,
         `Workspace ${handle(source.id)} has no branch to cut from: ${why}. Delegate without from.`
@@ -5008,16 +5061,26 @@ export const createWorkItems = ({
    * A workspace's HEAD and its commits past its base, bundled inside its
    * boundary ({@link CONTROL_WORKSPACE_BUNDLE}). A held one's boundary,
    * started for that, is closed again however the bundle went, and the
-   * workspace stays held.
+   * workspace stays held. One archived into its retirement's carry
+   * ({@link carriedWork}), as a settle in its turn may have just done, is
+   * read from that carry on its machine: the carry's HEAD and its bundle.
    */
   const bundleOf = (id: string): Promise<WorkspaceCommit> =>
     inWorkspaceTurn(id, async () => {
       // As it stands in its turn: a settle before it may have closed it.
       const [source] = db.workspacesNamed(id);
+      const carried = source ? carriedWork(source) : undefined;
+      if (source && carried?.holding.ahead) {
+        return (await call(source.machineId, CONTROL_WORKSPACE_BUNDLE, [
+          refOf(source),
+          source.base,
+          carried.carry,
+        ])) as WorkspaceCommit;
+      }
       if (!source || source.state === "archived") {
         throw new WorkItemRefusal(
           409,
-          `Workspace ${id} was archived before its branch could be read: its clone is gone. Delegate without from.`
+          `Workspace ${id} was archived before its branch could be read: its clone is gone${carried ? ", and its carry holds no commit" : ""}. Delegate without from.`
         );
       }
       try {
@@ -7823,7 +7886,9 @@ export const createWorkItems = ({
         `the hub could not look for the item's outputs: ${failedWith(result)}`
       );
     }
-    const scratch = item.projectId ? await scratchOutputs(workspace, item) : [];
+    const scratch = item.projectId
+      ? await scratchOutputs(workspace, false)
+      : [];
     const problems = [
       ...outputsSaid(result.stdout),
       ...scratchOutputsSaid(scratch, declaredFilesOf(result.stdout)),
@@ -7834,61 +7899,61 @@ export const createWorkItems = ({
   };
 
   /**
-   * What the workspace's `$TMPDIR/outputs/` holds ({@link
-   * SCRATCH_OUTPUTS_LIST}); nothing for a host-scope workspace, which has no
+   * What the workspace's `$TMPDIR/outputs/` holds, read by its machine's
+   * agent on its host, outside its boundary (core
+   * {@link CONTROL_WORKSPACE_OUTPUTS}), each file's bytes with it when
+   * `read`: a workspace whose boundary cannot start still has its outputs
+   * kept, and closes. Nothing for a host-scope workspace, which has no
    * scratch dir of its own.
    */
   const scratchOutputs = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow
+    read: boolean
   ): Promise<ScratchOutput[]> => {
     if (workspace.host) {
       return [];
     }
-    const listed = await runIn(workspace, item)(
-      SCRATCH_OUTPUTS_LIST,
-      GIT_TIMEOUT_MS
-    );
-    if (listed.exitCode !== 0) {
+    const ask: ScratchOutputsAsk = { read, limit: FOLDER_FILE_LIMIT };
+    try {
+      return (await call(workspace.machineId, CONTROL_WORKSPACE_OUTPUTS, [
+        refOf(workspace),
+        ask,
+      ])) as ScratchOutput[];
+    } catch (error) {
       throw new Error(
-        `${SCRATCH_OUTPUTS} could not be listed: ${failedWith(listed)}`
+        `${SCRATCH_OUTPUTS} could not be read on ${machineName(workspace.machineId)}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
       );
     }
-    return scratchOutputsOf(listed.stdout);
   };
 
   /**
-   * The files of `$TMPDIR/outputs/` read from the workspace, each at its
-   * path under it within the item's assets `folder`: `$TMPDIR/outputs/x.md`
-   * lands at `assets/<item>/x.md`. Links are not read.
+   * The files of `$TMPDIR/outputs/` read from the workspace's machine, each
+   * at its path under it within the item's assets `folder`:
+   * `$TMPDIR/outputs/x.md` lands at `assets/<item>/x.md`. Links are not
+   * read; a file past what the project's folder takes is refused, as its
+   * write would be.
    */
   const scratchOutputFiles = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow,
     folder: string
-  ): Promise<{ path: string; content: Uint8Array }[]> => {
-    const files: { path: string; content: Uint8Array }[] = [];
-    for (const one of await scratchOutputs(workspace, item)) {
+  ): Promise<{ path: string; content: Uint8Array }[]> =>
+    (await scratchOutputs(workspace, true)).flatMap((one) => {
       if (one.link) {
-        continue;
+        return [];
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
-      const read = await runIn(workspace, item)(
-        `base64 < "$TMPDIR/${OUTPUTS_DIR}/"${quote(one.path)}`,
-        GIT_TIMEOUT_MS
-      );
-      if (read.exitCode !== 0) {
+      if (one.content === undefined) {
         throw new Error(
-          `${SCRATCH_OUTPUTS}${one.path} could not be read: ${failedWith(read)}`
+          `${SCRATCH_OUTPUTS}${one.path} is ${(one.size / MIB).toFixed(2)} MiB; a file there stops at ${FOLDER_FILE_LIMIT / MIB} MiB`
         );
       }
-      files.push({
-        path: `${folder}/${one.path}`,
-        content: Buffer.from(read.stdout, "base64"),
-      });
-    }
-    return files;
-  };
+      return [
+        {
+          path: `${folder}/${one.path}`,
+          content: Buffer.from(one.content, "base64"),
+        },
+      ];
+    });
 
   /**
    * One output's files read from the workspace, each at its whole path from
@@ -7942,7 +8007,7 @@ export const createWorkItems = ({
       // biome-ignore lint/performance/noAwaitInLoops: one output at a time keeps each read under the command's output cap
       files.push(...(await outputFiles(workspace, item, output, folder)));
     }
-    files.push(...(await scratchOutputFiles(workspace, item, folder)));
+    files.push(...(await scratchOutputFiles(workspace, folder)));
     if (files.length === 0) {
       return null;
     }

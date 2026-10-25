@@ -67,6 +67,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   type HarnessKind,
   invariant,
@@ -292,6 +293,7 @@ import {
   storedHashes,
 } from "./redaction";
 import { fenced, setRestartSource } from "./restart";
+import { scratchOutputs } from "./scratch-outputs";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
@@ -3826,6 +3828,11 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_MIGRATE,
       convertWorktrees
+    );
+    // A workspace's $TMPDIR/outputs/, read on this host for the hub to keep.
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_OUTPUTS,
+      scratchOutputs
     );
     // A project move's steps (move.ts). Each runs as this process's child, so
     // none starts behind a raised fence; the hub runs it again after a restart.

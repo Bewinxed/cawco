@@ -217,6 +217,7 @@ import {
   quietGitParameters,
 } from "./hub-git";
 import { hubPreviewsPath } from "./hub-previews";
+import { cutMark } from "./interrupted-cut";
 import { type HeldProc, KeeperPool } from "./keepers";
 import { logRelay } from "./log-relay";
 import {
@@ -2661,6 +2662,16 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
     if (!place?.isDirectory()) {
       await refuseGone(ref, `${ref.path} is not a folder`);
     }
+    return;
+  }
+  // A clone whose cut is under way is none yet: a sandbox started there
+  // makes its masks in a half-made folder, which the next cut again reads as
+  // someone else's (obelisk, 2026-10-25: ".bash_profile, .bashrc, .opencode,
+  // .pi, .vscode, and 2 more", every one 18:41:14). The cut starts its own
+  // boundary once its files are checked out (workspace.ts `createWorkspace`).
+  const mark = await cutMark(ref.id).catch(() => undefined);
+  if (mark?.path === ref.path && !mark.checkedOut) {
+    await refuseGone(ref, `${ref.path} is still being cut, not a clone yet`);
     return;
   }
   const git = await stat(join(ref.path, ".git")).catch(() => undefined);

@@ -2420,9 +2420,13 @@ export interface WorkspaceArchive {
  * `keep` whose clone holds work that is nowhere else, `held`, what it holds,
  * with nothing deleted and its boundary closed. `head`, for a git clone it
  * read and deleted: its HEAD and the `origin` branch that holds it, where a
- * cut again starts ({@link WorkspaceCut}).
+ * cut again starts ({@link WorkspaceCut}). `carried`, with a carry: what
+ * the clone held that the carry keeps now, as it was read before the clone
+ * went, `bytes` the carry's size: work that is nowhere else still, which a
+ * cut again restores.
  */
 export interface WorkspaceArchived {
+  carried?: WorkspaceHolding;
   carry: string | null;
   head?: WorkspaceCut;
   held?: WorkspaceHolding;
@@ -2519,8 +2523,11 @@ export const sizeWords = (bytes: number): string => {
  * A workspace's commit as another machine takes it: `head`, the clone's
  * HEAD, and `bundle`, a git bundle (base64) of every commit HEAD has that
  * `origin/<base>` does not, or null when it has none. Git runs inside the
- * workspace's boundary. Args `[WorkspaceRef, base]`; answers
- * {@link WorkspaceCommit}. Machine-scoped.
+ * workspace's boundary. With `carry`, one of its own carries on that
+ * machine (a workspace archived into its retirement's carry, its clone
+ * gone): that carry's HEAD and its bundle, read on the host, the carry
+ * being the agent's own folder. Args `[WorkspaceRef, base, carry?]`;
+ * answers {@link WorkspaceCommit}. Machine-scoped.
  */
 export const CONTROL_WORKSPACE_BUNDLE = "workspaceBundle";
 
@@ -2596,6 +2603,37 @@ export const INPUTS_DIR = "inputs";
  * delegate's report there went with it.
  */
 export const OUTPUTS_DIR = "outputs";
+
+/**
+ * What a workspace's `$TMPDIR/outputs/` ({@link OUTPUTS_DIR}) holds, read on
+ * its machine's host by its own agent, outside its boundary, so it is read
+ * whether or not the boundary can start (a clone deleted, its accounts
+ * record damaged) and the workspace closes all the same. The workspace
+ * writes its scratch dir, so nothing there is followed: a link at any depth,
+ * `outputs` itself included, is listed and never read, and each file read is
+ * checked to be the one at its path inside the scratch dir as it is opened
+ * (agent scratch-outputs.ts). A scratch dir or `outputs` that is not there
+ * holds nothing. Args `[WorkspaceRef, ScratchOutputsAsk]`; answers
+ * {@link ScratchOutput}`[]`, in path order. Machine-scoped; only the hub
+ * sends it.
+ */
+export const CONTROL_WORKSPACE_OUTPUTS = "workspaceOutputs";
+
+/** What {@link CONTROL_WORKSPACE_OUTPUTS} is asked: whether to read the files, and the most bytes one file read may hold. */
+export interface ScratchOutputsAsk {
+  /** A file past it is listed with its size and not read. */
+  limit: number;
+  read: boolean;
+}
+
+/** One entry of `$TMPDIR/outputs/` ({@link CONTROL_WORKSPACE_OUTPUTS}): its path under it (`.` for `outputs` itself when that is a link), its size, whether it is a link, and its bytes when asked for and within the limit. */
+export interface ScratchOutput {
+  /** Base64 of its bytes: a file read, within the ask's limit. */
+  content?: string;
+  link: boolean;
+  path: string;
+  size: number;
+}
 
 /**
  * The most one delegation's inputs come to, together. A long session's

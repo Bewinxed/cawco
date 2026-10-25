@@ -229,6 +229,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   type CommandQueue,
   type CommandQueueFrame,
@@ -1466,6 +1467,7 @@ const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
 ]);
 /**
@@ -23404,6 +23406,7 @@ export const createServer = (
       method === CONTROL_WORKSPACE_DISCARD ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
+      method === CONTROL_WORKSPACE_OUTPUTS ||
       method === CONTROL_INPUTS_ADMIT ||
       method === CONTROL_INPUTS_COPY ||
       method === CONTROL_INPUTS_READ ||
@@ -23413,10 +23416,13 @@ export const createServer = (
       method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
-    // A delegate's inputs admitted or read only look at its parent's files
+    // A delegate's inputs admitted or read only look at its parent's files,
+    // and a workspace's outputs read only look at its scratch dir
     // ({@link asRead}); every other method here changes the machine.
     const answer =
-      method === CONTROL_INPUTS_ADMIT || method === CONTROL_INPUTS_READ
+      method === CONTROL_INPUTS_ADMIT ||
+      method === CONTROL_INPUTS_READ ||
+      method === CONTROL_WORKSPACE_OUTPUTS
         ? await readAgent(machineId, method, args, timeout)
         : await callAgent(machineId, method, args, timeout);
     switch (answer.kind) {

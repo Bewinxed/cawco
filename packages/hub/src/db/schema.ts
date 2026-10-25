@@ -1180,8 +1180,10 @@ export const workspaces = sqliteTable("workspaces", {
   host: integer("host", { mode: "boolean" }).notNull().default(false),
   /**
    * What its clone held that is nowhere else when it was filed `held`, as
-   * its machine read it once its boundary was closed; null in any other
-   * state.
+   * its machine read it once its boundary was closed; for one archived
+   * into its retirement's carry (`head.carry`), what that carry keeps, which
+   * is still work nowhere else (work-items.ts `carriedWork`); null in any
+   * other state.
    */
   holding: text("holding", { mode: "json" }).$type<WorkspaceHolding>(),
   /** When {@link workspaces.holding} was read. */
