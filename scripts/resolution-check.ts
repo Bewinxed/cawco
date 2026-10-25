@@ -22,7 +22,9 @@
  * which builds the program without checking it, and reads every
  * "successfully resolved to '<path>'" line of the trace. A path outside the
  * checkout fails the check, named with the import and the file that made it.
- * Inside means under the root, or under a store entry the checkout's
+ * Inside means under the root, under the folder the checkout's
+ * `node_modules` links to where it is a link (a Linux workspace's, agent
+ * workspace-modules.ts), or under a store entry the checkout's
  * `node_modules/.bun` links to: with bun's global virtual store a package
  * realpaths into `<cache>/links/` (bun.com/docs/pm/global-store:
  * "project/node_modules/.bun/react@18.3.1 -> ~/.bun/install/cache/links/…").
@@ -63,9 +65,20 @@ interface Leak {
   specifier: string;
 }
 
-/** The folders a resolved path may lie in: the root, and each store entry it links. */
+/**
+ * The folders a resolved path may lie in: the root, the folder its
+ * `node_modules` links to where it is a link (a Linux workspace's, in the
+ * workspaces' cache: agent workspace-modules.ts), and each store entry it
+ * links.
+ */
 const insides = async (root: string): Promise<string[]> => {
-  const store = join(root, "node_modules/.bun");
+  const modules = join(root, "node_modules");
+  const linkedModules = (
+    await lstat(modules).catch(() => undefined)
+  )?.isSymbolicLink()
+    ? [await realpath(modules)]
+    : [];
+  const store = join(modules, ".bun");
   const entries = await readdir(store).catch(() => []);
   const linked = await Promise.all(
     entries.map(async (name) => {
@@ -73,7 +86,7 @@ const insides = async (root: string): Promise<string[]> => {
       return (await lstat(at)).isSymbolicLink() ? realpath(at) : undefined;
     })
   );
-  return [root, ...linked.filter((at) => at !== undefined)];
+  return [root, ...linkedModules, ...linked.filter((at) => at !== undefined)];
 };
 
 /**

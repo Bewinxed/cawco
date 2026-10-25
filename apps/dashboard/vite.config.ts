@@ -100,7 +100,10 @@ const houseFaces = (): Plugin => ({
  * <pkg>`), outside the clone, so the faces app.css names answered 403 and the
  * page drew in the fallback face. The store is read off where the dashboard's
  * own face package (Fredoka's) resolves; in a normal checkout that is `node_modules/.bun`
- * under the workspace root, already allowed, and nothing is added.
+ * under the workspace root, already allowed, and nothing is added. A Linux
+ * workspace's root `node_modules` is itself a link into that cache (agent
+ * workspace-modules.ts), holding the packages the store cannot: where it
+ * really is is served too.
  */
 const SERVED_DIRS = (() => {
   const workspaceRoot = searchForWorkspaceRoot(process.cwd());
@@ -109,8 +112,11 @@ const SERVED_DIRS = (() => {
   );
   const linkDir = face.slice(0, face.lastIndexOf("/node_modules/"));
   const store = dirname(linkDir);
-  const inside = !relative(workspaceRoot, store).startsWith("..");
-  return inside ? [workspaceRoot] : [workspaceRoot, store];
+  const modules = realpathSync(join(workspaceRoot, "node_modules"));
+  const outside = [store, modules].filter((dir) =>
+    relative(workspaceRoot, dir).startsWith("..")
+  );
+  return [workspaceRoot, ...new Set(outside)];
 })();
 
 /**

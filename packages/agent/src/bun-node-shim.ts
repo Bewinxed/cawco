@@ -3,12 +3,15 @@
  *
  * `bun --bun` and `bunx --bun` run a package's bin under Bun by putting a dir
  * holding `node` and `bun` links to the running bun first on its children's
- * `PATH`. Bun makes that dir itself, at a path fixed when it is built:
- * `/tmp/bun-node-<sha>` on Linux, `/private/tmp/bun-node-<sha>` on macOS
- * (`RunCommand::BUN_NODE_DIR`, src/install/lib.rs at bun-v1.4.3: "`/tmp/bun-node-<sha>`
- * (or debug variant). Windows builds compute the path at runtime via
- * GetTempPathW"); it reads no `TMPDIR` for it (oven-sh/bun#41435, which would
- * have, was closed unmerged). A boundary lets a command write neither path
+ * `PATH`. Bun makes that dir itself, under a root fixed when it is built and
+ * named by the user and the commit: `/tmp/bun-node-<uid>-<sha>` on Linux,
+ * `/private/tmp/bun-node-<uid>-<sha>` on macOS (`RunCommand::bun_node_dir`,
+ * src/install/lib.rs at bun-v1.4.4: "`/tmp/bun-node-<uid>-<sha>` (or debug
+ * variant): `/tmp` is everybody's, this is one user's"; bun 1.4.3's was
+ * `/tmp/bun-node-<sha>`, and on 2026-10-25 a shim of that name left
+ * `bunx --bun` on Node in every workspace); it reads no `TMPDIR` for it
+ * (oven-sh/bun#41435, which would have, was closed unmerged). A boundary
+ * lets a command write neither path
  * (Linux: `/tmp` is an empty read-only tmpfs, boundary-policy.ts
  * `srtSettings`; macOS: only the policy's paths are written). There Bun's
  * `mkdir` fails, it keeps `PATH` as it was ("`Err(_) => return Ok(())`"), and
@@ -60,7 +63,7 @@ const unmade = (why: string): undefined => {
   }
 };
 
-/** `bun`'s shim dir, as Bun names it: by the commit in its `--revision`. */
+/** `bun`'s shim dir, as Bun names it: by this user's uid and the commit in its `--revision`. */
 const shimDirOf = async (bun: string): Promise<string | undefined> => {
   const ran = await Bun.$`${bun} --revision`
     .env(hostEnvironment())
@@ -72,7 +75,7 @@ const shimDirOf = async (bun: string): Promise<string | undefined> => {
     ? unmade(
         `${bun} --revision said ${JSON.stringify(revision || ran.stderr.toString().trim())}, which names no commit`
       )
-    : join(BUN_NODE_ROOT, `bun-node-${sha}`);
+    : join(BUN_NODE_ROOT, `bun-node-${process.getuid?.()}-${sha}`);
 };
 
 /** `link` naming `bun`: made, or made again where it names anything else. */

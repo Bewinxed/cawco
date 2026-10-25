@@ -80,10 +80,10 @@ const LOG_NAME = "stand-in-bun.log";
 /** What the stand-in answers `bun --revision` with: a commit no real bun names, so its node shim dir is its own. */
 const STAND_IN_SHA = "5ca1ab1e0";
 const STAND_IN_REVISION = `${Bun.version}+${STAND_IN_SHA}`;
-/** Where the agent makes the `--bun` node shim for that revision (bun-node-shim.ts `BUN_NODE_ROOT`). */
+/** Where the agent makes the `--bun` node shim for that revision, this user's (bun-node-shim.ts `BUN_NODE_ROOT`). */
 const STAND_IN_SHIM = join(
   process.platform === "darwin" ? "/private/tmp" : "/tmp",
-  `bun-node-${STAND_IN_SHA}`
+  `bun-node-${process.getuid?.()}-${STAND_IN_SHA}`
 );
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
 const NOT_LANDED = "Not landed: the merge checks ran on";

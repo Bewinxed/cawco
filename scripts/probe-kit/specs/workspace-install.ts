@@ -20,8 +20,10 @@
  *
  * In each leg:
  *
- * - at its first command a clone has no `node_modules`: nothing installed
- *   at the cut;
+ * - at its first command a clone's `node_modules` holds nothing: nothing
+ *   installed at the cut (a Linux clone's bun `node_modules` is there
+ *   already, an empty folder of its own in the cache it links to: agent
+ *   workspace-modules.ts);
  * - its own frozen install, run in its boundary, finishes;
  * - its packages link into the cache, as above;
  * - B adds under {@link SECOND_CLONE_LIMIT_KB} to the disk, counted by
@@ -34,7 +36,7 @@
  *   bun scripts/probe-kit/run.ts workspace-install
  */
 import { lstat, readdir, realpath, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -87,7 +89,7 @@ const installOf = (tag: Tag): string =>
 /** The delegate's install: whether the cut left `node_modules`, then its own frozen install and its exit. */
 const installCommand = (tag: Tag): string =>
   [
-    `if [ -e node_modules ]; then echo ${apart(`AT-CUT-HAD-${tag}`)}; else echo ${apart(`AT-CUT-NONE-${tag}`)}; fi`,
+    `if [ -n "$(ls -A node_modules 2>/dev/null)" ]; then echo ${apart(`AT-CUT-HAD-${tag}`)}; else echo ${apart(`AT-CUT-NONE-${tag}`)}; fi`,
     `${installOf(tag)} > "$TMPDIR/install.log" 2>&1; echo ${apart(`INSTALLED-${tag}:`)}$?`,
     `tail -n 3 "$TMPDIR/install.log"`,
   ].join("; ");
@@ -318,9 +320,11 @@ const installed = async (
     INSTALL_MS
   ).catch(() => undefined);
   kit.check(
-    `${tag}: its clone has no node_modules at its first command: the cut installed nothing`,
+    `${tag}: its clone's node_modules holds nothing at its first command: the cut installed nothing`,
     said?.includes(`AT-CUT-NONE-${tag}`) === true,
-    said?.includes(`AT-CUT-HAD-${tag}`) ? "node_modules was there" : "unread"
+    said?.includes(`AT-CUT-HAD-${tag}`)
+      ? "node_modules held packages"
+      : "unread"
   );
   const exit = new RegExp(`INSTALLED-${tag}:(\\d+)`).exec(said ?? "")?.[1];
   const tail = said?.slice(said.indexOf(`INSTALLED-${tag}:`)).slice(0, 400);
@@ -446,6 +450,27 @@ const run = async (kit: Kit) => {
     bunLeg,
     await parentOn(fleet, repo, "Workspace install"),
     repo
+  );
+
+  const cacheAt = await realpath(cache);
+  const modulesAt = await Promise.all(
+    [a, b].map((one) =>
+      realpath(join(one.path, "node_modules")).catch(() => "")
+    )
+  );
+  kit.check(
+    "bun: each clone's node_modules is a folder of its own in the workspaces' cache, where bun hard-links what its global store cannot hold",
+    modulesAt.every(
+      (at, index) =>
+        at ===
+        join(
+          cacheAt,
+          "modules",
+          basename([a, b][index]?.path ?? ""),
+          "node_modules"
+        )
+    ),
+    modulesAt.join("; ")
   );
 
   const pnpmStore = join(cache, "pnpm", "store");

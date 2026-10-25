@@ -126,6 +126,7 @@ import {
 import { removeTree } from "./remove-tree";
 import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
+import { workspaceModulesRoot } from "./workspace-modules";
 import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
 
@@ -1671,6 +1672,8 @@ const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
  * - its Apple build root, `xdg/cawco-apple.noindex/<clone's folder name>`,
  *   where build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and
  *   its lock;
+ * - on Linux, the folder its `node_modules` links to,
+ *   `modules/<clone's folder name>` (workspace-modules.ts);
  * - on macOS, Xcode's DerivedData folders whose `info.plist` names a project
  *   inside the clone (the boundary's xcodebuild puts every build's in
  *   `DerivedData.noindex/`), and SwiftPM's build dirs for each of the clone's
@@ -1682,7 +1685,11 @@ const cacheOfClone = async (clone: string): Promise<string[]> => {
   const cache = workspaceCacheDir();
   const apple = join(cache, "xdg", "cawco-apple.noindex");
   const name = basename(clone);
-  const owned = [join(apple, name), join(apple, ".locks", name)];
+  const owned = [
+    join(apple, name),
+    join(apple, ".locks", name),
+    workspaceModulesRoot(clone),
+  ];
   if (process.platform !== "darwin") {
     return owned;
   }
