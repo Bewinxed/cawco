@@ -258,7 +258,12 @@ export { default as IconUndock } from "~icons/solar/sidebar-minimalistic-bold-du
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
-export { default as IconSort } from "~icons/solar/sort-bold-duotone";
+/*
+ * Sort: Solar's bare cut of it, the bars and their arrow with no squircle
+ * round them (the owner, 10-24: "u need to draw similar style icons that are
+ * without their containers").
+ */
+export { default as IconSort } from "~icons/solar/sort-from-top-to-bottom-bold-duotone";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 export { default as IconCollapseOthers } from "~icons/solar/square-double-alt-arrow-up-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";

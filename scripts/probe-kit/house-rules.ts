@@ -420,6 +420,105 @@ function houseRead(args: InPageArgs): InPageRead {
     }
     return out;
   };
+  /**
+   * Where layer `i` of `el`'s background paints, in the viewport, or null
+   * where it fills the box: a layer that repeats on either axis, or a size
+   * or place this cannot read as a length or a percentage (cover, contain,
+   * auto, a calc()). The box is the padding box, the default origin.
+   */
+  const layerBox = (
+    el: Element,
+    s: CSSStyleDeclaration,
+    i: number
+  ): { left: number; top: number; right: number; bottom: number } | null => {
+    const nth = (list: string) => {
+      const all = layersOf(list);
+      return all[i % all.length] ?? "";
+    };
+    if (nth(s.backgroundRepeat) !== "no-repeat") {
+      return null;
+    }
+    const r = el.getBoundingClientRect();
+    const bl = Number.parseFloat(s.borderLeftWidth) || 0;
+    const bt = Number.parseFloat(s.borderTopWidth) || 0;
+    const box = {
+      left: r.left + bl,
+      top: r.top + bt,
+      width: r.width - bl - (Number.parseFloat(s.borderRightWidth) || 0),
+      height: r.height - bt - (Number.parseFloat(s.borderBottomWidth) || 0),
+    };
+    const length = (value: string | undefined, whole: number) => {
+      if (value === undefined) {
+        return null;
+      }
+      const n = Number.parseFloat(value);
+      if (/^-?[\d.]+px$/.test(value)) {
+        return n;
+      }
+      if (/^-?[\d.]+%$/.test(value)) {
+        return (n / 100) * whole;
+      }
+      return null;
+    };
+    const [sw, sh = "auto"] = nth(s.backgroundSize).split(/\s+/);
+    const w = length(sw, box.width);
+    const h = sh === "auto" ? box.height : length(sh, box.height);
+    if (w === null || h === null) {
+      return null;
+    }
+    // A position's percentage places the layer's point at the box's point.
+    const place = (value: string | undefined, whole: number, size: number) => {
+      if (value === undefined) {
+        return null;
+      }
+      if (/^-?[\d.]+%$/.test(value)) {
+        return (Number.parseFloat(value) / 100) * (whole - size);
+      }
+      return length(value, whole);
+    };
+    const [px0, py0] = nth(s.backgroundPosition).split(/\s+/);
+    const x = place(px0, box.width, w);
+    const y = place(py0, box.height, h);
+    if (x === null || y === null) {
+      return null;
+    }
+    return {
+      left: box.left + x,
+      top: box.top + y,
+      right: box.left + x + w,
+      bottom: box.top + y + h,
+    };
+  };
+  /**
+   * The colours a gradient ground shows under these text rects: stopsOf,
+   * less each layer sized and placed clear of every rect (the transcript's
+   * rail, a 2px line drawn as a background layer down a row's edge, is not
+   * the ground under the row's words).
+   */
+  const stopsUnder = (
+    el: Element,
+    s: CSSStyleDeclaration,
+    rects: DOMRect[]
+  ) => {
+    const image = s.backgroundImage;
+    if (!image.includes("gradient(")) {
+      return [];
+    }
+    const under = layersOf(image).filter((_, i) => {
+      const at = layerBox(el, s, i);
+      return (
+        at === null ||
+        rects.some(
+          (t) =>
+            t.left < at.right &&
+            t.right > at.left &&
+            t.top < at.bottom &&
+            t.bottom > at.top
+        )
+      );
+    });
+    return under.length > 0 ? stopsOf(under.join(", ")) : [];
+  };
   /** A token's colour as this page resolves it: the page's own, else tokens.css's. */
   const tokenColour = (t: { name: string; value: string }): Rgba => {
     const probe = document.createElement("i");
@@ -1293,7 +1392,7 @@ function houseRead(args: InPageArgs): InPageRead {
           image = true;
           break;
         }
-        const layer = { bg: fill(s), stops: stopsOf(s.backgroundImage) };
+        const layer = { bg: fill(s), stops: stopsUnder(up, s, t.rects) };
         layers.push(layer);
         if (
           layer.bg[3] >= 0.99 ||
