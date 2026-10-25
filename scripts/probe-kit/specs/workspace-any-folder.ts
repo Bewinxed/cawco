@@ -2,8 +2,8 @@
  * A delegate gets its own private copy of any folder, a repository or not,
  * and its work lands there (agent layer.ts, workspace.ts; hub work-items.ts
  * `landFolder`). On a scratch fleet (real hub, agent and sessiond; Claude
- * Code and OpenCode against the mock model). This spec delegates, so its fleet makes
- * workspaces: it runs on the host, outside every boundary.
+ * Code, OpenCode and pi against the mock model). This spec delegates, so its
+ * fleet makes workspaces: it runs on the host, outside every boundary.
  *
  * - a. A folder that is no repository (`site/`): its delegate edits
  *   `site.conf` and runs a check that reads that file (an `nginx -t`-style
@@ -40,6 +40,10 @@
  *   once the workspace retired, a handoff continues the same session in the
  *   workspace made again. On macOS the server is the machine's, the
  *   session's directory the copy.
+ * - h. A pi delegate in a folder works in its view as the others do: its
+ *   file tool's write is read by its shell at the folder's path while the
+ *   folder lacks it, and it lands through the folder's checks, the file in
+ *   the folder.
  *
  * Every delegate's commands name its folder where it works on it: the
  * folder's own path on Linux, its copy's on macOS ({@link copyAt}); what the
@@ -71,10 +75,10 @@ import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F)\b/;
+const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F|P)\b/;
 /** How finish_item answers a folder landing's conflict (hub work-items.ts `conflictText`). */
 const CONFLICT = "Not landed: a file you changed";
-type Tag = "A" | "B" | "C1" | "C2" | "C3" | "E" | "F";
+type Tag = "A" | "B" | "C1" | "C2" | "C3" | "E" | "F" | "P";
 /** What the person writes in the checkout while g's delegate works there. */
 const PERSON_LATER = "person-later.txt";
 const PERSON_TEXT = "PERSON-LATER-1";
@@ -85,6 +89,9 @@ const CODE_MODE = "execute";
 /** What f's file tool writes, and where in its folder. */
 const OC_FILE = "oc.txt";
 const OC_TEXT = "from opencode";
+/** What h's file tool writes, and where in its folder. */
+const PI_FILE = "pi.txt";
+const PI_TEXT = "from pi";
 
 const linux = process.platform === "linux";
 
@@ -197,6 +204,8 @@ const commandOf = (tag: Tag): string => {
       return `cd ${at} && if test -d .git; then echo DOTGIT-""DIR; fi && echo three > three.txt && git add three.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate three' && echo DONE-E`;
     case "F":
       return `cat ${at}/${OC_FILE} && echo "DONE-""F"`;
+    case "P":
+      return `cat ${at}/${PI_FILE} && echo "DONE-""P"`;
     default: {
       const unhandled: never = tag;
       return unhandled;
@@ -227,6 +236,11 @@ const noteHost = (tag: Tag): void => {
     if (linux) {
       noteViewServer();
     }
+    return;
+  }
+  if (tag === "P") {
+    const file = join(at, PI_FILE);
+    hostAt.P = existsSync(file) ? readFileSync(file, "utf8") : "absent";
     return;
   }
   if (tag === "B") {
@@ -348,6 +362,45 @@ const openCodeTurn = (
   return text("done");
 };
 
+/** CawCo's `short` tool as pi offers it: by its MCP name, or pi's own. */
+const piCawco = (request: Seen, short: string): string | undefined =>
+  [`mcp__cawco__${short}`, `cawco_${short}`, short].find((name) =>
+    request.toolNames.includes(name)
+  );
+
+/**
+ * h, a pi delegate: its file tool writes `pi.txt` in its folder, its shell
+ * reads it there, it finishes. pi speaks chat completions, so its shell's
+ * output is read in the tool messages ({@link heardBy}).
+ */
+const piTurn = (
+  request: Seen,
+  step: NonNullable<(typeof steps)["P"]>
+): Reply => {
+  const at = copyAt("P");
+  if (!step.wrote) {
+    step.wrote = true;
+    return tool("write", { path: join(at, PI_FILE), content: `${PI_TEXT}\n` });
+  }
+  if (!heardBy(request).includes("DONE-P")) {
+    return tool("bash", { command: commandOf("P") });
+  }
+  if (hostAt.P === undefined) {
+    noteHost("P");
+  }
+  if (!step.finish) {
+    const name = piCawco(request, "finish_item");
+    step.finish = name !== undefined;
+    return name
+      ? tool(name, {
+          headline: "Did P.",
+          summary: "Did P.\n\nThe command printed DONE-P.\n\nNot run: none.",
+        })
+      : text(`finish_item is not offered: ${request.toolNames.join(", ")}`);
+  }
+  return text("done");
+};
+
 /** Each delegate runs its command, then calls finish_item once; the parents say "ok". */
 const respond = (request: Seen): Reply => {
   const tag = request.tools
@@ -360,6 +413,9 @@ const respond = (request: Seen): Reply => {
   const step = steps[tag];
   if (tag === "F") {
     return openCodeTurn(request, step);
+  }
+  if (tag === "P") {
+    return piTurn(request, step);
   }
   if (!request.all.includes(`DONE-${tag}`)) {
     return tool("Bash", { command: commandOf(tag), description: "Work" });
@@ -551,6 +607,79 @@ const run = async (kit: Kit) => {
   const repoParent = await repoLegs(kit, fleet, { delegate, ended, env, git });
   await worktreeLeg(kit, fleet, { delegate, ended, env, git }, repoParent);
   await openCodeLeg(kit, fleet, parent);
+  await piLeg(kit, fleet, parent);
+};
+
+/**
+ * h: a pi delegate in a folder that is no repository works in its
+ * workspace's view (agent pi-sessiond.ts, layer.ts `enterSpawn`): its file
+ * tool's write is read by its shell at the folder's path while the folder on
+ * the host lacks it, and it lands through the folder's checks.
+ */
+const piLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const { check } = kit;
+  const folder = join(fleet.sandbox, "pi-site");
+  folders.P = folder;
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, "README"), "pi.\n");
+  // The project's gate on macOS is `sh check.sh`, run in the folder a
+  // landing checks: this folder's own reads the delegate's file.
+  await writeFile(
+    join(folder, "check.sh"),
+    `grep -q '${PI_TEXT}' ${PI_FILE} && echo PI-OK || { echo PI-BAD; exit 1; }\n`
+  );
+  const started = await fleet.api<{ workItemId: string; workspaceId: string }>(
+    "/api/work-items",
+    {
+      parentInstanceId: parent,
+      title: "Folder P",
+      prompt: "PROBE-FOLDER-P: write your file, read it, then finish.",
+      harness: "pi",
+      model: MODEL.pi,
+      cwd: folder,
+    }
+  );
+  const itemOf = () =>
+    fleet.query<ItemRow>(
+      "SELECT state, error, result, workspace_id FROM work_items WHERE id = ?",
+      started.workItemId
+    )[0];
+  const row = await until(
+    "h's item ended",
+    itemOf,
+    (one) => ["done", "failed", "cancelled"].includes(one.state),
+    600_000
+  ).catch(itemOf);
+  const [workspace] = fleet.query<{ kind: string; path: string }>(
+    "SELECT kind, path FROM workspaces WHERE id = ?",
+    started.workspaceId
+  );
+  const said =
+    fleet.seen
+      .filter((one) => one.afterTool)
+      .map(heardBy)
+      .find((heard) => heard.includes("DONE-P")) ?? "";
+  check(
+    linux
+      ? "h: a pi delegate in a folder works in its view at the folder's path: its file tool's write is read by its shell there while the folder on the host lacks it"
+      : "h: a pi delegate in a folder works in its copy: its file tool's write is read by its shell there while the folder on the host lacks it",
+    workspace?.kind === "folder" &&
+      (linux ? workspace.path === folder : workspace.path !== folder) &&
+      said.includes(PI_TEXT) &&
+      hostAt.P === "absent",
+    `${JSON.stringify(workspace)}; host then: ${JSON.stringify(hostAt.P)}; ${said.slice(-400)}`
+  );
+  check(
+    "h: it lands through the folder's checks, the file in the folder",
+    row?.state === "done" &&
+      (await readFile(join(folder, PI_FILE), "utf8").catch(() => "")) ===
+        `${PI_TEXT}\n`,
+    `${row?.state} ${row?.error ?? ""}\n${(row?.result ?? "").slice(0, 800)}`
+  );
 };
 
 /**
