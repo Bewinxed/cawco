@@ -125,7 +125,7 @@ open, as a small shrug." and adds the prop:
 | --- | --- | --- | --- |
 | Client stopped | `shrug-plug.png` | a big unplugged power plug hanging on its cord from the wing tip | `tk_Y5k2WWfv5SI-13KXKyPWe`, cut out of `tk_sg27DA3pNkgrKhn8r7-Du` |
 | Unsupported network | `shrug-sign.png` | a signpost with two blank arrow boards beside his feet, all in a very thick black outline | `tk_TAF1q3ykp3xLLNzvRvmUj`, cut out of `tk_tIRW0EEoY-2VK-B5yK2n1` |
-| Sign-in link expired | `shrug-chain.png` | three big links from the wing tip in a very thick outline, the bottom one broken open with a wide gap, still on the chain | `tk_naWf2L6gPvMxisiNTA_kh`, cut out of `tk_wINUCk7AogR5hAbgXGSmN`, a boxed edit of the sixth round's `tk_74IrxdQvEPO-QVEhR6rji` |
+| Sign-in link expired | `shrug-chain.png` | three big links from the wing tip in a hard, thick outline, spaced apart, the top one tucked behind the wing tip, the bottom one broken open with a wide gap, still on the chain | `tk_N3hxv9nhEAYxaWRn0GQs6`, cut out of `tk_fj510vmz4tlt5GLgrer2V`, boxed edits of the sixth round's `tk_74IrxdQvEPO-QVEhR6rji` (chain, then top links, then the wing tip's edge) |
 | Another tailnet | `shrug-map.png` | a big unfolded map beside his feet, a vermilion dashed line winding to an X | `tk_flbuuxUg8rTWt3jYsWwsR`, cut out of `tk_etp6RHQtW8669pB0fUCC0` |
 | Admin refused | `shrug-envelope.png` | admin's envelope beside his feet, clear of the wing, a vermilion cross stamped on it | `tk_QT13mHZzGIDUm11bicD9k`, cut out of `tk_uTZ7gwboimz1QN-ERb1W_` |
 | Key refused | `shrug-key.png` | a big key standing beside his feet, its bow as wide as his head, the shaft snapped in two | `tk_ydDJMc4ZFhgkYcZbo4cFt`, cut out of `tk_H-UuKYR4R38YOZt_eAm8t` |
@@ -183,3 +183,16 @@ vermilion blot (`tk_Sc86awxgNLf340ARg30rk` and its siblings), a chain box
 that cut into the wing (`tk_0ybkgwV4nIn4sdkI8c8hC` and its siblings), and the
 from-source chains, whose wings measured unequal (`tk_FozmJBO0Si1P9-VvVIQuN`
 and its siblings).
+
+A fourth read found the chain's top link fading into the wing tip and the
+top two links overlapping. Two more boxed edits fixed it without touching
+the broken bottom link: the top two links redrawn apart in a hard outline
+(box x 0.745, y 0.39, 0.2 by 0.355, feather 4, `tk_NQuohoX4pX3uaBZWCyZKV`),
+then the wing tip's edge brought down over the top link (box x 0.76, y 0.39,
+0.18 by 0.12, feather 4, `tk_fj510vmz4tlt5GLgrer2V`). A small feather keeps a
+boxed edit's seam crisp; the default 16 is what blurred it. Passed over: the
+other boxed takes, which kept a fade or added a blot, the full-chain edits of
+the kept take, whose break was a hairline or whose broken link fell loose
+(`tk_kVxRoBfBxxHD2rU0ew7eL`, `tk_n-LHRc6MsL4Vqf36VFUTh`), and boxed fixes of
+the second link's junction, which blurred it (`tk_ifn3qylNuqYmtxdQWziFC` and
+its siblings).
