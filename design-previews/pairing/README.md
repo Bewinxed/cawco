@@ -21,7 +21,11 @@ PAIRING_ENGINES=chromium PAIRING_LEGS=end,motion PAIRING_MOMENTS=expired …   #
   kept clear. It decodes (ZXing, in the spec).
 - `lib/swap.js`: transitions.dev "Text morph" and "Text states swap" on the
   house's tokens, as Web Animations split into read and write phases.
-- `caw/`: Caw's drawings, one per moment.
+- `caw/`: Caw's drawings, one per moment, each with its night still
+  (`<moment>-night.png`).
+
+The page has both schemes (`color-scheme: light dark`, the tokens'
+`light-dark()`), following the reader's system.
 
 ## Motion, recipe by recipe
 
@@ -36,7 +40,8 @@ PAIRING_ENGINES=chromium PAIRING_LEGS=end,motion PAIRING_MOMENTS=expired …   #
 | The fail and clock glyphs, and Remove device's check giving way | transitions.dev Icon swap on DESIGN's status glyph (from 0.92, `--dur-control`) |
 | Expired's letters into the verdict | a FLIP (`--dur-panel`, drawer), then the strike (`--dur-morph`) |
 | Remove device's rows | a FLIP over `--dur-panel` on ease-out |
-| The dots (cloud, arrival, swallow, burst), the head's squeeze and shake, the ping | r4's |
+| The dots (cloud, arrival, swallow, burst), the head's squeeze and shake | r4's |
+| The ping | r4's ring, growing `--qr-ping-reach` (`--space-3`) past the card on every side, under the title's `--space-4` gap, so it never meets the title |
 
 The dots are drawn on one canvas per card. Each moment's dot motion is r4's
 paths, delays and curves, written as one track per dot and read from one Web
@@ -65,16 +70,43 @@ them: a separate reviewer reads anatomy, proportion and character.
 | Waiting | `caw/waiting.png` | `tk_4MBgKsoG-k9zny9qtFP4z` |
 | Last minute | `caw/lastminute.png` | `tk_qpzFqEOgLm30y5iH5l7XU` |
 | Checking | `caw/checking.png` | `tk_Pg4KWYmyJkbZ-ydttEIdx` |
-| Paired (and Removed, the same card changed in place) | `caw/approved.png` | `tk_XLMcDjIlz0Y9f1uODbtfL` |
+| Paired | `caw/approved.png` | `tk_vdFvg-7_BXJtsxZg8_37W`, cut out of `tk_5MKhbxfDbzzuMFIGJzA9x` |
+| Removed | `caw/removed.png` | `tk_j8UHibltNAAOqoDnMAXrc`, cut out of `tk_scTWkTlb5Y9CXhr2BJ0DI` |
 | Not let in | `caw/denied.png` | `tk_Q-q2L8tsk-HsTV2vS97oa` |
 | That code expired | `caw/expired.png` | `tk_UUycqx4EcxvnLivv9rBYf` |
-| That scan didn't match | `caw/nomatch.png` | `tk_cB9JiRetv7txeth1YRB2D` |
+| That scan didn't match | `caw/nomatch.png` | `tk_vYCT4PHo2PzsWV2p8AFkc`, cut out of `tk_zHhwGrEet-1dbYUGCLf48` |
 | Pairing didn't start (both causes) | `caw/failed.png` | `tk_gMv0Ked3Nln-dsB9KL8VS` |
 | The head (r4's app icon) | `caw/badge.png` | r4's |
 | The head, face shut | `caw/badge-shut.png` | `tk_yHUMib6tFcuJXcOasbqIn` |
 
-The card's height runs on its wrap, the card filling it: on the spec's
-WebKit, a card running its lap (the band's CSS animation of
-`--border-angle`) drew no other run's height or transition, so the card
-jumped to its new height on the first frame and the words arriving below
-were cut by its edge.
+Paired, Removed and That scan didn't match were remade from the cut-out of
+the open-eyed source, `tk_689t8aVLxt1_jA_ojCjfk`, on Qwen-Image's edit
+guide (QwenLM/Qwen-Image `prompt_utils.py`, the edit enhancer: "Keep the
+enhanced prompt direct and specific"; its example "Replace the man's hat
+with a dark brown beret; keep smile, short hair, and gray jacket
+unchanged"): the operation, then one clause keeping the rest, `keepRest:
+"loose"`, then cut out by a `transparent: true` call. Their instructions:
+
+- Paired: "Raise both wings a little higher in a small, calm cheer, each
+  wing the same size and shape as in the input; keep his open eyes, beak,
+  body, two feet and the transparent background unchanged."
+- Removed: "Lower both wings to hang at his sides and add a small beige
+  smartphone falling just below the tip of the wing on the right, tilted as
+  if he let it go; keep his open eyes, beak, body, two feet and the
+  transparent background unchanged."
+- That scan didn't match: "Add a small beige smartphone pinched at the red
+  tip of the wing on the right, the wing raised a little so the phone is in
+  front of his beak, screen toward his eye; keep his open eyes, the wing on
+  the left, beak, body, two feet and the transparent background unchanged."
+
+Each cut-out came back with a pale sticker outline (45–55% of its edge
+band light, against the source's 0.2%); `halo.py` cleared it (2.0–2.6%
+left, the phone's own beige), then the 512 take was halved to 256.
+
+**By night** each still is drawn on the house's paper rim (`--paper`,
+#f4f0e6), as the Caw panel and Decisions list previews' night stills are:
+the rim grown 3.6px round his whole silhouette at 256 (an antialiased
+round dilation of his alpha, drawn under him), which the spec measures at a
+median 3px, so 0.94px on screen at Desk's 80px and 0.75px at Phone's 64px
+(the Decisions list's hero reads 0.75px at 80 on the same rule). The QR's
+head stays as it is: it sits on the code's paper, light in both schemes.

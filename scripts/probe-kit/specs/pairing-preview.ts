@@ -26,10 +26,16 @@
  *   starting on the arrival's frame, not drawn at ½ of it, drawn at its end.
  * - A tile stands over the code (its z-index, an opaque box): a dot falling
  *   behind one meets no word there.
+ * - Expired's verdict: the gap before the struck code at least a space.
+ * - The ping's ring, its lap held and sought every 2.5%: never meets the
+ *   title's box.
  * - Caw centred on the card's axis; his box never meets the card's; each
  *   moment's Caw its own drawing.
- * - The frames: whole and visible at 390, 1110 and 1440 (inside the window
- *   and every box above them, the page never scrolling sideways).
+ * - Light and dark: the frames whole and visible at 390, 680, 1110 and 1440
+ *   (inside the window and every box above them, the page never scrolling
+ *   sideways), and the sweep of every moment at 390, 680 and 1440 totalling
+ *   no overflow, Caw his night still by night; each night still's paper rim
+ *   measured as drawn on both layouts.
  * - Chromium at 1×: no frame takes the main thread over 16.7ms.
  * - No console error.
  *
@@ -92,9 +98,9 @@ const ENDINGS = [
 ] as const;
 /** `PAIRING_LEGS=motion,end`: those legs alone (every leg by default). */
 const LEGS = new Set(
-  (process.env.PAIRING_LEGS ?? "qr,motion,device,end,poses,frames,cost").split(
-    ","
-  )
+  (
+    process.env.PAIRING_LEGS ?? "qr,motion,ping,device,end,poses,frames,cost"
+  ).split(",")
 );
 type Moment = (typeof MOMENTS)[number];
 /** `PAIRING_MOMENTS=denied,expired`: the motion legs of those moments alone (every moment by default). */
@@ -882,7 +888,7 @@ async function deviceLeg(kit: Kit, page: Page, engine: Engine) {
  * animations and the arrival's start on one frame, and on the arrival's
  * clock it is not yet drawn at ½ and drawn at 1.
  */
-/** The moment whose drawing of Caw a moment shows: the network cases are Checking's, the two causes Failed's, Removed Paired's. */
+/** The moment whose drawing of Caw a moment shows: the network cases are Checking's, the two causes Failed's. */
 function poseOf(m: Moment): string {
   if (m.startsWith("checking")) {
     return "checking";
@@ -890,7 +896,43 @@ function poseOf(m: Moment): string {
   if (m.startsWith("failed")) {
     return "failed";
   }
-  return m === "removed" ? "approved" : m;
+  return m;
+}
+
+/** Expired's verdict: the gap before the struck code, against a space in the verdict's own face, per layout. */
+async function spentGap(kit: Kit, page: Page, engine: Engine) {
+  const gaps = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
+      const said = stage.querySelector(".scene-outcome .said") as HTMLElement;
+      const lead = said.querySelector(".lead") as HTMLElement;
+      const spent = said.querySelector(".spent") as HTMLElement;
+      const range = document.createRange();
+      range.selectNodeContents(lead);
+      const end = [...range.getClientRects()].at(-1);
+      const code = spent.getBoundingClientRect();
+      const probe = document.createElement("span");
+      probe.style.whiteSpace = "pre";
+      probe.textContent = " ";
+      said.append(probe);
+      const space = probe.getBoundingClientRect().width;
+      probe.remove();
+      return {
+        layout: stage.dataset.layout ?? "",
+        gap: end ? code.left - end.right : Number.NaN,
+        space,
+        // The code on the lead's last line (they overlap down the page), not opening a line of its own.
+        sameLine: end
+          ? Math.min(end.bottom, code.bottom) - Math.max(end.top, code.top) > 0
+          : false,
+      };
+    })
+  );
+  for (const g of gaps) {
+    kit.check(
+      `${engine} expired: ${g.layout} the gap before the struck code is at least a space (${g.gap.toFixed(2)}px against a space's ${g.space.toFixed(2)}px${g.sameLine ? "" : ", the code opening a line"})`,
+      !g.sameLine || g.gap >= g.space - 0.25
+    );
+  }
 }
 
 async function endLeg(kit: Kit, page: Page, engine: Engine) {
@@ -971,6 +1013,9 @@ async function endLeg(kit: Kit, page: Page, engine: Engine) {
             .join("; ")
         );
       }
+    }
+    if (m === "expired") {
+      await spentGap(kit, page, engine);
     }
     if (m === "removed") {
       continue;
@@ -1072,7 +1117,7 @@ async function posesLeg(kit: Kit, page: Page, engine: Engine) {
         (img) => new URL(img.src).pathname.split("/").pop() ?? ""
       )
     );
-    // One moment each: the network cases are Checking, the two causes are Failed, and Removed is Paired's card changed in place.
+    // One moment each: the network cases are Checking, the two causes are Failed.
     const moment = poseOf(m);
     drawn.set(moment, [...new Set([...(drawn.get(moment) ?? []), ...srcs])]);
   }
@@ -1089,18 +1134,328 @@ async function posesLeg(kit: Kit, page: Page, engine: Engine) {
   );
 }
 
-/** At 390, 1110 and 1440 the frames stand whole and visible: inside the window and every box above them; the page never scrolls sideways. */
-async function framesLeg(kit: Kit, url: string, engine: Engine) {
-  const { page, errors } = await openPreview(kit, url, engine, "phone");
-  for (const width of [390, 1110, 1440]) {
+/**
+ * The ping's ring, its loop held and sought every 2.5% of a lap (WAAPI's
+ * own clock): its box never meets the title's, on both layouts, in the two
+ * moments it runs in.
+ */
+async function pingLeg(kit: Kit, page: Page, engine: Engine) {
+  for (const m of ["waiting", "lastminute"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
+    await playIn(page, m);
+    await settled(page);
+    const reads = await page.evaluate((steps) => {
+      return [...document.querySelectorAll<HTMLElement>(".stage")].map(
+        (stage) => {
+          const layout = stage.dataset.layout ?? "";
+          const ping = stage.querySelector(".ping") as HTMLElement;
+          const title = (
+            stage.querySelector(".title") as HTMLElement
+          ).getBoundingClientRect();
+          const run = ping.getAnimations().find((a) => a.id === "ping");
+          if (!run) {
+            return { layout, missing: true, worst: Number.NaN, at: 0, met: 0 };
+          }
+          const { delay = 0, duration } = (
+            run.effect as KeyframeEffect
+          ).getTiming() as {
+            delay: number;
+            duration: number;
+          };
+          const was = run.currentTime;
+          run.pause();
+          let worst = Number.POSITIVE_INFINITY;
+          let at = 0;
+          let met = 0;
+          for (let i = 0; i <= steps; i += 1) {
+            // The lap's last frame is read a hair before it wraps to the next.
+            const f = Math.min(i / steps, 0.9999);
+            run.currentTime = delay + f * duration;
+            const r = ping.getBoundingClientRect();
+            const across =
+              Math.min(r.right, title.right) - Math.max(r.left, title.left);
+            const down =
+              Math.min(r.bottom, title.bottom) - Math.max(r.top, title.top);
+            if (across > 0 && down > 0) {
+              met += 1;
+            }
+            const clear = r.top - title.bottom;
+            if (clear < worst) {
+              worst = clear;
+              at = f;
+            }
+          }
+          run.currentTime = was;
+          run.play();
+          return { layout, missing: false, worst, at, met };
+        }
+      );
+    }, STEPS);
+    for (const r of reads) {
+      kit.check(
+        `${engine} ${m}: ${r.layout} the ping's ring stays clear of the title's box at every read of its lap (${STEPS + 1} reads; closest ${r.worst.toFixed(2)}px under it at ${(r.at * 100).toFixed(1)}%)`,
+        !r.missing && r.met === 0 && r.worst > 0,
+        r.missing ? "no ping run" : `${r.met} reads meet it`
+      );
+    }
+  }
+}
+
+/**
+ * Night: every pose's night still carries the paper rim, measured as the
+ * page draws him: the median distance from the night drawing's outer edge to
+ * his day drawing, in the still's px, times the px he is drawn at on each
+ * layout. The house's night stills (the Decisions list's hero) read 0.75px
+ * at 80 on the same rule.
+ */
+async function nightRims(kit: Kit, page: Page, engine: Engine) {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
+  const read = await page.evaluate(async (poses) => {
+    const load = (src: string) =>
+      new Promise<HTMLImageElement>((done, fail) => {
+        const img = new Image();
+        img.onload = () => done(img);
+        img.onerror = fail;
+        img.src = src;
+      });
+    const inked = (img: HTMLImageElement) => {
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const g = c.getContext("2d") as CanvasRenderingContext2D;
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      return Array.from(
+        { length: c.width * c.height },
+        (_, i) => (d[i * 4 + 3] ?? 0) > 127
+      );
+    };
+    const sizes = [...document.querySelectorAll<HTMLElement>(".stage")].map(
+      (stage) => ({
+        layout: stage.dataset.layout ?? "",
+        w: (stage.querySelector(".caw") as HTMLElement).getBoundingClientRect()
+          .width,
+      })
+    );
+    const out: Record<string, Record<string, number>> = {};
+    for (const pose of poses) {
+      // biome-ignore lint/performance/noAwaitInLoops: one pose at a time
+      const [day, night] = await Promise.all([
+        load(`./caw/${pose}.png`),
+        load(`./caw/${pose}-night.png`),
+      ]);
+      const side = day.naturalWidth;
+      const a = inked(day);
+      const b = inked(night);
+      const K = 10;
+      const offs: [number, number, number][] = [];
+      for (let dy = -K; dy <= K; dy += 1) {
+        for (let dx = -K; dx <= K; dx += 1) {
+          offs.push([dx, dy, Math.hypot(dx, dy)]);
+        }
+      }
+      offs.sort((p, q) => p[2] - q[2]);
+      const far: number[] = [];
+      for (let i = 0; i < side * side; i += 1) {
+        const x = i % side;
+        const y = Math.floor(i / side);
+        const edge =
+          b[i] &&
+          !a[i] &&
+          [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ].some(([dx = 0, dy = 0]) => {
+            const xx = x + dx;
+            const yy = y + dy;
+            return (
+              xx < 0 || yy < 0 || xx >= side || yy >= side || !b[yy * side + xx]
+            );
+          });
+        if (!edge) {
+          continue;
+        }
+        for (const [dx, dy, r] of offs) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (
+            xx >= 0 &&
+            yy >= 0 &&
+            xx < side &&
+            yy < side &&
+            a[yy * side + xx]
+          ) {
+            far.push(r);
+            break;
+          }
+        }
+      }
+      far.sort((p, q) => p - q);
+      const median = far[Math.floor(far.length / 2)] ?? 0;
+      out[pose] = Object.fromEntries(
+        sizes.map((s) => [s.layout, (median * s.w) / side])
+      );
+    }
+    return out;
+  }, POSES);
+  for (const [pose, at] of Object.entries(read)) {
+    kit.check(
+      `${engine} night: ${pose}'s night still carries the paper rim at about 0.83px on screen (${Object.entries(
+        at
+      )
+        .map(([layout, px]) => `${layout} ${px.toFixed(2)}px`)
+        .join(", ")})`,
+      Object.values(at).every((px) => px >= 0.6 && px <= 1.1)
+    );
+  }
+}
+
+/** Every drawing of Caw the moments show. */
+const POSES = [...new Set(MOMENTS.map(poseOf))];
+
+/**
+ * The sweep, one scheme at a time, every moment at 390, 680 and 1440: no
+ * word stands past the card, no text box overflows, the page never scrolls
+ * sideways, and Caw is his day still by day and his night still by night.
+ */
+async function sweep(
+  kit: Kit,
+  page: Page,
+  engine: Engine,
+  scheme: "light" | "dark"
+) {
+  const found: string[] = [];
+  let reads = 0;
+  for (const width of [390, 680, 1440]) {
     // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
     await page.setViewportSize({ width, height: 900 });
-    await page.evaluate(
-      () =>
-        new Promise((done) =>
-          requestAnimationFrame(() => requestAnimationFrame(done))
-        )
-    );
+    for (const m of MOMENTS) {
+      // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
+      await playIn(page, m);
+      await settled(page);
+      reads += 1;
+      const out = await page.evaluate(
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
+        ({ night }) => {
+          const said: string[] = [];
+          const doc = document.documentElement;
+          if (doc.scrollWidth > doc.clientWidth) {
+            said.push(
+              `page scrolls sideways (${doc.scrollWidth}/${doc.clientWidth})`
+            );
+          }
+          // The page offers both schemes, and the reader's is the one asked.
+          const offered = getComputedStyle(doc).colorScheme.split(" ");
+          if (
+            offered.length !== 2 ||
+            matchMedia("(prefers-color-scheme: dark)").matches !== night
+          ) {
+            said.push(`scheme ${getComputedStyle(doc).colorScheme}`);
+          }
+          for (const stage of document.querySelectorAll<HTMLElement>(
+            ".stage"
+          )) {
+            const layout = stage.dataset.layout ?? "";
+            const card = (
+              stage.querySelector(".card") as HTMLElement
+            ).getBoundingClientRect();
+            const words = stage.querySelectorAll<HTMLElement>(
+              ".scene[data-on] :is(.said, .record, .means, .btn, .facts p, .readout .words, .letters), .title"
+            );
+            for (const el of words) {
+              if (el.closest("[hidden]") || el.getClientRects().length === 0) {
+                continue;
+              }
+              const r = el.getBoundingClientRect();
+              const inCard = el.closest(".card");
+              if (
+                inCard &&
+                (r.left < card.left - 0.5 ||
+                  r.right > card.right + 0.5 ||
+                  r.bottom > card.bottom + 0.5)
+              ) {
+                said.push(`${layout} ${el.className} past the card`);
+              }
+              if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
+                said.push(
+                  `${layout} ${el.className} overflows (${el.scrollWidth}/${el.clientWidth})`
+                );
+              }
+            }
+            const src =
+              (stage.querySelector(".caw") as HTMLImageElement).src
+                .split("/")
+                .pop() ?? "";
+            if (src.endsWith("-night.png") !== night) {
+              said.push(`${layout} Caw is ${src}`);
+            }
+          }
+          return said;
+        },
+        { night: scheme === "dark" }
+      );
+      found.push(...out.map((s) => `${m}@${width}: ${s}`));
+    }
+  }
+  kit.check(
+    `${engine} ${scheme}: the overflow sweep totals 0 (${reads} reads: ${MOMENTS.length} moments at 390, 680 and 1440, both layouts each), and every Caw is his ${scheme === "dark" ? "night still on the paper rim" : "day still"}`,
+    found.length === 0,
+    found.slice(0, 6).join("; ")
+  );
+}
+
+/** Light and dark: at 390, 680, 1110 and 1440 the frames stand whole and visible (inside the window and every box above them; the page never scrolls sideways), then the sweep; by night the rims. */
+async function framesLeg(kit: Kit, url: string, engine: Engine) {
+  const { page, errors } = await openPreview(kit, url, engine, "phone");
+  for (const scheme of ["light", "dark"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
+    await page.emulateMedia({ colorScheme: scheme });
+    await framesWhole(kit, page, engine, scheme);
+    await sweep(kit, page, engine, scheme);
+    if (scheme === "dark") {
+      await nightRims(kit, page, engine);
+    }
+  }
+  kit.check(
+    `${engine} (frames page): no console error`,
+    errors.length === 0,
+    errors.slice(0, 4).join(" | ")
+  );
+}
+
+async function framesWhole(
+  kit: Kit,
+  page: Page,
+  engine: Engine,
+  scheme: string
+) {
+  for (const width of [390, 680, 1110, 1440]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
+    await page.setViewportSize({ width, height: 900 });
+    // The window at its new width, then two frames for the page's refit (its resize listener):
+    // WebKit can draw a frame or two at the old width after the resize is asked.
+    await page.waitForFunction((w) => window.innerWidth === w, width);
+    // Frames until the page has refit (its resize listener), at most 60: said with the read.
+    const refit = await page.evaluate(async () => {
+      const doc = document.documentElement;
+      const fit = () =>
+        [...document.querySelectorAll<HTMLElement>(".fit")]
+          .map((f) => f.style.getPropertyValue("--fit"))
+          .join("/");
+      const first = { scroll: doc.scrollWidth, fit: fit() };
+      let frames = 0;
+      while (frames < 60) {
+        // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
+        await new Promise((done) => requestAnimationFrame(done));
+        frames += 1;
+        if (frames >= 2 && doc.scrollWidth <= doc.clientWidth) {
+          break;
+        }
+      }
+      return { frames, first, fit: fit() };
+    });
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every rule it reads lives inside it
     const found = await page.evaluate(() => {
       const out: string[] = [];
@@ -1141,16 +1496,11 @@ async function framesLeg(kit: Kit, url: string, engine: Engine) {
       return out;
     });
     kit.check(
-      `${engine} at ${width}: both frames stand whole and visible, and the page never scrolls sideways`,
+      `${engine} ${scheme} at ${width}: both frames stand whole and visible, and the page never scrolls sideways (refit in ${refit.frames} frame(s): scrollWidth ${refit.first.scroll} and --fit ${refit.first.fit || "unset"} as the width landed, --fit ${refit.fit} now)`,
       found.length === 0,
       found.join("; ")
     );
   }
-  kit.check(
-    `${engine} (frames page): no console error`,
-    errors.length === 0,
-    errors.slice(0, 4).join(" | ")
-  );
 }
 
 async function frameCost(kit: Kit, page: Page, m: Moment) {
@@ -1220,6 +1570,9 @@ async function runLegs(kit: Kit, page: Page, url: string, engine: Engine) {
       // biome-ignore lint/performance/noAwaitInLoops: one held clock at a time
       await motionLeg(kit, page, engine, m);
     }
+  }
+  if (LEGS.has("ping")) {
+    await pingLeg(kit, page, engine);
   }
   if (LEGS.has("device")) {
     await deviceLeg(kit, page, engine);
