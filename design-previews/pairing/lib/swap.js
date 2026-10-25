@@ -21,16 +21,27 @@ const BLUR = "blur(2px)";
 const CLEAR = "blur(0px)";
 
 /** A run of the change, kept until it lands, then the plain text put back. */
-function landing(host, text, runs, step, current) {
+function landing(host, text, runs, step, current, put = (t) => (host.textContent = t)) {
   Promise.all(runs.map((run) => run.finished)).then(
     () => {
       if (step === current()) {
-        host.textContent = text;
+        put(text);
       }
     },
     () => undefined
   );
   return runs;
+}
+
+/**
+ * A swap cell's text is always an element (one span), never bare text: an
+ * anonymous grid item takes no style, and the mark line trims each run of
+ * words by its own element (preview.css, `.mark-line`).
+ */
+function spanOf(text) {
+  const span = document.createElement("span");
+  span.textContent = text;
+  return span;
 }
 
 export class TextMorph {
@@ -143,7 +154,7 @@ export class TextSwap {
   put(text) {
     this.#step += 1;
     this.#text = text;
-    this.#host.textContent = text;
+    this.#host.replaceChildren(spanOf(text));
   }
 
   /** The swap to `next` (null when nothing changes), with `timing` { delay, duration, easing, lift }. */
@@ -189,7 +200,7 @@ export class TextSwap {
             { delay: delay + duration, duration, easing, fill: "both" }
           ),
         ];
-        return landing(host, next, runs, step, () => this.#step);
+        return landing(host, next, runs, step, () => this.#step, (text) => host.replaceChildren(spanOf(text)));
       },
     };
   }

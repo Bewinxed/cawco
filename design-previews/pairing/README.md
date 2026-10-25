@@ -33,6 +33,16 @@ sentence) is gone, and only the head's squeeze and shake, face shut, stays.
   (502)." take the line; Retry, coral, where the head was; Retry lets the
   cloud drift on from where it stood.
 
+The status glyphs are the designer's ruling: the house's bare Close (`M6 6l12
+12M18 6L6 18`) and Tick (`M5 12.5l4.5 4.5L19 7.5`) and Solar's linear clock
+(a 10 circle and `M12 8V12L14.5 14.5`), each a 1.5 stroke with round caps on
+the 24 grid, no fill and no disc. They are 16px (`--icon-md`) on the line
+under the code and in Paired's and Removed's ledger, and a quarter of the
+phone's box on Denied's screen (24px on the desk, 20px on the phone). Each
+mark sits on the x-height middle of the words beside it by the dashboard's
+mark line recipe (`.mark-line`, `.mark-cell`, `.mark-text`, copied into
+`preview.css`), within half a pixel in both engines.
+
 "Pairing is off" is gone with no drawing of its own: the card only shows
 while the hub is in pairing mode, so it never meets that answer.
 

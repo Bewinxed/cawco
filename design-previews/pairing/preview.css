@@ -577,6 +577,27 @@
     }
   }
 
+  /* The mark line (DESIGN.md, The Mark Line Rule; the dashboard's recipe in
+     design.css, copied): words beside a mark have their x-height's middle on
+     the mark's middle. A run of words is trimmed to its x-height band and
+     given back the room as padding, half above and half below, so its box's
+     middle is its x-height's middle; a mark beside words that wrap stands in
+     a cell one line tall at the row's start. A text swap's cell is a grid,
+     which takes no trim, so its runs are its spans. */
+  .mark-text,
+  .mark-line > :where(:not(svg, img, .mark-cell, [data-box], .words)),
+  .mark-line > .words > span {
+    text-box: trim-both ex alphabetic;
+    padding-block: calc((1lh - 1ex) / 2);
+  }
+  .mark-cell {
+    display: grid;
+    flex: none;
+    place-content: center;
+    place-items: center;
+    block-size: 1lh;
+  }
+
   /* The line under the code: one short sentence, centred under it. */
   .readout {
     display: block flex;
@@ -592,18 +613,14 @@
        as wide as the mark it shows and none where it shows none (preview.js
        sizes it and eases it), so the words stay centred. */
     .slot {
-      flex: none;
-      display: block grid;
-      place-items: center;
       inline-size: 0;
-      block-size: 1lh;
       overflow: visible;
       > * {
         grid-area: 1 / 1;
       }
       .g {
-        inline-size: 20px;
-        block-size: 20px;
+        inline-size: var(--icon-md);
+        block-size: var(--icon-md);
         overflow: visible;
       }
       .g-close {
@@ -661,11 +678,12 @@
       overflow: visible;
     }
     /* Denied: the bare ✕ on the phone's screen, at its centre. */
+    /* A quarter of the phone's box: 24px on the desk, 20px on the phone. */
     .wire-mark {
       inset-block-start: 50%;
       inset-inline-start: 50%;
-      inline-size: 20px;
-      block-size: 20px;
+      inline-size: calc(var(--wire) / 4);
+      block-size: calc(var(--wire) / 4);
       translate: -50% -50%;
       color: var(--status-fail-glyph);
     }
@@ -732,12 +750,12 @@
   }
 
   /* ---- An ending (report a8f73fdb §2): a ledger of what just happened. The
-     verdict (a 20px status glyph, then one sentence), the record of the
+     verdict (a 16px status glyph, then one sentence), the record of the
      device as one meta line, what it means and the way out, the acts with
      one coral. All text on the column's one start edge at both widths. ---- */
   .scene-outcome {
     display: block grid;
-    grid-template-columns: 20px minmax(0, 1fr);
+    grid-template-columns: var(--icon-md) minmax(0, 1fr);
     align-content: start;
     column-gap: var(--space-3);
     row-gap: var(--space-3);
@@ -755,17 +773,17 @@
   /* Paired's and Removed's status glyph, Solar's mark alone, no disc under
      it: its two faces share one cell (transitions.dev "Icon swap"),
      data-glyph shows one. */
+  /* A mark cell one verdict line tall (the mark line's .mark-cell), its glyph
+     on the verdict's first line's x-height middle: the verdict is a trimmed
+     run (.mark-text). */
   .mark {
-    display: block grid;
-    inline-size: 20px;
-    block-size: 20px;
-    /* On the verdict's first line. */
-    margin-block-start: calc((1lh - 20px) / 2);
+    place-items: center;
+    inline-size: var(--icon-md);
     font: var(--type-body);
     .g {
       grid-area: 1 / 1;
-      inline-size: 20px;
-      block-size: 20px;
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
       overflow: visible;
       opacity: 0;
     }
