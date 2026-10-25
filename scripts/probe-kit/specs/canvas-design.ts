@@ -3923,8 +3923,33 @@ async function reaches(page: Page) {
   return { close, create: folded ? `More: ${folded}` : null };
 }
 
-/** A check that the head holds its controls, Close stands whole and pressable, and every folded control is in More, read now. */
-type Holds = (leg: string) => Promise<void>;
+/** A check that the head holds its controls, Close stands whole and pressable, and every folded control is in More, read now; `settledMs`, how long the page's frames took to settle the width it is read at. */
+type Holds = (leg: string, settledMs?: number) => Promise<void>;
+
+/**
+ * The page's next 12 frames run, as BOUNCE_QUICK ends: the head's fit is
+ * measured in a ResizeObserver delivery and written in the frame after
+ * (SideSurface, frameObserver), so a width has settled once the page has
+ * drawn frames at it, however long they take. Settled by time instead, a
+ * loaded engine read the fit of the width before: WebKit beside three other
+ * specs, 800 ms after the window went 390→1440→680→390, the head at 390
+ * still stood every control whole with its words and no More, as it fits at
+ * 1440. Answers how long the frames took, in ms.
+ */
+const SETTLE = (): Promise<number> =>
+  new Promise((done) => {
+    const from = performance.now();
+    let left = 12;
+    const tick = () => {
+      left -= 1;
+      if (left === 0) {
+        done(Math.round(performance.now() - from));
+      } else {
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+  });
 
 /** The bench pane set to `w` px wide (`transformOrigin` top left, for a zoom), or zoomed to `scale`. */
 const SET_PANE = ({ w, scale }: { scale?: number; w?: number }) => {
@@ -3944,12 +3969,12 @@ async function slowBounce(page: Page, holds: Holds): Promise<void> {
     for (const w of BOUNCE.slice(1)) {
       // biome-ignore lint/performance/noAwaitInLoops: one width settled, then read, before the next
       await page.evaluate(SET_PANE, { w });
-      await page.waitForTimeout(600);
+      let settledMs = await page.evaluate(SETTLE);
       if (zoomed) {
         await page.evaluate(SET_PANE, { scale: Math.min(1, 390 / w) });
-        await page.waitForTimeout(600);
+        settledMs += await page.evaluate(SETTLE);
       }
-      await holds(`slowly${zoomed ? ", zoomed to fit" : ""}`);
+      await holds(`slowly${zoomed ? ", zoomed to fit" : ""}`, settledMs);
     }
   }
   await page.evaluate(SET_PANE, { scale: 1 });
@@ -3985,8 +4010,7 @@ async function windowBounce(page: Page, holds: Holds): Promise<void> {
     ).style.inlineSize = "100%";
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(800);
-  await holds("window fresh");
+  await holds("window fresh", await page.evaluate(SETTLE));
   for (const sizes of [
     [1440, 680, 390],
     [1440, 390],
@@ -3995,8 +4019,10 @@ async function windowBounce(page: Page, holds: Holds): Promise<void> {
       // biome-ignore lint/performance/noAwaitInLoops: one size after another, no wait between
       await page.setViewportSize({ width, height: 844 });
     }
-    await page.waitForTimeout(800);
-    await holds(`window quickly 390→${sizes.join("→")}`);
+    await holds(
+      `window quickly 390→${sizes.join("→")}`,
+      await page.evaluate(SETTLE)
+    );
   }
 }
 
@@ -4049,8 +4075,8 @@ async function bounceLeg(
     return;
   }
   await page.waitForTimeout(3000);
-  const holds: Holds = async (leg) => {
-    const read = await page.evaluate(FIT_READ);
+  const holds: Holds = async (leg, settledMs) => {
+    const read = { ...(await page.evaluate(FIT_READ)), settledMs };
     const more = await moreEntries(page);
     const missing = read.folded.filter(
       (one) =>
@@ -4101,7 +4127,7 @@ async function bounceLeg(
       JSON.stringify({ ...read, moreEntries: more, missing, reach })
     );
   };
-  await holds("fresh");
+  await holds("fresh", await page.evaluate(SETTLE));
   await slowBounce(page, holds);
   await quickBounce(page, holds);
   await windowBounce(page, holds);
