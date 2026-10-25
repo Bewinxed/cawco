@@ -12,7 +12,7 @@ median of the pixels the night still draws outside the day silhouette), and
 the night still drawn over it. A 2x screen's device pixel is half as wide,
 so the 1x rim holds there too.
 
-    python3 -I design-previews/suggestions/capture/night-mark.py
+    python3 -I design-previews/suggestions/app/night-mark.py
 """
 import sys
 from pathlib import Path

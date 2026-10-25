@@ -1,0 +1,275 @@
+/* The preview's own page: the state machine's switcher, drawn in a look of
+   its own so it is never taken for the product, and the stage, one state
+   at its production width on the house's tokens (the dashboard's app.css,
+   before this sheet). The directions' values the house has no token for
+   stand here as preview-only variables (README.md lists them). */
+
+@layer preview {
+  :root {
+    /* The switcher's own look: not the product's. */
+    --sm-ground: oklch(17% 0 0);
+    --sm-ink: oklch(92% 0 0);
+    --sm-muted: oklch(68% 0 0);
+    --sm-mark: oklch(88% 0.17 98);
+    --sm-mark-ink: oklch(17% 0 0);
+    --sm-rule: oklch(32% 0 0);
+    --sm-w: 18rem;
+
+    /* Where a state stands. */
+    --board-column: 560px;
+    --keyboard-h: 291px;
+
+    /* Unsent drafts. */
+    --drafts-edge: color-mix(in oklch, var(--ink-strong) 40%, transparent);
+    --drafts-gap: 6px;
+    --drafts-pad-inline: 14px;
+    --drafts-pad-block: 10px;
+    --drafts-max: 85%;
+    --drafts-hover-fill: color-mix(in oklch, var(--ink-strong) 4%, transparent);
+    --drafts-press-scale: 0.985;
+    --drafts-dim: 0.5;
+    --drafts-ghost-1: 60%;
+    --drafts-ghost-2: 78%;
+    --drafts-ghost-3: 52%;
+    --drafts-ghost-edge-low: color-mix(in oklch, var(--ink-strong) 20%, transparent);
+    --drafts-ghost-edge-high: color-mix(in oklch, var(--ink-strong) 40%, transparent);
+
+    /* The ledger. */
+    --ledger-text-size: 15px;
+    --ledger-kicker-size: 11px;
+    --ledger-kicker-track: 0.08em;
+    --ledger-hairline: color-mix(in oklch, var(--ink-strong) 9%, transparent);
+    --ledger-hover-fill: color-mix(in oklch, var(--ink-strong) 3%, transparent);
+    --ledger-press-fill: color-mix(in oklch, var(--ink-strong) 6%, transparent);
+    --ledger-pencil-rest: 0.4;
+    --ledger-pencil-touch: 0.6;
+    --ledger-check-ink: 1;
+    --ledger-check-hold: 1000;
+    --ledger-bone-1: 72%;
+    --ledger-bone-2: 88%;
+    --ledger-bone-3: 58%;
+    --ledger-bone-reason: 40%;
+
+    /* The tray. */
+    --tray-tint: color-mix(in oklch, var(--ink-strong) 3%, transparent);
+    --tray-hover-fill: color-mix(in oklch, var(--ink-strong) 7%, transparent);
+    --tray-pad-inline: 12px;
+    --tray-lift: -40px;
+    --tray-line: 2px;
+    --tray-bone-1: 72%;
+    --tray-bone-2: 88%;
+    --tray-bone-3: 58%;
+    --tray-chip-max: 16rem;
+  }
+
+  :root.dark {
+    --tray-tint: color-mix(in oklch, var(--ink-strong) 6%, transparent);
+    --tray-hover-fill: color-mix(in oklch, var(--ink-strong) 10%, transparent);
+  }
+
+  /* The flip: nothing eases from the old theme's colour. */
+  [data-flipping] *,
+  [data-flipping] *::before,
+  [data-flipping] *::after {
+    transition: none !important;
+  }
+
+  html {
+    background: var(--surface-recess);
+    color: var(--ink-strong);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    display: grid;
+    grid-template-columns: var(--sm-w) minmax(0, 1fr);
+    min-block-size: 100dvh;
+    margin: 0;
+    font: var(--type-body);
+
+    @media (width < 900px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ---------- The switcher: its own look, never the product's ---------- */
+  .switcher {
+    position: sticky;
+    inset-block-start: 0;
+    align-self: start;
+    display: grid;
+    align-content: start;
+    gap: 18px;
+    max-block-size: 100dvh;
+    padding: 16px;
+    overflow-y: auto;
+    background: var(--sm-ground);
+    color: var(--sm-ink);
+    font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+
+    @media (width < 900px) {
+      position: static;
+      max-block-size: none;
+    }
+
+    & h2 {
+      margin: 0 0 6px;
+      font: inherit;
+      color: var(--sm-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    & ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    & a {
+      display: block;
+      padding: 3px 7px;
+      border: 1px solid var(--sm-rule);
+      border-radius: 3px;
+      color: var(--sm-ink);
+      text-decoration: none;
+
+      &:hover {
+        border-color: var(--sm-muted);
+      }
+
+      &[aria-current="page"] {
+        border-color: var(--sm-mark);
+        background: var(--sm-mark);
+        color: var(--sm-mark-ink);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--sm-mark);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  .key {
+    margin: 0;
+    color: var(--sm-muted);
+    overflow-wrap: anywhere;
+  }
+
+  /* ---------- The stage: one state at its production width ---------- */
+  .stage {
+    display: flex;
+    align-items: start;
+    min-inline-size: 0;
+    padding: var(--space-7);
+  }
+
+  .frame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    inline-size: var(--frame-w);
+    max-inline-size: 100%;
+    overflow: clip;
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+
+  /* Caw's panel: a conversation's width and his panel's height. */
+  .frame[data-frame="thread"] {
+    block-size: var(--c-caw-panel-h);
+  }
+
+  /* The phone: his sheet at a phone's height. */
+  .frame[data-frame="phone"],
+  .frame[data-frame="keyboard"] {
+    block-size: 844px;
+  }
+
+  /* The empty board: the page's recessed field at the starters' measure. */
+  .frame[data-frame="board"] {
+    min-block-size: var(--c-caw-panel-h);
+    background: var(--surface-recess);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+
+  .panel-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-block-end: 1px solid var(--border-hairline);
+  }
+
+  .panel-mark {
+    inline-size: var(--c-row-lead);
+    block-size: var(--c-row-lead);
+    object-fit: contain;
+  }
+
+  .panel-words {
+    display: grid;
+    min-inline-size: 0;
+
+    & strong {
+      font: var(--type-label);
+    }
+
+    & span {
+      font: var(--type-meta);
+      color: var(--ink-muted);
+    }
+  }
+
+  /* What the frame holds scrolls inside it, as Caw's panel does. */
+  .body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
+    padding: var(--space-6) var(--space-4) var(--space-4);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--surface-recess);
+
+    [data-frame="board"] > & {
+      padding: var(--space-7);
+      overflow: visible;
+    }
+  }
+
+  /* The phone's keyboard, drawn only as the room it takes. */
+  .keyboard {
+    display: grid;
+    flex: none;
+    place-items: center;
+    block-size: var(--keyboard-h);
+    background: var(--surface-recess-deep);
+    border-block-start: 1px solid var(--border-hairline);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+
+  /* Caw's still by day; by night his still drawn on the paper rim. */
+  .caw-still.night {
+    display: none;
+  }
+
+  :root.dark .caw-still {
+    &.day {
+      display: none;
+    }
+
+    &.night {
+      display: inline-block;
+    }
+  }
+}

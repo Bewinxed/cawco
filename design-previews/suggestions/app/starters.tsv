@@ -1,0 +1,24 @@
+project	place	position	glyph	text	reason
+Cawco	board	0	grill	Grill me on “Make the Caw bookend kit for clips” until it has a spec	It has sat in idea for 10 days, not started.
+Cawco	board	1	bug	Find out why the “Weekly X milestone check” routine failed and fix it	This routine’s last run failed.
+Cawco	board	2	reply	Walk me through what “Post: install a skill once across the whole fleet” needs from me	It has waited on you in review for 10 days.
+Cawco	board	3	reply	Walk me through what “Post: stop typing the same correction to every agent” needs from me	It has waited on you in review for 10 days.
+Cawco	board	4	reply	Walk me through what “Post: one board instead of a wall of agent terminals” needs from me	It has waited on you in review for 10 days.
+Cawco	board	5	grill	Grill me on “Write .agents/product-marketing.md for the marketing sk…” until it has a spec	It has sat in idea for 9 days, not started.
+Cawco	decisions	0	explore	Lay out the options in “A session set up a routine: Review hub join f…” as a decision page	Its last answer lays out options for you to choose between.
+Cawco	routines	0	triage	Every Monday, triage the week’s new “writer” tasks	7 tasks like these were filed in the last 14 days.
+Cawco-Dev	board	0	grill	Grill me on “Publish the chip design page for each chip category” until it has a spec	It has sat in ready for 1 day, not started.
+Cawco-Dev	board	1	search	Check what landed in “Design previews: how far DESIGN.md's new rules reach, today beside…”	It is one of the latest commits on main.
+Cawco-Dev	board	2	grill	Grill me on “Ask for a sentence-shaped approval card when an agent e…” until it has a spec	It has sat in ready for 1 day, not started.
+Cawco-Dev	board	3	grill	Grill me on “Give workflows a home of their own, apart from routines” until it has a spec	It is in ready and not started yet.
+Cawco-Dev	board	4	grill	Grill me on “Rethink the sidebar highlight and the message row's edi…” until it has a spec	It has sat in ready for 1 day, not started.
+Cawco-Dev	board	5	grill	Grill me on “Stop the orchestrator editing .md files instead of the…” until it has a spec	It has sat in ready for 1 day, not started.
+Cawco-Dev	decisions	0	explore	Lay out the options in “connect cawco-dev to its github repo so issue…” as a decision page	Its last answer lays out options for you to choose between.
+Cawco-Dev	routines	0	routine	Every Monday, do what “Live check of nightly 5539: reply with the word ready.” asked	This conversation asks for work that comes back again and again.
+Cawco-Dev	routines	1	routine	Every Monday, do what “Live check of nightly 5552: reply with the word ready.” asked	This conversation asks for work that comes back again and again.
+Cawco-Dev	routines	2	routine	Every Monday, do what “Live check of nightly 5548: reply with the word ready.” asked	This conversation asks for work that comes back again and again.
+Cawco-Dev	routines	3	routine	Every Monday, do what “Live check of nightly 5541: reply with the word ready.” asked	This conversation asks for work that comes back again and again.
+Cawco-Dev	routines	4	triage	Every Monday, triage the week’s new “fleet/machines” tasks	6 tasks like these were filed in the last 14 days.
+HyucksField	board	0	tasks	Read HyucksField’s notes and file its first tasks	It has no open tasks, and its notes say what it is for.
+anbar	board	0	tasks	Read anbar’s notes and file its first tasks	It has no open tasks, and its notes say what it is for.
+patapon	board	0	tasks	Read patapon’s notes and file its first tasks	It has no open tasks, and its notes say what it is for.
