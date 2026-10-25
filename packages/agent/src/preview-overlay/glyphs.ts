@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 const NAMES = {
   pen: "pen-bold-duotone",
   pin: "pin-bold-duotone",
-  comment: "chat-round-dots-bold-duotone",
+  comment: "chat-round-bold-duotone",
   gallery: "gallery-bold-duotone",
   eraser: "eraser-bold-duotone",
 } as const;

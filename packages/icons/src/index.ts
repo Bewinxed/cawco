@@ -66,10 +66,16 @@ export { default as IconBug } from "~icons/solar/bug-bold-duotone";
 /** Work set for dates: a Caw starter that plans on the calendar. */
 export { default as IconCalendar } from "~icons/solar/calendar-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
-/** Comment: the artifact panel's mode and the radial menu's sector (DESIGN.md, Artifact panel, canvas and ink). */
-export { default as IconComment } from "~icons/solar/chat-round-dots-bold-duotone";
-/** A task review's Transcript chip: the attempt's session, read in place. */
-export { default as IconTranscript } from "~icons/solar/chat-round-line-bold-duotone";
+/**
+ * Comment: the artifact panel's mode and the radial menu's sector (DESIGN.md,
+ * Artifact panel, canvas and ink); a task review's Transcript chip, the
+ * attempt's session read in place. Solar's bare round bubble: its dots and
+ * lines cuts draw marks inside the bubble.
+ */
+export {
+  default as IconComment,
+  default as IconTranscript,
+} from "~icons/solar/chat-round-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-bold-duotone";
 /**

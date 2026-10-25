@@ -804,8 +804,23 @@ async function serve(
   const logs = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit");
   await mkdir(logs, { recursive: true });
   const log = join(logs, `vite-${how}-${port}`);
+  // A dev server re-bundles its deps: the dashboard pre-bundles @cawco/icons,
+  // a linked package, and Vite keeps a pre-bundle while its lockfile and
+  // config stay the same ("When making changes to the linked dep, restart the
+  // dev server with the `--force` command line option",
+  // vite.dev/guide/dep-pre-bundling), so a bench read after an icon changed
+  // drew the icon it had before.
   const child = Bun.spawn(
-    [VITE, how, "--host", host, "--port", String(port), "--strictPort"],
+    [
+      VITE,
+      how,
+      ...(how === "dev" ? ["--force"] : []),
+      "--host",
+      host,
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
     {
       cwd: DASHBOARD,
       env: {

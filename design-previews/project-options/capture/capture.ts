@@ -59,8 +59,22 @@ const hub = Bun.serve({
 
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
+// `--force`: the dashboard pre-bundles @cawco/icons, a linked package, and
+// Vite keeps a pre-bundle while its lockfile and config stay the same ("When
+// making changes to the linked dep, restart the dev server with the `--force`
+// command line option", vite.dev/guide/dep-pre-bundling), so a capture after
+// an icon changed drew the icon it had before.
 const vite = Bun.spawn(
-  [VITE, "dev", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+  [
+    VITE,
+    "dev",
+    "--force",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(port),
+    "--strictPort",
+  ],
   {
     cwd: DASHBOARD,
     env: {
