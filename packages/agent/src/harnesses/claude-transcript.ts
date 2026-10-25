@@ -1,11 +1,12 @@
 /**
  * Direct transcript reader for Claude Code sessions.
  *
- * Replaces the SDK's `getSessionMessages` black box with an in-house reader
- * built on `@cawco/jsonl-parser`. The hot path — first page, newest records
- * — backward-scans from EOF via `readTranscriptEnd`, reading ~1 MB instead of
- * the full file. The full-read path falls back to `readTranscript` when callers
- * page deeper than the tail window covers.
+ * Reads a transcript without holding it. Each line is kept as a
+ * {@link ChainNode} in a per-file line index ({@link LineIndexes}): what the
+ * chain walk reads, and where the record lies in the file. The walk runs
+ * over the nodes; only the records a read returns are read back, by their
+ * byte ranges. The newest window, the hot path, reads backward from the end
+ * ({@link ReverseReader}) and never builds the index.
  *
  * Output shape mirrors the SDK's `SessionMessage` exactly: the six fields the
  * `toEntry` mapper reads (`type`, `uuid`, `session_id`, `message`,
@@ -21,12 +22,19 @@
 
 import {
   type HarnessNote,
+  interruptLine,
   type NeutralSystemMessage,
   transcriptUserText,
+  type WindowAsk,
 } from "@cawco/core";
 import type { LocatedRecord } from "@cawco/jsonl-parser";
-import { readTranscriptEnd, typeFilter } from "@cawco/jsonl-parser";
-import { cache } from "./transcript-cache.ts";
+import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
+import {
+  type LineIndex,
+  LineIndexes,
+  windowCuts,
+  windowRange,
+} from "./transcript-index.ts";
 
 /** The shape the SDK's `getSessionMessages` returns — kept structurally identical. */
 export interface SDKSessionMessage {
@@ -99,6 +107,46 @@ export interface RawRecord {
 }
 
 /**
+ * One line of a transcript as the line index keeps it: the fields the chain
+ * walk reads, where the record lies in its file, and what the message it
+ * makes is, for cutting a conversation into windows ({@link saidPlan}).
+ * Built from the whole record once, as the line is scanned
+ * ({@link nodeOf}); the record itself is read again only when a read
+ * returns it.
+ */
+export interface ChainNode {
+  byteLength: number;
+  compactMetadata?: CompactMetadata;
+  /**
+   * The ids its message names that another message may name too: the tool
+   * calls it makes or answers, the task its notification ends (`task:<id>`).
+   * A window never starts between two messages that name the same id.
+   */
+  ids?: string[];
+  isMeta?: boolean;
+  isSidechain?: boolean;
+  logicalParentUuid?: string;
+  /** An assistant record's `message.id`: records of one message share it. */
+  messageId?: string;
+  offset: number;
+  /** Its message opens a turn: a window may start here. */
+  opens?: true;
+  operation?: string;
+  parentUuid?: string | null;
+  /** What its message is, when it makes one ({@link toSDKMessage}): `hook` for a hook's failure. */
+  shows?: "user" | "assistant" | "system" | "hook";
+  /** The command id its message carries ({@link SDKSessionMessage.sourceUuid}). */
+  sourceUuid?: string;
+  subtype?: string;
+  teamName?: string;
+  timestamp?: string;
+  /** A user record carrying a tool result. */
+  toolResult?: true;
+  type: string;
+  uuid: string;
+}
+
+/**
  * Types the SDK includes in its initial pass (before chain walking).
  * The byte prefilter is looser than the final filter so it doesn't miss
  * records needed for chain linking (system compact_boundary, attachments, etc).
@@ -119,35 +167,18 @@ export const CHAIN_TYPES = typeFilter(
 // ---------------------------------------------------------------------------
 
 /** Extract the message id from an assistant record (for orphan splicing). */
-function assistantMessageId(r: RawRecord): string | undefined {
-  if (r.type !== "assistant") {
-    return undefined;
-  }
-  const msg = r.message as { id?: unknown } | null | undefined;
-  return typeof msg?.id === "string" ? msg.id : undefined;
+function assistantMessageId(r: ChainNode): string | undefined {
+  return r.type === "assistant" ? r.messageId : undefined;
 }
 
 /** Whether a user record is a tool_result follow-up (for orphan splicing). */
-function isToolResultUser(r: RawRecord): boolean {
-  if (r.type !== "user" || !r.parentUuid) {
-    return false;
-  }
-  const msg = r.message as { content?: unknown } | null | undefined;
-  const content = msg?.content;
-  if (!Array.isArray(content)) {
-    return false;
-  }
-  return content.some(
-    (block) =>
-      typeof block === "object" &&
-      block !== null &&
-      (block as { type?: string }).type === "tool_result"
-  );
+function isToolResultUser(r: ChainNode): boolean {
+  return r.type === "user" && !!r.parentUuid && r.toolResult === true;
 }
 
 /** Build uuid→record map from parsed records, keeping only those with a uuid. */
-function buildUuidMap(records: RawRecord[]): Map<string, RawRecord> {
-  const m = new Map<string, RawRecord>();
+function buildUuidMap(records: ChainNode[]): Map<string, ChainNode> {
+  const m = new Map<string, ChainNode>();
   for (const r of records) {
     if (typeof r.uuid === "string") {
       m.set(r.uuid, r);
@@ -161,7 +192,7 @@ function buildUuidMap(records: RawRecord[]): Map<string, RawRecord> {
  * Mutates `byUuid` in place (replaces records with updated copies).
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: compact boundary relink must handle both preservedMessages and preservedSegment shapes in one pass
-function relinkCompactBoundaries(byUuid: Map<string, RawRecord>): Set<string> {
+function relinkCompactBoundaries(byUuid: Map<string, ChainNode>): Set<string> {
   const skippedAnchors = new Set<string>();
   for (const r of byUuid.values()) {
     if (r.type !== "system" || r.subtype !== "compact_boundary") {
@@ -217,7 +248,7 @@ function relinkCompactBoundaries(byUuid: Map<string, RawRecord>): Set<string> {
 }
 
 /** Build a file-order index map for tiebreaking. */
-function buildIndexMap(records: RawRecord[]): Map<string, number> {
+function buildIndexMap(records: ChainNode[]): Map<string, number> {
   const m = new Map<string, number>();
   for (let i = 0; i < records.length; i += 1) {
     if (records[i].uuid) {
@@ -229,12 +260,12 @@ function buildIndexMap(records: RawRecord[]): Map<string, number> {
 
 /** From each leaf, find its first user/assistant ancestor. */
 function findTips(
-  leaves: RawRecord[],
-  byUuid: Map<string, RawRecord>
-): RawRecord[] {
-  const tips: RawRecord[] = [];
+  leaves: ChainNode[],
+  byUuid: Map<string, ChainNode>
+): ChainNode[] {
+  const tips: ChainNode[] = [];
   for (const leaf of leaves) {
-    let node: RawRecord | undefined = leaf;
+    let node: ChainNode | undefined = leaf;
     const visited = new Set<string>();
     while (node) {
       if (visited.has(node.uuid)) {
@@ -256,9 +287,9 @@ function findTips(
  * chain in chronological order (oldest first), without orphan splicing.
  */
 function findActiveChain(
-  byUuid: Map<string, RawRecord>,
-  records: RawRecord[]
-): { chain: RawRecord[]; chainSet: Set<string> } {
+  byUuid: Map<string, ChainNode>,
+  records: ChainNode[]
+): { chain: ChainNode[]; chainSet: Set<string> } {
   const indexMap = buildIndexMap(records);
 
   // Leaves: records whose uuid isn't any other record's parentUuid.
@@ -277,16 +308,16 @@ function findActiveChain(
 
   // Pick the best tip: prefer non-sidechain/non-meta/non-team, then latest.
   const good = tips.filter((r) => !(r.isSidechain || r.teamName || r.isMeta));
-  const latest = (arr: RawRecord[]) =>
+  const latest = (arr: ChainNode[]) =>
     arr.reduce((a, b) =>
       (indexMap.get(b.uuid) ?? -1) > (indexMap.get(a.uuid) ?? -1) ? b : a
     );
   const best = good.length > 0 ? latest(good) : latest(tips);
 
   // Walk the chain back from best tip.
-  const chain: RawRecord[] = [];
+  const chain: ChainNode[] = [];
   const chainSet = new Set<string>();
-  let node: RawRecord | undefined = byUuid.get(best.uuid);
+  let node: ChainNode | undefined = byUuid.get(best.uuid);
   while (node) {
     if (chainSet.has(node.uuid)) {
       break;
@@ -300,7 +331,7 @@ function findActiveChain(
 }
 
 /** Whether `r` is the line Claude Code starts a compacted conversation on. */
-const isCompactBoundary = (r: RawRecord): boolean =>
+const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
   r.type === "system" && r.subtype === "compact_boundary";
 
 /**
@@ -319,13 +350,13 @@ const isCompactBoundary = (r: RawRecord): boolean =>
  * summary.
  */
 function withSetAside(
-  chain: RawRecord[],
-  original: Map<string, RawRecord>
-): RawRecord[] {
+  chain: ChainNode[],
+  original: Map<string, ChainNode>
+): ChainNode[] {
   const [head] = chain;
-  const before: RawRecord[] = [];
+  const before: ChainNode[] = [];
   const seen = new Set<string>();
-  const onFrom = (r: RawRecord): RawRecord | undefined => {
+  const onFrom = (r: ChainNode): ChainNode | undefined => {
     if (r.parentUuid) {
       return original.get(r.parentUuid);
     }
@@ -356,17 +387,17 @@ function withSetAside(
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: mirrors the SDK's kEe orphan-splice logic which requires cross-referencing message ids, parent uuids, and chain membership
 function spliceOrphans(
-  chain: RawRecord[],
+  chain: ChainNode[],
   chainSet: Set<string>,
-  byUuid: Map<string, RawRecord>
-): RawRecord[] {
+  byUuid: Map<string, ChainNode>
+): ChainNode[] {
   const chainAssistants = chain.filter((r) => r.type === "assistant");
   if (chainAssistants.length === 0) {
     return chain;
   }
 
   // Map message id → LAST chain assistant (the SDK's `o.set(m, f)` loop).
-  const msgIdToTarget = new Map<string, RawRecord>();
+  const msgIdToTarget = new Map<string, ChainNode>();
   for (const a of chainAssistants) {
     const mid = assistantMessageId(a);
     if (mid) {
@@ -375,8 +406,8 @@ function spliceOrphans(
   }
 
   // Collect all records by message id, and tool_result users by parentUuid.
-  const byMsgId = new Map<string, RawRecord[]>();
-  const toolResultByParent = new Map<string, RawRecord[]>();
+  const byMsgId = new Map<string, ChainNode[]>();
+  const toolResultByParent = new Map<string, ChainNode[]>();
   for (const r of byUuid.values()) {
     const mid = assistantMessageId(r);
     if (mid) {
@@ -400,7 +431,7 @@ function spliceOrphans(
   // For each unique message id, collect orphans and attach to the LAST chain
   // assistant with that id — matching the SDK's kEe.
   const seenMids = new Set<string>();
-  const spliceMap = new Map<string, RawRecord[]>();
+  const spliceMap = new Map<string, ChainNode[]>();
   let spliceTotal = 0;
   for (const a of chainAssistants) {
     const mid = assistantMessageId(a);
@@ -413,7 +444,7 @@ function spliceOrphans(
     const siblings = byMsgId.get(mid) ?? [a];
     const sameMsg = siblings.filter((r) => !chainSet.has(r.uuid));
 
-    const toolResults: RawRecord[] = [];
+    const toolResults: ChainNode[] = [];
     for (const r of siblings) {
       const trs = toolResultByParent.get(r.uuid);
       if (trs) {
@@ -429,7 +460,7 @@ function spliceOrphans(
       continue;
     }
 
-    const byTs = (x: RawRecord, y: RawRecord) =>
+    const byTs = (x: ChainNode, y: ChainNode) =>
       (x.timestamp ?? "").localeCompare(y.timestamp ?? "");
     sameMsg.sort(byTs);
     toolResults.sort(byTs);
@@ -451,7 +482,7 @@ function spliceOrphans(
     return chain;
   }
 
-  const result: RawRecord[] = [];
+  const result: ChainNode[] = [];
   for (const r of chain) {
     result.push(r);
     const extra = spliceMap.get(r.uuid);
@@ -484,10 +515,10 @@ function spliceOrphans(
  * a window cannot hold what the compactions set aside.
  */
 function walkChainWindowed(
-  records: RawRecord[],
+  records: ChainNode[],
   windowed: boolean,
   said = false
-): RawRecord[] {
+): ChainNode[] {
   const byUuid = buildUuidMap(records);
   const original = said ? new Map(byUuid) : byUuid;
   const skippedAnchors = relinkCompactBoundaries(byUuid);
@@ -502,7 +533,7 @@ function walkChainWindowed(
   }
   if (windowed) {
     // Drop everything up to and including the last skipped compact anchor.
-    const dropped: RawRecord[] = [];
+    const dropped: ChainNode[] = [];
     let cut = -1;
     for (let i = 0; i < active.length; i += 1) {
       if (skippedAnchors.has(active[i].uuid)) {
@@ -908,7 +939,7 @@ function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
  * `\n`, in queue order. The dequeue lines sit right before the record, so a
  * window that holds the record holds them.
  */
-function joinedCounts(raw: RawRecord[]): Map<string, number> {
+function joinedCounts(raw: readonly ChainNode[]): Map<string, number> {
   const joined = new Map<string, number>();
   let dequeued = 0;
   for (const r of raw) {
@@ -924,62 +955,276 @@ function joinedCounts(raw: RawRecord[]): Map<string, number> {
   return joined;
 }
 
-/** Convert located records to the SDK shape via chain walking. */
-function locatedToMessages(
-  located: LocatedRecord[],
-  windowed = false,
-  said = false
-): SDKSessionMessage[] {
-  const raw = located.map((lr) => lr.record as unknown as RawRecord);
-  const joined = joinedCounts(raw);
-  const chain = walkChainWindowed(raw, windowed, said);
-  const messages: SDKSessionMessage[] = [];
-  for (const r of chain) {
-    const msg = toSDKMessage(r);
-    if (msg) {
-      const count = joined.get(r.uuid);
-      messages.push(count ? { ...msg, joined: count } : msg);
+// ---------------------------------------------------------------------------
+// Line index
+// ---------------------------------------------------------------------------
+
+/** The tool calls a message makes, answers, or the task its notification ends: {@link ChainNode.ids}. */
+function namedIds(msg: SDKSessionMessage): string[] {
+  const ids: string[] = [];
+  const frame = msg.message as {
+    content?: unknown;
+    status?: unknown;
+    subtype?: unknown;
+    task_id?: unknown;
+    tool_use_id?: unknown;
+  } | null;
+  if (msg.type === "system") {
+    if (frame?.subtype === "task_notification") {
+      if (typeof frame.tool_use_id === "string") {
+        ids.push(frame.tool_use_id);
+      }
+      if (frame.status && typeof frame.task_id === "string") {
+        ids.push(`task:${frame.task_id}`);
+      }
+    }
+    return ids;
+  }
+  const content = frame?.content;
+  if (!Array.isArray(content)) {
+    return ids;
+  }
+  for (const block of content as {
+    id?: unknown;
+    tool_use_id?: unknown;
+    type?: unknown;
+  }[]) {
+    if (
+      msg.type === "assistant" &&
+      block.type === "tool_use" &&
+      typeof block.id === "string"
+    ) {
+      ids.push(block.id);
+    } else if (
+      block.type === "tool_result" &&
+      typeof block.tool_use_id === "string"
+    ) {
+      ids.push(block.tool_use_id);
     }
   }
-  return keyHookFailures(messages);
+  return ids;
 }
 
 /**
- * Read the full transcript, returning every user/assistant record in the
- * active conversation chain (matching the SDK's chain-walking logic).
+ * Whether a message opens a turn a window may start at: the reader's words,
+ * or anyone's sent in their place — the user record the hub resets a
+ * keep-alive's quiet at — never a compaction's summary or the CLI's line
+ * for a turn it was stopped in.
+ */
+function opensTurn(msg: SDKSessionMessage): boolean {
+  if (msg.type !== "user" || msg.compactSummary || msg.parent_tool_use_id) {
+    return false;
+  }
+  const text = transcriptUserText(msg.message);
+  return !!text?.trim() && !interruptLine(text);
+}
+
+/** The fields of a record the chain walk reads ({@link ChainNode}). */
+function chainFields(r: RawRecord): Partial<ChainNode> {
+  const fields: Partial<ChainNode> = {};
+  if (r.parentUuid !== undefined) {
+    fields.parentUuid = r.parentUuid;
+  }
+  for (const key of [
+    "logicalParentUuid",
+    "subtype",
+    "timestamp",
+    "operation",
+    "teamName",
+  ] as const) {
+    const value = r[key];
+    if (typeof value === "string" && value) {
+      fields[key] = value;
+    }
+  }
+  if (r.compactMetadata) {
+    fields.compactMetadata = r.compactMetadata;
+  }
+  if (r.isSidechain) {
+    fields.isSidechain = true;
+  }
+  if (r.isMeta) {
+    fields.isMeta = true;
+  }
+  const message = r.message as
+    { content?: unknown; id?: unknown } | null | undefined;
+  if (r.type === "assistant" && typeof message?.id === "string") {
+    fields.messageId = message.id;
+  }
+  if (
+    r.type === "user" &&
+    Array.isArray(message?.content) &&
+    message.content.some(
+      (block) =>
+        typeof block === "object" &&
+        block !== null &&
+        (block as { type?: string }).type === "tool_result"
+    )
+  ) {
+    fields.toolResult = true;
+  }
+  return fields;
+}
+
+/** What the message a record makes is, for cutting windows ({@link ChainNode.shows}). */
+function messageFacts(r: RawRecord): Partial<ChainNode> {
+  const msg = toSDKMessage(r);
+  if (!msg) {
+    return {};
+  }
+  const frame = msg.message as { subtype?: unknown } | null;
+  const ids = namedIds(msg);
+  return {
+    shows:
+      msg.type === "system" && frame?.subtype === "hook_response"
+        ? "hook"
+        : msg.type,
+    ...(opensTurn(msg) ? { opens: true as const } : {}),
+    ...(msg.sourceUuid ? { sourceUuid: msg.sourceUuid } : {}),
+    ...(ids.length > 0 ? { ids } : {}),
+  };
+}
+
+/** One scanned line as the index keeps it ({@link ChainNode}). */
+export function nodeOf(located: LocatedRecord): ChainNode {
+  const r = located.record as unknown as RawRecord;
+  return {
+    type: r.type,
+    uuid: r.uuid,
+    offset: located.offset,
+    byteLength: located.byteLength,
+    ...chainFields(r),
+    ...messageFacts(r),
+  };
+}
+
+/** Every transcript's line index, as reads ask for them. */
+const indexes = new LineIndexes<ChainNode>(CHAIN_TYPES, nodeOf);
+
+/** The line indexes' memory: the daemon sizes it from machine config. */
+export const transcriptIndexes = indexes;
+
+/**
+ * The conversation as it was said, laid out for windows: its messages'
+ * nodes in order, each one's place by uuid, and where a window may start.
  *
- * Uses the transcript cache: the first call parses the file; subsequent calls
- * for the same path only parse appended bytes.
+ * A window may start at a message that opens a turn ({@link ChainNode.opens}),
+ * unless a hook's failure stands right before it (that failure is named by
+ * the message after it, `keyHookFailures`) or an id named before it is named
+ * again at or after it ({@link ChainNode.ids}: a call and its answer, a
+ * background task and its notification). So whatever folds one message into
+ * another (a result into its call, a notification into its subagent) folds
+ * within one window, and windows built one at a time from the newest back
+ * give the rows a whole read gives, in its order.
  */
-export async function readSessionFull(
-  path: string
-): Promise<SDKSessionMessage[]> {
-  const entry = await cache.get(path);
-  if (entry.walkedMessages) {
-    return entry.walkedMessages as SDKSessionMessage[];
+interface SaidPlan {
+  at: Map<string, number>;
+  /** The positions a window may start at, rising; 0 is always one. */
+  cuts: number[];
+  joined: Map<string, number>;
+  nodes: ChainNode[];
+}
+
+function saidPlan(all: readonly ChainNode[]): SaidPlan {
+  const nodes = walkChainWindowed([...all], false, true).filter(
+    (node) => node.shows !== undefined
+  );
+  return {
+    at: new Map(nodes.map((node, i) => [node.uuid, i])),
+    cuts: windowCuts(
+      nodes,
+      (i) => !!nodes[i]?.opens && nodes[i - 1]?.shows !== "hook"
+    ),
+    joined: joinedCounts(all),
+    nodes,
+  };
+}
+
+/** A memo on an index, rebuilt once the file changes under it. */
+const memo = <T>(
+  index: LineIndex<ChainNode>,
+  key: string,
+  build: () => T
+): T => {
+  if (!index.memo.has(key)) {
+    index.memo.set(key, build());
   }
-  const messages = locatedToMessages(entry.records);
-  entry.walkedMessages = messages;
-  return messages;
+  return index.memo.get(key) as T;
+};
+
+/**
+ * The messages of `records` in order, joined counts put on and hook failures
+ * named, and the first `count` records' alone: a hook failure is named by
+ * the user message after it, so a caller reads on past the records it wants
+ * until that message.
+ */
+function messagesOf(
+  records: readonly (RawRecord | undefined)[],
+  joined: Map<string, number>,
+  count = records.length
+): SDKSessionMessage[] {
+  const made: { at: number; msg: SDKSessionMessage }[] = [];
+  records.forEach((r, at) => {
+    const msg = r ? toSDKMessage(r) : null;
+    if (r && msg) {
+      const times = joined.get(r.uuid);
+      made.push({ at, msg: times ? { ...msg, joined: times } : msg });
+    }
+  });
+  keyHookFailures(made.map(({ msg }) => msg));
+  return made.flatMap(({ at, msg }) => (at < count ? [msg] : []));
 }
 
 /**
- * The conversation as it was said: the active chain ({@link readSessionFull})
- * with every stretch its compactions set aside before it, in order
- * ({@link withSetAside}), each compaction's boundary between them. What a
- * transcript shows: a compaction changes what the model reads next, never
- * what was said. Cached beside the active chain's walk.
+ * The messages of `nodes[from..to)` (a said plan's or a chain's), read back
+ * by their byte ranges. A range that ends on hook failures nothing has named
+ * yet reads on to the user message that names them.
  */
-export async function readSessionSaid(
+async function messagesAt(
+  path: string,
+  nodes: readonly ChainNode[],
+  joined: Map<string, number>,
+  from: number,
+  to: number
+): Promise<SDKSessionMessage[]> {
+  let end = to;
+  for (let i = to - 1; i >= from; i -= 1) {
+    if (nodes[i].shows === "user") {
+      break;
+    }
+    if (nodes[i].shows === "hook") {
+      while (end < nodes.length && nodes[end].shows !== "user") {
+        end += 1;
+      }
+      end = Math.min(end + 1, nodes.length);
+      break;
+    }
+  }
+  const records = (await readSpans(path, nodes.slice(from, end))) as (
+    RawRecord | undefined
+  )[];
+  return messagesOf(records, joined, to - from);
+}
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * The active conversation chain, whole (matching the SDK's chain walk), read
+ * through the line index: for readers that need all of it (a summariser's
+ * answer, a continuation).
+ */
+export async function readSessionChain(
   path: string
 ): Promise<SDKSessionMessage[]> {
-  const entry = await cache.get(path);
-  if (entry.saidMessages) {
-    return entry.saidMessages as SDKSessionMessage[];
-  }
-  const messages = locatedToMessages(entry.records, false, true);
-  entry.saidMessages = messages;
-  return messages;
+  const index = await indexes.get(path);
+  const nodes = memo(index, "chain", () =>
+    walkChainWindowed([...index.nodes], false).filter(
+      (node) => node.shows !== undefined
+    )
+  );
+  const joined = memo(index, "joined", () => joinedCounts(index.nodes));
+  return messagesAt(path, nodes, joined, 0, nodes.length);
 }
 
 /**
@@ -990,89 +1235,208 @@ export async function readSessionSaid(
 export async function readSessionWhole(
   path: string
 ): Promise<SDKSessionMessage[]> {
-  const entry = await cache.get(path);
-  return entry.records.flatMap((located) => {
-    const msg = toSDKMessage(located.record as unknown as RawRecord);
+  const index = await indexes.get(path);
+  const shown = index.nodes.filter((node) => node.shows !== undefined);
+  const records = (await readSpans(path, shown)) as (RawRecord | undefined)[];
+  return records.flatMap((r) => {
+    const msg = r ? toSDKMessage(r) : null;
     return msg ? [msg] : [];
   });
 }
+
+/** How far back the newest window reads before it takes the line index instead. Ours: 32 MiB. */
+const NEWEST_MAX_BYTES = 32 * 1024 * 1024;
+
+/** A window of the conversation as it was said: its messages, and the cursors either side of it. */
+export interface SaidWindow {
+  messages: SDKSessionMessage[];
+  newer: string | null;
+  older: string | null;
+}
+
+/**
+ * A window of the conversation as it was said ({@link withSetAside}): every
+ * turn across its compactions, a compaction's boundary between them.
+ *
+ * The newest window is read backward from the end ({@link newestWindow}); any
+ * other through the line index, which a file's first such read builds. A
+ * window starts where {@link SaidPlan} lets one, at or before `limit`
+ * messages back; `older` names its first message (null at the start), and
+ * `newer` the message after its last (null at the end).
+ */
+export async function readSaidWindow(
+  path: string,
+  ask: WindowAsk
+): Promise<SaidWindow> {
+  if ("end" in ask) {
+    const fast = await newestWindow(path, ask.limit);
+    if (fast) {
+      return fast;
+    }
+  }
+  const index = await indexes.get(path);
+  const plan = memo(index, "said", () => saidPlan(index.nodes));
+  const { at, cuts, joined, nodes } = plan;
+  const { from, to } = windowRange(cuts, nodes.length, (id) => at.get(id), ask);
+  return {
+    messages: await messagesAt(path, nodes, joined, from, to),
+    older: from > 0 ? nodes[from].uuid : null,
+    newer: "start" in ask && to < nodes.length ? nodes[to].uuid : null,
+  };
+}
+
+/**
+ * The newest window read backward from the end, without the line index: the
+ * chain walked over what was read ({@link walkChainWindowed}, an exact
+ * suffix of the whole walk), cut where a window may start
+ * ({@link SaidPlan}) by what the read alone can tell. Undefined when the read
+ * cannot answer exactly within {@link NEWEST_MAX_BYTES}: a compaction's
+ * boundary in what was read (the conversation as it was said differs from
+ * the chain there), or no place to cut.
+ */
+async function newestWindow(
+  path: string,
+  limit: number
+): Promise<SaidWindow | undefined> {
+  const reader = new ReverseReader(path, {
+    prefilter: CHAIN_TYPES,
+    maxBytes: NEWEST_MAX_BYTES,
+  });
+  let target = limit * 2;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next, wider one is needed
+    await reader.more(target - reader.records.length);
+    const raw = reader.records.map(nodeOf);
+    if (raw.some(isCompactBoundary)) {
+      return;
+    }
+    const nodes = walkChainWindowed(raw, !reader.complete).filter(
+      (node) => node.shows !== undefined
+    );
+    const from = localCut(nodes, limit);
+    if (from !== undefined || reader.complete) {
+      const start = from ?? 0;
+      const byUuid = new Map(
+        reader.records.map((located) => [
+          (located.record as unknown as RawRecord).uuid,
+          located.record as unknown as RawRecord,
+        ])
+      );
+      return {
+        messages: messagesOf(
+          nodes.slice(start).map((node) => byUuid.get(node.uuid)),
+          joinedCounts(raw)
+        ),
+        older:
+          start > 0 || !reader.complete ? (nodes[start]?.uuid ?? null) : null,
+        newer: null,
+      };
+    }
+    if (reader.spent) {
+      return;
+    }
+    target = Math.max(target * 2, reader.records.length * 2);
+  }
+}
+
+/**
+ * Where the newest window of `nodes` (a suffix of the conversation, its
+ * start unseen) may start, `limit` messages back or more: a place
+ * {@link SaidPlan} would cut that the suffix alone can vouch for. An id
+ * answered in it whose call is not in it was opened before it, so nothing
+ * up to that answer may start a window. Undefined when no place is.
+ */
+function localCut(
+  nodes: readonly ChainNode[],
+  limit: number
+): number | undefined {
+  const blocked = new Int32Array(nodes.length + 1);
+  const seen = new Map<
+    string,
+    { first: number; last: number; opened: boolean }
+  >();
+  nodes.forEach((node, i) => {
+    for (const id of node.ids ?? []) {
+      const known = seen.get(id);
+      if (known) {
+        known.last = i;
+      } else {
+        seen.set(id, { first: i, last: i, opened: opensId(node, id) });
+      }
+    }
+  });
+  for (const { first, last, opened } of seen.values()) {
+    const from = opened ? first + 1 : 0;
+    if (from <= last) {
+      blocked[from] += 1;
+      blocked[last + 1] -= 1;
+    }
+  }
+  let [open = 0] = blocked;
+  let found: number | undefined;
+  for (let i = 1; i < nodes.length && i <= nodes.length - limit; i += 1) {
+    open += blocked[i];
+    if (open === 0 && nodes[i].opens && nodes[i - 1].shows !== "hook") {
+      found = i;
+    }
+  }
+  return found;
+}
+
+/** Whether `node` opens `id` rather than answering it: a tool call it makes, a task it ends. */
+const opensId = (node: ChainNode, id: string): boolean =>
+  node.shows === "assistant" || id.startsWith("task:");
 
 /**
  * Read the newest records from a session transcript, starting from EOF.
  *
  * GUARANTEE: `readSessionEnd(path, N).messages` is always an **exact suffix**
- * of `readSessionFull(path)` — same records, same order, ending at the same
+ * of {@link readSessionChain} — same records, same order, ending at the same
  * final record. Its length is `min(N, full)` except when the byte cap
- * (`readTranscriptEnd`'s 16 MiB `maxBytes`) prevents the window from growing
- * far enough; then it is shorter but still exact, and `complete` is false.
- * Exact, not self-correcting: no later read is needed to repair ordering or
- * membership — a longer read only extends the suffix at the old end.
+ * prevents the window from growing far enough; then it is shorter but still
+ * exact, and `complete` is false. Exact, not self-correcting: no later read
+ * is needed to repair ordering or membership — a longer read only extends the
+ * suffix at the old end.
  *
- * Cache hit path: the whole-file walk over cached records trivially satisfies
- * the guarantee — `slice(-count)` on the full walked chain is an exact suffix
- * by definition.
- *
- * Cache miss path: the windowed chain walk drops the suspect old end (a
- * compact-boundary anchor whose preserved records lie before the window, or a
- * root whose parent does), then the loop below widens the window until N
- * chain messages survive. A fire-and-forget `cache.get(path)` populates the
- * cache so the next caller (typically the hub's whole-transcript read) awaits the
- * same single-flighted populate instead of re-parsing.
- *
- * Proven corpus-wide by `bench/transcript-tail-parity.ts`.
+ * The windowed chain walk drops the suspect old end (a compact-boundary
+ * anchor whose preserved records lie before the window, or a root whose
+ * parent does), then the loop below reads further back until N chain
+ * messages survive. Each step reads only the bytes before the last
+ * ({@link ReverseReader}); nothing is parsed twice and no index is built.
  *
  * Known theoretical gap, never observed in 166 real transcripts: a retried
  * assistant turn whose orphan records sit further from their on-chain anchor
  * than the whole window would be omitted from (not reordered within) the
- * suffix's old end; any full read layered behind the tail supplies it.
+ * suffix's old end.
  *
  * Returns records in chronological order (oldest first).
  */
 export async function readSessionEnd(
   path: string,
-  count = 200,
-  populateCache = true
+  count = 200
 ): Promise<{ complete: boolean; messages: SDKSessionMessage[] }> {
-  // Cache hit: use walked-messages cache, slice to the last `count`.
-  const cached = populateCache ? cache.peek(path) : undefined;
-  if (cached) {
-    const entry = await cache.get(path);
-    if (!entry.walkedMessages) {
-      entry.walkedMessages = locatedToMessages(entry.records);
-    }
-    const messages = entry.walkedMessages as SDKSessionMessage[];
-    const sliced = messages.slice(-count);
-    return { complete: sliced.length === messages.length, messages: sliced };
-  }
-
-  // Cache miss: fast windowed read for first paint.
+  const reader = new ReverseReader(path, { prefilter: CHAIN_TYPES });
   let target = count;
-  let prevStart = -1;
   for (;;) {
     // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next, wider one is needed
-    const result = await readTranscriptEnd(path, {
-      records: target,
-      prefilter: CHAIN_TYPES,
-    });
-    const messages = locatedToMessages(result.records, !result.complete);
-    // Stop when: enough chain messages, the whole file is in hand, or the
-    // window can no longer grow (maxBytes cap — startOffset stopped moving).
-    if (
-      messages.length >= count ||
-      result.complete ||
-      result.startOffset === prevStart
-    ) {
-      // Fire-and-forget: populate the cache so phase-2 full read is free.
-      if (populateCache) {
-        // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional fire-and-forget
-        cache.get(path).catch(() => {});
-      }
-      return { complete: result.complete, messages };
+    await reader.more(target - reader.records.length);
+    const raw = reader.records.map(nodeOf);
+    const nodes = walkChainWindowed(raw, !reader.complete);
+    const byUuid = new Map(
+      reader.records.map((located) => [
+        (located.record as unknown as RawRecord).uuid,
+        located.record as unknown as RawRecord,
+      ])
+    );
+    const messages = messagesOf(
+      nodes.map((node) => byUuid.get(node.uuid)),
+      joinedCounts(raw)
+    );
+    if (messages.length >= count || reader.complete || reader.spent) {
+      return { complete: reader.complete, messages: messages.slice(-count) };
     }
-    prevStart = result.startOffset;
-    // The raw-record target is a proxy for window size: asking for at least
-    // double what the last window held forces readTranscriptEnd to widen.
-    target = Math.max(target * 2, result.records.length * 2);
+    // Asking for at least double what the last window held widens it.
+    target = Math.max(target * 2, reader.records.length * 2);
   }
 }
 
@@ -1081,7 +1445,7 @@ export async function readSessionContext(path: string) {
   let previous = -1;
   for (;;) {
     // biome-ignore lint/performance/noAwaitInLoops: widen the tail only when the preceding read found no usage.
-    const { messages, complete } = await readSessionEnd(path, count, false);
+    const { messages, complete } = await readSessionEnd(path, count);
     for (const entry of messages.reverse()) {
       if (entry.type !== "assistant" || entry.error || entry.compactSummary) {
         continue;

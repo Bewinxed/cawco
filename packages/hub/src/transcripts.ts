@@ -5,8 +5,12 @@
  * or not anyone is watching — so opening a session is a page read off what is
  * already built, and every client renders the same blocks (`TranscriptBuilder`,
  * @cawco/core). A session the hub has not built since it started is read from
- * its machine once, on its first frame or its first page, and the frames that
- * arrive during that read are held and folded in behind it. A transcript
+ * its machine on its first frame or its first page, its newest window alone,
+ * and the frames that arrive during that read are held and folded in behind
+ * it. Older windows are read as pages reach back past what is held, each put
+ * in front of it (`TranscriptBuilder.prepend`), so opening or paging a
+ * transcript costs its machine and the hub the window, never the whole
+ * conversation. A transcript
  * read again (a rewind, a continuation folded in, frames lost, its machine's
  * agent on a new build) is merged into what is built, never put in its place
  * (`TranscriptBuilder.merge`): a row once served stays where it stands under
@@ -37,14 +41,35 @@ import {
 } from "@cawco/core";
 import type { HubLifetimeShape } from "./lifetime";
 
-/** A stored transcript as its machine answered, or why it could not. */
+/**
+ * Where the next older window of a transcript is read: in which of its
+ * conversations (the ones it went on from, oldest first, then its own) and
+ * before which entry there (null: that conversation's newest window).
+ */
+export interface HistoryCursor {
+  before: string | null;
+  conversation: number;
+}
+
+/** A stored transcript's newest window as its machine answered, or why it could not. */
 export type HistoryRead =
   | {
       entries: SessionMessage[];
       /** The hub's own lines, placed by the builder after the rows each followed ({@link HubLine}). */
       lines: HubLine[];
+      /** The window before this one; null when this one reaches the start. */
+      older: HistoryCursor | null;
       records: Record<string, SendRecord>;
       where: TranscriptWhere;
+    }
+  | HistoryFault;
+
+/** An older window of a stored transcript, or why it could not be read. */
+export type OlderRead =
+  | {
+      entries: SessionMessage[];
+      older: HistoryCursor | null;
+      records: Record<string, SendRecord>;
     }
   | HistoryFault;
 
@@ -91,11 +116,16 @@ export interface TranscriptPorts {
   readonly lifetime: HubLifetimeShape;
   /** Whether the session has a process the hub believes is running. */
   readonly live: (instanceId: string) => boolean;
-  /** The session's whole stored transcript and the records of its sends, cut after `at` when given. */
+  /** The session's newest stored window and the records of its sends, cut after `at` when given. */
   readonly readHistory: (
     instanceId: string,
     at?: string
   ) => Promise<HistoryRead>;
+  /** The window of the session's stored transcript `cursor` names, and the records of its sends. */
+  readonly readOlder: (
+    instanceId: string,
+    cursor: HistoryCursor
+  ) => Promise<OlderRead>;
   /** One frame onto the session's Ledger stream. */
   readonly sequence: (instanceId: string, frame: SessionStreamFrame) => void;
   /**
@@ -176,6 +206,12 @@ interface Entry {
   held: Held[];
   /** The read in flight, while one is; frames meanwhile wait in `held`. */
   loading: Promise<HistoryRead> | null;
+  /** The window before what is held; null once the conversation's start is. */
+  older: HistoryCursor | null;
+  /** The older window's read in flight, while one is. */
+  olderLoading: Promise<OlderRead> | null;
+  /** Counts the reads merged in: an older read begun before one is not put in front of it. */
+  reads: number;
   usedAt: number;
   where: TranscriptWhere | null;
 }
@@ -305,12 +341,19 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         const building = Date.now();
         try {
           ports.laws.raise(() => {
-            const { events, placed } = entry.builder.merge(
+            const { events, placed, front } = entry.builder.merge(
               read.entries,
               read.records,
               read.lines,
-              at !== undefined
+              at !== undefined,
+              read.older === null
             );
+            // The first read, or one that now opens the transcript (a rewind
+            // to before what was held), says where the older windows are.
+            if (front) {
+              entry.older = read.older;
+            }
+            entry.reads += 1;
             for (const line of placed) {
               ports.anchor(instanceId, line.id, line.after);
             }
@@ -386,6 +429,9 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       builder,
       loading: null,
       held: [],
+      older: null,
+      olderLoading: null,
+      reads: 0,
       where: null,
       usedAt: Date.now(),
     };
@@ -408,6 +454,80 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     );
   };
 
+  /**
+   * The window before what is held, read and put in front of it, once: a
+   * second asker waits for the same read. A read again of the newest window
+   * meanwhile (a rewind) leaves what this read finds out of it.
+   */
+  const readOlder = (
+    instanceId: string,
+    entry: Entry,
+    cursor: HistoryCursor
+  ): Promise<OlderRead> => {
+    if (entry.olderLoading !== null) {
+      return entry.olderLoading;
+    }
+    const { reads } = entry;
+    const loading = ports
+      .readOlder(instanceId, cursor)
+      .then((read) => {
+        if (
+          "fault" in read ||
+          entries.get(instanceId) !== entry ||
+          entry.reads !== reads ||
+          entry.older !== cursor
+        ) {
+          return read;
+        }
+        ports.laws.raise(() => {
+          const { events, placed } = entry.builder.prepend(
+            read.entries,
+            read.records,
+            read.older === null
+          );
+          entry.older = read.older;
+          for (const line of placed) {
+            ports.anchor(instanceId, line.id, line.after);
+          }
+          emit(instanceId, events);
+        });
+        return read;
+      })
+      .finally(() => {
+        entry.olderLoading = null;
+      });
+    entry.olderLoading = loading;
+    return loading;
+  };
+
+  /**
+   * Older windows, read until a page of `span` blocks before `before` can be
+   * cut from what is held, or the conversation's start is in: a page asked
+   * before a block not read yet (a reader's cursor from before the hub last
+   * built it) reads back to it. Why a window could not be read, if one
+   * could not.
+   */
+  const readBack = async (
+    instanceId: string,
+    entry: Entry,
+    span: number,
+    before: string | undefined
+  ): Promise<HistoryFault | undefined> => {
+    while (!entry.builder.holds(span, before) && entry.older !== null) {
+      const cursor = entry.older;
+      // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
+      const read = await readOlder(instanceId, entry, cursor);
+      if ("fault" in read) {
+        return read;
+      }
+      // A read another read overtook put nothing in front: the page is
+      // what is held.
+      if (entry.older === cursor) {
+        return;
+      }
+    }
+  };
+
   const page: TranscriptsShape["page"] = async (instanceId, limit, before) => {
     const entry = entryFor(instanceId);
     if (entry.loading !== null) {
@@ -418,9 +538,14 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         return read;
       }
     }
+    const span = limit ?? TRANSCRIPT_PAGE;
+    const fault = await readBack(instanceId, entry, span, before);
+    if (fault) {
+      return fault;
+    }
     // Read and stamped in one tick: no frame can fold in between, so the page
     // is exactly the transcript at `seq`.
-    const built = entry.builder.page(limit ?? TRANSCRIPT_PAGE, before);
+    const built = entry.builder.page(span, before);
     if (!built) {
       return { gone: before ?? "" };
     }

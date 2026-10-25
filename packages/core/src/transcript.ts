@@ -152,49 +152,84 @@ const precedingIds = (rows: readonly TranscriptBlock[], at: number): string[] =>
     .reverse();
 
 /**
+ * Where a line goes among `rows`: after its anchor, else before the first row
+ * stored after it, else at the end; past any line this pass put there.
+ */
+function placeAt(
+  rows: readonly TranscriptBlock[],
+  line: HubLine,
+  anchor: string | undefined,
+  thisPass: ReadonlySet<string>
+): number {
+  let at =
+    anchor === undefined
+      ? rows.findIndex(
+          (row) =>
+            row.timestamp !== undefined && Date.parse(row.timestamp) > line.at
+        )
+      : rows.findIndex((row) => row.id === anchor) + 1;
+  if (at < 0) {
+    at = rows.length;
+  }
+  while (at < rows.length && thisPass.has(rows[at].id)) {
+    at += 1;
+  }
+  return at;
+}
+
+/**
  * The hub's lines into a read's rows, oldest first, each after the first row
  * its anchor names that the read holds, after any line already placed
  * there; one never placed, or whose anchor names none of them, goes where
  * its clock puts it (before the first row stored after it), once, and is
- * returned with the anchor it keeps from then on. A line the read already
- * holds (one standing between two conversations) is left where it is.
+ * returned with the anchor it keeps from then on. A line already held
+ * (`held`, or one standing between two conversations in the read) is left
+ * where it is.
+ *
+ * A read of a window of the conversation (`complete` false: older rows are
+ * not read yet) places only the lines that are its own: one its anchor puts
+ * among its rows, or one written at or after its first row's time (an
+ * anchor older than that was never one: a line is placed after the rows
+ * before it as it was written). The rest are `pending`, for the read of the
+ * older window that holds them.
  */
 function placeLines(
   instanceId: string,
   rows: TranscriptBlock[],
-  lines: readonly HubLine[]
-): LinePlaced[] {
+  lines: readonly HubLine[],
+  complete: boolean,
+  held: ReadonlySet<string> = new Set()
+): { placed: LinePlaced[]; pending: HubLine[] } {
   const placed: LinePlaced[] = [];
+  const pending: HubLine[] = [];
   const ids = new Set(rows.map((row) => row.id));
   const thisPass = new Set<string>();
+  const firstAt = rows.find((row) => row.timestamp !== undefined)?.timestamp;
+  const since = firstAt === undefined ? undefined : Date.parse(firstAt);
   for (const line of [...lines].sort((a, b) => a.at - b.at)) {
     const { entry } = line;
     const blocks = mapFrame(
       instanceId,
       (entry.type === "system" ? entry.message : entry) as NeutralMessage,
       () => entry.uuid
-    ).blocks.filter((block) => !ids.has(block.id));
+    ).blocks.filter((block) => !(ids.has(block.id) || held.has(block.id)));
     const [first] = blocks;
     if (!first) {
+      continue;
+    }
+    const anchor = line.after?.find((id) => ids.has(id));
+    if (
+      anchor === undefined &&
+      !complete &&
+      (since === undefined || line.at < since)
+    ) {
+      pending.push(line);
       continue;
     }
     for (const block of blocks) {
       block.timestamp = storedAt(entry);
     }
-    const anchor = line.after?.find((id) => ids.has(id));
-    let at =
-      anchor === undefined
-        ? rows.findIndex(
-            (row) =>
-              row.timestamp !== undefined && Date.parse(row.timestamp) > line.at
-          )
-        : rows.findIndex((row) => row.id === anchor) + 1;
-    if (at < 0) {
-      at = rows.length;
-    }
-    while (at < rows.length && thisPass.has(rows[at].id)) {
-      at += 1;
-    }
+    const at = placeAt(rows, line, anchor, thisPass);
     rows.splice(at, 0, ...blocks);
     for (const block of blocks) {
       ids.add(block.id);
@@ -204,7 +239,7 @@ function placeLines(
       placed.push({ id: first.id, after: precedingIds(rows, at) });
     }
   }
-  return placed;
+  return { placed, pending };
 }
 
 /**
@@ -273,6 +308,15 @@ export class TranscriptBuilder {
   private readonly seeded = new Set<string>();
   /** How many reads this transcript has merged: the first is the transcript, and says nothing. */
   private reads = 0;
+  /**
+   * Whether the rows held reach back to the conversation's start. A
+   * transcript is read a window at a time from the newest back
+   * ({@link prepend}); until the oldest is in, a page that reaches the front
+   * of what is held still names a cursor, and the hub reads on.
+   */
+  private complete = true;
+  /** The hub's lines that belong to rows not read yet ({@link placeLines}). */
+  private pendingLines: HubLine[] = [];
   /**
    * The main-transcript blocks taken out on purpose and not back since (a
    * rewind's cut, a line taken back, a send replaced), by id: what the
@@ -361,10 +405,23 @@ export class TranscriptBuilder {
     entries: SessionMessage[],
     records: Record<string, SendRecord>,
     lines: readonly HubLine[] = [],
-    cut = false
-  ): { events: TranscriptEvent[]; placed: LinePlaced[] } {
+    cut = false,
+    complete = true
+  ): { events: TranscriptEvent[]; placed: LinePlaced[]; front: boolean } {
     const { rows: read, branches } = this.build(entries);
-    const placed = placeLines(this.instanceId, read, lines);
+    const { placed, pending } = placeLines(
+      this.instanceId,
+      read,
+      lines,
+      complete,
+      this.reads === 0 ? undefined : this.rowIds
+    );
+    this.pendingLines = [
+      ...this.pendingLines.filter(
+        (line) => !pending.some((one) => one.entry.uuid === line.entry.uuid)
+      ),
+      ...pending,
+    ];
     for (const entry of entries) {
       this.seeded.add(entry.uuid);
     }
@@ -385,20 +442,103 @@ export class TranscriptBuilder {
       this.rows = read;
       this.rowIds = new Set(read.map((row) => row.id));
       this.branches = branches;
+      this.complete = complete;
       ({ blocks: this.placed, queued: this.queued } = placeSends(
         this.rows,
         this.records
       ));
       this.facts = { ...this.facts, commands, initialized };
       this.tail = { ...blankTail(), busy: this.tail.busy };
-      return { events: [], placed };
+      return { events: [], placed, front: true };
     }
     this.mergeRows(read, cut);
     this.mergeBranches(branches);
     this.setFacts({ commands, initialized });
     this.setTail({ ...blankTail(), busy: this.tail.busy });
     this.replace();
+    // A read whose rows now open the transcript (a rewind to before what was
+    // held) is where it begins: whether that is the conversation's start is
+    // the read's word.
+    const front = read.length > 0 && this.rows[0]?.id === read[0].id;
+    if (front) {
+      this.complete = complete;
+    }
+    return { events: this.flush(), placed, front };
+  }
+
+  /**
+   * An older window of the stored conversation, read after what is held
+   * ({@link complete}: whether it reaches the conversation's start), put in
+   * front of it. Windows start where nothing before them is still answered
+   * (core `WindowAsk`), so its rows are what a whole read gives there, in
+   * its order. Nothing served moves: what it puts in front is no change to a
+   * client, which reads it with the older page; a served row that moves
+   * for it (a failed send placed by its clock) is said. The hub's lines
+   * that wait for it are placed in it ({@link placeLines}); `placed` holds
+   * those their anchor did not.
+   */
+  prepend(
+    entries: SessionMessage[],
+    records: Record<string, SendRecord>,
+    complete: boolean
+  ): { events: TranscriptEvent[]; placed: LinePlaced[] } {
+    const { rows: built, branches } = this.build(entries);
+    const older = built.filter((row) => !this.rowIds.has(row.id));
+    const { placed, pending } = placeLines(
+      this.instanceId,
+      older,
+      this.pendingLines,
+      complete,
+      this.rowIds
+    );
+    this.pendingLines = pending;
+    for (const entry of entries) {
+      this.seeded.add(entry.uuid);
+    }
+    for (const [uuid, record] of Object.entries(records)) {
+      if (newer(this.records[uuid], record)) {
+        this.records = { ...this.records, [uuid]: record };
+      }
+    }
+    for (const [toolUseId, branch] of branches) {
+      if (!this.branches.has(toolUseId)) {
+        this.branches.set(toolUseId, branch);
+      }
+    }
+    const init = older.findLast((row) => row.type === "system.init");
+    if (init && !this.rows.some((row) => row.type === "system.init")) {
+      this.facts = {
+        ...this.facts,
+        commands: {
+          ...this.facts.commands,
+          names: init.metadata?.slashCommands ?? this.facts.commands.names,
+          skills: init.metadata?.skills ?? this.facts.commands.skills,
+        },
+      };
+    }
+    if (entries.length > 0 && !this.facts.initialized) {
+      this.facts = { ...this.facts, initialized: true };
+    }
+    this.rows = [...older, ...this.rows];
+    for (const row of older) {
+      this.rowIds.add(row.id);
+    }
+    this.complete = complete;
+    this.replace(true);
     return { events: this.flush(), placed };
+  }
+
+  /**
+   * Whether a page of `limit` blocks ending before `before` (the newest when
+   * absent) can be cut from what is held: there are that many before it, or
+   * what is held reaches the conversation's start. False too when `before`
+   * names a block not read yet.
+   */
+  holds(limit: number, before?: string): boolean {
+    const end =
+      before === undefined ? this.placed.length : this.indexOf(before);
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: complete is set by merge() and prepend() elsewhere in this class; the checker doesn't see that cross-method mutation
+    return end >= 0 && (this.complete || end >= limit);
   }
 
   /**
@@ -984,7 +1124,7 @@ export class TranscriptBuilder {
       return {
         blocks,
         branches,
-        cursor: start > 0 ? this.placed[start].id : null,
+        cursor: this.cursorAt(start),
         queued: this.queued,
         tail: this.tail,
         facts: this.facts,
@@ -994,8 +1134,16 @@ export class TranscriptBuilder {
     return {
       blocks,
       branches,
-      cursor: start > 0 ? this.placed[start].id : null,
+      cursor: this.cursorAt(start),
     };
+  }
+
+  /** The cursor of a page starting at `start`: its first block, unless it opens the conversation. */
+  private cursorAt(start: number): string | null {
+    if (start > 0 || !this.complete) {
+      return this.placed[start]?.id ?? null;
+    }
+    return null;
   }
 
   /** Every main-transcript block and branch: the whole transcript at once. */
@@ -1294,7 +1442,7 @@ export class TranscriptBuilder {
    * as events: the rows kept in order stay, the rest leave and come back
    * after the block before them.
    */
-  private replace(): void {
+  private replace(prepended = false): void {
     const { blocks: next, queued } = placeSends(this.rows, this.records);
     const before = this.placed;
     const position = new Map(next.map((block, i) => [block.id, i]));
@@ -1316,6 +1464,10 @@ export class TranscriptBuilder {
     const held = new Map(before.map((block) => [block.id, block]));
     next.forEach((block, i) => {
       this.removed.delete(block.id);
+      // Rows read in front of what was served are no change to it.
+      if (prepended && !held.has(block.id)) {
+        return;
+      }
       if (!keptIds.has(block.id)) {
         this.events.push({
           type: "block.insert",

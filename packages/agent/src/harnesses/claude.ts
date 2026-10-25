@@ -61,10 +61,12 @@ import type {
   SessionInstruction,
   SessionMessage,
   SpawnPayload,
+  TranscriptWindow,
   UserAnswers,
   UserQuestion,
   UserQuestionAnswered,
   UserQuestionResult,
+  WindowAsk,
 } from "@cawco/core";
 import {
   ACCOUNT_READ,
@@ -243,10 +245,10 @@ import {
 } from "../wakeups";
 import {
   hookFailureId,
+  readSaidWindow,
+  readSessionChain,
   readSessionContext,
   readSessionEnd,
-  readSessionFull,
-  readSessionSaid,
   readSessionWhole,
   type SDKSessionMessage,
   withHarnessNote,
@@ -737,9 +739,6 @@ const wholeLines = (bytes: Uint8Array, file: string): SessionStoreEntry[] => {
   return entries;
 };
 
-const wholeTranscript = async (file: string): Promise<SessionStoreEntry[]> =>
-  wholeLines(await readFile(file), file);
-
 /** How much of each end of a transcript a listing reads, as the SDK's own listing does. */
 const LISTING_END_BYTES = 65_536;
 
@@ -805,14 +804,14 @@ const listingRead = async <T, R>(
  * agent started with: it reads CLAUDE_CONFIG_DIR once and keeps it. A session
  * that runs on an account keeps its transcript under that account's dir, so
  * each of those calls is handed this store over the one file the session has,
- * wherever {@link claudeSessionFile} found it. `read` gives the entries the
- * SDK folds: the whole transcript, or for a listing only its two ends.
+ * wherever {@link claudeSessionFile} found it. A load gives the transcript's
+ * two ends ({@link transcriptEnds}), all any of those calls reads: in SDK
+ * 0.3.302 getSessionInfo serializes what it loads and keeps its first and
+ * last 64 KiB (`X9`: `n.subarray(0,mn)`, `n.subarray(r-mn)`), rename and tag
+ * only append, and delete only deletes.
  */
-const transcriptStore = (
-  file: string,
-  read: (file: string) => Promise<SessionStoreEntry[]> = wholeTranscript
-): SessionStore => ({
-  load: (key) => (key.subpath ? Promise.resolve(null) : read(file)),
+const transcriptStore = (file: string): SessionStore => ({
+  load: (key) => (key.subpath ? Promise.resolve(null) : transcriptEnds(file)),
   async append(key, entries) {
     if (key.subpath) {
       throw new Error(`cawco writes no subagent transcript (${key.subpath})`);
@@ -862,11 +861,10 @@ const jsonlNames = async (dir: string): Promise<string[]> => {
   }
 };
 
-/** A session's info, read from its transcript wherever it is stored. */
+/** A session's info, read from its transcript's two ends wherever it is stored. */
 const sessionInfoAt = async (
   file: string,
-  sessionId: string,
-  read: (file: string) => Promise<SessionStoreEntry[]> = wholeTranscript
+  sessionId: string
 ): Promise<SDKSessionInfo | undefined> => {
   let modified: number;
   try {
@@ -878,7 +876,7 @@ const sessionInfoAt = async (
     throw error;
   }
   const info = await getSessionInfo(sessionId, {
-    sessionStore: transcriptStore(file, read),
+    sessionStore: transcriptStore(file),
   });
   // A store has no modification time to give, so the SDK's answer says when
   // it was read: the transcript's own is what the SDK's listing reports.
@@ -4425,6 +4423,39 @@ const toEntry = (
 };
 
 /**
+ * Stored messages as the hub reads them, each `AskUserQuestion` answer folded
+ * into its message: the reader keeps `toolUseResult` on each record, so the
+ * answers need no second read of the file. Only entries whose assistant
+ * message contained an `AskUserQuestion` tool_use need the sidecar attached.
+ */
+const withQuestionResults = (
+  rows: readonly SDKSessionMessage[]
+): SessionMessage[] => {
+  const sidecars = new Map<string, UserQuestionResult>();
+  for (const entry of rows) {
+    if (entry.toolUseResult !== undefined) {
+      const result = normalizeQuestionResult(entry.toolUseResult);
+      if (result) {
+        sidecars.set(entry.uuid, result);
+      }
+    }
+  }
+  if (sidecars.size === 0) {
+    return rows.map(toEntry);
+  }
+  return rows.map((entry) => {
+    const result = sidecars.get(entry.uuid);
+    if (!result) {
+      return toEntry(entry);
+    }
+    return {
+      ...toEntry(entry),
+      message: attachQuestionResult(entry.message, result),
+    };
+  });
+};
+
+/**
  * Whether a stored assistant message is the one its model ended the turn
  * with: Claude writes each of its lines with the message's final
  * `stop_reason`, `null` while it is still being written.
@@ -5036,7 +5067,7 @@ export class ClaudeHarness implements Harness {
       }
     }
     const read = await listingRead(files, ({ file, sessionId }) =>
-      sessionInfoAt(file, sessionId, transcriptEnds)
+      sessionInfoAt(file, sessionId)
     );
     return [
       ...own,
@@ -5069,40 +5100,29 @@ export class ClaudeHarness implements Harness {
     if (span === "whole") {
       return (await readSessionWhole(file)).map(toEntry);
     }
-    // A tail read scans backward from EOF and parses only the newest window —
-    // ~4ms on a 97MB transcript vs ~150ms for the full parse. Callers that
-    // page deeper omit `tail` and get the whole conversation: the active
-    // chain, or the conversation as it was said.
-    const read = span === "said" ? readSessionSaid : readSessionFull;
+    // A tail read scans backward from EOF and parses only the newest records;
+    // without one, the whole active chain is read through the line index.
     const rows = tailCount
       ? (await readSessionEnd(file, tailCount)).messages
-      : await read(file);
-    // `readSessionFull` preserves `toolUseResult` on each record, so
-    // `AskUserQuestion` answers can be folded without re-reading the file.
-    // Only entries whose assistant message contained an `AskUserQuestion`
-    // tool_use need the sidecar attached — build a uuid→result map inline.
-    const sidecars = new Map<string, UserQuestionResult>();
-    for (const entry of rows) {
-      if (entry.toolUseResult !== undefined) {
-        const result = normalizeQuestionResult(entry.toolUseResult);
-        if (result) {
-          sidecars.set(entry.uuid, result);
-        }
-      }
+      : await readSessionChain(file);
+    return withQuestionResults(rows);
+  }
+
+  async readTranscriptWindow(
+    sessionKey: string,
+    dir: string | undefined,
+    ask: WindowAsk
+  ): Promise<TranscriptWindow> {
+    const file = await claudeSessionFile(sessionKey, dir);
+    if (!file) {
+      return { entries: [], older: null, newer: null };
     }
-    if (sidecars.size === 0) {
-      return rows.map(toEntry);
-    }
-    return rows.map((entry) => {
-      const result = sidecars.get(entry.uuid);
-      if (!result) {
-        return toEntry(entry);
-      }
-      return {
-        ...toEntry(entry),
-        message: attachQuestionResult(entry.message, result),
-      };
-    });
+    const window = await readSaidWindow(file, ask);
+    return {
+      entries: withQuestionResults(window.messages),
+      older: window.older,
+      newer: window.newer,
+    };
   }
 
   async renameSession(

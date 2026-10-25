@@ -48,6 +48,7 @@ import type {
   SpawnPayload,
   SpinOffHeld,
   StopPayload,
+  WindowAsk,
   WorkInFlight,
 } from "@cawco/core";
 import {
@@ -69,6 +70,7 @@ import {
   CONTROL_QUERIES,
   CONTROL_READ_CONTINUATION,
   CONTROL_READ_SESSION_CONTEXT,
+  CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
   CONTROL_SET_EFFORT,
@@ -705,6 +707,7 @@ const CATALOG_METHODS = new Set([
   "listSessions",
   "getSessionInfo",
   "getSessionMessages",
+  CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_READ_CONTINUATION,
   "renameSession",
   "tagSession",
@@ -722,6 +725,7 @@ const CATALOG_READS = new Set([
   "listSessions",
   "getSessionInfo",
   "getSessionMessages",
+  CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_READ_CONTINUATION,
   CONTROL_READ_SESSION_CONTEXT,
 ]);
@@ -1469,11 +1473,12 @@ export class SessionSupervisor {
     ) {
       // #control sinks its own answer, success or failure.
       const behind = this.#queues.get(key) ?? Promise.resolve();
+      const transcript =
+        control.method === "getSessionMessages" ||
+        control.method === CONTROL_READ_TRANSCRIPT_WINDOW;
       return inFlight(
-        control.method === "getSessionMessages"
-          ? "transcript reads"
-          : `${control.method} reads`,
-        control.method === "getSessionMessages"
+        transcript ? "transcript reads" : `${control.method} reads`,
+        transcript
           ? behind.then(() => this.#transcriptRead(() => this.#route(envelope)))
           : behind.then(() => this.#route(envelope))
       );
@@ -6461,18 +6466,30 @@ export class SessionSupervisor {
             );
             return info ? titled(info) : info;
           }
+          case CONTROL_READ_TRANSCRIPT_WINDOW: {
+            const at = Date.now();
+            const options = args[1] as
+              { dir?: string; window: WindowAsk } | undefined;
+            if (!options?.window) {
+              throw new Error(`${method} names no window`);
+            }
+            const window = await adapter.readTranscriptWindow(
+              args[0] as string,
+              dirOf(args[1]),
+              options.window
+            );
+            catalogRead(
+              at,
+              `readTranscriptWindow ${adapter.kind} ${String(args[0]).slice(0, 8)} ${JSON.stringify(options.window)}: ${window.entries.length} message(s)`
+            );
+            return window;
+          }
           case "getSessionMessages": {
             const at = Date.now();
-            // `said`: the conversation as it was said, what a transcript
-            // shows; `whole`: every message stored. Neither: the active chain.
+            // `whole`: every message stored; else the active chain.
             const options = args[1] as
-              { said?: boolean; tail?: number; whole?: boolean } | undefined;
-            let span: TranscriptSpan = "chain";
-            if (options?.whole) {
-              span = "whole";
-            } else if (options?.said) {
-              span = "said";
-            }
+              { tail?: number; whole?: boolean } | undefined;
+            const span: TranscriptSpan = options?.whole ? "whole" : "chain";
             const messages = await adapter.getSessionMessages(
               args[0] as string,
               dirOf(args[1]),

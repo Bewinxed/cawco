@@ -13,7 +13,7 @@
 
 import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
-import { readTranscriptTail, type Checkpoint } from "./file.ts";
+import { scanFile, type Checkpoint } from "./file.ts";
 import { parseMany } from "./pool.ts";
 import { section } from "./section.ts";
 import { typeFilter } from "./scan.ts";
@@ -975,14 +975,12 @@ export class TranscriptIndex {
       let write: FileWrite;
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one tail read at a time; they are small
-        const tail = await readTranscriptTail(path, checkpoint, { prefilter });
-        const docs: TranscriptDoc[] = [];
-        for (const located of tail.records) {
-          const doc = extractDoc(located.record, options.extract);
-          if (doc) {
-            docs.push(doc);
-          }
-        }
+        const tail = await scanFile(path, {
+          from: checkpoint,
+          prefilter,
+          pick: (located) => extractDoc(located.record, options.extract) ?? undefined,
+        });
+        const docs = tail.items;
         result.filesTailed++;
         write = {
           path,

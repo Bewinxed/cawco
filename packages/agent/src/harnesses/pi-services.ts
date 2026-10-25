@@ -1,4 +1,5 @@
 /** Pi metadata, history and fleet profile. Shared with the host; no turn factory. */
+import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -15,6 +16,8 @@ import type {
   NeutralContentBlock,
   NeutralSessionInfo,
   SessionMessage,
+  TranscriptWindow,
+  WindowAsk,
 } from "@cawco/core";
 import {
   CONTROL_MODEL_CATALOG,
@@ -24,6 +27,7 @@ import {
 } from "@cawco/core";
 import { piAgentDir, piMemoryFile, piSkillsDir } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { type LocatedRecord, readSpans } from "@cawco/jsonl-parser";
 import type {
   ImageContent,
   Model,
@@ -31,6 +35,7 @@ import type {
 } from "@earendil-works/pi-ai/compat";
 import {
   type AgentSessionServices,
+  CURRENT_SESSION_VERSION,
   createAgentSessionServices,
   getAgentDir,
   type McpServerConfig,
@@ -61,6 +66,7 @@ import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
 import { piMcpEntry, piMcpList } from "./pi-mcp";
 import { piOpenTurns } from "./pi-sessiond";
+import { LineIndexes, windowCuts, windowRange } from "./transcript-index";
 
 const PI_TOOL = toolSpec("pi");
 if (!PI_TOOL) {
@@ -452,13 +458,331 @@ const assistantEntries = (
   ];
 };
 
+/**
+ * One line of a pi session file as its line index keeps it: what the path
+ * walk and the window's cuts read, and where the entry lies in the file.
+ */
+interface PiNode {
+  /** An assistant message with blocks of its own (`toBlocks`). */
+  blocks?: true;
+  byteLength: number;
+  /** An assistant message that ended on an error. */
+  error?: true;
+  /** A compaction's first kept entry. */
+  firstKept?: string;
+  id: string;
+  /** The tool calls it makes or answers, the background command it ends: a window never starts between two that name one. */
+  ids?: string[];
+  offset: number;
+  /** A user message that says something: a window may start here. */
+  opens?: true;
+  parentId: string | null;
+  role?: string;
+  /** A background command's end ({@link BACKGROUND_SHELL}). */
+  shell?: true;
+  type: string;
+  /** The header's session format version. */
+  version?: number;
+}
+
+/** One stored line as the index keeps it. */
+const piNodeOf = (located: LocatedRecord): PiNode => {
+  const entry = located.record as unknown as {
+    details?: unknown;
+    firstKeptEntryId?: string;
+    id?: string;
+    message?: {
+      content?: unknown;
+      customType?: string;
+      details?: unknown;
+      errorMessage?: string;
+      role?: string;
+      toolCallId?: string;
+    };
+    parentId?: string | null;
+    type: string;
+    version?: number;
+  };
+  const node: PiNode = {
+    id: entry.id ?? "",
+    parentId: entry.parentId ?? null,
+    type: entry.type,
+    offset: located.offset,
+    byteLength: located.byteLength,
+  };
+  if (entry.type === "session") {
+    node.version = entry.version ?? 1;
+  }
+  if (entry.type === "compaction" && entry.firstKeptEntryId) {
+    node.firstKept = entry.firstKeptEntryId;
+  }
+  const message = entry.type === "message" ? entry.message : undefined;
+  if (!message) {
+    return node;
+  }
+  node.role = message.role;
+  Object.assign(node, messageFacts(message));
+  return node;
+};
+
+/** A stored pi message's facts, as its node keeps them ({@link PiNode}). */
+const messageFacts = (message: {
+  content?: unknown;
+  customType?: string;
+  details?: unknown;
+  errorMessage?: string;
+  role?: string;
+  toolCallId?: string;
+}): Pick<PiNode, "blocks" | "error" | "ids" | "opens" | "shell"> => {
+  switch (message.role ?? "") {
+    case "user":
+      return textOf(contentOf(message.content)).trim() ? { opens: true } : {};
+    case "assistant": {
+      const blocks = toBlocks(message.content);
+      const ids = blocks.flatMap((block) =>
+        block.type === "tool_use" ? [block.id] : []
+      );
+      return {
+        ...(blocks.length > 0 ? { blocks: true as const } : {}),
+        ...(message.errorMessage ? { error: true as const } : {}),
+        ...(ids.length > 0 ? { ids } : {}),
+      };
+    }
+    case "toolResult":
+      return message.toolCallId ? { ids: [message.toolCallId] } : {};
+    case "custom":
+      return message.customType === BACKGROUND_SHELL && message.details
+        ? {
+            shell: true,
+            ids: [`task:${(message.details as BackgroundShellEnd).taskId}`],
+          }
+        : {};
+    default:
+      return {};
+  }
+};
+
+/** Every pi session file's line index. */
+const piIndexes = new LineIndexes<PiNode>(() => true, piNodeOf);
+
+/**
+ * A session file laid out for reading: its entries in file order
+ * (`stored`), the path from the root to its leaf (`path`, the conversation
+ * as it was said: pi's leaf is the last entry it appended), each path
+ * entry's place, and where a window may start on it.
+ */
+interface PiPlan {
+  at: Map<string, number>;
+  cuts: number[];
+  /** Each path entry's next message's role. */
+  nextRoles: (string | undefined)[];
+  path: PiNode[];
+  stored: PiNode[];
+}
+
+/** Each node's next message's role, read back from the end once. */
+const nextRolesOf = (nodes: readonly PiNode[]): (string | undefined)[] => {
+  const roles = new Array<string | undefined>(nodes.length);
+  let next: string | undefined;
+  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+    roles[i] = next;
+    if (nodes[i]?.type === "message") {
+      next = nodes[i]?.role;
+    }
+  }
+  return roles;
+};
+
+/**
+ * The file's plan, through its line index. A file in a format older than
+ * pi's own (CURRENT_SESSION_VERSION) is opened by pi first, once, which
+ * migrates it in place, as resuming it would.
+ */
+async function piPlanOf(path: string, cwd: string): Promise<PiPlan> {
+  let index = await piIndexes.get(path);
+  const header = index.nodes.find((node) => node.type === "session");
+  if (header && (header.version ?? 1) < CURRENT_SESSION_VERSION) {
+    SessionManager.open(path, undefined, cwd);
+    index = await piIndexes.get(path);
+  }
+  const built = index.memo.get("plan") as PiPlan | undefined;
+  if (built) {
+    return built;
+  }
+  const stored = index.nodes.filter((node) => node.type !== "session");
+  const byId = new Map(stored.map((node) => [node.id, node]));
+  const path_: PiNode[] = [];
+  const seen = new Set<string>();
+  for (
+    let node = stored.at(-1);
+    node && !seen.has(node.id);
+    node = node.parentId ? byId.get(node.parentId) : undefined
+  ) {
+    seen.add(node.id);
+    path_.push(node);
+  }
+  path_.reverse();
+  const at = new Map(path_.map((node, i) => [node.id, i]));
+  const cuts = windowCuts(path_, (i) => !!path_[i]?.opens);
+  const plan = { at, cuts, nextRoles: nextRolesOf(path_), path: path_, stored };
+  index.memo.set("plan", plan);
+  return plan;
+}
+
+/** A stored pi entry, as reading one back types it. */
+interface StoredPiEntry {
+  firstKeptEntryId: string;
+  id: string;
+  message?: { role?: string; content?: unknown };
+  summary: string;
+  timestamp: string;
+  tokensBefore: number;
+  type: string;
+}
+
+/**
+ * The first transcript entry a stored message at `index` of `nodes` makes,
+ * as {@link messageEntries} makes it, read off its node: its own id, or a
+ * failed attempt's line when nothing retried it.
+ */
+const firstMade = (
+  nodes: readonly PiNode[],
+  index: number,
+  next: string | undefined,
+  sessionKey: string
+): string | undefined => {
+  const node = nodes[index];
+  if (node?.type !== "message") {
+    return;
+  }
+  if (node.role === "user" || node.role === "toolResult" || node.shell) {
+    return node.id;
+  }
+  if (node.role !== "assistant") {
+    return;
+  }
+  if (node.blocks) {
+    return node.id;
+  }
+  const retried =
+    next === "assistant" || (next === undefined && piOpenTurns.has(sessionKey));
+  return node.error && !retried ? `${node.id}:error` : undefined;
+};
+
+/** The transcript entries one stored message makes; `next` the role of the message after it. */
+const messageEntries = (
+  sessionKey: string,
+  entry: StoredPiEntry,
+  message: { role?: string; content?: unknown },
+  next: string | undefined
+): SessionMessage[] => {
+  const entries: SessionMessage[] = [];
+  if (message.role === "user") {
+    entries.push({
+      type: "user",
+      uuid: entry.id,
+      session_id: sessionKey,
+      message: { role: "user", content: contentOf(message.content) },
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+      timestamp: entry.timestamp,
+    });
+  } else if (message.role === "assistant") {
+    entries.push(...assistantEntries(sessionKey, entry, message, next));
+  } else if (message.role === "toolResult") {
+    const tool = message as { toolCallId?: string; isError?: boolean };
+    entries.push({
+      type: "user",
+      uuid: entry.id,
+      session_id: sessionKey,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: tool.toolCallId ?? "",
+            content: contentOf(message.content),
+            is_error: tool.isError,
+          },
+        ],
+      },
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+      timestamp: entry.timestamp,
+    });
+  }
+  entries.push(
+    ...backgroundShellEntries(
+      sessionKey,
+      entry,
+      message as BackgroundShellMessage
+    )
+  );
+  return entries;
+};
+
+/**
+ * The transcript entries of `nodes[from..to)` (a plan's path, or every
+ * stored entry), their entries read back by byte range. Each assistant
+ * message's next message role (a failed attempt retried) and each
+ * compaction's first kept entry are read off the nodes, whichever window
+ * they are in.
+ */
+async function piEntriesAt(
+  file: string,
+  sessionKey: string,
+  nodes: readonly PiNode[],
+  plan: PiPlan,
+  from: number,
+  to: number
+): Promise<SessionMessage[]> {
+  const roles = nodes === plan.path ? plan.nextRoles : nextRolesOf(nodes);
+  const placeOf =
+    nodes === plan.path
+      ? plan.at
+      : new Map(nodes.map((node, i) => [node.id, i]));
+  const read = await readSpans(file, nodes.slice(from, to));
+  const entries: SessionMessage[] = [];
+  read.forEach((record, offset) => {
+    const index = from + offset;
+    const entry = record as unknown as StoredPiEntry | undefined;
+    // A compaction, where it happened — where the live stream drew it
+    // (pi-runtime). Its boundary carries what pi stores of it: how full the
+    // context was, not what triggered it. What the model still holds from
+    // before it begins at the first entry it kept (`keptFrom`).
+    if (entry?.type === "compaction") {
+      const kept = placeOf.get(entry.firstKeptEntryId) ?? index;
+      let keptFrom: string | undefined;
+      for (let at = kept; at < index && keptFrom === undefined; at += 1) {
+        keptFrom = firstMade(nodes, at, roles[at], sessionKey);
+      }
+      entries.push(...compactionEntries(sessionKey, entry, keptFrom));
+      return;
+    }
+    const message = entry?.type === "message" ? entry.message : undefined;
+    if (entry && message) {
+      entries.push(...messageEntries(sessionKey, entry, message, roles[index]));
+    }
+  });
+  return entries;
+}
+
+/**
+ * The file pi stores a session in: `<timestamp>_<id>.jsonl` in the folder pi
+ * keeps its sessions for `cwd` (named by pi itself: `getSessionDir` of a
+ * session not yet written, which writes nothing). Found by its name alone:
+ * pi's own listing reads every session file in the folder through.
+ */
 export async function piSessionPath(
   sessionKey: string,
   cwd: string
 ): Promise<string | undefined> {
-  return (await SessionManager.list(cwd)).find(
-    (info) => info.id === sessionKey || info.path.includes(sessionKey)
-  )?.path;
+  const dir = SessionManager.create(cwd).getSessionDir();
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const name = names.find(
+    (one) => one.endsWith(".jsonl") && one.includes(sessionKey)
+  );
+  return name ? join(dir, name) : undefined;
 }
 
 let servicesPromise: Promise<AgentSessionServices> | null = null;
@@ -667,111 +991,79 @@ export class PiProfile {
    * model reads next starts at the entry it kept, `firstKeptEntryId`), so
    * the path from the root to the current leaf (`getBranch`) is the
    * conversation as it was said, every compaction in its place, and no
-   * branch the session left: the `chain` and `said` spans alike. `whole` is
-   * every entry stored, abandoned branches too (`getEntries`).
+   * branch the session left: the `chain` span. `whole` is every entry
+   * stored, abandoned branches too (`getEntries`). A `tail` is the newest
+   * window's end. Read through the session file's line index
+   * ({@link piPlanOf}), never pi's own whole-file load.
    */
   async getSessionMessages(
     sessionKey: string,
     dir?: string,
-    _tail?: number,
+    tail?: number,
     span: TranscriptSpan = "chain"
   ): Promise<SessionMessage[]> {
     if (!dir) {
       return [];
     }
+    if (tail) {
+      const window = await this.readTranscriptWindow(sessionKey, dir, {
+        end: "newest",
+        limit: tail,
+      });
+      return window.entries.slice(-tail);
+    }
     const path = await piSessionPath(sessionKey, dir);
     if (!path) {
       return [];
     }
-    const manager = SessionManager.open(path, undefined, dir);
-    const entries: SessionMessage[] = [];
-    const stored =
-      span === "whole" ? manager.getEntries() : manager.getBranch();
-    const placeOf = new Map(stored.map((entry, index) => [entry.id, index]));
-    /** The first transcript entry each stored entry made, in stored order. */
-    const made: { index: number; uuid: string }[] = [];
-    const nextRole = (index: number): string | undefined => {
-      for (let at = index + 1; at < stored.length; at += 1) {
-        const later = stored[at];
-        if (later.type === "message") {
-          return (later as { message?: { role?: string } }).message?.role;
-        }
-      }
-      return undefined;
-    };
-    for (const [index, entry] of stored.entries()) {
-      // A compaction, where it happened — where the live stream drew it
-      // (pi-runtime). Its boundary carries what pi stores of it: how full the
-      // context was, not what triggered it. What the model still holds from
-      // before it begins at the first entry it kept (`keptFrom`).
-      if (entry.type === "compaction") {
-        const kept = placeOf.get(entry.firstKeptEntryId) ?? index;
-        entries.push(
-          ...compactionEntries(
-            sessionKey,
-            entry,
-            made.find((one) => one.index >= kept)?.uuid
-          )
-        );
-        continue;
-      }
-      if (entry.type !== "message") {
-        continue;
-      }
-      const before = entries.length;
-      const message = (entry as { message?: unknown }).message as
-        { role?: string; content?: unknown } | undefined;
-      if (!message) {
-        continue;
-      }
-      if (message.role === "user") {
-        entries.push({
-          type: "user",
-          uuid: entry.id,
-          session_id: sessionKey,
-          message: { role: "user", content: contentOf(message.content) },
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          timestamp: entry.timestamp,
-        });
-      } else if (message.role === "assistant") {
-        entries.push(
-          ...assistantEntries(sessionKey, entry, message, nextRole(index))
-        );
-      } else if (message.role === "toolResult") {
-        const tool = message as { toolCallId?: string; isError?: boolean };
-        entries.push({
-          type: "user",
-          uuid: entry.id,
-          session_id: sessionKey,
-          message: {
-            role: "user",
-            content: [
-              {
-                type: "tool_result",
-                tool_use_id: tool.toolCallId ?? "",
-                content: contentOf(message.content),
-                is_error: tool.isError,
-              },
-            ],
-          },
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          timestamp: entry.timestamp,
-        });
-      }
-      entries.push(
-        ...backgroundShellEntries(
-          sessionKey,
-          entry,
-          message as BackgroundShellMessage
-        )
-      );
-      if (entries.length > before) {
-        made.push({ index, uuid: entries[before].uuid });
-      }
+    const plan = await piPlanOf(path, dir);
+    const nodes = span === "whole" ? plan.stored : plan.path;
+    return await piEntriesAt(path, sessionKey, nodes, plan, 0, nodes.length);
+  }
+
+  /**
+   * A window of the conversation as it was said (the path to the leaf),
+   * starting where a turn opens and nothing before it is answered after it:
+   * a tool call and its result, a background command and its notice. Each
+   * compaction names the first entry it kept from the whole path, whichever
+   * window that entry is in.
+   */
+  async readTranscriptWindow(
+    sessionKey: string,
+    dir: string | undefined,
+    ask: WindowAsk
+  ): Promise<TranscriptWindow> {
+    const path = dir ? await piSessionPath(sessionKey, dir) : undefined;
+    if (!(path && dir)) {
+      return { entries: [], older: null, newer: null };
     }
-    return entries;
+    const plan = await piPlanOf(path, dir);
+    const { length } = plan.path;
+    // An entry's id is its stored entry's, or that one's marked
+    // (`<id>:error`, `<id>:boundary`): a cut names its stored entry by it.
+    const { from, to } = windowRange(
+      plan.cuts,
+      length,
+      (id) => plan.at.get(id.split(":")[0] ?? id),
+      ask
+    );
+    let entries = await piEntriesAt(
+      path,
+      sessionKey,
+      plan.path,
+      plan,
+      from,
+      to
+    );
+    if ("through" in ask) {
+      const cut = entries.findIndex((entry) => entry.uuid === ask.through);
+      entries = cut >= 0 ? entries.slice(0, cut + 1) : entries;
+    }
+    return {
+      entries,
+      older: from > 0 ? (plan.path[from]?.id ?? null) : null,
+      newer: "start" in ask && to < length ? (plan.path[to]?.id ?? null) : null,
+    };
   }
 
   renameSession(): Promise<void> {

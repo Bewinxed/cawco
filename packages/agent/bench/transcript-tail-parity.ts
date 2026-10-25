@@ -1,7 +1,7 @@
 /**
  * Corpus-wide proof of the tail-read guarantee: for every main-session
  * transcript on this machine, `readSessionEnd(path, N).messages` must be an
- * exact (type|uuid) suffix of `readSessionFull(path)` and at least
+ * exact (type|uuid) suffix of `readSessionChain(path)` and at least
  * `min(N, full.length)` long unless the byte cap stopped the window from
  * growing. Also exercises the one historically-divergent file at adversarial
  * counts and reports tail-vs-full timing.
@@ -13,8 +13,8 @@ import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { userLayerPath } from "@cawco/core/paths";
 import {
+  readSessionChain,
   readSessionEnd,
-  readSessionFull,
 } from "../src/harnesses/claude-transcript";
 
 const N = 160;
@@ -39,7 +39,7 @@ const failures: string[] = [];
 for (const f of files) {
   let t0 = performance.now();
   // biome-ignore lint/performance/noAwaitInLoops: sequential on purpose — per-file timing would be meaningless with concurrent reads
-  const full = await readSessionFull(f);
+  const full = await readSessionChain(f);
   fullMsTotal += performance.now() - t0;
   if (full.length === 0) {
     empty += 1;
@@ -60,7 +60,7 @@ for (const f of files) {
       stillShort += 1;
       failures.push(`SHORT ${f} tail=${tail.length} full=${full.length}`);
     } else {
-      // The 16 MiB window cap: shorter but still exact, and honest about it.
+      // The window's byte cap: shorter but still exact, and honest about it.
       capped += 1;
     }
     continue;
@@ -94,7 +94,7 @@ const divergent = join(
 );
 try {
   statSync(divergent);
-  const full = await readSessionFull(divergent);
+  const full = await readSessionChain(divergent);
   for (const count of [100, 160, 229, 230, 250, 400]) {
     // biome-ignore lint/performance/noAwaitInLoops: adversarial counts probed one at a time, in order
     const tail = (await readSessionEnd(divergent, count)).messages;

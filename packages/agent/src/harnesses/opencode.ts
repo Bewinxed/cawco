@@ -47,6 +47,8 @@ import type {
   SignInFault,
   SlashCommand,
   SpawnPayload,
+  TranscriptWindow,
+  WindowAsk,
   WorkspaceRef,
 } from "@cawco/core";
 import {
@@ -190,7 +192,7 @@ import {
   splitModel,
   turnWasOpen,
 } from "./opencode-session";
-import { toTranscript } from "./opencode-transcript";
+import { opensTurn, toTranscript } from "./opencode-transcript";
 
 /** A reattach's read the server did not answer in time: undecided, so the reattach tries again, within its budget (`#recover`). */
 class ReattachUnanswered extends Error {
@@ -1316,6 +1318,305 @@ const allMessages = async (
     cursor = page.cursor.next ?? undefined;
   } while (cursor);
   return messages;
+};
+
+/** A page of a session's messages: from `cursor`, else the first in `order`. */
+const messagePage = async (
+  client: OpencodeClient,
+  sessionID: string,
+  order: "asc" | "desc",
+  cursor: string | undefined
+): Promise<{ data: SessionMessageInfo[]; next: string | undefined }> => {
+  const read = await askOpencode((options) =>
+    client.message.list(
+      {
+        sessionID,
+        limit: MESSAGE_PAGE,
+        ...(cursor ? { cursor } : { order }),
+      },
+      options
+    )
+  );
+  const page = answerOf(read, `the messages of ${sessionID}`);
+  return { data: page.data, next: page.cursor.next ?? undefined };
+};
+
+/** Messages a page of a session's history asks its server for. Ours. */
+const MESSAGE_PAGE = 100;
+
+/**
+ * Where a window of an OpenCode conversation begins or ends, as the hub
+ * passes it back: the server's cursor of the page that holds the message
+ * (none: the first page in that direction) and the message, which a `before`
+ * window ends just before and a `start` window starts at.
+ */
+interface WindowMark {
+  id: string;
+  page: string | null;
+}
+
+const markOf = (mark: WindowMark): string => `oc:${JSON.stringify(mark)}`;
+
+const readMark = (token: string): WindowMark => {
+  if (!token.startsWith("oc:")) {
+    throw new Error(`not an OpenCode window cursor: ${token}`);
+  }
+  return JSON.parse(token.slice(3)) as WindowMark;
+};
+
+/** A session's messages from `cursor` on in `order`, each with the cursor of the page it came on. */
+async function* messagesFrom(
+  client: OpencodeClient,
+  sessionID: string,
+  order: "asc" | "desc",
+  cursor: string | undefined
+): AsyncGenerator<{ message: SessionMessageInfo; page: string | null }> {
+  let next = cursor;
+  for (;;) {
+    const page = next ?? null;
+    // biome-ignore lint/performance/noAwaitInLoops: each page names the next
+    const read = await messagePage(client, sessionID, order, next);
+    for (const message of read.data) {
+      yield { message, page };
+    }
+    if (read.data.length === 0 || !read.next) {
+      return;
+    }
+    ({ next } = read);
+  }
+}
+
+/** A window of messages, oldest first, with its cursors and where a rewind's cut falls in it. */
+interface MessageWindow {
+  cutAfter?: string;
+  messages: SessionMessageInfo[];
+  newer: string | null;
+  older: string | null;
+}
+
+/**
+ * A window of a session's messages as it was said, oldest first, read a
+ * page at a time from where `ask` names and never the rest: newest first
+ * for `end`, `before` and `through` ({@link backwardWindow}), oldest first
+ * for `start` ({@link forwardWindow}). A window starts at a message that
+ * opens a turn ({@link opensTurn}): OpenCode keeps a call and its result in
+ * one message, and a subagent's in its own session, so nothing before such
+ * a message is answered after it. A staged rewind hides its boundary
+ * message and everything after it (`revert`).
+ */
+const messageWindow = (
+  client: OpencodeClient,
+  sessionID: string,
+  ask: WindowAsk,
+  revert: string | undefined
+): Promise<MessageWindow> =>
+  "start" in ask
+    ? forwardWindow(client, sessionID, ask, revert)
+    : backwardWindow(client, sessionID, ask, revert);
+
+/** Whether a read back has reached where its window ends: the mark it ends before, or the entry a cut keeps. */
+const reached = (
+  sessionID: string,
+  message: SessionMessageInfo,
+  mark: WindowMark | undefined,
+  through: string | undefined
+): "mark" | "through" | undefined => {
+  if (mark) {
+    return message.id === mark.id ? "mark" : undefined;
+  }
+  return through &&
+    toTranscript(sessionID, [message]).some((one) => one.uuid === through)
+    ? "through"
+    : undefined;
+};
+
+/** Where a read back stands: past a staged rewind's hidden messages yet, past its mark or cut yet. */
+interface BackState {
+  cutAfter?: string;
+  hidden: boolean;
+  skipping: boolean;
+}
+
+/**
+ * The messages a read back keeps, newest first: none a staged rewind hides
+ * (`revert` and everything after it), and none until its mark (the mark
+ * itself left out) or the message holding its cut (kept, the cut noted).
+ * `state` says how far it got once the history runs out.
+ */
+async function* keptBack(
+  messages: AsyncIterable<{ message: SessionMessageInfo; page: string | null }>,
+  sessionID: string,
+  edge: { mark?: WindowMark; through?: string; revert?: string },
+  state: BackState
+): AsyncGenerator<{ message: SessionMessageInfo; page: string | null }> {
+  for await (const one of messages) {
+    if (state.hidden) {
+      state.hidden = one.message.id !== edge.revert;
+      continue;
+    }
+    const end = state.skipping
+      ? reached(sessionID, one.message, edge.mark, edge.through)
+      : undefined;
+    if (state.skipping && end === undefined) {
+      continue;
+    }
+    state.skipping = false;
+    if (end === "through") {
+      state.cutAfter = edge.through;
+    }
+    if (end !== "mark") {
+      yield one;
+    }
+  }
+}
+
+/** A window read newest first: the newest, the one before a mark, or the newest of a cut. */
+const backwardWindow = async (
+  client: OpencodeClient,
+  sessionID: string,
+  ask: Exclude<WindowAsk, { start: string | null }>,
+  revert: string | undefined
+): Promise<MessageWindow> => {
+  const mark = "before" in ask ? readMark(ask.before) : undefined;
+  const through = "through" in ask ? ask.through : undefined;
+  const state: BackState = {
+    hidden: revert !== undefined && mark === undefined,
+    skipping: mark !== undefined || through !== undefined,
+  };
+  const taken: SessionMessageInfo[] = [];
+  const pages = messagesFrom(
+    client,
+    sessionID,
+    "desc",
+    mark?.page ?? undefined
+  );
+  for await (const { message, page } of keptBack(
+    pages,
+    sessionID,
+    { mark, through, revert },
+    state
+  )) {
+    taken.push(message);
+    if (taken.length >= ask.limit && opensTurn(message)) {
+      return {
+        messages: taken.reverse(),
+        older: markOf({ id: message.id, page }),
+        newer: null,
+        ...(state.cutAfter ? { cutAfter: state.cutAfter } : {}),
+      };
+    }
+  }
+  // The history ran out: a rewind that names no stored message hides none,
+  // a cut that names none cuts nothing, and a mark it no longer holds is gone.
+  if (state.hidden) {
+    return backwardWindow(client, sessionID, ask, undefined);
+  }
+  if (state.skipping && mark) {
+    throw new Error(`the transcript no longer holds ${mark.id}`);
+  }
+  if (state.skipping) {
+    return backwardWindow(
+      client,
+      sessionID,
+      { end: "newest", limit: ask.limit },
+      revert
+    );
+  }
+  return {
+    messages: taken.reverse(),
+    older: null,
+    newer: null,
+    ...(state.cutAfter ? { cutAfter: state.cutAfter } : {}),
+  };
+};
+
+/**
+ * A window read oldest first, from the conversation's start or a mark a
+ * window before it named, until a staged rewind's boundary. Its `older`
+ * names its first message with no page: a read back to it reads from the
+ * newest page down.
+ */
+const forwardWindow = async (
+  client: OpencodeClient,
+  sessionID: string,
+  ask: { limit: number; start: string | null },
+  revert: string | undefined
+): Promise<MessageWindow> => {
+  const mark = ask.start === null ? undefined : readMark(ask.start);
+  let skipping = mark !== undefined;
+  const taken: SessionMessageInfo[] = [];
+  const older = mark ? markOf({ id: mark.id, page: null }) : null;
+  for await (const { message, page } of messagesFrom(
+    client,
+    sessionID,
+    "asc",
+    mark?.page ?? undefined
+  )) {
+    skipping = skipping && message.id !== mark?.id;
+    if (skipping) {
+      continue;
+    }
+    if (message.id === revert) {
+      return { messages: taken, older, newer: null };
+    }
+    if (taken.length >= ask.limit && opensTurn(message)) {
+      return {
+        messages: taken,
+        older,
+        newer: markOf({ id: message.id, page }),
+      };
+    }
+    taken.push(message);
+  }
+  if (skipping && mark) {
+    throw new Error(`the transcript no longer holds ${mark.id}`);
+  }
+  return { messages: taken, older, newer: null };
+};
+
+/**
+ * Each subagent the calls among `messages` started, read whole as the
+ * session it started is, its entries under the call (`parent_tool_use_id`),
+ * in the order the server lists the children.
+ */
+const subagentEntries = async (
+  client: OpencodeClient,
+  sessionKey: string,
+  messages: readonly SessionMessageInfo[]
+): Promise<SessionMessage[]> => {
+  const callByChild = new Map<string, string>();
+  for (const message of messages) {
+    for (const block of message.type === "assistant" ? message.content : []) {
+      if (block.type !== "tool" || block.name !== "subagent") {
+        continue;
+      }
+      const child = (block.state as { metadata?: { sessionID?: unknown } })
+        .metadata?.sessionID;
+      if (typeof child === "string") {
+        callByChild.set(child, block.id);
+      }
+    }
+  }
+  if (callByChild.size === 0) {
+    return [];
+  }
+  const entries: SessionMessage[] = [];
+  for (const child of await allSessions(client, { parentID: sessionKey })) {
+    const callID = callByChild.get(child.id);
+    if (!callID) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: children are appended in this order; parallel reads would reorder subagents
+    const childMessages = await allMessages(client, child.id);
+    const childEntries = syncSection("OpenCode transcript built", () =>
+      toTranscript(child.id, childMessages)
+    );
+    for (const entry of childEntries) {
+      entry.parent_tool_use_id = callID;
+    }
+    entries.push(...childEntries);
+  }
+  return entries;
 };
 
 /**
@@ -5374,15 +5675,74 @@ export class OpencodeHarness implements Harness {
    * its message list is the conversation as it was said and every message it
    * stored. A staged rewind's hidden messages are none of them.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reads the session, its rewind point, its waiting sends and its subagents in one pass
   async getSessionMessages(
     sessionKey: string,
     _dir?: string,
-    _tail?: number,
+    tail?: number,
     _span?: TranscriptSpan
   ): Promise<SessionMessage[]> {
+    // A tail is the newest window's end; anything else is every message.
+    if (tail) {
+      const window = await this.readTranscriptWindow(sessionKey, undefined, {
+        end: "newest",
+        limit: tail,
+      });
+      return window.entries.slice(-tail);
+    }
+    return (
+      await this.#transcript(
+        sessionKey,
+        async (client, revert) => {
+          let messages = await allMessages(client, sessionKey);
+          const index = revert
+            ? messages.findIndex((message) => message.id === revert)
+            : -1;
+          if (index >= 0) {
+            messages = messages.slice(0, index);
+          }
+          return { messages, older: null, newer: null };
+        },
+        true
+      )
+    ).entries;
+  }
+
+  /**
+   * A window of the session's messages ({@link messageWindow}) as transcript
+   * entries: its waiting sends after the newest, and each subagent its calls
+   * started, read whole after the window's own entries, as the session it
+   * started is.
+   */
+  async readTranscriptWindow(
+    sessionKey: string,
+    _dir: string | undefined,
+    ask: WindowAsk
+  ): Promise<TranscriptWindow> {
+    return await this.#transcript(
+      sessionKey,
+      async (client, revert) => {
+        const window = await messageWindow(client, sessionKey, ask, revert);
+        return window;
+      },
+      "end" in ask || "through" in ask
+    );
+  }
+
+  /**
+   * The transcript entries of the messages `read` picks: the session looked
+   * up, its rewind point handed to `read`, its waiting sends after them when
+   * `newest`, and the subagents their calls started.
+   */
+  async #transcript(
+    sessionKey: string,
+    read: (
+      client: OpencodeClient,
+      revert: string | undefined
+    ) => Promise<MessageWindow>,
+    newest: boolean
+  ): Promise<TranscriptWindow> {
     if ((await opencodeBinary()) === undefined) {
-      return [];
+      return { entries: [], older: null, newer: null };
     }
     assertOpencodeKey(sessionKey, "getSessionMessages");
     const client = await this.#homeClient(sessionKey);
@@ -5396,60 +5756,31 @@ export class OpencodeHarness implements Harness {
       );
     } catch (error) {
       if (notFound(error)) {
-        return [];
+        return { entries: [], older: null, newer: null };
       }
       throw error;
     }
-    let messages = await allMessages(client, sessionKey);
-    // A staged rewind hides its boundary message and everything after it.
-    const revertID = info.revert?.messageID;
-    if (revertID) {
-      const index = messages.findIndex((message) => message.id === revertID);
-      if (index >= 0) {
-        messages = messages.slice(0, index);
-      }
-    }
-    const waiting = answerOf(
-      await askOpencode((options) =>
-        client.session.inbox.list({ sessionID: sessionKey }, options)
-      ),
-      `the waiting sends of ${sessionKey}`
-    );
-    const entries = syncSection("OpenCode transcript built", () =>
+    const window = await read(client, info.revert?.messageID);
+    const { messages } = window;
+    const waiting = newest
+      ? answerOf(
+          await askOpencode((options) =>
+            client.session.inbox.list({ sessionID: sessionKey }, options)
+          ),
+          `the waiting sends of ${sessionKey}`
+        )
+      : [];
+    let entries = syncSection("OpenCode transcript built", () =>
       toTranscript(sessionKey, messages, waiting)
     );
-    const callByChild = new Map<string, string>();
-    for (const message of messages) {
-      if (message.type !== "assistant") {
-        continue;
-      }
-      for (const block of message.content) {
-        const child = (
-          block.type === "tool" && block.name === "subagent"
-            ? (block.state as { metadata?: { sessionID?: unknown } }).metadata
-            : undefined
-        )?.sessionID;
-        if (block.type === "tool" && typeof child === "string") {
-          callByChild.set(child, block.id);
-        }
-      }
+    const cut = window.cutAfter
+      ? entries.findIndex((entry) => entry.uuid === window.cutAfter)
+      : -1;
+    if (cut >= 0) {
+      entries = entries.slice(0, cut + 1);
     }
-    for (const child of await allSessions(client, { parentID: sessionKey })) {
-      const callID = callByChild.get(child.id);
-      if (!callID) {
-        continue;
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: children are appended in this order; parallel reads would reorder subagents
-      const childMessages = await allMessages(client, child.id);
-      const childEntries = syncSection("OpenCode transcript built", () =>
-        toTranscript(child.id, childMessages)
-      );
-      for (const entry of childEntries) {
-        entry.parent_tool_use_id = callID;
-      }
-      entries.push(...childEntries);
-    }
-    return entries;
+    entries.push(...(await subagentEntries(client, sessionKey, messages)));
+    return { entries, older: window.older, newer: window.newer };
   }
 
   async renameSession(

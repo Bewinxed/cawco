@@ -20,7 +20,7 @@ export interface CliConfig {
    * what it held for it.
    */
   registeredAs?: { hubId: string; machineId: string };
-  /** Transcript cache budget in megabytes (default 256). */
+  /** Transcript line indexes' heap budget in megabytes (default 256). */
   transcriptCacheMb?: number;
   updatedAt: string;
 }
@@ -74,7 +74,7 @@ export const readConfig = async (
 
 /**
  * Merges over what is already there: remembering a hub must not drop the
- * transcript cache budget. Written whole, at its owner-only mode.
+ * transcript line indexes' budget. Written whole, at its owner-only mode.
  */
 export const writeConfig = async (
   patch: Partial<CliConfig>,

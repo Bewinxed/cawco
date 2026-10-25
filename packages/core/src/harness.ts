@@ -1910,6 +1910,14 @@ export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
 export const CONTROL_LIST_SESSIONS = "listSessions";
 export const CONTROL_GET_SESSION_INFO = "getSessionInfo";
 export const CONTROL_GET_SESSION_MESSAGES = "getSessionMessages";
+/**
+ * A window of a stored conversation, as it was said: args
+ * `[sessionKey, { dir?, window: WindowAsk }]`; answers a `TranscriptWindow`
+ * (transcript-types.ts). What the hub builds a transcript from, a window at
+ * a time from the newest back, so opening or paging one costs its machine
+ * the window and never the file.
+ */
+export const CONTROL_READ_TRANSCRIPT_WINDOW = "readTranscriptWindow";
 export const CONTROL_READ_SESSION_CONTEXT = "readSessionContext";
 export const CONTROL_RENAME_SESSION = "renameSession";
 export const CONTROL_TAG_SESSION = "tagSession";

@@ -19,6 +19,7 @@ import type {
   SendRecord,
   SendRefusal,
   SendState,
+  SessionMessage,
   SlashCommand,
   UserQuestionResult,
 } from "./harness";
@@ -407,6 +408,35 @@ export interface TranscriptPage {
   tail?: TranscriptTail;
   /** Where the transcript lives. */
   where: TranscriptWhere;
+}
+
+/**
+ * Which window of a stored conversation, as it was said, a read asks its
+ * machine for (harness.ts `CONTROL_READ_TRANSCRIPT_WINDOW`): about `limit`
+ * entries, the window widened back to where one may start (the start of a
+ * turn nothing before it still answers), so windows read one at a time from
+ * the newest back build the rows a whole read builds, in its order.
+ *
+ * - `end`: the newest.
+ * - `before`: the one ending just before the entry a window's `older` named.
+ * - `start`: the one starting at the entry a window's `newer` named (null:
+ *   the conversation's start), forward.
+ * - `through`: the newest, of the conversation cut after this entry (a
+ *   rewind); the whole conversation's newest when it holds no such entry.
+ */
+export type WindowAsk =
+  | { end: "newest"; limit: number }
+  | { before: string; limit: number }
+  | { limit: number; start: string | null }
+  | { limit: number; through: string };
+
+/** A window of a stored conversation, as it was said, oldest first. */
+export interface TranscriptWindow {
+  entries: SessionMessage[];
+  /** The entry after the window, to ask a `start` window from; null when it reaches the end. */
+  newer: string | null;
+  /** The window's first entry, to ask a `before` window with; null when it starts the conversation. */
+  older: string | null;
 }
 
 /** Where a transcript was found: the machine, folder, key and harness. */

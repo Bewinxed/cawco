@@ -228,9 +228,9 @@ import { forgePost } from "./forges/forge";
 import { setHubGitOrigins } from "./git-credential";
 import type { Harness } from "./harness";
 import { harness, harnesses } from "./harnesses";
+import { transcriptIndexes } from "./harnesses/claude-transcript";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
-import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { ghAccounts, ghAccountToken } from "./host-gh";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, followHub, stopCarrying } from "./hub-loopback";
@@ -3320,10 +3320,10 @@ export const startDaemon = (rediscover = false) =>
     } else if (denied.state === "unsynced") {
       yield* Effect.logInfo(`${denied.detail}: spawns wait for it`);
     }
-    // Size the transcript cache from machine config (if set).
+    // Size the transcript line indexes from machine config (if set).
     const machineConfig = yield* Effect.promise(() => readConfig());
     if (machineConfig?.transcriptCacheMb) {
-      transcriptCache.configureBudget(
+      transcriptIndexes.configureBudget(
         machineConfig.transcriptCacheMb * 1024 * 1024
       );
     }

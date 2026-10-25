@@ -74,7 +74,7 @@ export function completeLines(buf: Uint8Array): Uint8Array {
 }
 
 /** `text` as a record: a JSON object, or undefined when it is not one. */
-function parseObject(text: string): TranscriptRecord | undefined {
+export function parseObject(text: string): TranscriptRecord | undefined {
   let record: unknown;
   try {
     record = JSON.parse(text);

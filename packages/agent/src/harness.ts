@@ -34,6 +34,8 @@ import type {
   SignInFault,
   SpawnPayload,
   TextAttachment,
+  TranscriptWindow,
+  WindowAsk,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 
@@ -320,14 +322,14 @@ export interface HarnessSession {
  *
  * - `chain`: what the model reads now (claude: its active chain, which
  *   begins at the last compaction);
- * - `said`: the conversation as it was said, what a transcript shows: every
- *   turn across its compactions, each compaction where it happened, no
- *   branch the conversation left;
  * - `whole`: every message the session ever stored, across compactions and
  *   abandoned branches, for readers that index the whole history rather
  *   than show it.
+ *
+ * What a transcript shows, the conversation as it was said, is read a window
+ * at a time ({@link Harness.readTranscriptWindow}).
  */
-export type TranscriptSpan = "chain" | "said" | "whole";
+export type TranscriptSpan = "chain" | "whole";
 
 /** One harness adapter. Implemented per runtime; registered in `./harnesses`. */
 export interface Harness {
@@ -393,10 +395,6 @@ export interface Harness {
     sessionKey: string,
     dir?: string
   ): Promise<NeutralSessionInfo | undefined>;
-  /**
-   * The session's messages, oldest first, over the {@link TranscriptSpan}
-   * asked for (`chain` when none). `tail` keeps only the newest.
-   */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   getSessionMessages(
     sessionKey: string,
@@ -425,6 +423,22 @@ export interface Harness {
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
   providerList?(): Promise<{ id: string; name: string }[]>;
+  /**
+   * The session's messages, oldest first, over the {@link TranscriptSpan}
+   * asked for (`chain` when none). `tail` keeps only the newest.
+   */
+  /**
+   * A window of the session's conversation as it was said, what a
+   * transcript shows: every turn across its compactions, each compaction
+   * where it happened, no branch the conversation left. Reading one costs
+   * the window, never the whole stored conversation (core `WindowAsk`).
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
+  readTranscriptWindow(
+    sessionKey: string,
+    dir: string | undefined,
+    ask: WindowAsk
+  ): Promise<TranscriptWindow>;
   /** Reopen surviving custody, or leave the instance sleeping if it is gone. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
   reattach?(

@@ -460,6 +460,14 @@ const entry = (
   }) as SessionMessage;
 
 /**
+ * Whether a window of the conversation may start at this message: the
+ * reader's words (or anyone's sent in their place), the user entry the hub
+ * resets a keep-alive's quiet at.
+ */
+export const opensTurn = (message: SessionMessageInfo): boolean =>
+  message.type === "user" && !!message.text.trim();
+
+/**
  * 2.0's projected messages → the neutral transcript entries the folder reads.
  * `waiting` are the sends OpenCode admitted and has yet to give the model
  * (`GET …/inbox`): each is a queued row after the stored ones.

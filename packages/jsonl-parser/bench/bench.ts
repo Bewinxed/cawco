@@ -6,7 +6,7 @@
 import { readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseMany, readTranscript } from "../src/index.ts";
+import { parseMany, scanFile } from "../src/index.ts";
 import { TranscriptIndex } from "../src/fts5.ts";
 
 const root = process.argv[2] ?? `${process.env.HOME}/.claude/projects`;
@@ -28,7 +28,7 @@ function mb(n: number): string {
   let parsed = 0;
   let invalid = 0;
   for (const f of files) {
-    const { stats } = await readTranscript(f);
+    const { stats } = await scanFile(f, { pick: () => undefined });
     bytes += stats.bytes;
     parsed += stats.parsed;
     invalid += stats.invalid;

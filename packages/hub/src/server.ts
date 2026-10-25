@@ -105,10 +105,12 @@ import type {
   TranscriptPage,
   TranscriptTurns,
   TranscriptWhere,
+  TranscriptWindow,
   UpdateReport,
   UsageBucket,
   UsageLimitsResponse,
   UsageSpend,
+  WindowAsk,
   WorkspaceRef,
 } from "@cawco/core";
 import {
@@ -206,6 +208,7 @@ import {
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
+  CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_RELOAD_SKILLS,
   CONTROL_RESTLESS,
@@ -913,8 +916,10 @@ import {
 import { createTrackers, trackerRoutes } from "./tracker";
 import {
   createTranscripts,
+  type HistoryCursor,
   type HistoryFault,
   type HistoryRead,
+  type OlderRead,
   type TranscriptPayload,
 } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
@@ -1601,6 +1606,12 @@ type Located =
  * body from turning a single request into a fleet-wide transcript sweep.
  */
 const TITLE_ASK_LIMIT = 64;
+
+/**
+ * How many stored entries each window of a conversation's head holds, read
+ * to name it: its first turn is almost always among the first few. Ours.
+ */
+const TITLE_WINDOW = 40;
 
 /**
  * A rule draft as the wire carries it — shared by create (POST, the hub mints
@@ -22183,23 +22194,23 @@ export const createServer = (
       : { code: 504, said: machineFault(machineId, "silent") };
 
   /**
-   * The stored entries under `where`, as its machine answers, or why it
-   * could not: the conversation as it was said (`said`), every turn across
-   * its compactions. A compaction changes what the model reads next, never
-   * what the transcript shows; read as the active chain alone, a transcript
-   * the hub read again began at the newest compaction, and every turn before
-   * it was gone from the list, on every screen and after a reload.
+   * A window of the stored conversation under `where`, as its machine
+   * answers, or why it could not: the conversation as it was said, every
+   * turn across its compactions. A compaction changes what the model reads
+   * next, never what the transcript shows; read as the active chain alone, a
+   * transcript the hub read again began at the newest compaction, and every
+   * turn before it was gone from the list, on every screen and after a
+   * reload.
    */
-  const storedEntries = async (
-    where: TranscriptWhere
-  ): Promise<
-    { entries: SessionMessage[] } | Extract<HistoryRead, { fault: string }>
-  > => {
+  const storedWindow = async (
+    where: TranscriptWhere,
+    window: WindowAsk
+  ): Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>> => {
     const { machineId } = where;
     const answer = await readAgent(
       machineId,
-      CONTROL_GET_SESSION_MESSAGES,
-      [where.sessionKey, { dir: where.cwd || undefined, said: true }],
+      CONTROL_READ_TRANSCRIPT_WINDOW,
+      [where.sessionKey, { dir: where.cwd || undefined, window }],
       READ_TIMEOUT_MS,
       where.harness
     );
@@ -22216,7 +22227,7 @@ export const createServer = (
               fault: "timeout",
               message: machineFault(machineId, "silent"),
             };
-      case "answered":
+      case "answered": {
         if (!answer.value.ok) {
           return {
             fault: "failed",
@@ -22225,11 +22236,13 @@ export const createServer = (
         }
         // A session the machine has never stored answers with nothing: an
         // empty transcript, the same shape a brand new session has.
+        const read = answer.value.result as Partial<TranscriptWindow> | null;
         return {
-          entries: (Array.isArray(answer.value.result)
-            ? answer.value.result
-            : []) as SessionMessage[],
+          entries: Array.isArray(read?.entries) ? read.entries : [],
+          older: read?.older ?? null,
+          newer: read?.newer ?? null,
         };
+      }
       default:
         throw unreachable(answer);
     }
@@ -22246,9 +22259,17 @@ export const createServer = (
   const SLOW_HISTORY_MS = 1000;
 
   /**
-   * A session's whole stored transcript, from its machine, with the records of
-   * the sends it holds — cut after the entry `at` when given (a rewind, a fork
-   * from the middle).
+   * How many stored entries a window of history asks for: two of the
+   * dashboard's pages and then some, so a newest page is cut from the first
+   * window read. Ours.
+   */
+  const HISTORY_WINDOW = 300;
+
+  /**
+   * A session's newest stored window, from its machine, with the records of
+   * the sends it holds — cut after the entry `at` when given (a rewind, a
+   * fork from the middle) — and where the window before it is: in its own
+   * conversation, or the one it went on from once its own reaches its start.
    */
   const readHistory = async (
     instanceId: string,
@@ -22263,14 +22284,7 @@ export const createServer = (
     const { where } = found;
     const row = "row" in found ? found.row : held;
     const began = Date.now();
-    // The conversations it went on from, oldest first, each followed by the
-    // line between it and the next: the transcript reads as one.
-    const earlier = row ? await priorEntries(row, where, prior) : [];
-    if ("fault" in earlier) {
-      return earlier;
-    }
-    const priorRead = Date.now();
-    const current = await currentEntries(
+    const current = await currentWindow(
       where,
       at,
       "cut" in found ? found.cut : undefined
@@ -22278,21 +22292,161 @@ export const createServer = (
     if ("fault" in current) {
       return current;
     }
-    const currentRead = Date.now();
-    const stored = [...earlier, ...current];
+    const read = Date.now();
+    const older = olderOf(prior.length, current.older);
+    const stored = current.entries;
     // Pictures as references to the media store, before a send's record is
     // filled from one of these entries.
     externalizeImages(stored);
-    const records = recordMap(sendLines(row?.id, stored, true, true));
+    const records = recordMap(sendLines(row?.id, stored, true, older === null));
     const transcript = withoutPings(stored, records);
-    const lines = row ? readRowHistory(row, transcript) : [];
+    const lines = row ? readRowHistory(row, transcript, older === null) : [];
     const done = Date.now();
     if (done - began >= SLOW_HISTORY_MS) {
       console.info(
-        `[transcripts] ${instanceId.slice(0, 8)}'s history: ${earlier.length} entries of ${prior.length} conversation(s) before read in ${priorRead - began} ms, ${current.length} of its own in ${currentRead - priorRead} ms, put together here in ${done - currentRead} ms`
+        `[transcripts] ${instanceId.slice(0, 8)}'s newest window: ${stored.length} entries read in ${read - began} ms, put together here in ${done - read} ms`
       );
     }
-    return { entries: transcript, lines, records, where };
+    return { entries: transcript, lines, records, where, older };
+  };
+
+  /**
+   * The window before one that began at `older` in conversation
+   * `conversation` (the session's own is the last, after the
+   * {@link PriorConversation}s it went on from): the window before it there,
+   * else the newest of the conversation before, else none.
+   */
+  const olderOf = (
+    conversation: number,
+    older: string | null
+  ): HistoryCursor | null => {
+    if (older !== null) {
+      return { conversation, before: older };
+    }
+    return conversation > 0
+      ? { conversation: conversation - 1, before: null }
+      : null;
+  };
+
+  /**
+   * The window `cursor` names of a session's stored history, with the
+   * records of the sends it holds. A conversation the session went on from
+   * ends on the line that stands between it and the next ("Continued on
+   * …"); the window that reaches the start of them all begins with where
+   * the session's project was moved to its machine.
+   */
+  const readOlder = async (
+    instanceId: string,
+    cursor: HistoryCursor
+  ): Promise<OlderRead> => {
+    const found = await conversationWhere(instanceId, cursor.conversation);
+    if ("fault" in found) {
+      return found;
+    }
+    const { conversation, row, where } = found;
+    if (!where.sessionKey) {
+      return { entries: [], records: {}, older: null };
+    }
+    const window = await storedWindow(
+      where,
+      cursor.before === null
+        ? { end: "newest", limit: HISTORY_WINDOW }
+        : { before: cursor.before, limit: HISTORY_WINDOW }
+    );
+    if ("fault" in window) {
+      return window;
+    }
+    const { entries } = window;
+    // A conversation the session went on from ends on the line between it
+    // and the next: its newest window's last.
+    const line =
+      row && cursor.before === null
+        ? betweenLine(row, conversation)
+        : undefined;
+    if (line) {
+      entries.push(line);
+    }
+    const older = olderOf(cursor.conversation, window.older);
+    externalizeImages(entries);
+    const records = recordMap(
+      sendLines(row?.id, entries, false, older === null)
+    );
+    const transcript = withoutPings(entries, records);
+    if (row && older === null) {
+      placeMovedHere(row, transcript);
+      nameFromStart(row, transcript);
+    }
+    return { entries: transcript, records, older };
+  };
+
+  /**
+   * Where the session's conversation `index` is stored: one it went on from
+   * ({@link PriorConversation}), or its own after them.
+   */
+  const conversationWhere = async (
+    instanceId: string,
+    index: number
+  ): Promise<
+    | {
+        conversation: PriorConversation | undefined;
+        row: InstanceRow | undefined;
+        where: TranscriptWhere;
+      }
+    | HistoryFault
+  > => {
+    const found = await historyWhere(instanceId);
+    if ("fault" in found) {
+      return found;
+    }
+    const [held] = db.getInstancesByIds([instanceId]);
+    const row = "row" in found ? found.row : held;
+    const conversation = row ? db.priorConversations(row.id)[index] : undefined;
+    return {
+      conversation,
+      row,
+      where: conversation
+        ? {
+            ...found.where,
+            sessionKey: conversation.sessionId,
+            harness: conversation.harness,
+          }
+        : found.where,
+    };
+  };
+
+  /** The line between a conversation the session went on from and the next ("Continued on …"), if any. */
+  const betweenLine = (
+    row: InstanceRow,
+    conversation: PriorConversation | undefined
+  ): SessionMessage | undefined => {
+    const event = conversation?.next
+      ? db.atLimit.events([row.id]).find((one) => one.id === conversation.next)
+      : undefined;
+    return event ? limitEntry(row, event) : undefined;
+  };
+
+  /**
+   * A session's whole stored history, every window of it, oldest first: for
+   * a reader that needs all of it at once (a thread's repair).
+   */
+  const readHistoryWhole = async (instanceId: string): Promise<HistoryRead> => {
+    const newest = await readHistory(instanceId);
+    if ("fault" in newest) {
+      return newest;
+    }
+    const windows: SessionMessage[][] = [newest.entries];
+    let { records } = newest;
+    for (let cursor = newest.older; cursor !== null;) {
+      // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
+      const older = await readOlder(instanceId, cursor);
+      if ("fault" in older) {
+        return older;
+      }
+      windows.unshift(older.entries);
+      records = { ...older.records, ...records };
+      cursor = older.older;
+    }
+    return { ...newest, entries: windows.flat(), records, older: null };
   };
 
   /**
@@ -22326,32 +22480,33 @@ export const createServer = (
   };
 
   /**
-   * The conversation a session runs now, as its machine stores it (none yet:
-   * nothing), cut after the entry `at` a rewind names, else after a fork's
-   * own `cut`.
+   * The newest window of the conversation a session runs now, as its
+   * machine stores it (none yet: nothing), cut after the entry `at` a rewind
+   * names, else after a fork's own `cut`.
    */
-  const currentEntries = async (
+  const currentWindow = async (
     where: TranscriptWhere,
     at: string | undefined,
     forked: string | undefined
-  ): Promise<SessionMessage[] | HistoryFault> => {
+  ): Promise<TranscriptWindow | HistoryFault> => {
     if (!where.sessionKey) {
-      return [];
-    }
-    const answer = await storedEntries(where);
-    if ("fault" in answer) {
-      return answer;
+      return { entries: [], older: null, newer: null };
     }
     const cut = at ?? forked;
-    const end = cut
-      ? answer.entries.findIndex((entry) => entry.uuid === cut)
-      : -1;
-    return end >= 0
-      ? answer.entries.slice(
-          0,
-          end + Number(includesRewindAnchor(where, answer.entries[end], at))
-        )
-      : answer.entries;
+    const window = await storedWindow(
+      where,
+      cut
+        ? { through: cut, limit: HISTORY_WINDOW }
+        : { end: "newest", limit: HISTORY_WINDOW }
+    );
+    if ("fault" in window) {
+      return window;
+    }
+    const last = window.entries.at(-1);
+    if (cut && last?.uuid === cut && !includesRewindAnchor(where, last, at)) {
+      window.entries.pop();
+    }
+    return window;
   };
 
   /** One of the hub's lines at an account's limit, as a stored transcript entry holds it. */
@@ -22369,62 +22524,42 @@ export const createServer = (
   });
 
   /**
-   * The conversations a session went on from, oldest first, as their machine
-   * stores them — each where it ran there, in whichever account's dir, found
-   * by its key — each followed by the line that stands between it and the
-   * next ("Continued on …"). Or why one could not be read.
+   * A row nobody has named, named from its stored transcript's oldest user
+   * turn that says anything: the unambiguous answer to what the session is
+   * called (write-once), read once the window that reaches the start is.
    */
-  const priorEntries = async (
+  const nameFromStart = (
     row: InstanceRow,
-    where: TranscriptWhere,
-    prior: readonly PriorConversation[]
-  ): Promise<SessionMessage[] | HistoryFault> => {
-    const events = new Map(
-      db.atLimit.events([row.id]).map((event) => [event.id, event])
-    );
-    const entries: SessionMessage[] = [];
-    for (const conversation of prior) {
-      // biome-ignore lint/performance/noAwaitInLoops: one conversation after another, in the order they are read
-      const answer = await storedEntries({
-        ...where,
-        sessionKey: conversation.sessionId,
-        harness: conversation.harness,
-      });
-      if ("fault" in answer) {
-        return answer;
-      }
-      entries.push(...answer.entries);
-      const line = conversation.next
-        ? events.get(conversation.next)
-        : undefined;
-      if (line) {
-        entries.push(limitEntry(row, line));
+    transcript: SessionMessage[]
+  ): void => {
+    if (!(row.title || row.derivedTitle)) {
+      const first = firstTurnOf(transcript);
+      if (first) {
+        nameFromFirstTurn(row.machineId, row.id, first);
       }
     }
-    return entries;
   };
 
   /**
-   * What a whole stored transcript says about the row it belongs to: its
-   * oldest user turn is the unambiguous answer to what the session is called
-   * (write-once), and a session the hub holds in custody ends on the notice
-   * that says so. Returns the hub's own lines for the builder to place, each
-   * after the rows it followed when it was first placed (core `HubLine`,
-   * `line_anchors`): the account lines but the one between two of its
-   * conversations, which stands between them already ({@link priorEntries}),
+   * What a stored transcript's newest window says about the row it belongs
+   * to: a session the hub holds in custody ends on the notice that says so,
+   * and, when the window reaches the start (`start`), its oldest user turn
+   * names it ({@link nameFromStart}) and where its project was moved to its
+   * machine opens it. Returns the hub's own lines for the builder to place,
+   * each after the rows it followed when it was first placed (core
+   * `HubLine`, `line_anchors`): the account lines but the one between two of
+   * its conversations, which stands between them already ({@link readOlder}),
    * the lines its machine said ({@link noteMachineLine}), fleet watch's
    * ({@link noteWatch}), and where it started again fresh
    * ({@link noteFreshStart}).
    */
   const readRowHistory = (
     row: InstanceRow,
-    transcript: SessionMessage[]
+    transcript: SessionMessage[],
+    start: boolean
   ): HubLine[] => {
-    if (!(row.title || row.derivedTitle)) {
-      const first = firstTurnOf(transcript);
-      if (first) {
-        nameFromFirstTurn(row.machineId, row.id, first);
-      }
+    if (start) {
+      nameFromStart(row, transcript);
     }
     const lineAnchors = db.lineAnchorsOf(row.id);
     const placed = (entry: SessionMessage, at: number): HubLine => ({
@@ -22464,7 +22599,9 @@ export const createServer = (
         message: custodyLine(row, held.reason),
       });
     }
-    placeMovedHere(row, transcript);
+    if (start) {
+      placeMovedHere(row, transcript);
+    }
     return lines;
   };
 
@@ -22514,6 +22651,7 @@ export const createServer = (
     lifetime,
     laws,
     readHistory,
+    readOlder,
     anchor: (instanceId, lineId, after) =>
       db.anchorLine(instanceId, lineId, after),
     build: (machineId) =>
@@ -23866,7 +24004,7 @@ export const createServer = (
   // now and, while his machine is away, as the next machine registers.
   const repairThread = createThreadRepair({
     db,
-    history: (instanceId) => readHistory(instanceId),
+    history: (instanceId) => readHistoryWhole(instanceId),
     restore: caw.restore,
   });
   offBoot.push(repairThread);
@@ -29358,29 +29496,26 @@ export const createServer = (
                 return { id: ask.id, title: null };
               }
 
-              const answer = await readAgent(
-                machineId,
-                CONTROL_GET_SESSION_MESSAGES,
-                [sessionKey, { dir: cwd }],
-                READ_TIMEOUT_MS,
-                harness
-              );
+              // The conversation's head, a window at a time from its start,
+              // until a turn that says anything: never the whole of it.
               // Unanswered or refused: no title now and nothing written, so
               // the next render asks again.
-              switch (answer.kind) {
-                case "unanswered":
+              let first: string | undefined;
+              for (let start: string | null = null; ;) {
+                // biome-ignore lint/performance/noAwaitInLoops: each window names the next
+                const window = await storedWindow(
+                  { machineId, sessionKey, cwd: cwd ?? "", harness },
+                  { start, limit: TITLE_WINDOW }
+                );
+                if ("fault" in window) {
                   return { id: ask.id, title: null };
-                case "answered":
-                  if (!answer.value.ok) {
-                    return { id: ask.id, title: null };
-                  }
+                }
+                first = firstTurnOf(window.entries);
+                if (first || window.newer === null) {
                   break;
-                default:
-                  throw unreachable(answer);
+                }
+                start = window.newer;
               }
-              const first = firstTurnOf(
-                Array.isArray(answer.value.result) ? answer.value.result : []
-              );
               if (!first) {
                 return { id: ask.id, title: null };
               }

@@ -4,7 +4,7 @@
  * `new Worker(new URL("./worker.js", import.meta.url))` resolves from dist.
  */
 
-import { readTranscript } from "./file.ts";
+import { scanFile } from "./file.ts";
 import { typeFilter } from "./scan.ts";
 import { extractDoc, type ExtractOptions, type TranscriptDoc } from "./text.ts";
 import type { LocatedRecord, ParseStats } from "./types.ts";
@@ -31,17 +31,19 @@ export async function runTask(task: WorkerTask): Promise<WorkerFileResult[]> {
   const results: WorkerFileResult[] = [];
   for (const path of task.files) {
     try {
-      const { records, stats } = await readTranscript(path, { prefilter });
+      // Documents are taken out of each record as the scan reads it, so a
+      // file's records are never all held at once.
       if (task.mode === "docs") {
-        const docs: TranscriptDoc[] = [];
-        for (const located of records) {
-          const doc = extractDoc(located.record, task.extract);
-          if (doc) {
-            docs.push(doc);
-          }
-        }
+        const { items: docs, stats } = await scanFile(path, {
+          prefilter,
+          pick: (located) => extractDoc(located.record, task.extract) ?? undefined,
+        });
         results.push({ path, docs, stats });
       } else {
+        const { items: records, stats } = await scanFile(path, {
+          prefilter,
+          pick: (located) => located,
+        });
         results.push({ path, records, stats });
       }
     } catch (error) {

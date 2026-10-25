@@ -362,6 +362,11 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
     detect: () => detected(kind),
     listSessions: async () => [],
     getSessionMessages: async () => [],
+    readTranscriptWindow: async () => ({
+      entries: [],
+      older: null,
+      newer: null,
+    }),
     getSessionInfo: async () => undefined,
     machine: (method: string) => {
       if (method === "inspectConfig") {

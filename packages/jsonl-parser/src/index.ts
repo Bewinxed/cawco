@@ -10,13 +10,15 @@
  */
 
 export {
-  readTranscript,
-  readTranscriptEnd,
-  readTranscriptTail,
   type Checkpoint,
-  type ReadEndOptions,
-  type ReadEndResult,
-  type ReadResult,
+  fileStamp,
+  ReverseReader,
+  type ReverseOptions,
+  readSpans,
+  type ScanFileOptions,
+  type ScanResult,
+  scanFile,
+  type Span,
 } from "./file.ts";
 export { parseMany, type ParseManyOptions } from "./pool.ts";
 export { setSectionMarker } from "./section.ts";
@@ -26,6 +28,7 @@ export {
   lineRecords,
   lineSpans,
   newStats,
+  parseObject,
   parseRecords,
   typeFilter,
   type BytePrefilter,
