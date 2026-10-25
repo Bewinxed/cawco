@@ -3,9 +3,11 @@
  * the engine. The folder is served as it is, and its page is read at 390,
  * 680 and 1440 on Chromium and WebKit, in every state the preview offers
  * (at rest, waiting on him, the task pane open, an empty project, a read
- * failure) and both phone forks (the grouped list, the columns sideways).
+ * failure) and both phone forks (the grouped list, the columns sideways),
+ * and at his window's 1037.
  *
  *   bun scripts/probe-kit/run.ts project-preview
+ *   PROJECT_PREVIEW_ENGINES=chromium bun scripts/probe-kit/run.ts project-preview
  *
  * Asserted:
  * - boxes: the page never scrolls sideways; inside the head, the bar, the
@@ -18,8 +20,20 @@
  *   two, the stage's one fact, a third line only for Working and Review,
  *   none on a card waiting on him);
  * - the pane holds at most two cards before its tabs;
- * - one act per view: exactly one coral-filled control in view, in every
- *   state at every width (Ask Caw, Approve, the empty project's Send, Retry);
+ * - one act per view: at most one coral-filled control in view, in every
+ *   state at every width (Approve, a composer's Send, Retry, the phone view
+ *   bar's Ask Caw), and none while an ask stands;
+ * - his pins (DESIGN.md, The Title Bars Follow Liquid Glass Rule): the
+ *   project's head is one row, the name, the place as its OS mark, Caw's
+ *   seat and one glass capsule of bare symbols (Ask Caw, Spin off, More on a
+ *   desk; Spin off and More from 640 to 900; More alone under 640), nothing
+ *   in it coral and no second line; the pane's bar holds bare symbols only
+ *   (no metadata strip: no section name, id, stage, agent or age), its
+ *   capsule holds the session's symbol named in its tooltip, and its tabs
+ *   are Task, Changes and History, no Session; Caw's first thread stands its
+ *   title as the marked placeholder its copy replaces;
+ * - the house rules (house-rules.ts) at 390, 1037 and 1440 on both engines,
+ *   and the overflow sweep (journeys/scan.ts) totals zero at each width;
  * - no glyph stands in a box of its own: a glyph whose parent draws a
  *   border or a fill shares that box with words (a labelled control or
  *   tile); an icon alone has no container, controls included;
@@ -73,8 +87,13 @@
  * - no console error on any page.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one state at a time
+import { mkdir } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { projectWords } from "../../../packages/core/src/words/project";
+import { HouseRules } from "../house-rules";
+import { scan } from "../journeys/scan";
 import {
   type Kit,
   type MotionRun,
@@ -87,8 +106,13 @@ const FOLDER = normalize(
   join(import.meta.dir, "..", "..", "..", "design-previews", "project")
 );
 const STATES = ["rest", "waiting", "open", "empty", "fault", "first"] as const;
-const SIZES: View[] = ["desk", "narrowDesk", "phone"];
-const ENGINES = ["chromium", "webkit"] as const;
+const SIZES: View[] = ["desk", "window1037", "narrowDesk", "phone"];
+/** The widths the house rules read at: Desk, his window, Phone. */
+const HOUSE_WIDTHS = [1440, 1037, 390];
+/** Both engines; `PROJECT_PREVIEW_ENGINES=chromium` runs one while iterating. */
+const ENGINES = (
+  process.env.PROJECT_PREVIEW_ENGINES ?? "chromium,webkit"
+).split(",") as ("chromium" | "webkit")[];
 const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
 /** The house curves (DESIGN.md, Motion grammar) and the skeleton's cross-fade. */
 const HOUSE_CURVES = [
@@ -170,15 +194,15 @@ const PARENTS = [
   ".bar",
   ".glass",
   ".head",
-  ".head-words",
+  ".head-who",
   ".head-acts",
+  ".capsule",
   ".col-head",
   ".card",
   ".card-meta",
   ".card-third",
   ".viewbar",
-  ".pane-top",
-  ".pane-facts",
+  ".pane-bar",
   ".pcard",
   ".chips",
   ".decision",
@@ -321,8 +345,8 @@ const cutColumns = (page: Page): Promise<string[]> =>
  * any colour of its background image, at a coral hue (20 to 50 degrees in
  * OKLCH) with a chroma of 0.1 or more (the status tints sit under it).
  */
-const coralFills = (page: Page): Promise<string[]> =>
-  page.evaluate(() => {
+const coralFills = (page: Page, within = "body"): Promise<string[]> =>
+  page.evaluate((scope) => {
     const canvas = document.createElement("canvas").getContext("2d");
     const coral = (colour: string): boolean => {
       if (!canvas) {
@@ -374,7 +398,11 @@ const coralFills = (page: Page): Promise<string[]> =>
         getComputedStyle(element).visibility === "visible"
       );
     };
-    return [...document.querySelectorAll("button, a, [role='button'], label")]
+    return [
+      ...(document
+        .querySelector(scope)
+        ?.querySelectorAll("button, a, [role='button'], label") ?? []),
+    ]
       .filter(inView)
       .filter((control) => colours(getComputedStyle(control)).some(coral))
       .map(
@@ -382,7 +410,7 @@ const coralFills = (page: Page): Promise<string[]> =>
           (control.textContent?.trim() || control.getAttribute("aria-label")) ??
           control.localName
       );
-  });
+  }, within);
 
 /**
  * Each glyph in view standing in a box of its own: its parent draws a
@@ -792,9 +820,9 @@ const askInView = (page: Page) =>
       ask: [...document.querySelectorAll(".ask-sec:not(.is-answered)")].some(
         inView
       ),
-      askCaw: [...document.querySelectorAll('[data-act="ask-caw"]')].some(
-        inView
-      ),
+      askCaw: [
+        ...document.querySelectorAll('.viewbar [data-act="ask-caw"]'),
+      ].some(inView),
     };
   });
 
@@ -1502,7 +1530,7 @@ const heightOf = (selector: string) => (page: Page) =>
 const motions = async (
   kit: Kit,
   origin: string,
-  engine: (typeof ENGINES)[number]
+  engine: "chromium" | "webkit"
 ): Promise<void> => {
   const desk = await kit.page("desk", { engine });
   listen(desk, `motion ${engine} desk`);
@@ -1572,7 +1600,6 @@ const motions = async (
       expect: [
         ["card-land", 280],
         ["review-fold", 160],
-        ["pill-morph", 180],
       ],
       read: leftOf('.card[data-id="tsk-16"]'),
     }
@@ -1721,7 +1748,218 @@ const motions = async (
   );
 };
 
+/* ---------- His pins ---------- */
+
+/**
+ * What his pins stand on, as drawn: the project's head (one row, its
+ * capsule's symbols, its words), the open pane's bar and tabs, and Caw's
+ * first-thread title.
+ */
+const pinParts = (page: Page) =>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: it runs in the page as one function, reading the head, the pane and Caw's first thread together
+  page.evaluate(() => {
+    const shown = (element: Element | null): element is Element => {
+      if (!element) {
+        return false;
+      }
+      const box = element.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        getComputedStyle(element).visibility === "visible"
+      );
+    };
+    const middle = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return (box.top + box.bottom) / 2;
+    };
+    const spread = (elements: Element[]) => {
+      const mids = elements.map(middle);
+      return mids.length > 0 ? Math.max(...mids) - Math.min(...mids) : 0;
+    };
+    const lines = (element: Element | null): number => {
+      if (!element) {
+        return 0;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return new Set(
+        [...range.getClientRects()]
+          .filter((rect) => rect.width > 0)
+          .map((rect) => Math.round(rect.top))
+      ).size;
+    };
+    const named = (element: Element) => ({
+      label: element.getAttribute("aria-label") ?? "",
+      tip: element.getAttribute("title") ?? "",
+      words: (element.textContent ?? "").trim(),
+      glyphs: element.querySelectorAll("svg").length,
+    });
+
+    const head = document.querySelector(".head");
+    const name = head?.querySelector(".head-name") ?? null;
+    const headShown =
+      shown(head) && shown(name) && Boolean(head?.closest("#page"));
+    const parts = head
+      ? [
+          name,
+          head.querySelector(".head-place"),
+          head.querySelector(".head-seat"),
+          ...head.querySelectorAll(".capsule .bar-item"),
+        ].filter(shown)
+      : [];
+    const capsule = head
+      ? [...head.querySelectorAll(".capsule .bar-item")].filter(shown)
+      : [];
+    const pane = document.querySelector<HTMLElement>('[data-slot="pane"]');
+    const paneOpen = Boolean(pane && !pane.hidden && shown(pane));
+    const bar = pane?.querySelector(".pane-bar") ?? null;
+    const barItems = bar
+      ? [...bar.querySelectorAll(".bar-item")].filter(shown)
+      : [];
+    const session = bar?.querySelector('[data-act="open-session"]') ?? null;
+    const first = document.querySelector('[data-slot="caw-first"]');
+    return {
+      head: headShown
+        ? {
+            spread: spread(parts),
+            parts: parts.length,
+            nameLines: lines(name),
+            words: (head as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
+            name: (name?.textContent ?? "").trim(),
+            capsule: capsule.map(named),
+            seat: shown(head?.querySelector(".head-seat") ?? null),
+            place: shown(head?.querySelector(".head-place") ?? null)
+              ? named(head?.querySelector(".head-place") as Element)
+              : null,
+            secondRow: Boolean(
+              document.querySelector(".head-line, .head-words, .head-new")
+            ),
+          }
+        : null,
+      pane: paneOpen
+        ? {
+            tabs: [...(pane as HTMLElement).querySelectorAll(".ptab")].map(
+              (tab) => (tab.textContent ?? "").trim()
+            ),
+            strip: (pane as HTMLElement).querySelectorAll(
+              '.pane-top, .pane-facts, [data-slot="pill"]'
+            ).length,
+            bar: Boolean(bar),
+            barWords: ((bar as HTMLElement | null)?.innerText ?? "").trim(),
+            barSpread: spread(barItems),
+            titleNext: Boolean(
+              bar?.nextElementSibling?.matches('[data-slot="pane-title"]')
+            ),
+            session: shown(session) ? named(session as Element) : null,
+          }
+        : null,
+      first: shown(first)
+        ? (
+            document.querySelector('[data-slot="caw-first-title"]')
+              ?.textContent ?? ""
+          ).trim()
+        : null,
+    };
+  });
+
+/** The open-session symbol's name says what it opens. */
+const SESSION = /session/i;
+
+/** Each pin's element, read where the state shows it. */
+const checkPins = async (
+  kit: Kit,
+  page: Page,
+  where: string,
+  state: string
+): Promise<void> => {
+  const width = page.viewportSize()?.width ?? 0;
+  const pins = await pinParts(page);
+  if (pins.head) {
+    const { head } = pins;
+    // The capsule's symbols by width: under the drawer's line the view bar
+    // carries Ask Caw, and under 640 Spin off moves into More.
+    const more = commonWords.moreFor("");
+    let want = [projectWords.askCaw, projectWords.spinOff, more];
+    if (width < 640) {
+      want = [more];
+    } else if (width < 901) {
+      want = [projectWords.spinOff, more];
+    }
+    const seat = !["empty", "fault"].includes(state);
+    const bare = head.capsule.every(
+      (item) => item.words === "" && item.glyphs === 1 && item.tip !== ""
+    );
+    kit.check(
+      `${where}: pins 11 and 12, the head is one row: the name on one line, its place as its OS mark, ${seat ? "Caw's seat, " : ""}then one capsule of bare named symbols (${want.join(", ")}), no second row, no words but the name`,
+      head.spread <= 4 &&
+        head.nameLines === 1 &&
+        head.words === head.name &&
+        !head.secondRow &&
+        head.seat === seat &&
+        head.place !== null &&
+        head.place.words === "" &&
+        head.place.tip !== "" &&
+        bare &&
+        head.capsule.length === want.length &&
+        head.capsule.every((item, i) =>
+          item.label.startsWith(want[i] as string)
+        ),
+      `centres within ${head.spread.toFixed(1)}px over ${head.parts} parts, name on ${head.nameLines} line(s), words “${head.words}”, seat ${head.seat}, place ${head.place ? `“${head.place.tip}”` : "none"}, capsule ${head.capsule.map((item) => `${item.label}${item.words ? ` “${item.words}”` : ""}`).join(", ")}`
+    );
+    const coral = await coralFills(page, ".head");
+    kit.check(
+      `${where}: pin 12, nothing in the head is coral`,
+      coral.length === 0,
+      coral.join(", ") || "none"
+    );
+  }
+  if (pins.pane) {
+    const { pane } = pins;
+    kit.check(
+      `${where}: pin 1, the pane's tabs are Task, Changes and History, no Session`,
+      pane.tabs.join(",") === "Task,Changes,History",
+      pane.tabs.join(", ")
+    );
+    kit.check(
+      `${where}: pin 1, the session opens from a bare symbol in the pane's capsule, named in its tooltip`,
+      Boolean(
+        pane.session &&
+        pane.session.words === "" &&
+        pane.session.glyphs === 1 &&
+        SESSION.test(pane.session.tip) &&
+        SESSION.test(pane.session.label)
+      ),
+      pane.session
+        ? `“${pane.session.tip}”, words “${pane.session.words}”`
+        : "no open-session symbol"
+    );
+    kit.check(
+      `${where}: pin 11, the pane's bar is one row of bare symbols with no metadata strip, the task's title under it`,
+      pane.bar &&
+        pane.strip === 0 &&
+        pane.barWords === "" &&
+        pane.barSpread <= 1 &&
+        pane.titleNext,
+      `strip parts ${pane.strip}, bar words “${pane.barWords}”, symbols within ${pane.barSpread.toFixed(1)}px, title next ${pane.titleNext}`
+    );
+  }
+  if (pins.first !== null) {
+    kit.check(
+      `${where}: pin 14, Caw's first thread stands its title as the marked placeholder, the old line gone`,
+      pins.first.startsWith("[Copy to come:") &&
+        !pins.first.includes("Talk to Caw"),
+      pins.first
+    );
+  }
+};
+
 /* ---------- The run ---------- */
+
+/** The house rules, one reader per engine (set as each engine's legs start). */
+let house: HouseRules | null = null;
+/** The overflow sweep's (journeys/scan.ts) findings, by the width read at. */
+const scanTotals = new Map<number, number>();
 
 /** The sweep's faults over every state read, by the width read at. */
 const sweepTotals = new Map<number, number>();
@@ -1878,6 +2116,38 @@ const checkFixes = async (
   const swept = await sweep(page);
   const width = page.viewportSize()?.width ?? 0;
   sweepTotals.set(width, (sweepTotals.get(width) ?? 0) + swept.length);
+  const spilled = await page.evaluate(scan);
+  scanTotals.set(width, (scanTotals.get(width) ?? 0) + spilled.length);
+  kit.check(
+    `${where}: the overflow sweep (scan.ts) finds nothing spilled, out of its row or under a control`,
+    spilled.length === 0,
+    spilled.slice(0, 6).join("; ")
+  );
+  if (house && HOUSE_WIDTHS.includes(width)) {
+    // Caw's bottom sheet stands over the board on a phone by design.
+    const sheet = await page.evaluate(() => {
+      const col = document.querySelector<HTMLElement>(".caw-col");
+      return Boolean(
+        col && !col.hidden && getComputedStyle(col).position === "absolute"
+      );
+    });
+    await house.at(
+      page,
+      where,
+      sheet
+        ? {
+            except: [
+              {
+                rule: "overflow",
+                selector: ".board *",
+                reason:
+                  "Caw's bottom sheet stands over the board on a phone (DESIGN.md, Caw's panel: the sheet, part of the page)",
+              },
+            ],
+          }
+        : {}
+    );
+  }
   kit.check(
     `${where}: the sweep finds nothing past the screen and no words over words`,
     swept.length === 0,
@@ -1904,11 +2174,12 @@ const checkState = async (
   kit.check(
     asking
       ? `${where}: no coral while the ask stands and Ask Caw is out of view`
-      : `${where}: exactly one coral-filled control in view`,
-    acts.length === (asking ? 0 : 1),
+      : `${where}: at most one coral-filled control in view`,
+    asking ? acts.length === 0 : acts.length <= 1,
     acts.join(", ") || "none"
   );
   await checkNeeds(kit, page, where, state);
+  await checkPins(kit, page, where, state);
   const boxed = await boxedGlyphs(page);
   kit.check(
     `${where}: no glyph stands in a box of its own`,
@@ -2213,8 +2484,48 @@ const checkFlows = async (
   await checkSettle(kit, page, origin, `${where} the asks answered`);
 };
 
+/**
+ * The states his pins stand in, drawn for him to look at (DPR 1, Chromium):
+ * the head at rest, the pane open, and Caw's first thread, at each width.
+ */
+const CAPTURES: [string, string][] = [
+  ["rest", "list"],
+  ["open", "list"],
+  ["first", "list"],
+];
+const capture = async (kit: Kit, origin: string, size: View): Promise<void> => {
+  const page = await kit.page(size, { engine: "chromium", scale: 1 });
+  listen(page, `capture ${size}`);
+  await mkdir(join(kit.out, "captures"), { recursive: true });
+  const width = page.viewportSize()?.width ?? 0;
+  for (const [state, layout] of CAPTURES) {
+    await openFrame(page, origin, state, layout);
+    await page.screenshot({
+      path: join(kit.out, "captures", `project-${state}-${width}.png`),
+    });
+  }
+  await page.close();
+};
+
 const boxes = async (kit: Kit, origin: string): Promise<void> => {
   for (const engine of ENGINES) {
+    house = new HouseRules(kit, `${engine}`, {
+      scope: ".app",
+      except: [
+        {
+          rule: "glyph",
+          selector: ".head .capsule [data-act='more']",
+          reason:
+            "under 640 the head's capsule holds More alone, as ProjectHead.svelte draws it (its BarGlass, `max-phone:hidden` on Ask Caw and Spin off)",
+        },
+        {
+          rule: "glyph",
+          selector: ".glass-caw",
+          reason:
+            "the phone's top bar: Caw's glass hangs from his tucked tab at the screen's edge (DESIGN.md, Caw's panel), outside his pins on this page",
+        },
+      ],
+    });
     for (const size of SIZES) {
       const page = await kit.page(size, { engine });
       listen(page, `${engine} ${size}`);
@@ -2256,6 +2567,8 @@ const boxes = async (kit: Kit, origin: string): Promise<void> => {
         );
       }
     }
+    house.report();
+    house = null;
   }
 };
 
@@ -2264,13 +2577,22 @@ const probe = async (kit: Kit): Promise<void> => {
   const origin = `http://127.0.0.1:${server.port}`;
   try {
     await boxes(kit, origin);
-    for (const width of [390, 680, 1440]) {
+    for (const width of [390, 680, 1037, 1440]) {
       kit.check(
         `the sweep at ${width} totals zero over both engines, every state, Day and Night`,
         sweepTotals.get(width) === 0,
         `${sweepTotals.get(width) ?? "no reading"}`
       );
+      kit.check(
+        `the overflow sweep (scan.ts) at ${width} totals zero over both engines, every state, Day and Night`,
+        scanTotals.get(width) === 0,
+        `${scanTotals.get(width) ?? "no reading"}`
+      );
     }
+    for (const size of ["desk", "window1037", "phone"] as View[]) {
+      await capture(kit, origin, size);
+    }
+    kit.note(`captures in ${join(kit.out, "captures")}`);
     for (const engine of ENGINES) {
       await motions(kit, origin, engine);
     }

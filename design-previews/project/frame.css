@@ -355,8 +355,6 @@ pre {
   align-items: center;
   gap: var(--space-2);
   padding-inline: var(--space-4) var(--space-1);
-  background: var(--surface-raised);
-  border-block-end: 1px solid var(--border-hairline);
   min-width: 0;
 }
 .bar-burger,
@@ -494,66 +492,136 @@ pre {
   outline: none;
 }
 
+/* The project's head: one row, as tall as Caw's seat, every control centred
+   on it. The name gives way first (its ellipsis) before anything trailing moves. */
 .head {
   display: flex;
   flex: none;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-5);
-  min-height: calc(var(--c-page-head-h) - var(--space-5));
+  gap: var(--space-4);
+  min-height: var(--c-project-head-h);
   padding-block: var(--space-5) var(--space-3);
 }
-.head-words {
-  display: grid;
-  flex: 1;
-  gap: var(--space-1);
+.head-who {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-3);
   min-width: 0;
 }
 .head-name {
+  min-width: 0;
+  overflow: clip;
   font: var(--type-title);
   letter-spacing: -0.01em;
-  text-wrap: balance;
-}
-.head-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: 0.35em;
-  font: var(--type-body);
-  color: var(--ink-muted);
-}
-.head-needs:empty {
-  display: none;
-}
-.needs-link {
-  display: inline-grid;
-  border-radius: var(--radius-xs);
-  color: var(--status-attn-ink);
-  font-weight: 500;
-  transition:
-    background-color var(--dur-control) var(--ease-out),
-    color var(--dur-control) var(--ease-out);
-}
-.needs-link > span {
-  grid-area: 1 / 1;
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-.needs-link[aria-pressed="true"] {
-  padding-inline: var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--brand-wash);
-  color: var(--brand-ink);
-}
-@media (hover: hover) {
-  .needs-link:hover {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
 }
 .head-acts {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--space-2);
+  margin-inline-start: auto;
+}
+/* Caw's seat: the page's one Caw, at 48px, a button that opens his column. */
+.head-seat {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--c-project-head-h);
+  height: var(--c-project-head-h);
+  border-radius: var(--radius-md);
+}
+.head-seat[hidden] {
+  display: none;
+}
+.head-seat img {
+  width: var(--c-project-head-h);
+  height: var(--c-project-head-h);
+}
+
+/* One capsule of the panel's glass, the top bar's trailing group its recipe:
+   bare symbols, no fill or edge of their own until hovered or pressed. */
+.capsule {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--c-btn-h);
+  padding: var(--c-bar-group-pad);
+  border-radius: var(--radius-pill);
+  background: var(--material-panel);
+  border: 1px solid var(--border-hairline);
+  box-shadow: var(--shadow-tile);
+  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+}
+.bar-item {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--c-bar-item);
+  height: var(--c-bar-item);
+  border-radius: var(--radius-pill);
+  color: var(--ink-muted);
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    color var(--dur-control) var(--ease-out),
+    scale var(--dur-toggle) var(--ease-out);
+}
+.bar-item .glyph.sym {
+  width: var(--c-bar-symbol);
+  height: var(--c-bar-symbol);
+}
+@media (hover: hover) {
+  .bar-item:hover {
+    background: var(--surface-hover);
+    color: var(--ink-strong);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar-item:active {
+    scale: 0.97;
+  }
+}
+
+/* Needs you, the page's filter, after the views: its mark in the attention
+   glyph's spark and its words in the attention ink, never a filled surface. */
+.bar-needs:empty {
+  display: none;
+}
+.needs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--c-btn-h-sm);
+  padding-inline: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: var(--type-label);
+  color: var(--status-attn-ink);
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    border-color var(--dur-control) var(--ease-out);
+}
+.needs-link .glyph {
+  color: var(--status-attn-glyph);
+}
+.needs-words {
+  display: inline-grid;
+}
+.needs-words > span {
+  grid-area: 1 / 1;
+}
+.needs-link[aria-pressed="true"] {
+  border-color: var(--status-attn-glyph);
+}
+@media (hover: hover) {
+  .needs-link:hover {
+    background: var(--surface-hover);
+  }
 }
 
 /* The ⋯ menu, a popover on data-state (it turns back from where it stands). */
@@ -637,25 +705,40 @@ pre {
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+/* The house edge fade on each side with more past it: sideways where the
+   pane or Caw's column narrows the board, and at its foot while its cards run
+   on below. The two fades meet (intersect) where both stand. */
+.board:is([data-more-start], [data-more-end], [data-more-below]) {
+  mask-image: var(--fade-x, linear-gradient(#000, #000)),
+    var(--fade-y, linear-gradient(#000, #000));
+  mask-composite: intersect;
+}
 .board[data-more-end] {
-  mask-image: linear-gradient(
+  --fade-x: linear-gradient(
     to right,
     #000 calc(100% - var(--c-edge-fade-len)),
     transparent
   );
 }
 .board[data-more-start] {
-  mask-image: linear-gradient(
+  --fade-x: linear-gradient(
     to left,
     #000 calc(100% - var(--c-edge-fade-len)),
     transparent
   );
 }
 .board[data-more-start][data-more-end] {
-  mask-image: linear-gradient(
+  --fade-x: linear-gradient(
     to right,
     transparent,
     #000 var(--c-edge-fade-len),
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
+}
+.board[data-more-below] {
+  --fade-y: linear-gradient(
+    to bottom,
     #000 calc(100% - var(--c-edge-fade-len)),
     transparent
   );
@@ -1148,66 +1231,24 @@ pre {
   padding: var(--space-3) var(--space-5) var(--space-2);
   border-block-start: 1px solid var(--border-hairline);
 }
-.pane-top {
+/* The pane's bar: bare symbols on no ground, Back leading on a phone, the
+   capsule trailing; the task's title is the content under it. */
+.pane-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-inline-start: calc(-1 * var(--space-3));
-}
-.pane-top code {
-  color: var(--ink-muted);
-}
-.pane-head {
-  display: grid;
   gap: var(--space-2);
+  min-height: var(--c-btn-h);
+}
+.pane-bar .capsule {
+  margin-inline-start: auto;
+}
+.pane-back {
+  display: none;
 }
 .pane-title {
-  margin-block-start: var(--space-2);
   font: var(--type-title);
   letter-spacing: -0.01em;
   text-wrap: balance;
-}
-.pane-facts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  font: var(--type-meta);
-  color: var(--ink-muted);
-}
-.pane-facts .who {
-  font-weight: 500;
-  color: var(--ink-strong);
-}
-.pane-facts .labels {
-  margin-inline-start: auto;
-}
-
-.pill {
-  display: inline-grid;
-  align-items: center;
-  height: var(--c-pill-h);
-  padding: 0 10px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-recess-deep);
-  font: var(--type-label);
-  color: var(--ink-strong);
-  transition:
-    background-color var(--dur-panel) var(--ease-out),
-    color var(--dur-panel) var(--ease-out);
-}
-.pill > span {
-  grid-area: 1 / 1;
-  text-box: trim-both ex alphabetic;
-  padding-block: calc((1lh - 1ex) / 2);
-}
-.pill[data-tone="live"] {
-  background: var(--status-live-bg);
-  color: var(--status-live-ink);
-}
-.pill[data-tone="done"] {
-  background: var(--status-done-bg);
-  color: var(--status-done-ink);
 }
 
 /* A card in the pane: the ask (permission-card recipe, spark edge) and the review. */
@@ -1603,7 +1644,6 @@ pre {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-  border-block-end: 1px solid var(--border-hairline);
 }
 .caw-mark {
   width: var(--c-row-lead);
@@ -1836,18 +1876,15 @@ pre {
     min-height: 0;
     padding-block: var(--space-4) var(--space-3);
   }
-  .head-acts .btn.primary,
-  .head-acts .head-new {
+  /* Under the drawer's line the view bar carries Ask Caw, and under 640px
+     Spin off moves into More (ProjectHead: the capsule holds More alone). */
+  .head-ask {
     display: none;
   }
-  .menu-item.phone-only {
-    display: flex;
+  .pane-back {
+    display: inline-grid;
   }
-  .head-line {
-    font: var(--type-meta);
-  }
-  /* Said once per kind: the Needs-you group head and the view bar's chip. */
-  .head-needs {
+  .pane-close {
     display: none;
   }
 
@@ -2030,6 +2067,12 @@ pre {
 }
 
 @media (width < 640px) {
+  .head-spin {
+    display: none;
+  }
+  .menu-item.phone-only {
+    display: flex;
+  }
   .board .col-head {
     padding-block-start: var(--space-2);
   }

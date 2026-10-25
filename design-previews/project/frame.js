@@ -330,20 +330,17 @@ const banded = new Map();
 const PROJECTS = {
   "cawco-dev": {
     name: "Cawco-Dev",
-    place: "obelisk-of-light · ~/cockpit · 43 places",
-    where: "obelisk-of-light · ~/cockpit",
+    machine: "obelisk-of-light",
     decisions: "8",
   },
   tidewater: {
     name: "tidewater",
-    place: "obelisk-of-light · ~/tidewater",
-    where: "obelisk-of-light · ~/tidewater",
+    machine: "obelisk-of-light",
     decisions: "",
   },
   "obelisk-site": {
     name: "obelisk-site",
-    place: "obelisk-of-light · ~/obelisk-site · 5 places",
-    where: "obelisk-of-light · ~/obelisk-site",
+    machine: "obelisk-of-light",
     decisions: "",
   },
 };
@@ -597,7 +594,8 @@ const place = () => {
 /**
  * The house edge fade on the board's sides while more of it lies past them
  * (the pane or Caw's column narrows it): a column cut at an edge fades out
- * there rather than being sliced.
+ * there rather than being sliced. Its foot fades too while its cards run on
+ * below it.
  */
 const markEdges = () => {
   const board = $('[data-slot="board"]');
@@ -606,6 +604,11 @@ const markEdges = () => {
   board.toggleAttribute(
     "data-more-end",
     more > 1 && board.scrollLeft < more - 1
+  );
+  const below = board.scrollHeight - board.clientHeight - board.scrollTop;
+  board.toggleAttribute(
+    "data-more-below",
+    getComputedStyle(board).overflowY !== "visible" && below > 1
   );
 };
 
@@ -699,9 +702,16 @@ const drawHead = (animate) => {
   for (const slot of $$('[data-slot="project-name"]')) {
     slot.textContent = project.name;
   }
-  /* A read the hub refused claims nothing it read: the place, no counts. */
-  $('[data-slot="place"]').textContent =
-    S.state === "fault" ? project.where : project.place;
+  /* The place is its machine, drawn as its OS mark and named in its tooltip. */
+  $('[data-slot="place"]').title = project.machine;
+  $('[data-slot="more"]').setAttribute("aria-label", `More for ${project.name}`);
+  $('[data-slot="more"]').title = `More for ${project.name}`;
+  $(".capsule").setAttribute("aria-label", project.name);
+  /* Caw sits in the head; over the empty board he stands there instead, and
+     a read the hub refused draws no one. */
+  const seat = $('[data-slot="seat"]');
+  seat.hidden = S.state === "empty" || S.state === "fault";
+  seat.setAttribute("aria-label", `Caw, lead of ${project.name}`);
   $('[data-slot="decisions"]').textContent = project.decisions;
   for (const row of $$(".rail-row[data-project]")) {
     if (row.dataset.project === S.project) {
@@ -718,15 +728,15 @@ const drawHead = (animate) => {
   } else {
     let link = $(".needs-link", slot);
     if (!link) {
-      slot.innerHTML =
-        '<span aria-hidden="true">· </span><button class="needs-link" type="button" data-act="filter-needs" aria-pressed="false"></button>';
+      slot.innerHTML = `<button class="needs-link mark-line" type="button" data-act="filter-needs" aria-pressed="false" title="Needs you">${use("hand-shake")}<span class="needs-words"></span></button>`;
       link = $(".needs-link", slot);
     }
     link.setAttribute("aria-pressed", String(S.filter));
+    const words = $(".needs-words", link);
     if (animate) {
-      morph(link, needWords(count), "needs-morph");
+      morph(words, needWords(count), "needs-morph");
     } else {
-      link.textContent = needWords(count);
+      words.textContent = needWords(count);
     }
   }
   const chip = $(".viewbar-needs");
@@ -788,7 +798,7 @@ const drawRing = (count) => {
 
 /* ---------- The task pane ---------- */
 
-const TABS = ["Task", "Session", "Changes", "History"];
+const TABS = ["Task", "Changes", "History"];
 
 const FILES = {
   "tsk-16": {
@@ -816,25 +826,10 @@ const FILES = {
 };
 
 const defaultTab = (task) => {
-  if (task.stage === "working") {
-    return "session";
-  }
   if (task.stage === "review") {
     return "changes";
   }
   return "task";
-};
-
-const stagePill = (task) => {
-  const tone = { working: "live", done: "done" }[task.stage] ?? "";
-  const word = {
-    ready: "Ready",
-    working: "Working",
-    review: "Review",
-    done: "Done",
-    dropped: "Dropped",
-  }[task.stage];
-  return `<span class="pill" data-tone="${tone}" data-slot="pill"><span>${word}</span></span>`;
 };
 
 const askSection = (task) => {
@@ -938,18 +933,6 @@ const tabPanel = (task, tab) => {
       <div class="prows">${fileRows}</div>
     </div>`;
   }
-  if (tab === "session") {
-    return `<div class="ppanel" role="tabpanel" aria-label="Session">
-      <h3 class="mark-line">${ring(task.ring ?? [7, 7])}<span>Plan · ${(task.ring ?? [7, 7]).join(" of ")} done</span></h3>
-      <ol class="steps">
-        <li>Read the tide feed's offsets</li>
-        <li>Find where BST is applied</li>
-        <li data-now>${task.step ?? "Write the fix and its test"}</li>
-        <li>Run the checks</li>
-      </ol>
-      <a class="btn outline sm" href="#session"><span>Open session</span>${use("square-top-down", "glyph sm")}</a>
-    </div>`;
-  }
   if (tab === "history") {
     return `<div class="ppanel" role="tabpanel" aria-label="History">
       <div class="prows">
@@ -975,16 +958,27 @@ const tabsHTML = (tab) =>
       `<button class="ptab" type="button" role="tab" data-tab="${name.toLowerCase()}" aria-selected="${name.toLowerCase() === tab}">${name}</button>`
   ).join("")}</div>`;
 
+/**
+ * The pane's bar: one row of bare symbols and no title (DESIGN.md, The Title
+ * Bars Follow Liquid Glass Rule). Back leads where the pane is its own page
+ * (a phone); trailing, one glass capsule: the task's session, opened where
+ * sessions open, then Close where the pane is a side card (a desk). The task
+ * itself is the pane's content, its title first.
+ */
+const paneBar = (task) => {
+  const session = task.agent
+    ? `<button class="bar-item" type="button" data-act="open-session" aria-label="Open ${task.agent}'s session" title="Open ${task.agent}'s session">${use("square-top-down", "glyph sym")}</button>`
+    : "";
+  return `<header class="pane-bar" data-slot="pane-bar">
+      <button class="bar-item pane-back" type="button" data-act="close-pane" aria-label="Back to Board" title="Back to Board">${use("alt-arrow-left-l", "glyph sym")}</button>
+      <div class="capsule" role="group" aria-label="${task.title}">${session}<button class="bar-item pane-close" type="button" data-act="close-pane" aria-label="Close ${task.id}" title="Close">${use("close-l", "glyph sym")}</button></div>
+    </header>`;
+};
+
 const paneHTML = (task) => `
   <div class="pane-scroll">
-    <header class="pane-head">
-      <div class="pane-top">
-        <button class="btn ghost sm" type="button" data-act="close-pane">${use("alt-arrow-left-l")}<span>Board</span></button>
-        <code>${task.id}</code>
-      </div>
-      <h2 class="pane-title" data-slot="pane-title">${task.title}</h2>
-      <p class="pane-facts mark-line">${stagePill(task)}${task.agent ? `${agentMark(task.agent)}<span class="who">${task.agent}</span>` : ""}<span>${task.age ? `${task.age} ago` : ""}</span><span class="labels">${task.labels ?? ""}</span></p>
-    </header>
+    ${paneBar(task)}
+    <h2 class="pane-title" data-slot="pane-title">${task.title}</h2>
     ${reviewCard(task)}
   </div>
   <section class="pane-tabs" aria-label="Task sections">
@@ -1282,9 +1276,6 @@ const approve = () => {
   place();
   flip(before, { id: "card-land", ease: "--ease-drawer" });
   drawHead(hadAsk);
-  const pill = $('[data-slot="pill"]');
-  pill.dataset.tone = "done";
-  morph(pill, "Done", "pill-morph");
   const review = $('[data-slot="review"]');
   if (review) {
     foldTo(
@@ -1312,9 +1303,6 @@ const sendBackGo = () => {
   place();
   flip(before, { id: "card-back", ease: "--ease-drawer" });
   drawHead(false);
-  const pill = $('[data-slot="pill"]');
-  pill.dataset.tone = "live";
-  morph(pill, "Working", "pill-morph");
   const review = $('[data-slot="review"]');
   if (review) {
     foldTo(
@@ -1563,8 +1551,9 @@ const drawCaw = () => {
   $('[data-slot="caw-rule"]').hidden = asks.length === 0 || first;
   const start = $('[data-slot="caw-first"]');
   start.hidden = !first;
+  /* PLACEHOLDER: the first thread's title waits for its copy (pin 14). */
   $('[data-slot="caw-first-title"]').textContent =
-    `Talk to Caw about ${PROJECTS[S.project].name}`;
+    `[Copy to come: Caw's first-thread title for ${PROJECTS[S.project].name}]`;
   $('[data-slot="caw-starters"]').innerHTML = (FIRST_STARTERS[S.project] ?? [])
     .map(
       (words) =>
@@ -1817,6 +1806,8 @@ const fileTasks = () => {
     morph($('[data-slot="caw-said"]', row), "Filed 3 tasks in Ready", "caw-said-morph");
     $(".live-dot", row)?.remove();
   }
+  /* Tasks stand on the board: Caw sits back down in the head. */
+  $('[data-slot="seat"]').hidden = false;
   say("Caw filed 3 tasks in Ready");
 };
 
@@ -2047,7 +2038,10 @@ const paintActs = () => {
       });
     }
   }
-  for (const ask of $$('[data-act="ask-caw"]')) {
+  /* The phone's view bar carries Ask Caw as a labelled button; the head's is
+     a bare symbol in its capsule, never coral (no view of a project is for
+     asking Caw), and stays where it stands. */
+  for (const ask of $$('.viewbar [data-act="ask-caw"]')) {
     const returning = ask.hidden && !(cawOpen || heroOpen);
     ask.hidden = cawOpen || heroOpen;
     /* Back once Caw's column shuts: it fades in where it stood, never pops. */
@@ -2120,6 +2114,12 @@ const putWords = (words) => {
 const ACTS = {
   "ask-caw": () => {
     openCaw();
+  },
+  "caw-seat": () => {
+    openCaw();
+  },
+  "open-session": () => {
+    say(`${taskOf(S.selected)?.agent ?? "The"}'s session opens where sessions open`);
   },
   "close-caw": closeCaw,
   "close-pane": closePane,
@@ -2325,7 +2325,9 @@ window.preview = {
 /* The board's edge fade follows its scroll and its width (the pane and Caw's column narrow it). */
 const BOARD = $('[data-slot="board"]');
 BOARD.addEventListener("scroll", markEdges, { passive: true });
-new ResizeObserver(markEdges).observe(BOARD);
+/* Read on the next frame: a fade toggled inside the observer's own delivery
+   would size the board again in the same frame (WebKit says the loop). */
+new ResizeObserver(() => requestAnimationFrame(markEdges)).observe(BOARD);
 
 const params = new URLSearchParams(location.search);
 applyScheme(params.get("scheme") ?? "light");
