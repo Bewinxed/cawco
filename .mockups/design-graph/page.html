@@ -1807,23 +1807,30 @@
 
   /* ---- Round 29, the designer's section 5 ("Tokens to add") ---- */
   /* PROPOSED, local to the mockup: the hue-or-ink choice is the owner's, on the page's switch, which labels
-     these as a proposal. If he picks hue, the six hues and the two mixes below go into
+     these as a proposal. If he picks hue, the six hues, their six washes and the held mix below go into
      design/tokens/cawco.resolver.json in the build; if ink, they go with the option.
-     The clip kinds' hues (section B, `prop-*`), cut as the tool families are (DESIGN.md: one hue per family at
-     50% / 0.12 by day, 74% / 0.11 at night). The designer named opacity teal, position blue, size ochre,
-     colour magenta, text violet, unfold green. The Reserved Hue Rule keeps crimson (22), spark yellow (85),
-     olive and green (122 to 140) and blue (245 to 252) for status, and coral (33) is the action, so position
-     takes indigo (272), the blue nearest status-live's that is not it, and unfold takes cyan (205) in green's
-     place (my call, both). */
+     The clip kinds' hues (section B, `prop-*`), drawn at the designer's strength on the tool-family ladder
+     (DESIGN.md: one hue per family at 50% / 0.12 by day, 74% / 0.11 at night). The designer named opacity teal,
+     position blue, size ochre, colour magenta, text violet, unfold blue-green. The Reserved Hue Rule keeps
+     crimson (22), spark yellow (85), olive and green (122 to 140) and blue (245 to 252) for status, and coral
+     (33) is the action, so position takes indigo (272), the blue nearest status-live's that is not it, and
+     unfold takes 235, 59 degrees from opacity's 176 so the two never read as one. */
   --prop-opacity: light-dark(oklch(50% 0.12 176), oklch(74% 0.11 176));
   --prop-position: light-dark(oklch(50% 0.12 272), oklch(74% 0.11 272));
   --prop-size: light-dark(oklch(50% 0.12 62), oklch(74% 0.11 62));
   --prop-colour: light-dark(oklch(50% 0.12 335), oklch(74% 0.11 335));
   --prop-text: light-dark(oklch(50% 0.12 300), oklch(74% 0.11 300));
-  --prop-unfold: light-dark(oklch(50% 0.12 205), oklch(74% 0.11 205));
-  /* A kind's bar: its hue at 15% (the diff-add-bg recipe), a held bar at twice that. */
-  --prop-fill-mix: 15%;
-  --prop-fill-mix-held: 30%;
+  --prop-unfold: light-dark(oklch(50% 0.12 235), oklch(74% 0.11 235));
+  /* A kind's bar wash: its hue as an opaque fill, 92% / 0.05 by day, 34% / 0.06 at night, so it reads as that
+     hue on the paper ground and not as grey (the owner, on 15% tints: "i literally don't see any difference
+     between the two"). A held or pointed bar mixes a fifth of the kind's ink into its wash. */
+  --prop-opacity-wash: light-dark(oklch(92% 0.05 176), oklch(34% 0.06 176));
+  --prop-position-wash: light-dark(oklch(92% 0.05 272), oklch(34% 0.06 272));
+  --prop-size-wash: light-dark(oklch(92% 0.05 62), oklch(34% 0.06 62));
+  --prop-colour-wash: light-dark(oklch(92% 0.05 335), oklch(34% 0.06 335));
+  --prop-text-wash: light-dark(oklch(92% 0.05 300), oklch(34% 0.06 300));
+  --prop-unfold-wash: light-dark(oklch(92% 0.05 235), oklch(34% 0.06 235));
+  --prop-held-mix: 20%;
   /* The handle (section A). Round 28's measured geometry kept: iPadOS 26's handle on Apple's own picture
      (support.apple.com 125309), concentric with the corner, its visible gap 0.122 R from the edge, its body
      65.6° of the circle on the diagonal. The designer's 6px gap assumed a 12px card; on our 16px panel it
@@ -2311,12 +2318,12 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
    html[data-kinds]: "hue" puts the glyph, the figure and the bar in the kind's hue (prop-*); "ink" names the
    kind by its glyph alone, the bars on surface-fill. */
 .rows { position: relative; }
-.clip { --kind: var(--prop-text); position: relative; z-index: 1; min-block-size: var(--c-row-h-two); padding-block: var(--space-2); align-items: center; }
-.clip[data-prop="opacity"] { --kind: var(--prop-opacity); }
-.clip[data-prop="position"] { --kind: var(--prop-position); }
-.clip[data-prop="size"] { --kind: var(--prop-size); }
-.clip[data-prop="colour"] { --kind: var(--prop-colour); }
-.clip[data-prop="unfold"] { --kind: var(--prop-unfold); }
+.clip { --kind: var(--prop-text); --kind-wash: var(--prop-text-wash); position: relative; z-index: 1; min-block-size: var(--c-row-h-two); padding-block: var(--space-2); align-items: center; }
+.clip[data-prop="opacity"] { --kind: var(--prop-opacity); --kind-wash: var(--prop-opacity-wash); }
+.clip[data-prop="position"] { --kind: var(--prop-position); --kind-wash: var(--prop-position-wash); }
+.clip[data-prop="size"] { --kind: var(--prop-size); --kind-wash: var(--prop-size-wash); }
+.clip[data-prop="colour"] { --kind: var(--prop-colour); --kind-wash: var(--prop-colour-wash); }
+.clip[data-prop="unfold"] { --kind: var(--prop-unfold); --kind-wash: var(--prop-unfold-wash); }
 /* The chosen clip: the brand wash with the card's 1px brand-solid ring (the second review: the recess alone
    with a ring read as a focused input, not "this one is chosen"). The hover ghost glides under the row a
    pointer is on. */
@@ -2363,10 +2370,10 @@ html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
 .facts[data-drop~="word"] .word { display: none; }
 .edits-count .num { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
 
-/* The lane is the row: bars, ghosts and tails on the bare row. A bar in the kind's hue at 15%, its 1px edge
-   in the hue; in ink only, surface-fill with the 3:1 edge. */
+/* The lane is the row: bars, ghosts and tails on the bare row. A bar on its kind's opaque wash, its 1px edge in
+   the kind's ink; in ink only, surface-fill with the 3:1 edge. */
 .lane { position: relative; block-size: var(--c-pill-h); user-select: none; touch-action: none; }
-.bar { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --bar-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--bar-fill); box-shadow: inset 0 0 0 1px var(--bar-edge); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
+.bar { --bar-fill: var(--kind-wash); --bar-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--bar-fill); box-shadow: inset 0 0 0 1px var(--bar-edge); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
 /* In ink only the bar stands one step stronger than the row's own fills (the second review: surface-fill at
    night read 0.31 on about 0.2): surface-fill-strong, its edge border-contrast; under the pointer and held,
    the edge steps to the muted ink. */
@@ -2378,17 +2385,17 @@ html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill-strong); --bar-edge
 .bar::before { inset-inline-start: var(--space-1); }
 .bar::after { inset-inline-end: var(--space-1); }
 @media (hover: hover) {
-  .dock:not([data-view="original"]) .bar:hover { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix-held), transparent); }
+  html[data-kinds="hue"] .dock:not([data-view="original"]) .bar:hover { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-held-mix), var(--kind-wash)); }
   html[data-kinds="ink"] .dock:not([data-view="original"]) .bar:hover { --bar-edge: var(--ink-muted); }
   .dock:not([data-view="original"]) .bar:hover::before, .dock:not([data-view="original"]) .bar:hover::after { opacity: 1; }
 }
-.bar[aria-pressed="true"] { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix-held), transparent); }
+.bar[aria-pressed="true"] { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-held-mix), var(--kind-wash)); }
 html[data-kinds="ink"] .bar[aria-pressed="true"] { --bar-edge: var(--ink-muted); }
 .bar[aria-pressed="true"]::before, .bar[aria-pressed="true"]::after { opacity: 1; }
 .bar.spring { border-start-end-radius: 0; border-end-end-radius: 0; box-shadow: inset 0 1px 0 0 var(--bar-edge), inset 0 -1px 0 0 var(--bar-edge), inset 1px 0 0 0 var(--bar-edge); }
 .lane.rescaling .bar, .lane.rescaling .ghost, .lane.rescaling .tail { transition: left var(--dur-reveal) var(--ease-in-out), width var(--dur-reveal) var(--ease-in-out), background-color var(--dur-control) var(--ease-out); }
 .ghost { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); border: 1px dashed var(--border-contrast); pointer-events: none; }
-.tail { --tail-fill: color-mix(in oklab, var(--kind) var(--prop-fill-mix), transparent); --tail-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--tail-edge), transparent) top / 100% 1px no-repeat, linear-gradient(to right, var(--tail-edge), transparent) bottom / 100% 1px no-repeat, linear-gradient(to right, var(--tail-fill), transparent); pointer-events: none; }
+.tail { --tail-fill: var(--kind-wash); --tail-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--tail-edge), transparent) top / 100% 1px no-repeat, linear-gradient(to right, var(--tail-edge), transparent) bottom / 100% 1px no-repeat, linear-gradient(to right, var(--tail-fill), transparent); pointer-events: none; }
 html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-edge: var(--border-contrast); }
 .dock[data-view="original"] .bar { background: none; box-shadow: none; border: 1px dashed var(--border-contrast); cursor: default; }
 .dock[data-view="original"] .bar::before, .dock[data-view="original"] .bar::after { opacity: 0; }
