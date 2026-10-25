@@ -117,7 +117,8 @@
  * the old `@container (width < 640px)` label rule queried. D
  * (`CANVAS_DESIGN=desk` alone): at session-sheet leg 18's 523px desk pane
  * that box is under 640 and Comments' word is not drawn. B
- * (`CANVAS_DESIGN=bounce` alone), in Chromium and WebKit: the bench pane
+ * (`CANVAS_DESIGN=bounce` alone; `CANVAS_CPU_THROTTLE=<rate>` slows its
+ * Chromium pages' CPU that many times), in Chromium and WebKit: the bench pane
  * grown 390 → 1440 → 680 → 390, slowly and a frame or two a step; at each
  * width it settles on, the head holds its controls in its width, Close
  * stands whole and takes a press at its centre, and every folded control is
@@ -2842,8 +2843,8 @@ const FIT_READ = (): FitRead => {
 
 /**
  * The pane set to each of `widths` in turn, `frames` frames apart (a quick
- * grow and shrink, as a split dragged or a window snapped does), then left
- * to settle.
+ * grow and shrink, as a split dragged or a window snapped does); the leg
+ * then waits for the head to settle (`HEAD_SETTLED`).
  */
 const BOUNCE_QUICK = async ({
   widths,
@@ -2872,13 +2873,26 @@ const BOUNCE_QUICK = async ({
       await frame();
     }
   }
-  for (let k = 0; k < 12; k += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: the head's fit lands
-    await frame();
-  }
 };
 
-/** More's entries, opened by a press and shut again; none while More doesn't stand. */
+/**
+ * More opened from the keyboard, as a person tabbing to it does: its
+ * trigger focused and Enter pressed, the menu read once it stands. Never a
+ * pointer press here: under a loaded machine (load 210) a click's wait for
+ * the trigger to stand still ran out its 30 s on WebKit after the head had
+ * settled, and the leg ended on it.
+ */
+async function openMore(page: Page): Promise<void> {
+  await page
+    .locator("[data-bench-pane] [data-slot=side-head] > [data-slot=more]")
+    .focus();
+  await page.keyboard.press("Enter");
+  await page
+    .locator("[data-slot=dropdown-menu-content]")
+    .waitFor({ timeout: 15_000 });
+}
+
+/** More's entries, opened from the keyboard and shut again; none while More doesn't stand. */
 async function moreEntries(page: Page): Promise<string[]> {
   const trigger = page.locator(
     "[data-bench-pane] [data-slot=side-head] > [data-slot=more]"
@@ -2886,10 +2900,7 @@ async function moreEntries(page: Page): Promise<string[]> {
   if ((await trigger.count()) === 0) {
     return [];
   }
-  await trigger.click();
-  await page
-    .locator("[data-slot=dropdown-menu-content]")
-    .waitFor({ timeout: 5000 });
+  await openMore(page);
   const entries = await page.evaluate(() =>
     [
       ...document.querySelectorAll<HTMLElement>(
@@ -2919,12 +2930,7 @@ async function reaches(page: Page) {
   if (standing) {
     return { close, create: `the head: ${standing}` };
   }
-  await page
-    .locator("[data-bench-pane] [data-slot=side-head] > [data-slot=more]")
-    .click();
-  await page
-    .locator("[data-slot=dropdown-menu-content]")
-    .waitFor({ timeout: 5000 });
+  await openMore(page);
   // Read at rest: the menu's entrance (a scale) finished, its rows at their
   // own size.
   await page.evaluate(() => {
@@ -2948,6 +2954,74 @@ async function reaches(page: Page) {
 /** A check that the head holds its controls, Close stands whole and pressable, and every folded control is in More, read now. */
 type Holds = (leg: string) => Promise<void>;
 
+/**
+ * Waits, in the page, until the panel's head has settled after a resize:
+ * no run of some length running in it (`document.getAnimations()`, a
+ * control's morph or fade; loops left alone), and its boxes (the head's
+ * own, each child's, its scroll and client widths) read the same on three
+ * frames in a row, so its fit has measured, folded and drawn. Read each
+ * frame, never after a fixed sleep: a loaded machine draws frames late
+ * (load 80 to 88 put a head's read before its fit landed, 2 or 3 of 353),
+ * an idle one at once. Answers null once settled, else what still moved
+ * at `ms`.
+ */
+const HEAD_SETTLED = async (ms: number): Promise<string | null> => {
+  const head = () =>
+    document.querySelector<HTMLElement>(
+      "[data-bench-pane] [data-slot=side-head]"
+    );
+  const boxes = () => {
+    const el = head();
+    if (!el) {
+      return "no head";
+    }
+    const at = (one: Element) => {
+      const r = one.getBoundingClientRect();
+      return [r.left, r.top, r.width, r.height]
+        .map((n) => Math.round(n * 2) / 2)
+        .join(",");
+    };
+    return [
+      `${el.scrollWidth}/${el.clientWidth}`,
+      at(el),
+      ...[...el.children].map(
+        (one) => `${(one as HTMLElement).hidden ? "-" : ""}${at(one)}`
+      ),
+    ].join(" ");
+  };
+  const moving = () =>
+    document.getAnimations().filter((run) => {
+      const target = (run.effect as KeyframeEffect | null)?.target;
+      const timing = run.effect?.getComputedTiming();
+      const end = Number(timing?.endTime ?? 0);
+      return (
+        run.playState === "running" &&
+        end > 0 &&
+        Number.isFinite(end) &&
+        Number(timing?.iterations ?? 1) <= 1 &&
+        !!target &&
+        !!head()?.contains(target)
+      );
+    });
+  const deadline = performance.now() + ms;
+  let last = "";
+  for (let same = 0; same < 2;) {
+    if (performance.now() > deadline) {
+      return `unsettled after ${ms}ms: ${moving().length} run(s) moving; boxes ${last}`;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until three read the same
+    await new Promise((done) => requestAnimationFrame(done));
+    const now = boxes();
+    same = now === last && moving().length === 0 ? same + 1 : 0;
+    last = now;
+  }
+  return null;
+};
+
+/** The head settled (`HEAD_SETTLED`), as a leg reads it after each resize: null once settled, else what still moved after 15 s. */
+const headSettled = (page: Page): Promise<string | null> =>
+  page.evaluate(HEAD_SETTLED, 15_000);
+
 /** The bench pane set to `w` px wide (`transformOrigin` top left, for a zoom), or zoomed to `scale`. */
 const SET_PANE = ({ w, scale }: { scale?: number; w?: number }) => {
   const pane = document.querySelector("[data-bench-pane]") as HTMLElement;
@@ -2966,10 +3040,10 @@ async function slowBounce(page: Page, holds: Holds): Promise<void> {
     for (const w of BOUNCE.slice(1)) {
       // biome-ignore lint/performance/noAwaitInLoops: one width settled, then read, before the next
       await page.evaluate(SET_PANE, { w });
-      await page.waitForTimeout(600);
+      await headSettled(page);
       if (zoomed) {
         await page.evaluate(SET_PANE, { scale: Math.min(1, 390 / w) });
-        await page.waitForTimeout(600);
+        await headSettled(page);
       }
       await holds(`slowly${zoomed ? ", zoomed to fit" : ""}`);
     }
@@ -3007,7 +3081,6 @@ async function windowBounce(page: Page, holds: Holds): Promise<void> {
     ).style.inlineSize = "100%";
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(800);
   await holds("window fresh");
   for (const sizes of [
     [1440, 680, 390],
@@ -3017,7 +3090,6 @@ async function windowBounce(page: Page, holds: Holds): Promise<void> {
       // biome-ignore lint/performance/noAwaitInLoops: one size after another, no wait between
       await page.setViewportSize({ width, height: 844 });
     }
-    await page.waitForTimeout(800);
     await holds(`window quickly 390→${sizes.join("→")}`);
   }
 }
@@ -3046,6 +3118,13 @@ async function bounceLeg(
 ): Promise<void> {
   const touch = view === "phone";
   const page = await kit.page(view, { theme: "light", engine });
+  // `CANVAS_CPU_THROTTLE=<rate>`: the page's CPU slowed that many times on Chromium (the DevTools protocol's
+  // `Emulation.setCPUThrottlingRate`), so the leg is read as a loaded machine draws it, without loading the machine.
+  const throttle = Number(process.env.CANVAS_CPU_THROTTLE ?? 1);
+  if (engine === "chromium" && throttle > 1) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: throttle });
+  }
   await page.setViewportSize({ width: 1920, height: 844 });
   await page.route(`${stage.base}/__cawco/ping`, (route) =>
     route.fulfill({
@@ -3070,15 +3149,25 @@ async function bounceLeg(
     await page.close();
     return;
   }
-  await page.waitForTimeout(3000);
+  // Every read of the head waits for it to settle after what moved it (`HEAD_SETTLED`): its fonts in, no run moving, its boxes the same three frames in a row.
+  await page.evaluate(() => document.fonts.ready);
+  // The pane's page loaded (its frame's ready mark), so nothing the page says reaches the head after the first read.
+  await page
+    .waitForSelector("[data-bench-pane] iframe[data-ready]", {
+      state: "attached",
+      timeout: 60_000,
+    })
+    .catch(() => undefined);
   const holds: Holds = async (leg) => {
-    const read = await page.evaluate(FIT_READ);
+    const unsettled = await headSettled(page);
+    const read = { ...(await page.evaluate(FIT_READ)), unsettled };
     const more = await moreEntries(page);
     const missing = read.folded.filter(
       (one) =>
         !one.names.some((name) => more.some((entry) => entry.startsWith(name)))
     );
     const shared =
+      read.unsettled === null &&
       read.closeWhole &&
       read.closeHit === "Close" &&
       (read.folded.length === 0 || read.more) &&
