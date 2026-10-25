@@ -3314,9 +3314,7 @@ export const createWorkItems = ({
     }
     const done = plan.filter((entry) => entry.status === "completed");
     const completed = new Set(
-      done
-        .filter((entry) => PLAN_TODO.test(entry.id))
-        .map((entry) => entry.id)
+      done.filter((entry) => PLAN_TODO.test(entry.id)).map((entry) => entry.id)
     );
     const said = new Set(
       done
