@@ -14,8 +14,8 @@ bun design-previews/comment-sizing/capture/capture.ts            # remake parts.
 - **Option**: A, beside the comment (what main ships: two fifths of the well,
   280 to 480px, PinFloat's placement: as tall as what it holds up to the
   page area, moved up to stand whole near the foot, above or below an
-  element too wide to stand beside, growing out of its pill as every kit
-  popover does); B, a 320px card at most min(480px, 50%)
+  element too wide to stand beside, the pill growing into the card and
+  keeping to it as the page scrolls); B, a 320px card at most min(480px, 50%)
   of the well tall (our call: the report's min(400px, 40%) was under what a
   three-entry one-line exchange needs, so B never drew its card), a thread
   whose whole exchange needs more handed to Comments at 400px (500px on a pane
@@ -39,7 +39,7 @@ What it is made of:
   `fonts/` the two faces they draw in.
 - `preview.js` places them: PinFloat's placement ported line for line, each
   option's sizes, the page lifted clear of a drawer, and the house motion (the
-  card's kit pop out of its pill, its origin at the pill, and `popOut` back, `morph`'s width tween for a hand-off, `railIn` and
+  card's morph out of its pill and back into it, `morph`'s width tween for a hand-off, `railIn` and
   `railOut`, `unfold` for a row opening). What is shown is kept through a reload.
 - `preview.css` draws only what stands round the parts: the switches, the
   frame, the pane's head, the decision page, each option's holders.

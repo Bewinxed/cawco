@@ -165,6 +165,7 @@
   import { loadedPanes } from "./loaded.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";
+  import { markFace, markState } from "./PinMark.svelte";
   import PinPeek from "./PinPeek.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
@@ -4512,6 +4513,7 @@
         <PinFloat
           exit={cardExit}
           box={pinAt?.box ?? null}
+          face={markFace(markState(cardPin))}
           label={`Comment ${cardPin.number}`}
           mark={pinAt?.mark ?? null}
           pin={cardPin.number}

@@ -17,7 +17,10 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
-  import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
+  import PinMark, {
+    markFace,
+    markState,
+  } from "#lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
 
   const AT = "2026-10-23T09:00:00.000Z";
@@ -100,15 +103,23 @@
     roomW = node.clientWidth;
     roomH = node.clientHeight;
   });
-  /** The pill near the well's foot (`?at=foot`), else near its top. */
-  const foot =
-    new URLSearchParams(globalThis.location?.search ?? "").get("at") === "foot";
+  /**
+   * Where the pill stands: near the well's foot (`?at=foot`), on a page
+   * that scrolls under the card (`?at=scroll`: the pill moves with it, as
+   * the overlay reports a scrolled pin), else near its top.
+   */
+  const at = new URLSearchParams(globalThis.location?.search ?? "").get("at");
+  /** How far the bench's page is scrolled, px (`?at=scroll`). */
+  let scrolled = $state(0);
   /** The pill's box in the well, as the page reports a pin's mark. */
-  const MARK = $derived({
-    x: 24,
-    y: foot ? Math.max(72, roomH - 64) : 72,
-    w: 20,
-    h: 20,
+  const MARK = $derived.by(() => {
+    if (at === "foot") {
+      return { x: 24, y: Math.max(72, roomH - 64), w: 20, h: 20 };
+    }
+    if (at === "scroll") {
+      return { x: 24, y: 360 - scrolled, w: 20, h: 20 };
+    }
+    return { x: 24, y: 72, w: 20, h: 20 };
   });
 </script>
 
@@ -125,6 +136,20 @@
     data-slot="pin-room"
     {@attach measureRoom}
   >
+    {#if at === "scroll"}
+      <div
+        class="absolute inset-0 overflow-y-auto"
+        data-slot="bench-page"
+        onscroll={(event) => {
+          scrolled = event.currentTarget.scrollTop;
+        }}
+      >
+        <!-- A page four screens tall, to scroll under the card. -->
+        {#each [1, 2, 3, 4] as screen (screen)}
+          <div class="h-dvh"></div>
+        {/each}
+      </div>
+    {/if}
     <span
       class="absolute start-(--mark-x) top-(--mark-y)"
       style:--mark-x="{MARK.x}px"
@@ -139,6 +164,7 @@
     </span>
     {#if shown}
       <PinFloat
+        face={markFace(markState(pin))}
         label="Comment {pin.number}"
         mark={MARK}
         pin={pin.number}
