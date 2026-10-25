@@ -51,7 +51,12 @@
  *   "cannot create cache directory: …/.impeccable/bin/0.1.17"). Then a second
  *   delegate, in a workspace of its own, runs the launcher with its download
  *   base unreachable, and the engine answers from the same file, unchanged:
- *   one cache for every workspace, fetched once.
+ *   one cache for every workspace, fetched once;
+ * - impeccable's hook, handed an Edit to a file in the clone, keeps its
+ *   `hook.cache.json` under the workspaces' cache's `impeccable/hook/`
+ *   (`IMPECCABLE_CACHE_ROOT`), and the clone has no `.impeccable/
+ *   hook.cache.json` (before the fix every item that ran the hook ended with
+ *   that file in no commit, and finish_item refused it).
  *
  *   bun scripts/probe-kit/run.ts boundary-writes
  */
@@ -126,6 +131,19 @@ const impeccable = (prefix = ""): string =>
 echo ${apart("IMPECCABLE_HOME-IS:")}"$IMPECCABLE_HOME" ${apart("ENGINE-PINS:")}"$(tr -d '[:space:]' < "$TMPDIR/impeccable-skill/scripts/VERSION")"
 ${prefix}sh "$TMPDIR/impeccable-skill/scripts/impeccable" engine-probe > "$TMPDIR/engine.out" 2>&1; echo ${apart("ENGINE-EXIT:")}$?; tr ' ' _ < "$TMPDIR/engine.out" | sed "s/^/ENG""INE-SAID:/"`;
 
+/** A rule impeccable's hook flags, so the hook has findings to keep in its cache. */
+const HOOK_CSS =
+  ".title { background: linear-gradient(90deg, #f472b6, #a78bfa); -webkit-background-clip: text; color: transparent; }";
+const HOOK_FILE = "probe-hook.css";
+
+/**
+ * impeccable's hook, given the PostToolUse event of an Edit to a file in the
+ * clone as Claude Code hands it one, run by the launcher the command above
+ * fetched; then the file goes again, and the command says the hook's exit.
+ */
+const IMPECCABLE_HOOK = `echo '${HOOK_CSS}' > ${HOOK_FILE}
+printf '{"session_id":"probe","cwd":"%s","hook_event_name":"PostToolUse","tool_name":"Edit","tool_input":{"file_path":"%s/${HOOK_FILE}"}}' "$PWD" "$PWD" | sh "$TMPDIR/impeccable-skill/scripts/impeccable" hook > /dev/null 2>&1; echo ${apart("HOOK-EXIT:")}$?; rm -f ${HOOK_FILE}`;
+
 /** The delegate's one command: each write, the install and the commit, each followed by its exit. */
 const COMMAND = [
   `bun -e '${HOME_WRITE}' "$HOME/${HOME_TARGET}" 2> "$TMPDIR/home.err"; echo ${apart("HOME-WRITE:")}$?; cat "$TMPDIR/home.err"`,
@@ -136,6 +154,7 @@ const COMMAND = [
   `echo ${apart("HTTPS_PROXY-IS:")}"$HTTPS_PROXY" ${apart("ALL_PROXY-IS:")}"$ALL_PROXY"; echo ${apart("PROXY-CURL:")}"$(curl -sS -o /dev/null -w '%{http_code}' https://example.com/ 2>&1 | tr ' ' _)"`,
   BUNX,
   impeccable(),
+  IMPECCABLE_HOOK,
   `echo ${apart(END)}`,
 ].join("\n");
 
@@ -447,7 +466,34 @@ const run = async (kit: Kit) => {
     sqlite === "1",
     `bun:sqlite query: ${sqlite ?? "unread"}`
   );
+  await checkHookCache(kit, home, clone, said);
   await checkEngineCache(kit, fleet, parent, repo, said);
+};
+
+/**
+ * impeccable's hook, run inside the boundary on an Edit in the clone, keeps
+ * its state in the workspaces' cache (core paths.ts `workspaceCacheEnv`,
+ * `IMPECCABLE_CACHE_ROOT`), and nothing of it is in the clone.
+ */
+const checkHookCache = async (
+  kit: Kit,
+  home: string,
+  clone: string,
+  said: string
+): Promise<void> => {
+  const root = join(home, ".cawco", "workspace-cache", "impeccable", "hook");
+  const kept = await Array.fromAsync(
+    new Bun.Glob("*/hook.cache.json").scan({ cwd: root, onlyFiles: true })
+  ).catch(() => [] as string[]);
+  const inClone = join(clone, ".impeccable", "hook.cache.json");
+  kit.check(
+    "impeccable's hook, on an Edit in the clone, keeps its cache in the workspaces' cache and none in the clone",
+    after(said, "HOOK-EXIT:") === "0" &&
+      kept.length > 0 &&
+      clone !== "" &&
+      !existsSync(inClone),
+    `exit ${after(said, "HOOK-EXIT:") ?? "unread"}; in ${root}: ${kept.join(", ") || "none"}; ${inClone}: ${existsSync(inClone) ? "present" : "absent"}`
+  );
 };
 
 /** What `engine-probe` said, its lines joined, as the command printed them after their marker. */

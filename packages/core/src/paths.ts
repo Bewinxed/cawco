@@ -1197,6 +1197,16 @@ export const workspaceCacheEnv = (): Record<string, string> => {
     // directory: …/.impeccable/bin/0.1.17"), so every workspace fetches each
     // version once, here, and the next runs it from here.
     IMPECCABLE_HOME: join(cache, "impeccable"),
+    // impeccable's hook state (`hook.cache.json`, `hook.pending.json`), which
+    // its hook otherwise writes into the clone's `.impeccable/`, hidden only
+    // by the clone's own excludes, so every finished item found a file in no
+    // commit. With this root set the hook keeps it in a folder per project
+    // path here instead (crates/hook/src/hook_lib.rs `hook_state_dir`: "When
+    // IMPECCABLE_CACHE_ROOT is set, state relocates to a per-project
+    // subdirectory of that root instead, so project roots stay free of tool
+    // artifacts"). The hook runs through the CLI's shell prefix, so with this
+    // environment.
+    IMPECCABLE_CACHE_ROOT: join(cache, "impeccable", "hook"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
   };
 };
