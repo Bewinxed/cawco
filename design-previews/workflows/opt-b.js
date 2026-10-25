@@ -165,7 +165,6 @@ const runDesk = () =>
       title: "Reply shortlist",
       label: `Reply shortlist, run ${LIVE}`,
       facts: liveFacts(),
-      asking: true,
       acts: [["stop", "Stop run"]],
       body: `${runRows()}<div class="hr"></div><p class="meta">The checks score when the run ends.</p>`,
     }),

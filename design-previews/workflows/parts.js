@@ -303,7 +303,9 @@ export const desk = ({
 /**
  * A run opened in the Split beside the view. Its head is one row: the
  * workflow's name, then one glass group of bare symbols, Close last. What
- * the run is doing (`facts`) is content, drawn under the head.
+ * the run is doing (`facts`) is content, drawn under the head. Its composer's
+ * send is never the coral: the one act of every Split drawn here is the
+ * run's own (Answer, Keep as workflow).
  */
 export const splitPane = ({
   title = "",
@@ -311,11 +313,10 @@ export const splitPane = ({
   facts: list = [],
   acts = [],
   body,
-  asking = false,
 }) => `<aside class="split" aria-label="${esc(label)}">
   <header class="split-head">${title ? `<h4 class="trunc">${esc(title)}</h4>` : '<span class="grow"></span>'}${group([...acts, ["close", "Close"]])}</header>
   <div class="split-body">${list.length ? facts(list) : ""}${body}</div>
-  <div class="composer"><span>Message the orchestrator…</span>${btn("", { v: asking ? "secondary" : "primary", size: "sm", icon: "arrow" })}</div>
+  <div class="composer"><span>Message the orchestrator…</span>${btn("", { v: "secondary", size: "sm", icon: "arrow" })}</div>
 </aside>`;
 
 /* ---------------------------------------------------------- the phone */
@@ -355,7 +356,7 @@ export const liveFacts = (extra = []) => [
  */
 export const runTree = ({ ask = "", drift = false, stepsOf = STEPS, against = "" } = {}) => {
   const rows = [
-    `<div class="runrow"><span>${glyph("needs")}</span><span class="t">Workflow · ${WF}</span><span class="r">orchestrator</span>${against ? `<span class="d">${against}</span>` : ""}</div>`,
+    `<div class="runrow"><span>${glyph("needs")}</span><span class="t">Workflow · ${WF}</span><span class="r">orchestrator</span>${against ? `<span class="d vs">${against}</span>` : ""}</div>`,
   ];
   for (const s of stepsOf) {
     const r = RUN[s.n];
