@@ -26,6 +26,8 @@
  *   starting on the arrival's frame, not drawn at ½ of it, drawn at its end.
  * - A tile stands over the code (its z-index, an opaque box): a dot falling
  *   behind one meets no word there.
+ * - The scan's exit, held and sought every 1/60s: no piece jumps, nothing
+ *   stands still mid-way, and the device starts on the frame it ends.
  * - Expired's verdict: the gap before the struck code at least a space.
  * - The ping's ring, its lap held and sought every 2.5%: never meets the
  *   title's box.
@@ -99,7 +101,8 @@ const ENDINGS = [
 /** `PAIRING_LEGS=motion,end`: those legs alone (every leg by default). */
 const LEGS = new Set(
   (
-    process.env.PAIRING_LEGS ?? "qr,motion,ping,device,end,poses,frames,cost"
+    process.env.PAIRING_LEGS ??
+    "qr,motion,handoff,ping,device,end,poses,frames,cost"
   ).split(",")
 );
 type Moment = (typeof MOMENTS)[number];
@@ -1134,6 +1137,228 @@ async function posesLeg(kit: Kit, page: Page, engine: Engine) {
   );
 }
 
+/** One exit read: each piece of the code leaving, and the device arriving, on one layout. */
+interface ExitRead {
+  badge: number;
+  device: number;
+  dotsFar: number;
+  dotsO: number;
+  eyes: { o: number; x: number; y: number }[];
+  layout: string;
+  paper: number;
+}
+
+/** Every piece of the code as drawn now, and the device's opacity, per layout. Runs in the page. */
+function readExit(): ExitRead[] {
+  const { preview } = window as unknown as { preview: Preview };
+  return [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
+    const layout = stage.dataset.layout ?? "";
+    const badge = (
+      stage.querySelector(".well .badge") as HTMLElement
+    ).getBoundingClientRect();
+    const head = {
+      x: badge.left + badge.width / 2,
+      y: badge.top + badge.height / 2,
+    };
+    const canvas = (
+      stage.querySelector(".code canvas.dots") as HTMLElement
+    ).getBoundingClientRect();
+    const drawn = preview.dotsOf(layout);
+    const k =
+      canvas.width /
+      (stage.querySelector(".code canvas.dots") as HTMLElement).offsetWidth;
+    const n = Math.max(1, drawn.dots.length);
+    const opacity = (sel: string) =>
+      Number(getComputedStyle(stage.querySelector(sel) as HTMLElement).opacity);
+    return {
+      layout,
+      dotsFar:
+        drawn.dots.reduce(
+          (sum, d) =>
+            sum +
+            Math.hypot(
+              canvas.left + d.cx * k - head.x,
+              canvas.top + d.cy * k - head.y
+            ),
+          0
+        ) / n,
+      dotsO: drawn.dots.reduce((sum, d) => sum + d.o, 0) / n,
+      eyes: [...stage.querySelectorAll<SVGGElement>(".code .eye")].map(
+        (eye) => {
+          const r = eye.getBoundingClientRect();
+          return {
+            x: r.left + r.width / 2,
+            y: r.top + r.height / 2,
+            o: Number(getComputedStyle(eye).opacity),
+          };
+        }
+      ),
+      badge: badge.width,
+      paper: opacity(".scene-code"),
+      device: opacity(".scene-device"),
+    };
+  });
+}
+
+/**
+ * The exit's faults, read by read: each piece's one-read steps against an
+ * eighth of its whole change (1.5px at least; 0.125 for an opacity), and
+ * every read between the first move and the last where no piece moved.
+ */
+function exitFaults(seen: ExitRead[], ms: number[]) {
+  const channels: { name: string; px: boolean; v: number[] }[] = [
+    {
+      name: "dots' distance from the head",
+      px: true,
+      v: seen.map((s) => s.dotsFar),
+    },
+    { name: "dots' opacity", px: false, v: seen.map((s) => s.dotsO) },
+    { name: "the head's size", px: true, v: seen.map((s) => s.badge) },
+    { name: "the paper's opacity", px: false, v: seen.map((s) => s.paper) },
+    ...(seen[0]?.eyes ?? []).flatMap((_, e) => [
+      {
+        name: `eye ${e + 1} x`,
+        px: true,
+        v: seen.map((s) => s.eyes[e]?.x ?? 0),
+      },
+      {
+        name: `eye ${e + 1} y`,
+        px: true,
+        v: seen.map((s) => s.eyes[e]?.y ?? 0),
+      },
+      {
+        name: `eye ${e + 1} opacity`,
+        px: false,
+        v: seen.map((s) => s.eyes[e]?.o ?? 0),
+      },
+    ]),
+  ];
+  const jumps: string[] = [];
+  let first = Number.POSITIVE_INFINITY;
+  let last = -1;
+  const moving = new Set<number>();
+  for (const c of channels) {
+    const whole = Math.max(...c.v) - Math.min(...c.v);
+    const limit = c.px ? Math.max(whole / 8, 1.5) : 0.125;
+    const eps = c.px ? 0.05 : 0.002;
+    for (let i = 1; i < c.v.length; i += 1) {
+      const step = Math.abs((c.v[i] as number) - (c.v[i - 1] as number));
+      if (step > eps) {
+        moving.add(i);
+        first = Math.min(first, i);
+        last = Math.max(last, i);
+      }
+      if (step > limit) {
+        jumps.push(
+          `${c.name} ${step.toFixed(2)} in one read at ${(ms[i] ?? 0).toFixed(0)}ms (of ${whole.toFixed(2)})`
+        );
+      }
+    }
+  }
+  const stills: string[] = [];
+  for (let i = first + 1; i < last; i += 1) {
+    if (!moving.has(i)) {
+      stills.push(`${(ms[i] ?? 0).toFixed(0)}ms`);
+    }
+  }
+  return { channels, jumps, stills, first, last };
+}
+
+/**
+ * The scan's exit (the owner, picking "The device, at Approve": "at the end
+ * of the qr parts that animate out there's a lag then it jumps to the end of
+ * animation"), its clock held and sought every 1/60s from the play to the
+ * device's arrival landing, with the exit's 0, ¼, ½, ¾ and 1 among the reads.
+ * Each piece (the dots' mean distance from the head and their mean opacity,
+ * each finder eye's place and opacity, the head's size, the paper's
+ * opacity) moves no more in one frame than an eighth of its whole change
+ * (DESIGN's --ease-crossfade note: more than an eighth in one frame "reads as
+ * the change lurching") or 1.5px, an opacity no more than 0.125; no frame
+ * between the exit's first move and its last stands still; and the device
+ * starts to arrive on the frame the exit ends, every piece gone.
+ */
+async function handoffLeg(kit: Kit, page: Page, engine: Engine) {
+  const m = "checking-public";
+  const t = await page.evaluate(() => {
+    const ms = (name: string) =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(name)
+      );
+    return {
+      panel: ms("--dur-panel"),
+      pop: ms("--dur-pop"),
+      settle: ms("--dur-settle"),
+    };
+  });
+  // The exit ends as the pour does; the device's arrival ("reveal") runs on from there.
+  const exitEnd = t.panel + t.pop;
+  const length = exitEnd + t.settle;
+  const FRAME = 1000 / 60;
+  const at = [
+    ...Array.from(
+      { length: Math.floor(length / FRAME) + 1 },
+      (_, i) => (i * FRAME) / length
+    ),
+    ...QUARTERS.map((q) => (q * exitEnd) / length),
+    1,
+  ]
+    .map((f) => Math.round(f * 1e6) / 1e6)
+    .filter((f, i, all) => all.indexOf(f) === i)
+    .sort((a, b) => a - b);
+  await playIn(page, m);
+  await settled(page);
+  const read = await readMotion(page, () => playIn(page, m), "main.frames", {
+    fractions: at,
+    of: "reveal",
+    read: () => page.evaluate(readExit),
+  });
+  await settled(page);
+  for (const layout of ["desk", "phone"]) {
+    const seen = read.at.map(
+      (r) =>
+        (r.value as ExitRead[]).find((x) => x.layout === layout) as ExitRead
+    );
+    const ms = read.at.map((r) => r.fraction * length);
+    const { channels, jumps, stills, first, last } = exitFaults(seen, ms);
+    const arrives = seen.findIndex((s) => s.device > 0.01);
+    const there = seen[arrives];
+    const gone =
+      there !== undefined &&
+      there.paper <= 0.02 &&
+      there.dotsO <= 0.02 &&
+      there.eyes.every((e) => e.o <= 0.02);
+    // The device's first step comes within one frame of the exit's last, in time (a quarter read can fall between).
+    const gap = (ms[arrives] ?? Number.NaN) - (ms[last] ?? Number.NaN);
+    const quarter = (q: number) =>
+      seen[
+        read.at.findIndex(
+          (r) => Math.abs(r.fraction * length - q * exitEnd) < 0.01
+        )
+      ];
+    const said = QUARTERS.map((q) => {
+      const s = quarter(q);
+      return s
+        ? `${q}: dots ${s.dotsO.toFixed(2)}, eyes ${s.eyes.map((e) => e.o.toFixed(2)).join("/")}, paper ${s.paper.toFixed(2)}`
+        : `${q}: unread`;
+    }).join("; ");
+    kit.check(
+      `${engine} ${m}: ${layout} the code's exit has no jump (${channels.length} pieces, ${read.at.length} reads every 1/60s to ${length.toFixed(0)}ms; at the exit's ${said})`,
+      read.at.length > 10 && jumps.length === 0,
+      jumps.slice(0, 6).join("; ")
+    );
+    kit.check(
+      `${engine} ${m}: ${layout} the code's exit never stands still between its first move and its last (${(ms[first] ?? 0).toFixed(0)}–${(ms[last] ?? 0).toFixed(0)}ms)`,
+      last > first && stills.length === 0,
+      stills.slice(0, 8).join(", ")
+    );
+    kit.check(
+      `${engine} ${m}: ${layout} the device starts where the exit ends (its last step at ${(ms[last] ?? 0).toFixed(0)}ms, the device's first at ${(ms[arrives] ?? 0).toFixed(0)}ms, every piece gone there)`,
+      arrives >= 0 && gone && gap >= 0 && gap <= FRAME + 0.5,
+      JSON.stringify({ gap, there })
+    );
+  }
+}
+
 /**
  * The ping's ring, its loop held and sought every 2.5% of a lap (WAAPI's
  * own clock): its box never meets the title's, on both layouts, in the two
@@ -1570,6 +1795,9 @@ async function runLegs(kit: Kit, page: Page, url: string, engine: Engine) {
       // biome-ignore lint/performance/noAwaitInLoops: one held clock at a time
       await motionLeg(kit, page, engine, m);
     }
+  }
+  if (LEGS.has("handoff")) {
+    await handoffLeg(kit, page, engine);
   }
   if (LEGS.has("ping")) {
     await pingLeg(kit, page, engine);
