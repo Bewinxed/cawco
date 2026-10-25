@@ -62,6 +62,29 @@ const IDLE_MS = 10 * 60 * 1000;
 /** How often idle indexes are looked for. */
 const SWEEP_MS = 60 * 1000;
 
+/** Whether `error` says the file is no longer there: a session deleted, or a retired workspace's transcripts with it. */
+export const isGone = (error: unknown): boolean =>
+  (error as { code?: string } | null)?.code === "ENOENT";
+
+/**
+ * What `read` answers, or `gone` when the file it reads is no longer there,
+ * however far the read had got: a transcript deleted while it is read reads
+ * as one never found.
+ */
+export async function unlessGone<T>(
+  read: () => Promise<T>,
+  gone: T
+): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isGone(error)) {
+      return gone;
+    }
+    throw error;
+  }
+}
+
 /**
  * The change time an index read up to `checkpoint` is kept under: the file's
  * own when it is still the size the scan saw. A file that grew meanwhile is
@@ -97,13 +120,20 @@ export class LineIndexes<N> {
     );
   }
 
-  /** The file's index, brought up to date with it. */
+  /** The file's index, brought up to date with it; a file no longer there drops its index. */
   get(path: string): Promise<LineIndex<N>> {
     const pending = this.inflight.get(path);
     if (pending) {
       return pending;
     }
-    const read = this.refresh(path).finally(() => this.inflight.delete(path));
+    const read = this.refresh(path)
+      .catch((error: unknown) => {
+        if (isGone(error)) {
+          this.evict(path);
+        }
+        throw error;
+      })
+      .finally(() => this.inflight.delete(path));
     this.inflight.set(path, read);
     return read;
   }
