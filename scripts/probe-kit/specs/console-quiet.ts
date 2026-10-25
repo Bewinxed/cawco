@@ -40,18 +40,35 @@
  *    reconnecting window and past it: the server's read of the load said the
  *    machine is away, and the board lists it away (client.svelte.ts
  *    `storedReadWaits`). No request fails and nothing is logged; the pane
- *    shows the machine away. The machine back, the page reads each once, and
- *    the pane says so no more.
+ *    shows the machine away. Files opened then: its attachments stand as the
+ *    fault row, its reason and, under Show details, the machine's words
+ *    (core `machineFaultWords`), with nothing clipped (journeys/scan.ts over
+ *    the page); Try again asks nothing. The machine back, the page reads
+ *    each once, the pane says so no more, and Files, still open, lists the
+ *    conversation's picture where the fault row stood.
  */
-import { mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page, Response, WebSocketRoute } from "playwright-core";
 import type { AgentRow } from "../../../packages/core/src";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { RECONNECTING_MS } from "../../../packages/core/src/handover";
+import {
+  machineCalled,
+  machineFaultWords,
+} from "../../../packages/core/src/machine-names";
+import { filesWords } from "../../../packages/core/src/words/files";
 import { MACHINE, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
-import { COMPOSER, type Kit, kitsOwnMessage, open, type Spec } from "../kit";
+import { scan } from "../journeys/scan";
+import {
+  COMPOSER,
+  type Kit,
+  kitsOwnMessage,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
 
 /** B's turn: long enough to stream through every reload. */
 const WORDS = Array.from({ length: 4000 }, (_, at) => `word${at}`);
@@ -68,6 +85,12 @@ const STORED = "00000000-0000-4000-8000-00000000c0de";
 const READ_LINE = /^\[cawco\] read (\w+) because (\w+)/;
 /** The pane's title for a transcript whose machine is away (SessionPane.svelte `faultTitle`). */
 const AWAY_TITLE = /This machine is (offline|reconnecting)/;
+/** A 1×1 PNG: the picture e's stored conversation carries. */
+const PIXEL =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+/** Files' attachments region, and its fault row there. */
+const ATTACHMENTS = '[data-files-region="attachments"]';
+const ATTACHMENTS_FAULT = `${ATTACHMENTS} [data-files-failed]`;
 /** The hub's answer to a stream's resume (hub stream.ts `subscribe`). */
 const STREAM_ANSWER = /"type":"stream\.(backlog|reset)"/;
 /** Any session's newest transcript page. */
@@ -116,6 +139,44 @@ const watch = (page: Page): Heard => {
     }
   });
   return heard;
+};
+
+/**
+ * The person's last prompt in a stored Claude transcript carries a picture,
+ * as the CLI writes one (a base64 `image` block), so Files lists an
+ * attachment for it: chained after the file's last record.
+ */
+const withPicture = async (file: string, cwd: string): Promise<void> => {
+  const lines = (await readFile(file, "utf8")).trimEnd().split("\n");
+  const parentUuid =
+    lines
+      .map((line) => JSON.parse(line) as { uuid?: string })
+      .findLast((record) => record.uuid)?.uuid ?? null;
+  await appendFile(
+    file,
+    `${JSON.stringify({
+      type: "user",
+      uuid: "0000c0de-0000-4000-8000-00000000f11e",
+      parentUuid,
+      isSidechain: false,
+      userType: "external",
+      cwd,
+      sessionId: STORED,
+      version: "2.1.280",
+      gitBranch: "main",
+      timestamp: new Date(Date.UTC(2026, 9, 2)).toISOString(),
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: PIXEL },
+          },
+          { type: "text", text: "Here is the picture." },
+        ],
+      },
+    })}\n`
+  );
 };
 
 /** Empties what was heard, answering what it held. */
@@ -170,12 +231,14 @@ const run = async (kit: Kit): Promise<void> => {
     "-probe-console-quiet"
   );
   await mkdir(project, { recursive: true });
-  writeClaudeTranscript(join(project, `${STORED}.jsonl`), {
+  const storedFile = join(project, `${STORED}.jsonl`);
+  writeClaudeTranscript(storedFile, {
     bytes: 64 * 1024,
     seed: 7,
     sessionId: STORED,
     cwd: fleet.workdir,
   });
+  await withPicture(storedFile, fleet.workdir);
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
@@ -465,6 +528,54 @@ const run = async (kit: Kit): Promise<void> => {
     })
   );
 
+  // Files, opened while the machine is away: what a person sees there.
+  await page.locator("[data-files-control]").click();
+  await page.locator("[data-glass-card-frame='files-pop']").waitFor();
+  const faultShown = await page
+    .locator(ATTACHMENTS_FAULT)
+    .waitFor({ timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  await page.locator(`${ATTACHMENTS_FAULT} [data-details]`).click();
+  await settle(page, 400);
+  const machineWords = machineFaultWords(
+    machineCalled(MACHINE, await fleet.api<AgentRow[]>("/api/agents")),
+    "offline"
+  );
+  const faultSaid = (
+    (await page.locator(ATTACHMENTS_FAULT).textContent()) ?? ""
+  ).replaceAll(/\s+/g, " ");
+  const clipped = await page.evaluate(scan);
+  kit.check(
+    "e. Files opened while the machine is away: its attachments stand as the fault row, the reason and, under Show details, the machine's words, and the overflow sweep finds nothing clipped",
+    faultShown &&
+      faultSaid.includes(filesWords.cantReadAttachments) &&
+      faultSaid.includes(machineWords) &&
+      clipped.length === 0,
+    JSON.stringify({ faultShown, faultSaid, machineWords, clipped })
+  );
+  take(heard);
+  await page.locator(`${ATTACHMENTS_FAULT} [data-again]`).click();
+  await page.waitForTimeout(SETTLE_MS);
+  const tried = take(heard);
+  const triedAttachments = tried.asked.filter(
+    (path) => path === attachments
+  ).length;
+  const stillFault = await page.locator(ATTACHMENTS_FAULT).count();
+  kit.check(
+    "e. Try again while the machine is away asks nothing of the hub: no attachments request, nothing fails or is logged, and the fault row stands",
+    triedAttachments === 0 &&
+      tried.failed.length === 0 &&
+      tried.said.length === 0 &&
+      stillFault === 1,
+    JSON.stringify({
+      triedAttachments,
+      failed: tried.failed,
+      said: tried.said,
+      stillFault,
+    })
+  );
+
   // The machine back: its conversation is read, once.
   const answered = page.waitForResponse(
     (response) => new URL(response.url()).pathname === stored,
@@ -480,12 +591,28 @@ const run = async (kit: Kit): Promise<void> => {
     .waitFor({ state: "detached", timeout: 30_000 })
     .then(() => true)
     .catch(() => false);
+  const listed = await page
+    .locator(`${ATTACHMENTS} [data-files-row]`)
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
   await page.waitForTimeout(SETTLE_MS);
   const backLoad = take(heard);
   const backReads = backLoad.asked.filter((path) => path === stored).length;
   const backAttachments = backLoad.asked.filter(
     (path) => path === attachments
   ).length;
+  const files = await page.evaluate(
+    ({ region, fault }) => ({
+      open: !!document.querySelector("[data-glass-card-frame='files-pop']"),
+      fault: document.querySelectorAll(fault).length,
+      rows: [...document.querySelectorAll(`${region} [data-files-row]`)].map(
+        (row) => row.textContent?.replaceAll(/\s+/g, " ").trim() ?? ""
+      ),
+    }),
+    { region: ATTACHMENTS, fault: ATTACHMENTS_FAULT }
+  );
   kit.check(
     "e. the machine back: the stored conversation and its attachments are read once each, the transcript answers 200, nothing fails, and the pane no longer says the machine is away",
     backRead?.status() === 200 &&
@@ -501,6 +628,11 @@ const run = async (kit: Kit): Promise<void> => {
       awayGone,
       failed: backLoad.failed,
     })
+  );
+  kit.check(
+    "e. the machine back: Files, still open, has no fault row in its attachments and lists the conversation's picture",
+    listed && files.open && files.fault === 0 && files.rows.length > 0,
+    JSON.stringify({ listed, ...files })
   );
 };
 

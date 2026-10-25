@@ -356,6 +356,16 @@ export function followFiles(instanceId: string | null): void {
   if (waits?.on === "board") {
     return;
   }
+  // The machine back, its transcript is read again first (client.svelte.ts
+  // `readBehind`): the attachments are read once that lands, by the newest
+  // message it brings, not before it and again after.
+  if (
+    !waits &&
+    attachmentsReadAt.get(instanceId)?.startsWith("away:") &&
+    cawco.session(instanceId)?.loading
+  ) {
+    return;
+  }
   const carrying =
     waits?.on === "machine"
       ? `away:${waits.machine.machineId}`
