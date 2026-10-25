@@ -567,6 +567,14 @@ const spec: Spec = {
               source: "app/starters.tsv",
             },
           ],
+          except: [
+            {
+              rule: "contrast",
+              selector: "[data-dimmed]",
+              reason:
+                "Unsent drafts as the designer's report specs them (README: the stack dims to 50% once words are in the box), drawn with their costs for the owner to judge: the dimmed stack's words stand under 4.5:1",
+            },
+          ],
         });
         let states = 0;
         let spills = 0;

@@ -6,7 +6,8 @@
   provenance line closing the set. On the empty board the stack stands
   right-aligned in a centred 560px column, the composer under it. Drawn as
   specced, its costs included (three left edges per item; the reason under
-  a bubble can read as history).
+  a bubble can read as history; the stack dimmed to 50% puts its words under
+  4.5:1).
 
   A press scales the bubble to 0.985 under the hand, then the bubble travels
   down into the box and fades as the rest of the stack dims to 50%, one

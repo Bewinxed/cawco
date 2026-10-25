@@ -1629,7 +1629,7 @@ export async function buttonNames(scope: Locator): Promise<string[]> {
  * or a set count of loops) is paused at its start, and every one-shot run is
  * waited on until it lands.
  */
-export async function settle(page: Page, ms = 150): Promise<void> {
+export async function settle(page: Page, ms = 150, rounds = 4): Promise<void> {
   // A looping run (a working glyph's breath, a needs-you dot's three echoes,
   // which outlast the wait) would be caught mid-loop, a different frame each
   // time: it is paused at currentTime 0 instead, the product's motion left
@@ -1734,6 +1734,26 @@ export async function settle(page: Page, ms = 150): Promise<void> {
     }
   }
   await page.waitForTimeout(ms);
+  // A finite run that began after the wait looked (a page's reveal once its
+  // frame loaded) was read mid-flight: decisions-list's opened page at 382
+  // of its 400ms on a busy WebKit. Settle again while one runs, a few times
+  // at most: a page that keeps starting runs is the `settled` rule's finding.
+  if (rounds > 1 && (await page.evaluate(finiteRunning))) {
+    await settle(page, ms, rounds - 1);
+  }
+}
+
+/** Whether a finite run that does not repeat is running on the document's clock. */
+function finiteRunning(): boolean {
+  return window.kitRuns().some((run) => {
+    const timing = run.effect?.getComputedTiming();
+    return (
+      run.playState === "running" &&
+      run.timeline instanceof DocumentTimeline &&
+      Number.isFinite(Number(timing?.endTime ?? 0)) &&
+      Number(timing?.iterations ?? 1) <= 1
+    );
+  });
 }
 
 /** Two frames: a flush, a style pass, and whatever reads the frame after it. */
