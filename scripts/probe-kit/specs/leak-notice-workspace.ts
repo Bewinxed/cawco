@@ -28,7 +28,13 @@
  * Then it rests (`wait_item`), its item live, as a delegate waiting on its
  * runs does; told of the leftover it rests again, and told of the leak it
  * ends its item blocked, the leaking process still climbing and its
- * background command still running, so its session stays awake.
+ * background command still running. Before it answers that notice the probe
+ * reads what (w4) and (w5) name of its runs ({@link readRuns}): the leaker's
+ * pids and the browser's output. Within half a second of the item's end its
+ * workspace's settle has ended them, and once its session sleeps the
+ * workspace retires, its scratch dir (where Claude Code writes a background
+ * command's output) with it; read after the end, on round r331, the pids
+ * were gone and, ten seconds on, the output too.
  *
  * - (w1) Within {@link LEFT_WAIT_MS} the delegate reads that a process it
  *   started is still running after what started it ended, naming
@@ -157,6 +163,42 @@ let step = 0;
 let pending: { input: object; name: string } | undefined;
 /** Whether the delegate has ended its item, told of its leak. */
 let ended = false;
+/** What the probe read of the delegate's runs as it was told of its leak, before it ended its item ({@link readRuns}). */
+let runs: Runs | undefined;
+
+interface Runs {
+  /** The browser command's output, once it reached BROWSER-DONE; nothing when it did not within {@link BROWSER_WAIT_MS}. */
+  browsed: string | undefined;
+  /** The leaker's pids, as the agent's line names those it ended. */
+  leakerPids: number[];
+  /** How many background outputs the delegate's commands had. */
+  outputs: number;
+}
+
+/**
+ * The leaker's pids and the browser's output, read from the request that
+ * tells the delegate of its leak, while its item is live: the files Claude
+ * Code writes a background command's output into, as its tool results in
+ * the request say, read until the browser's reaches BROWSER-DONE (it ends
+ * {@link BROWSER_HOLD_S} s and a few in, a minute before a leak is told).
+ */
+const readRuns = async (request: Seen): Promise<Runs> => {
+  const files = [
+    ...new Set(
+      [...request.body.matchAll(OUTPUT_FILE)].map((one) => one[1] ?? "")
+    ),
+  ];
+  const browsed = await until(
+    "the browser command's output",
+    async () =>
+      (await Promise.all(files.map(textOf))).find((said) =>
+        said.includes("BROWSER-DONE")
+      ),
+    Boolean,
+    BROWSER_WAIT_MS
+  ).catch(() => undefined);
+  return { browsed, outputs: files.length, leakerPids: await pidsOf(LEAKER) };
+};
 
 /** A call of `name`, through ToolSearch while it is not loaded yet. */
 const want = (request: Seen, name: string, input: object): Reply => {
@@ -170,7 +212,7 @@ const want = (request: Seen, name: string, input: object): Reply => {
     : text(`${name} is not offered`);
 };
 
-const respond = (request: Seen): Reply => {
+const respond = async (request: Seen): Promise<Reply> => {
   if (!request.tools) {
     return text("Probe title");
   }
@@ -202,6 +244,7 @@ const respond = (request: Seen): Reply => {
   }
   if (!ended && request.last.includes(leakWords.leaking)) {
     ended = true;
+    runs = await readRuns(request);
     return want(request, FINISH, BLOCKED);
   }
   if (!ended && request.last.includes(leakWords.leftBehind)) {
@@ -381,8 +424,6 @@ const spec: Spec = {
         Boolean,
         MEMORY_WAIT_MS
       ).catch(() => undefined);
-      // Its pids while it runs, as the agent's line names those it ended.
-      const leakerPids = await pidsOf(LEAKER);
       check(
         "(w2) the delegate reads that a process it started in its workspace is leaking memory, naming it and the workspace",
         !!memoryTold?.includes(where),
@@ -391,26 +432,13 @@ const spec: Spec = {
       await endedCheck(kit, fleet, {
         delegate: item.instanceId,
         item: item.workItemId,
-        leakerPids,
+        leakerPids: runs?.leakerPids ?? [],
         workspace: workspace ?? "",
       });
-      // The browser command's output, from the file Claude Code writes a background command's into.
-      const outputs = () => [
-        ...new Set(
-          fleet.seen.flatMap((request) =>
-            [...request.body.matchAll(OUTPUT_FILE)].map((one) => one[1] ?? "")
-          )
-        ),
-      ];
-      const browsed = await until(
-        "the browser command's output",
-        async () =>
-          (await Promise.all(outputs().map(textOf))).find((said) =>
-            said.includes("BROWSER-DONE")
-          ),
-        Boolean,
-        BROWSER_WAIT_MS
-      ).catch(() => undefined);
+      const browsed = runs?.browsed;
+      const unbrowsed = runs
+        ? ` (no output reached BROWSER-DONE among ${runs.outputs} background outputs)`
+        : " (its runs unread: the delegate was never told of its leak)";
       const running = Number(browsed?.match(HANDLERS_RUNNING)?.[1]);
       const after = Number(browsed?.match(HANDLERS_AFTER)?.[1]);
       const told = toldWith(fleet.seen, [leakWords.leftBehind, INSTALL]);
@@ -425,7 +453,7 @@ const spec: Spec = {
       check(
         "(w5) a browser run in the workspace for 35 s had its crash handlers, they ended with it, and no session read a leftover naming one nor did the agent's log",
         running > 0 && after === 0 && !handlerTold && logged.length === 0,
-        `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}${browsed ? "" : ` (no output reached BROWSER-DONE among ${outputs().length} background outputs)`}; ${handlerTold ? `the session was told: ${handlerTold}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? `no [leaks] line naming ${INSTALL}` : logged.join(" | ").slice(0, 400)}`
+        `crash handlers while it ran ${Number.isNaN(running) ? "unread" : running}, after it ended ${Number.isNaN(after) ? "unread" : after}${browsed ? "" : unbrowsed}; ${handlerTold ? `the session was told: ${handlerTold}` : "no session told of a crash handler"}; agent log: ${logged.length === 0 ? `no [leaks] line naming ${INSTALL}` : logged.join(" | ").slice(0, 400)}`
       );
       const parentLeft = fleet.seen.find(
         (request) =>
