@@ -895,10 +895,11 @@ async function serveSession(
 }
 
 /**
- * Host mode's lock on one request to a name of the pattern
- * (preview-access.ts), `instanceId` the origin that holds the name (a
- * session's, a project's, an embed's), or undefined when none does: the
- * answer that stops the request, or undefined when it goes on.
+ * The lock on one request (preview-access.ts), to a name of host mode's
+ * pattern or to an origin's own port, `instanceId` the origin that holds
+ * the name or port (a session's, a project's, an embed's), or undefined when
+ * no name does: the answer that stops the request, or undefined when it
+ * goes on.
  *
  * The person's live pass goes through on every held name, whichever origin
  * holds it; a session's (`artifact_browse`) on the names of its scope
@@ -1112,7 +1113,9 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
  * preview or a canvas takes a port of the range and a listener on it, on the
  * hub's own bind address; its port is kept, so the previewed app keeps its
  * storage across restarts. That is all port mode (the default, no setup)
- * has. Host mode adds one listener on the range's first port that routes
+ * has. Every listener is behind the lock (preview-access.ts): without the
+ * person's pass or a session's, whoever reaches a port is answered the
+ * locked page. Host mode adds one listener on the range's first port that routes
  * each request by its Host, a name per session from the fleet's pattern that
  * DNS or a proxy brings there, behind the lock: `{session}` its id, or
  * `{port}` the preview port it keeps, so a fixed pool of names, one per port
@@ -1160,22 +1163,23 @@ export function createPreviewListeners(
   };
   /**
    * A listener on `port`, each request's session from `route`, and its TLS
-   * twins on the tailnet addresses while those serve HTTPS. `lock` (host
-   * mode, preview-access.ts): a request to any name needs the browser's
-   * pass, WebSocket upgrades too, but the dashboard's ping and the entry
-   * that spends a ticket for one.
+   * twins on the tailnet addresses while those serve HTTPS, behind `lock`
+   * (preview-access.ts): a request needs the browser's pass, WebSocket
+   * upgrades too, but the dashboard's ping and the entry that spends a
+   * ticket for one. Host mode's names set it on their domain, an origin's
+   * own port on the host it was reached at.
    */
   const listen = (
     port: number,
     route: (request: Request) => string | undefined,
-    lock?: PassLock
+    lock: PassLock
   ): Listener => {
     const fetch = async (
       request: Request,
       server: Server<ListenerSocket>
     ): Promise<Response | undefined> => {
       const instanceId = route(request);
-      const stopped = lock && atTheLock(request, lock, instanceId);
+      const stopped = atTheLock(request, lock, instanceId);
       if (stopped) {
         return framedBy(stopped, ancestorsOf(instanceId));
       }
@@ -1199,14 +1203,14 @@ export function createPreviewListeners(
         );
         return framedBy(downResponse("closed", 404));
       }
-      // A session's own port has no CDN in front of it; host mode's names
-      // (the lock's) may.
+      // An origin's own port has no CDN in front of it; host mode's names
+      // may.
       const answer = await serveSession(
         request,
         server,
         instanceId,
         deps,
-        lock === undefined
+        lock.domain === null
       );
       // Gzipped here, once, after the overlay tag is keyed; an immutable
       // answer once for its address on this session's origin.
@@ -1342,6 +1346,12 @@ export function createPreviewListeners(
     }
   };
 
+  /** The lock on every origin's own port: its pass set on the host it was reached at. */
+  const portLock: PassLock = {
+    domain: null,
+    passes,
+    sessionLive: deps.sessionLive,
+  };
   /** Each session's listener on its own port, by session. */
   const sessions = new Map<string, Listener>();
   /**
@@ -1370,7 +1380,7 @@ export function createPreviewListeners(
     try {
       sessions.set(
         instanceId,
-        listen(port, () => instanceId)
+        listen(port, () => instanceId, portLock)
       );
       return true;
     } catch (thrown) {
@@ -1581,7 +1591,7 @@ export function createPreviewListeners(
         embeds.set(key, {
           owner,
           ancestors: new Set<string>(),
-          listener: listen(port, () => key),
+          listener: listen(port, () => key, portLock),
         });
         return true;
       } catch (thrown) {
@@ -1703,7 +1713,8 @@ export function createPreviewListeners(
     /**
      * Session `instanceId`'s origin as a process on the hub's own machine
      * dials it: its own port on the listeners' bind address, loopback for a
-     * wildcard. That listener has no lock in either mode, so no ticket.
+     * wildcard. Behind the lock like every port: its caller enters with a
+     * session's ticket (server.ts, a canvas's unseen screen).
      */
     local(instanceId: string): string {
       const port = portOf(instanceId);

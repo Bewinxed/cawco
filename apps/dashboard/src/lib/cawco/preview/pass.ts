@@ -1,21 +1,48 @@
 /**
- * Host mode's way in, from the dashboard (hub preview-access.ts). Every
- * frame loads its preview's own address; the browser's one pass (core
- * `PREVIEW_PASS_COOKIE`, set on the domain every name stands under) lets it
- * through, the frames inside it too. Only a frame turned away
- * (`cawco:locked`) enters: one ticket, spent at `/__cawco/enter` on its
- * origin beside the frames, never in one, then the frame loads again. One
- * entry stands in flight per domain, so frames turned away together spend
- * one ticket, and an entry that landed after a frame last stood without
- * a pass (its load, or its page's word that it was let in) stands for that
- * frame too.
+ * The way into previews, from the dashboard (hub preview-access.ts). Every
+ * frame loads its preview's own address; the browser's one pass lets it
+ * through, the frames inside it too: on host mode's names set on the domain
+ * every name stands under (core `PREVIEW_PASS_COOKIE`), on an origin's own
+ * port on the host it stands on, which every port of it carries. Only a
+ * frame turned away (`cawco:locked`) enters: one ticket, spent at
+ * `/__cawco/enter` on its origin beside the frames, never in one, then the
+ * frame loads again. One entry stands in flight per pass (a domain, or a
+ * host by its scheme), so frames turned away together spend one ticket, and
+ * an entry that landed after a frame last stood without a pass (its load, or
+ * its page's word that it was let in) stands for that frame too.
  */
 import {
   hostModeDomain,
   type PreviewTicket,
   previewEnterUrl,
 } from "@cawco/core/frames";
+import { previewWords } from "@cawco/core/words/preview";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+
+/**
+ * Whether `origin` is an origin's own port: the dashboard's own host (core
+ * `previewRoute` puts a port on the host the dashboard was reached at),
+ * where host mode's names stand on names of their own.
+ */
+const byPort = (origin: string): boolean =>
+  new URL(origin).hostname === location.hostname;
+
+/** What one pass covers for `origin`: its host by its scheme on a port, else host mode's domain. */
+const passScope = (origin: string): string => {
+  const at = new URL(origin);
+  return byPort(origin)
+    ? `${at.protocol}//${at.hostname}`
+    : hostModeDomain(origin);
+};
+
+/** Why a frame of `origin` was turned away twice, in the dashboard's words. */
+export const turnedAwayWords = (origin: string): string =>
+  byPort(origin)
+    ? previewWords.portPassTurnedAway(new URL(origin).hostname)
+    : previewWords.passTurnedAway(
+        hostModeDomain(origin),
+        location.protocol === "https:"
+      );
 
 interface Entry {
   done: Promise<string | null>;
@@ -25,7 +52,7 @@ interface Entry {
   refused?: string | null;
 }
 
-/** The newest entry by domain. */
+/** The newest entry by what its pass covers ({@link passScope}). */
 const entries = new Map<string, Entry>();
 
 /** A ticket from the hub, spent on `origin`: null once spent, else why not. */
@@ -53,7 +80,7 @@ async function enter(origin: string): Promise<string | null> {
 }
 
 /**
- * Enters the previews under `origin`'s domain for a frame turned away that
+ * Enters the previews `origin`'s pass covers for a frame turned away that
  * last stood without a pass at `since` (`performance.now()`): null once it
  * may load again, else the hub's words for why it can't.
  */
@@ -61,8 +88,8 @@ export function enterPreviews(
   origin: string,
   since: number
 ): Promise<string | null> {
-  const domain = hostModeDomain(origin);
-  const held = entries.get(domain);
+  const scope = passScope(origin);
+  const held = entries.get(scope);
   if (
     held &&
     (held.landed === undefined ||
@@ -75,6 +102,6 @@ export function enterPreviews(
     entry.landed = performance.now();
     entry.refused = refused;
   });
-  entries.set(domain, entry);
+  entries.set(scope, entry);
   return entry.done;
 }

@@ -3,6 +3,7 @@ import {
   OWNER_COOKIE,
   OWNER_COOKIE_SECURE,
   PREVIEW_PASS_COOKIE,
+  PREVIEW_PORT_PASS_COOKIE,
   readEnv,
 } from "@cawco/core";
 import { PAGE_ORIGIN_HEADER } from "@cawco/core/browser-gate";
@@ -14,9 +15,10 @@ import { ownOrigin } from "#lib/cawco/own-origin.js";
 import type { RequestEvent, RequestHandler } from "./$types";
 
 /**
- * The browser's paired-device cookie and its preview pass (hub
- * preview-access.ts: a dashboard under host mode's domain is sent it), as
- * one `Cookie` value; none without either.
+ * The browser's paired-device cookie and its preview passes (hub
+ * preview-access.ts: a dashboard under host mode's domain is sent that
+ * pass, one on a preview port's host the port's), as one `Cookie` value;
+ * none without either.
  */
 const hubCookiesOf = (cookie: string | null): string | undefined =>
   cookie
@@ -26,7 +28,8 @@ const hubCookiesOf = (cookie: string | null): string | undefined =>
       (part) =>
         part.startsWith(`${OWNER_COOKIE}=`) ||
         part.startsWith(`${OWNER_COOKIE_SECURE}=`) ||
-        part.startsWith(`${PREVIEW_PASS_COOKIE}=`)
+        part.startsWith(`${PREVIEW_PASS_COOKIE}=`) ||
+        part.startsWith(`${PREVIEW_PORT_PASS_COOKIE}=`)
     )
     .join("; ") || undefined;
 

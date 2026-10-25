@@ -21,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { passedFetch } from "../preview-pass";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -186,7 +187,10 @@ const run = async (kit: Kit) => {
     `/api/projects/${projectId}/preview-address`,
     {}
   );
-  const page = await fetch(`http://127.0.0.1:${port}/__cawco/page/${kept.id}/`);
+  const page = await passedFetch(
+    fleet,
+    `http://127.0.0.1:${port}/__cawco/page/${kept.id}/`
+  );
   const html = await page.text();
   kit.check(
     "(c) the healthy page is served on its project's origin, its Preview embed with an address",

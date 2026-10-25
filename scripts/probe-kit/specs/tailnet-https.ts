@@ -914,7 +914,8 @@ const run = async (kit: Kit) => {
       dropPort: () => undefined,
       setSettings: () => undefined,
     } satisfies Parameters<typeof createPreviewListeners>[2],
-    // Port mode alone here: no listener holds host mode's lock, so no pass is read.
+    // No request here carries a pass, so the lock reads none: each answer is
+    // its locked page, which carries the preview's headers this leg reads.
     {} as Parameters<typeof createPreviewListeners>[3],
     tailnet
   );

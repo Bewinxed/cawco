@@ -622,7 +622,7 @@ export const artifactShownWords = (shown: Shown): string =>
 export const artifactBrowsedWords = (
   browsed: Browsed & { link: string }
 ): string =>
-  `Load ${browsed.url} once in your browser tool to open ${browsed.link}. ${browsed.expiresAt === null ? "It needs no pass: it opens for as long as this session runs." : `It opens until ${ahead(browsed.expiresAt)} (15 minutes) or this session ends; call again for a fresh one.`}`;
+  `Load ${browsed.url} once in your browser tool to open ${browsed.link}. It opens until ${ahead(browsed.expiresAt)} (15 minutes) or this session ends; call again for a fresh one.`;
 
 /** `artifact_promote`. */
 export const artifactPromotedWords = (promoted: Promoted): string =>

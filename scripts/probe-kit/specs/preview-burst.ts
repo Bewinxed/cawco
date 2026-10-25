@@ -66,6 +66,7 @@ import type { RenderReport } from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
 import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
+import { passInto } from "../preview-pass";
 
 const OPENS = 20;
 const ICONS = 150;
@@ -276,6 +277,9 @@ export const workspaceGone = async () => false;
   });
 }
 
+/** The pass the probe's own hub listener takes (its passes open any token): the browser's cookie on a port over plain http. */
+const PROBE_PASS = "cawco-preview-pass=probe";
+
 /** The hub's preview listener for one session showing a component canvas, its machine's listener at `agentPort`. */
 async function hubListener(
   instanceId: string,
@@ -329,11 +333,17 @@ async function hubListener(
     beside: () => ({ close: () => undefined }),
     origin: () => undefined,
   } as unknown as Listeners[4];
+  // Its port is behind the lock: one pass ({@link PROBE_PASS}) opens it,
+  // the front's and the cost's requests carry it.
+  const passes = {
+    live: () => ({ id: "probe", scope: null }),
+    touch: () => undefined,
+  } as unknown as Listeners[3];
   const listeners = createPreviewListeners(
     "127.0.0.1",
     deps,
     db,
-    {} as Listeners[3],
+    passes,
     tailnet
   );
   const { port } = listeners.address(instanceId);
@@ -373,6 +383,10 @@ function front(
       }
     }
     headers.set("host", String(asked[":authority"] ?? ""));
+    headers.set(
+      "cookie",
+      [headers.get("cookie"), PROBE_PASS].filter(Boolean).join("; ")
+    );
     for (const [name, value] of Object.entries(CLOUDFLARE)) {
       headers.set(name, value);
     }
@@ -730,7 +744,7 @@ async function relayCost(
     const batch = await Promise.all(
       Array.from({ length: COST_AT_ONCE }, async () => {
         const answer = await fetch(url, {
-          headers: { "accept-encoding": "gzip" },
+          headers: { "accept-encoding": "gzip", cookie: PROBE_PASS },
           decompress: false,
         } as RequestInit);
         statuses.add(answer.status);
@@ -890,6 +904,8 @@ async function realJoin(kit: Kit): Promise<void> {
   ).json()) as { port?: number };
   const origin = `http://127.0.0.1:${port ?? 0}`;
   const page: Page = await kit.page("desk");
+  // Its port is behind the lock: the person's pass, as the dashboard's frame holds it.
+  await passInto(page.context(), fleet, origin);
   const modules: string[] = [];
   page.on("request", (request) => {
     const at = new URL(request.url());

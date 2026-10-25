@@ -18,17 +18,12 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
-import {
-  hostModeDomain,
-  type PreviewAddress,
-  previewRoute,
-} from "@cawco/core/frames";
-import { previewWords } from "@cawco/core/words/preview";
+import { type PreviewAddress, previewRoute } from "@cawco/core/frames";
 import { SvelteMap } from "svelte/reactivity";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
-import { enterPreviews } from "../preview/pass";
+import { enterPreviews, turnedAwayWords } from "../preview/pass";
 
 export type Slot = "composer" | "panel";
 
@@ -307,10 +302,7 @@ export class Stage {
     }
     this.#turnedAway += 1;
     if (this.#turnedAway > 1) {
-      this.unreached = previewWords.passTurnedAway(
-        hostModeDomain(origin),
-        location.protocol === "https:"
-      );
+      this.unreached = turnedAwayWords(origin);
       this.entry = null;
       this.changed();
       return;

@@ -33281,7 +33281,7 @@
         ]
       },
       "PreviewTicket": {
-        "description": "A ticket into host mode's previews for the device or browser that asked: single-use, and spent by `expiresAt` (ms epoch).",
+        "description": "A ticket into the previews for the device or browser that asked: single-use, and spent by `expiresAt` (ms epoch).",
         "type": "object",
         "properties": {
           "expiresAt": {
@@ -57361,6 +57361,10 @@
               "type": "string"
             }
           },
+          "previewSettings": {
+            "$ref": "#/components/schemas/PreviewSettings",
+            "description": "The fleet's preview mode (Settings › Previews): a switch moves every\npreview origin, so a decision page loaded before it loads again, its\nembeds at their new origins."
+          },
           "previews": {
             "type": "array",
             "items": {
@@ -57385,6 +57389,7 @@
           "kind",
           "moves",
           "noticesSeen",
+          "previewSettings",
           "protocol",
           "pulses"
         ]
@@ -57756,6 +57761,55 @@
           "reason"
         ]
       },
+      "PreviewSettings": {
+        "description": "How previews are reached, fleet-wide (Settings › Previews, Caw's\n`admin_previews_write`): `port`, one port per session from the hub's range,\nwhich needs no setup; or `host`, an origin per session from `pattern`\n(`https://`, then a host name whose first label holds `{session}`, standing\nfor the session's id, or `{port}`, for the preview port it keeps, so one\nname per port of the range serves every session), for a fleet behind DNS\nor a proxy that routes them to the hub's first preview port. `passDomain`:\nthe domain the names stand under, which the browser's pass is set on\n({@link PREVIEW_PASS_COOKIE}).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "port"
+                ]
+              },
+              "ports": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "ports"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "host"
+                ]
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "passDomain": {
+                "type": "string"
+              },
+              "ports": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "passDomain",
+              "pattern",
+              "ports"
+            ]
+          }
+        ]
+      },
       "InstancesDeltaFrame": {
         "type": "object",
         "properties": {
@@ -57795,6 +57849,55 @@
             "items": {
               "type": "string"
             }
+          },
+          "previewSettings": {
+            "description": "Present when it moved: the fleet's preview mode ({@link InstancesFrame.previewSettings}).",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "port"
+                    ]
+                  },
+                  "ports": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode",
+                  "ports"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "host"
+                    ]
+                  },
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "passDomain": {
+                    "type": "string"
+                  },
+                  "ports": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode",
+                  "passDomain",
+                  "pattern",
+                  "ports"
+                ]
+              }
+            ]
           },
           "previews": {
             "type": "array",

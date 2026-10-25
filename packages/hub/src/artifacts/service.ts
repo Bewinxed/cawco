@@ -743,11 +743,11 @@ export type Shown =
 
 /**
  * What `artifact_browse` answers: the address the session's own browser
- * loads, and when it stops opening (ISO); null where previews are reached
- * by port, with no pass to lapse.
+ * loads, an entry that sets the session's pass, and when that pass stops
+ * opening (ISO).
  */
 export interface Browsed {
-  expiresAt: string | null;
+  expiresAt: string;
   url: string;
 }
 
@@ -6757,7 +6757,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
                     ...stands,
                     pass: {
                       ...pass,
-                      how: `Load url once in your own browser tool: it lets that browser into ${row.name}${pass.expiresAt ? ` until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one` : ""}.`,
+                      how: `Load url once in your own browser tool: it lets that browser into ${row.name} until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one.`,
                     },
                   }
             );

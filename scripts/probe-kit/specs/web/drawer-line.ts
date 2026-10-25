@@ -97,6 +97,7 @@ const EMPTY_BOARD: Envelope<InstancesFrame> = {
     agents: [],
     continuations: [],
     formerIds: {},
+    previewSettings: { mode: "port", ports: "3457–3556" },
     handoffs: {},
     hubBuild: { startedAt: 0, version: "0.0.0" },
     hubRun: "bench",

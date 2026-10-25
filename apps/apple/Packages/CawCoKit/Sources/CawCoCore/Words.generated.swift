@@ -1217,6 +1217,11 @@ public enum Words {
         public static func passTurnedAway(domain: String, overHttps: Bool) -> String {
             overHttps ? "This preview turned the dashboard away twice: this browser kept no pass for \(domain). Allow cookies for \(domain) in this browser, then try again." : "This preview turned the dashboard away: previews on their own names need the dashboard opened over https under the same domain, which is \(domain). Open the dashboard at an https address under \(domain), and its previews open there."
         }
+
+        /// A preview on its own port turned the dashboard away twice (hub preview-access.ts): the browser kept no pass for `host`, which every port of it carries.
+        public static func portPassTurnedAway(host: String) -> String {
+            "This preview turned the dashboard away twice: this browser kept no pass for \(host). Allow cookies for \(host) in this browser, then try again."
+        }
     }
 
     public enum Offers {

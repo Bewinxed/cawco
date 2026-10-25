@@ -56,6 +56,7 @@ import {
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Engine, type Kit, kitsOwnMessage, open, type Spec } from "../kit";
+import { passedFetch } from "../preview-pass";
 
 /** The pane probes again 2 s after a failure (PreviewPane `PROBE_FIRST_MS`); slack for the probe and the frame's load. */
 const FIRST_BACK_MS = 6000;
@@ -307,7 +308,8 @@ live = Preview("${site.id}", "The site as it runs")`,
     `/api/instances/${decided}/preview-address`,
     {}
   );
-  const served = await fetch(
+  const served = await passedFetch(
+    fleet,
     `http://127.0.0.1:${own}/__cawco/page/${page.id}/`
   ).then((answer) => answer.text());
   const embedPort = Number(EMBED_PORT.exec(served)?.[1] ?? 0);

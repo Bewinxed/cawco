@@ -15,6 +15,7 @@ import type {
   FsPayload,
   InstanceRow,
   NamedSpawn,
+  PreviewSettings,
   SendPayload,
   SessionPulse,
   SessionTooling,
@@ -1203,6 +1204,11 @@ const state = $state({
    * id is that session's.
    */
   formerIds: {} as Record<string, string>,
+  /**
+   * The fleet's preview mode, from the board: a switch moves every preview
+   * origin, so a page loaded on its own (decisions PageFrame) loads again.
+   */
+  previewSettings: null as PreviewSettings | null,
   /**
    * The project moves the hub is carrying (core move.ts), whole: handed on
    * connect in the `instances` frame, then replaced by each `moves` frame.
@@ -3443,6 +3449,12 @@ function handleFrame(frame: FramePayload): void {
     // leaves its tab on the session it is now (SessionSurface).
     if (frame.formerIds && !equal(state.formerIds, frame.formerIds)) {
       state.formerIds = frame.formerIds;
+    }
+    if (
+      frame.previewSettings &&
+      !equal(state.previewSettings, frame.previewSettings)
+    ) {
+      state.previewSettings = frame.previewSettings;
     }
     // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
     if (frame.noticesSeen) {
@@ -9533,6 +9545,10 @@ export const cawco = {
   /** Former id → the id its session has now (the hub's fold of older continuations). */
   get formerIds(): Record<string, string> {
     return state.formerIds;
+  },
+  /** The fleet's preview mode, as the board last carried it; null before the first board. */
+  get previewSettings(): PreviewSettings | null {
+    return state.previewSettings;
   },
   /** One continuation the hub is carrying, while it keeps it in its table. */
   continuation: (id: string): ContinuationJob | undefined =>

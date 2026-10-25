@@ -37,6 +37,7 @@ import {
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
+import { passInto, previewPass } from "../preview-pass";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -215,9 +216,14 @@ const probe = async (kit: Kit) => {
       })
     ).json()) as { origin?: string; port?: number };
   const direct = `http://127.0.0.1:${(await address()).port ?? 0}`;
+  // Its port is behind the lock too: the person's pass on its host.
+  const pass = await previewPass(fleet, direct);
+  /** A read of the preview's own port, with the pass. */
+  const readDirect = (path: string, headers: Record<string, string> = {}) =>
+    read(`${direct}${path}`, { cookie: pass, ...headers });
 
   // The dep's address, from the module's own text.
-  const plain = await read(`${direct}/src/main.js`, {
+  const plain = await readDirect("/src/main.js", {
     "accept-encoding": "identity",
   });
   const depPath = (await plain.text()).match(DEP_URL)?.[1];
@@ -232,7 +238,7 @@ const probe = async (kit: Kit) => {
   }
 
   // 1. Direct.
-  const dep = await read(`${direct}${depPath}`);
+  const dep = await readDirect(depPath);
   await dep.arrayBuffer();
   kit.check(
     "1a: direct: the `?v=` dep answers `max-age=31536000,immutable`, gzipped",
@@ -241,7 +247,7 @@ const probe = async (kit: Kit) => {
       dep.headers.get("content-encoding") === "gzip",
     said(dep)
   );
-  const module = await read(`${direct}/src/main.js`);
+  const module = await readDirect("/src/main.js");
   await module.arrayBuffer();
   const etag = module.headers.get("etag");
   kit.check(
@@ -252,7 +258,7 @@ const probe = async (kit: Kit) => {
     said(module)
   );
   const again = etag
-    ? await read(`${direct}/src/main.js`, { "if-none-match": etag })
+    ? await readDirect("/src/main.js", { "if-none-match": etag })
     : null;
   await again?.arrayBuffer();
   kit.check(
@@ -260,7 +266,7 @@ const probe = async (kit: Kit) => {
     again?.status === 304,
     again ? said(again) : "no etag to send"
   );
-  const own = await read(`${direct}/`);
+  const own = await readDirect("/");
   await own.arrayBuffer();
   kit.check(
     "1e: direct: the page itself, its overlay tag at the hub's key now, answers `no-store` with no validators, gzipped",
@@ -272,6 +278,7 @@ const probe = async (kit: Kit) => {
     said(own)
   );
   const page = await kit.page("desk");
+  await passInto(page.context(), fleet, direct);
   await page.goto(`${direct}/`, { waitUntil: "domcontentloaded" });
   const ran = await until(
     "the page's module graph ran",

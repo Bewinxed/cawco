@@ -28,6 +28,7 @@ import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
+import { passedFetch } from "../preview-pass";
 
 /** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const SIM = {
@@ -198,7 +199,8 @@ async function run(kit: Kit): Promise<void> {
         method: "POST",
       })
     ).json()) as { port: number };
-    const response = await fetch(
+    const response = await passedFetch(
+      fleet,
       `http://127.0.0.1:${port}/__cawco/artifact/${id}/send`,
       {
         method: "POST",

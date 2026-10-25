@@ -389,8 +389,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         CanvasDebug.log.notice("canvas page answered \(status) for \(navigationResponse.response.url?.absoluteString ?? "?", privacy: .public)")
         #endif
         guard navigationResponse.isForMainFrame, status != 200 else { return decisionHandler(.allow) }
-        if status == 401, page.byHost, !reentered {
-            // Host mode: the origin turned the page's pass away (it lapsed,
+        if status == 401, !reentered {
+            // The origin turned the page's pass away (it lapsed,
             // hub preview-access.ts); the canvas enters again, once in a row.
             reentered = true
             reentering = true
@@ -1179,7 +1179,7 @@ final class CanvasRoom: NSObject {
         web?.web.removeFromSuperview()
         let made = CanvasWeb(page: page, instanceId: instanceId) { [weak self] place in
             guard let hub = self?.host?.hub else { throw CanvasRefusal(message: "no hub is connected") }
-            return try await hub.previewLoad(place, for: .instance(instanceId), byHost: page.byHost)
+            return try await hub.previewLoad(place, for: .instance(instanceId))
         }
         made.onDone = { [weak self] in self?.composer.foldCanvas() }
         made.onDock = { [weak self] in self?.composer.dockCanvas() }
