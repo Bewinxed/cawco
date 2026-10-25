@@ -1220,26 +1220,9 @@ async function pageWidthLeg(
 const spec: Spec = {
   name: "comment-sizing-preview",
   async run(kit: Kit) {
-    // A's float is the product's own PinFloat, built from the dashboard's
-    // source into the preview (live-card/) before it is read, so what is
-    // read is what the source draws now.
-    const dashboard = join(ROOT, "apps", "dashboard");
-    const built = Bun.spawnSync(
-      [
-        join(dashboard, "node_modules", ".bin", "vite"),
-        "build",
-        "--config",
-        "scripts/comment-card.vite.ts",
-        "--logLevel",
-        "warn",
-      ],
-      { cwd: dashboard, stdout: "pipe", stderr: "pipe" }
-    );
-    kit.check(
-      "the live card (live-card/: the dashboard's own PinFloat, HangCard and PinFoot) is built from the dashboard's source",
-      built.exitCode === 0,
-      built.stderr.toString().slice(-600)
-    );
+    // A's float (live-card/) is the proposed thread card as built at
+    // f38a69173, kept as it stands since the card left the product
+    // (4f12dbb2f): there is no source left to build it from.
     const server = serve();
     const base = `http://127.0.0.1:${server.port}/`;
     try {

@@ -8,11 +8,11 @@ thread where the chosen option puts it.
 ```sh
 python3 -m http.server -d design-previews/comment-sizing 8080   # any static server on this folder
 bun scripts/probe-kit/run.ts comment-sizing-preview              # the proof (Chromium + WebKit)
-bun design-previews/comment-sizing/capture/capture.ts            # remake parts.js, house.css, fonts/, live-card/
+bun design-previews/comment-sizing/capture/capture.ts            # remake parts.js, house.css, fonts/
 ```
 
-- **Option**: A, beside the comment (what main ships, played live: the
-  product's own PinFloat, two fifths of the well, 280 to 480px, hung from
+- **Option**: A, beside the comment (the proposed card, played live: the
+  PinFloat built at f38a69173, two fifths of the well, 280 to 480px, hung from
   its pin's foot as the top bar's card hangs from its glass, sliding out of
   it with the foot's liquid bridge, as tall as what it holds up to the page
   area, moved up to stand whole near the foot, standing still as the page
@@ -33,11 +33,11 @@ bun design-previews/comment-sizing/capture/capture.ts            # remake parts.
 What it is made of:
 
 - `live-card/`: the float over the page, live: `card.js` and `card.css`, the
-  dashboard's own PinFloat (its HangCard, its PinFoot) and stylesheet, built
-  from the dashboard's source by `apps/dashboard/scripts/comment-card.vite.ts`
-  (`live/`: LiveCard, which mounts it, and its entry); every option's card,
-  composer and foot sheet is it, at the option's width. capture.ts builds
-  it, and the proof builds it again before it reads the preview.
+  proposed thread card (PinFloat with its HangCard and PinFoot, and their
+  stylesheet) as built at f38a69173; every option's card, composer and foot
+  sheet is it, at the option's width. That card left the product until its
+  design is approved (4f12dbb2f), so nothing rebuilds it: it is the proposal
+  as it stood.
 - `parts.js`: every other comment part as its real component drew it
   (PinCard, CommentRail, CommentComposer, PinMark, the kit's Button and
   split handle), mounted with `capture/fixture.js` by `capture/Stage.svelte`
