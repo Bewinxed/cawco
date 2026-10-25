@@ -1,7 +1,8 @@
 import { crossSiteRefusal } from "@cawco/core/browser-gate";
+import { gateWords } from "@cawco/core/words/gate";
 import type { Handle } from "@sveltejs/kit/hooks";
+import { ownOrigin } from "#lib/cawco/own-origin.js";
 import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
-import { publicOrigin } from "../public-origin.js";
 
 /**
  * Every request the dashboard's server answers:
@@ -10,10 +11,12 @@ import { publicOrigin } from "../public-origin.js";
  *   previewed app on its own port of this host above all, never reaches
  *   `/api` (and through it the hub) or any other route with the browser's
  *   cookies; a top-level navigation from elsewhere still opens a page. The
- *   dashboard's own origin is the request's `publicOrigin`
- *   (public-origin.js), the one derivation serve.js and the vite servers'
- *   `/ws` relays read: under `vite dev` and `vite preview` too, where
- *   `event.url` knows the Host alone.
+ *   dashboard's own origin is `ownOrigin` (lib/cawco/own-origin.ts): a
+ *   browser's request's `publicOrigin` (public-origin.js), the one
+ *   derivation serve.js and the vite servers' `/ws` relays read, under
+ *   `vite dev` and `vite preview` too, where `event.url` knows the Host
+ *   alone; a server load's own `fetch` (a subrequest, which carries none of
+ *   the browser's headers), its URL's.
  * - **Isolation**: `Origin-Agent-Cluster` keeps this origin in its own agent
  *   cluster, apart from a preview on the same site; `frame-ancestors 'self'`
  *   lets no other origin frame the dashboard.
@@ -31,16 +34,13 @@ export const handle: Handle = async ({ event, resolve }) => {
   const refused = crossSiteRefusal(
     event.request.method,
     (name) => event.request.headers.get(name),
-    publicOrigin(Object.fromEntries(event.request.headers)).origin
+    ownOrigin(event)
   );
   if (refused) {
     console.warn(
-      `[cawco] refused ${refused} to ${event.request.method} ${event.url.pathname}`
+      gateWords.refused(refused, event.request.method, event.url.pathname)
     );
-    return new Response(
-      "The dashboard answers its own pages only: this request came from another page.",
-      { status: 403 }
-    );
+    return new Response(gateWords.answer, { status: 403 });
   }
   const resolved = await resolve(event, {
     preload: (input) => input.type === "js" || input.type === "css",

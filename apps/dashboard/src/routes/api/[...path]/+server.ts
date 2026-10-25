@@ -10,8 +10,8 @@ import {
   HUB_UNREACHABLE,
   HUB_UNREACHABLE_HEADER,
 } from "#lib/cawco/hub-read.js";
-import { publicOrigin } from "../../../../public-origin.js";
-import type { RequestHandler } from "./$types";
+import { ownOrigin } from "#lib/cawco/own-origin.js";
+import type { RequestEvent, RequestHandler } from "./$types";
 
 /**
  * The browser's paired-device cookie and its preview pass (hub
@@ -99,10 +99,13 @@ const unreachedWords = (error: unknown): string => {
  * Proxy all API requests to the hub server
  */
 async function proxyToHub(
-  request: Request,
-  path: string,
+  event: RequestEvent,
   clientAddress?: string
 ): Promise<Response> {
+  const {
+    request,
+    params: { path },
+  } = event;
   const url = new URL(request.url);
   const targetUrl = `${hubOrigin()}/api/${path}${url.search}`;
   const authorization = request.headers.get("authorization");
@@ -134,8 +137,7 @@ async function proxyToHub(
         }),
         // The page's own origin, which the gate (hooks.server.ts) found
         // ours: an https one gets its cookie with `__Host-` and `Secure`.
-        [PAGE_ORIGIN_HEADER]: publicOrigin(Object.fromEntries(request.headers))
-          .origin,
+        [PAGE_ORIGIN_HEADER]: ownOrigin(event),
         ...(clientAddress && { "X-Cawco-Client-Address": clientAddress }),
         // A proxy in front's own words (a TLS terminator's scheme, Cloudflare's
         // client address and ray): the hub reads from them that the page
@@ -241,26 +243,15 @@ async function proxyToHub(
   }
 }
 
-export const GET: RequestHandler = async ({
-  request,
-  params,
-  getClientAddress,
-}) => proxyToHub(request, params.path, getClientAddress());
+export const GET: RequestHandler = async (event) =>
+  proxyToHub(event, event.getClientAddress());
 
-export const POST: RequestHandler = async ({
-  request,
-  params,
-  getClientAddress,
-}) => proxyToHub(request, params.path, getClientAddress());
+export const POST: RequestHandler = async (event) =>
+  proxyToHub(event, event.getClientAddress());
 
-export const PUT: RequestHandler = async ({
-  request,
-  params,
-  getClientAddress,
-}) => proxyToHub(request, params.path, getClientAddress());
+export const PUT: RequestHandler = async (event) =>
+  proxyToHub(event, event.getClientAddress());
 
-export const PATCH: RequestHandler = async ({ request, params }) =>
-  proxyToHub(request, params.path);
+export const PATCH: RequestHandler = async (event) => proxyToHub(event);
 
-export const DELETE: RequestHandler = async ({ request, params }) =>
-  proxyToHub(request, params.path);
+export const DELETE: RequestHandler = async (event) => proxyToHub(event);
