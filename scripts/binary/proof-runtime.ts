@@ -372,8 +372,11 @@ globalThis.__cawcoCanvas = {
   );
 } else if (verb === "proof-loop-held") {
   // The loop watch's thread from the binary's own entry, its loop held
-  // (proof-loop-held.ts); the probe kit's loop-held-said reads its lines.
-  (await import("./proof-loop-held")).holdLoop();
+  // (proof-loop-held.ts): the full hold for the probe kit's loop-held-said,
+  // `short` for the release's stack proof (proof-stack.ts).
+  const { HOLD_MS, SHORT_HOLD_MS, holdLoop } =
+    await import("./proof-loop-held");
+  holdLoop(Bun.argv[3] === "short" ? SHORT_HOLD_MS : HOLD_MS);
 } else {
   throw new Error(`Unknown proof command ${verb}`);
 }
