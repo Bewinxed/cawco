@@ -4,8 +4,8 @@
  * opened before, they don't show up in the list of comments or resolved
  * comments on the previous pages"). On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model) and the built dashboard, an
- * artifact's own tab at the desk (1440, light and dark) and the phone (390),
- * read from the pane's DOM, its computed styles and the hub's `comment_read`
+ * artifact's own tab at the desk (1440, light and dark; and light on WebKit)
+ * and the phone (390), read from the pane's DOM, its computed styles and the hub's `comment_read`
  * route, never from pixels:
  *
  * 1. A page with three pins written in its own doc, as the overlay writes
@@ -19,7 +19,9 @@
  * 2. The pane's doc held back by a stand-in for its socket (`routeWebSocket`
  *    on `/ws/artifact/`, the hub's messages kept 2.5 s): from the socket's
  *    start until the doc lands no empty state, no row, no tab count and no
- *    head count element is drawn; nothing inside `--dur-wait-grace`, then
+ *    head count element is drawn; nothing inside `--dur-wait-grace` from when
+ *    the pane's grace timer started (the timer itself, caught as it fires,
+ *    never the socket's start, which an effect may follow), then
  *    skeleton rows at the common row's height (place and age, words), their fill apart from the list's
  *    surface (The Claim Of Nothing Rule); once the doc lands, the rows of (1)
  *    and the counts in their place.
@@ -59,10 +61,11 @@ const FRAME = `${PANE} iframe[title="Preview"]`;
 const LIST = '[data-slot="comment-rail"]';
 type Theme = "light" | "dark";
 /** Each leg: where it runs and in which scheme. */
-const LEGS: { theme: Theme; view: "desk" | "phone" }[] = [
+const LEGS: Leg[] = [
   { view: "desk", theme: "light" },
   { view: "desk", theme: "dark" },
   { view: "phone", theme: "light" },
+  { view: "desk", theme: "light", engine: "webkit" },
 ];
 const PAGE =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Pins</title></head><body><h1>Pins</h1><p id="here">The paragraph pin 1 stands on.</p></body></html>';
@@ -247,10 +250,41 @@ const listOpenFor = (page: Page, session: string) =>
     localStorage.setItem(key, "open");
   }, `cawco-preview-comments:${session}`);
 
-/** Records, from the page's own clock, when the pane's artifact socket opened and every state the list drew after it. */
+/**
+ * Records, from the page's own clock, when the pane's artifact socket opened
+ * and every state the list drew after it (`at` from the socket, `t` on the
+ * page's clock); and every timer of 100 ms or more that fired until the list
+ * first drew its reading rows, with when it was set and when it fired: the
+ * pane's `--dur-wait-grace` timer (PreviewPane `readingLong`) among them,
+ * which starts in an effect before or after the socket's.
+ */
 const recorder = () => {
-  const seen: { at: number; state: string }[] = [];
+  const seen: { at: number; state: string; t: number }[] = [];
+  const fired: { delay: number; firedAt: number; setAt: number }[] = [];
   let socketAt = 0;
+  let reading = false;
+  const nativeTimeout = window.setTimeout;
+  window.setTimeout = ((
+    handler: TimerHandler,
+    delay?: number,
+    ...rest: unknown[]
+  ) => {
+    const wait = Number(delay ?? 0);
+    if (reading || typeof handler !== "function" || wait < 100) {
+      return nativeTimeout(handler, delay, ...rest);
+    }
+    const setAt = performance.now();
+    return nativeTimeout(
+      (...args: unknown[]) => {
+        if (!reading) {
+          fired.push({ delay: wait, firedAt: performance.now(), setAt });
+        }
+        (handler as (...given: unknown[]) => void)(...args);
+      },
+      delay,
+      ...rest
+    );
+  }) as typeof window.setTimeout;
   const Native = window.WebSocket;
   window.WebSocket = class extends Native {
     constructor(url: string | URL, protocols?: string | string[]) {
@@ -280,7 +314,9 @@ const recorder = () => {
       .filter(Boolean)
       .join(" ");
     if (seen.at(-1)?.state !== state) {
-      seen.push({ at: Math.round(performance.now() - socketAt), state });
+      const t = performance.now();
+      seen.push({ at: Math.round(t - socketAt), state, t });
+      reading ||= state.includes("reading");
     }
   };
   new MutationObserver(look).observe(document, {
@@ -289,9 +325,26 @@ const recorder = () => {
     characterData: true,
   });
   Object.defineProperty(window, "probeListSeen", {
-    value: () => ({ seen, socketAt }),
+    value: () => ({ seen, socketAt, fired }),
   });
 };
+
+/**
+ * When the grace timer that drew the reading rows started, on the page's
+ * clock: the last timer of `graceMs` that fired before they were drawn
+ * ({@link recorder}); null when none did.
+ */
+const graceStart = (
+  fired: { delay: number; firedAt: number; setAt: number }[],
+  graceMs: number,
+  readingAt: number
+): number | null =>
+  fired
+    .filter(
+      (timer) =>
+        Math.abs(timer.delay - graceMs) < 1 && timer.firedAt <= readingAt
+    )
+    .at(-1)?.setAt ?? null;
 
 /** The pane's artifact socket through the spec: held, refused, or let through. */
 interface Stand {
@@ -453,12 +506,21 @@ const fronted = async (at: At, engine: "chromium" | "webkit") => {
 };
 
 interface Leg {
+  /** Chromium unless named. */
+  engine?: "webkit";
   theme: Theme;
   view: "desk" | "phone";
 }
 
 const pageFor = (at: At, leg: Leg) =>
-  at.kit.page(leg.view, { theme: leg.theme });
+  at.kit.page(leg.view, {
+    theme: leg.theme,
+    ...(leg.engine ? { engine: leg.engine } : {}),
+  });
+
+/** A leg's name in its checks: its view and scheme, and its engine when it is not Chromium. */
+const legName = (leg: Leg) =>
+  `${leg.view} ${leg.theme}${leg.engine ? ` ${leg.engine}` : ""}`;
 
 interface At {
   base: string;
@@ -550,9 +612,8 @@ const pinned = async (at: At): Promise<HubPin[]> => {
 
 /** 1. The tabs and the head read the hub's counts; moved pins under their own tab, each row one button. */
 const counts = async (at: At, leg: Leg, hub: HubPin[]) => {
-  const { view } = leg;
   const check = (name: string, ok: boolean, detail: string) =>
-    at.kit.check(`${view} ${leg.theme}: ${name}`, ok, detail);
+    at.kit.check(`${legName(leg)}: ${name}`, ok, detail);
   const openOnHub = hub.filter((pin) => !pin.resolvedAt).length;
   const resolvedOnHub = hub.filter((pin) => pin.resolvedAt).length;
   const page = await pageFor(at, leg);
@@ -606,7 +667,7 @@ const openTab = (page: Page, at: At) =>
 const heldBack = async (at: At, leg: Leg) => {
   const { view } = leg;
   const check = (name: string, ok: boolean, detail: string) =>
-    at.kit.check(`${view} ${leg.theme}: ${name}`, ok, detail);
+    at.kit.check(`${legName(leg)}: ${name}`, ok, detail);
   const page = await pageFor(at, leg);
   await listOpenFor(page, at.session);
   await page.addInitScript(recorder);
@@ -646,10 +707,13 @@ const heldBack = async (at: At, leg: Leg) => {
     (now) => now.rows.length + now.moved.length > 0 && !now.reading,
     15_000
   ).catch(() => drawn(page));
-  const { seen } = await page.evaluate(() =>
+  const { seen, fired } = await page.evaluate(() =>
     (
       window as unknown as {
-        probeListSeen: () => { seen: { at: number; state: string }[] };
+        probeListSeen: () => {
+          fired: { delay: number; firedAt: number; setAt: number }[];
+          seen: { at: number; state: string; t: number }[];
+        };
       }
     ).probeListSeen()
   );
@@ -657,7 +721,20 @@ const heldBack = async (at: At, leg: Leg) => {
   const counted = beforeRows.filter((one) => COUNTED.test(one.state));
   const empties = beforeRows.filter((one) => one.state.includes("empty"));
   const firstReading = seen.find((one) => one.state.includes("reading"));
-  const said = JSON.stringify({ graceMs, seen });
+  // From when the grace timer itself started: it may start in an effect
+  // before the socket's, so the socket's clock reads it up to an effect early.
+  const graceAt = firstReading
+    ? graceStart(fired, graceMs, firstReading.t)
+    : null;
+  const readingAfterGrace =
+    firstReading && graceAt !== null
+      ? Math.round(firstReading.t - graceAt)
+      : null;
+  const said = JSON.stringify({
+    graceMs,
+    readingAfterGrace,
+    seen: seen.map((one) => ({ at: one.at, state: one.state })),
+  });
   check(
     "2: while the doc is held, no empty state, no tab count and no head count element is drawn",
     empties.length === 0 &&
@@ -668,9 +745,9 @@ const heldBack = async (at: At, leg: Leg) => {
     `${said}; at ${HOLD_MS} ms: ${JSON.stringify(during)}`
   );
   check(
-    `2: nothing inside --dur-wait-grace (${graceMs} ms), then skeleton rows, their fill apart from the list's surface`,
-    !!firstReading &&
-      firstReading.at >= graceMs - 50 &&
+    `2: nothing inside --dur-wait-grace (${graceMs} ms) from when its timer started, then skeleton rows, their fill apart from the list's surface`,
+    readingAfterGrace !== null &&
+      readingAfterGrace >= graceMs - 50 &&
       during.reading &&
       during.skeletonHeights.length === 3 &&
       during.skeletonFillApart === true &&
@@ -699,9 +776,8 @@ const heldBack = async (at: At, leg: Leg) => {
 
 /** 3. A socket refused before it synced: why, as its own sentence, and Try again bringing the rows. */
 const refused = async (at: At, leg: Leg) => {
-  const { view } = leg;
   const check = (name: string, ok: boolean, detail: string) =>
-    at.kit.check(`${view} ${leg.theme}: ${name}`, ok, detail);
+    at.kit.check(`${legName(leg)}: ${name}`, ok, detail);
   const page = await pageFor(at, leg);
   await listOpenFor(page, at.session);
   const stand = await standIn(page);
