@@ -20,6 +20,10 @@
  *    `bottom - --fade-inset-end - --fade-end`, each read off the engine
  *    (`--fade-end` is the registered length the mask draws, so a fade lifted
  *    at the end reads 0px);
+ *  - on a phone, a card halfway down that column revealed by
+ *    `scrollIntoView` from the page's top: in view and clear of the foot's
+ *    fade while it still stands (the page's scroll padding, --reveal-foot,
+ *    is at least the run the fade covers, edge-fade.css `--fade-foot`);
  *  - the same on the Table view's last row, under the pane's fade on a desk
  *    and the project page's on a phone, two other faded scrollers;
  *  - the overflow sweep totals 0 (journeys/scan.ts), and the page logs no
@@ -89,6 +93,35 @@ function scrollToEnd(selector: string): string {
   return "no scroller round it";
 }
 
+/**
+ * Marks `selector`'s match at `index` `data-probe-last`, sets its nearest
+ * scroller back to its top, and reveals it as the page's code does
+ * (`scrollIntoView`, its foot at the scroller's foot less its
+ * scroll-padding), mid-scroll.
+ */
+function revealMidPage([selector, index]: [string, number]): string {
+  const item = document.querySelectorAll<HTMLElement>(selector)[index];
+  if (!item) {
+    return "nothing matched";
+  }
+  for (const old of document.querySelectorAll("[data-probe-last]")) {
+    old.removeAttribute("data-probe-last");
+  }
+  item.setAttribute("data-probe-last", "");
+  for (let at = item.parentElement; at; at = at.parentElement) {
+    const { overflowY } = getComputedStyle(at);
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      at.scrollHeight > at.clientHeight + 1
+    ) {
+      at.scrollTop = 0;
+      item.scrollIntoView({ block: "end", behavior: "instant" });
+      return `${at.dataset.slot ?? at.tagName} revealed it at ${at.scrollTop} of ${at.scrollHeight - at.clientHeight}`;
+    }
+  }
+  return "no scroller round it";
+}
+
 /** The marked item against every faded block scroller round it. */
 function readClear(): Clear | null {
   const item = document.querySelector<HTMLElement>("[data-probe-last]");
@@ -132,9 +165,17 @@ async function checkClear(
   page: Page,
   at: string,
   what: string,
-  selector: string
+  selector: string,
+  /** Revealed by `scrollIntoView` mid-scroll, this match of `selector`; else its last, scrolled to its end. */
+  reveal?: number
 ): Promise<void> {
-  const scrolled = await page.evaluate(scrollToEnd, selector);
+  const scrolled =
+    reveal === undefined
+      ? await page.evaluate(scrollToEnd, selector)
+      : await page.evaluate(revealMidPage, [selector, reveal] as [
+          string,
+          number,
+        ]);
   // A scroll timeline moves its fade at the next frame.
   await settle(page, 300);
   await frames(page);
@@ -144,9 +185,12 @@ async function checkClear(
     read.fades.length > 0 &&
     read.item.top >= 0 &&
     read.item.bottom <= read.innerHeight &&
-    read.fades.every((fade) => read.item.bottom <= fade.fadeTop + SAME_PX);
+    read.fades.every((fade) => read.item.bottom <= fade.fadeTop + SAME_PX) &&
+    // Mid-page: the fade still stands at the foot, not lifted at the end.
+    (reveal === undefined ||
+      read.fades.every((fade) => Number.parseFloat(fade.fadeEnd) > 0));
   kit.check(
-    `${at}: ${what}, scrolled to its end, stands wholly in view and clear of every edge fade round it`,
+    `${at}: ${what}, ${reveal === undefined ? "scrolled to its end" : "revealed by scrollIntoView mid-page"}, stands wholly in view and clear of every edge fade round it`,
     clear,
     read === null
       ? `nothing marked (${scrolled})`
@@ -278,6 +322,19 @@ const spec: Spec = {
           "the board's long column's last card",
           longColumn
         );
+        if (view === "phone") {
+          // A card halfway down the column, revealed as the page's own
+          // code reveals one: it lands above the page's scroll padding
+          // (--reveal-foot), which stands clear of the foot's fade.
+          await checkClear(
+            kit,
+            page,
+            at,
+            "a card halfway down the long column",
+            longColumn,
+            Math.floor(CARDS / 2)
+          );
+        }
         let found = await page.evaluate(scan);
         kit.check(
           `${at} board: the overflow sweep totals 0 (${found.length})`,

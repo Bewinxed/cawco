@@ -2091,16 +2091,17 @@
            the reach. What it reveals (a scrollIntoView here, or one in a
            decision page's frame, which carries up into it) lands in the part
            nothing stands over: above the bar, or above Caw's sheet while it
-           stands (--reveal-foot, its scroll padding). -->
+           stands (--reveal-foot, its scroll padding), and never inside the
+           foot's fade: at least the run the fade covers there
+           (edge-fade.css `--fade-foot`, --bar-fade-inset + its length;
+           0px while the page wears no fade). -->
             <div
               data-slot="project-page"
               class={[
                 "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
                 fadeOn === "page" && "kit-edge-fade-block",
               ]}
-              style:--reveal-foot={docked
-                ? "var(--c-sheet-max-h)"
-                : "var(--bar-reach)"}
+              style:--reveal-foot={`max(${docked ? "var(--c-sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
               style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
               style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
             >
