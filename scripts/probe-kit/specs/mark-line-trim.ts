@@ -12,9 +12,12 @@
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model) and the built dashboard, in Chromium and WebKit at the desk
  * (1440) and the phone (390), on the live screens (home, a session, a
- * project, usage, each Configure page, the pending button's bench, and a
+ * project, usage, each Configure page, the pending button's bench, a
  * machine's menu whose pause the hub refused, its item saying why under its
- * label), every element whose computed `text-box-trim` is
+ * label, the project's tasks filtered, its Filter saying a count, and on
+ * the phone an artifact with an open pin on its own tab, the window narrowed
+ * until Comments goes into the head's More and More says its count), every
+ * element whose computed `text-box-trim` is
  * not `none` and that is drawn with words in it is read three ways: as it
  * stands, with its trim off, and with its padding off. A run whose trim
  * takes effect stands shorter than with its trim off. A finding is a run
@@ -22,13 +25,18 @@
  * taller than trimmed by that padding. Each is named with its display, its
  * height, the padding it carries and its row's (its parent's) height.
  *
+ * Read on their own as well: the filter's count pill, a box on the
+ * button's line, stands at its declared height (`h-space-5`, 18px); More's
+ * count, its own mark line, has its number trimmed and standing at its line.
+ *
  *   bun scripts/probe-kit/run.ts mark-line-trim
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page at a time, each read as it stands
 import type { Page } from "playwright-core";
+import type { Pin } from "../../../packages/core/src/comments";
 import { machineWords } from "../../../packages/core/src/words/machine";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
-import { MACHINE } from "../../scratch-fleet";
+import { MACHINE, until } from "../../scratch-fleet";
 import {
   type Engine,
   type Kit,
@@ -36,12 +44,104 @@ import {
   open,
   type Spec,
   settle,
+  VIEWS,
   type View,
 } from "../kit";
+import { pagePins, writePagePins } from "../pins";
+import { fleetUp, made } from "./artifact-resize-loop";
 
 const ENGINES: Engine[] = ["chromium", "webkit"];
 const SIZES: View[] = ["desk", "phone"];
 const READY = '[data-slot="shell"]';
+/** The task filter's count pill, on the project's strip or its bar. */
+const FILTER_COUNT = '[data-filter-trigger] [data-slot="count"]';
+/** The count the side card's More says for a control in it (Comments'). */
+const MORE_COUNT = '[data-slot="side-head"] [data-slot="more-count"]';
+/** The preview's page, in the side card. */
+const PREVIEW_FRAME = 'iframe[title="Preview"]';
+
+/** A comment pinned on the page, open: Comments counts it. */
+const OPEN_PIN: Pin = {
+  id: "probe-mark-line-pin-1",
+  number: 1,
+  kind: "comment",
+  anchor: { selector: "h1", source: null, text: "Lay out the chip wraps" },
+  at: new Date().toISOString(),
+  by: "person",
+  elements: [],
+  point: { x: 0.5, y: 0.5 },
+  thread: [
+    {
+      id: "probe-mark-line-entry-1",
+      by: "person",
+      text: "The second chip wraps too early",
+      at: new Date().toISOString(),
+    },
+  ],
+};
+
+/**
+ * Narrows the window a step at a time, from its width down to `to`, until
+ * `selector` stands: the head moves its controls into More as its room
+ * goes. Throws when it never does.
+ */
+const narrowUntil = async (
+  page: Page,
+  selector: string,
+  to: number,
+  step: number
+): Promise<void> => {
+  const { width: from, height } = page.viewportSize() ?? {
+    width: 1440,
+    height: 900,
+  };
+  const heads: string[] = [];
+  for (let width = from; width >= to; width -= step) {
+    await page.setViewportSize({ width, height });
+    await settle(page);
+    if ((await page.locator(selector).locator("visible=true").count()) > 0) {
+      return;
+    }
+    heads.push(
+      `${width}: ${await page.evaluate(() =>
+        [...document.querySelectorAll('[data-slot="side-head"] button')]
+          .map((b) => b.getAttribute("aria-label") ?? b.textContent?.trim())
+          .join(" | ")
+      )}`
+    );
+  }
+  throw new Error(
+    `${selector} stood at no width from ${from} to ${to}; the head at each: ${heads.filter((_, at) => at % 10 === 0).join(" ;; ")}`
+  );
+};
+
+/** The box `selector` stands in, and its words' run inside it. */
+const boxOf = (page: Page, selector: string) =>
+  page.evaluate((one) => {
+    // The one drawn: a phone's strip keeps a second, folded away.
+    const el =
+      [...document.querySelectorAll<HTMLElement>(one)].find(
+        (each) => each.getBoundingClientRect().width > 0
+      ) ?? null;
+    if (!el) {
+      return null;
+    }
+    const run = el.querySelector<HTMLElement>(":scope > span");
+    const height = (box: HTMLElement | null) =>
+      box ? Math.round(box.getBoundingClientRect().height * 100) / 100 : null;
+    return {
+      height: height(el),
+      declared: getComputedStyle(el).height,
+      space5: getComputedStyle(document.documentElement)
+        .getPropertyValue("--space-5")
+        .trim(),
+      run: height(run),
+      runTrim: run
+        ? getComputedStyle(run).getPropertyValue("text-box-trim")
+        : null,
+      lineHeight: run ? getComputedStyle(run).lineHeight : null,
+    };
+  }, selector);
 
 /** A run the trim left untrimmed, as the page measured it. */
 interface Untrimmed {
@@ -135,35 +235,70 @@ interface Place {
   act?: (page: Page) => Promise<void>;
   /** What the act brought up, on screen as the page is read. */
   holds?: string;
+  /** A reading of its own, beside the sweep: whether it holds, and what it read. */
+  measure?: (page: Page) => Promise<{ ok: boolean; detail: string }>;
   name: string;
   path: string;
   ready?: string;
+  /** The sizes the state stands at; every one when unsaid. */
+  sizes?: View[];
 }
 
+/** Pins one open comment on the artifact's page, as the overlay writes one, and waits for the doc to hold it. */
+const pinOn = async (kit: Kit, base: string, artifact: string) => {
+  const page = await kit.page("desk");
+  await open(page, `${base}/artifact/${artifact}`, PREVIEW_FRAME);
+  const frame = await until(
+    "the preview's page, its doc joined",
+    async () => {
+      const inside = await (
+        await page.locator(PREVIEW_FRAME).first().elementHandle()
+      )?.contentFrame();
+      const joined = await inside
+        ?.evaluate(
+          () =>
+            !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
+              .cawcoArtifact?.doc
+        )
+        .catch(() => false);
+      return joined ? inside : null;
+    },
+    Boolean,
+    60_000
+  );
+  if (frame) {
+    await writePagePins(frame, OPEN_PIN);
+    await until(
+      "the pin in the page's doc",
+      async () => Object.keys(await pagePins(frame)).length,
+      (n) => n > 0,
+      20_000
+    );
+  }
+  await page.close();
+};
+
 const setUp = async (kit: Kit): Promise<{ base: string; places: Place[] }> => {
-  const fleet: KitFleet = await kit.fleet(() => ({
-    everyMs: 5,
-    words: ["Noted, the mark line reads as it should."],
-  }));
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  const fleet: KitFleet = await fleetUp(kit);
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Mac layer",
     machineId: MACHINE,
     cwd: fleet.repo,
     caw: false,
   });
+  await fleet.api(`/api/projects/${project.id}/tasks`, {
+    title: "Mark line pill",
+  });
   const session = await fleet.spawn("claude", "Mark line", fleet.repo, {
     projectId: project.id,
   });
-  await fleet.send(session, "Say something short.");
+  const artifact = await made(kit, "1", "chip-wraps", () =>
+    fleet.send(session, "PROBE-CALL:1")
+  );
   const base = await fleet.dashboard();
+  if (artifact) {
+    await pinOn(kit, base, artifact);
+  }
   const configs = [
     "config",
     "config/accounts",
@@ -232,6 +367,61 @@ const setUp = async (kit: Kit): Promise<{ base: string; places: Place[] }> => {
       },
     },
     { name: "project", path: `project/${project.id}` },
+    {
+      // The filter's count stands on its trigger while a filter does (the
+      // URL's words): a box on the button's line, at its own height.
+      name: "project, its tasks filtered",
+      path: `project/${project.id}?q=Mark`,
+      holds: FILTER_COUNT,
+      act: async (page) => {
+        await page
+          .locator(FILTER_COUNT)
+          .locator("visible=true")
+          .first()
+          .waitFor({ timeout: 20_000 });
+      },
+      measure: async (page) => {
+        const pill = await boxOf(page, FILTER_COUNT);
+        return {
+          ok:
+            pill !== null &&
+            pill.declared === pill.space5 &&
+            pill.height === Number.parseFloat(pill.space5),
+          detail: JSON.stringify(pill),
+        };
+      },
+    },
+    ...(artifact
+      ? [
+          {
+            // Comments goes into More as the head's room goes, and More says
+            // its count: the count's words trimmed beside its glyph. Only a
+            // phone's head is that narrow: a desk's keeps Comments standing
+            // down to 300px, on the artifact's own tab and beside its
+            // session alike, More taking the other controls.
+            name: "artifact, Comments in More with its count",
+            sizes: ["phone"],
+            path: `artifact/${artifact}`,
+            ready: '[data-slot="side-card"]',
+            holds: MORE_COUNT,
+            act: (page: Page) => narrowUntil(page, MORE_COUNT, 300, 10),
+            measure: async (page: Page) => {
+              const count = await boxOf(page, MORE_COUNT);
+              return {
+                ok:
+                  count !== null &&
+                  count.runTrim !== null &&
+                  count.runTrim !== "none" &&
+                  count.run !== null &&
+                  count.lineHeight !== null &&
+                  Math.abs(count.run - Number.parseFloat(count.lineHeight)) <
+                    0.5,
+                detail: JSON.stringify(count),
+              };
+            },
+          } satisfies Place,
+        ]
+      : []),
     { name: "usage", path: "usage" },
     ...configs.map((path) => ({ name: path, path })),
     {
@@ -249,9 +439,14 @@ const readPlace = async (
   page: Page,
   base: string,
   place: Place,
+  size: View,
   leg: string
 ): Promise<{ read: number; runs: Untrimmed[] } | null> => {
   try {
+    await page.setViewportSize({
+      width: VIEWS[size].width,
+      height: VIEWS[size].height,
+    });
     await open(page, `${base}/${place.path}`, place.ready ?? READY);
     await place.act?.(page);
     await settle(page);
@@ -270,6 +465,14 @@ const readPlace = async (
       (await page.locator(place.holds).count()) > 0
     );
   }
+  if (place.measure) {
+    const measured = await place.measure(page);
+    kit.check(
+      `${leg} ${place.name}: it stands at its own height`,
+      measured.ok,
+      measured.detail
+    );
+  }
   return page.evaluate(untrimmedRuns);
 };
 
@@ -281,8 +484,10 @@ const run = async (kit: Kit): Promise<void> => {
       const page = await kit.page(size, { engine });
       const found: string[] = [];
       let read = 0;
-      for (const place of places) {
-        const seen = await readPlace(kit, page, base, place, leg);
+      for (const place of places.filter(
+        (one) => !one.sizes || one.sizes.includes(size)
+      )) {
+        const seen = await readPlace(kit, page, base, place, size, leg);
         read += seen?.read ?? 0;
         for (const one of seen?.runs ?? []) {
           found.push(
