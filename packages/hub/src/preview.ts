@@ -1345,8 +1345,8 @@ export function createPreviewListeners(
   /** Each session's listener on its own port, by session. */
   const sessions = new Map<string, Listener>();
   /**
-   * Each embedded preview's listener on its own port (not kept: an embed is
-   * made again as its page is served), by its key, with the origin of the
+   * Each machine artifact's listener on the port it keeps (made again as a
+   * frame next names it, after a mode change too), by its key, with the origin of the
    * page that shows it and every origin that page was served on: exactly
    * those may frame it.
    */
@@ -1532,6 +1532,15 @@ export function createPreviewListeners(
       return why;
     }
     try {
+      // Its listener binds with `reusePort`, which succeeds beside any other
+      // socket bound the same way, and that one would take a share of the
+      // names' requests past the lock: host mode opens only on a port
+      // nothing holds.
+      if (!unheld(PREVIEW_PORTS.first)) {
+        const why = `Port ${PREVIEW_PORTS.first} is held by another listener, so host-mode previews can't take it: free it, or set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
+        previewFailed(HOP, null, why);
+        return why;
+      }
       byHost = listen(
         PREVIEW_PORTS.first,
         (request) => sessionOfHost(pattern, request.headers.get("host")),
@@ -1635,12 +1644,22 @@ export function createPreviewListeners(
     }
   };
 
-  /** Every listener stopped, each one's connections closed, before the mode changes. */
+  /**
+   * Every listener stopped, each one's connections closed, before the mode
+   * changes: a machine artifact's too, which opens again on a port the new
+   * mode allows as a frame next names it ({@link openEmbed}). One left
+   * standing kept a port host mode's listener then binds beside it
+   * (`reusePort`), and the kernel handed it half of that port's requests,
+   * served with no lock.
+   */
   const stopAll = async (): Promise<void> => {
-    const stopping = [...sessions.values(), ...(byHost ? [byHost] : [])].map(
-      (listener) => listener.stop()
-    );
+    const stopping = [
+      ...sessions.values(),
+      ...[...embeds.values()].map((embed) => embed.listener),
+      ...(byHost ? [byHost] : []),
+    ].map((listener) => listener.stop());
     sessions.clear();
+    embeds.clear();
     byHost = undefined;
     hostPattern = undefined;
     await Promise.all(stopping);
