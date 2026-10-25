@@ -2,10 +2,15 @@
  * What the hub's log says of a relaunch at rest (hub server.ts
  * `relaunchAtRest`): a session whose CLI runs a boundary hook that fails
  * open, or whose Claude Code process ran a manual `/compact`, relaunched on
- * its conversation between turns, and the hold on a boundary relaunch.
+ * its conversation between turns, and the hold on a boundary relaunch; and
+ * of an account move's relaunch (`relaunchOnAccount`, `relaunchMoved`),
+ * which starts only a session whose process worked (`processWorks`).
  * Written to the machine's log only: no screen draws it, so it is not
  * written into the app (scripts/words-swift.ts).
  */
+
+/** The words every account move's relaunch line carries. */
+export const RELAUNCHES_ON = "relaunches on";
 
 /** What each relaunch is for: its log tag, and where it relaunches the session. */
 export const RELAUNCH_FOR = {
@@ -34,4 +39,15 @@ export const relaunchWords = {
   /** The hold ended with an ask kept back: it goes now. */
   holdEnded: (instanceId: string) =>
     `[hub] boundary: ${instanceId}'s hold ended; the ask it kept back goes now`,
+  /** An account move relaunches a session whose process worked, on its conversation; `then`: what it is told first, from ", " on. */
+  onAccount: (session: string, account: string, then = "") =>
+    `[hub] ${session} ${RELAUNCHES_ON} ${account}, its conversation resumed${then}.`,
+  /** An account move of a session whose process wasn't working: moved, never started. */
+  atRest: (
+    session: string,
+    account: string,
+    status: string,
+    launching: boolean
+  ) =>
+    `[hub] ${session} is on ${account} now, and isn't relaunched: its process wasn't working (it is ${status}${launching ? ", its launch on its way" : ""}). Whatever wakes it next starts it there.`,
 };

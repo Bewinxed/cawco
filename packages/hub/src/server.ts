@@ -4091,7 +4091,9 @@ export const createServer = (
   const sendSpawn = (
     agent: ReturnType<typeof registry.agent>,
     machineId: string,
-    envelope: Envelope<SpawnPayload>
+    envelope: Envelope<SpawnPayload>,
+    /** The hub's own launch (a restore, a relaunch): it goes in its turn ({@link paceSpawn}). */
+    paced = false
   ): Envelope | undefined => {
     if (holdingStarts(machineId) && envelope.instanceId) {
       db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
@@ -4099,6 +4101,11 @@ export const createServer = (
     }
     // No link and no hold: the caller found the machine offline first.
     if (!agent) {
+      return;
+    }
+    if (paced && envelope.instanceId && paceSpawn(machineId)) {
+      db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
+      queueStart(machineId, envelope.instanceId);
       return;
     }
     const frame = { ...envelope, payload: bounded(envelope.payload) };
@@ -4111,11 +4118,76 @@ export const createServer = (
   };
 
   /**
-   * Sends every start a machine is owed, in the order they were asked for,
-   * each exactly once: the row's claim is taken before the send. Runs when the
-   * machine registers and when its update state changes, and does nothing while
-   * it still takes no start ({@link startHold}). A start the person has since
-   * stopped is dropped.
+   * How far apart the hub's own launches on one machine go: a register's
+   * restores, a relaunch onto another account, the starts a machine was
+   * owed while it took none. obelisk's boot of 2026-10-23 started 19
+   * relaunches in one second, about 240 Claude Code processes with what else
+   * woke, load around 143; one launch at a time keeps a boot's handful of
+   * cut turns from landing on the machine at once.
+   */
+  const SPAWN_PACE_MS = 1500;
+  /** Each machine's paced launches: when the last went, those waiting their turn (each kept on its row, `db.oweSpawn`), and the timer that sends the next. */
+  interface Pacing {
+    last: number;
+    queue: string[];
+    timer: HubTimer | undefined;
+  }
+  const pacings = new Map<string, Pacing>();
+  const pacingOf = (machineId: string): Pacing => {
+    const known = pacings.get(machineId);
+    if (known) {
+      return known;
+    }
+    const fresh: Pacing = { last: 0, queue: [], timer: undefined };
+    pacings.set(machineId, fresh);
+    return fresh;
+  };
+
+  /**
+   * Whether the hub's own launch on `machineId` waits its turn now: one
+   * went within {@link SPAWN_PACE_MS}, or others wait before it. A launch
+   * that need not wait is counted as it goes.
+   */
+  const paceSpawn = (machineId: string): boolean => {
+    const pacing = pacingOf(machineId);
+    if (pacing.queue.length > 0 || Date.now() - pacing.last < SPAWN_PACE_MS) {
+      return true;
+    }
+    pacing.last = Date.now();
+    return false;
+  };
+
+  /** `instanceId`'s start, kept on its row, waits its turn on `machineId`. */
+  const queueStart = (machineId: string, instanceId: string): void => {
+    const pacing = pacingOf(machineId);
+    if (!pacing.queue.includes(instanceId)) {
+      pacing.queue.push(instanceId);
+    }
+    armPace(machineId);
+  };
+
+  /** Arms the send of `machineId`'s next start in its turn. */
+  const armPace = (machineId: string): void => {
+    const pacing = pacingOf(machineId);
+    if (pacing.timer || pacing.queue.length === 0 || lifetime.closed()) {
+      return;
+    }
+    pacing.timer = lifetime.after(
+      Math.max(0, pacing.last + SPAWN_PACE_MS - Date.now()),
+      () => {
+        pacing.timer = undefined;
+        sendNextStart(machineId);
+        armPace(machineId);
+      }
+    );
+  };
+
+  /**
+   * Sends the next start `machineId` is owed, exactly once: the row's claim
+   * is taken before the send. While the machine is away or takes no start,
+   * its line empties and each start stays on its row for its next flush
+   * ({@link flushOwedStarts}). A start the person has since stopped is
+   * dropped; one taken already, or dropped, gives its turn to the next.
    *
    * Each is bound as it goes ({@link bounded}), on the account its row runs
    * on now, and its machine asks for its credential as it starts it
@@ -4124,35 +4196,53 @@ export const createServer = (
    * with the reason: the row and its work item say so, and what it was sent
    * stays owed.
    */
-  const flushOwedStarts = (machineId: string): void => {
+  const sendNextStart = (machineId: string): void => {
+    const pacing = pacingOf(machineId);
     const agent = registry.agent(machineId);
     if (!agent || holdingStarts(machineId)) {
+      pacing.queue = [];
+      return;
+    }
+    const id = pacing.queue.shift();
+    const owed = db.owedSpawns(machineId).find((one) => one.id === id);
+    if (!(owed && db.takeOwedSpawn(owed.id))) {
+      return;
+    }
+    // Taken off its row: it is in flight below only if it goes.
+    launches.delete(owed.id);
+    const row = db.ownedInstance(owed.id, machineId);
+    if (
+      !row ||
+      row.endIntent ||
+      ["stopped", "discarded"].includes(row.status)
+    ) {
+      return;
+    }
+    const asked = JSON.parse(owed.envelope) as Envelope<SpawnPayload>;
+    const launch = boundOwed(machineId, owed.id, asked.payload);
+    if (!launch) {
+      return;
+    }
+    pacing.last = Date.now();
+    // To the id the machine has now: it may have re-joined under a new one
+    // since the start was owed (`takeFormerId`).
+    sendFrame(agent, { ...asked, machineId, payload: launch });
+    // What it was sent while its start was held goes right behind it.
+    releaseOwed({ instanceId: owed.id });
+  };
+
+  /**
+   * Every start a machine is owed goes, in the order they were asked for,
+   * one at a time ({@link sendNextStart}, {@link SPAWN_PACE_MS} apart). Runs
+   * when the machine registers and when its update state changes, and does
+   * nothing while it still takes no start ({@link startHold}).
+   */
+  const flushOwedStarts = (machineId: string): void => {
+    if (!registry.agent(machineId) || holdingStarts(machineId)) {
       return;
     }
     for (const owed of db.owedSpawns(machineId)) {
-      if (!db.takeOwedSpawn(owed.id)) {
-        continue;
-      }
-      // Taken off its row: it is in flight below only if it goes.
-      launches.delete(owed.id);
-      const row = db.ownedInstance(owed.id, machineId);
-      if (
-        !row ||
-        row.endIntent ||
-        ["stopped", "discarded"].includes(row.status)
-      ) {
-        continue;
-      }
-      const asked = JSON.parse(owed.envelope) as Envelope<SpawnPayload>;
-      const launch = boundOwed(machineId, owed.id, asked.payload);
-      if (!launch) {
-        continue;
-      }
-      // To the id the machine has now: it may have re-joined under a new one
-      // since the start was owed (`takeFormerId`).
-      sendFrame(agent, { ...asked, machineId, payload: launch });
-      // What it was sent while its start was held goes right behind it.
-      releaseOwed({ instanceId: owed.id });
+      queueStart(machineId, owed.id);
     }
   };
 
@@ -8009,12 +8099,13 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
     });
-    sendSpawn(agent, machineId, {
-      verb: "spawn",
+    // A relaunch is the hub's own launch: it goes in its turn.
+    sendSpawn(
+      agent,
       machineId,
-      instanceId,
-      payload: revive,
-    });
+      { verb: "spawn", machineId, instanceId, payload: revive },
+      relaunch
+    );
     // What a move ended with its old process, said to this one first.
     tellEndedByMove(row);
     publishInstances(machineId);
@@ -9624,9 +9715,10 @@ export const createServer = (
     if (!db.owesSpawn(record.instanceId)) {
       return "behind";
     }
-    // A machine away was answered above, by why it is away.
+    // A machine away was answered above, by why it is away; a start no hold
+    // keeps waits its turn among the hub's own ({@link paceSpawn}).
     const held = row && startHold(row.machineId)?.kind;
-    return held && held !== "away" ? held : "update";
+    return held && held !== "away" ? held : "starting";
   };
 
   /**
@@ -18120,12 +18212,13 @@ export const createServer = (
       keepTurn: true,
     });
     // Kept on its row while its machine takes no start ({@link startHold}).
-    sendSpawn(agent, row.machineId, {
-      verb: "spawn",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload,
-    });
+    // A restore is the hub's own launch: a boot's go one at a time.
+    sendSpawn(
+      agent,
+      row.machineId,
+      { verb: "spawn", machineId: row.machineId, instanceId: row.id, payload },
+      true
+    );
   };
 
   /**
@@ -21604,6 +21697,8 @@ export const createServer = (
     const running = !["sleeping", "stopping", "stopped", "error"].includes(
       row.status
     );
+    // Read before the carry, which ends its process at rest.
+    const live = processWorks(row);
     const stopped = stoppedNow(row.id);
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
@@ -21650,8 +21745,8 @@ export const createServer = (
     db.atLimit.dropHold(row.id);
     publishInstances(row.machineId);
     publishStalls();
-    if (running) {
-      relaunchOnAccount(row.id, stopped);
+    if (live) {
+      relaunchOnAccount(row.id, stopped, true);
     }
     if (move) {
       noteAtLimit(row, move);
@@ -21661,19 +21756,34 @@ export const createServer = (
     return {
       state: "moved",
       accountId: account.id,
-      why: handMovedWords(running, title, fromName, toName),
+      why: handMovedWords(live, title, fromName, toName),
     };
   };
 
-  /** Why a move does not relaunch `row` now: it is being ended, or its process is not running. Nothing when it runs. */
-  const notRunning = (row: StoredRow): string | undefined => {
-    if (db.ownedInstance(row.id, row.machineId)?.endIntent) {
-      return "it is being ended";
-    }
-    return ["sleeping", "stopped", "error"].includes(row.status)
-      ? `it is ${row.status}`
-      : undefined;
-  };
+  /**
+   * Whether `row`'s process works now: its row says it runs, no launch of it
+   * is on its way, and it is not being ended. The one rule every account
+   * move reads before it relaunches a session ({@link relaunchOnAccount},
+   * {@link relaunchMoved}), read before the move's carry ends the process
+   * at rest. A session at rest (asleep, failed, or filed anything but
+   * running) is moved, never started: its next wake starts it on the
+   * account its row names. A launch on its way (a register's restore of a
+   * cut turn, a wake) takes the move itself as it goes ({@link takeOwedMove}).
+   * The rule before read the status alone (`notRunning`: anything but
+   * sleeping, stopped or failed), so a row the register's restore had just
+   * filed `starting`, or one still `unknown` or `running` from before the
+   * boot, was relaunched as it owed a move, beside its own launch: obelisk,
+   * 2026-10-23 20:16:32, 19 September sessions "relaunches on …, its
+   * conversation resumed" in one second.
+   */
+  const processWorks = (row: {
+    id: string;
+    machineId: string;
+    status: string;
+  }): boolean =>
+    row.status === "running" &&
+    !launchInFlight(row.id) &&
+    !db.ownedInstance(row.id, row.machineId)?.endIntent;
 
   /** What a person's move that went says: copied, and relaunched now or at its next start. */
   const handMovedWords = (
@@ -21696,11 +21806,14 @@ export const createServer = (
    * carry cannot happen stays on its account and in place. `carry`: its
    * turn was refused at its account's limit (or on its sign-in), so once
    * relaunched it is told to carry on, and answers there what that turn was
-   * asked.
+   * asked. `live`: whether its process worked before the carry ended it
+   * ({@link processWorks}), read now when no carry came first; only then is
+   * it relaunched.
    */
   const relaunchOnAccount = (
     instanceId: string,
-    carry?: "limit" | "signin"
+    carry?: "limit" | "signin",
+    live?: boolean
   ): void => {
     const going = takeUpOwedMove(instanceId, carry);
     if (going !== undefined) {
@@ -21714,18 +21827,25 @@ export const createServer = (
     if (!(row?.sessionId && agent)) {
       return;
     }
-    // Ended (its work item over, a person's stop) or no longer running: a
-    // move never starts it. Its row names the account now, so whatever
-    // wakes it next starts it there.
-    const stopped = notRunning(row);
-    if (stopped) {
+    // At rest, starting, or being ended: a move never starts it. Its row
+    // names the account now, so whatever wakes it next starts it there.
+    if (!(live ?? processWorks(row))) {
       console.log(
-        `[hub] ${sessionName(row)} is on ${accountWords(row.accountId)} now, and isn't relaunched: ${stopped}. Whatever wakes it next starts it there.`
+        relaunchWords.atRest(
+          sessionName(row),
+          accountWords(row.accountId),
+          row.status,
+          launchInFlight(row.id)
+        )
       );
       return;
     }
     console.log(
-      `[hub] ${sessionName(row)} relaunches on ${accountWords(row.accountId)}, its conversation resumed${carry ? " and told to carry on past the limit that stopped it" : ""}.`
+      relaunchWords.onAccount(
+        sessionName(row),
+        accountWords(row.accountId),
+        carry ? " and told to carry on past the limit that stopped it" : ""
+      )
     );
     resumeSpawn(
       agent,
@@ -21808,6 +21928,8 @@ export const createServer = (
     /** The record is still this move's: no newer ask replaced it. */
     const still = () => owedMoves.get(stored.id)?.to === to;
     const stopped = stoppedNow(stored.id, carry);
+    // Read before the carry, which ends its process at rest.
+    const live = processWorks(stored);
     const carried = moveRowsToAccount(
       stored.machineId,
       [stored],
@@ -21837,7 +21959,7 @@ export const createServer = (
         // Behind the carry's own end, so its relaunch (and a newer move
         // asked meanwhile) is taken up afresh, never joined to this one.
         if (landed) {
-          relaunchOnAccount(stored.id, stopped);
+          relaunchOnAccount(stored.id, stopped, live);
           releaseOwed({ instanceId: stored.id });
         }
       });
@@ -27623,7 +27745,10 @@ export const createServer = (
    * one turn that answers what the refused turn asked; with `compact`, that
    * carry-on is the compaction's first step, and its filing turn and Claude
    * Code's `/compact` follow it, before anything else it is owed (which
-   * waits behind them, {@link compactions}).
+   * waits behind them, {@link compactions}). Relaunched only when its
+   * process worked before the move (`live`, {@link processWorks}); one at
+   * rest is moved, and what it is told next (its carry-on, a compaction's
+   * step) goes as any send to a session at rest does.
    */
   const relaunchMoved = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
@@ -27631,12 +27756,28 @@ export const createServer = (
       sessionId: string;
     },
     stopped: false | "limit" | "signin",
-    compact: { line: string; move: AccountMove } | undefined
+    compact: { line: string; move: AccountMove } | undefined,
+    live: boolean
   ): void => {
-    console.log(
-      `[hub] ${sessionName(now)} relaunches on ${accountWords(now.accountId)}, its conversation resumed${compact ? ", files its open items and is compacted" : ""}${stopped ? `${compact ? ", then is" : " and"} told to carry on past what stopped it` : ""}.`
-    );
-    resumeSpawn(agent, now.machineId, now, true);
+    if (live) {
+      console.log(
+        relaunchWords.onAccount(
+          sessionName(now),
+          accountWords(now.accountId),
+          `${compact ? ", files its open items and is compacted" : ""}${stopped ? `${compact ? ", then is" : " and"} told to carry on past what stopped it` : ""}`
+        )
+      );
+      resumeSpawn(agent, now.machineId, now, true);
+    } else {
+      console.log(
+        relaunchWords.atRest(
+          sessionName(now),
+          accountWords(now.accountId),
+          now.status,
+          false
+        )
+      );
+    }
     if (compact) {
       startCompaction(now, compact.line, compact.move, stopped);
       return;
@@ -27684,12 +27825,14 @@ export const createServer = (
         };
       }
       // Its process ends at rest and its data goes into the account's dir,
-      // and only then does its row say the account; it starts again there.
+      // and only then does its row say the account; it starts again there
+      // when that process worked (read before the carry ends it).
       // One that did not move stays on its account, held until its reset;
       // a process the carry ended there is asleep, woken at that reset.
       // A stopped session's move ends what it holds for later, unless no
       // person waits on it: then it waits for that work up to the cap from
       // `laterSince`. A rebalance's of a running one waits for it.
+      const live = processWorks(row);
       const { kept, ended } = await moveRowsToAccount(
         row.machineId,
         [row],
@@ -27716,7 +27859,8 @@ export const createServer = (
         agent,
         { ...now, sessionId: now.sessionId },
         stopped,
-        compact
+        compact,
+        live
       );
       const what = ended.get(row.id);
       return what ? { ended: what } : {};

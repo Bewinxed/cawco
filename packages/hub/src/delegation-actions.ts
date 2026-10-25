@@ -658,7 +658,9 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * interrupt holds its work item and only its parent, its lead or the person
  * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
- * `recut`); or its work item is blocked, its delegate type, machine or
+ * `recut`); or its start waits its turn among the hub's own launches on its
+ * machine, which go one at a time (`starting`, server.ts `paceSpawn`); or
+ * its work item is blocked, its delegate type, machine or
  * account missing, and it goes once that is back (`blocked`, work-items.ts
  * `blockIfMissing`).
  */
@@ -676,6 +678,7 @@ export type SendHold =
   | "recut"
   | "resting"
   | "signin"
+  | "starting"
   | "update";
 
 /** What the hub did with a send, as `handoff` tells its sender. */
@@ -703,6 +706,8 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
     "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
+  starting:
+    "Its machine is starting the hub's own launches one at a time, a second or more apart, so the session's start waits its turn at the hub and the message goes right behind it.",
   update:
     "Its machine is installing an update and restarting, so the message is queued at the hub and goes to the session as soon as the update is done.",
   build:
