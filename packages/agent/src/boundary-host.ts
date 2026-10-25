@@ -875,8 +875,15 @@ const watchGuarded = (sandbox: Sandbox): void => {
   guard();
 };
 process.on("SIGUSR1", guard);
+/**
+ * Whether this boundary was told to stop (the agent's `stopBoundary`): its
+ * sandbox's end is then the stop it asked for, never one said unasked, and
+ * it exits 0, whatever its sandbox's kill read as.
+ */
+let asked = false;
 for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
   process.on(signal, () => {
+    asked = true;
     stopping = true;
     if (current) {
       kill(current);
@@ -972,7 +979,7 @@ for (;;) {
         `cawco: the sandbox ${current?.inner ?? "starting"} ended with status ${status}, so the workspace's boundary closes`
       );
     }
-    await finish({ status });
+    await finish({ status: asked ? 0 : status });
   }
   // Recorded, then said on stdout, as a line: the keeper drains stderr
   // unread, and the agent says each line its host says after the sandbox is

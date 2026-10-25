@@ -280,6 +280,12 @@ interface Held extends Boundary {
    * on beside it.
    */
   readonly gen: string;
+  /**
+   * What its form was made of, part by part ({@link Plan.parts}), so a move
+   * names what moved ({@link movedParts}). None on one an earlier build
+   * started.
+   */
+  readonly parts?: FormParts;
   readonly path: string;
 }
 
@@ -3096,7 +3102,7 @@ const replaceOlder = async (
   replaceSoon(ref);
   if (keptRunning.get(ref.id)?.said !== work.words) {
     console.info(
-      `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work.words}, and handed over once that ends`
+      `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work.words}, and handed over once that ends${await formMoveWords(ref, held)}`
     );
     await recordDecision(ref.id, {
       ...decided(held),
@@ -3581,8 +3587,109 @@ interface Plan {
    * ({@link handOver}, REPORT.md §7.7).
    */
   readonly form: string;
+  /** Each part {@link form} hashes over, hashed on its own, by name ({@link formFrom}). */
+  readonly parts: FormParts;
   readonly spec: ProcSpec;
 }
+
+/** A form's parts, each by name with its own hash ({@link Plan.parts}). */
+type FormParts = Readonly<Record<string, string>>;
+
+/** The part of a Linux form that is what the fleet sync writes ({@link syncedPresence}). */
+const SYNCED_PART = "synced";
+
+/**
+ * A form, and its parts, from what it is made of, in order: the form hashes
+ * every part's text, each after a NUL but the first, and each part keeps a
+ * hash of its own text alone.
+ */
+const formFrom = (
+  made: readonly (readonly [string, string])[]
+): { form: string; parts: FormParts } => {
+  const hash = createHash("sha256");
+  const parts: Record<string, string> = {};
+  made.forEach(([name, text], at) => {
+    if (at > 0) {
+      hash.update("\0");
+    }
+    hash.update(text);
+    parts[name] = createHash("sha256").update(text).digest("hex").slice(0, 12);
+  });
+  return { form: hash.digest("hex").slice(0, 16), parts };
+};
+
+/** The parts that moved from `was` to `now`, by name; every one of `now`'s when `was` names none. */
+const movedParts = (was: FormParts | undefined, now: FormParts): string[] =>
+  Object.keys(now).filter((name) => was?.[name] !== now[name]);
+
+/** The parts of a form its workspace's policy is written into: Linux's srt settings, macOS's Seatbelt profile. */
+const POLICY_PARTS: ReadonlySet<string> = new Set(["settings", "profile"]);
+
+/**
+ * How policy `now` differs from `was`, a boundary's grant ({@link
+ * grantedOf}), in words: each path a list holds now that it did not then
+ * (`+`), or held then and not now (`-`), and each other field that changed.
+ * None when `was` is not on record.
+ */
+const policyMoves = (was: Policy | undefined, now: Policy): string[] => {
+  if (!was) {
+    return [];
+  }
+  const before: Record<string, unknown> = { ...was };
+  const after: Record<string, unknown> = { ...now };
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .sort()
+    .flatMap((field) => {
+      const then = pathsOf(before[field]);
+      const nowPaths = pathsOf(after[field]);
+      if (then && nowPaths) {
+        return [
+          ...nowPaths
+            .filter((path) => !then.includes(path))
+            .map((path) => `${field} +${path}`),
+          ...then
+            .filter((path) => !nowPaths.includes(path))
+            .map((path) => `${field} -${path}`),
+        ];
+      }
+      return JSON.stringify(before[field]) === JSON.stringify(after[field])
+        ? []
+        : [`${field} changed`];
+    });
+};
+
+/**
+ * What moved in workspace `ref`'s form since its boundary `held` started,
+ * for the log line that hands it over or keeps it: each part that moved
+ * ({@link movedParts}) and, when its policy's part did, how the policy moved
+ * ({@link policyMoves}), the first {@link REASONS_SAID} of it. Empty when
+ * its form did not move, or cannot be read now.
+ */
+const formMoveWords = async (
+  ref: WorkspaceRef,
+  held: Held
+): Promise<string> => {
+  try {
+    const now = await formNow(ref);
+    if (held.form === now.form) {
+      return "";
+    }
+    if (!held.parts) {
+      return "; its form moved from one a build before form parts started";
+    }
+    const moved = movedParts(held.parts, now.parts);
+    const paths = moved.some((part) => POLICY_PARTS.has(part))
+      ? policyMoves(
+          await grantedPolicy(ref.id, held.gen),
+          await workspacePolicy(ref)
+        )
+      : [];
+    const more = paths.length - REASONS_SAID;
+    return `; its form moved: ${moved.join(", ")}${paths.length > 0 ? ` (${paths.slice(0, REASONS_SAID).join("; ")}${more > 0 ? `; and ${more} more` : ""})` : ""}`;
+  } catch {
+    return "";
+  }
+};
 
 /** The generation every form is computed for ({@link Plan.form}): no boundary has it. */
 const FORM_GENERATION = "form";
@@ -3594,31 +3701,50 @@ const FORM_GENERATION = "form";
  * restoring … nothing there resolves (absent, dangling or unreadable)", its
  * linux-sandbox-utils.js 0.0.81), so a boundary started before one was made
  * has none of it. Made since, it is a later form, and the boundary is handed
- * over to it ({@link rearmMoved}). Each is named by what its bind holds:
- * srt binds the path's resolved target (its `unit.resolve`, the canonical
- * source), and a bind keeps the device and inode it was made over, so one
- * taken away and made again, or pointed at another target, is a later form
- * too. `stat` follows the path to that target. Seatbelt grants by path rule,
- * there or not.
+ * over to it ({@link rearmMoved}). Each is named by what its bind shows: srt
+ * binds the path's resolved target (its `unit.resolve`, the canonical
+ * source), and `stat` follows the path to that target. A dir's bind shows
+ * what the dir holds as it changes, but keeps the device and inode it was
+ * made over, so a dir taken away and made again, or pointed at another
+ * target, is a later form. A file's bind keeps the file it was made over,
+ * whose content is all it shows, so a file is named by its content: one
+ * written again whole with the same bytes (a new inode) is the same form, and
+ * one with other bytes is a later one. Seatbelt grants by path rule, there or
+ * not.
  */
 const syncedPresence = async (): Promise<string> =>
   (
     await Promise.all(
       fleetSyncedPaths().map(async (path) => {
         const held = await stat(path).catch(() => undefined);
-        return `${path} ${held ? `${held.dev}:${held.ino}` : "none"}`;
+        if (!held) {
+          return `${path} none`;
+        }
+        if (held.isFile()) {
+          const bytes = await readFile(path).catch(() => undefined);
+          return `${path} ${bytes ? `file ${createHash("sha256").update(bytes).digest("hex")}` : "unreadable"}`;
+        }
+        return `${path} ${held.dev}:${held.ino}`;
       })
     )
   ).join("\n");
 
+/** The form, with its parts, a boundary of workspace `ref` takes in this build on this machine now. */
+const formNow = async (
+  ref: WorkspaceRef
+): Promise<{ form: string; parts: FormParts }> => {
+  const { form, parts } = await planFor(ref, FORM_GENERATION);
+  return { form, parts };
+};
+
 /** The form a boundary of workspace `ref` takes in this build on this machine now. */
 const formOf = async (ref: WorkspaceRef): Promise<string> =>
-  (await planFor(ref, FORM_GENERATION)).form;
+  (await formNow(ref)).form;
 
 /** The {@link Plan} of generation `gen` of workspace `ref`'s boundary on this machine now. */
 const planOf = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
-  const [plan, form] = await Promise.all([planFor(ref, gen), formOf(ref)]);
-  return { ...plan, form };
+  const [plan, now] = await Promise.all([planFor(ref, gen), formNow(ref)]);
+  return { ...plan, ...now };
 };
 
 /** {@link planOf}, its form hashed from `gen`'s own files. */
@@ -3636,7 +3762,6 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     pid: undefined,
     scratch: scratchOf(id),
   });
-  const hash = createHash("sha256");
   const runtimes = await containerSockets();
   // Made on the host at every look, on both OSes, where Bun looks for it
   // (bun-node-shim.ts); macOS reads `/private/tmp` as it stands, Linux binds it
@@ -3683,16 +3808,12 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         [grantedOf(id, gen), granted],
         ...guardFiles(id, gen),
       ],
-      form: hash
-        .update(profile)
-        .update("\0")
-        .update(RUNNER)
-        .update("\0")
-        .update(exec)
-        .update("\0")
-        .update(isPlace(id) ? PLACE_GUARD : "")
-        .digest("hex")
-        .slice(0, 16),
+      ...formFrom([
+        ["profile", profile],
+        ["runner", RUNNER],
+        ["exec", exec],
+        ["place", isPlace(id) ? PLACE_GUARD : ""],
+      ]),
       spec: {
         command: "/usr/bin/sandbox-exec",
         args: [
@@ -3754,24 +3875,16 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       [grantedOf(id, gen), granted],
       ...guardFiles(id, gen),
     ],
-    form: hash
-      .update(settings)
-      .update("\0")
-      .update(await syncedPresence())
-      .update("\0")
-      .update(launcher)
-      .update("\0")
-      .update(RUNNER)
-      .update("\0")
-      .update(exec)
-      .update("\0")
-      .update(denies)
-      .update("\0")
-      .update(await hostText)
-      .update("\0")
-      .update(place ? `${policy.scratch}\0${PLACE_GUARD}` : "")
-      .digest("hex")
-      .slice(0, 16),
+    ...formFrom([
+      ["settings", settings],
+      [SYNCED_PART, await syncedPresence()],
+      ["launcher", launcher],
+      ["runner", RUNNER],
+      ["exec", exec],
+      ["denies", denies],
+      ["host", await hostText],
+      ["place", place ? `${policy.scratch}\0${PLACE_GUARD}` : ""],
+    ]),
     spec: {
       command: runtime,
       args: [
@@ -5601,27 +5714,40 @@ const inUseNow = async (): Promise<string[]> => {
 };
 
 /**
- * Each boundary in use whose form moved since it started, handed over to
- * one of the form now as soon as nothing runs in it ({@link ensure}'s
+ * Each boundary in use whose form's part the fleet sync writes moved since
+ * it started ({@link SYNCED_PART}, {@link syncedPresence}), handed over to one
+ * of the form now as soon as nothing runs in it ({@link ensure}'s
  * {@link replaceOlder}), so a session's next command, hook or server start
  * runs in it: after a fleet sync made a path a boundary reads (the fleet's
- * hook scripts, {@link syncedPresence}), a session started before it, or
- * before this build, reaches what it holds. One not in use takes the form
+ * hook scripts), a session started before it reaches what it holds. A sync
+ * that moved nothing a boundary reads moves no form part of its own, and
+ * nothing is handed over for it: a form that moved otherwise (a build, the
+ * workspace's policy) is the boundary's next use's to take ({@link ensure}),
+ * and one already waiting for its work to end ({@link stale}) is handed over
+ * by the look that waits ({@link handOverStale}). One started by a build
+ * that kept no parts is its next use's too. One not in use takes the form
  * now at its next ensure.
  */
 export const rearmMoved = async (why: string): Promise<void> => {
   for (const id of await inUseNow()) {
+    if (stale.has(id)) {
+      continue;
+    }
     // biome-ignore lint/performance/noAwaitInLoops: one small record read and one form per boundary in use
     const held = await readHeld(id).catch(() => undefined);
-    if (!held) {
+    if (!held?.parts) {
       continue;
     }
     const ref = { id, path: held.path };
-    if (held.form === (await formOf(ref))) {
+    const now = await formNow(ref);
+    if (
+      held.form === now.form ||
+      held.parts[SYNCED_PART] === now.parts[SYNCED_PART]
+    ) {
       continue;
     }
     console.info(
-      `[workspace] ${id}: its boundary's form moved (${why}), so it is handed over once nothing runs in it`
+      `[workspace] ${id}: its boundary's form moved (${why}: ${movedParts(held.parts, now.parts).join(", ")}), so it is handed over once nothing runs in it`
     );
     await ensureBoundary(ref).catch((error: unknown) => {
       console.warn(
@@ -5713,13 +5839,14 @@ const handOver = async (
 ): Promise<Boundary> => {
   const record = retiringFileOf(ref.id, old);
   const retiring: Retiring = old;
+  const moved = await formMoveWords(ref, old);
   await writeWhole(record, `${JSON.stringify(retiring)}\n`, 0o644);
   const fresh = await start(client, ref).catch(async (error: unknown) => {
     await rm(record, { force: true });
     throw error;
   });
   console.info(
-    `[workspace] ${ref.id}: its boundary ${old.pid} (form ${old.form ?? "none"}) is handed over to ${fresh.pid}; it closes once nothing runs in it`
+    `[workspace] ${ref.id}: its boundary ${old.pid} (form ${old.form ?? "none"}) is handed over to ${fresh.pid}; it closes once nothing runs in it${moved}`
   );
   await recordDecision(ref.id, {
     ...decided(old),
@@ -7841,18 +7968,44 @@ const endMembers = async (
   );
 };
 
+/** Waits up to `ms` for sessiond to hold `procId` no more: whether it is gone. */
+const goneWithin = async (procId: string, ms: number): Promise<boolean> => {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls one process until it is gone, or the deadline passes
+    if (!(await holding(procId))) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    await Bun.sleep(20);
+  }
+};
+
+/**
+ * How long a Linux boundary's srt host has, once told to stop, to end its
+ * sandbox itself and exit ({@link stopBoundary}). Ours: srt's own teardown
+ * is bounded at 1.5 s (its bridges killed), and the host's kill of its
+ * sandbox is the one {@link endSandbox} the agent would make.
+ */
+const HOST_STOP_MS = 3000;
+
 /**
  * Stops the boundary of workspace `id` that `held` names, as sessiond holds
- * it, with every process in it. Linux: its init, then its outer bwrap
- * (sandbox-end.ts `endSandbox`, as its host ends one itself). srt
- * then sees its child exit, and its host removes srt's proxy, socat bridges
- * and mount points and exits (killing the host instead would leave those
- * behind, REPORT.md §5e), and its keeper ends what is left in its cgroup
- * (sessiond server.ts `#sweep`). An anchor from before srt goes with the
- * `unshare` sessiond holds (`--kill-child`). macOS: the runner, then
- * everything that answers to its generation's name, which outlives the
- * runner there ({@link killAnswering}). On whichever keeper holds it: the
- * current one, or a retiring one.
+ * it, with every process in it. Linux: its srt host is told first (SIGTERM),
+ * and ends its sandbox itself, its init then its outer bwrap (sandbox-end.ts
+ * `endSandbox`), as a stop it was asked for, so it says no sandbox of its
+ * ended unasked and exits 0 (boundary-host.ts `stopping`); then it removes
+ * srt's proxy, socat bridges and mount points and exits (killing the host
+ * instead would leave those behind, REPORT.md §5e). A sandbox still running
+ * {@link HOST_STOP_MS} after is ended by the agent the same way, its init
+ * then its outer bwrap, and its host cleans up as that ends. Its keeper ends
+ * what is left in its cgroup (sessiond server.ts `#sweep`). An anchor from
+ * before srt goes with the `unshare` sessiond holds (`--kill-child`). macOS:
+ * the runner, then everything that answers to its generation's name, which
+ * outlives the runner there ({@link killAnswering}). On whichever keeper
+ * holds it: the current one, or a retiring one.
  */
 const stopBoundary = async (
   id: string,
@@ -7861,14 +8014,17 @@ const stopBoundary = async (
   const procId = boundaryProcId(id, held.gen);
   const place = await readPlace(id, held.gen);
   if (place && (await isBwrap(place.outer))) {
-    endSandbox(place, () => signalPid(listedPid(place.outer), "SIGKILL"));
-    const deadline = Date.now() + STOP_TIMEOUT_MS;
-    while (
-      // biome-ignore lint/performance/noAwaitInLoops: polls one process until its host has cleaned up, or the deadline passes
-      (await holding(procId)) &&
-      Date.now() < deadline
-    ) {
-      await Bun.sleep(20);
+    // The host alone, never its tree as the keeper signals one: the stop is
+    // the host's to make, its sandbox's end then the one it asked for.
+    const host = await keepers.holding(procId);
+    if (host) {
+      signalPid(listedPid(host.pid), "SIGTERM");
+    }
+    // A host gone ended its sandbox as it went (its outer bwrap dies with it
+    // besides, `--die-with-parent`), and its pid is not read again.
+    if (!(host && (await goneWithin(procId, HOST_STOP_MS)))) {
+      endSandbox(place, () => signalPid(listedPid(place.outer), "SIGKILL"));
+      await goneWithin(procId, STOP_TIMEOUT_MS);
     }
   }
   const left = await keepers.holding(procId);
@@ -8014,6 +8170,7 @@ const launch = async (
     scratch: scratchOf(ref.id),
     path: ref.path,
     form: plan.form,
+    parts: plan.parts,
   };
   if (linux && (await hasLeftDirs(ref.path))) {
     // Its host left a mount point where a dir stands in: an older boundary
