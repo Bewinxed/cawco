@@ -971,15 +971,19 @@ export class TranscriptBuilder {
       });
       this.clearTurnPhase();
     } else if (
-      mapping.delta ||
-      mapping.currentTool ||
-      // A turn that opens on a long reasoning block sends neither text nor a
-      // tool call for minutes; the block itself is the evidence.
-      mapping.blockStart ||
-      mapping.thinkingDelta ||
-      mapping.blocks.some(
-        (block) => block.type === "assistant" || block.type === "thinking"
-      )
+      // The main loop's frames only, as the daemon reads a turn (agent
+      // claude.ts `runsTurn`): a subagent writing on after its session's
+      // turn ended is its branch's news, not a turn.
+      !mapping.agentId &&
+      (mapping.delta ||
+        mapping.currentTool ||
+        // A turn that opens on a long reasoning block sends neither text nor a
+        // tool call for minutes; the block itself is the evidence.
+        mapping.blockStart ||
+        mapping.thinkingDelta ||
+        mapping.blocks.some(
+          (block) => block.type === "assistant" || block.type === "thinking"
+        ))
     ) {
       // Frames are the evidence it is working, whoever sent the turn.
       this.setTail({ busy: true });

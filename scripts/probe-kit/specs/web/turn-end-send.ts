@@ -25,13 +25,18 @@
  * c. The session's process is killed mid-turn: the hub's tail says not busy
  *    before the turn the hub starts again (server.ts `forgetPending`,
  *    transcripts.ts `processGone`).
- * d. The machine's agent is away as the turn ends.
+ * d. The machine's agent is away as the turn ends: Claude Code, OpenCode
+ *    and pi.
  * e. A person stops the turn.
+ * f. A subagent's frames arrive after the turn ended (fed in through a
+ *    relay on the agent's socket): the tail stays not busy.
+ * g. OpenCode's `/mcp`, whose end sends no `result`: at rest the tail stays
+ *    not busy; into a running turn, what tail and pulse say is a note.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg, one engine, one step at a time
 import type { Page } from "playwright-core";
-import type { Reply, Seen } from "../../../scratch-fleet";
-import { until } from "../../../scratch-fleet";
+import type { Harness, Reply, Seen } from "../../../scratch-fleet";
+import { MACHINE, until } from "../../../scratch-fleet";
 import {
   COMPOSER,
   type Engine,
@@ -60,8 +65,9 @@ const AWAY = "PROBE-AWAY";
 /** The turn the agent is away for: its words, and how far apart. */
 const AWAY_WORDS = 40;
 const AWAY_EVERY_MS = 250;
-/** When the model's last word of that turn goes out, ms epoch. */
-let awayEndsAt: number | null = null;
+/** When the model's last word of each harness's away turn goes out, ms epoch, by harness. */
+const awayEnds = new Map<string, number>();
+const AWAY_OF = /PROBE-AWAY-(\w+)/;
 
 const words = (count: number, word: string) =>
   Array.from({ length: count }, () => word);
@@ -71,8 +77,11 @@ const respond = (request: Seen): Reply => {
   if (request.afterTool) {
     return { everyMs: 5, words: ["ok"] };
   }
-  if (request.last.includes(AWAY)) {
-    awayEndsAt ??= Date.now() + AWAY_WORDS * AWAY_EVERY_MS;
+  const away = AWAY_OF.exec(request.last)?.[1];
+  if (away) {
+    if (!awayEnds.has(away)) {
+      awayEnds.set(away, Date.now() + AWAY_WORDS * AWAY_EVERY_MS);
+    }
     return { everyMs: AWAY_EVERY_MS, words: words(AWAY_WORDS, "step") };
   }
   if (request.last.includes(LONG)) {
@@ -87,7 +96,8 @@ const respond = (request: Seen): Reply => {
 /** The hub's newest page of a session's transcript, as far as these legs read it. */
 interface HubPage {
   blocks?: { type: string; content?: unknown }[];
-  tail?: { busy: boolean };
+  branches?: { toolUseId: string; blocks: unknown[] }[];
+  tail?: { busy: boolean; streams?: Record<string, string> };
 }
 
 const hubPage = (fleet: KitFleet, session: string) =>
@@ -420,14 +430,24 @@ async function stoppedLeg(
 }
 
 /**
- * d. The machine's agent goes away mid-turn (killed; sessiond keeps Claude
- *    Code running) and the turn ends while it is away; the agent comes back
- *    and takes the process up again. The hub's tail then says not busy, as
- *    its pulse does, and a page opened on the session shows Send.
+ * d. The machine's agent goes away mid-turn (killed; sessiond keeps the
+ *    harness's process running) and the turn ends while it is away; the
+ *    agent comes back and takes the process up again (OpenCode: its
+ *    `watchResumedTurn`). The hub's tail then says not busy, as its pulse
+ *    does, and a page opened on the session shows Send.
  */
-async function awayLeg(kit: Kit, fleet: KitFleet, base: string): Promise<void> {
-  const session = await fleet.spawn("claude", "Turn end away", fleet.workdir);
-  await fleet.send(session, `${AWAY} a while`);
+async function awayLeg(
+  kit: Kit,
+  fleet: KitFleet,
+  base: string,
+  harness: Harness
+): Promise<void> {
+  const session = await fleet.spawn(
+    harness,
+    `Turn end away ${harness}`,
+    fleet.workdir
+  );
+  await fleet.send(session, `${AWAY}-${harness} a while`);
   await until(
     "the turn under way, on the hub's tail and pulse",
     async () => ({
@@ -438,8 +458,12 @@ async function awayLeg(kit: Kit, fleet: KitFleet, base: string): Promise<void> {
     60_000
   );
   await fleet.stop("agent", "SIGKILL");
-  const ends = await until("the turn's words", () => awayEndsAt, Boolean);
-  // Claude Code writes the turn's end a moment after the model's last word.
+  const ends = await until(
+    "the turn's words",
+    () => awayEnds.get(harness),
+    Boolean
+  );
+  // The harness writes the turn's end a moment after the model's last word.
   await Bun.sleep(Math.max(0, (ends ?? 0) - Date.now()) + 3000);
   fleet.launch("agent");
   await fleet.agentUp();
@@ -461,7 +485,7 @@ async function awayLeg(kit: Kit, fleet: KitFleet, base: string): Promise<void> {
   const send = await shows(page, SEND, 100);
   const stop = await shows(page, STOP, 100);
   kit.check(
-    "a turn that ended while the agent was away: the hub's tail says not busy, and a page opened on it shows Send",
+    `${harness}: a turn that ended while the agent was away: the hub's tail says not busy, and a page opened on it shows Send`,
     read.tail?.busy === false && pulse?.busy !== true && send && !stop,
     `row ${back?.status}; tail busy ${read.tail?.busy}, pulse ${pulse ? `busy ${pulse.busy}` : "none"}; the page shows send ${send}, stop ${stop}; the transcript ends ${(
       read.blocks ?? []
@@ -471,6 +495,204 @@ async function awayLeg(kit: Kit, fleet: KitFleet, base: string): Promise<void> {
       .join(", ")}`
   );
   await page.close();
+}
+
+/**
+ * f. A subagent's frames after its session's turn has ended. Claude Code
+ *    sends none on this fleet (a background `Agent`'s frames never reach the
+ *    hub, measured), so they are fed in: the machine's agent reaches the hub
+ *    through the probe's own relay on its socket (`CAWCO_HUB_URL`), and once
+ *    a turn has ended the relay says, as the agent would, a subagent's
+ *    streamed words and its written message (`parent_tool_use_id` set). The
+ *    hub folds them into the subagent's branch, and its tail stays not busy,
+ *    as the daemon's pulse does (core transcript.ts `applyFrame`, the
+ *    daemon's `runsTurn`: only the main loop's frames are a turn).
+ */
+async function subagentLeg(kit: Kit, fleet: KitFleet): Promise<void> {
+  const hub = `ws${fleet.base.slice("http".length)}`;
+  const agents = new Set<WebSocket>();
+  const relay = Bun.serve<{
+    path: string;
+    up?: WebSocket;
+    held: (string | Uint8Array<ArrayBuffer>)[];
+  }>({
+    port: 0,
+    hostname: "127.0.0.1",
+    // The agent's socket is relayed; everything else it and its sessions ask
+    // of the hub (their CawCo MCP tools) goes through as it is.
+    fetch: (request, server) => {
+      const url = new URL(request.url);
+      if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+        return fetch(
+          new Request(`${fleet.base}${url.pathname}${url.search}`, request)
+        );
+      }
+      return server.upgrade(request, {
+        data: { path: `${url.pathname}${url.search}`, held: [] },
+      })
+        ? undefined
+        : new Response("relay", { status: 400 });
+    },
+    websocket: {
+      open: (ws) => {
+        const up = new WebSocket(`${hub}${ws.data.path}`);
+        up.binaryType = "arraybuffer";
+        ws.data.up = up;
+        // The agent's own socket; its sessions' others are relayed only.
+        if (new URL(ws.data.path, hub).pathname === "/ws") {
+          agents.add(up);
+        }
+        up.onopen = () => {
+          for (const line of ws.data.held.splice(0)) {
+            up.send(line);
+          }
+        };
+        up.onmessage = (event) => ws.send(event.data as string | ArrayBuffer);
+        up.onclose = () => ws.close();
+      },
+      message: (ws, said) => {
+        const { up } = ws.data;
+        const line = typeof said === "string" ? said : Uint8Array.from(said);
+        if (up?.readyState === WebSocket.OPEN) {
+          up.send(line);
+        } else {
+          ws.data.held.push(line);
+        }
+      },
+      close: (ws) => {
+        if (ws.data.up) {
+          agents.delete(ws.data.up);
+        }
+        ws.data.up?.close();
+      },
+    },
+  });
+  try {
+    await fleet.stop("agent");
+    fleet.launch("agent", [], {
+      CAWCO_HUB_URL: `ws://127.0.0.1:${relay.port}/ws`,
+    });
+    await fleet.agentUp();
+    const session = await fleet.spawn(
+      "claude",
+      "Turn end subagent",
+      fleet.workdir
+    );
+    await fleet.send(session, `${SLOW} a short while`);
+    await until(
+      "the turn ended, on the hub's tail and pulse",
+      async () => ({
+        read: await hubPage(fleet, session),
+        pulse: await hubPulse(fleet, session),
+        row: await fleet.instance(session),
+      }),
+      (now) =>
+        now.row?.turn_open_at === null &&
+        now.pulse?.busy === false &&
+        now.read.tail?.busy === false,
+      120_000
+    );
+    const branch = `toolu_probe_${crypto.randomUUID().slice(0, 8)}`;
+    const say = (message: object) => {
+      for (const up of agents) {
+        up.send(
+          JSON.stringify({
+            verb: "frames",
+            machineId: MACHINE,
+            instanceId: session,
+            payload: {
+              kind: "frame",
+              instanceId: session,
+              harness: "claude",
+              message,
+            },
+          })
+        );
+      }
+    };
+    say({
+      type: "stream_event",
+      parent_tool_use_id: branch,
+      event: {
+        type: "content_block_delta",
+        delta: { type: "text_delta", text: "a subagent's words" },
+      },
+    });
+    say({
+      type: "assistant",
+      uuid: crypto.randomUUID(),
+      parent_tool_use_id: branch,
+      message: {
+        content: [{ type: "text", text: "A subagent's written message." }],
+      },
+    });
+    const folded = await until(
+      "the subagent's message on its branch",
+      () => hubPage(fleet, session),
+      (page) =>
+        (page.branches ?? []).some(
+          (one) => one.toolUseId === branch && one.blocks.length > 0
+        ),
+      15_000
+    ).catch(() => undefined);
+    await Bun.sleep(1000);
+    const [read, pulse] = [
+      await hubPage(fleet, session),
+      await hubPulse(fleet, session),
+    ];
+    kit.check(
+      "a subagent's frames after its turn ended: the hub folds them into its branch, and its tail stays not busy, as its pulse",
+      folded !== undefined && read.tail?.busy === false && pulse?.busy !== true,
+      `relayed to ${agents.size} agent socket(s); branch folded ${folded !== undefined}; tail busy ${read.tail?.busy}, pulse ${pulse ? `busy ${pulse.busy}` : "none"}`
+    );
+  } finally {
+    await fleet.stop("agent");
+    relay.stop(true);
+    fleet.launch("agent");
+    await fleet.agentUp();
+  }
+}
+
+/**
+ * g. OpenCode's `/mcp` (opencode-session.ts `#mcpCommand`): the agent says
+ *    the session busy as the send goes in and not busy in its `finally`,
+ *    with no `result` frame. At rest, the hub's tail never says busy over
+ *    it. Into a running turn, what the tail and the pulse say then is
+ *    printed as a note.
+ */
+async function mcpLeg(kit: Kit, fleet: KitFleet): Promise<void> {
+  const session = await fleet.spawn("opencode", "Turn end mcp", fleet.workdir);
+  await fleet.send(session, "/mcp connect probe-none");
+  await Bun.sleep(4000);
+  const [rest, restPulse] = [
+    await hubPage(fleet, session),
+    await hubPulse(fleet, session),
+  ];
+  kit.check(
+    "opencode: /mcp at rest: the hub's tail says not busy after it, as its pulse",
+    rest.tail?.busy === false && restPulse?.busy !== true,
+    `tail busy ${rest.tail?.busy}, pulse ${restPulse ? `busy ${restPulse.busy}` : "none"}`
+  );
+  await fleet.send(session, `${LONG} a long while`);
+  await until(
+    "the turn under way, on the hub's tail and pulse",
+    async () => ({
+      read: await hubPage(fleet, session),
+      pulse: await hubPulse(fleet, session),
+    }),
+    (now) => now.read.tail?.busy === true && now.pulse?.busy === true,
+    60_000
+  );
+  await fleet.send(session, "/mcp connect probe-none");
+  await Bun.sleep(4000);
+  const [mid, midPulse] = [
+    await hubPage(fleet, session),
+    await hubPulse(fleet, session),
+  ];
+  kit.note(
+    `opencode: /mcp into a running turn: the hub's tail busy ${mid.tail?.busy}, its pulse ${midPulse ? `busy ${midPulse.busy}` : "none"}`
+  );
+  await fleet.stopSession(session);
 }
 
 const spec: Spec = {
@@ -489,8 +711,12 @@ const spec: Spec = {
     await leg(kit, fleet, base, "chromium", "desk");
     await leg(kit, fleet, base, "webkit", "iphone15Pro");
     await killedLeg(kit, fleet, base);
-    await awayLeg(kit, fleet, base);
+    for (const harness of ["claude", "opencode", "pi"] as const) {
+      await awayLeg(kit, fleet, base, harness);
+    }
     await stoppedLeg(kit, fleet, base);
+    await mcpLeg(kit, fleet);
+    await subagentLeg(kit, fleet);
   },
 };
 export default spec;
