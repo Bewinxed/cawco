@@ -4,25 +4,38 @@
  *
  *   bun design-previews/project-options/capture/shots.ts
  *
- * Each option's frame (frame.html, its views.ts choice) at Desk 1440 × 900
- * and Phone 390 × 844, and H and D also at his window 1037 × 760, at 2× as
- * the live captures were, into `captures/<part>-<option>-<width>.png`; and
- * Today for H, D and P, the live captures themselves (today/). It writes
- * `captures/manifest.json`: part, option, width, file and one plain caption
- * per capture.
+ * Each option's frame (frame.html, its views.ts choice) at the widths its
+ * pick shows at (Desk 1440 × 900, his window 1037 × 760, Phone 390 × 844),
+ * at DPR 1, the screen alone, into `captures/<part>-<option>-<width>.png`;
+ * and Today once per width, the live captures themselves (today/), scaled
+ * to DPR 1. It writes `captures/manifest.json`: part, option, width, file
+ * and one plain caption per capture. A pick's option that is the very
+ * picture another pick's option already is (the default page is H1, D2 and
+ * Caw idle at once) is not written twice: its entry names the one file and
+ * says so in its caption.
  */
-import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, normalize, resolve } from "node:path";
 import { chromium } from "playwright-core";
-import { OPTION_VIEWS, TODAY_CAPTION, TODAY_VIEWS } from "../views";
+import {
+  FRAME_DEFAULTS,
+  OPTION_VIEWS,
+  TODAY_CAPTION,
+  TODAY_WIDTHS,
+} from "../views";
 
 const DIR = resolve(import.meta.dir, "..");
 const OUT = join(DIR, "captures");
 const HEIGHT: Record<string, number> = { 1440: 900, 1037: 760, 390: 844 };
-const TODAY_FILE: Record<string, string> = { 1440: "desk.png", 1037: "window.png", 390: "phone.png" };
-/** The decision page's widths: every option at 1440 and 390; the head and the board also at his window. */
-const shot = (part: string, width: string) =>
-  width !== "1037" || part === "H" || part === "D";
+/** A file name's part of a pick's or option's name: "Pane placement" → "pane-placement", "(a)" → "a". */
+const slug = (words: string) =>
+  words
+    .toLowerCase()
+    .replace(/′/g, "-prime")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
@@ -41,21 +54,31 @@ const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] }
 try {
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
-  const manifest: { caption: string; file: string; option: string; part: string; width: number }[] = [];
+  const manifest: {
+    caption: string;
+    file: string;
+    option: string;
+    part: string;
+    frame?: string;
+    sameAs?: string;
+    width: number;
+  }[] = [];
   let n = 0;
   for (const view of OPTION_VIEWS) {
-    for (const width of view.widths.filter((one) => shot(view.part, one))) {
+    for (const width of view.widths) {
       // biome-ignore lint/performance/noAwaitInLoops: one frame captured at a time
       const page = await browser.newPage({
         viewport: { width: Number(width), height: HEIGHT[width] ?? 900 },
-        deviceScaleFactor: 2,
+        deviceScaleFactor: 1,
         hasTouch: width === "390",
       });
       const hash = new URLSearchParams({ ...view.choice, w: width }).toString();
       n += 1;
       await page.goto(`http://127.0.0.1:${server.port}/frame.html?n=${n}#${hash}`);
       await page.waitForFunction(() => "ready" in document.documentElement.dataset);
-      const file = `${view.part}-${view.option}-${width}.png`;
+      const file = `${slug(view.part)}-${slug(view.option)}-${width}.png`;
+      // The retry clock and the live dots settle to one moment before the picture.
+      await page.waitForTimeout(400);
       await page.screenshot({ path: join(OUT, file) });
       await page.close();
       manifest.push({
@@ -64,22 +87,48 @@ try {
         width: Number(width),
         file,
         caption: view.caption[width] ?? "",
+        frame: JSON.stringify(
+          Object.entries({ ...FRAME_DEFAULTS, ...view.choice, w: width }).sort()
+        ),
       });
     }
   }
-  for (const today of TODAY_VIEWS) {
-    for (const width of today.widths.filter((one) => shot(today.part, one))) {
-      const file = `${today.part}-Today-${width}.png`;
-      // biome-ignore lint/performance/noAwaitInLoops: a few files copied in turn
-      await copyFile(join(DIR, "today", TODAY_FILE[width] ?? ""), join(OUT, file));
-      manifest.push({
-        part: today.part,
-        option: "Today",
-        width: Number(width),
-        file,
-        caption: TODAY_CAPTION[width],
-      });
+  for (const width of TODAY_WIDTHS) {
+    const file = `today-${width}.png`;
+    // The live captures are 2×: shown at the page's own size, the screen alone at DPR 1.
+    // biome-ignore lint/performance/noAwaitInLoops: a few pictures in turn
+    const page = await browser.newPage({
+      viewport: { width: Number(width), height: HEIGHT[width] ?? 900 },
+      deviceScaleFactor: 1,
+    });
+    await page.goto(`http://127.0.0.1:${server.port}/frame.html?today=${width}#w=${width}&today=1`);
+    await page.waitForFunction(() => "ready" in document.documentElement.dataset);
+    await page.screenshot({ path: join(OUT, file) });
+    await page.close();
+    manifest.push({ part: "Today", option: "Today", width: Number(width), file, caption: TODAY_CAPTION[width] });
+  }
+  const seen = new Map<string, (typeof manifest)[number]>();
+  for (const one of manifest) {
+    // A twin is the same frame (the same choice once the frame's defaults fill it) or the same bytes.
+    const sum =
+      one.frame ??
+      createHash("md5")
+        // biome-ignore lint/performance/noAwaitInLoops: each picture read in turn
+        .update(await readFile(join(OUT, one.file)))
+        .digest("hex");
+    const twin = seen.get(sum);
+    if (twin) {
+      await rm(join(OUT, one.file));
+      one.file = twin.file;
+      one.sameAs = `${twin.part} ${twin.option}`;
+      one.caption = `${one.caption} (The same picture as ${twin.part} ${twin.option} at ${twin.width}.)`;
+    } else {
+      seen.set(sum, one);
     }
+  }
+  console.log(`${seen.size} distinct pictures`);
+  for (const one of manifest) {
+    one.frame = undefined;
   }
   await writeFile(join(OUT, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`captured ${manifest.length} pictures into captures/`);

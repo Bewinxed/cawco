@@ -1,6 +1,7 @@
 /* What stands round the captured parts, on the house's tokens: the frame's
    layout (the Shell's rail, the page's column, the body beside the pane or
-   Caw's column; a phone's scroller under its two bars) and the switch page
+   Caw's column; a phone's scroller under its two bars), the scroll edge
+   effect every bar, dock and pinned head uses, and the switch page
    (index.html). The parts themselves are house.css's. */
 
 /* ---- The frame ---- */
@@ -47,6 +48,53 @@ body {
   flex: none;
   padding: 0 var(--space-6) var(--space-2) var(--space-7);
 }
+/* Pane placement A (ruling 9): the page's column beside a pane or column
+   that runs the window's full height, its bar on the page bar's line. */
+.po-main-split {
+  flex-direction: row;
+}
+.po-page {
+  display: flex;
+  flex: auto;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+/* Under A the Shell's own group stands at the window's trailing edge on
+   the bar's line, over the side's trailing end (its bar keeps the room). */
+.po-main-split {
+  position: relative;
+}
+.po-shell-edge {
+  position: absolute;
+  inset-inline-end: var(--space-6);
+  z-index: 5;
+}
+/* Under A at his window the page column takes its phone form whole: its
+   foot dock over the board, as the phone's. */
+.po-page-narrow {
+  position: relative;
+  flex: none;
+  inline-size: calc(100% - var(--po-pane));
+}
+.po-page-foot {
+  position: absolute;
+  inset: auto var(--space-3) var(--space-4);
+  z-index: 4;
+}
+.po-page-narrow .po-content {
+  padding-block-end: var(--po-foot);
+}
+/* A board in its phone form beside a pane (his 1037 window): P1's strip
+   and one stage's cards, on the phone's insets. */
+.po-content.po-content-narrow {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline: 0;
+}
+/* The pane taking the board's place, under the page bar. */
+.po-body-page > * {
+  flex: auto;
+}
 .po-body {
   display: flex;
   flex: auto;
@@ -78,6 +126,12 @@ body {
   block-size: 100%;
   overflow: hidden;
   --po-top: var(--c-top-bar-h);
+  --po-tl: --po-page;
+  --po-edge-ground: var(--surface-recess);
+
+  > .po-edge-foot {
+    --po-edge-h: var(--po-foot);
+  }
 }
 .po-phone-scroll {
   position: absolute;
@@ -120,6 +174,100 @@ body {
   inset: auto 0 0;
   block-size: var(--po-sheet);
   z-index: 6;
+}
+
+/* ---- The scroll edge effect (DESIGN.md, Layout, No bar ground) ----
+   Where content scrolls under a bar, a dock or a stuck or pinned head, it
+   blurs and fades under it: "Scroll edge effects further enhance legibility
+   by blurring and reducing the opacity of background content" (HIG,
+   Materials). Absent at rest, in over the first `--c-edge-fade-len-phone`
+   (16px) of scroll; at a foot, on while more stands below. One recipe:
+
+   - `.po-edge-host` holds a scroller and its edges; it names their
+     timeline (`--po-tl`, one name per kind of host so a nested host never
+     shares one).
+   - `.po-edge-scroller` is the scroller the edges read.
+   - `.po-edge.po-edge-top` / `.po-edge-foot`: the layer under the bar's (or
+     head's, or dock's) region, `--po-edge-h` tall plus the fade, its ground
+     `--po-edge-ground`: the backdrop blurs, the ground fades the content
+     out toward the edge. `--po-edge-at` sets it below the edge (a strip
+     that sticks under a bar), `--po-edge-from` the scroll it starts at.
+
+   Each layer stands under the controls it parts (z-index 2, the controls 3
+   and up) and over the content, so the controls stay crisp. */
+.po-edge-host {
+  timeline-scope: var(--po-tl);
+}
+[data-pane] {
+  --po-tl: --po-pane;
+}
+[data-list] {
+  --po-tl: --po-list;
+}
+[data-caw-column] {
+  --po-tl: --po-col;
+}
+.po-edge-scroller {
+  scroll-timeline: var(--po-tl) block;
+}
+.po-edge {
+  --po-edge-band: calc(var(--po-edge-h) + var(--c-edge-fade-len-phone));
+
+  position: absolute;
+  inset-inline: 0;
+  z-index: 2;
+  block-size: var(--po-edge-band);
+  pointer-events: none;
+  opacity: 0;
+  backdrop-filter: blur(var(--material-blur));
+  animation-duration: auto;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: var(--po-tl);
+}
+.po-edge-top {
+  --po-edge-h: var(--c-top-bar-h);
+
+  inset-block-start: var(--po-edge-at, 0px);
+  background: linear-gradient(
+    to bottom,
+    var(--po-edge-ground),
+    color-mix(in oklab, var(--po-edge-ground) 60%, transparent) var(--po-edge-h),
+    transparent
+  );
+  mask-image: linear-gradient(to bottom, #000 var(--po-edge-h), transparent);
+  animation-name: po-edge-in;
+  animation-range: var(--po-edge-from, 0px) calc(var(--po-edge-from, 0px) + var(--c-edge-fade-len-phone));
+}
+.po-edge-foot {
+  --po-edge-h: var(--po-foot);
+
+  inset-block-end: 0;
+  background: linear-gradient(
+    to top,
+    var(--po-edge-ground),
+    color-mix(in oklab, var(--po-edge-ground) 60%, transparent) var(--po-edge-h),
+    transparent
+  );
+  mask-image: linear-gradient(to top, #000 var(--po-edge-h), transparent);
+  animation-name: po-edge-out;
+  animation-range: calc(100% - var(--c-edge-fade-len-phone)) 100%;
+}
+@keyframes po-edge-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes po-edge-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 /* ---- The switch page (index.html) ---- */

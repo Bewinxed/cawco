@@ -7,8 +7,13 @@
 
   - D2: the stage strip always, columns `--po-col` (300px) wide, the board
     scrolling sideways under the strip.
-  - D1: the columns share the width when the board is `--container-po-fit`
-    (1100px) or wider, with no strip; narrower, it is D2.
+  - D1: five 224px columns side by side when the board is
+    `--container-po-fit` (1100px) or wider, with no strip; narrower, it is
+    D2 (at his 1037 window both are D2).
+
+  `stale`: the board as it last read, its rows and counts at
+  `account-stale-opacity` (the house's out-of-date reading), the card whose
+  file didn't read kept whole with its own failure.
 -->
 <script>
   import { board, cardKey, STAGES } from "./data.js";
@@ -25,12 +30,12 @@
 </script>
 
 <div data-board={option} class="@container flex h-full min-h-0 flex-col gap-space-3">
-  <Strip class={option === "D1" ? "@po-fit:hidden" : ""} {counts} />
+  <Strip class={[option === "D1" ? "@po-fit:hidden" : "", state === "stale" ? "opacity-(--account-stale-opacity)" : ""].join(" ")} {counts} />
   <div
     data-columns
     class={[
       "kit-edge-fade grid min-h-0 flex-auto grid-flow-col auto-cols-(--po-col) grid-rows-1 gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3",
-      option === "D1" && "@po-fit:grid-flow-row @po-fit:grid-cols-5 @po-fit:auto-cols-auto",
+      option === "D1" && "@po-fit:grid-flow-row @po-fit:grid-cols-[repeat(5,var(--po-col-fit))] @po-fit:auto-cols-auto",
     ]}
   >
     {#each STAGES as stage (stage.key)}
@@ -40,13 +45,13 @@
         aria-label="{stage.name}, {cards.length} {cards.length === 1 ? 'task' : 'tasks'}"
         class="flex max-h-full min-h-0 min-w-0 flex-col gap-space-1 self-start rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline"
       >
-        <header class="px-space-2 py-space-1">
+        <header class={["px-space-2 py-space-1", state === "stale" && "opacity-(--account-stale-opacity)"]}>
           <StageHead count={cards.length} {stage} />
         </header>
         {#if cards.length > 0}
           <ol class="m-0 flex min-h-0 list-none flex-col gap-space-1 overflow-y-auto overscroll-y-contain p-0">
             {#each cards as item (item.task.id)}
-              <li data-card={cardKey(item, ask)}></li>
+              <li class={state === "stale" && !item.fault ? "opacity-(--account-stale-opacity)" : ""} data-card={cardKey(item, ask)}></li>
             {/each}
           </ol>
         {:else}

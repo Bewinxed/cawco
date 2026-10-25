@@ -1,0 +1,35 @@
+{
+ "source": "the hub's project_starters for Cawco-Dev, place board, in position order (live-starters/starters.tsv, 2026-10-25)",
+ "starters": [
+  {
+   "glyph": "grill",
+   "text": "Grill me on “Publish the chip design page for each chip category” until it has a spec",
+   "reason": "It has sat in ready for 1 day, not started."
+  },
+  {
+   "glyph": "search",
+   "text": "Check what landed in “Design previews: how far DESIGN.md's new rules reach, today beside…”",
+   "reason": "It is one of the latest commits on main."
+  },
+  {
+   "glyph": "grill",
+   "text": "Grill me on “Ask for a sentence-shaped approval card when an agent e…” until it has a spec",
+   "reason": "It has sat in ready for 1 day, not started."
+  },
+  {
+   "glyph": "grill",
+   "text": "Grill me on “Give workflows a home of their own, apart from routines” until it has a spec",
+   "reason": "It is in ready and not started yet."
+  },
+  {
+   "glyph": "grill",
+   "text": "Grill me on “Rethink the sidebar highlight and the message row's edi…” until it has a spec",
+   "reason": "It has sat in ready for 1 day, not started."
+  },
+  {
+   "glyph": "grill",
+   "text": "Grill me on “Stop the orchestrator editing .md files instead of the…” until it has a spec",
+   "reason": "It has sat in ready for 1 day, not started."
+  }
+ ]
+}

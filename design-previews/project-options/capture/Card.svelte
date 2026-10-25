@@ -2,16 +2,19 @@
   A task's card in the options' anatomy (report part 2): the lead row is its
   id in mono and its one state mark; then its title whole; then its labels as
   plain text and its to-dos' ratio. A card whose session asks (C1, C2) gives
-  the ask a line of its own, two at most; C2 adds Deny and Approve as
-  untinted peers for a permission (DESIGN.md, The Peer Rule). A card whose
+  the ask a line of its own, in the words of the one ask the hub has recorded
+  in Cawco-Dev (data/ask.json; drawn for the state on tsk-17). C2 answers it
+  where it stands: the hub holds no permission ask, so its peers are that
+  question's own choices, untinted (DESIGN.md, The Peer Rule). A card whose
   file didn't read carries the item-sized failure as its last row (F).
 
   The card is an article whose title is the link, stretched over it, so its
   buttons are never inside an anchor.
 -->
 <script>
+  import { ASK } from "./data.js";
   import Mark from "./Mark.svelte";
-  import { Button, IconClose, IconTick, TaskRing } from "./kit.js";
+  import { Button, TaskRing } from "./kit.js";
 
   let { item, ask = "C1" } = $props();
   const task = $derived(item.task);
@@ -43,11 +46,7 @@
     href="?task={task.id}">{task.title}</a
   >
   {#if asks}
-    <p data-slot-text class="m-0 type-body text-ink-strong">
-      {ask === "C2"
-        ? "«what the session asks to run, in its words»"
-        : "«the session's ask, in its words»"}
-    </p>
+    <p data-ask class="m-0 type-body text-pretty wrap-anywhere text-ink-strong">{ASK.question}</p>
   {/if}
   {#if todos.total > 0 || task.labels.length > 0}
     <span
@@ -66,19 +65,12 @@
     </span>
   {/if}
   {#if asks && ask === "C2"}
-    <div class="relative z-1 flex justify-between gap-space-8 pt-space-1">
-      <Button
-        class="border-border-button-outline text-ink-strong"
-        size="sm"
-        variant="secondary"
-        ><IconClose aria-hidden="true" /><span>Deny</span></Button
-      >
-      <Button
-        class="border-border-button-outline text-ink-strong"
-        size="sm"
-        variant="secondary"
-        ><IconTick aria-hidden="true" /><span>Approve</span></Button
-      >
+    <div data-peers class="relative z-1 flex flex-col items-stretch gap-space-2 pt-space-1">
+      {#each ASK.options as option (option.label)}
+        <Button class="h-auto min-h-c-btn-h-sm justify-start border-border-button-outline py-space-1 text-start whitespace-normal text-ink-strong" size="sm" variant="secondary"
+          >{option.label}</Button
+        >
+      {/each}
     </div>
   {/if}
   {#if item.fault}

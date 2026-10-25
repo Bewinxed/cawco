@@ -200,7 +200,9 @@ try {
           return true;
         }
         try {
-          return document.querySelector(b.replaceAll("&", "")) !== null;
+          // The nesting `&` goes; an escaped one (`\&`, inside a class such as `[&_path]:…`) is the class's own.
+          // biome-ignore lint/performance/useTopLevelRegex: it runs in the page, which shares no scope with this module
+          return document.querySelector(b.replace(/(?<!\\)&/g, "")) !== null;
         } catch {
           return true;
         }

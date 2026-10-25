@@ -1,39 +1,33 @@
 /**
- * The project's real records (../data/tasks.json, the hub's own task files
- * for Cawco-Dev as they stood on 2026-10-25) and the three states the
- * preview draws them in:
+ * The project's real records and the three states the preview draws them in:
+ *
+ * - `../data/tasks.json`: the hub's own task files for Cawco-Dev as they
+ *   stood on 2026-10-25.
+ * - `../data/starters.json`: the hub's starters for Cawco-Dev's board
+ *   (`project_starters`), word for word, in their order.
+ * - `../data/ask.json`: the one ask the hub has recorded in Cawco-Dev: Caw's
+ *   question in his thread (`thread_messages.question`), word for word.
  *
  * - `rest`: his board as it is today: 30 Ready, 33 Done, nothing waiting.
  * - `waits`: drawn for the state (no task of his waits today): tsk-17's
- *   session asks him, standing in Working, and tsk-16, whose attempt handed
- *   in its result on 16 Oct, standing in Review. Every word on them is their
- *   record's; what no record holds (the session's ask) is a «slot».
+ *   session asks him, standing in Working, its ask in the words of the one
+ *   recorded ask (Caw's question; no task's session has one), and tsk-16,
+ *   whose attempt handed in its result on 16 Oct, standing in Review.
  * - `stale`: his board as it is today, drawn under a read that failed; tsk-3
  *   carries the item-sized failure (its file didn't read), drawn for the state.
  *
- * Times are said in the owner's zone (Asia/Qatar), as the dashboard says
- * them in his browser.
+ * Times are drawn by `When.svelte` as `<time>` elements the frame says in
+ * the reader's own zone (frame.js, as the dashboard formats with
+ * `Intl.DateTimeFormat(undefined, …)`).
  */
+import ask from "../data/ask.json";
+import starters from "../data/starters.json";
 import data from "../data/tasks.json";
 
 export const TASKS = data.tasks;
+export const STARTERS = starters.starters;
+export const ASK = ask;
 export const byId = (id) => TASKS.find((task) => task.id === id);
-
-const ZONE = "Asia/Qatar";
-const dayFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  timeZone: ZONE,
-});
-const clockFormat = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: ZONE,
-});
-export const day = (ms) => dayFormat.format(ms);
-export const clock = (ms) => clockFormat.format(ms);
-export const dayClock = (ms) => `${day(ms)} ${clock(ms)}`;
 
 /** How long, said short: "4 min", "17 h". */
 export function took(from, to) {
@@ -72,7 +66,6 @@ export const PROJECT = {
   os: "linux-x64",
   /** The live head's "51 places": this machine and 50 more. */
   more: 50,
-  folder: "/home/bewinxed/cockpit",
 };
 
 /** The last attempt that ended with a word (Stopped), if it is the last one. */
@@ -84,21 +77,22 @@ function lastStopped(task) {
 /**
  * The one mark a card wears, by the advisor's precedence (asks, review,
  * failed, stopped, working, queued, after, can't start, done, sent back,
- * dropped), from what the hub records; a plain Ready card has none.
+ * dropped), from what the hub records; a plain Ready card has none. `at` is
+ * the mark's time, drawn by When in the reader's zone.
  */
 export function markOf(task, state) {
   if (state === "waits" && task.id === "tsk-17") {
     return { kind: "asks", word: "asks", drawn: true };
   }
   if (state === "waits" && task.id === "tsk-16") {
-    return { kind: "review", word: "review", when: day(task.result.at), drawn: true };
+    return { kind: "review", word: "review", at: task.result.at, drawn: true };
   }
   if (task.stage === "done") {
-    return { kind: "done", when: day(task.completedAt ?? task.result?.at) };
+    return { kind: "done", at: task.completedAt ?? task.result?.at };
   }
   const stopped = lastStopped(task);
   if (stopped) {
-    return { kind: "stopped", word: "Stopped", when: day(stopped.endedAt) };
+    return { kind: "stopped", word: "Stopped", at: stopped.endedAt };
   }
   return null;
 }
@@ -121,6 +115,15 @@ export function board(state) {
     });
   }
   return columns;
+}
+
+/** The stage a phone opens on: the first holding something that waits; with nothing waiting, the first (ruling 10). */
+export function firstShown(state) {
+  const columns = board(state);
+  const waits = STAGES.find((stage) =>
+    columns[stage.key].some((item) => item.mark?.kind === "asks" || item.mark?.kind === "review")
+  );
+  return (waits ?? STAGES[0]).key;
 }
 
 /**
@@ -152,5 +155,5 @@ export function cardDrawings() {
   return [...seen].map(([key, value]) => ({ key, ...value }));
 }
 
-/** How many things wait on him in a state. */
+/** How many things wait on him in a state; a stale board says none (its count is suppressed, PRODUCT.md). */
 export const waiting = (state) => (state === "waits" ? 2 : 0);

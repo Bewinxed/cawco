@@ -1,0 +1,21 @@
+{
+ "source": "the hub's one recorded ask in Cawco-Dev: Caw's question in his thread, thread_messages.question (hub DB copy 2026-10-25 11:13)",
+ "thread": "Routine · Memory curator",
+ "at": 1792055958487,
+ "question": "Six wire breaks from the preview-ports change are already on main and break 0.1.11 builds (CanvasExport.port, Rule.interrupt ×3, and the /shown body no longer accepting error \"hub\"). How should they be handled?",
+ "header": "Wire breaks",
+ "options": [
+  {
+   "label": "Raise WIRE_PROTOCOL (Recommended)",
+   "description": "Bump WIRE_PROTOCOL 6→7 on main so old builds see 'hub is newer, update' instead of failing reads silently. No compatibility shims; matches the cutover rule."
+  },
+  {
+   "label": "Restore the old shapes",
+   "description": "Put back what 0.1.11 reads and sends (port, interrupt, accept error \"hub\") so the shipped app keeps working until the next TestFlight."
+  },
+  {
+   "label": "Leave as is",
+   "description": "Ship the next build and accept that 0.1.11 misbehaves until people update."
+  }
+ ]
+}

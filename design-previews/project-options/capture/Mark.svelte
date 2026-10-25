@@ -6,6 +6,7 @@
 -->
 <script>
   import { IconCheck, IconNeedsYou, IconStopped } from "./kit.js";
+  import When from "./When.svelte";
 
   let { mark, class: className = "" } = $props();
   const waits = $derived(mark.kind === "asks" || mark.kind === "review");
@@ -32,5 +33,5 @@
   {/if}
   {#if mark.word}<span>{mark.word}</span>{/if}
   {#if mark.kind === "done"}<span class="sr-only">Done</span>{/if}
-  {#if mark.when}<span data-slot="num" class="num">{mark.when}</span>{/if}
+  {#if mark.at}<When at={mark.at} />{/if}
 </span>
