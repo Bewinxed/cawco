@@ -40,7 +40,8 @@ The page has both schemes (`color-scheme: light dark`, the tokens'
 | The fail and clock glyphs, and Remove device's check giving way | transitions.dev Icon swap on DESIGN's status glyph (from 0.92, `--dur-control`) |
 | Expired's letters into the verdict | a FLIP (`--dur-panel`, drawer), then the strike (`--dur-morph`) |
 | Remove device's rows | a FLIP over `--dur-panel` on ease-out |
-| The dots (cloud, arrival, swallow, burst), the head's squeeze and shake | r4's |
+| The dots (cloud, arrival, burst), the head's squeeze and shake | r4's |
+| The swallow (the scan) | r4's pour, inner first, each dot and finder eye late by its distance from the head, on `--ease-crossfade` over `--dur-pop`; the paper and head fade with the last of it (`--dur-pop` from `--dur-panel`), and the device arrives on the frame it ends. On r4's ease-in-out each piece sat still for its first third and then moved near a third of its way in one frame, so the finder eyes, starting last, hung and jumped, and the paper then vanished in a frame (the owner: "a lag then it jumps to the end") |
 | The ping | r4's ring, growing `--qr-ping-reach` (`--space-3`) past the card on every side, under the title's `--space-4` gap, so it never meets the title |
 
 The dots are drawn on one canvas per card. Each moment's dot motion is r4's

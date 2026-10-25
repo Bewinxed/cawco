@@ -1645,8 +1645,13 @@ function plan(S, m) {
       startPing(S, D.settle + D.stagger * 2);
     } else if (kind === "device") {
       // The scan: the dots pour into the head, inner first (r4's swallow); the letters and the line leave;
-      // the head gulps; then the card becomes the device (Card resize, Panel reveal).
-      const swallow = curveOf(E["in-out"]);
+      // the head gulps as the paper fades with the last of the pour; then, on the frame the pour ends, the
+      // card becomes the device (Card resize, Panel reveal). Every piece goes on the crossfade curve: on
+      // ease-in-out over --dur-pop each sat still for its first third and then moved near a third of its
+      // way in one frame, so the finder eyes, starting last, hung and then jumped into the head, and the
+      // paper and head then vanished in a frame (ease-out over --dur-exit), the owner's "lag then it
+      // jumps to the end".
+      const swallow = curveOf(E.crossfade);
       playDots(
         S,
         DOTS.map((dot) =>
@@ -1661,8 +1666,10 @@ function plan(S, m) {
           )
         )
       );
+      // Each finder eye pours with the dots round it: late by its own distance from the head, as they are.
       for (const eye of S.eyes) {
         const into = { x: MIDDLE - Number(eye.dataset.cx), y: MIDDLE - Number(eye.dataset.cy) };
+        const far = Math.hypot(into.x, into.y) / Math.hypot(MIDDLE, MIDDLE);
         part(
           S,
           eye,
@@ -1670,7 +1677,7 @@ function plan(S, m) {
             { transform: "none", opacity: 1 },
             { transform: `${t(into)} scale(${V["pop-scale"]})`, opacity: 0 },
           ],
-          { duration: D.pop, easing: E["in-out"], delay: D.panel }
+          { duration: D.pop, easing: E.crossfade, delay: far * D.panel }
         );
       }
       leave(S, S.letters);
@@ -1682,7 +1689,13 @@ function plan(S, m) {
         { duration: D.pop, easing: E.out, delay: D.panel }
       );
       const swallowed = D.panel + D.pop;
-      part(S, S.scenes.code, [{ opacity: 1 }, { opacity: 0 }], { duration: D.exit, easing: E.out, delay: swallowed });
+      // The paper and the head fade with the last of the pour, gone as it ends.
+      part(S, S.scenes.code, [{ opacity: 1 }, { opacity: 0 }], {
+        duration: D.pop,
+        easing: E.crossfade,
+        delay: D.panel,
+        id: "paper",
+      });
       // Panel reveal: up from --space-8 below, a 2px cross-blur and a fade, over --dur-settle.
       part(
         S,
@@ -1691,7 +1704,7 @@ function plan(S, m) {
           { opacity: 0, transform: `translateY(${V.reveal})`, filter: "blur(2px)" },
           { opacity: 1, transform: "none", filter: "blur(0px)" },
         ],
-        { duration: D.settle, easing: E.out, delay: swallowed }
+        { duration: D.settle, easing: E.out, delay: swallowed, id: "reveal" }
       );
     } else if (m === "approved") {
       // The device leaves (Panel reveal's close, on the house's faster exit); the card resizes; the words come in.
