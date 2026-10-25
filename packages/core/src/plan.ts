@@ -196,13 +196,28 @@ export const todoGroups = <T extends Pick<TaskTodo, "depth" | "proposed">>(
   return { agreed, offered };
 };
 
-/** How far a task's to-dos have got: the agreed ones ({@link todoGroups}) ticked, of all agreed. */
+/**
+ * How far a task's to-dos have got: the agreed ones ({@link todoGroups})
+ * ticked, of all agreed; and how many top-level offers wait to be kept or
+ * dropped (`offered`, a card's "2 offered": what is nested under an offer is
+ * kept or dropped with it, so it is not counted apart).
+ */
 export const todoProgress = (
   todos: readonly Pick<TaskTodo, "depth" | "done" | "proposed">[]
-): { done: number; total: number } => {
-  const { agreed } = todoGroups(todos);
+): { done: number; offered: number; total: number } => {
+  const { agreed, offered } = todoGroups(todos);
+  /** The offers themselves: each offered to-do not nested under the one before it. */
+  let offers = 0;
+  let under: number | null = null;
+  for (const todo of offered) {
+    if (under === null || todo.depth <= under) {
+      offers += 1;
+      under = todo.depth;
+    }
+  }
   return {
     done: agreed.filter((todo) => todo.done).length,
+    offered: offers,
     total: agreed.length,
   };
 };

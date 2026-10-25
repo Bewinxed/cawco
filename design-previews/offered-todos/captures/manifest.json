@@ -1,0 +1,319 @@
+{
+  "made": "2026-10-25, the page's clock at 2026-10-25 12:00 +0300 (app/tsk16.js NOW)",
+  "scale": 1,
+  "region": "the component alone ([data-slot=\"region\"]): the to-do list, or the board card",
+  "widths": {
+    "Desk": "the desk's task pane, 462px",
+    "Phone": "the phone, 390px"
+  },
+  "captures": [
+    {
+      "where": "Desk",
+      "theme": "light",
+      "state": "offered",
+      "design": "desk-offered-light.png",
+      "today": [
+        "desk-live-light.png",
+        "desk-main-light.png"
+      ],
+      "caption": "Desk, light. Design: tsk-16 with nothing agreed. Two offered rows (dashed box, muted words, the attempt that offered them), Keep and Drop on each, Offered 2 and Keep all, the add field last. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "dark",
+      "state": "offered",
+      "design": "desk-offered-dark.png",
+      "today": [
+        "desk-live-dark.png",
+        "desk-main-dark.png"
+      ],
+      "caption": "Desk, dark. Design: tsk-16 with nothing agreed. Two offered rows (dashed box, muted words, the attempt that offered them), Keep and Drop on each, Offered 2 and Keep all, the add field last. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "light",
+      "state": "kept-one",
+      "design": "desk-kept-one-light.png",
+      "today": [
+        "desk-live-light.png",
+        "desk-main-light.png"
+      ],
+      "caption": "Desk, light. Design: after Keep on “Full web run on committed fix”. It is a to-do now (To-dos 0/1); one offer stands under Offered 1. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "dark",
+      "state": "kept-one",
+      "design": "desk-kept-one-dark.png",
+      "today": [
+        "desk-live-dark.png",
+        "desk-main-dark.png"
+      ],
+      "caption": "Desk, dark. Design: after Keep on “Full web run on committed fix”. It is a to-do now (To-dos 0/1); one offer stands under Offered 1. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "light",
+      "state": "dropped",
+      "design": "desk-dropped-light.png",
+      "today": [
+        "desk-live-light.png",
+        "desk-main-light.png"
+      ],
+      "caption": "Desk, light. Design: after Drop on the second offer. Its row has become one line saying so, with Undo, where it stood. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "dark",
+      "state": "dropped",
+      "design": "desk-dropped-dark.png",
+      "today": [
+        "desk-live-dark.png",
+        "desk-main-dark.png"
+      ],
+      "caption": "Desk, dark. Design: after Drop on the second offer. Its row has become one line saying so, with Undo, where it stood. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "light",
+      "state": "keeping-all",
+      "design": "desk-keeping-all-light.png",
+      "today": [
+        "desk-live-light.png",
+        "desk-main-light.png"
+      ],
+      "caption": "Desk, light. Design: Keep all pressed and the hub still writing: the button says “Keeping…” and the rows stay put until it answers. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "dark",
+      "state": "keeping-all",
+      "design": "desk-keeping-all-dark.png",
+      "today": [
+        "desk-live-dark.png",
+        "desk-main-dark.png"
+      ],
+      "caption": "Desk, dark. Design: Keep all pressed and the hub still writing: the button says “Keeping…” and the rows stay put until it answers. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "light",
+      "state": "refused",
+      "design": "desk-refused-light.png",
+      "today": [
+        "desk-live-light.png",
+        "desk-main-light.png"
+      ],
+      "caption": "Desk, light. Design: a keep the hub refused, said on the list's problem line in the hub's own words; the row is unchanged. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "dark",
+      "state": "refused",
+      "design": "desk-refused-dark.png",
+      "today": [
+        "desk-live-dark.png",
+        "desk-main-dark.png"
+      ],
+      "caption": "Desk, dark. Design: a keep the hub refused, said on the list's problem line in the hub's own words; the row is unchanged. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Desk",
+      "theme": "light",
+      "state": "card-offered",
+      "design": "desk-card-offered-light.png",
+      "today": [
+        "desk-live-card-light.png",
+        "desk-main-card-light.png"
+      ],
+      "caption": "Desk, light. Design: the board card with nothing agreed. No ring; “2 offered” stands where it would be. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    },
+    {
+      "where": "Desk",
+      "theme": "dark",
+      "state": "card-offered",
+      "design": "desk-card-offered-dark.png",
+      "today": [
+        "desk-live-card-dark.png",
+        "desk-main-card-dark.png"
+      ],
+      "caption": "Desk, dark. Design: the board card with nothing agreed. No ring; “2 offered” stands where it would be. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    },
+    {
+      "where": "Desk",
+      "theme": "light",
+      "state": "card-kept",
+      "design": "desk-card-kept-light.png",
+      "today": [
+        "desk-live-card-light.png",
+        "desk-main-card-light.png"
+      ],
+      "caption": "Desk, light. Design: the board card after one keep. The ring draws the agreed one alone (0/1), and “1 offered” stands beside it. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    },
+    {
+      "where": "Desk",
+      "theme": "dark",
+      "state": "card-kept",
+      "design": "desk-card-kept-dark.png",
+      "today": [
+        "desk-live-card-dark.png",
+        "desk-main-card-dark.png"
+      ],
+      "caption": "Desk, dark. Design: the board card after one keep. The ring draws the agreed one alone (0/1), and “1 offered” stands beside it. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    },
+    {
+      "where": "Phone",
+      "theme": "light",
+      "state": "offered",
+      "design": "phone-offered-light.png",
+      "today": [
+        "phone-live-light.png",
+        "phone-main-light.png"
+      ],
+      "caption": "Phone, light. Design: tsk-16 with nothing agreed. Two offered rows (dashed box, muted words, the attempt that offered them), Keep and Drop on each, Offered 2 and Keep all, the add field last. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "dark",
+      "state": "offered",
+      "design": "phone-offered-dark.png",
+      "today": [
+        "phone-live-dark.png",
+        "phone-main-dark.png"
+      ],
+      "caption": "Phone, dark. Design: tsk-16 with nothing agreed. Two offered rows (dashed box, muted words, the attempt that offered them), Keep and Drop on each, Offered 2 and Keep all, the add field last. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "light",
+      "state": "kept-one",
+      "design": "phone-kept-one-light.png",
+      "today": [
+        "phone-live-light.png",
+        "phone-main-light.png"
+      ],
+      "caption": "Phone, light. Design: after Keep on “Full web run on committed fix”. It is a to-do now (To-dos 0/1); one offer stands under Offered 1. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "dark",
+      "state": "kept-one",
+      "design": "phone-kept-one-dark.png",
+      "today": [
+        "phone-live-dark.png",
+        "phone-main-dark.png"
+      ],
+      "caption": "Phone, dark. Design: after Keep on “Full web run on committed fix”. It is a to-do now (To-dos 0/1); one offer stands under Offered 1. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "light",
+      "state": "dropped",
+      "design": "phone-dropped-light.png",
+      "today": [
+        "phone-live-light.png",
+        "phone-main-light.png"
+      ],
+      "caption": "Phone, light. Design: after Drop on the second offer. Its row has become one line saying so, with Undo, where it stood. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "dark",
+      "state": "dropped",
+      "design": "phone-dropped-dark.png",
+      "today": [
+        "phone-live-dark.png",
+        "phone-main-dark.png"
+      ],
+      "caption": "Phone, dark. Design: after Drop on the second offer. Its row has become one line saying so, with Undo, where it stood. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "light",
+      "state": "keeping-all",
+      "design": "phone-keeping-all-light.png",
+      "today": [
+        "phone-live-light.png",
+        "phone-main-light.png"
+      ],
+      "caption": "Phone, light. Design: Keep all pressed and the hub still writing: the button says “Keeping…” and the rows stay put until it answers. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "dark",
+      "state": "keeping-all",
+      "design": "phone-keeping-all-dark.png",
+      "today": [
+        "phone-live-dark.png",
+        "phone-main-dark.png"
+      ],
+      "caption": "Phone, dark. Design: Keep all pressed and the hub still writing: the button says “Keeping…” and the rows stay put until it answers. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "light",
+      "state": "refused",
+      "design": "phone-refused-light.png",
+      "today": [
+        "phone-live-light.png",
+        "phone-main-light.png"
+      ],
+      "caption": "Phone, light. Design: a keep the hub refused, said on the list's problem line in the hub's own words; the row is unchanged. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "dark",
+      "state": "refused",
+      "design": "phone-refused-dark.png",
+      "today": [
+        "phone-live-dark.png",
+        "phone-main-dark.png"
+      ],
+      "caption": "Phone, dark. Design: a keep the hub refused, said on the list's problem line in the hub's own words; the row is unchanged. Beside it, Today: Today, his live build: the two offers as ordinary to-dos with “Proposed” before their words, counted in To-dos 0/2. / Today, main: the two offers under an Offered head below the add field, out of the count, with no way to keep or drop them."
+    },
+    {
+      "where": "Phone",
+      "theme": "light",
+      "state": "card-offered",
+      "design": "phone-card-offered-light.png",
+      "today": [
+        "phone-live-card-light.png",
+        "phone-main-card-light.png"
+      ],
+      "caption": "Phone, light. Design: the board card with nothing agreed. No ring; “2 offered” stands where it would be. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    },
+    {
+      "where": "Phone",
+      "theme": "dark",
+      "state": "card-offered",
+      "design": "phone-card-offered-dark.png",
+      "today": [
+        "phone-live-card-dark.png",
+        "phone-main-card-dark.png"
+      ],
+      "caption": "Phone, dark. Design: the board card with nothing agreed. No ring; “2 offered” stands where it would be. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    },
+    {
+      "where": "Phone",
+      "theme": "light",
+      "state": "card-kept",
+      "design": "phone-card-kept-light.png",
+      "today": [
+        "phone-live-card-light.png",
+        "phone-main-card-light.png"
+      ],
+      "caption": "Phone, light. Design: the board card after one keep. The ring draws the agreed one alone (0/1), and “1 offered” stands beside it. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    },
+    {
+      "where": "Phone",
+      "theme": "dark",
+      "state": "card-kept",
+      "design": "phone-card-kept-dark.png",
+      "today": [
+        "phone-live-card-dark.png",
+        "phone-main-card-dark.png"
+      ],
+      "caption": "Phone, dark. Design: the board card after one keep. The ring draws the agreed one alone (0/1), and “1 offered” stands beside it. Beside it, Today: Today, his live build's card: the ring draws the two offers as two unmade steps, 0/2. / Today, main's card: no ring and no word, so a task with two offers waiting looks like one with no to-dos."
+    }
+  ]
+}

@@ -1,48 +1,69 @@
 import { memoryWords } from "@cawco/core/words/memory";
 
+type AgeUnit = "second" | "minute" | "hour" | "day" | "week" | "month" | "year";
+
+/** How long ago `date` was, in the one unit both wordings below say it in; null under 5s. */
+function ageOf(date: Date): { n: number; unit: AgeUnit } | null {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 5) {
+    return null;
+  }
+  if (seconds < 60) {
+    return { n: seconds, unit: "second" };
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return { n: minutes, unit: "minute" };
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return { n: hours, unit: "hour" };
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return { n: days, unit: "day" };
+  }
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) {
+    return { n: weeks, unit: "week" };
+  }
+  const months = Math.floor(days / 30);
+  if (months < 12) {
+    return { n: months, unit: "month" };
+  }
+  return { n: Math.floor(days / 365), unit: "year" };
+}
+
+const SHORT_UNIT: Record<AgeUnit, string> = {
+  second: "s",
+  minute: "m",
+  hour: "h",
+  day: "d",
+  week: "w",
+  month: "mo",
+  year: "y",
+};
+
 /**
  * Format a date as a relative time string (e.g., "5m ago"); the app's
  * FleetMemory `ago` says it the same way.
  */
 export function formatDistanceToNow(date: Date): string {
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  const age = ageOf(date);
+  return age
+    ? memoryWords.ago(`${age.n}${SHORT_UNIT[age.unit]}`)
+    : memoryWords.justNow;
+}
 
-  if (diffInSeconds < 5) {
-    return memoryWords.justNow;
-  }
+const LONG = new Intl.RelativeTimeFormat("en", { numeric: "always" });
 
-  if (diffInSeconds < 60) {
-    return memoryWords.ago(`${diffInSeconds}s`);
-  }
-
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) {
-    return memoryWords.ago(`${diffInMinutes}m`);
-  }
-
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return memoryWords.ago(`${diffInHours}h`);
-  }
-
-  const diffInDays = Math.floor(diffInHours / 24);
-  if (diffInDays < 7) {
-    return memoryWords.ago(`${diffInDays}d`);
-  }
-
-  const diffInWeeks = Math.floor(diffInDays / 7);
-  if (diffInWeeks < 4) {
-    return memoryWords.ago(`${diffInWeeks}w`);
-  }
-
-  const diffInMonths = Math.floor(diffInDays / 30);
-  if (diffInMonths < 12) {
-    return memoryWords.ago(`${diffInMonths}mo`);
-  }
-
-  const diffInYears = Math.floor(diffInDays / 365);
-  return memoryWords.ago(`${diffInYears}y`);
+/**
+ * {@link formatDistanceToNow} in whole words ("1 week ago"), for what a
+ * screen reader or a tooltip says of the same age.
+ */
+export function formatDistanceToNowLong(date: Date): string {
+  const age = ageOf(date);
+  return age ? LONG.format(-age.n, age.unit) : memoryWords.justNow;
 }
 
 /**

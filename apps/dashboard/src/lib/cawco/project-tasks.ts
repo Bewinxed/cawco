@@ -252,8 +252,13 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   related: string[];
   stage: string;
   title: string;
-  /** Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out. */
-  todos: { done: number; total: number };
+  /**
+   * Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered
+   * ones are left out, and counted apart as `offered` (the offers that wait
+   * to be kept or dropped). The hub's index row does not carry `offered` yet;
+   * a task read whole does (`todoProgress` of its to-dos).
+   */
+  todos: { done: number; offered?: number; total: number };
   type: string | null;
 }
 
@@ -275,6 +280,12 @@ export interface Todo {
   depth: number;
   done: boolean;
   id: string | null;
+  /**
+   * The work item whose attempt offered it, from a `(proposed by <work
+   * item>)` line; absent on an agreed to-do and on a `(proposed)` line that
+   * names none (the hub does not write the work item yet).
+   */
+  offeredBy?: string;
   /** `2.1`: the second top-level to-do's first child. */
   path: string;
   promoted: string | null;
@@ -591,6 +602,39 @@ export const changeTodo = (
     `${one(projectId, taskId)}/todos/${encodeURIComponent(todo)}`,
     json("PATCH", change)
   );
+
+/**
+ * Keeps offered to-dos, named by id or position: their lines lose the
+ * offer's marker, in one commit (Keep, Keep all). What is nested under an
+ * offer is kept with it.
+ */
+export const keepTodos = (
+  projectId: string,
+  taskId: string,
+  todos: string[]
+): Promise<TaskView> =>
+  send(`${one(projectId, taskId)}/todos/keep`, json("POST", { todos }));
+
+/** Drops an offered to-do, and what is nested under it, from the file. */
+export const dropTodo = (
+  projectId: string,
+  taskId: string,
+  todo: string
+): Promise<TaskView> =>
+  send(`${one(projectId, taskId)}/todos/${encodeURIComponent(todo)}`, {
+    method: "DELETE",
+  });
+
+/**
+ * Puts a dropped offer back where it stood (Undo): its lines with their
+ * ids and markers, at `index` among the task's to-dos in file order.
+ */
+export const restoreTodo = (
+  projectId: string,
+  taskId: string,
+  dropped: { index: number; todos: Todo[] }
+): Promise<TaskView> =>
+  send(`${one(projectId, taskId)}/todos/restore`, json("POST", dropped));
 
 /**
  * A fresh attempt at a task whose last one failed, in that attempt's

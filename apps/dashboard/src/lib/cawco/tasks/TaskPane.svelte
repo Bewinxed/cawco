@@ -62,10 +62,13 @@
     addTodo,
     attemptWord,
     changeTodo,
+    dropTodo,
     flagsOf,
+    keepTodos,
     linkTask,
     readHistory,
     readTask,
+    restoreTodo,
     reviewOf,
     type StagesView,
     stageLabel,
@@ -74,6 +77,7 @@
     type TaskHistoryEvent,
     type TaskSummary,
     type TaskView,
+    type Todo,
     updateTask,
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
@@ -90,7 +94,7 @@
   import TaskRelations from "./TaskRelations.svelte";
   import TaskReview from "./TaskReview.svelte";
   import TextSection from "./TextSection.svelte";
-  import TodoList from "./TodoList.svelte";
+  import TodoList, { type OfferedBy } from "./TodoList.svelte";
 
   let {
     projectId,
@@ -377,6 +381,30 @@
   };
 
   const when = (at: number) => new Date(at).toLocaleString();
+
+  /**
+   * The attempt that offered a to-do, joined from its line's work item to
+   * this task's attempts: its session's mark and title, and its row's link,
+   * as Sessions draws it. When it offered it is when it ended.
+   */
+  const offerOf = (todo: Todo): OfferedBy | null => {
+    const attempt = shown?.attempts.find(
+      (one) => one.workItemId === todo.offeredBy
+    );
+    if (!attempt) {
+      return null;
+    }
+    const id = attempt.instanceId;
+    return {
+      at: attempt.endedAt ?? attempt.startedAt,
+      href: rowHref(id),
+      open: () => openBeside(id, projectId, taskId),
+      place: sessionPlace(id),
+      session: id,
+      status: TONE[attemptWord(attempt.state)] ?? "idle",
+      title: sessionTitle(id) ?? commonWords.itsSession,
+    };
+  };
 
   /**
    * The decision this task was made from (its `decided: <page>#<card>`
@@ -699,6 +727,22 @@
           ontick={async (todo, done) => {
             if (shown) {
               took(await changeTodo(projectId, shown.id, todo, { done }));
+            }
+          }}
+          offeredBy={offerOf}
+          ondrop={async (todo) => {
+            if (shown) {
+              took(await dropTodo(projectId, shown.id, todo));
+            }
+          }}
+          onkeep={async (todos) => {
+            if (shown) {
+              took(await keepTodos(projectId, shown.id, todos));
+            }
+          }}
+          onrestore={async (dropped) => {
+            if (shown) {
+              took(await restoreTodo(projectId, shown.id, dropped));
             }
           }}
           todos={shown.todos}

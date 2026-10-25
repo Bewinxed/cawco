@@ -1,0 +1,196 @@
+/* The preview's own page: the state machine's switcher, drawn in a look of
+   its own so it is never taken for the product, and the stage, one state
+   at its production width on the house's tokens (the dashboard's app.css,
+   before this sheet). The component region (`data-slot="region"`) is what
+   the captures take. */
+
+@layer preview {
+  :root {
+    /* The switcher's own look: not the product's. */
+    --sm-ground: oklch(17% 0 0);
+    --sm-ink: oklch(92% 0 0);
+    --sm-muted: oklch(68% 0 0);
+    --sm-mark: oklch(88% 0.17 98);
+    --sm-mark-ink: oklch(17% 0 0);
+    --sm-rule: oklch(32% 0 0);
+    --sm-w: 18rem;
+  }
+
+  /* The flip: nothing eases from the old theme's colour. */
+  [data-flipping] *,
+  [data-flipping] *::before,
+  [data-flipping] *::after {
+    transition: none !important;
+  }
+
+  html {
+    background: var(--surface-recess);
+    color: var(--ink-strong);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    display: block grid;
+    grid-template-columns: var(--sm-w) minmax(0, 1fr);
+    min-block-size: 100dvh;
+    margin: 0;
+    font: var(--type-body);
+
+    @media (width < 900px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ---------- The switcher: its own look, never the product's ---------- */
+  .switcher {
+    position: sticky;
+    inset-block-start: 0;
+    align-self: start;
+    display: block grid;
+    align-content: start;
+    gap: 18px;
+    max-block-size: 100dvh;
+    padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--sm-ground);
+    color: var(--sm-ink);
+    font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+
+    @media (width < 900px) {
+      position: static;
+      max-block-size: none;
+    }
+
+    & h2 {
+      margin: 0 0 6px;
+      font: inherit;
+      color: var(--sm-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    & ul {
+      display: block flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    & a {
+      display: block;
+      padding: 3px 7px;
+      border: 1px solid var(--sm-rule);
+      border-radius: 3px;
+      color: var(--sm-ink);
+      text-decoration: none;
+
+      @media (hover: hover) {
+        &:hover {
+          border-color: var(--sm-muted);
+        }
+      }
+
+      &[aria-current="page"] {
+        border-color: var(--sm-mark);
+        background: var(--sm-mark);
+        color: var(--sm-mark-ink);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--sm-mark);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  .key,
+  .caption {
+    margin: 0;
+    color: var(--sm-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .caption {
+    color: var(--sm-ink);
+    text-wrap: pretty;
+  }
+
+  /* ---------- The stage: one state at its production width ---------- */
+  .stage {
+    display: block flex;
+    align-items: start;
+    min-inline-size: 0;
+    padding: var(--space-7);
+
+    @media (width < 900px) {
+      padding: 0;
+    }
+  }
+
+  .frame {
+    display: block flex;
+    flex-direction: column;
+    flex: none;
+    inline-size: var(--frame-w);
+    max-inline-size: 100%;
+    overflow: clip;
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+
+  /* The phone: the task's own page at a phone's height. */
+  .frame[data-frame="phone"] {
+    min-block-size: 844px;
+  }
+
+  /* The board: the card in a column of the recessed field. */
+  .frame[data-kind="card"] {
+    background: var(--surface-recess);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+
+  .board {
+    padding: var(--space-3);
+  }
+
+  .card-column {
+    display: block flex;
+    flex-direction: column;
+    inline-size: 100%;
+    max-inline-size: var(--c-board-col-max);
+
+    [data-frame="phone"] & {
+      max-inline-size: none;
+    }
+  }
+
+  /* The pane's head, as TaskPane's: the id, then the title. */
+  .pane-head {
+    display: block grid;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--pane-inline) var(--space-3);
+  }
+
+  .pane-id {
+    font: var(--type-meta);
+    font-family: var(--font-mono);
+    color: var(--ink-subtle);
+  }
+
+  .pane-title {
+    margin: 0;
+    font: var(--type-title);
+    letter-spacing: var(--track-title);
+    text-wrap: balance;
+  }
+
+  .pane-body {
+    padding: var(--space-3) var(--pane-inline) var(--space-6);
+    border-block-start: 1px solid var(--border-hairline);
+  }
+}

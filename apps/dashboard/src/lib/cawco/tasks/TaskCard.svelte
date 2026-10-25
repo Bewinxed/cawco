@@ -73,6 +73,8 @@
     project ? actionsOf(project(), task.id).length > 0 : false
   );
   const retry = $derived(isRetry(task));
+  /** Offers waiting on a keep or a drop (core `todoProgress`). */
+  const offered = $derived(task.todos.offered ?? 0);
   /**
    * What it waits on that has not landed: the hub's word when it gives one,
    * else its `after` edges whose task is not in a done stage.
@@ -198,7 +200,7 @@
       {/if}
     </span>
   {/if}
-  {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0}
+  {#if task.todos.total > 0 || offered > 0 || waitsOn.length > 0 || task.labels.length > 0}
     <span
       data-slot="foot"
       class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
@@ -213,6 +215,20 @@
             >{task.todos.done}/{task.todos.total}</span
           >
         </span>
+      {/if}
+      <!-- The ring draws the agreed to-dos alone; offers waiting on a keep or
+           a drop are said beside it, or alone where none is agreed. -->
+      {#if task.todos.total > 0 && offered > 0}
+        <span aria-hidden="true">·</span>
+      {/if}
+      {#if offered > 0}
+        <span
+          data-slot="offered"
+          title="{offered} {offered === 1
+            ? 'to-do'
+            : 'to-dos'} offered by an attempt, not agreed yet"
+          ><span class="num">{offered}</span> offered</span
+        >
       {/if}
       {#if waitsOn.length > 0}
         <span class="mark-line inline-flex items-center gap-space-1">

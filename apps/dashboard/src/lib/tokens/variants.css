@@ -638,6 +638,7 @@
 @custom-variant slot-tree-mark-rest (&[data-slot="tree-mark-rest"]);
 @custom-variant slot-tree-node (&[data-slot="tree-node"]);
 @custom-variant slot-turn (&[data-slot="turn"]);
+@custom-variant slot-undo (&[data-slot="undo"]);
 @custom-variant slot-value (&[data-slot="value"]);
 @custom-variant slot-view-bar (&[data-slot="view-bar"]);
 @custom-variant slot-view-calendar (&[data-slot="view-calendar"]);
