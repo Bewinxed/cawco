@@ -20,6 +20,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
+  CANVAS_AWAY,
   CANVAS_EMBED_FETCHED,
   CANVAS_EMBED_SIZE,
   CANVAS_GRAPH_FETCHED,
@@ -395,7 +396,64 @@ export interface Bridge {
 export const bridge = (): Bridge | undefined =>
   (window as unknown as { cawco?: Bridge }).cawco;
 
+/**
+ * Every animation-frame callback the page asks for (the canvas's own and
+ * each story's) held while the page holding it says its pane is away (core
+ * `CANVAS_AWAY`), and asked for once it is back: WebKit runs a frame's rAF
+ * at full rate under a pane `content-visibility: hidden` puts away, and
+ * nothing in the frame can tell it is skipped. A held callback is the one
+ * the page asked for, run on the next frame it is seen: what a person sees
+ * is the same.
+ */
+function holdWhileAway(): void {
+  const ask = window.requestAnimationFrame.bind(window);
+  const cancel = window.cancelAnimationFrame.bind(window);
+  let away = false;
+  /** Callbacks asked for while away, by the id the page was given (negative: none the browser gives). */
+  const held = new Map<number, FrameRequestCallback>();
+  /** A held callback asked for once back: the browser's id for it, by the page's. */
+  const asked = new Map<number, number>();
+  let last = 0;
+  window.requestAnimationFrame = (callback) => {
+    if (!away) {
+      return ask(callback);
+    }
+    last -= 1;
+    held.set(last, callback);
+    return last;
+  };
+  window.cancelAnimationFrame = (id) => {
+    if (held.delete(id)) {
+      return;
+    }
+    const real = asked.get(id);
+    asked.delete(id);
+    cancel(real ?? id);
+  };
+  addEventListener("message", (event) => {
+    const said = event.data as { away?: unknown; type?: unknown } | null;
+    if (event.source !== window.parent || said?.type !== CANVAS_AWAY) {
+      return;
+    }
+    away = said.away === true;
+    if (away) {
+      return;
+    }
+    for (const [id, callback] of held) {
+      asked.set(
+        id,
+        ask((time) => {
+          asked.delete(id);
+          callback(time);
+        })
+      );
+    }
+    held.clear();
+  });
+}
+
 export function boot(options: BootOptions): void {
+  holdWhileAway();
   const { adapter, root } = options;
   const params = new URLSearchParams(location.search);
   const files = params.getAll("file");

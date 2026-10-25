@@ -109,6 +109,18 @@ export const CANVAS_EMBED_READY = "cawco:embed-ready";
  */
 export const CANVAS_EMBED_FETCHED = "cawco:embed-fetched";
 
+/**
+ * A canvas frame's pane put away (`away: true`) or brought back
+ * (`away: false`), `{ type, away }`: the message the page holding the frame
+ * posts it, from the dashboard's own pane-away path (motion/rest.ts
+ * `holdSkipped`), relayed by a decision page to its Previews. A canvas holds
+ * its stories' animation-frame callbacks while away (agent canvas runtime):
+ * WebKit runs a frame's rAF at full rate under a `content-visibility:
+ * hidden` pane (1,245 a 20 s, where Chromium runs none), and nothing in
+ * the frame can tell it is skipped.
+ */
+export const CANVAS_AWAY = "cawco:away";
+
 /** The canvas page's count of its preloads (stage-host host.ts `serveCanvas`), read by the runtime. */
 export interface CanvasGraph {
   /** Its share's preloads: the whole graph on a page of its own, the page's {@link CANVAS_EMBED_GO} in a Preview (unknown until then). */

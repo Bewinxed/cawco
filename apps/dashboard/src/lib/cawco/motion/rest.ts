@@ -12,6 +12,7 @@
  * (`.pane-hidden`), whose skipped subtree would otherwise run its loops on
  * ({@link holdSkipped} carries the hold into it).
  */
+import { CANVAS_AWAY } from "@cawco/core/stage";
 
 /** Marks the root while the tab is hidden. Returns the cleanup. */
 export function restWhenHidden(): () => void {
@@ -42,6 +43,12 @@ export function restWhenHidden(): () => void {
  * away, and a person coming back sees it as it would be by then. Held
  * instead, it would play its rest as they came back (a cover's wait seen
  * again); a run already held (paused) stays as it is.
+ *
+ * Every frame in it is told it is away (core `CANVAS_AWAY`), one loaded
+ * while it is too, and told it is back as the pane comes back: a canvas
+ * frame's stories run their own animation-frame loops, which WebKit runs
+ * at full rate under the skip (1,245 callbacks in 20 s; Chromium none),
+ * and the canvas holds them while away (agent canvas runtime).
  */
 export function holdSkipped(away: boolean) {
   return (node: Element): (() => void) | undefined => {
@@ -62,11 +69,32 @@ export function holdSkipped(away: boolean) {
         }
       });
     });
+    tellFrames(node, true);
+    const loaded = (event: Event) => {
+      if (event.target instanceof HTMLIFrameElement) {
+        tellFrame(event.target, true);
+      }
+    };
+    // `load` reaches no ancestor of a frame but in its capture phase.
+    node.addEventListener("load", loaded, true);
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(task);
+      node.removeEventListener("load", loaded, true);
+      tellFrames(node, false);
     };
   };
+}
+
+/** Frame `frame` told its pane is away, or back (core `CANVAS_AWAY`). */
+const tellFrame = (frame: HTMLIFrameElement, away: boolean) =>
+  frame.contentWindow?.postMessage({ type: CANVAS_AWAY, away }, "*");
+
+/** Every frame under `node` told its pane is away, or back. */
+function tellFrames(node: Element, away: boolean): void {
+  for (const frame of node.querySelectorAll("iframe")) {
+    tellFrame(frame, away);
+  }
 }
 
 /** An attachment: marks its element while none of it is in view. */

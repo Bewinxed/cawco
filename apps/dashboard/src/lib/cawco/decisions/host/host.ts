@@ -7,6 +7,7 @@
  */
 
 import { mount } from "svelte";
+import { relayAway } from "./away";
 import Host from "./Host.svelte";
 import { bridge, picks, takeServed } from "./page.svelte.js";
 
@@ -14,6 +15,7 @@ takeServed(document);
 bridge()?.on("picks", (next) => {
   picks.now = next;
 });
+relayAway();
 
 const target = document.getElementById("decision-root");
 if (target) {

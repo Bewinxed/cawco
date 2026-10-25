@@ -34,9 +34,12 @@
  *   second): the time, frames, requests and page memory at each, and every
  *   50 ms while scrolling, whether a Preview in view stood drawn, as its
  *   skeleton, or empty.
- * - `raf`: a story running an animation-frame loop, its frame in view and
- *   one below the page's fold: the callbacks each runs in 20 s idle, and the
- *   one below once scrolled to.
+ * - `raf`: a story running an animation-frame loop, its frame in view, in a
+ *   pane the dashboard put away (directly, and through a decision page's
+ *   relay) and one below the page's fold: the callbacks each runs in 20 s
+ *   idle, and again once back or scrolled to.
+ * - `rekey`: a write no page is served from costs the next frame nothing;
+ *   an edit to an imported file reaches the open canvas and the next frame.
  *
  * Numbers go to `numbers.json` in the spec's output folder, and each is a
  * NOTE line. The checks are what a frame owes: it draws, and it loads no
@@ -366,9 +369,15 @@ const pageProcesses = (pids: number[]): number[] =>
 /** Installed before the page's own scripts: when the frame said its shape, and every animation-frame callback it runs. */
 function installCounters(): void {
   const w = window as unknown as {
-    __cost: { drawnAt: number | null; fetchedAt: number | null; raf: number };
+    __cost: {
+      drawnAt: number | null;
+      fetchedAt: number | null;
+      raf: number;
+      /** While set, each animation frame asked for is counted by the stack that asked for it. */
+      sites: Record<string, number> | null;
+    };
   };
-  w.__cost = { drawnAt: null, fetchedAt: null, raf: 0 };
+  w.__cost = { drawnAt: null, fetchedAt: null, raf: 0, sites: null };
   // Every resource kept: the default buffer holds 250, a canvas asks for hundreds.
   performance.setResourceTimingBufferSize(100_000);
   addEventListener("message", (event) => {
@@ -382,11 +391,25 @@ function installCounters(): void {
     }
   });
   const raf = window.requestAnimationFrame.bind(window);
-  window.requestAnimationFrame = (callback) =>
-    raf((time) => {
+  window.requestAnimationFrame = (callback) => {
+    const { sites } = w.__cost;
+    if (sites) {
+      // The callers, this wrapper's own line left out.
+      const site = (
+        new Error("the caller of requestAnimationFrame").stack ?? ""
+      )
+        .split("\n")
+        .slice(1, 7)
+        // biome-ignore lint/performance/useTopLevelRegex: this function runs in the page, where none of this module's scope is
+        .map((line) => line.trim().replace(/\/@cawco\/m\/[^/]+/, ""))
+        .join(" < ");
+      sites[site] = (sites[site] ?? 0) + 1;
+    }
+    return raf((time) => {
       w.__cost.raf += 1;
       callback(time);
     });
+  };
 }
 
 /** What the frame's own timeline says: its resources, their bytes by kind, the moments. */
@@ -926,8 +949,21 @@ async function frameLeg(
     const all = statesFiles();
     const page = await kit.page("desk", { scale: 1, init: [installCounters] });
     for (const one of all) {
-      await page.goto(embedUrl(stage.base, one), { waitUntil: "commit" });
-      await drawn(page).catch(() => undefined);
+      // A page Vite reloads as it builds a dependency the page found (its `full-reload`) aborts the next one's navigation: that one is asked again.
+      for (const _ of [1, 2]) {
+        const went = await page
+          .goto(embedUrl(stage.base, one), { waitUntil: "commit" })
+          .then(() => true)
+          .catch(() => false);
+        if (
+          went &&
+          (await drawn(page)
+            .then(() => true)
+            .catch(() => false))
+        ) {
+          break;
+        }
+      }
     }
     await page.close();
   }
@@ -1029,6 +1065,19 @@ async function frameLeg(
     const raf = await page.evaluate(
       () => (window as unknown as { __cost: { raf: number } }).__cost.raf
     );
+    // Who asks for the frames an idle canvas runs: each caller's stack, for 3 s.
+    await page.evaluate(() => {
+      (window as unknown as { __cost: { sites: object } }).__cost.sites = {};
+    });
+    await Bun.sleep(3000);
+    const loopSites = await page.evaluate(() =>
+      Object.entries(
+        (window as unknown as { __cost: { sites: Record<string, number> } })
+          .__cost.sites
+      )
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+    );
     const scripts = parsed.filter((one) => one.url.startsWith("http"));
     keep(kit, `${label}.${engine}`, {
       requests: read.requests,
@@ -1044,6 +1093,7 @@ async function frameLeg(
       heapMb: heap,
       pageProcessMb: processMb,
       rafPer20s: raf,
+      loopSites,
       drawnMs: read.drawnAt === null ? null : Math.round(read.drawnAt),
       frames: read.frames,
       failed: read.failed,
@@ -1279,10 +1329,56 @@ export default { component: Loop, args: { label: "loop" } };
 export const Spins = { args: {}, parameters: { viewport: 400 } };
 `;
 
-/** Frames of the looping story: one in view, one in view under a pane put away as the dashboard puts one away (`content-visibility: hidden`), one 4000px below the page's fold. */
+/**
+ * Frames of the looping story: one in view; two in a pane put away by the
+ * dashboard's own path (PaneLeaf's `data-pane-hidden`, `content-visibility:
+ * hidden`, and motion/rest.ts `holdSkipped`, bundled from the dashboard),
+ * one of them inside a page that relays it as a decision page does
+ * (decisions/host/away.ts `relayAway`); one 4000px below the page's fold.
+ */
 const LOOP_HOLDER = (url: string) => `<!doctype html><meta charset="utf-8">
-<style>body{margin:0}iframe{display:block;inline-size:600px;block-size:200px;border:0}.away{content-visibility:hidden;contain-intrinsic-size:auto 200px}</style>
-<iframe id="seen" src="${url}"></iframe><div class="away"><iframe id="away" src="${url}"></iframe></div><div style="block-size:4000px"></div><iframe id="unseen" src="${url}"></iframe>`;
+<style>body{margin:0}iframe{display:block;inline-size:600px;block-size:200px;border:0}.pane[data-pane-hidden]{content-visibility:hidden;contain-intrinsic-size:auto 400px}</style>
+<script src="/away.js"></script>
+<iframe id="seen" src="${url}"></iframe>
+<div class="pane" id="pane"><iframe id="away" src="${url}"></iframe><iframe id="relay" src="/relay"></iframe></div>
+<div style="block-size:4000px"></div>
+<iframe id="unseen" src="${url}"></iframe>
+<script>
+const pane = document.getElementById("pane");
+let back;
+window.putAway = () => { pane.toggleAttribute("data-pane-hidden", true); back = window.__probeAway.holdSkipped(true)(pane); };
+window.bringBack = () => { back?.(); pane.removeAttribute("data-pane-hidden"); };
+</script>`;
+
+/** A page standing for a decision page: the dashboard's relay, and one Preview's canvas. */
+const RELAY_PAGE = (url: string) => `<!doctype html><meta charset="utf-8">
+<style>body{margin:0}iframe{display:block;inline-size:600px;block-size:200px;border:0}</style>
+<script src="/away.js"></script><script>window.__probeAway.relayAway();</script>
+<iframe id="inner" src="${url}"></iframe>`;
+
+/** The dashboard's pane-away path and the decision page's relay, bundled for the holder. */
+async function awayScript(): Promise<string> {
+  const entry = join(process.env.TMPDIR ?? "/tmp", "canvas-cost-away.ts");
+  writeFileSync(
+    entry,
+    `import { holdSkipped } from ${JSON.stringify(join(APP, "src/lib/cawco/motion/rest.ts"))};
+import { relayAway } from ${JSON.stringify(join(APP, "src/lib/cawco/decisions/host/away.ts"))};
+(window as unknown as { __probeAway: object }).__probeAway = { holdSkipped, relayAway };
+`
+  );
+  const built = await Bun.build({
+    entrypoints: [entry],
+    target: "browser",
+    format: "iife",
+  });
+  rmSync(entry, { force: true });
+  if (!built.success) {
+    throw new Error(
+      `the pane-away path did not bundle: ${built.logs.join(" | ")}`
+    );
+  }
+  return await (built.outputs[0] as Bun.BuildArtifact).text();
+}
 
 async function rafLeg(
   kit: Kit,
@@ -1294,13 +1390,22 @@ async function rafLeg(
     stages.push(stage);
   }
   const url = embedUrl(stage.base, LOOP_FILE, "Spins");
+  const away = await awayScript();
   const holder = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: () =>
-      new Response(LOOP_HOLDER(url), {
-        headers: { "content-type": "text/html" },
-      }),
+    fetch: (request) => {
+      const { pathname } = new URL(request.url);
+      if (pathname === "/away.js") {
+        return new Response(away, {
+          headers: { "content-type": "text/javascript" },
+        });
+      }
+      return new Response(
+        pathname === "/relay" ? RELAY_PAGE(url) : LOOP_HOLDER(url),
+        { headers: { "content-type": "text/html" } }
+      );
+    },
   });
   try {
     for (const engine of ENGINES) {
@@ -1316,7 +1421,10 @@ async function rafLeg(
         return (await handle?.contentFrame()) ?? null;
       };
       const seen = await frameOf("seen");
-      const away = await frameOf("away");
+      const inPane = await frameOf("away");
+      const relay = await frameOf("relay");
+      const relayed =
+        (await (await relay?.$("#inner"))?.contentFrame()) ?? null;
       const unseen = await frameOf("unseen");
       const looping = (frame: typeof seen) =>
         frame
@@ -1331,49 +1439,168 @@ async function rafLeg(
           )
           .then(() => true)
           .catch(() => false) ?? Promise.resolve(false);
-      const mounted = await Promise.all([
-        looping(seen),
-        looping(away),
-        looping(unseen),
-      ]);
+      const frames = [seen, inPane, relayed, unseen];
+      const mounted = await Promise.all(frames.map(looping));
       const reset = (frame: typeof seen) =>
         frame?.evaluate(() => {
           (window as unknown as { __cost: { raf: number } }).__cost.raf = 0;
         });
-      await Promise.all([reset(seen), reset(away), reset(unseen)]);
-      await Bun.sleep(RAF_IDLE_MS);
       const count = (frame: typeof seen) =>
         frame?.evaluate(
           () => (window as unknown as { __cost: { raf: number } }).__cost.raf
         ) ?? Promise.resolve(null);
-      const [inView, putAway, outOfView] = await Promise.all([
-        count(seen),
-        count(away),
-        count(unseen),
+      await page.evaluate(() =>
+        (window as unknown as { putAway: () => void }).putAway()
+      );
+      await Bun.sleep(1000);
+      await Promise.all(frames.map(reset));
+      await Bun.sleep(RAF_IDLE_MS);
+      const [inView, paneAway, relayedAway, outOfView] = await Promise.all(
+        frames.map(count)
+      );
+      // Brought back: the loops held in the pane run again.
+      await page.evaluate(() =>
+        (window as unknown as { bringBack: () => void }).bringBack()
+      );
+      await Promise.all([reset(inPane), reset(relayed)]);
+      await Bun.sleep(2000);
+      const [paneBack, relayedBack] = await Promise.all([
+        count(inPane),
+        count(relayed),
       ]);
-      // Scrolled to: the loop held below the fold runs again.
+      // Scrolled to: the loop the engine held below the fold runs again.
       await page.evaluate(() =>
         document.getElementById("unseen")?.scrollIntoView()
       );
       await reset(unseen);
       await Bun.sleep(2000);
-      const back = await count(unseen);
+      const scrolledTo = await count(unseen);
       keep(kit, `raf.${engine}`, {
         mounted,
         inViewPer20s: inView,
-        paneAwayPer20s: putAway,
+        paneAwayPer20s: paneAway,
+        relayedAwayPer20s: relayedAway,
         outOfViewPer20s: outOfView,
-        scrolledToPer2s: back,
+        paneBackPer2s: paneBack,
+        relayedBackPer2s: relayedBack,
+        scrolledToPer2s: scrolledTo,
       });
       kit.check(
-        `raf ${engine}: a story's loop runs in view (${inView} in 20 s; ${putAway} in a pane put away, ${outOfView} below the fold, the engine's own holding) and runs again once scrolled to (${back} in 2 s)`,
-        mounted.every(Boolean) && (inView ?? 0) > 100 && (back ?? 0) > 10
+        `raf ${engine}: a story's loop runs in view (${inView} in 20 s), is held in a pane put away (${paneAway}) and through a decision page's relay (${relayedAway}), and runs again once back (${paneBack}, ${relayedBack} in 2 s) and once scrolled to (${scrolledTo} in 2 s; ${outOfView} below the fold, the engine's own holding)`,
+        mounted.every(Boolean) &&
+          (inView ?? 0) > 100 &&
+          (paneAway ?? 99) <= 3 &&
+          (relayedAway ?? 99) <= 3 &&
+          (paneBack ?? 0) > 10 &&
+          (relayedBack ?? 0) > 10 &&
+          (scrolledTo ?? 0) > 10
       );
       await page.close();
     }
   } finally {
     holder.stop(true);
   }
+}
+
+/* --- What a write in the stage's root costs the next frame -------------- */
+
+/** An agent's note, in a folder the project's git ignores: no module reads it, and Tailwind scans no ignored file. */
+const NOTE = ".cawco/probe-canvas-cost-note.md";
+
+/** The key a page asked for its modules at (`/@cawco/m/<key>/…`), and how many of them came over the network rather than from the browser's cache. */
+function keyedRead(): { fetched: number; key: string | null; modules: number } {
+  const keyed = (
+    performance.getEntriesByType("resource") as PerformanceResourceTiming[]
+  ).filter((one) => new URL(one.name).pathname.startsWith("/@cawco/m/"));
+  return {
+    key: keyed[0]
+      ? (new URL(keyed[0].name).pathname.split("/")[3] ?? null)
+      : null,
+    modules: keyed.length,
+    fetched: keyed.filter((one) => one.transferSize > 0).length,
+  };
+}
+
+/**
+ * A write the pages are served from nowhere: an agent's note beside the
+ * project. The next frame asks at the same key and takes every module from
+ * the browser's cache. Then an edit to a file a canvas imports: it reaches
+ * the open canvas by HMR, and the next frame asks at a new key and draws it.
+ */
+async function rekeyLeg(
+  kit: Kit,
+  stages: Stage[],
+  warm: Stage | null
+): Promise<Stage> {
+  const stage = warm ?? (await startStage());
+  if (!warm) {
+    stages.push(stage);
+  }
+  const [file, story] = TRACED.split("#") as [string, string | undefined];
+  const url = embedUrl(stage.base, file, story);
+  const page = await kit.page("desk", {
+    scale: 1,
+    browser: "canvas-cost-rekey",
+    init: [installCounters],
+  });
+  const load = async (into: Page, at: string) => {
+    await into.goto(at, { waitUntil: "commit", timeout: DRAW_MS });
+    await drawn(into);
+    return (await into.evaluate(keyedRead)) as ReturnType<typeof keyedRead>;
+  };
+  try {
+    const first = await load(page, url);
+    writeFileSync(join(APP, NOTE), `A note no page reads, ${Date.now()}\n`);
+    // The watcher's event, heard.
+    await Bun.sleep(1500);
+    const afterNote = await load(await page.context().newPage(), url);
+    keep(kit, "rekey.unrelated write", { first, afterNote });
+    kit.check(
+      `rekey: after a write no page is served from (${NOTE}), the next frame asks at the same key (${first.key} → ${afterNote.key}) and fetches ${afterNote.fetched} of its ${afterNote.modules} modules from the network`,
+      first.key !== null &&
+        afterNote.key === first.key &&
+        afterNote.fetched === 0
+    );
+    const loopUrl = embedUrl(stage.base, LOOP_FILE, "Spins");
+    const open = await page.context().newPage();
+    const before = await load(open, loopUrl);
+    await open.waitForSelector("[data-loop]", { timeout: DRAW_MS });
+    const wrote = Date.now();
+    writeFileSync(join(APP, LOOP_DIR, "Loop.svelte"), loopWith(" edited"));
+    const hmrMs = await open
+      .waitForFunction(
+        () =>
+          document
+            .querySelector("[data-loop]")
+            ?.textContent?.includes(" edited") ?? false,
+        undefined,
+        { timeout: 60_000, polling: 50 }
+      )
+      .then(() => Date.now() - wrote)
+      .catch(() => null);
+    await Bun.sleep(500);
+    const next = await page.context().newPage();
+    const afterEdit = await load(next, loopUrl);
+    const drawsEdit = await next
+      .waitForFunction(
+        () =>
+          document
+            .querySelector("[data-loop]")
+            ?.textContent?.includes(" edited") ?? false,
+        undefined,
+        { timeout: 30_000, polling: 100 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    keep(kit, "rekey.imported edit", { before, hmrMs, afterEdit, drawsEdit });
+    kit.check(
+      `rekey: an edit to an imported file reaches the open canvas by HMR (${hmrMs} ms), and the next frame asks at a new key (${before.key} → ${afterEdit.key}) and draws it (${drawsEdit})`,
+      hmrMs !== null && afterEdit.key !== before.key && drawsEdit
+    );
+  } finally {
+    rmSync(join(APP, NOTE), { force: true });
+  }
+  return stage;
 }
 
 /* --- The same stories built for production ------------------------------- */
@@ -2512,6 +2739,9 @@ const run = async (kit: Kit) => {
     }
     if (LEGS.has("raf")) {
       await rafLeg(kit, stages, warm);
+    }
+    if (LEGS.has("rekey")) {
+      warm = await rekeyLeg(kit, stages, warm);
     }
     if (LEGS.has("built") || LEGS.has("edit")) {
       warm = await builtLeg(kit, stages, warm);

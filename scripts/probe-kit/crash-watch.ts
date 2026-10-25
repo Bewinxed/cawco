@@ -53,8 +53,17 @@ interface Seen {
  * animations, each as its kind, its name (a CSS animation's, a transition's
  * property, a script's keyframes' properties), its element and where its
  * clock stands; sent when the set differs from the last frame's.
+ *
+ * Its frames are asked for of the browser's own `requestAnimationFrame`,
+ * taken before the page's scripts run: a page's own wrapper of it (a
+ * spec's counter, a canvas holding its stories' frames while away) never
+ * sees the kit's loop as the page's. canvas-cost read NeedsCard's frame as
+ * running 1,240 callbacks in 20 s idle in WebKit, every one this loop's
+ * (its caller `tick@web-inspector://bootstrap.js`, Playwright's init
+ * scripts), 0 in Chromium, which has no such loop.
  */
 function readFrames(): void {
+  const nextFrame = window.requestAnimationFrame.bind(window);
   const send = (window as unknown as { __kitFrame?: (seen: string) => void })
     .__kitFrame;
   if (!send || window !== window.top) {
@@ -114,9 +123,9 @@ function readFrames(): void {
       last = said;
       send(JSON.stringify({ at: Math.round(performance.now()), runs }));
     }
-    requestAnimationFrame(tick);
+    nextFrame(tick);
   };
-  requestAnimationFrame(tick);
+  nextFrame(tick);
 }
 
 /** Readies a context for {@link watchPage}: the binding and the frame reader. */

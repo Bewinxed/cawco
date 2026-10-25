@@ -158,7 +158,7 @@ interface DevServer {
         getModuleByUrl: (url: string) => Promise<ModuleNode | undefined>;
         getModulesByFile: (file: string) => Set<ModuleNode> | undefined;
         idToModuleMap: Map<string, ModuleNode>;
-        invalidateModule: (mod: ModuleNode) => void;
+        invalidateModule: (mod: ModuleNode, ...rest: unknown[]) => void;
       };
     };
   };
@@ -1220,8 +1220,9 @@ async function serveCanvas(
  * A canvas page's modules, at the stage's generation: `/@cawco/m/<key>/<the
  * module's own address>`, Vite's prebundled dependencies too (one of them
  * may import a module of the page's: the stage's `cawco:yjs`, which imports
- * Vite's client). The key is new whenever a file of the project is
- * written or taken away, or the dependencies are built again, so one
+ * Vite's client). The key is new whenever Vite lets go of a module's
+ * served code ({@link rekeyOnInvalidate}) or its server starts, and with
+ * each build of the dependencies, so one
  * address always holds one module's code: kept by the browser for good
  * (`immutable`), a decision page's embeds of one states file fetch each
  * module once, where through the hub's preview proxy each fetched all of
@@ -1237,6 +1238,32 @@ async function serveCanvas(
 const KEPT = "private, max-age=31536000, immutable";
 const newGeneration = (): string => randomBytes(9).toString("base64url");
 let generation = newGeneration();
+
+/** A new generation: every page loaded from now asks for its modules at new addresses. */
+const rekey = () => {
+  generation = newGeneration();
+  keyedServed.clear();
+};
+
+/**
+ * Keys anew whenever Vite lets go of a module's served code (its graph's
+ * `invalidateModule`): a file a module is read from changed (one the pages
+ * import, or one a plugin said a module depends on: Tailwind's every
+ * scanned source, by `addWatchFile`), an update reached a module's
+ * importers, a file was added that a glob or a failed import now finds, a
+ * TypeScript project file changed, or the dependencies were built again
+ * (`invalidateAll`). A write Vite serves nothing from (an agent's note, a
+ * log) lets go of nothing, and every address stays: the next page reads its
+ * modules from the browser's cache.
+ */
+function rekeyOnInvalidate(dev: DevServer): void {
+  const graph = dev.environments.client.moduleGraph;
+  const invalidate = graph.invalidateModule.bind(graph);
+  graph.invalidateModule = (mod, ...rest) => {
+    rekey();
+    invalidate(mod, ...rest);
+  };
+}
 
 /** The key a page loaded now asks for its modules under: the files' generation and the dependencies' build. */
 const generationOf = (dev: DevServer): string => {
@@ -3124,13 +3151,9 @@ function cawcoStage() {
           keepMissing([relative(root, abs)]);
         }
       };
-      // Any file written or taken away: what a new page loads is at new addresses.
-      for (const event of ["add", "change", "unlink"] as const) {
-        dev.watcher.on(event, () => {
-          generation = newGeneration();
-          keyedServed.clear();
-        });
-      }
+      // A server Vite (re)started (its config, a file the config imports or an env file changed: its own restart) serves at new addresses, and so does one that let go of a module.
+      rekey();
+      rekeyOnInvalidate(dev);
       dev.watcher.on("add", nowWritten);
       dev.watcher.on("change", nowWritten);
       dev.watcher.on("unlink", (abs: string) => {
