@@ -1425,9 +1425,11 @@ process.on("exit", removeLive);
 for (const [name, number] of Object.entries(END_SIGNALS)) {
   const signal = name as EndSignal;
   const onSignal = () => {
-    // The browsers first, while the records that name them stand.
+    // The browsers first, while the records that name them stand, and what
+    // still carries the folders in its environment (a process that left
+    // every tree the leash ends), before the folders go.
     ending = Promise.allSettled(
-      [...LIVE].map((one) => one.removeBrowsers())
+      [...LIVE].map((one) => one.removeBrowsers().then(() => one.endCarriers()))
     ).finally(() => {
       removeLive();
       if (!anotherEnds(signal)) {
