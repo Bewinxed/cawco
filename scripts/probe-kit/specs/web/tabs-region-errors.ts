@@ -163,16 +163,41 @@ const treeOf = (tabs: string[], active: string | null = tabs[0] ?? null) =>
     focusedLeaf: "pone",
   });
 
-/** A page (`view`, the desk unless named) with `ids` open as one group's tabs in its localStorage. */
+/** Where a tab's conversation is kept (workspace.svelte.ts `ctx`), by tab id. */
+type TabCtx = Record<string, { machine: string; cwd: string; harness: string }>;
+
+/**
+ * Tabs `ids` kept for conversations on a machine that is away, as a
+ * sleeping laptop's are: the hub can't tell what each names (core
+ * `TabNamed` `unknown`), so the strip keeps them. A tab the hub says names
+ * nothing is dropped as it is asked (workspace.svelte.ts, "Naming the
+ * tabs"), so a long strip of made-up ids would shrink to the fleet's own.
+ */
+const awayCtx = (ids: string[]): TabCtx =>
+  Object.fromEntries(
+    ids.map((id) => [
+      id,
+      { machine: "probe-away", cwd: "/home/probe/away", harness: "claude" },
+    ])
+  );
+
+/**
+ * A page (`view`, the desk unless named) with `ids` open as one group's
+ * tabs in its localStorage, each tab's conversation where `ctx` keeps it.
+ */
 async function tabsPage(
   kit: Kit,
   ids: string[],
-  view: "desk" | "phone" = "desk"
+  view: "desk" | "phone" = "desk",
+  ctx: TabCtx = {}
 ) {
   const page = await kit.page(view, { init: [captureErrors, watchHydration] });
-  await page.addInitScript((tree) => {
-    localStorage.setItem("cawco-workspace", tree);
-  }, treeOf(ids));
+  await page.addInitScript(
+    (tree) => {
+      localStorage.setItem("cawco-workspace", tree);
+    },
+    JSON.stringify({ ...JSON.parse(treeOf(ids)), ctx })
+  );
   return page;
 }
 
@@ -785,18 +810,18 @@ const spec: Spec = {
     // PREF_VALUE_LIMIT), the URL's first and the real three last.
     {
       const step = "(d) a strip past the cookie";
-      const many = [ids[0]];
+      const elsewhere: string[] = [];
       while (
-        encodeURIComponent(treeOf([...many, ...ids.slice(1)])).length <=
-        PREF_VALUE_LIMIT
+        encodeURIComponent(treeOf([ids[0], ...elsewhere, ...ids.slice(1)]))
+          .length <= PREF_VALUE_LIMIT
       ) {
-        many.push(crypto.randomUUID());
+        elsewhere.push(crypto.randomUUID());
       }
-      many.push(...ids.slice(1));
+      const many = [ids[0], ...elsewhere, ...ids.slice(1)];
       kit.note(
-        `${step}: ${many.length} tabs, ${encodeURIComponent(treeOf(many)).length} bytes encoded, over ${PREF_VALUE_LIMIT}`
+        `${step}: ${many.length} tabs (${elsewhere.length} on a machine away), ${encodeURIComponent(treeOf(many)).length} bytes encoded, over ${PREF_VALUE_LIMIT}`
       );
-      const page = await tabsPage(kit, many);
+      const page = await tabsPage(kit, many, "desk", awayCtx(elsewhere));
       await firstRender(
         `${step}, loaded`,
         page,
@@ -961,12 +986,9 @@ const spec: Spec = {
     // machines) must not move the bar's tools or the strip's "+".
     {
       const step = "(j) the bar from the first paint";
-      const wide = [
-        ids[0],
-        ...Array.from({ length: 30 }, () => crypto.randomUUID()),
-        ...ids.slice(1),
-      ];
-      const page = await tabsPage(kit, wide);
+      const elsewhere = Array.from({ length: 30 }, () => crypto.randomUUID());
+      const wide = [ids[0], ...elsewhere, ...ids.slice(1)];
+      const page = await tabsPage(kit, wide, "desk", awayCtx(elsewhere));
       await firstRender(
         step,
         page,

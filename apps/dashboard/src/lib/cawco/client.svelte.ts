@@ -1431,9 +1431,11 @@ const pageReads = new Map<
 
 // Lets the store be asserted from the console while developing, and a
 // bench stand its conversation in as one the hub holds running
-// (`adoptInstances`, as a snapshot does).
+// (`adoptInstances`, as a snapshot does) and at work (`frame`, a hub frame
+// taken as the socket takes it: a session's pulse lives in the store's own
+// `Pulse`s, which no bench can write into `state`).
 if (import.meta.env.DEV) {
-  devDebug({ state, inflight, adoptInstances });
+  devDebug({ state, inflight, adoptInstances, frame: handleFrame });
 }
 
 // HMR-persistent socket references, so a module reload never leaves an orphan.

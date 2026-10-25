@@ -20,7 +20,7 @@
    * own choice goes to the workspace, which holds no such group and would
    * navigate to the session.
    */
-  import type { SessionPulse } from "@cawco/core";
+  import type { PulseFrame, SessionPulse } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import { blankSession } from "#lib/cawco/client.svelte.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
@@ -145,8 +145,8 @@
   const debug = (
     globalThis as unknown as {
       __cawcoDebug: {
+        frame: (frame: PulseFrame) => void;
         state: {
-          pulses: Record<string, SessionPulse>;
           sessions: Record<string, ReturnType<typeof blankSession>>;
         };
       };
@@ -155,20 +155,25 @@
   const now = Date.now();
   for (const id of ids) {
     const activity = DOING[id];
-    debug.state.pulses[id] = {
-      activity,
-      at: now,
-      busy: activity === "working",
-      currentTool: null,
-      instanceId: id,
-      runningSubagents: 0,
-    };
     const session = blankSession(id);
     session.machineId = "bench";
     session.cwd = "/bench";
     session.messages = history(id);
     session.initialized = true;
     debug.state.sessions[id] = session;
+    // After its session is in: the pulse is written onto it, as the socket's is.
+    debug.frame({
+      kind: "pulse",
+      instanceId: id,
+      pulse: {
+        activity,
+        at: now,
+        busy: activity === "working",
+        currentTool: null,
+        instanceId: id,
+        runningSubagents: 0,
+      },
+    });
   }
 
   const first = untrack(() =>
@@ -225,7 +230,6 @@
     return () => {
       Reflect.deleteProperty(window, "__ht");
       for (const id of ids) {
-        delete debug.state.pulses[id];
         delete debug.state.sessions[id];
       }
     };

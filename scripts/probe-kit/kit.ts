@@ -1565,11 +1565,28 @@ export async function open(
   ready: string | (() => boolean),
   timeout = 60_000
 ): Promise<void> {
+  // What the page threw while it loaded: said with a wait that ran out, so
+  // the failure names why the page never came to `ready`.
+  const thrown: string[] = [];
+  const heard = (error: Error) => thrown.push(error.message.slice(0, 300));
+  page.on("pageerror", heard);
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  if (typeof ready === "string") {
-    await page.waitForSelector(ready, { timeout });
-  } else {
-    await page.waitForFunction(ready, null, { timeout });
+  try {
+    if (typeof ready === "string") {
+      await page.waitForSelector(ready, { timeout });
+    } else {
+      await page.waitForFunction(ready, null, { timeout });
+    }
+  } catch (error) {
+    const shows = await page
+      .evaluate(() => document.body?.innerText.replace(/\s+/g, " ").trim())
+      .catch(() => "unread");
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}\n  the page threw: ${thrown.join(" | ") || "nothing"}\n  it shows: ${(shows ?? "").slice(0, 400) || "no words"}`,
+      { cause: error }
+    );
+  } finally {
+    page.off("pageerror", heard);
   }
   await page.evaluate(() => document.fonts.ready);
   await pageReady(page);

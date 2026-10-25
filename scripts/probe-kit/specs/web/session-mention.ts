@@ -8,6 +8,10 @@
  *
  *   bun scripts/probe-kit/run.ts web session-mention
  *
+ * `SESSION_MENTION=<scene>[,<scene>…]` runs the scenes named (their names
+ * below, as `transcript on webkit`) after `board row`, whose hue the
+ * others' marks are held to.
+ *
  * - Composer (the recall bench, Chromium): @ and the title's words offer
  *   the far session; ↵ makes its chip, whose tip says the hub's facts; the
  *   message is sent as `@<title> <handle>`. Put back in a fresh tab (a draft
@@ -983,7 +987,13 @@ const spec: Spec = {
       ["own page", ownPage],
       ["task attempt", taskAttempt],
     ];
+    const asked = process.env.SESSION_MENTION?.split(",").map((name) =>
+      name.trim()
+    );
     for (const [name, scene] of scenes) {
+      if (asked && name !== "board row" && !asked.includes(name)) {
+        continue;
+      }
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one scene at a time
         await scene(kit, base);

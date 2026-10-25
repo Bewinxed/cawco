@@ -25,7 +25,7 @@
    * own choice goes to the workspace, which holds no such group and would
    * navigate to the session.
    */
-  import type { InstanceRow, SessionPulse } from "@cawco/core";
+  import type { InstanceRow, PulseFrame, SessionPulse } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import WorkTabs from "#lib/cawco/home/WorkTabs.svelte";
@@ -57,7 +57,7 @@
   const debug = (
     globalThis as unknown as {
       __cawcoDebug: {
-        state: { pulses: Record<string, SessionPulse> };
+        frame: (frame: PulseFrame) => void;
         adoptInstances: (rows: InstanceRow[]) => void;
       };
     }
@@ -66,16 +66,21 @@
   const pulse = (
     instanceId: string,
     activity: SessionPulse["activity"]
-  ): SessionPulse => ({
-    activity,
-    at: now,
-    busy: activity === "working",
-    currentTool: null,
-    instanceId,
-    runningSubagents: 0,
-  });
+  ): void =>
+    debug.frame({
+      kind: "pulse",
+      instanceId,
+      pulse: {
+        activity,
+        at: now,
+        busy: activity === "working",
+        currentTool: null,
+        instanceId,
+        runningSubagents: 0,
+      },
+    });
   for (const [instanceId, activity] of Object.entries(DOING)) {
-    debug.state.pulses[instanceId] = pulse(instanceId, activity);
+    pulse(instanceId, activity);
   }
   /** A bench session's row: `status` as the hub files it, its turn ended `ago` ms back. */
   const rowOf = (
@@ -107,7 +112,7 @@
     rowOf(workId(n), "running", n < WORKING ? null : 120_000 + n * 1000)
   );
   for (const row of workRows.slice(0, WORKING)) {
-    debug.state.pulses[row.id] = pulse(row.id, "working");
+    pulse(row.id, "working");
   }
   debug.adoptInstances([
     ...ids.map((id, n) => {
@@ -248,12 +253,6 @@
     Object.assign(window, { __ft: bench });
     return () => {
       Reflect.deleteProperty(window, "__ft");
-      for (const id of [
-        ...Object.keys(DOING),
-        ...workRows.map((row) => row.id),
-      ]) {
-        delete debug.state.pulses[id];
-      }
     };
   });
 </script>

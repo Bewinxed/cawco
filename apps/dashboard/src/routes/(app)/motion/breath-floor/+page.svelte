@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SessionPulse } from "@cawco/core";
+  import type { PulseFrame } from "@cawco/core";
   /**
    * Live work's breath on every surface it stands on, for the breath-floor
    * probe. On the page, raised, recess, recess-deep and well surfaces, every
@@ -61,16 +61,20 @@
   const WORKING_ID = "0f1e2d3c-0000-4000-8000-0000000000b1";
   (
     globalThis as unknown as {
-      __cawcoDebug: { state: { pulses: Record<string, SessionPulse> } };
+      __cawcoDebug: { frame: (frame: PulseFrame) => void };
     }
-  ).__cawcoDebug.state.pulses[WORKING_ID] = {
-    activity: "working",
-    at: Date.now(),
-    busy: true,
-    currentTool: null,
+  ).__cawcoDebug.frame({
+    kind: "pulse",
     instanceId: WORKING_ID,
-    runningSubagents: 0,
-  };
+    pulse: {
+      activity: "working",
+      at: Date.now(),
+      busy: true,
+      currentTool: null,
+      instanceId: WORKING_ID,
+      runningSubagents: 0,
+    },
+  });
 
   const steps: PlanNode[] = [
     { children: [], id: "s1", status: "in_progress", text: "Build the head" },

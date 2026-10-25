@@ -20,7 +20,7 @@
   import {
     CAPABILITIES_NONE,
     type InstanceRow,
-    type SessionPulse,
+    type PulseFrame,
     type WorkItemSummary,
   } from "@cawco/core";
   import { onMount } from "svelte";
@@ -116,9 +116,9 @@
   const debug = (
     globalThis as unknown as {
       __cawcoDebug: {
+        frame: (frame: PulseFrame) => void;
         state: {
           status: string;
-          pulses: Record<string, SessionPulse>;
           sessions: Record<string, ReturnType<typeof blankSession>>;
           workItems: Record<string, WorkItemSummary>;
           plans: Record<string, HeldPlan>;
@@ -143,14 +143,6 @@
       status: "running",
     },
   ]);
-  debug.state.pulses[ID] = {
-    activity: "working",
-    at: now,
-    busy: true,
-    currentTool: null,
-    instanceId: ID,
-    runningSubagents: 0,
-  };
   const session = blankSession(ID);
   session.machineId = "bench";
   session.cwd = "/bench";
@@ -164,6 +156,19 @@
     at: now,
   };
   debug.state.sessions[ID] = session;
+  // At work, as its pulse says: written onto the session, as the socket's is.
+  debug.frame({
+    kind: "pulse",
+    instanceId: ID,
+    pulse: {
+      activity: "working",
+      at: now,
+      busy: true,
+      currentTool: null,
+      instanceId: ID,
+      runningSubagents: 0,
+    },
+  });
   /** The details card stands over the conversation (`?details`). */
   const details = page.url.searchParams.has("details");
   if (details) {
@@ -320,7 +325,6 @@
     }
     delete debug.state.sessions[ID];
     delete debug.state.plans[ID];
-    delete debug.state.pulses[ID];
     debug.adoptInstances([]);
     if (details) {
       cawco.machines.splice(
