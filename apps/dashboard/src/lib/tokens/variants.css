@@ -590,6 +590,7 @@
 @custom-variant slot-suggest-chip (&[data-slot="suggest-chip"]);
 @custom-variant slot-suggest-fail (&[data-slot="suggest-fail"]);
 @custom-variant slot-suggest-shimmer (&[data-slot="suggest-shimmer"]);
+@custom-variant slot-suggestion (&[data-slot="suggestion"]);
 @custom-variant slot-summary (&[data-slot="summary"]);
 @custom-variant slot-swap (&[data-slot="swap"]);
 @custom-variant slot-switch (&[data-slot="switch"]);
