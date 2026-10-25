@@ -715,11 +715,6 @@ const worktreeLeg = async (
   folders.E = wt;
   await git(from.repo, "worktree", "add", "-q", "-b", "feature-wt", wt);
   const common = join(from.repo, ".git");
-  const wtGit = (
-    await git(wt, "rev-parse", "--path-format=absolute", "--absolute-git-dir")
-  )
-    .text()
-    .trim();
   const stateOf = async () => ({
     refs: (await git(from.repo, "for-each-ref")).text().trim(),
     config: createHash("sha256")
@@ -727,8 +722,10 @@ const worktreeLeg = async (
       .digest("hex"),
     head: (await git(wt, "rev-parse", "HEAD")).text().trim(),
     branch: (await git(wt, "symbolic-ref", "HEAD")).text().trim(),
-    index: statSync(join(wtGit, "index")).mtimeMs,
     status: (await git(wt, "status", "--porcelain")).text().trim(),
+    // The index by what it stages: a status of git's own may rewrite it
+    // just made (racy entries), which says nothing of the delegate.
+    index: (await git(wt, "ls-files", "--stage")).text().trim(),
   });
   const before = await stateOf();
   const e = await delegate("E", wt, from.parent);
