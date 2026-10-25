@@ -647,13 +647,18 @@
     style:opacity={unseen ? "0" : undefined}
   >
     <OsMark class="size-icon-md" os={group.os} />
-    <span>{group.name}</span>
+    <!-- The name gives way first, inside its ellipsis: on the rail at its
+         narrowest, "Archive all" wrapped to two lines and ran out of its
+         button. -->
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{group.name}</span
+    >
     {#if finished.length > 0}
       <!-- Everything this machine has finished, failures too, off the list
            in one go: "Archive all", at the header's end. -->
       <button
         aria-label="Archive all finished on {group.name}"
-        class="select-none mark-line focus-inset touch-hit press-tint ms-auto -me-space-1 inline-flex h-space-6 items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 type-meta text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+        class="select-none mark-line focus-inset touch-hit press-tint ms-auto -me-space-1 inline-flex h-space-6 flex-none items-center whitespace-nowrap gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 type-meta text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
         data-box
         onclick={() => archive(finished)}
         type="button"
