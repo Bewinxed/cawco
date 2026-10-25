@@ -45405,6 +45405,10 @@
           "hostname": {
             "type": "string"
           },
+          "hostsHub": {
+            "description": "The hub runs on this machine, as the hub reads it: live, never stored.",
+            "type": "boolean"
+          },
           "lastSeenAt": {
             "description": "A `Date` inside the hub, the ISO string it serialises to everywhere else.",
             "anyOf": [

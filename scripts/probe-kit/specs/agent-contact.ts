@@ -264,8 +264,12 @@ export default {
       const name = machineLabel(lostRow?.hostname ?? "");
       const pushed = machinePushes();
       const alert = pushed[0]?.payload.aps?.alert;
-      const told = said.filter((line) => line.includes(contactWords.lostLogged));
-      const back = said.filter((line) => line.includes(contactWords.backLogged));
+      const told = said.filter((line) =>
+        line.includes(contactWords.lostLogged)
+      );
+      const back = said.filter((line) =>
+        line.includes(contactWords.backLogged)
+      );
       check(
         `b: the agent stopped past ${MACHINE_LOST_MS / 1000} s, the hub's own machine is lost once (Needs you's item, one push: “${contactWords.lostTitle(name, true)}”), and both come down once it runs`,
         raisedAfter >= MACHINE_LOST_MS - 16_000 &&

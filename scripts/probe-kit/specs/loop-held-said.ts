@@ -18,6 +18,7 @@
  *   bun scripts/probe-kit/run.ts loop-held-said
  */
 import { join } from "node:path";
+import { loopWords } from "../../../packages/core/src/words/loop";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 /** How long the loop is held: past the watch's second saying. */
@@ -52,21 +53,35 @@ export default {
       new Response(child.stdout).text(),
       child.exited,
     ]);
-    const lines = `${err}${out}`.split("\n").filter((line) => line.includes("[loop]"));
-    const held = lines.filter((line) => line.includes("has been held"));
-    const atTen = held.find((line) => line.includes("held 10 s"));
-    const atThirty = held.find((line) => line.includes("held 30 s"));
+    const lines = `${err}${out}`
+      .split("\n")
+      .filter((line) => line.includes("[loop]"));
+    const atTen = lines.find((line) => line.includes(loopWords.heldNow(10)));
+    const atThirty = lines.find((line) => line.includes(loopWords.heldNow(30)));
+    // Said at 10 s and 30 s, and not again before 60 s.
+    const held = lines.filter((line) =>
+      [10, 30, 60].some((at) => line.includes(loopWords.heldNow(at)))
+    );
     const onCpu = (line: string | undefined) =>
-      process.platform !== "linux" || line?.includes("its main thread is on the CPU") === true;
+      process.platform !== "linux" ||
+      line?.includes(loopWords.onCpu()) === true;
     const inSection = (line: string | undefined) =>
-      line?.includes(`the last marked section entered: ${SECTION} (not left)`) === true;
+      line?.includes(loopWords.lastSection(SECTION, false)) === true;
     check(
       `a: held ${HOLD_MS / 1000} s, the watch from its own thread says so at 10 s and 30 s, the main thread on the CPU, in its section, not left`,
-      held.length === 2 && onCpu(atTen) && onCpu(atThirty) && inSection(atTen) && inSection(atThirty),
+      held.length === 2 &&
+        onCpu(atTen) &&
+        onCpu(atThirty) &&
+        inSection(atTen) &&
+        inSection(atThirty),
       JSON.stringify(lines)
     );
-    const again = lines.find((line) => line.includes("answers again after"));
-    const ended = lines.find((line) => line.includes("the agent's loop was held"));
+    const again = lines.find((line) =>
+      [34, 35, 36, 37].some((at) => line.includes(loopWords.answersAgain(at)))
+    );
+    // The loop's own line up to its number of ms.
+    const endedAt = loopWords.heldEnded(0).slice(0, -"0 ms".length);
+    const ended = lines.find((line) => line.startsWith(endedAt));
     check(
       "b: let go, the watch says it answers again, and the loop's own watch says the stall it ended",
       again !== undefined && ended?.includes(SECTION) === true,

@@ -386,12 +386,10 @@ export async function compileBinary(options: {
         "transcript-worker.ts",
         "process-table-worker.ts",
         "loop-watch-worker.ts",
-      ].map(
-        (name): [string, string] => [
-          `scripts/binary/${name}`,
-          join(ROOT, "scripts/binary", name),
-        ]
-      ),
+      ].map((name): [string, string] => [
+        `scripts/binary/${name}`,
+        join(ROOT, "scripts/binary", name),
+      ]),
       [
         "src/utils/image-resize-worker.ts",
         join(pi, "dist/utils/image-resize-worker.js"),

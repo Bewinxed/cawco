@@ -4187,6 +4187,30 @@ export const createServer = (
   const machineName = (machineId: string): string =>
     machineCalled(machineId, db.namedMachines());
   /**
+   * The machine this hub runs on, by the id every agent registers under. The
+   * id is a function of the host alone (core/machine-id.ts), and the hub and
+   * its agent run as the same user's services there (cli/service.ts), so an
+   * agent registered under it shares the hub's disk: a path on the hub, the
+   * projects' folders and a hub-directory marketplace, is a path on that
+   * machine. Every install type registers it, and no question is asked, so
+   * there is no answer to wait for and none to time out into a wrong one.
+   */
+  const ownMachineId = hostMachineId();
+  const isHubMachine = async (id: string): Promise<boolean> =>
+    id === (await ownMachineId);
+  /**
+   * {@link ownMachineId} once read, for a check that cannot wait on it: a
+   * register's, before its socket is bound ({@link takeFormerId}). Read as
+   * the hub starts, before any machine can register.
+   */
+  let ownMachineIdRead: string | undefined;
+  detach(
+    ownMachineId.then((id) => {
+      ownMachineIdRead = id;
+    }),
+    "own machine id"
+  );
+  /**
    * Whether the hub has lost a machine (machine-contact.ts): the one
    * person-facing "didn't answer", Needs you's item and one push, for a
    * machine silent past `MACHINE_LOST_MS` with sessions on it.
@@ -19611,30 +19635,6 @@ export const createServer = (
       : [];
   };
 
-  /**
-   * The machine this hub runs on, by the id every agent registers under. The
-   * id is a function of the host alone (core/machine-id.ts), and the hub and
-   * its agent run as the same user's services there (cli/service.ts), so an
-   * agent registered under it shares the hub's disk: a path on the hub, the
-   * projects' folders and a hub-directory marketplace, is a path on that
-   * machine. Every install type registers it, and no question is asked, so
-   * there is no answer to wait for and none to time out into a wrong one.
-   */
-  const ownMachineId = hostMachineId();
-  const isHubMachine = async (id: string): Promise<boolean> =>
-    id === (await ownMachineId);
-  /**
-   * {@link ownMachineId} once read, for a check that cannot wait on it: a
-   * register's, before its socket is bound ({@link takeFormerId}). Read as
-   * the hub starts, before any machine can register.
-   */
-  let ownMachineIdRead: string | undefined;
-  detach(
-    ownMachineId.then((id) => {
-      ownMachineIdRead = id;
-    }),
-    "own machine id"
-  );
   relayJourney.watch();
 
   /**

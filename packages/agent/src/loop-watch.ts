@@ -22,12 +22,8 @@
 
 import { heapSize } from "bun:jsc";
 import { standalone } from "@cawco/core/runtime";
-import {
-  BEAT,
-  LEFT,
-  SECTION,
-  type WatchdogMessage,
-} from "./loop-watch-shared";
+import { loopWords } from "@cawco/core/words/loop";
+import { BEAT, LEFT, SECTION, type WatchdogMessage } from "./loop-watch-shared";
 
 /** How often the loop is looked at. */
 const TICK_MS = 250;
@@ -128,12 +124,14 @@ const stallLine = (heldMs: number): string => {
   const lastWords = last
     ? `; the last entered: ${last.name}${last.left ? "" : " (not left)"}`
     : "";
-  return `[loop] the agent's loop was held ${Math.round(heldMs)} ms; phase: ${currentPhase}; in flight: ${work || "nothing counted"}; ${section}${lastWords}${unnamed}; heap ${Math.round(heapSize() / 1024 / 1024)} MB`;
+  return `${loopWords.heldEnded(heldMs)}; phase: ${currentPhase}; in flight: ${work || "nothing counted"}; ${section}${lastWords}${unnamed}; heap ${Math.round(heapSize() / 1024 / 1024)} MB`;
 };
 
 /** Where the watch from its own thread is: the binary's own entry when compiled, the source beside this file otherwise. */
 const WATCHDOG_URL = new URL(
-  standalone ? "./scripts/binary/loop-watch-worker.js" : "./loop-watch-worker.ts",
+  standalone
+    ? "./scripts/binary/loop-watch-worker.js"
+    : "./loop-watch-worker.ts",
   import.meta.url
 );
 

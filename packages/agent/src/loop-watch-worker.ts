@@ -24,15 +24,10 @@
  */
 
 import { readFile } from "node:fs/promises";
-import {
-  BEAT,
-  LEFT,
-  SECTION,
-  type WatchdogMessage,
-} from "./loop-watch-shared";
+import { loopWords } from "@cawco/core/words/loop";
+import { BEAT, LEFT, SECTION, type WatchdogMessage } from "./loop-watch-shared";
 
 declare const self: Worker;
-
 
 /** How often the loop is looked at from here. */
 const LOOK_MS = 1000;
@@ -74,19 +69,21 @@ const mainThread = async (): Promise<string> => {
     const share =
       lastCpu && at > lastCpu.at
         ? Math.round(
-            ((ticks - lastCpu.ticks) / CLOCK_TICKS / ((at - lastCpu.at) / 1000)) *
+            ((ticks - lastCpu.ticks) /
+              CLOCK_TICKS /
+              ((at - lastCpu.at) / 1000)) *
               100
           )
         : undefined;
     lastCpu = { at, ticks };
     const where = wchan.trim() && wchan.trim() !== "0" ? wchan.trim() : "";
     if (state === "R") {
-      return `its main thread is on the CPU${share === undefined ? "" : ` (${share}% of a core since the last look)`}`;
+      return loopWords.onCpu(share);
     }
     if (state === "D") {
-      return `its main thread waits on the disk${where ? ` (${where})` : ""}`;
+      return loopWords.onDisk(where);
     }
-    return `its main thread sleeps in the kernel (state ${state}${where ? `, ${where}` : ""}${share === undefined ? "" : `, ${share}% of a core since the last look`})`;
+    return loopWords.asleep(state, where, share);
   } catch {
     return "";
   }
@@ -119,7 +116,7 @@ const lastSection = (): string => {
     return "no marked section entered yet";
   }
   const name = sections.get(shared[SECTION] as number) ?? "an unnamed section";
-  return `the last marked section entered: ${name}${shared[LEFT] === 1 ? "" : " (not left)"}`;
+  return loopWords.lastSection(name, shared[LEFT] === 1);
 };
 
 /** One stall, as it is said: which kind, since when, and how far its saying has got. */
@@ -128,8 +125,8 @@ let stall: { kind: "held" | "deaf"; since: number; said: number } | undefined;
 const say = async (kind: "held" | "deaf", ms: number): Promise<void> => {
   const what =
     kind === "held"
-      ? `the agent's loop has been held ${Math.round(ms / 1000)} s and still is`
-      : `the agent's loop has taken in nothing for ${Math.round(ms / 1000)} s (no socket, file or signal) while its timers run`;
+      ? loopWords.heldNow(Math.round(ms / 1000))
+      : loopWords.deafNow(Math.round(ms / 1000));
   const parts = [
     thread,
     `phase: ${phase}`,
@@ -160,7 +157,7 @@ const look = async (): Promise<void> => {
   if (!kind) {
     if (stall && stall.said > 0) {
       console.warn(
-        `[loop] the agent's loop answers again after ${Math.round((now - stall.since) / 1000)} s`
+        loopWords.answersAgain(Math.round((now - stall.since) / 1000))
       );
     }
     stall = undefined;
@@ -170,7 +167,9 @@ const look = async (): Promise<void> => {
   if (stall?.kind !== kind) {
     stall = { kind, since: now - ms, said: 0 };
   }
-  const due = SAY_AT_S[stall.said] ?? (SAY_AT_S.at(-1) as number) + 60 * (stall.said - SAY_AT_S.length + 1);
+  const due =
+    SAY_AT_S[stall.said] ??
+    (SAY_AT_S.at(-1) as number) + 60 * (stall.said - SAY_AT_S.length + 1);
   if (ms >= due * 1000) {
     stall.said += 1;
     await say(kind, ms);
