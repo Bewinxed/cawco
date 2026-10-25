@@ -7980,6 +7980,41 @@ export function keepServedAway(viewId: string, fault: ReadFault): void {
 }
 
 /**
+ * The server's read of this load answered (its served tail's page): that is
+ * this view's newest read, taken as {@link readNewestPage} takes one, and
+ * nothing reads the page again. Its stream resumes from the page's `seq`
+ * ({@link adoptPage}): on the socket open now when its board names the
+ * page's hub run, else on the first board that does ({@link followHeld}),
+ * the hub replaying what came after out of its ring or resetting. A page of
+ * another run than the open socket's, or a view this tab already holds or
+ * is reading, is no page to take: false, and the view is read as ever.
+ */
+export function keepServedPage(viewId: string, page: TranscriptPage): boolean {
+  const target = session(viewId);
+  const run = page.hubRun ?? null;
+  const connected = state.status === "connected";
+  if (
+    target.reads > 0 ||
+    target.blocks.length > 0 ||
+    pageReads.has(viewId) ||
+    (connected && run !== socketRun)
+  ) {
+    return false;
+  }
+  target.readFault = null;
+  target.behind = null;
+  readLanded(viewId);
+  adoptTranscriptPage(target, page);
+  adoptPage(streamState, streamHost, viewId, {
+    seq: page.seq ?? 0,
+    run,
+    connected,
+  });
+  trackWorking(target);
+  return true;
+}
+
+/**
  * The newest transcript page the server read for a view, or how the hub
  * refused it — what `/session/[id]`'s server load hands the pane it names.
  */

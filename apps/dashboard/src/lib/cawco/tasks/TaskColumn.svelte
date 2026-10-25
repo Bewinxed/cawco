@@ -8,9 +8,13 @@
    * so the status reads glyph, then word, then hue, and coral stays the
    * action's (DESIGN.md, The Coral Is Where You Act Rule).
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, tick } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import {
+    reflow,
+    reflowsFrom,
+    reread,
+  } from "#lib/cawco/motion/rows.svelte.js";
   import {
     KIND_LABEL,
     type StageKind,
@@ -72,6 +76,27 @@
   } = $props();
 
   const count = $derived(cards.length);
+
+  /**
+   * The cards a column draws until the page is live: a first screen of them,
+   * a tall desk's column (1600px of cards some 90px apart). The server's
+   * HTML carries these alone: every card is some 7 KB of markup, and a board
+   * of a few hundred tasks was most of a megabyte of HTML, all but a screen
+   * of it below the fold. The rest are drawn in the task after the column
+   * mounts, and read where they stand (`reread`): none of them is taken for
+   * an arrival to animate.
+   */
+  const FIRST_CARDS = 16;
+  let whole = $state(false);
+  let list = $state<HTMLElement>();
+  $effect(() => {
+    const later = setTimeout(() => {
+      whole = true;
+      tick().then(() => reread(reflowsFrom(list ?? null)));
+    });
+    return () => clearTimeout(later);
+  });
+  const drawn = $derived(whole ? cards : cards.slice(0, FIRST_CARDS));
   /** The quiet word under the name: the stage's kind, or what the column holds. */
   const kindWord = $derived.by(() => {
     if (kind) {
@@ -125,9 +150,10 @@
   <ol
     data-slot="cards"
     class="m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible"
+    bind:this={list}
     {@attach reflow()}
   >
-    {#each cards as task (task.id)}
+    {#each drawn as task (task.id)}
       {@const fault = refused?.(task.id) ?? null}
       {@const on = picked?.(task.id) ?? false}
       <li

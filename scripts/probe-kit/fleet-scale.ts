@@ -6,13 +6,16 @@
  * 32–45 ms, instances_delta 28–74 ms): a fleet of 25 rows never shows it.
  *
  * The scene, our own call shaped after the audit's board:
- * - one project on the fleet's repository, whose sessions the rail lists;
+ * - one project on the fleet's repository, whose sessions the rail lists,
+ *   its board `TASKS` tasks long;
  * - `rows` rows in all, `asleep` of them sleeping: a template session takes
  *   one turn and is put to sleep, then, the hub and agent down, its row and
  *   conversation are copied into the rest. Most stand in trees (a session
  *   and the delegates it started, up to four deep), as the owner's
  *   orchestrators' do; a few are stopped or failed; a handful ended unseen,
- *   so Finished lists them. Each tree is in the project but one in seven;
+ *   so Finished lists them. Each tree is in the project but one in seven.
+ *   The newest asleep is an orchestrator on a long conversation of its own
+ *   (`LONG_MB`, claude-transcripts.ts): the session a cold load opens;
  * - live: `STREAMS` sessions in a tool loop that never ends (a call every
  *   couple of seconds, words before each), and `TURNS` sessions that take a
  *   short turn every `TURN_EVERY_MS`, each turn moving its row between
@@ -27,6 +30,7 @@ import { Database } from "bun:sqlite";
 import { readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../scratch-fleet";
+import { writeClaudeTranscript } from "./claude-transcripts";
 import type { Kit, KitFleet } from "./kit";
 
 /** The live board the audit read (0d8f70d1): rows, and how many slept. */
@@ -49,6 +53,22 @@ const DELEGATE_SHARE = 0.7;
 const DEPTH = 4;
 /** A tree outside the project, one in this many. */
 const UNPLACED_EVERY = 7;
+
+/**
+ * The long session's conversation, MB: an orchestrator's that has run for
+ * days, its tool results up to hundreds of kilobytes (claude-transcripts.ts).
+ * The owner's longest live one, 23cb5219, served an 854 KB page cold
+ * (2026-10-25). Our own call of size: its newest page is what a cold load
+ * reads, and any size past a few windows reads the same.
+ */
+const LONG_MB = 24;
+
+/**
+ * Tasks on the project's board, each with a description, to-dos and labels:
+ * a project a fleet has worked in for weeks. Our own call; the owner's
+ * served a 1025 KB page cold (2026-10-25).
+ */
+const TASKS = 200;
 
 const STREAM_TAG = "PROBE-SCALE-STREAM";
 const TURN_TAG = "PROBE-SCALE-TURN";
@@ -183,7 +203,7 @@ function seedBoard(
   },
   count: number,
   sleeping: number
-): { trees: number; unseen: number } {
+): { long: string; trees: number; unseen: number } {
   const now = Date.now();
   const conversation = readFileSync(from.file, "utf8");
   // A fixed sequence, so every run seeds the same board.
@@ -196,6 +216,8 @@ function seedBoard(
   /** Each row's depth in its tree, and its tree's project. */
   const placed = new Map<string, { depth: number; projectId: string | null }>();
   let trees = 0;
+  /** The newest sleeping row: the long session, a tree's top of its own. */
+  const longAt = sleeping - 1;
   for (let n = 0; n < count; n += 1) {
     const id = crypto.randomUUID();
     const sessionId = crypto.randomUUID();
@@ -206,7 +228,9 @@ function seedBoard(
     // A delegate of a row started shortly before, unless that tree is deep.
     const parentAt = n - 1 - Math.floor(random() * 50);
     const parent =
-      parentAt >= 0 && random() < DELEGATE_SHARE ? rows[parentAt] : undefined;
+      parentAt >= 0 && random() < DELEGATE_SHARE && n !== longAt
+        ? rows[parentAt]
+        : undefined;
     const above = parent ? placed.get(parent.id) : undefined;
     const under = above && above.depth < DEPTH ? parent : undefined;
     const place = placeOf(above, under !== undefined, () =>
@@ -215,13 +239,21 @@ function seedBoard(
     trees += place.depth === 0 ? 1 : 0;
     placed.set(id, place);
     const path = join(dirname(from.file), `${sessionId}.jsonl`);
-    writeFileSync(path, conversation.replaceAll(from.sessionId, sessionId));
+    writeConversation(
+      path,
+      n === longAt
+        ? { long: true, cwd: fleet.workdir, sessionId }
+        : {
+            long: false,
+            text: conversation.replaceAll(from.sessionId, sessionId),
+          }
+    );
     utimesSync(path, moved / 1000, moved / 1000);
     rows.push({
       id,
       overrides: {
         session_id: sessionId,
-        title: `${under ? "Delegate" : "Session"} ${n}`,
+        title: titleOf(n, n === longAt, under !== undefined),
         status,
         parent_instance_id: under?.id ?? null,
         project_id: place.projectId,
@@ -237,8 +269,36 @@ function seedBoard(
     });
   }
   seedRows(fleet.env.CAWCO_DB_PATH ?? "", from.template, rows);
-  return { trees, unseen: UNSEEN };
+  return { long: rows[longAt]?.id ?? "", trees, unseen: UNSEEN };
 }
+
+/** A seeded row's conversation: the template's, or the long one ({@link LONG_MB}). */
+function writeConversation(
+  path: string,
+  as:
+    | { cwd: string; long: true; sessionId: string }
+    | { long: false; text: string }
+): void {
+  if (as.long) {
+    writeClaudeTranscript(path, {
+      bytes: LONG_MB * 1024 * 1024,
+      compactEvery: 400,
+      cwd: as.cwd,
+      seed: 23,
+      sessionId: as.sessionId,
+    });
+  } else {
+    writeFileSync(path, as.text);
+  }
+}
+
+/** A seeded row's title: the long session's, a delegate's or a session's. */
+const titleOf = (n: number, long: boolean, delegate: boolean): string => {
+  if (long) {
+    return "Orchestrator";
+  }
+  return `${delegate ? "Delegate" : "Session"} ${n}`;
+};
 
 /** Where a row stands: under the row `above` it, a level deeper in its tree's project, or at a tree's top. */
 const placeOf = (
@@ -263,6 +323,8 @@ export interface ScaleFleet {
   base: string;
   /** The live sessions: streaming, then turn-taking. */
   live: string[];
+  /** A session asleep on a long conversation ({@link LONG_MB}): the one a cold load opens. */
+  long: string;
   /** A session asleep with a conversation: the one left open at rest. */
   quiet: string;
   /** Ends the turns it sends. */
@@ -292,6 +354,15 @@ export async function scaleFleet(
     machineId: MACHINE,
     cwd: fleet.workdir,
   });
+  for (let n = 0; n < TASKS; n += 1) {
+    await fleet.api(`/api/projects/${project.id}/tasks`, {
+      title: `Task ${n}: ${wordsOf(6, "probe").join("").trim()}`,
+      labels: [`area-${n % 7}`, ...(n % 3 === 0 ? ["bug"] : [])],
+      description: wordsOf(80, "description").join(""),
+      acceptance: wordsOf(30, "acceptance").join(""),
+      todos: [0, 1, 2].map((todo) => `To-do ${todo} of task ${n}`),
+    });
+  }
   const template = await answered(fleet, "Template", project.id);
   await asleep(fleet, template);
   const [row] = fleet.query<{ session_id: string }>(
@@ -352,11 +423,12 @@ export async function scaleFleet(
     "SELECT status, count(*) AS n FROM instances GROUP BY status"
   );
   kit.note(
-    `scale fleet: ${board.map((one) => `${one.n} ${one.status}`).join(", ")}; ${seeded.trees} trees seeded, ${seeded.unseen} ended unseen; ${STREAMS} sessions streaming, ${TURNS} taking a turn every ${TURN_EVERY_MS / 1000}s`
+    `scale fleet: ${board.map((one) => `${one.n} ${one.status}`).join(", ")}; ${seeded.trees} trees seeded, ${seeded.unseen} ended unseen, one on a ${LONG_MB} MB conversation; ${TASKS} tasks on the project's board; ${STREAMS} sessions streaming, ${TURNS} taking a turn every ${TURN_EVERY_MS / 1000}s`
   );
   return {
     base: await fleet.dashboard(),
     live: ids,
+    long: seeded.long,
     quiet: template,
     stop: () => {
       on = false;

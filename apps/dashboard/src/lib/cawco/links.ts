@@ -30,19 +30,21 @@ interface SessionLocation {
 
 /**
  * Where a session's transcript is read from: the view's id alone, the newest
- * page unless `before` names where an older one ends. The hub maps a live
- * instance to its key and locates any other, so the same address works before
- * this browser knows anything about the conversation.
+ * page unless `cursor` names where an older one ends, of the hub's own size
+ * unless `limit` names one. The hub maps a live instance to its key and
+ * locates any other, so the same address works before this browser knows
+ * anything about the conversation.
  */
 export const transcriptUrl = (
   viewId: string,
-  before?: { cursor: string; limit: number }
-): string =>
-  `/api/instances/${encodeURIComponent(viewId)}/transcript${
-    before
-      ? `?${new URLSearchParams({ before: before.cursor, limit: String(before.limit) })}`
-      : ""
-  }`;
+  page: { cursor?: string; limit?: number } = {}
+): string => {
+  const query = new URLSearchParams({
+    ...(page.cursor ? { before: page.cursor } : {}),
+    ...(page.limit ? { limit: String(page.limit) } : {}),
+  }).toString();
+  return `/api/instances/${encodeURIComponent(viewId)}/transcript${query ? `?${query}` : ""}`;
+};
 
 /**
  * Every instance row, looked up by id and by session. Built once per change to

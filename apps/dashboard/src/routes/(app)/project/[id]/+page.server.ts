@@ -9,7 +9,7 @@ import {
 import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
 import { checkoutOf } from "#lib/cawco/projects.js";
 import { type FindSeed, wordsOf } from "#lib/cawco/tasks/task-find.svelte.js";
-import type { PageLoad } from "./$types";
+import type { PageServerLoad } from "./$types";
 
 /** The error page's line for a read the page cannot stand without. */
 const refused = (what: string, failure: HubFailure): never =>
@@ -52,14 +52,18 @@ function findSeed(
 /**
  * The project's views: the project and its machine, its tasks and stages,
  * read through the hub proxy so the page renders on the server and a shared
- * link opens straight onto its board. The project is the page and a refused
- * read of it is the page's error; the tasks and stages are carried as they
- * ended, so a refusal is said where the board would be, never drawn as an
- * empty board. `?view=` names the view (the board when absent) and
+ * link opens straight onto its board. A server load: the page is handed
+ * what it returns and nothing else. Run in the browser too, the load had
+ * every hub answer it fetched inlined into the HTML (every project, every
+ * machine, the tasks and stages: 195 KB on a board of 200 tasks) for the
+ * browser to run it again over them as the page hydrated. The project is
+ * the page and a refused read of it is the page's error; the tasks and
+ * stages are carried as they ended, so a refusal is said where the board
+ * would be, never drawn as an empty board. `?view=` names the view (the board when absent) and
  * `?task=` the task whose sheet is open; on the Decisions tab `?page=`
  * names the decision page open in it.
  */
-export const load: PageLoad = async ({ fetch, params, url }) => {
+export const load: PageServerLoad = async ({ fetch, params, url }) => {
   const base = `/api/projects/${encodeURIComponent(params.id)}`;
   // The filter's words are the hub's to match (task-find.svelte.ts): a link
   // that carries them opens on what the hub found, live and archived.

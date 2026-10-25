@@ -121,6 +121,7 @@
     agentName,
     onlanded,
     onshown,
+    firstScreen = false,
     bare = false,
     parkedHeight = 0,
     latestInset,
@@ -150,6 +151,13 @@
     agentName: string;
     onlanded?: () => void;
     onshown?: (shown: boolean) => void;
+    /**
+     * The rows are the server's first screen of this conversation (the
+     * page a cold load was served with): stood in, painted at the tail from
+     * the server's HTML on, until the list has landed and is drawn in their
+     * place (`servedRows`).
+     */
+    firstScreen?: boolean;
     /**
      * An empty conversation draws nothing of its own: its composer is the
      * whole instruction (a thread with a project's Caw, which has no `/` or
@@ -358,7 +366,7 @@
    */
   let shown = $state(false);
   $effect(() => {
-    const drawn = shown;
+    const drawn = shown || servedRows;
     untrack(() => onshown?.(drawn));
     return () => untrack(() => onshown?.(false));
   });
@@ -1221,6 +1229,8 @@
     null,
     "session"
   );
+  /** This transcript lands at its tail: the place it returns to, if any, is the tail, and no record is sought (`seek`). */
+  let standsAtTail = $state(resume === null || resume.tail);
   /**
    * virtua's size for a row it has not measured yet — and a transcript's
    * newest row is always one it has not measured. The smallest row there is:
@@ -1233,6 +1243,9 @@
    * measured a viewport's worth it renders no buffer at all.
    */
   const ROW_ESTIMATE = 21;
+  /** The foot's height (the markup's `foot`): the composer's standing box cleared, the old fixed reserve its floor. */
+  const FOOT_ROOM =
+    "max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))";
   /** What every list item carries: the name its drawn rule finds it by (the style's `[data-item]`). */
   const ITEM_ATTRS = { "data-item": "" };
   /**
@@ -1651,6 +1664,27 @@
     return -1;
   }
   const renderedRows = $derived(presentation.rows);
+  /**
+   * THE SERVER'S FIRST SCREEN IS PAINTED, AND STAYS UNTIL THE LIST TAKES IT.
+   *
+   * A cold load's rows are the page the server read (`firstScreen`), and the
+   * server draws them, standing on the transcript's foot as the landed list
+   * stands, in a box over the list's own (the markup's `first-screen`): the
+   * newest rows are on screen from the HTML's first paint, before any script
+   * has run. The list mounts under them unpainted, lands and measures (the
+   * reveal), and is drawn in the frame they go: the same rows, in the same
+   * columns, on the same foot, so the frame that swaps them moves nothing.
+   * The list itself serves nothing (no `ssrCount`): two copies of every row
+   * in the HTML, one of them never painted, were what a long session's cold
+   * load weighed and hydrated.
+   *
+   * Only a landing at the tail is stood in for: a transcript returning to the
+   * reader's place far up, or opened at a record, lands elsewhere, and the
+   * pane's placeholder stands over it instead (`onshown`).
+   */
+  const servedRows = $derived(
+    firstScreen && standsAtTail && !shown && renderedRows.length > 0
+  );
   /**
    * The reader's rows whose well runs on into the next. A row folding away is
    * already out of its run: the rows either side close or join over its fold.
@@ -2359,44 +2393,6 @@
    */
   const leaver = (key: string) => () => left(key);
 
-  /**
-   * How many rows the SERVER paints — and nothing the browser ever hears about.
-   *
-   * `ssrCount` is virtua's server-render escape hatch: without it the store has
-   * no viewport and no scroll offset to reason from, so it renders the empty
-   * range `[0, -1]` and the server's HTML carries a transcript with no rows in
-   * it. Handing it the row count makes the server emit exactly that many, in
-   * normal flow until mount (virtua's `ListItem` leaves an unmeasured item
-   * unpositioned while `isSSR` holds), which is what puts the conversation in
-   * the first response.
-   *
-   * The catch is that it is not a render hint — it is a LATCH. The store reads
-   * it ONCE, at construction (`createVirtualStore(layout, ssrCount)`), sets
-   * `isSSR = !!ssrCount`, and pins its range at
-   * `[0, ssrCount - 1]`; `$getRange` then short-circuits to that frozen pair for
-   * as long as `isSSR` holds. The only thing in the whole store that clears the
-   * flag is `ACTION_SCROLL_OFFSET_CHANGE` — a genuine scroll event whose offset
-   * actually differs from the one on file.
-   *
-   * So a hydrating client that is handed `ssrCount` inherits that latch, and a
-   * transcript shorter than its viewport can never shed it: there is nothing to
-   * scroll, so no scroll event, so the range stays pinned at the row count the
-   * page happened to hydrate with. Rows built after that — the message the
-   * operator just sent, every frame the agent streams back — were folded, keyed
-   * and handed to the Virtualizer correctly and then dropped on the floor by a
-   * range that had stopped moving. Only a reload (a new store, a new count)
-   * showed them. That is the whole "transcript does not update live" defect.
-   *
-   * Gating on `browser` is therefore not a micro-optimisation but the contract:
-   * the count belongs to the server render, and the client builds a store that
-   * measures its viewport like any other. The hydrating render draws no rows for
-   * the microtask before `onMount` wires virtua's ResizeObserver to the
-   * scroller; ResizeObserver notifications are delivered in the rendering step
-   * BEFORE paint, so the measured range lands in the same frame and the gap is
-   * never seen.
-   */
-  const ssrCount = $derived(browser ? undefined : built.rows.length);
-
   let scroller = $state<HTMLElement | undefined>();
   /**
    * The scroller's height: what sets how far past the view virtua mounts
@@ -2875,6 +2871,7 @@
     marked = null;
     unfound = null;
     resume = { tail: false, at: docId };
+    standsAtTail = false;
     if (shown) {
       seeking = docId;
     } else {
@@ -3713,13 +3710,13 @@
    * So the list's own box stays unpainted until the transcript has landed
    * and every row in the viewport is drawn and measured, and is drawn a
    * frame later — any change to the rows in between starts the wait again —
-   * so the frame that shows the rows is never the frame that moved them. The
-   * server's render is unpainted too: it is the same rows, at estimated
-   * offsets. It waits for the newest page and for nothing older — with one
-   * exception, the reader's own place (below). What arrives after the reveal
-   * — the read replacing the server's tail, an older page in front — keeps
-   * the rows on screen measured and in place: see `frontOnly` and the two
-   * steps in `build`.
+   * so the frame that shows the rows is never the frame that moved them.
+   * Meanwhile a cold load's rows stand on screen as the server drew them
+   * (`servedRows`), and go in that frame. It waits for the newest page and for
+   * nothing older — with one exception, the reader's own place (below).
+   * What arrives after the reveal — a read again, an older page in front —
+   * keeps the rows on screen measured and in place: see `frontOnly` and the
+   * two steps in `build`.
    */
   $effect(() => {
     const node = scroller;
@@ -4544,6 +4541,93 @@
   );
 </script>
 
+<!-- One row's content, as the list draws it and as the server's first
+     screen stands it in (`servedRows`): `ticket` is the row's arrival or fold
+     (`Row`), and `announce` whether a live row speaks (only the list's). -->
+{#snippet rowBody(row: Row, ticket: Ticket | null, announce: boolean)}
+  <!-- The live row, and the answer it streamed once that has
+       landed (rows.ts `keepLive`): one branch, so the settle is
+       the same LiveRow updating, not a MessageRow mounting. -->
+  {#if row.kind === "live" || (row.kind === "single" && row.streamed)}
+    <LiveRow {agentName} {announce} {row} />
+  {:else if row.kind === "single" || row.kind === "queued"}
+    <MessageRow
+      {agentName}
+      folding={ticket?.kind === "fold"}
+      grouped={row.grouped}
+      message={row.message}
+      runsOn={runsOn.has(row.key)}
+    />
+  {:else if row.kind === "tools"}
+    <ToolGroup messages={row.messages} />
+  {:else if row.kind === "question"}
+    <QuestionCard asker={agentName} message={row.message} />
+  {:else if row.kind === "connect"}
+    <ConnectCard
+      answer={row.answer}
+      asker={agentName}
+      instanceId={session.instanceId}
+      message={row.message}
+    />
+  {:else if row.kind === "harness"}
+    <SystemLine
+      disclosed={disclosureAt(session.instanceId, row.key)}
+      harness={row.note}
+    />
+  {:else if row.kind === "compaction"}
+    <CompactionDivider
+      lead={ticket?.kind === "arrive" ? ticket.lead : null}
+      {row}
+    />
+  {:else if row.kind === "account"}
+    <AccountMoveDivider
+      {row}
+      stop={stop?.key === row.key ? stop.words : undefined}
+    />
+  {:else if row.kind === "notices"}
+    <NoticeRun {row} />
+  {:else if row.kind === "subagent"}
+    <Subagent branch={row.branch} spawn={row.spawn} />
+  {:else if row.kind === "delegate"}
+    <Delegate message={row.message} />
+  {:else if row.kind === "thinking"}
+    <Thinking live={row.live} text={row.text} />
+  {:else if row.kind === "livetool"}
+    {@const d = describeTool(row.glance.name, undefined, undefined, "pending")}
+    {@const LiveIcon = d.icon}
+    <!-- The in-flight tool is a rail row on the same columns as the
+         calls it becomes (app.css `.rail-row`, `.rail-line`): one
+         line, at the transcript's line height. No colour on the
+         glyph: the tool family's `text-tool-*` tint governs it, the
+         generic case inheriting the row's strong ink. -->
+    <div
+      data-tx-rail
+      data-slot="livetool"
+      class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong rail-row rail-line"
+    >
+      <span data-slot="rail-cell" class="rail-cell {d.color}"
+        ><LiveIcon class="size-icon-md" /></span
+      >
+      <!-- The same anatomy the settled ToolGroup row has: the
+           descriptor's verb, then the mono argument, the verb
+           omitted where the object is the whole sentence. Printing
+           `glance.name` here and `d.label` once it settled changed
+           the call's vocabulary the instant it completed. -->
+      {#if d.label}
+        <span
+          class="font-medium text-ink-strong flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          >{d.label}</span
+        >
+      {/if}
+      <!-- The argument gives way first (ToolGroup's row). -->
+      <span
+        class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
+        >{row.glance.glance}</span
+      >
+    </div>
+  {/if}
+{/snippet}
+
 <!-- Off-screen, and the only thing on this surface that speaks. Two channels:
      what just arrived (polite, queued behind the reader), and what is blocking
      (assertive, because the run has stopped). -->
@@ -4577,7 +4661,7 @@
   data-tx-columns
   data-slot="tr"
   aria-label={transcriptWords.transcript}
-  style:--foot-room={"max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"}
+  style:--foot-room={FOOT_ROOM}
   class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   role="log"
   bind:this={scroller}
@@ -4694,7 +4778,6 @@
       {onscrollend}
       scrollRef={scroller}
       shift={built.shifted}
-      {ssrCount}
       startMargin={olderRoom + spare}
       bind:this={
         () => list,
@@ -4717,92 +4800,7 @@
           rowKey={row.key}
         >
           {#snippet children(ticket)}
-            <!-- The live row, and the answer it streamed once that has
-                 landed (rows.ts `keepLive`): one branch, so the settle is
-                 the same LiveRow updating, not a MessageRow mounting. -->
-            {#if row.kind === "live" || (row.kind === "single" && row.streamed)}
-              <LiveRow {agentName} announce={active} {row} />
-            {:else if row.kind === "single" || row.kind === "queued"}
-              <MessageRow
-                {agentName}
-                folding={ticket?.kind === "fold"}
-                grouped={row.grouped}
-                message={row.message}
-                runsOn={runsOn.has(row.key)}
-              />
-            {:else if row.kind === "tools"}
-              <ToolGroup messages={row.messages} />
-            {:else if row.kind === "question"}
-              <QuestionCard asker={agentName} message={row.message} />
-            {:else if row.kind === "connect"}
-              <ConnectCard
-                answer={row.answer}
-                asker={agentName}
-                instanceId={session.instanceId}
-                message={row.message}
-              />
-            {:else if row.kind === "harness"}
-              <SystemLine
-                disclosed={disclosureAt(session.instanceId, row.key)}
-                harness={row.note}
-              />
-            {:else if row.kind === "compaction"}
-              <CompactionDivider
-                lead={ticket?.kind === "arrive" ? ticket.lead : null}
-                {row}
-              />
-            {:else if row.kind === "account"}
-              <AccountMoveDivider
-                {row}
-                stop={stop?.key === row.key ? stop.words : undefined}
-              />
-            {:else if row.kind === "notices"}
-              <NoticeRun {row} />
-            {:else if row.kind === "subagent"}
-              <Subagent branch={row.branch} spawn={row.spawn} />
-            {:else if row.kind === "delegate"}
-              <Delegate message={row.message} />
-            {:else if row.kind === "thinking"}
-              <Thinking live={row.live} text={row.text} />
-            {:else if row.kind === "livetool"}
-              {@const d = describeTool(
-                row.glance.name,
-                undefined,
-                undefined,
-                "pending"
-              )}
-              {@const LiveIcon = d.icon}
-              <!-- The in-flight tool is a rail row on the same columns as the
-                   calls it becomes (app.css `.rail-row`, `.rail-line`): one
-                   line, at the transcript's line height. No colour on the
-                   glyph: the tool family's `text-tool-*` tint governs it, the
-                   generic case inheriting the row's strong ink. -->
-              <div
-                data-tx-rail
-                data-slot="livetool"
-                class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong rail-row rail-line"
-              >
-                <span data-slot="rail-cell" class="rail-cell {d.color}"
-                  ><LiveIcon class="size-icon-md" /></span
-                >
-                <!-- The same anatomy the settled ToolGroup row has: the
-                     descriptor's verb, then the mono argument, the verb
-                     omitted where the object is the whole sentence. Printing
-                     `glance.name` here and `d.label` once it settled changed
-                     the call's vocabulary the instant it completed. -->
-                {#if d.label}
-                  <span
-                    class="font-medium text-ink-strong flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                    >{d.label}</span
-                  >
-                {/if}
-                <!-- The argument gives way first (ToolGroup's row). -->
-                <span
-                  class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
-                  >{row.glance.glance}</span
-                >
-              </div>
-            {/if}
+            {@render rowBody(row, ticket, active)}
           {/snippet}
         </TranscriptRow>
       {/snippet}
@@ -4817,7 +4815,7 @@
        last row, clear above it. -->
   <div
     aria-hidden="true"
-    class="isolate h-(--parked-room) pointer-events-none"
+    class="isolate invisible h-(--parked-room) pointer-events-none"
     style:--parked-room="{roomHeight}px"
     bind:this={parkedRoom}
   ></div>
@@ -4830,7 +4828,7 @@
   <div
     data-slot="foot"
     aria-hidden="true"
-    class="isolate h-(--foot-room) pointer-events-none"
+    class="isolate invisible h-(--foot-room) pointer-events-none"
     bind:this={foot}
   >
     <!-- The pin's mark (`pinNext`): a pixel, deeper than any row of the
@@ -4900,3 +4898,42 @@
     {/if}
   </div>
 </div>
+
+<!-- The server's first screen (`servedRows`), in the scroller's box (the
+     transcript area's, as the pane's placeholder takes it) and in its
+     geometry: the ledger's gutters and columns, the strip before the rows,
+     the rows as the list draws them, and the foot they stand on at the tail
+     (`tailTop`: the parked room is past the tail, never under it), standing
+     on its bottom edge. A reversed column scrolls from its end, so it opens
+     on its last row with the scroll bar the list will have, if any. It goes
+     in the frame the list is drawn. -->
+{#if servedRows}
+  <div
+    data-slot="first-screen"
+    style:--foot-room={FOOT_ROOM}
+    class="absolute inset-0 isolate flex flex-col-reverse overflow-y-auto anchor-none ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
+  >
+    <div>
+      {#if built.before}
+        <div class="isolate">
+          <p
+            data-slot="transcript-empty"
+            class="mark-line flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
+          >
+            <LiveDot /><span>Loading transcript…</span>
+          </p>
+        </div>
+      {/if}
+      <div class="isolate">
+        {#each renderedRows as row (row.key)}
+          <TranscriptRow continues={continued.has(row.key)}>
+            {#snippet children()}
+              {@render rowBody(row, null, false)}
+            {/snippet}
+          </TranscriptRow>
+        {/each}
+      </div>
+      <div aria-hidden="true" class="isolate h-(--foot-room)"></div>
+    </div>
+  </div>
+{/if}

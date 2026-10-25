@@ -30,6 +30,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import { browser } from "$app/env";
+  import { page } from "$app/state";
   import {
     cawco,
     clearReadFault,
@@ -37,6 +38,7 @@
     commandFault,
     faultMessage,
     keepServedAway,
+    keepServedPage,
     latestCommandFor,
     loadMcpServers,
     machineConnected,
@@ -451,6 +453,19 @@
       untrack(() => keepServedAway(id, servedAway));
       return;
     }
+    // The server's read of this load answered: its page is this one, the
+    // store's newest read (`keepServedPage`), and the pane's rows go on
+    // from what the server drew.
+    if (
+      nextCause === "open" &&
+      untrack(() => (tail?.ok ? keepServedPage(id, tail.page) : false))
+    ) {
+      untrack(() => {
+        readAnswered = true;
+        missing = false;
+      });
+      return;
+    }
     untrack(() => {
       const cause = nextCause;
       nextCause = "open";
@@ -495,10 +510,9 @@
   });
 
   /**
-   * The newest transcript page, read at render time and shipped with the page.
-   * This is what the SERVER paints: without it the first response carried an
-   * empty pane and the conversation only appeared once the bundle had hydrated
-   * and the stream had answered. Claimed by the pane the URL names.
+   * The newest transcript page, a first screen of it, read at render time and
+   * shipped with the page: what the SERVER paints, and the store's newest
+   * read (`keepServedPage`). Claimed by the pane the URL names.
    */
   const tail = $derived(serverTail?.viewId === viewId ? serverTail : null);
 
@@ -559,26 +573,19 @@
   const machineId = $derived(cawco.session(viewId)?.machineId ?? "");
 
   /**
-   * Whether the virtualized transcript may be shown.
-   *
-   * `live` above is the moment the STORE has the conversation, which is several
-   * frames before the transcript can draw it: virtua mounts, measures its rows
-   * (the scroll height doubles as it goes), and only then scrolls home. Swapping
-   * on `live` alone therefore replaced the server's painted tail with a column
-   * that was still being measured — a blank content area for those frames.
-   *
-   * So the two are handed over instead of swapped. The static tail stays on
-   * screen, the transcript mounts *behind* it under `visibility: hidden` (which
-   * still lays out and measures, unlike `display: none`), and this flips the
-   * instant `Transcript` says it has landed. Both boxes are the same rect by the
-   * `.tr` padding contract, so the flip moves nothing — and because it is one
-   * assignment, the two are never both painted.
+   * The load opened the conversation at one of its records (`?at=`,
+   * open-at.svelte.ts): its transcript lands there, not at the tail. Read as
+   * the pane mounts, as the address is followed (`workspace.followUrl`).
    */
-  // No standin, no veil, no handover. The transcript renders directly from
-  // the seeded session (server tail) on SSR via virtua's `ssrCount`, then
-  // switches to live data when the WS delivers. Virtua owns the DOM from
-  // the first frame — its SSR support renders the tail items as real DOM
-  // nodes that hydrate in place.
+  const openedAtRecord = untrack(() => page.url.searchParams.has("at"));
+  /**
+   * The rows on screen are the server's first screen (`seeded`): the
+   * transcript stands them in, painted at its tail from the server's HTML on,
+   * until its list has landed and is drawn in their place (Transcript's
+   * `firstScreen`). No placeholder stands over them. A load opened at a
+   * record lands elsewhere, under the placeholder.
+   */
+  const firstScreen = $derived(seeded !== null && !openedAtRecord);
 
   /**
    * A session the hub could not find anywhere: not in its rows, not in its
@@ -690,13 +697,16 @@
 
   /**
    * Whether the mounted transcript has drawn its rows, as it reports them
-   * (`onshown`). Transcript keeps its list unpainted until every row in view
-   * is measured, so the placeholder stands over it until then; dropping the
+   * (`onshown`): its list, or the server's first screen it stands in for the
+   * list. Transcript keeps its list unpainted until every row in view is
+   * measured, so the placeholder stands over it until then; dropping the
    * placeholder when the transcript mounted left the pane blank for those
    * frames. A transcript that goes reports false as it goes, so the reveal
-   * is always the mounted instance's own, never one it inherited.
+   * is always the mounted instance's own, never one it inherited. On the
+   * server, where no transcript reports, a first screen counts as drawn: the
+   * transcript stands it in from its first render.
    */
-  let shown = $state(false);
+  let shown = $state(untrack(() => firstScreen));
 
   /**
    * The placeholder, as a function of what stands in the area: over the
@@ -1325,6 +1335,7 @@
               <RegionBoundary region="transcript">
                 <Transcript
                   {agentName}
+                  {firstScreen}
                   {focused}
                   onshown={(drawn) => {
                     shown = drawn;

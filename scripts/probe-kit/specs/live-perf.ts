@@ -54,17 +54,29 @@
  *   `busyMeter`, beside its floor on a blank page, and the trace's thread
  *   time), socket messages a second and each kind's handling.
  * - nav: cold loads of the home, a session and a project page (time to
- *   first byte, first and largest paint, long tasks), then the home's
- *   common presses: Finished, Recent open and shut, a project.
+ *   first byte, the HTML in, first and largest paint and what each largest
+ *   paint painted, the first frame the transcript's newest row is drawn in
+ *   and whether the rows drawn fill it, the server's first screen handing
+ *   its place to the list, the page's own transcript reads, layout shifts
+ *   and what moved, long tasks; the HTML by part, each page's kept in the
+ *   out folder), then the home's common presses: Finished, Recent open and
+ *   shut, a project.
  * - memory: thirty tab switches between two readings of the heap after a
  *   collection, the DOM's nodes and the listeners (DevTools `Memory`).
+ *   Chromium only, as scroll is: both read the heap through the DevTools
+ *   protocol, and on another engine say so and are skipped.
  *
  * Asserted, the budgets the audit holds the dashboard to: no long task over
  * `LONG_TASK_MS` while a transcript is wheeled steadily; frames dropped
  * under `DROPPED_SHARE` of the display's while wheeling; no reading-position
  * jump; every press an interaction within `INTERACTION_MS`; the main
  * thread's own CPU at rest under `IDLE_SHARE`; after thirty switches the
- * DOM's nodes and the heap within `GROWTH_SHARE` of before. A hub message
+ * DOM's nodes and the heap within `GROWTH_SHARE` of before. On the scale
+ * fleet, a cold session page draws its newest rows within `NEWEST_ROW_MS`
+ * of its HTML being in, filling the transcript, reads no newest page of
+ * its own and hands its first screen to the list with no row moving; its
+ * HTML and a project's stay under their budgets, and their paints within
+ * theirs (`coldBudgets`). A hub message
  * costs what it changed, never the fleet's size: at rest a pulse's handling
  * within `PULSE_MS` and a board delta's within `DELTA_MS` on average; no
  * held list's reorder timer (motion/held-order) runs `HELD_ORDER_MS` in a
@@ -75,8 +87,10 @@
  *
  * THE FLEET AT ITS SIZE, WITHOUT THE LIVE HUB. `--fleet` stands up a
  * scratch fleet at the live board's size instead (fleet-scale.ts: 1763
- * rows, 1698 asleep, `--rows` and `--asleep` to name others), sessions
- * streaming and taking turns, and reads the `idle`, `switch` and `nav` legs on it
+ * rows, 1698 asleep, `--rows` and `--asleep` to name others, one of them
+ * on a long conversation, which the nav leg opens cold, and a project
+ * board of 200 tasks), sessions streaming and taking turns, and reads the
+ * `idle`, `switch` and `nav` legs on it
  * (`--legs` to name others), its build's source maps beside it. It runs
  * inside a workspace. `PROBE_ENGINE=webkit` reads it in WebKit, which has
  * no trace and no long animation frames: there the hub messages' handling
@@ -142,6 +156,39 @@ const KIND_BUDGETS = [
 ] as const;
 /** A held list's reorder timer in a long frame (7433e2b3, mechanism 7). */
 const HELD_ORDER_MS = 5;
+/*
+ * A cold load's budgets, held on the scale fleet at the desk's 1440×900
+ * (`coldBudgets`). The numbers they come from, Chromium / WebKit, before
+ * the server painted a first screen of 32 blocks (2026-10-25) and after:
+ *
+ *   the long session  HTML 1255 → 844 KB; newest rows drawn 720 / 1528 →
+ *                     105 / 342 ms after the HTML is in; fcp 404 / 536 →
+ *                     308 / 504 ms; lcp 968 / 1707 → 308 / 1522 ms
+ *   the project       HTML 1672 → 377 KB; fcp 380 / 914 → 228 / 473 ms;
+ *                     lcp 2548 / 1166 → 228 / 699 ms
+ *
+ * WebKit's largest paint after is the first screen's own paragraph painted
+ * again where it stands, as its row takes the store's copy of the page.
+ */
+/** The newest rows drawn after the HTML is in: the brief's "well under a second". */
+const NEWEST_ROW_MS = 500;
+/** How far a row may move as the list takes the server's first screen's place: none, to the pixel's rounding. */
+const SWAP_PX = 1;
+/**
+ * The session's HTML: a first screen weighs 844 KB, nearly all of it the
+ * tool output its 32 blocks carry; room for a row's markup to grow, none
+ * for a second page or a second copy of the rows (1255 KB).
+ */
+const SESSION_HTML_KB = 900;
+/** Its first paint: twice the slower engine's after, a third under the brief's second. */
+const SESSION_FCP_MS = 1000;
+/** Its largest paint: WebKit's re-paint of the first screen (1522 ms) with room; before, WebKit's was 1707 ms behind a skeleton. */
+const SESSION_LCP_MS = 1800;
+/** The project's HTML: 16 cards a column and the board's data (156 KB); before, every card (1672 KB). */
+const PROJECT_HTML_KB = 450;
+/** Its first and largest paint: the slower engine's after (473 / 699 ms) with room; before, Chromium's largest was 2548 ms. */
+const PROJECT_FCP_MS = 1000;
+const PROJECT_LCP_MS = 1000;
 /** The engine the run's pages open on (kit.ts `RUN_ENGINE`): only Chromium traces. */
 const TRACES = (process.env.PROBE_ENGINE ?? "chromium") === "chromium";
 /** A long frame's script the hub socket's message ran (live-page.ts keeps the page's handler a listener). */
@@ -373,8 +420,10 @@ const RECENT = /^Recent/;
 /** What every leg is given: the run's page, how to open more, and where its numbers go. */
 interface Live {
   base: string;
-  /** A desk page on the live dashboard, the watcher in it before its own scripts. */
-  desk: () => Promise<Page>;
+  /** A desk page on the live dashboard, the watcher in it before its own scripts; a cold one reads its newest row's first frame too. */
+  desk: (cold?: boolean) => Promise<Page>;
+  /** The legs read the scale fleet (`--fleet`), not a live hub. */
+  fleet: boolean;
   /** Opens a path on the run's page and lets it stand. */
   goto: (path: string, ready?: string) => Promise<void>;
   kit: Kit;
@@ -951,26 +1000,276 @@ async function idleLeg(live: Live, quiet: string) {
   }
 }
 
-/** A cold page's load: its first byte, its paints, its long tasks. */
+/** What a cold page's first frames said of its transcript ({@link watchNewestRow}). */
+interface FirstRows {
+  /** How far the rows drawn in the newest row's first frame reach above the area's top, px. */
+  above: number;
+  /** That frame, on the page's clock. */
+  at: number;
+  /** The rows drawn in it fill the area from its top. */
+  filled: boolean;
+  /** The area's height, px. */
+  height: number;
+  /**
+   * The server's first screen handing its place to the list: the frame the
+   * list was drawn in, how many of the first screen's last rows the list
+   * drew too (by their words), and the most any of them moved, px. Null
+   * while no first screen has gone.
+   */
+  swap: {
+    at: number;
+    matched: number;
+    movedPx: number;
+    /** Each of those rows: its words' start, its top and height in the first screen, then in the list. */
+    rows: [string, number, number, number, number][];
+  } | null;
+}
+
+/**
+ * The first frame a page draws its transcript's newest row in, on the
+ * page's clock: the last row in the transcript area (`Row`'s
+ * `[data-slot="row"]`, a call in a run's too: in document order oldest to
+ * newest, the list's, then the server's first screen standing over it),
+ * drawn (not hidden, not see-through) and inside the area's box; whether
+ * the rows drawn in that frame fill the area from its top; and, once the
+ * server's first screen (`first-screen`) has gone, where the list drew its
+ * last rows against where the first screen had them. Read before each
+ * frame from the page's start, put on the page before its own scripts:
+ * `window.__firstRows`.
+ */
+function watchNewestRow() {
+  const w = window as unknown as {
+    __firstRows: FirstRows | null;
+    __paints: [number, string][];
+  };
+  w.__firstRows = null;
+  // Room for every request the page makes: the timeline keeps 250 by
+  // default, and the page's own modules (some 230) fill it before its
+  // transcript is read.
+  performance.setResourceTimingBufferSize(100_000);
+  // Each largest paint as it is reported, with what it painted while that
+  // is still in the page (the entry's own element is null once removed).
+  w.__paints = [];
+  new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      const { element } = entry as unknown as { element?: Element | null };
+      const slot = element?.closest("[data-slot]")?.getAttribute("data-slot");
+      w.__paints.push([
+        Math.round(entry.startTime),
+        element
+          ? `${element.tagName.toLowerCase()}${slot ? ` in ${slot}` : ""}${element.closest('[data-slot="first-screen"]') ? " (first screen)" : ""}`
+          : "gone",
+      ]);
+    }
+  }).observe({ type: "largest-contentful-paint", buffered: true });
+  const drawn = (row: Element) =>
+    row.checkVisibility({ visibilityProperty: true, opacityProperty: true });
+  /** A row of its own, not a call inside a run's row, by its words and box. */
+  const placed = (within: Element) =>
+    [...within.querySelectorAll('[data-slot="row"]')]
+      .filter((row) => !row.parentElement?.closest('[data-slot="row"]'))
+      .filter(drawn)
+      .map((row) => {
+        const box = row.getBoundingClientRect();
+        return {
+          words: (row.textContent ?? "").replace(/\s+/g, " ").trim(),
+          top: box.top,
+          height: box.height,
+        };
+      });
+  /** The first screen's last rows, as its last frame drew them. */
+  let stood: ReturnType<typeof placed> = [];
+  const handOver = (at: number): boolean => {
+    const area = document.querySelector('[data-slot="transcript-slide"]');
+    const first = area?.querySelector('[data-slot="first-screen"]');
+    if (first) {
+      stood = placed(first).slice(-8);
+      return false;
+    }
+    const list = area?.querySelector('[data-slot="listing"][data-shown]');
+    if (!(list && stood.length > 0 && w.__firstRows)) {
+      return stood.length === 0 && Boolean(list);
+    }
+    const now = placed(list);
+    // A row is found by its words; among rows of the same words (a run of
+    // `Edited` calls), the one nearest where it stood.
+    const pairs = stood.flatMap((row) => {
+      const [same] = now
+        .filter((one) => one.words === row.words)
+        .sort((a, b) => Math.abs(a.top - row.top) - Math.abs(b.top - row.top));
+      return same ? [[row, same] as const] : [];
+    });
+    const moved = pairs.map(([row, same]) =>
+      Math.max(Math.abs(same.top - row.top), Math.abs(same.height - row.height))
+    );
+    w.__firstRows.swap = {
+      at,
+      matched: moved.length,
+      movedPx: Math.round(Math.max(0, ...moved) * 10) / 10,
+      rows: pairs.map(([row, same]) => [
+        row.words.slice(0, 24),
+        Math.round(row.top),
+        Math.round(row.height),
+        Math.round(same.top),
+        Math.round(same.height),
+      ]),
+    };
+    return true;
+  };
+  const look = (at: number) => {
+    const area = document.querySelector('[data-slot="transcript-slide"]');
+    const rows = [...(area?.querySelectorAll('[data-slot="row"]') ?? [])];
+    const last = rows.at(-1);
+    if (!w.__firstRows && area && last) {
+      const view = area.getBoundingClientRect();
+      const box = last.getBoundingClientRect();
+      if (
+        box.height > 0 &&
+        box.bottom > view.top &&
+        box.top < view.bottom &&
+        drawn(last)
+      ) {
+        const top = Math.min(
+          ...rows.filter(drawn).map((row) => row.getBoundingClientRect().top)
+        );
+        w.__firstRows = {
+          at,
+          filled: top <= view.top + 1,
+          above: Math.round(view.top - top),
+          height: Math.round(view.height),
+          swap: null,
+        };
+      }
+    }
+    if (!(w.__firstRows && handOver(at))) {
+      requestAnimationFrame(look);
+    }
+  };
+  requestAnimationFrame(look);
+}
+const NEWEST_ROW = { content: `(${watchNewestRow.toString()})();` };
+
+/** A cold page's load: its first byte, its paints, its newest row, its long tasks. */
 const coldLoad = async () => {
   const [nav] = performance.getEntriesByType(
     "navigation"
   ) as PerformanceNavigationTiming[];
-  const lcp = await new Promise<number>((done) => {
-    new PerformanceObserver((list) =>
-      done(list.getEntries().at(-1)?.startTime ?? -1)
-    ).observe({ type: "largest-contentful-paint", buffered: true });
-    setTimeout(() => done(-1), 500);
+  const lcp = await new Promise<PerformanceEntry | undefined>((done) => {
+    new PerformanceObserver((list) => done(list.getEntries().at(-1))).observe({
+      type: "largest-contentful-paint",
+      buffered: true,
+    });
+    setTimeout(() => done(undefined), 500);
   });
+  const lcpOn = (lcp as { element?: Element | null } | undefined)?.element;
   const [fcp] = performance.getEntriesByName("first-contentful-paint");
+  const newest = (window as unknown as { __firstRows: FirstRows | null })
+    .__firstRows;
+  // The page's layout shifts (Chromium's Layout Instability API; none where
+  // the engine has none): each one's score, when, and what moved.
+  interface Shift {
+    sources: {
+      currentRect: DOMRectReadOnly;
+      node?: Node | null;
+      previousRect: DOMRectReadOnly;
+    }[];
+    startTime: number;
+    value: number;
+  }
+  const shifts = PerformanceObserver.supportedEntryTypes.includes(
+    "layout-shift"
+  )
+    ? await new Promise<Shift[]>((done) => {
+        new PerformanceObserver((list) =>
+          done(list.getEntries() as unknown as Shift[])
+        ).observe({ type: "layout-shift", buffered: true });
+        setTimeout(() => done([]), 500);
+      })
+    : null;
+  /** A node as the slots it stands in say it, the nearest first. */
+  const named = (node: Node | null | undefined) => {
+    if (!(node instanceof Element)) {
+      return String(node?.nodeName ?? "gone");
+    }
+    const slots: string[] = [];
+    for (
+      let at = node.closest("[data-slot]");
+      at && slots.length < 3;
+      at = at.parentElement?.closest("[data-slot]") ?? null
+    ) {
+      slots.push(at.getAttribute("data-slot") ?? "");
+    }
+    return `${node.tagName.toLowerCase()} in ${slots.join(" < ")}`;
+  };
+  const box = (rect: DOMRectReadOnly) =>
+    [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(",");
+  // The page's own reads of a transcript (the hub's `/transcript`): of the
+  // newest page, and of the pages before it.
+  const reads = performance
+    .getEntriesByType("resource")
+    .map((entry) => entry.name)
+    .filter((name) => name.includes("/transcript"));
   return {
+    newestReads: reads.filter((name) => !name.includes("before=")).length,
+    olderReads: reads.filter((name) => name.includes("before=")).length,
     ttfbMs: Math.round(nav?.responseStart ?? -1),
+    /** The HTML wholly in: what a paint of it can follow at the soonest. */
+    htmlInMs: Math.round(nav?.responseEnd ?? -1),
     htmlKB: Math.round((nav?.decodedBodySize ?? 0) / 1024),
     fcpMs: Math.round(fcp?.startTime ?? -1),
-    lcpMs: Math.round(lcp),
+    lcpMs: Math.round(lcp?.startTime ?? -1),
+    lcpOn: lcpOn
+      ? `${lcpOn.tagName.toLowerCase()}${lcpOn.closest("[data-slot]") ? ` in ${lcpOn.closest("[data-slot]")?.getAttribute("data-slot")}` : ""}`
+      : null,
+    newestRowMs: newest === null ? null : Math.round(newest.at),
+    filled: newest?.filled ?? null,
+    /** How far the rows drawn in that frame reach above the area's top, and the area's height, px. */
+    rowsAbovePx: newest?.above ?? null,
+    areaPx: newest?.height ?? null,
+    swap: newest?.swap ?? null,
+    /** Every largest paint reported, and what it painted as it was. */
+    paints: (window as unknown as { __paints?: [number, string][] }).__paints,
+    cls:
+      shifts === null
+        ? null
+        : Math.round(shifts.reduce((sum, one) => sum + one.value, 0) * 10_000) /
+          10_000,
+    shifts: shifts?.map((one) => ({
+      at: Math.round(one.startTime),
+      value: Math.round(one.value * 10_000) / 10_000,
+      moved: one.sources.map(
+        (source) =>
+          `${named(source.node)} ${box(source.previousRect)} → ${box(source.currentRect)}`
+      ),
+    })),
     long: window.__perf.long.length,
     longMs: Math.round(window.__perf.long.reduce((sum, [, ms]) => sum + ms, 0)),
     nodes: document.getElementsByTagName("*").length,
+  };
+};
+
+/**
+ * A cold page's HTML as the server sent it, by part, KB: the serialized
+ * data of the loads (the inline scripts: the app's start and the data it
+ * hydrates from), the responses a universal load fetched
+ * (`data-sveltekit-fetched`, served again to the hydrating load), the
+ * inline styles, and the markup.
+ */
+const htmlParts = (html: string) => {
+  const sum = (pattern: RegExp) =>
+    [...html.matchAll(pattern)].reduce((total, [one]) => total + one.length, 0);
+  const fetched = sum(
+    /<script type="application\/json" data-sveltekit-fetched[^>]*>[\s\S]*?<\/script>/g
+  );
+  const scripts = sum(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g);
+  const styles = sum(/<style[^>]*>[\s\S]*?<\/style>/g);
+  const kb = (chars: number) => Math.round(chars / 1024);
+  return {
+    totalKB: kb(html.length),
+    dataKB: kb(scripts - fetched),
+    fetchedKB: kb(fetched),
+    stylesKB: kb(styles),
+    markupKB: kb(html.length - scripts - styles),
   };
 };
 
@@ -993,8 +1292,79 @@ const homeSays = () => {
   };
 };
 
+/** A cold load as the nav leg reads it. */
+type Cold = Awaited<ReturnType<typeof coldLoad>> & {
+  parts: ReturnType<typeof htmlParts>;
+  path: string;
+};
+
+/**
+ * The cold loads held to their budgets: a session's (the scale fleet's long
+ * one) and a project's. Asserted on the fleet alone: the live hub's
+ * sessions and boards are what they are.
+ */
+function coldBudgets(kit: Kit, loads: Cold[]): void {
+  const session = loads.find((one) => one.path.startsWith("/session/"));
+  if (session) {
+    const { parts, swap } = session;
+    const after =
+      session.newestRowMs === null
+        ? null
+        : session.newestRowMs - session.htmlInMs;
+    kit.check(
+      `cold ${session.path}: its newest rows drawn within ${NEWEST_ROW_MS}ms of its HTML being in`,
+      after !== null && after <= NEWEST_ROW_MS,
+      `${after}ms (the HTML in at ${session.htmlInMs}ms, the newest row drawn at ${session.newestRowMs}ms)`
+    );
+    kit.check(
+      `cold ${session.path}: the page reads no newest page of its own: the server's is the store's`,
+      session.newestReads === 0,
+      `${session.newestReads} read(s) of the newest page, ${session.olderReads} of older ones`
+    );
+    kit.check(
+      `cold ${session.path}: the rows its first frame draws fill the transcript from its top`,
+      session.filled === true,
+      `${session.rowsAbovePx}px above the ${session.areaPx}px area`
+    );
+    kit.check(
+      `cold ${session.path}: the list takes the server's first screen's place with no row moving more than ${SWAP_PX}px`,
+      swap !== null && swap.matched > 0 && swap.movedPx <= SWAP_PX,
+      JSON.stringify(swap)
+    );
+    kit.check(
+      `cold ${session.path}: its HTML under ${SESSION_HTML_KB} KB`,
+      parts.totalKB <= SESSION_HTML_KB,
+      JSON.stringify(parts)
+    );
+    kit.check(
+      `cold ${session.path}: first paint within ${SESSION_FCP_MS}ms, largest paint within ${SESSION_LCP_MS}ms`,
+      session.fcpMs >= 0 &&
+        session.fcpMs <= SESSION_FCP_MS &&
+        session.lcpMs >= 0 &&
+        session.lcpMs <= SESSION_LCP_MS,
+      `fcp ${session.fcpMs}ms, lcp ${session.lcpMs}ms (ttfb ${session.ttfbMs}ms)`
+    );
+  }
+  const project = loads.find((one) => one.path.startsWith("/project/"));
+  if (project) {
+    kit.check(
+      `cold ${project.path}: no hub answer inlined beside its data, its HTML under ${PROJECT_HTML_KB} KB`,
+      project.parts.fetchedKB === 0 && project.parts.totalKB <= PROJECT_HTML_KB,
+      JSON.stringify(project.parts)
+    );
+    kit.check(
+      `cold ${project.path}: first paint within ${PROJECT_FCP_MS}ms, largest paint within ${PROJECT_LCP_MS}ms`,
+      project.fcpMs >= 0 &&
+        project.fcpMs <= PROJECT_FCP_MS &&
+        project.lcpMs >= 0 &&
+        project.lcpMs <= PROJECT_LCP_MS,
+      `fcp ${project.fcpMs}ms, lcp ${project.lcpMs}ms (ttfb ${project.ttfbMs}ms)`
+    );
+  }
+}
+
 /** Nav: cold loads, then the home's common presses. */
-async function navLeg(live: Live, sessions: string[]) {
+async function navLeg(live: Live, session: string | undefined) {
   const { kit, page } = live;
   const projects = await page.evaluate(async () => {
     const answer = await fetch("/api/projects");
@@ -1002,15 +1372,22 @@ async function navLeg(live: Live, sessions: string[]) {
   });
   const paths = [
     "/session",
-    ...(sessions[0] ? [`/session/${sessions[0]}`] : []),
+    ...(session ? [`/session/${session}`] : []),
     ...(projects[0] ? [`/project/${projects[0].id}`] : []),
   ];
-  const loads: Record<string, unknown>[] = [];
+  const loads: Cold[] = [];
   for (const path of paths) {
-    const cold = await live.desk();
-    await cold.goto(`${live.base}${path}`, { waitUntil: "load" });
+    const cold = await live.desk(true);
+    const sent = await cold.goto(`${live.base}${path}`, { waitUntil: "load" });
+    const html = (await sent?.text()) ?? "";
     await cold.waitForTimeout(SETTLE_MS);
-    loads.push({ path, ...(await cold.evaluate(coldLoad)) });
+    const read = await cold.evaluate(coldLoad);
+    const parts = htmlParts(html);
+    await writeFile(
+      join(live.kit.out, `cold${path.replaceAll("/", "-")}.html`),
+      html
+    );
+    loads.push({ path, ...read, parts });
     await cold.close();
   }
   await live.goto("/session", "aside");
@@ -1043,6 +1420,9 @@ async function navLeg(live: Live, sessions: string[]) {
   live.numbers.nav = { loads, presses, home: { shut, open } };
   for (const one of loads) {
     kit.note(`cold ${JSON.stringify(one)}`);
+  }
+  if (live.fleet) {
+    coldBudgets(kit, loads);
   }
   kit.note(
     `nav: the rail's home says, Recent shut ${JSON.stringify(shut)}, Recent open ${JSON.stringify(open)}`
@@ -1167,9 +1547,9 @@ async function measureLive(
       (one): one is Leg => (LEGS as readonly string[]).includes(one)
     )
   );
-  const desk = async (): Promise<Page> => {
+  const desk = async (cold = false): Promise<Page> => {
     const one = await kit.page("desk", {
-      init: [WATCHER, LIB],
+      init: cold ? [WATCHER, LIB, NEWEST_ROW] : [WATCHER, LIB],
       scale: 1,
       scrollbars: true,
     });
@@ -1198,6 +1578,7 @@ async function measureLive(
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const live: Live = {
     base,
+    fleet: scale !== null,
     desk,
     kit,
     maps:
@@ -1223,7 +1604,18 @@ async function measureLive(
   kit.note(
     `live-perf: ${base}, ${rows.length} sessions on the board, ${running.length} running, the display's frame ${round(live.slot)}ms; legs ${[...legs].join(", ")}`
   );
-  if (legs.has("scroll")) {
+  // The scroll and memory legs read the heap and the DOM's counters through
+  // the DevTools protocol (`memoryOf`), which only Chromium speaks.
+  const chromiumOnly = (leg: Leg): boolean => {
+    if (legs.has(leg) && !TRACES) {
+      kit.note(
+        `${leg}: Chromium only (the heap and the DOM's counters are read through the DevTools protocol); skipped on ${process.env.PROBE_ENGINE}`
+      );
+      return false;
+    }
+    return legs.has(leg);
+  };
+  if (chromiumOnly("scroll")) {
     await scrollLeg(live, sessions);
   }
   if (legs.has("canvas")) {
@@ -1236,9 +1628,9 @@ async function measureLive(
     await switchLeg(live, tabs);
   }
   if (legs.has("nav")) {
-    await navLeg(live, sessions);
+    await navLeg(live, scale?.long ?? sessions[0]);
   }
-  if (legs.has("memory") && tabs.length > 1) {
+  if (chromiumOnly("memory") && tabs.length > 1) {
     await memoryLeg(live, tabs);
   }
   await writeFile(

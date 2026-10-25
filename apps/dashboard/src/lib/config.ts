@@ -43,3 +43,17 @@ export const INSTALL_TIMEOUT_MS = 300_000;
  * (`TRANSCRIPT_PAGE`, @cawco/core): small, so a tab paints from its first read.
  */
 export const TRANSCRIPT_OLDER_PAGE = 250;
+
+/**
+ * Blocks in the newest page a cold load of `/session/<id>` is served with:
+ * a first screen, which the server paints and the store takes as its newest
+ * read (`keepServedPage`); the older pages are read as the reader nears the
+ * first rows, as after any read. The hub's own size (60) carried the
+ * owner's longest session as 854 KB of HTML, nearly all of it tool output
+ * the closed rows never draw. Sized to fill the transcript of a 1440×900
+ * desk (743px of rows over its foot) even when every block is a one-line
+ * tool call (26px: 32 of them stand 832px); the scale fleet's long session,
+ * its tail mixed, drew 40 blocks 2564px tall in that 856px area (probe-kit
+ * live-perf, its nav leg's `rowsAbovePx`).
+ */
+export const FIRST_SCREEN_PAGE = 32;
