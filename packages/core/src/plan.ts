@@ -173,6 +173,41 @@ export interface TaskTodo {
 }
 
 /**
+ * A task's to-dos split by whether anyone agreed to them, file order kept.
+ * Offered: a `proposed` to-do and every to-do nested under one. Only the
+ * agreed ones count toward a task's to-do ring and count
+ * ({@link todoProgress}); the offered ones show apart, marked as offered.
+ */
+export const todoGroups = <T extends Pick<TaskTodo, "depth" | "proposed">>(
+  todos: readonly T[]
+): { agreed: T[]; offered: T[] } => {
+  const agreed: T[] = [];
+  const offered: T[] = [];
+  /** The depth of the offered to-do the walk is inside, while it is. */
+  let under: number | null = null;
+  for (const todo of todos) {
+    if (under !== null && todo.depth > under) {
+      offered.push(todo);
+      continue;
+    }
+    under = todo.proposed ? todo.depth : null;
+    (todo.proposed ? offered : agreed).push(todo);
+  }
+  return { agreed, offered };
+};
+
+/** How far a task's to-dos have got: the agreed ones ({@link todoGroups}) ticked, of all agreed. */
+export const todoProgress = (
+  todos: readonly Pick<TaskTodo, "depth" | "done" | "proposed">[]
+): { done: number; total: number } => {
+  const { agreed } = todoGroups(todos);
+  return {
+    done: agreed.filter((todo) => todo.done).length,
+    total: agreed.length,
+  };
+};
+
+/**
  * What `GET /api/instances/:id/plan` answers, and what the live frames keep
  * a client's copy equal to.
  */

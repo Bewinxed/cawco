@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  /** How far a plan has got: its steps, else its task's to-dos. */
+  /** How far a plan has got: its steps, else its task's agreed to-dos. */
   export function planProgress(plan: SessionPlan): {
     done: number;
     total: number;
@@ -10,17 +10,13 @@
         total: plan.steps.length,
       };
     }
-    const todos = plan.todos ?? [];
-    return {
-      done: todos.filter((todo) => todo.done).length,
-      total: todos.length,
-    };
+    return todoProgress(plan.todos ?? []);
   }
 
-  /** The plan has something to show: steps, a spec, or a task's to-dos. */
+  /** The plan has something to show: steps, a spec, or a task's agreed to-dos. */
   export const planShows = (plan: SessionPlan | undefined): boolean =>
     !!plan &&
-    (plan.steps.length > 0 || !!plan.spec || (plan.todos?.length ?? 0) > 0);
+    (plan.steps.length > 0 || !!plan.spec || todosTree(plan).length > 0);
 
   /**
    * A task's to-dos and nothing else (an attempt that has written no steps
@@ -33,7 +29,7 @@
   export const planTitle = (plan: SessionPlan | undefined): string =>
     onlyTodos(plan) ? planWords.todos : planWords.plan;
 
-  import type { SessionPlan } from "@cawco/core/plan";
+  import { type SessionPlan, todoProgress } from "@cawco/core/plan";
   import { planWords } from "@cawco/core/words/plan";
   import { stepsTree, todosTree } from "./PlanTree.svelte";
 </script>

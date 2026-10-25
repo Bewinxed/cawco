@@ -49,6 +49,7 @@ import {
   STARTER_PLACES,
   type StarterPlace,
   type TaskIssueLink,
+  todoProgress,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
@@ -496,6 +497,7 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   related: string[];
   stage: string;
   title: string;
+  /** Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out. */
   todos: { done: number; total: number };
   type: string | null;
 }
@@ -1710,6 +1712,8 @@ export const createTasks = (store: TaskStore) => {
   ): TaskIndexRow => {
     const doc = new TaskDoc(path, content);
     const parsed = doc.read();
+    // Agreed to-dos only: an offered one counts once someone agrees to it.
+    const todos = todoProgress(parsed.todos);
     return {
       projectId,
       path,
@@ -1727,8 +1731,8 @@ export const createTasks = (store: TaskStore) => {
       labels: parsed.fields.labels,
       outputs: parsed.fields.outputs,
       fields: doc.extraFields(),
-      todosDone: parsed.todos.filter((todo) => todo.done).length,
-      todosTotal: parsed.todos.length,
+      todosDone: todos.done,
+      todosTotal: todos.total,
       problem: parsed.problems.join(" ") || null,
       hash,
       updatedAt: new Date(),

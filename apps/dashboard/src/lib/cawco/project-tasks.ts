@@ -252,6 +252,7 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   related: string[];
   stage: string;
   title: string;
+  /** Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out. */
   todos: { done: number; total: number };
   type: string | null;
 }

@@ -35,6 +35,7 @@
     madeWords,
     type ProjectView,
     SHOWN_BLOCK_PAGES,
+    todoProgress,
     viewOfBlock,
     viewsWords,
   } from "@cawco/core";
@@ -821,10 +822,7 @@
       outputs: task.outputs,
       rank: task.rank,
       type: task.type,
-      todos: {
-        done: task.todos.filter((todo) => todo.done).length,
-        total: task.todos.length,
-      },
+      todos: todoProgress(task.todos),
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       attempts: task.attempts,

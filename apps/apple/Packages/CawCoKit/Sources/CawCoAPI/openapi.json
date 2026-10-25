@@ -35185,6 +35185,7 @@
             "type": "string"
           },
           "todos": {
+            "description": "Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out.",
             "type": "object",
             "properties": {
               "done": {

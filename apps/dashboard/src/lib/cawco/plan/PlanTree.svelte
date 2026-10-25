@@ -50,10 +50,13 @@
       }))
     );
 
-  /** A task attempt's to-dos, as their tree: ticked is completed. */
+  /**
+   * A task attempt's agreed to-dos, as their tree: ticked is completed. The
+   * offered ones are left out until agreed, as the plan's ring leaves them.
+   */
   export const todosTree = (plan: SessionPlan | undefined): PlanNode[] =>
     treeOf(
-      (plan?.todos ?? []).map((todo) => ({
+      todoGroups(plan?.todos ?? []).agreed.map((todo) => ({
         id: todo.id ?? todo.path,
         depth: todo.depth,
         status: todo.done ? ("completed" as const) : ("pending" as const),
@@ -61,7 +64,7 @@
       }))
     );
 
-  import type { SessionPlan } from "@cawco/core";
+  import { type SessionPlan, todoGroups } from "@cawco/core";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
 </script>
 

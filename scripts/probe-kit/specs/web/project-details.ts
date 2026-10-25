@@ -41,6 +41,13 @@
  *    fills under them composited as the browser paints them; and the same
  *    card's once picked, on the selection wash in selected-ink.
  *    `PROJECT_DETAILS=ink` runs 7 alone.
+ * 8. On Chromium and WebKit, at 1440 and 390: a task with one agreed to-do,
+ *    ticked, and two an attempt only offered (`(proposed)` lines, as an
+ *    attempt's plan leaves them) has its card's ring read 1 of 1, and its
+ *    pane's To-dos count 1/1 over the agreed one, the two standing under
+ *    "Offered". The page's spill and overlap scan (journeys/scan.ts) finds
+ *    nothing on the board or the pane, and no page says a console error.
+ *    `PROJECT_DETAILS=todos` runs 8 alone.
  *
  *   bun scripts/probe-kit/run.ts web project-details
  */
@@ -51,9 +58,12 @@ import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { projectWords } from "../../../../packages/core/src/words/project";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { scan } from "../../journeys/scan";
 import {
+  type Engine,
   type Kit,
   type KitFleet,
+  kitsOwnMessage,
   open,
   type Spec,
   settle,
@@ -192,6 +202,8 @@ interface Setup {
   fleet: KitFleet;
   gone: string;
   named: string;
+  /** The task with one agreed to-do, ticked, and two offered (8). */
+  offered: string;
   project: { id: string; name: string };
   second: string;
   src: string;
@@ -243,12 +255,36 @@ const setUp = async (kit: Kit): Promise<Setup> => {
       ...(n === 1 ? { todos: ["One"], labels: ["probe"] } : {}),
     });
   }
+  // 8: one agreed to-do, ticked, and two offered, as an attempt's plan leaves them.
+  const offered = await fleet.api<{ id: string }>(
+    `/api/projects/${project.id}/tasks`,
+    {
+      title: "Offered steps",
+      todos: [
+        "Agreed step",
+        "(proposed) First offer",
+        "(proposed) Second offer",
+      ],
+    }
+  );
+  const ticked = await fetch(
+    `${fleet.base}/api/projects/${project.id}/tasks/${offered.id}/todos/1`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ done: true }),
+    }
+  );
+  if (!ticked.ok) {
+    throw new Error(`ticking ${offered.id}'s first to-do: ${ticked.status}`);
+  }
   const base = await fleet.dashboard();
   return {
     base,
     fleet,
     gone,
     named,
+    offered: offered.id,
     project,
     second,
     src,
@@ -847,8 +883,103 @@ const inkLegs = async (kit: Kit, { url }: Setup) => {
   }
 };
 
+const TODO_LEGS: { engine: Engine; view: View; label: string }[] = [
+  { engine: "chromium", view: "desk", label: "chromium 1440" },
+  { engine: "chromium", view: "phone", label: "chromium 390" },
+  { engine: "webkit", view: "desk", label: "webkit 1440" },
+  { engine: "webkit", view: "phone", label: "webkit 390" },
+];
+
+/** 8: the card's ring and the pane's count read the agreed to-do alone; the offered ones stand apart. */
+const offeredTodos = async (kit: Kit, { offered, url }: Setup) => {
+  const card = `[data-slot="project-page"] [data-task-card][data-task="${offered}"]`;
+  const pane = `[data-task-pane="${offered}"]`;
+  const errors: string[] = [];
+  const findings: string[] = [];
+  for (const { engine, view, label } of TODO_LEGS) {
+    const page = await kit.page(view, { theme: "light", engine });
+    page.on("console", (message) => {
+      if (message.type() === "error" && !kitsOwnMessage(message.text())) {
+        errors.push(`${label}: ${message.text()}`);
+      }
+    });
+    page.on("pageerror", (error) => errors.push(`${label}: ${error}`));
+    await open(page, url, card);
+    await page.locator(card).scrollIntoViewIfNeeded();
+    await settle(page, 300);
+    const ring = await page.locator(card).evaluate((el) => ({
+      num:
+        el
+          .querySelector('[data-slot="foot"] [data-slot="num"]')
+          ?.textContent?.trim() ?? null,
+      title:
+        el
+          .querySelector('[data-slot="foot"] [title$="to-dos done"]')
+          ?.getAttribute("title") ?? null,
+    }));
+    kit.check(
+      `${label}: 8. the card's to-do ring reads 1 of 1, the two offered left out`,
+      ring.num === "1/1" && ring.title === "1 of 1 to-dos done",
+      JSON.stringify(ring)
+    );
+    findings.push(
+      ...(await page.evaluate(scan)).map((one) => `${label} board: ${one}`)
+    );
+    await page.locator(card).click();
+    await page.locator(`${pane} [data-slot="offered"]`).waitFor({
+      timeout: 15_000,
+    });
+    await settle(page, 300);
+    const list = await page.locator(pane).evaluate((el) => {
+      const words = (node: Element | null | undefined) =>
+        node?.textContent?.replace(/\s+/g, " ").trim() ?? null;
+      const group = el.querySelector('[data-slot="offered"]');
+      const texts = (root: Element | null | undefined) =>
+        [
+          ...(root?.querySelectorAll('[data-slot="todo"] [data-slot="text"]') ??
+            []),
+        ].map(words);
+      const all = texts(el);
+      const apart = texts(group);
+      return {
+        count: words(el.querySelector('h3 [data-slot="count"]')),
+        head: words(group?.querySelector("h4")),
+        agreed: all.filter((one) => !apart.includes(one)),
+        offered: apart,
+      };
+    });
+    kit.check(
+      `${label}: 8. the pane counts 1/1 over the agreed to-do, the two offered under "Offered"`,
+      list.count === "1/1" &&
+        list.head === "Offered" &&
+        JSON.stringify(list.agreed) === JSON.stringify(["Agreed step"]) &&
+        JSON.stringify(list.offered) ===
+          JSON.stringify(["First offer", "Second offer"]),
+      JSON.stringify(list)
+    );
+    findings.push(
+      ...(await page.evaluate(scan)).map((one) => `${label} pane: ${one}`)
+    );
+    await page.close();
+  }
+  kit.check(
+    `8. the spill and overlap scan over the board and the pane on all ${TODO_LEGS.length} legs: ${findings.length} findings`,
+    findings.length === 0,
+    findings.join("\n")
+  );
+  kit.check(
+    `8. no console error on any page: ${errors.length}`,
+    errors.length === 0,
+    errors.join("\n")
+  );
+};
+
 const run = async (kit: Kit) => {
   const setup = await setUp(kit);
+  if (process.env.PROJECT_DETAILS === "todos") {
+    await offeredTodos(kit, setup);
+    return;
+  }
   await inkLegs(kit, setup);
   if (process.env.PROJECT_DETAILS === "ink") {
     return;
@@ -862,6 +993,7 @@ const run = async (kit: Kit) => {
   await refusals(kit, setup);
   await names(kit, setup);
   await rename(kit, setup);
+  await offeredTodos(kit, setup);
 };
 
 export default { name: "project-details", run } satisfies Spec;

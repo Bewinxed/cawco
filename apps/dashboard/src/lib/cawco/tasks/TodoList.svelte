@@ -4,8 +4,12 @@
    * shows at once and is written behind it; a tick the hub refuses goes back
    * with its reason. A to-do's words edit in place, and any to-do can take
    * one under it. Ticking every to-do does not finish a task: checks and
-   * landing do (§5.2), so nothing here moves a stage.
+   * landing do (§5.2), so nothing here moves a stage. The agreed to-dos come
+   * first and are the count; the ones an attempt only offered stand under
+   * them as Offered, out of the count until someone agrees (core
+   * `todoGroups`).
    */
+  import { todoGroups } from "@cawco/core/plan";
   import { tick } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import type { Todo } from "#lib/cawco/project-tasks.js";
@@ -76,8 +80,9 @@
   let busy = $state(false);
   let problem = $state<string | null>(null);
 
+  const groups = $derived(todoGroups(todos));
   const done = $derived(
-    todos.filter((todo) => ticking[refOf(todo)] ?? todo.done).length
+    groups.agreed.filter((todo) => ticking[refOf(todo)] ?? todo.done).length
   );
 
   const say = (error: unknown) => {
@@ -147,6 +152,86 @@
   }
 </script>
 
+{#snippet row(todo: Todo)}
+  {@const ref = refOf(todo)}
+  {@const checked = ticking[ref] ?? todo.done}
+  <li
+    data-slot="todo"
+    data-todo={ref}
+    data-linked={marked === ref || undefined}
+    class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent) rounded-sm transition-[background-color] duration-(--dur-fade) ease-out data-linked:bg-selected-bg"
+    style:--depth={todo.depth}
+    style:--indent="calc(var(--depth, 0) * var(--space-6))"
+  >
+    <Checkbox
+      aria-label={todo.text}
+      {checked}
+      onCheckedChange={(next) => toggle(todo, next)}
+    />
+    {#if editing === ref}
+      <form
+        class="flex-auto"
+        onsubmit={(event) => {
+          event.preventDefault();
+          saveEdit(todo);
+        }}
+        {@attach focusOnMount}
+      >
+        <Input
+          aria-label="To-do"
+          autocomplete="off"
+          text="label"
+          disabled={busy}
+          onblur={() => saveEdit(todo)}
+          onkeydown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              editing = null;
+            }
+          }}
+          bind:value={editText}
+        />
+      </form>
+    {:else}
+      <button
+        data-slot="text"
+        class="select-none flex flex-auto items-baseline gap-space-2 min-w-0 p-space-1 rounded-xs type-body text-ink-strong text-start hover:bg-surface-hover data-done:text-ink-subtle data-done:line-through data-done:decoration-border-control press-tint focus-inset"
+        data-done={checked ? "" : undefined}
+        onclick={() => {
+          editing = ref;
+          editText = todo.text;
+        }}
+        title="Edit this to-do"
+        type="button"
+      >
+        <span>{todo.text}</span>
+        {#if todo.promoted}
+          <span class="flex-none type-meta font-mono liga-none text-ink-muted"
+            >→ {todo.promoted}</span
+          >
+        {/if}
+      </button>
+      <Button
+        aria-label="Add a to-do under “{todo.text}”"
+        class="flex-none"
+        reveal="row-hover"
+        tone="muted"
+        onclick={() => {
+          addingUnder = ref;
+          addText = "";
+        }}
+        size="icon-xs"
+        variant="ghost"
+      >
+        <IconPlus />
+      </Button>
+    {/if}
+  </li>
+  {#if addingUnder === ref}
+    <li>{@render addForm(ref, todo.depth + 1)}</li>
+  {/if}
+{/snippet}
+
 {#snippet addForm(under: string, depth: number)}
   <form
     data-slot="add"
@@ -195,113 +280,44 @@
 <section class="flex flex-col gap-space-2">
   <h3 class={sectionHeadVariants({ inset: "flush" })}>
     To-dos
-    {#if todos.length > 0}
+    {#if groups.agreed.length > 0}
       <span
         data-num
         data-slot="count"
         class="num ms-auto type-meta text-ink-subtle"
-        >{done}/{todos.length}</span
+        >{done}/{groups.agreed.length}</span
       >
     {/if}
   </h3>
   {#if problem}
     <p class="type-meta text-error-11" role="alert">{problem}</p>
   {/if}
-  {#if todos.length > 0}
+  {#if groups.agreed.length > 0}
     <ul class="flex flex-col m-0 p-0 list-none">
-      {#each todos as todo (todo.path)}
-        {@const ref = refOf(todo)}
-        {@const checked = ticking[ref] ?? todo.done}
-        <li
-          data-slot="todo"
-          data-todo={ref}
-          data-linked={marked === ref || undefined}
-          class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent) rounded-sm transition-[background-color] duration-(--dur-fade) ease-out data-linked:bg-selected-bg"
-          style:--depth={todo.depth}
-          style:--indent="calc(var(--depth, 0) * var(--space-6))"
-        >
-          <Checkbox
-            aria-label={todo.text}
-            {checked}
-            onCheckedChange={(next) => toggle(todo, next)}
-          />
-          {#if editing === ref}
-            <form
-              class="flex-auto"
-              onsubmit={(event) => {
-                event.preventDefault();
-                saveEdit(todo);
-              }}
-              {@attach focusOnMount}
-            >
-              <Input
-                aria-label="To-do"
-                autocomplete="off"
-                text="label"
-                disabled={busy}
-                onblur={() => saveEdit(todo)}
-                onkeydown={(event) => {
-                  if (event.key === "Escape") {
-                    event.stopPropagation();
-                    editing = null;
-                  }
-                }}
-                bind:value={editText}
-              />
-            </form>
-          {:else}
-            <button
-              data-slot="text"
-              class="select-none flex flex-auto items-baseline gap-space-2 min-w-0 p-space-1 rounded-xs type-body text-ink-strong text-start hover:bg-surface-hover data-done:text-ink-subtle data-done:line-through data-done:decoration-border-control press-tint focus-inset"
-              data-done={checked ? "" : undefined}
-              onclick={() => {
-                editing = ref;
-                editText = todo.text;
-              }}
-              title="Edit this to-do"
-              type="button"
-            >
-              {#if todo.proposed}
-                <span
-                  class="flex-none type-meta text-ink-muted"
-                  title="Left open in an attempt's plan: offered, not agreed. Rewording it agrees to it."
-                  >Proposed</span
-                >
-              {/if}
-              <span>{todo.text}</span>
-              {#if todo.promoted}
-                <span
-                  class="flex-none type-meta font-mono liga-none text-ink-muted"
-                  >→ {todo.promoted}</span
-                >
-              {/if}
-            </button>
-            <Button
-              aria-label="Add a to-do under “{todo.text}”"
-              class="flex-none"
-              reveal="row-hover"
-              tone="muted"
-              onclick={() => {
-                addingUnder = ref;
-                addText = "";
-              }}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <IconPlus />
-            </Button>
-          {/if}
-        </li>
-        {#if addingUnder === ref}
-          <li>{@render addForm(ref, todo.depth + 1)}</li>
-        {/if}
+      {#each groups.agreed as todo (todo.path)}
+        {@render row(todo)}
       {/each}
     </ul>
-  {:else}
+  {:else if groups.offered.length === 0}
     <p data-slot="todo-list-empty" class="type-body text-ink-subtle">
       Break the task into steps here; a session working on it ticks them as it
       goes.
     </p>
   {/if}
   {@render addForm("", 0)}
+  {#if groups.offered.length > 0}
+    <section data-slot="offered" class="flex flex-col gap-space-2">
+      <h4
+        class={sectionHeadVariants({ inset: "flush" })}
+        title="Left open in an attempt's plan, not agreed. Rewording one agrees to it."
+      >
+        Offered
+      </h4>
+      <ul class="flex flex-col m-0 p-0 list-none">
+        {#each groups.offered as todo (todo.path)}
+          {@render row(todo)}
+        {/each}
+      </ul>
+    </section>
+  {/if}
 </section>
