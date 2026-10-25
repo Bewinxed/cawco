@@ -36,6 +36,8 @@
   --container-section-row: 312px;
   --container-connect-row: 400px;
   --container-suggestion-rows-narrow: 340px;
+  --container-plan-step: 15rem;
+  --container-plan-delegate: 13rem;
 }
 
 @theme inline {
@@ -229,6 +231,7 @@
   --color-presence-off: var(--presence-off);
   --color-scrollbar-thumb: var(--scrollbar-thumb);
   --color-skeleton-sheen: var(--skeleton-sheen);
+  --color-plan-sheen: var(--plan-sheen);
   --color-prose-bullet: var(--prose-bullet);
   --color-identity-ink: var(--identity-ink);
   --color-machine-offline: var(--machine-offline);
@@ -594,6 +597,13 @@
   --spacing-c-bench-stage: var(--c-bench-stage);
   --spacing-c-bench-side-w: var(--c-bench-side-w);
   --spacing-c-bench-side-h: var(--c-bench-side-h);
+  --spacing-c-plan-card-w: var(--c-plan-card-w);
+  --spacing-c-plan-card-h: var(--c-plan-card-h);
+  --spacing-c-plan-sheet-h: var(--c-plan-sheet-h);
+  --spacing-c-plan-row-pad: var(--c-plan-row-pad);
+  --spacing-c-plan-row-pad-coarse: var(--c-plan-row-pad-coarse);
+  --spacing-c-plan-line-min: var(--c-plan-line-min);
+  --spacing-c-plan-badge-px: var(--c-plan-badge-px);
   --spacing-c-bench-field-w: var(--c-bench-field-w);
   --spacing-c-bench-readout-w: var(--c-bench-readout-w);
   --spacing-c-side-bench-h: var(--c-side-bench-h);
@@ -741,6 +751,10 @@
   --animate-tip-in: kit-tip-in var(--dur-fade) var(--ease-out) both;
   --animate-skeleton-pulse: kit-skeleton-pulse var(--dur-skeleton-pulse)
     var(--ease-crossfade) infinite;
+  --animate-plan-pulse: plan-pulse var(--pv-sweep, var(--dur-loop)) linear
+    infinite;
+  --animate-plan-sweep: plan-sweep var(--pv-sweep, var(--dur-loop)) linear
+    infinite;
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -979,6 +993,25 @@
     }
     50% {
       opacity: var(--skeleton-pulse-floor);
+    }
+  }
+  @keyframes plan-sweep {
+    to {
+      translate: 100% 0;
+    }
+  }
+  @keyframes plan-pulse {
+    0% {
+      opacity: 0;
+      translate: 0 0;
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      translate: 0 var(--len);
     }
   }
 }

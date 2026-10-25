@@ -1,0 +1,401 @@
+{
+  "preview": "plan-view-r8",
+  "page": "apps/dashboard/src/lib/cawco/plan/proposal/page.oui",
+  "captures": [
+    {
+      "file": "plan-1-one-list-1440-light.png",
+      "way": "1 One list",
+      "size": "1440",
+      "theme": "light"
+    },
+    {
+      "file": "plan-2-lanes-1440-light.png",
+      "way": "2 Lanes",
+      "size": "1440",
+      "theme": "light"
+    },
+    {
+      "file": "plan-3-crew-first-1440-light.png",
+      "way": "3 Crew first",
+      "size": "1440",
+      "theme": "light"
+    },
+    {
+      "file": "plan-1-one-list-1440-dark.png",
+      "way": "1 One list",
+      "size": "1440",
+      "theme": "dark"
+    },
+    {
+      "file": "plan-2-lanes-1440-dark.png",
+      "way": "2 Lanes",
+      "size": "1440",
+      "theme": "dark"
+    },
+    {
+      "file": "plan-3-crew-first-1440-dark.png",
+      "way": "3 Crew first",
+      "size": "1440",
+      "theme": "dark"
+    },
+    {
+      "file": "plan-1-one-list-390-light.png",
+      "way": "1 One list",
+      "size": "390",
+      "theme": "light"
+    },
+    {
+      "file": "plan-2-lanes-390-light.png",
+      "way": "2 Lanes",
+      "size": "390",
+      "theme": "light"
+    },
+    {
+      "file": "plan-3-crew-first-390-light.png",
+      "way": "3 Crew first",
+      "size": "390",
+      "theme": "light"
+    },
+    {
+      "file": "plan-1-one-list-390-dark.png",
+      "way": "1 One list",
+      "size": "390",
+      "theme": "dark"
+    },
+    {
+      "file": "plan-2-lanes-390-dark.png",
+      "way": "2 Lanes",
+      "size": "390",
+      "theme": "dark"
+    },
+    {
+      "file": "plan-3-crew-first-390-dark.png",
+      "way": "3 Crew first",
+      "size": "390",
+      "theme": "dark"
+    }
+  ],
+  "firstView": {
+    "1440×900 light": {
+      "fold": 900,
+      "count": {
+        "text": "Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first",
+        "bottom": 243
+      },
+      "ways": [
+        {
+          "name": "1 One list",
+          "left": 311,
+          "top": 251,
+          "inView": true
+        },
+        {
+          "name": "2 Lanes",
+          "left": 625,
+          "top": 251,
+          "inView": true
+        },
+        {
+          "name": "3 Crew first",
+          "left": 939,
+          "top": 251,
+          "inView": true
+        }
+      ],
+      "chips": [2498, 2498, 2498]
+    },
+    "1440×900 dark": {
+      "fold": 900,
+      "count": {
+        "text": "Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first",
+        "bottom": 243
+      },
+      "ways": [
+        {
+          "name": "1 One list",
+          "left": 311,
+          "top": 251,
+          "inView": true
+        },
+        {
+          "name": "2 Lanes",
+          "left": 625,
+          "top": 251,
+          "inView": true
+        },
+        {
+          "name": "3 Crew first",
+          "left": 939,
+          "top": 251,
+          "inView": true
+        }
+      ],
+      "chips": [2498, 2498, 2498]
+    },
+    "680×900 light": {
+      "fold": 900,
+      "count": {
+        "text": "Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first",
+        "bottom": 240
+      },
+      "ways": [
+        {
+          "name": "1 One list",
+          "left": 51,
+          "top": 249,
+          "inView": true
+        },
+        {
+          "name": "2 Lanes",
+          "left": 365,
+          "top": 249,
+          "inView": true
+        },
+        {
+          "name": "3 Crew first",
+          "left": 679,
+          "top": 249,
+          "inView": false
+        }
+      ],
+      "chips": [2495, 2495, 2495]
+    },
+    "680×900 dark": {
+      "fold": 900,
+      "count": {
+        "text": "Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first",
+        "bottom": 240
+      },
+      "ways": [
+        {
+          "name": "1 One list",
+          "left": 51,
+          "top": 249,
+          "inView": true
+        },
+        {
+          "name": "2 Lanes",
+          "left": 365,
+          "top": 249,
+          "inView": true
+        },
+        {
+          "name": "3 Crew first",
+          "left": 679,
+          "top": 249,
+          "inView": false
+        }
+      ],
+      "chips": [2495, 2495, 2495]
+    },
+    "390×844 light": {
+      "fold": 844,
+      "count": {
+        "text": "Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first",
+        "bottom": 267
+      },
+      "ways": [
+        {
+          "name": "1 One list",
+          "left": 40,
+          "top": 276,
+          "inView": true
+        },
+        {
+          "name": "2 Lanes",
+          "left": 354,
+          "top": 276,
+          "inView": false
+        },
+        {
+          "name": "3 Crew first",
+          "left": 668,
+          "top": 276,
+          "inView": false
+        }
+      ],
+      "chips": [2886, 3034, 3182]
+    },
+    "390×844 dark": {
+      "fold": 844,
+      "count": {
+        "text": "Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first",
+        "bottom": 267
+      },
+      "ways": [
+        {
+          "name": "1 One list",
+          "left": 40,
+          "top": 276,
+          "inView": true
+        },
+        {
+          "name": "2 Lanes",
+          "left": 354,
+          "top": 276,
+          "inView": false
+        },
+        {
+          "name": "3 Crew first",
+          "left": 668,
+          "top": 276,
+          "inView": false
+        }
+      ],
+      "chips": [2886, 3034, 3182]
+    }
+  },
+  "checks": [
+    "PASS the hub's check keeps the program",
+    "PASS 1440×900 light: every embed draws the stories its Preview names (Ways Side drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+    "PASS 1440×900 light: the plan card's lead opens \"Recommended: Crew first, because …\"",
+    "PASS 1440×900 light: the first view says how many ways there are and stands them side by side, every one named above the fold (\"Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first\" to 243; \"1 One list\" at x 311, y 251, \"2 Lanes\" at x 625, y 251, \"3 Crew first\" at x 939, y 251; fold 900; drawn at 0.769; the options' chips at 2498, 2498, 2498)",
+    "PASS 1440×900 light: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+    "PASS 1440×900 light: each way draws one frame, the one this screen shows, the desk's (desk, desk, desk)",
+    "PASS 1440×900 light: each way's head is one row with no words, Close a bare symbol in its glass (\"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px)",
+    "PASS 1440×900 light: every step's mark is its bare glyph, no edge and no fill (0px solid rgba(0, 0, 0, 0))",
+    "PASS 1440×900 light: Lanes stands the steps that run at the same time side by side (2 columns at x 325, 457, tops 225, 225)",
+    "PASS 1440×900 light: each way's steps stand their status tiles in one column and their words in one (One list 28 rows, tiles at 11, words at 27; Lanes 26 rows, tiles at 325, words at 341; Crew first 28 rows, tiles at 638, words at 655)",
+    "PASS 1440×900 light: every drawing of the plan shows each of its to-dos (Ways:Side 28 of 28, Ways:Side 28 of 28, Ways:Side 28 of 28, CrewFirst:Opened 28 of 28)",
+    "PASS 1440×900 light: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (Ways:Side 14px for 14px, Ways:Side 14px for 14px, Ways:Side 14px for 14px, CrewFirst:Opened 14px for 14px)",
+    "PASS 1440×900 light: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (none offered)",
+    "PASS 1440×900 light: Lanes draws a line for each step's dependency, each one painted (2 lines for 2 dependencies, 0 unpainted)",
+    "PASS 1440×900 light: no line crosses a box, in any drawing (0 crossings)",
+    "PASS 1440×900 light: no words are cut without an ellipsis, in any drawing",
+    "PASS 1440×900 light: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+    "PASS 1440×900 light: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+    "PASS 1440×900 light: the pins section's first fix draws the previews step opened to its description (open)",
+    "PASS 1440×900 light: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-26 in sight)",
+    "PASS 1440×900 light: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+    "PASS 1440×900 light: the pulse is light running along the line, its band brighter than the fill at every moment (Start 2.94:1, Middle 2.94:1, End 2.94:1)",
+    "PASS 1440×900 light: no console errors, the page and its canvases",
+    "PASS 1440×900 light: nothing scrolls the page sideways (1440 wide in 1440)",
+    "PASS 1440×900 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-light-1.png 848 KiB, rows 0–2881, plan-steps-1440-light-2.png 538 KiB, rows 2881–6581; 1440×6581)",
+    "PASS 1440×900 light: the page's own capture paints every embed (73.1%, 48.7%, 57.4%, 57.6% their commonest colour)",
+    "PASS 1440×900 dark: every embed draws the stories its Preview names (Ways Side drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+    "PASS 1440×900 dark: the plan card's lead opens \"Recommended: Crew first, because …\"",
+    "PASS 1440×900 dark: the first view says how many ways there are and stands them side by side, every one named above the fold (\"Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first\" to 243; \"1 One list\" at x 311, y 251, \"2 Lanes\" at x 625, y 251, \"3 Crew first\" at x 939, y 251; fold 900; drawn at 0.769; the options' chips at 2498, 2498, 2498)",
+    "PASS 1440×900 dark: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+    "PASS 1440×900 dark: each way draws one frame, the one this screen shows, the desk's (desk, desk, desk)",
+    "PASS 1440×900 dark: each way's head is one row with no words, Close a bare symbol in its glass (\"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px)",
+    "PASS 1440×900 dark: every step's mark is its bare glyph, no edge and no fill (0px solid rgba(0, 0, 0, 0))",
+    "PASS 1440×900 dark: Lanes stands the steps that run at the same time side by side (2 columns at x 325, 457, tops 225, 225)",
+    "PASS 1440×900 dark: each way's steps stand their status tiles in one column and their words in one (One list 28 rows, tiles at 11, words at 27; Lanes 26 rows, tiles at 325, words at 341; Crew first 28 rows, tiles at 638, words at 655)",
+    "PASS 1440×900 dark: every drawing of the plan shows each of its to-dos (Ways:Side 28 of 28, Ways:Side 28 of 28, Ways:Side 28 of 28, CrewFirst:Opened 28 of 28)",
+    "PASS 1440×900 dark: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (Ways:Side 14px for 14px, Ways:Side 14px for 14px, Ways:Side 14px for 14px, CrewFirst:Opened 14px for 14px)",
+    "PASS 1440×900 dark: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (none offered)",
+    "PASS 1440×900 dark: Lanes draws a line for each step's dependency, each one painted (2 lines for 2 dependencies, 0 unpainted)",
+    "PASS 1440×900 dark: no line crosses a box, in any drawing (0 crossings)",
+    "PASS 1440×900 dark: no words are cut without an ellipsis, in any drawing",
+    "PASS 1440×900 dark: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+    "PASS 1440×900 dark: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+    "PASS 1440×900 dark: the pins section's first fix draws the previews step opened to its description (open)",
+    "PASS 1440×900 dark: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-26 in sight)",
+    "PASS 1440×900 dark: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+    "PASS 1440×900 dark: the pulse is light running along the line, its band brighter than the fill at every moment (Start 1.58:1, Middle 1.58:1, End 1.58:1)",
+    "PASS 1440×900 dark: no console errors, the page and its canvases",
+    "PASS 1440×900 dark: nothing scrolls the page sideways (1440 wide in 1440)",
+    "PASS 1440×900 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-dark-1.png 862 KiB, rows 0–2881, plan-steps-1440-dark-2.png 529 KiB, rows 2881–6581; 1440×6581)",
+    "PASS 1440×900 dark: the page's own capture paints every embed (73.1%, 46.4%, 57.4%, 57.6% their commonest colour)",
+    "PASS 680×900 light: every embed draws the stories its Preview names (Ways Side drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+    "PASS 680×900 light: the plan card's lead opens \"Recommended: Crew first, because …\"",
+    "PASS 680×900 light: the first view says how many ways there are and stands them side by side, every one named above the fold (\"Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first\" to 240; \"1 One list\" at x 51, y 249, \"2 Lanes\" at x 365, y 249, \"3 Crew first\" at x 679, y 249 (at the edge, scrolls in); fold 900; drawn at 0.769; the options' chips at 2495, 2495, 2495)",
+    "PASS 680×900 light: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+    "PASS 680×900 light: each way draws one frame, the one this screen shows, the desk's (desk, desk, desk)",
+    "PASS 680×900 light: each way's head is one row with no words, Close a bare symbol in its glass (\"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px)",
+    "PASS 680×900 light: every step's mark is its bare glyph, no edge and no fill (0px solid rgba(0, 0, 0, 0))",
+    "PASS 680×900 light: Lanes stands the steps that run at the same time side by side (2 columns at x 325, 457, tops 225, 225)",
+    "PASS 680×900 light: each way's steps stand their status tiles in one column and their words in one (One list 28 rows, tiles at 11, words at 27; Lanes 26 rows, tiles at 325, words at 341; Crew first 28 rows, tiles at 638, words at 655)",
+    "PASS 680×900 light: every drawing of the plan shows each of its to-dos (Ways:Side 28 of 28, Ways:Side 28 of 28, Ways:Side 28 of 28, CrewFirst:Opened 28 of 28)",
+    "PASS 680×900 light: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (Ways:Side 14px for 14px, Ways:Side 14px for 14px, Ways:Side 14px for 14px, CrewFirst:Opened 14px for 14px)",
+    "PASS 680×900 light: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (none offered)",
+    "PASS 680×900 light: Lanes draws a line for each step's dependency, each one painted (2 lines for 2 dependencies, 0 unpainted)",
+    "PASS 680×900 light: no line crosses a box, in any drawing (0 crossings)",
+    "PASS 680×900 light: no words are cut without an ellipsis, in any drawing",
+    "PASS 680×900 light: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+    "PASS 680×900 light: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+    "PASS 680×900 light: the pins section's first fix draws the previews step opened to its description (open)",
+    "PASS 680×900 light: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-26 in sight)",
+    "PASS 680×900 light: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+    "PASS 680×900 light: the pulse is light running along the line, its band brighter than the fill at every moment (Start 2.94:1, Middle 2.94:1, End 2.94:1)",
+    "PASS 680×900 light: no console errors, the page and its canvases",
+    "PASS 680×900 light: nothing scrolls the page sideways (680 wide in 680)",
+    "PASS 680×900 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-680-light-1.png 1023 KiB, rows 0–5978, plan-steps-680-light-2.png 128 KiB, rows 5978–6743; 680×6743)",
+    "PASS 680×900 light: the page's own capture paints every embed (78.9%, 52.1%, 48.4%, 41% their commonest colour)",
+    "PASS 680×900 dark: every embed draws the stories its Preview names (Ways Side drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+    "PASS 680×900 dark: the plan card's lead opens \"Recommended: Crew first, because …\"",
+    "PASS 680×900 dark: the first view says how many ways there are and stands them side by side, every one named above the fold (\"Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first\" to 240; \"1 One list\" at x 51, y 249, \"2 Lanes\" at x 365, y 249, \"3 Crew first\" at x 679, y 249 (at the edge, scrolls in); fold 900; drawn at 0.769; the options' chips at 2495, 2495, 2495)",
+    "PASS 680×900 dark: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+    "PASS 680×900 dark: each way draws one frame, the one this screen shows, the desk's (desk, desk, desk)",
+    "PASS 680×900 dark: each way's head is one row with no words, Close a bare symbol in its glass (\"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px; \"\" [Expand, Close] 28px)",
+    "PASS 680×900 dark: every step's mark is its bare glyph, no edge and no fill (0px solid rgba(0, 0, 0, 0))",
+    "PASS 680×900 dark: Lanes stands the steps that run at the same time side by side (2 columns at x 325, 457, tops 225, 225)",
+    "PASS 680×900 dark: each way's steps stand their status tiles in one column and their words in one (One list 28 rows, tiles at 11, words at 27; Lanes 26 rows, tiles at 325, words at 341; Crew first 28 rows, tiles at 638, words at 655)",
+    "PASS 680×900 dark: every drawing of the plan shows each of its to-dos (Ways:Side 28 of 28, Ways:Side 28 of 28, Ways:Side 28 of 28, CrewFirst:Opened 28 of 28)",
+    "PASS 680×900 dark: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (Ways:Side 14px for 14px, Ways:Side 14px for 14px, Ways:Side 14px for 14px, CrewFirst:Opened 14px for 14px)",
+    "PASS 680×900 dark: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (none offered)",
+    "PASS 680×900 dark: Lanes draws a line for each step's dependency, each one painted (2 lines for 2 dependencies, 0 unpainted)",
+    "PASS 680×900 dark: no line crosses a box, in any drawing (0 crossings)",
+    "PASS 680×900 dark: no words are cut without an ellipsis, in any drawing",
+    "PASS 680×900 dark: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+    "PASS 680×900 dark: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+    "PASS 680×900 dark: the pins section's first fix draws the previews step opened to its description (open)",
+    "PASS 680×900 dark: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-26 in sight)",
+    "PASS 680×900 dark: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+    "PASS 680×900 dark: the pulse is light running along the line, its band brighter than the fill at every moment (Start 1.58:1, Middle 1.58:1, End 1.58:1)",
+    "PASS 680×900 dark: no console errors, the page and its canvases",
+    "PASS 680×900 dark: nothing scrolls the page sideways (680 wide in 680)",
+    "PASS 680×900 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-680-dark-1.png 1022 KiB, rows 0–5978, plan-steps-680-dark-2.png 129 KiB, rows 5978–6743; 680×6743)",
+    "PASS 680×900 dark: the page's own capture paints every embed (78.9%, 52%, 48.4%, 41% their commonest colour)",
+    "PASS 390×844 light: every embed draws the stories its Preview names (Ways Side drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+    "PASS 390×844 light: the plan card's lead opens \"Recommended: Crew first, because …\"",
+    "PASS 390×844 light: the first view says how many ways there are and stands them side by side, every one named above the fold (\"Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first\" to 267; \"1 One list\" at x 40, y 276, \"2 Lanes\" at x 354, y 276 (at the edge, scrolls in), \"3 Crew first\" at x 668, y 276 (at the edge, scrolls in); fold 844; drawn at 0.769; the options' chips at 2886, 3034, 3182)",
+    "PASS 390×844 light: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+    "PASS 390×844 light: each way draws one frame, the one this screen shows, the phone's (phone, phone, phone)",
+    "PASS 390×844 light: each way's head is one row with no words, Close a bare symbol in its glass (\"\" [Close] 28px; \"\" [Close] 28px; \"\" [Close] 28px)",
+    "PASS 390×844 light: every step's mark is its bare glyph, no edge and no fill (0px solid rgba(0, 0, 0, 0))",
+    "PASS 390×844 light: Lanes stands the steps that run at the same time side by side (2 columns at x 325, 468, tops 238, 238)",
+    "PASS 390×844 light: each way's steps stand their status tiles in one column and their words in one (One list 28 rows, tiles at 11, words at 27; Lanes 26 rows, tiles at 325, words at 341; Crew first 28 rows, tiles at 638, words at 655)",
+    "PASS 390×844 light: every drawing of the plan shows each of its to-dos (Ways:Side 28 of 28, Ways:Side 28 of 28, Ways:Side 28 of 28, CrewFirst:Opened 28 of 28)",
+    "PASS 390×844 light: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (Ways:Side 13.7px for 14px, Ways:Side 13.7px for 14px, Ways:Side 13.7px for 14px, CrewFirst:Opened 14px for 14px)",
+    "PASS 390×844 light: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (none offered)",
+    "PASS 390×844 light: Lanes draws a line for each step's dependency, each one painted (2 lines for 2 dependencies, 0 unpainted)",
+    "PASS 390×844 light: no line crosses a box, in any drawing (0 crossings)",
+    "PASS 390×844 light: no words are cut without an ellipsis, in any drawing",
+    "PASS 390×844 light: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+    "PASS 390×844 light: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+    "PASS 390×844 light: the pins section's first fix draws the previews step opened to its description (open)",
+    "PASS 390×844 light: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-26 in sight)",
+    "PASS 390×844 light: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+    "PASS 390×844 light: the pulse is light running along the line, its band brighter than the fill at every moment (Start 2.94:1, Middle 2.94:1, End 2.94:1)",
+    "PASS 390×844 light: no console errors, the page and its canvases",
+    "PASS 390×844 light: nothing scrolls the page sideways (390 wide in 390)",
+    "PASS 390×844 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-light.png 843 KiB, rows 0–7327; 390×7327)",
+    "PASS 390×844 light: the page's own capture paints every embed (84.4%, 88.5%, 84.1%, 54.8% their commonest colour)",
+    "PASS 390×844 dark: every embed draws the stories its Preview names (Ways Side drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+    "PASS 390×844 dark: the plan card's lead opens \"Recommended: Crew first, because …\"",
+    "PASS 390×844 dark: the first view says how many ways there are and stands them side by side, every one named above the fold (\"Three ways, side by side: 1 One list, 2 Lanes, 3 Crew first\" to 267; \"1 One list\" at x 40, y 276, \"2 Lanes\" at x 354, y 276 (at the edge, scrolls in), \"3 Crew first\" at x 668, y 276 (at the edge, scrolls in); fold 844; drawn at 0.769; the options' chips at 2886, 3034, 3182)",
+    "PASS 390×844 dark: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+    "PASS 390×844 dark: each way draws one frame, the one this screen shows, the phone's (phone, phone, phone)",
+    "PASS 390×844 dark: each way's head is one row with no words, Close a bare symbol in its glass (\"\" [Close] 28px; \"\" [Close] 28px; \"\" [Close] 28px)",
+    "PASS 390×844 dark: every step's mark is its bare glyph, no edge and no fill (0px solid rgba(0, 0, 0, 0))",
+    "PASS 390×844 dark: Lanes stands the steps that run at the same time side by side (2 columns at x 325, 468, tops 238, 238)",
+    "PASS 390×844 dark: each way's steps stand their status tiles in one column and their words in one (One list 28 rows, tiles at 11, words at 27; Lanes 26 rows, tiles at 325, words at 341; Crew first 28 rows, tiles at 638, words at 655)",
+    "PASS 390×844 dark: every drawing of the plan shows each of its to-dos (Ways:Side 28 of 28, Ways:Side 28 of 28, Ways:Side 28 of 28, CrewFirst:Opened 28 of 28)",
+    "PASS 390×844 dark: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (Ways:Side 13.7px for 14px, Ways:Side 13.7px for 14px, Ways:Side 13.7px for 14px, CrewFirst:Opened 14px for 14px)",
+    "PASS 390×844 dark: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (none offered)",
+    "PASS 390×844 dark: Lanes draws a line for each step's dependency, each one painted (2 lines for 2 dependencies, 0 unpainted)",
+    "PASS 390×844 dark: no line crosses a box, in any drawing (0 crossings)",
+    "PASS 390×844 dark: no words are cut without an ellipsis, in any drawing",
+    "PASS 390×844 dark: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+    "PASS 390×844 dark: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+    "PASS 390×844 dark: the pins section's first fix draws the previews step opened to its description (open)",
+    "PASS 390×844 dark: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-26 in sight)",
+    "PASS 390×844 dark: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+    "PASS 390×844 dark: the pulse is light running along the line, its band brighter than the fill at every moment (Start 1.58:1, Middle 1.58:1, End 1.58:1)",
+    "PASS 390×844 dark: no console errors, the page and its canvases",
+    "PASS 390×844 dark: nothing scrolls the page sideways (390 wide in 390)",
+    "PASS 390×844 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-dark.png 846 KiB, rows 0–7327; 390×7327)",
+    "PASS 390×844 dark: the page's own capture paints every embed (84.4%, 88.3%, 84.1%, 54.8% their commonest colour)"
+  ]
+}

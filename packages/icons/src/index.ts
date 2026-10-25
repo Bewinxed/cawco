@@ -71,10 +71,11 @@ export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
 export { default as IconToolTodo } from "~icons/solar/checklist-bold-duotone";
 /** A starter that files tasks: its ticks on a half-ink body, as every starter's glyph is (StarterCards). */
 export { default as IconTaskList } from "~icons/solar/checklist-minimalistic-bold-duotone";
-/** A report; and a project's decision pages (the Decisions tab's tiles and its empty state). */
+/** A report; a project's decision pages (the Decisions tab's tiles and its empty state); and a plan step that is a task (plan/proposal TaskBadge). */
 export {
   default as IconDecisions,
   default as IconReport,
+  default as IconTask,
 } from "~icons/solar/clipboard-check-bold-duotone";
 export { default as IconFileTable } from "~icons/solar/clipboard-list-bold-duotone";
 export { default as IconReportFailed } from "~icons/solar/clipboard-remove-bold-duotone";
@@ -148,6 +149,8 @@ export { default as IconPost } from "~icons/solar/hashtag-square-bold-duotone";
 export { default as IconHistory } from "~icons/solar/history-bold-duotone";
 /** A routine turning itself off soon unless kept. */
 export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
+/** A plan step or a delegate waiting on another step or a slot (plan/proposal). */
+export { default as IconWaiting } from "~icons/solar/hourglass-line-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
 export { default as IconInfo } from "~icons/solar/info-circle-bold-duotone";
 export { default as IconKey } from "~icons/solar/key-bold-duotone";

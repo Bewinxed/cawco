@@ -248,6 +248,15 @@ const ANIMATIONS: Record<string, string> = {
   // per --dur-skeleton-pulse, on ease-in-out, until what it stands for comes.
   "animate-skeleton-pulse":
     "kit-skeleton-pulse var(--dur-skeleton-pulse) var(--ease-crossfade) infinite",
+  // A working delegate's line pulsing down its run (plan/proposal
+  // Connectors): one band per --dur-loop, the proposal's own tuning
+  // (--pv-sweep) when its frame sets one, linear as every loop turns.
+  "animate-plan-pulse":
+    "plan-pulse var(--pv-sweep, var(--dur-loop)) linear infinite",
+  // A band of light crossing a working delegate's progress line
+  // (plan/proposal ProgressLine), on the same tuning.
+  "animate-plan-sweep":
+    "plan-sweep var(--pv-sweep, var(--dur-loop)) linear infinite",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
@@ -294,6 +303,11 @@ const KEYFRAMES: Record<string, string> = {
   "kit-tip-in": "from {\n  opacity: 0;\n  translate: var(--kit-tip-from);\n}",
   "kit-skeleton-pulse":
     "0%,\n100% {\n  opacity: 1;\n}\n50% {\n  opacity: var(--skeleton-pulse-floor);\n}",
+  "plan-sweep": "to {\n  translate: 100% 0;\n}",
+  // Drawn only along the way: at either end (a still picture is paused at
+  // the start) no band shows.
+  "plan-pulse":
+    "0% {\n  opacity: 0;\n  translate: 0 0;\n}\n15%,\n85% {\n  opacity: 1;\n}\n100% {\n  opacity: 0;\n  translate: 0 var(--len);\n}",
 };
 
 /**
@@ -365,6 +379,11 @@ const CONTAINERS = {
   // skeleton stands a second reason line on every row here, on every other
   // row wider (probe-kit suggestions-preview).
   "suggestion-rows-narrow": "340px",
+  // A plan proposal's rows in a narrow column (Lanes' steps side by side):
+  // a step row's trail, and a delegate row's line and state, stand under
+  // its words.
+  "plan-step": "15rem",
+  "plan-delegate": "13rem",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */

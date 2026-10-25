@@ -1655,8 +1655,18 @@ function readRealSize() {
         }
       : { x: 0, y: 0, w: 0, h: 0, right: 0, bottom: 0 };
   };
-  const zoomOf = (el: Element) =>
-    (el as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
+  // The product of every computed `zoom` up its document: every engine
+  // answers it (Safari lacks `currentCSSZoom` before 26.4).
+  const zoomOf = (el: Element) => {
+    let zoom = 1;
+    for (let at: Element | null = el; at; at = at.parentElement) {
+      const own = Number.parseFloat(getComputedStyle(at).zoom);
+      if (own > 0) {
+        zoom *= own;
+      }
+    }
+    return zoom;
+  };
   const frames = [
     ...document.querySelectorAll<HTMLIFrameElement>(
       "[data-slot=media] iframe[data-slot=embed]"

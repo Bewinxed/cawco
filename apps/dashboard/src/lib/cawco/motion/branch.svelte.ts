@@ -123,6 +123,7 @@ import {
   motionOk,
   numberOf,
 } from "./curves.svelte";
+import { drawnBox, viewHeightAt } from "./drawn";
 import {
   atTravel,
   BLEED,
@@ -192,7 +193,7 @@ const px = (value: number) => `${value.toFixed(2)}px`;
  * place, and scaled about that centre).
  */
 function restOf(glyph: HTMLElement): { x: number; y: number } {
-  const box = glyph.getBoundingClientRect();
+  const box = drawnBox(glyph);
   const ridden = getComputedStyle(glyph).translate;
   const [dx = 0, dy = 0] =
     ridden === "none"
@@ -273,7 +274,7 @@ function nestOf(
   // own transform; see `railsOf`).
   const mark = layoutBox(parent);
   const first =
-    node.getBoundingClientRect().top +
+    drawnBox(node).top +
     node.clientTop +
     Number.parseFloat(getComputedStyle(node).paddingTop);
   const vars: Record<string, string> = {
@@ -283,9 +284,7 @@ function nestOf(
   const row = node.querySelector<HTMLElement>(":scope > li");
   const own = row?.querySelector<HTMLElement>(child);
   if (row && own) {
-    vars["--nest-glyph-y"] = px(
-      restOf(own).y - row.getBoundingClientRect().top
-    );
+    vars["--nest-glyph-y"] = px(restOf(own).y - drawnBox(row).top);
     vars["--nest-reach"] = px(layoutBox(own).left - layoutBox(row).left);
   }
   return [node, vars];
@@ -566,7 +565,7 @@ interface Line {
  */
 function railsOf(li: HTMLElement, frame: DOMRect, line: Line): Stretch[] {
   const rails: Stretch[] = [];
-  const box = li.getBoundingClientRect();
+  const box = drawnBox(li);
   for (const pseudo of ["::before", "::after"] as const) {
     const style = getComputedStyle(li, pseudo);
     if (style.content === "none" || style.display === "none") {
@@ -601,7 +600,7 @@ function itemOf(
   boxOf: (element: HTMLElement) => Box
 ): Item {
   const icon = el.querySelector<HTMLElement>(glyph);
-  const box = el.getBoundingClientRect();
+  const box = drawnBox(el);
   const top = box.top - frame.top;
   const centre = icon ? restOf(icon) : null;
   const y = centre ? centre.y - frame.top : top;
@@ -727,7 +726,7 @@ function nestOfItem(
 }
 
 function measure(group: HTMLElement, options: BranchOptions): Shape {
-  const frame = group.getBoundingClientRect();
+  const frame = drawnBox(group);
   // Each list's line. The group's own leaves the parent's glyph; a list
   // open under a child leaves that child's glyph, as far along the whole
   // line as the child is.
@@ -806,12 +805,12 @@ function measure(group: HTMLElement, options: BranchOptions): Shape {
  */
 function viewOf(
   group: HTMLElement,
-  frame = group.getBoundingClientRect(),
+  frame = drawnBox(group),
   laidOut = layoutBox(group).top
 ): Shape["seen"] {
   const shift = frame.top - (laidOut - window.scrollY);
   const above = -frame.top + Math.min(0, shift);
-  const below = window.innerHeight - frame.top + Math.max(0, shift);
+  const below = viewHeightAt(group) - frame.top + Math.max(0, shift);
   return (top, bottom) => bottom > above && top < below;
 }
 
@@ -1601,8 +1600,8 @@ function inFlow(group: HTMLElement): void {
  */
 function placeOf(group: HTMLElement): Box {
   const parent = group.offsetParent;
-  const box = group.getBoundingClientRect();
-  const frame = parent?.getBoundingClientRect();
+  const box = drawnBox(group);
+  const frame = parent ? drawnBox(parent) : undefined;
   return {
     top: frame
       ? box.top - frame.top - (parent?.clientTop ?? 0)
@@ -1952,7 +1951,7 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
   afterWrites({
     read: () => {
       // Its box and its parent's glyph: all a fold reads of the tree.
-      const frame = group.getBoundingClientRect();
+      const frame = drawnBox(group);
       const mark = parentGlyph(group, options.parent ?? options.glyph);
       // How far over the group's top its line starts, at that glyph's foot.
       const lead = mark

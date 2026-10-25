@@ -596,8 +596,18 @@ function embedRead() {
     }
     const r = body.getBoundingClientRect();
     /** CSS zoom in effect on an element: an embed draws every story at 1 (runtime.ts `sayShape`), so its words at their own size. */
-    const zoomOf = (el: Element) =>
-      (el as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
+    // The product of every computed `zoom` up its document: every engine
+    // answers it (Safari lacks `currentCSSZoom` before 26.4).
+    const zoomOf = (el: Element) => {
+      let zoom = 1;
+      for (let at: Element | null = el; at; at = at.parentElement) {
+        const own = Number.parseFloat(getComputedStyle(at).zoom);
+        if (own > 0) {
+          zoom *= own;
+        }
+      }
+      return zoom;
+    };
     const sizes = new Map<number, number>();
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {

@@ -655,6 +655,8 @@
 @custom-variant state-active (&[data-state="active"]);
 @custom-variant state-checked (&[data-state="checked"]);
 @custom-variant state-closed (&[data-state="closed"]);
+@custom-variant state-doing (&[data-state="doing"]);
+@custom-variant state-done (&[data-state="done"]);
 @custom-variant state-empty (&[data-state="empty"]);
 @custom-variant state-failed (&[data-state="failed"]);
 @custom-variant state-mismatch (&[data-state="mismatch"]);
@@ -666,6 +668,7 @@
 @custom-variant state-stale (&[data-state="stale"]);
 @custom-variant state-unseen (&[data-state="unseen"]);
 @custom-variant state-unshown (&[data-state="unshown"]);
+@custom-variant state-you (&[data-state="you"]);
 @custom-variant status-ahead (&[data-status="ahead"]);
 @custom-variant status-asked (&[data-status="asked"]);
 @custom-variant status-cancelled (&[data-status="cancelled"]);

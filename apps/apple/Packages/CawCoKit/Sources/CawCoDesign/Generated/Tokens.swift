@@ -282,6 +282,8 @@ public enum Palette {
     public static let scrollbarThumb = Palette.named("scrollbar-thumb")
     /// The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse).
     public static let skeletonSheen = Palette.named("skeleton-sheen")
+    /// The light running along a working delegate's progress line (plan proposal ProgressLine): its fill mixed toward the brighter ink of its scheme, the raised surface by day, so the band is brighter than the fill and never the track's paper.
+    public static let planSheen = Palette.named("plan-sheen")
     /// List bullets in rendered markdown.
     public static let proseBullet = Palette.named("prose-bullet")
     /// Project identity ink at hue 0; the identity-ink utility turns it to the project's --identity-h. 48%, not 50%: on a row's hover surface the cyan end of the wheel fell to 4.39:1 at 50%, and 48% holds every one of the ten hues above 4.5:1.
@@ -1207,6 +1209,20 @@ public enum Size {
     public static let cBenchSideW: Double = 360
     /// The chosen-hover bench's side-panel well height.
     public static let cBenchSideH: Double = 240
+    /// A plan proposal's side card (plan/proposal DeskPlan): the split's side at its 360px.
+    public static let cPlanCardW: Double = 360
+    /// A plan proposal's side card's height: the split's at a 900px window.
+    public static let cPlanCardH: Double = 680
+    /// A plan proposal's phone sheet (plan/proposal PhonePlan): 85% of the probe kit's 844px phone.
+    public static let cPlanSheetH: Double = 717
+    /// A plan row's block padding: an 18px tile centred in the 28px row (c-row-lead).
+    public static let cPlanRowPad: Double = 5
+    /// A plan row's block padding under a finger: a 22px label line centred in the 44px row (c-touch-floor).
+    public static let cPlanRowPadCoarse: Double = 11
+    /// A delegate's progress line at its shortest, before what follows it wraps to the next line.
+    public static let cPlanLineMin: Double = 48
+    /// A task badge's inline padding (plan/proposal TaskBadge).
+    public static let cPlanBadgePx: Double = 6
     /// The chosen-hover bench's model list and editor width.
     public static let cBenchFieldW: Double = 480
     /// A bench slider's readout ("32px", "100%"), so the figure never jumps.
