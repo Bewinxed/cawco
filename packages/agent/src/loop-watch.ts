@@ -21,6 +21,13 @@
  */
 
 import { heapSize } from "bun:jsc";
+import { standalone } from "@cawco/core/runtime";
+import {
+  BEAT,
+  LEFT,
+  SECTION,
+  type WatchdogMessage,
+} from "./loop-watch-shared";
 
 /** How often the loop is looked at. */
 const TICK_MS = 250;
@@ -59,16 +66,44 @@ export const inFlight = <T>(kind: string, work: Promise<T>): Promise<T> => {
   });
 };
 
+/**
+ * The watch from its own thread (loop-watch-worker.ts): the memory it reads
+ * the loop's beat and last section from, and the ids it knows sections by.
+ */
+let watchdog: { shared: Float64Array; worker: Worker } | undefined;
+const sectionIds = new Map<string, number>();
+
+/** Section `name` entered, or left, as the watch from its own thread reads it. */
+const markSection = (name: string, left: boolean): void => {
+  if (!watchdog) {
+    return;
+  }
+  let id = sectionIds.get(name);
+  if (id === undefined) {
+    id = sectionIds.size;
+    sectionIds.set(name, id);
+    watchdog.worker.postMessage({
+      kind: "section",
+      id,
+      name,
+    } satisfies WatchdogMessage);
+  }
+  watchdog.shared[SECTION] = id;
+  watchdog.shared[LEFT] = left ? 1 : 0;
+};
+
 /** Runs `run`, a synchronous section, marked as `name`: a stall it causes names it. */
 export const syncSection = <T>(name: string, run: () => T): T => {
   const at = performance.now();
   last = { at, left: false, name };
+  markSection(name, false);
   try {
     return run();
   } finally {
     const ms = performance.now() - at;
     if (last?.at === at) {
       last.left = true;
+      markSection(name, true);
     }
     if (!longest || ms > longest.ms) {
       longest = { ms, name };
@@ -76,11 +111,13 @@ export const syncSection = <T>(name: string, run: () => T): T => {
   }
 };
 
+/** The work in flight, in words. */
+const flyingWords = (): string =>
+  [...flying].map(([kind, count]) => `${kind} ${count}`).join(", ");
+
 /** What the loop's last stall is said with. */
 const stallLine = (heldMs: number): string => {
-  const work = [...flying]
-    .map(([kind, count]) => `${kind} ${count}`)
-    .join(", ");
+  const work = flyingWords();
   const section = longest
     ? `the longest marked section since the tick before: ${longest.name}, ${Math.round(longest.ms)} ms`
     : "no marked section ran since the tick before";
@@ -94,9 +131,51 @@ const stallLine = (heldMs: number): string => {
   return `[loop] the agent's loop was held ${Math.round(heldMs)} ms; phase: ${currentPhase}; in flight: ${work || "nothing counted"}; ${section}${lastWords}${unnamed}; heap ${Math.round(heapSize() / 1024 / 1024)} MB`;
 };
 
-/** Starts the watch: each stall of {@link LATE_MS} or more is one line through `say`. */
+/** Where the watch from its own thread is: the binary's own entry when compiled, the source beside this file otherwise. */
+const WATCHDOG_URL = new URL(
+  standalone ? "./scripts/binary/loop-watch-worker.js" : "./loop-watch-worker.ts",
+  import.meta.url
+);
+
+/**
+ * Starts the watch from its own thread (loop-watch-worker.ts): it reads the
+ * beat each tick writes, and a byte it sends the echo opened here comes
+ * back only while this loop takes in sockets. Unreferenced, as the echo
+ * is: neither keeps the agent from exiting.
+ */
+const startWatchdog = (): void => {
+  const shared = new Float64Array(new SharedArrayBuffer(3 * 8));
+  shared[BEAT] = Date.now();
+  shared[SECTION] = -1;
+  const echo = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      data(socket, data) {
+        socket.write(data);
+      },
+    },
+  });
+  echo.unref();
+  const worker = new Worker(WATCHDOG_URL, { ref: false, smol: true });
+  worker.postMessage({
+    kind: "start",
+    beat: shared.buffer as SharedArrayBuffer,
+    port: echo.port,
+  } satisfies WatchdogMessage);
+  watchdog = { shared, worker };
+};
+
+/**
+ * Starts the watch: each stall of {@link LATE_MS} or more is one line
+ * through `say` once it ends, and one that lasts, or a loop that runs its
+ * timers but takes in nothing, is said while it lasts, from a thread of its
+ * own ({@link startWatchdog}).
+ */
 export const watchLoop = (say: (line: string) => void): (() => void) => {
+  startWatchdog();
   let expected = performance.now() + TICK_MS;
+  let posted = "";
   const timer = setInterval(() => {
     const now = performance.now();
     const late = now - expected;
@@ -105,6 +184,19 @@ export const watchLoop = (say: (line: string) => void): (() => void) => {
       say(stallLine(late));
     }
     longest = undefined;
+    if (watchdog) {
+      watchdog.shared[BEAT] = Date.now();
+      const state = {
+        kind: "state",
+        phase: currentPhase,
+        flying: flyingWords() || "nothing counted",
+      } satisfies WatchdogMessage;
+      const said = `${state.phase}\0${state.flying}`;
+      if (said !== posted) {
+        posted = said;
+        watchdog.worker.postMessage(state);
+      }
+    }
   }, TICK_MS);
   timer.unref();
   return () => clearInterval(timer);
