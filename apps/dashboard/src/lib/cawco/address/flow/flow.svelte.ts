@@ -54,9 +54,30 @@ export type Pose =
   | "lock-open"
   | "lock-shut"
   | "live"
-  | "shrug"
+  | "shrug-plug"
+  | "shrug-sign"
+  | "shrug-chain"
+  | "shrug-map"
+  | "shrug-envelope"
+  | "shrug-key"
   | "shrug-tag"
-  | "shrug-hourglass";
+  | "shrug-phone"
+  | "shrug-hourglass"
+  | "shrug-cert";
+
+/** Each failure's shrug, with the prop that says what went wrong. */
+const FAILED_POSE: Record<Cause, Pose> = {
+  stopped: "shrug-plug",
+  unsupported: "shrug-sign",
+  "stale-link": "shrug-chain",
+  "wrong-tailnet": "shrug-map",
+  refused: "shrug-envelope",
+  "key-refused": "shrug-key",
+  taken: "shrug-tag",
+  "no-answer": "shrug-phone",
+  expired: "shrug-hourglass",
+  "certs-off": "shrug-cert",
+};
 
 /** Where the tray stands: Needs you's row, Settings' button, the phone's sheet. */
 export type Surface = "needs" | "settings" | "phone";
@@ -251,10 +272,7 @@ export class AddressFlow {
       case "done":
         return "live";
       case "failed":
-        if (this.cause === "taken") {
-          return "shrug-tag";
-        }
-        return this.cause === "expired" ? "shrug-hourglass" : "shrug";
+        return FAILED_POSE[this.cause];
     }
   });
 

@@ -1221,9 +1221,16 @@ async function motionLegs(kit: Kit, page: Page, engine: Engine) {
   });
 }
 
-/** The page fits whole, no sideways scroll, at every width from 320 up. */
+/**
+ * The page fits whole, no sideways scroll, at every width from 320 up; and at
+ * the desk's 1440 and 680 and the phone's 390, every failure too, no visible
+ * element past the window's edge and Caw on each tray's axis.
+ */
 async function widthLegs(kit: Kit, page: Page, engine: Engine) {
-  const widths = [320, 360, 390, 400, 430, 480, 520, 560, 600, 639, 768, 1024];
+  const widths = [
+    320, 360, 390, 400, 430, 480, 520, 560, 600, 639, 680, 768, 1024, 1440,
+  ];
+  const swept = [1440, 680, 390];
   const states: [Net, string][] = [
     ["tailscale", "start"],
     ["tailscale", "phone"],
@@ -1251,11 +1258,69 @@ async function widthLegs(kit: Kit, page: Page, engine: Engine) {
       }
     }
   }
+  const past: string[] = [];
+  const offAxis: string[] = [];
+  let sweeps = 0;
+  const failures = FAILURES.map(
+    (f) => [f.net, `failed:${f.cause}`] as [Net, string]
+  );
+  for (const width of swept) {
+    // biome-ignore lint/performance/noAwaitInLoops: one width at a time
+    await page.setViewportSize({ width, height: 900 });
+    for (const [net, m] of [...states, ...failures]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one state at a time
+      await standAt(page, net, false, m);
+      const read = await page.evaluate(() => {
+        const edge = window.innerWidth;
+        const out: string[] = [];
+        for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+          if (!el.checkVisibility() || el.classList.contains("sr-only")) {
+            continue;
+          }
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > edge + 0.5 || r.left < -0.5)) {
+            out.push(
+              `${el.tagName.toLowerCase()} ${r.left.toFixed(1)}–${r.right.toFixed(1)}`
+            );
+          }
+        }
+        const axis = [
+          ...document.querySelectorAll<HTMLElement>("[data-tray]"),
+        ].map((tray) => {
+          const t = tray.getBoundingClientRect();
+          const caw = tray
+            .querySelector("[data-slot=tray-caw]")
+            ?.getBoundingClientRect();
+          return caw
+            ? (caw.left + caw.width / 2 - (t.left + t.width / 2)).toFixed(2)
+            : "none";
+        });
+        return { out, axis };
+      });
+      sweeps += 1;
+      past.push(...read.out.map((s) => `${width} ${net} ${m}: ${s}`));
+      for (const dx of read.axis) {
+        if (dx === "none" || Math.abs(Number(dx)) > 1) {
+          offAxis.push(`${width} ${net} ${m}: ${dx}`);
+        }
+      }
+    }
+  }
   await page.setViewportSize({ width: 1440, height: 900 });
   kit.check(
     `${engine}: the page fits whole, no sideways scroll, at ${widths.join(", ")} (${states.length} states each)`,
     wide.length === 0,
     wide.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: the overflow sweep at ${swept.join(", ")} totals ${past.length} elements past the window's edge (${sweeps} states, every failure included)`,
+    past.length === 0,
+    past.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: Caw stands on each tray's axis within 1px at ${swept.join(", ")} (${sweeps} states)`,
+    offAxis.length === 0,
+    offAxis.slice(0, 6).join("; ")
   );
 }
 
