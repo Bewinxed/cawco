@@ -268,6 +268,72 @@ const callsOf = (reply: Reply): ToolCall[] => [
  * provider does not take ({@link Reply.deny}, either API), or Anthropic's
  * usage limit ({@link Reply.refuse}, its messages only).
  */
+/**
+ * The person's words in a request's `messages`, in order: user messages, and
+ * the system messages that carry words read mid-turn; never another system
+ * message (a chat completion's system prompt). Each whole, for `all` and
+ * `last`; `midTurn` when it carries words read mid-turn.
+ */
+const wordsOf = (
+  messages: readonly { content: unknown; role: string }[]
+): { midTurn: boolean; text: string }[] =>
+  messages.flatMap((message) => {
+    if (message.role !== "user" && message.role !== "system") {
+      return [];
+    }
+    const text = textOf(message.content);
+    if (text.includes(MID_TURN)) {
+      return [{ text, midTurn: true }];
+    }
+    return message.role === "user" ? [{ text, midTurn: false }] : [];
+  });
+
+/** A request the mock got, as {@link Seen} records it; `body` its body as kept. */
+const seenOf = (
+  request: Request,
+  parsed: {
+    messages?: { content: unknown; role: string }[];
+    tools?: { function?: { name?: string }; name?: string }[];
+  },
+  body: string
+): Seen => {
+  const words = wordsOf(parsed.messages ?? []);
+  const final = answeredOf(parsed.messages ?? []);
+  return {
+    at: Date.now(),
+    auth:
+      request.headers.get("authorization") ??
+      request.headers.get("x-api-key") ??
+      "",
+    afterTool:
+      final?.role === "tool" ||
+      (Array.isArray(final?.content) &&
+        (final.content as { type?: string }[]).some(
+          (block) => block.type === "tool_result"
+        )),
+    toolFailed: toolFailed(final?.content),
+    all: words.map((said) => said.text).join("\n"),
+    body,
+    ...newestOf(words),
+    tools: (parsed.tools?.length ?? 0) > 0,
+    // Anthropic names a tool at its top; chat completions, in `function`.
+    toolNames: (parsed.tools ?? []).flatMap((tool) => {
+      const name = tool.name ?? tool.function?.name;
+      return typeof name === "string" ? [name] : [];
+    }),
+  };
+};
+
+/**
+ * The most the mock keeps of its requests' bodies ({@link Seen} `body`, each
+ * the whole conversation so far): past it, a spec's responder is answering
+ * the same way in a loop, and every further request is refused. On the Mac
+ * (2026-10-25) workspace-any-folder's OpenCode leg looped 6669 times on a
+ * reply it never heard, and its runner reached 16.1 GiB; once it heard it,
+ * its runner peaked at 164 MB.
+ */
+const SEEN_BODIES_CAP = 1024 * 2 ** 20;
+
 const refusalOf = (reply: Reply, chat: boolean): Response | undefined => {
   if (reply.deny) {
     const { message, retryAfterS, status } = reply.deny;
@@ -1730,6 +1796,30 @@ async function standUp(
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
+  /** The bytes of the request bodies {@link seen} keeps, and what stopped it once they passed {@link SEEN_BODIES_CAP}. */
+  const bodies = { bytes: 0, runaway: undefined as string | undefined };
+  /**
+   * A request whose body `keptBody` would take {@link bodies} past
+   * {@link SEEN_BODIES_CAP}, refused, and every one after it; nothing while
+   * they are within it, the body counted.
+   */
+  const runawayRefusal = (keptBody: string): Response | undefined => {
+    if (!bodies.runaway && bodies.bytes + keptBody.length <= SEEN_BODIES_CAP) {
+      bodies.bytes += keptBody.length;
+      return;
+    }
+    if (!bodies.runaway) {
+      bodies.runaway = `the mock model was asked ${seen.length + 1} times, its requests' bodies past ${SEEN_BODIES_CAP / 2 ** 20} MiB: a spec's responder answers the same way in a loop, so every request from here on is refused`;
+      console.warn(`[mock] ${bodies.runaway}`);
+    }
+    return Response.json(
+      {
+        type: "error",
+        error: { type: "invalid_request_error", message: bodies.runaway },
+      },
+      { status: 400 }
+    );
+  };
   /** Token-count requests the mock got, and the hold a spec puts on their answers ({@link holdCountTokens}). */
   const countTokens = { asked: 0, held: null as Promise<void> | null };
   /** Holds every token-count answer, as a slow Anthropic would, until the release this answers is called. */
@@ -1760,44 +1850,12 @@ async function standUp(
         await countTokens.held;
         return Response.json({ input_tokens: 100 });
       }
-      // The person's words, in order: user messages, and the system
-      // messages that carry words read mid-turn; never another system
-      // message (a chat completion's system prompt). Each whole, for `all`
-      // and `last`; `midTurn` when it carries words read mid-turn.
-      const words = (body.messages ?? []).flatMap((message) => {
-        if (message.role !== "user" && message.role !== "system") {
-          return [];
-        }
-        const text = textOf(message.content);
-        if (text.includes(MID_TURN)) {
-          return [{ text, midTurn: true }];
-        }
-        return message.role === "user" ? [{ text, midTurn: false }] : [];
-      });
-      const final = answeredOf(body.messages ?? []);
-      const one: Seen = {
-        at: Date.now(),
-        auth:
-          request.headers.get("authorization") ??
-          request.headers.get("x-api-key") ??
-          "",
-        afterTool:
-          final?.role === "tool" ||
-          (Array.isArray(final?.content) &&
-            (final.content as { type?: string }[]).some(
-              (block) => block.type === "tool_result"
-            )),
-        toolFailed: toolFailed(final?.content),
-        all: words.map((said) => said.text).join("\n"),
-        body: JSON.stringify(body),
-        ...newestOf(words),
-        tools: (body.tools?.length ?? 0) > 0,
-        // Anthropic names a tool at its top; chat completions, in `function`.
-        toolNames: (body.tools ?? []).flatMap((tool) => {
-          const name = tool.name ?? tool.function?.name;
-          return typeof name === "string" ? [name] : [];
-        }),
-      };
+      const keptBody = JSON.stringify(body);
+      const runaway = runawayRefusal(keptBody);
+      if (runaway) {
+        return runaway;
+      }
+      const one = seenOf(request, body, keptBody);
       seen.push(one);
       const reply = await options.respond(one);
       const chat = path.endsWith("/chat/completions");
@@ -3094,6 +3152,8 @@ async function standUp(
     repo,
     workdir,
     seen,
+    /** Why the mock stopped answering, once its requests' bodies passed {@link SEEN_BODIES_CAP}: a responder in a loop. */
+    runaway: () => bodies.runaway,
     /** How many token-count requests the mock has got so far. */
     countTokensAsked: () => countTokens.asked,
     holdCountTokens,

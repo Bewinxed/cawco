@@ -262,6 +262,37 @@ const openCodeFinish = (request: Seen, input: object): Reply | undefined => {
     : undefined;
 };
 
+/** A message's text: a string, or its parts' text joined. */
+const partsText = (content: unknown): string => {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .map((part: { text?: unknown }) =>
+      typeof part.text === "string" ? part.text : ""
+    )
+    .join(" ");
+};
+
+/**
+ * What an OpenCode request carries: the person's words (`all`) and every
+ * tool's result so far. OpenCode speaks chat completions, where a tool's
+ * result is a `tool` message, which `all` leaves out; its shell's output is
+ * read there.
+ */
+const heardBy = (request: Seen): string => {
+  const { messages } = JSON.parse(request.body) as {
+    messages?: { role: string; content: unknown }[];
+  };
+  const results = (messages ?? [])
+    .filter((message) => message.role === "tool")
+    .map((message) => partsText(message.content));
+  return [request.all, ...results].join("\n");
+};
+
 /**
  * f, an OpenCode delegate: its file tool writes `oc.txt` in its folder, its
  * shell reads it there, it finishes; handed off once its workspace retired,
@@ -272,8 +303,9 @@ const openCodeTurn = (
   step: NonNullable<(typeof steps)["F"]>
 ): Reply => {
   const at = copyAt("F");
+  const heard = heardBy(request);
   if (request.all.includes(F_AGAIN)) {
-    if (!request.all.includes("AGAIN-F")) {
+    if (!heard.includes("AGAIN-F")) {
       return tool("shell", {
         command: `cat ${at}/${OC_FILE} && echo "AGAIN-""F"`,
         description: "Read it again",
@@ -296,7 +328,7 @@ const openCodeTurn = (
     step.wrote = true;
     return tool("write", { path: join(at, OC_FILE), content: `${OC_TEXT}\n` });
   }
-  if (!request.all.includes("DONE-F")) {
+  if (!heard.includes("DONE-F")) {
     return tool("shell", { command: commandOf("F"), description: "Work" });
   }
   if (hostAt.F === undefined) {
@@ -540,6 +572,12 @@ const openCodeLeg = async (
   ocSeen.home = fleet.home;
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, "README"), "OpenCode.\n");
+  // The project's gate on macOS is `sh check.sh`, run in the folder a
+  // landing checks: this folder's own reads the delegate's file.
+  await writeFile(
+    join(folder, "check.sh"),
+    `grep -q '${OC_TEXT}' ${OC_FILE} && echo OC-OK || { echo OC-BAD; exit 1; }\n`
+  );
   const credential = await fleet.sessionCredential(parent);
   const started = await fleet.api<{
     instanceId: string;
@@ -570,12 +608,10 @@ const openCodeLeg = async (
     600_000
   ).catch(itemOf);
   const said =
-    fleet.seen.find(
-      (one) =>
-        one.afterTool &&
-        one.all.includes("DONE-F") &&
-        !one.all.includes(F_AGAIN)
-    )?.all ?? "";
+    fleet.seen
+      .filter((one) => one.afterTool && !one.all.includes(F_AGAIN))
+      .map(heardBy)
+      .find((heard) => heard.includes("DONE-F")) ?? "";
   // A view's own server is Linux's alone: on macOS the copy is a folder of
   // its own, which the machine's server works in.
   const inView =
@@ -625,8 +661,10 @@ const openCodeLeg = async (
     600_000
   ).catch(itemOf);
   const againSaid =
-    fleet.seen.find((one) => one.afterTool && one.all.includes("AGAIN-F"))
-      ?.all ?? "";
+    fleet.seen
+      .filter((one) => one.afterTool)
+      .map(heardBy)
+      .find((heard) => heard.includes("AGAIN-F")) ?? "";
   const items = fleet.query<{ id: string; instance_id: string }>(
     "SELECT id, instance_id FROM work_items WHERE workspace_id = ?",
     started.workspaceId

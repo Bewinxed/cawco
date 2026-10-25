@@ -1072,6 +1072,15 @@ export class Run {
         ends.push(async () => {
           (await served)?.stop();
           (await servedDev)?.stop();
+          // A responder that looped fails its spec, whatever its checks said.
+          const runaway = fleet.runaway();
+          if (runaway) {
+            kit.check(
+              "the mock model's requests stayed within its bound",
+              false,
+              runaway
+            );
+          }
           // A spec that failed keeps what says why, which goes with the
           // fleet: into its output folder, the hub still answering.
           if (this.failures > failuresBefore) {
