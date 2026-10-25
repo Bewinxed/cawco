@@ -177,8 +177,8 @@
 
   /**
    * The exchange a `comment_reply` or `comment_resolve` call answered, whole,
-   * for its row's body: the pin's thread up to this reply (the pin its chip
-   * reads, artifact-names `pinNamed`), then the reply as the call wrote it
+   * for its row's body: the pin's thread as it stood at this call (the pin
+   * its chip reads, artifact-names `pinNamed`), then the reply as the call wrote it
    * (its `text`). Null for any other call and a failed one, whose row keeps
    * its fields and its refusal.
    */
@@ -205,7 +205,18 @@
           (entry) => entry.by === "agent" && entry.text.trim() === reply
         )
       : -1;
-    const before: Said[] = (at === -1 ? thread : thread.slice(0, at))
+    // With none (a resolve that said nothing, or a thread read before the
+    // reply landed), the thread as it stood at the call: what was written
+    // by the call's own time. A row the harness hasn't stored yet is the
+    // call under way, its thread the one standing now.
+    const called = m.timestamp ? Date.parse(m.timestamp) : Number.NaN;
+    const stood =
+      at === -1
+        ? thread.filter(
+            (entry) => Number.isNaN(called) || Date.parse(entry.at) <= called
+          )
+        : thread.slice(0, at);
+    const before: Said[] = stood
       .filter((entry) => entry.text.trim() !== "")
       .map((entry) => ({
         by: entry.by,

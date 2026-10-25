@@ -36,7 +36,9 @@
  *      paragraphs: the comment_reply's row shows the exchange whole (his
  *      words and the reply, word for word, selectable), nothing in it
  *      clamped, its overflow sweep 0 at this width, and resting the mouse
- *      on its pin chip opens no peek;
+ *      on its pin chip opens no peek; resolved with no words, then reopened
+ *      by him with more words and answered again, the resolve's row shows
+ *      the thread as it stood at the resolve, none of what came after;
  *    - the agent's turn carries a chip for each spot it changed and for the
  *      comment it answered; the paragraph's chip opens the panel scrolled
  *      to it, its thread open;
@@ -62,11 +64,12 @@ import {
   VIEWS,
   type View,
 } from "../kit";
-import { writePagePins } from "../pins";
+import { pagePins, writePagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
 const REPLY = "mcp__cawco__comment_reply";
+const RESOLVE = "mcp__cawco__comment_resolve";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** The person's comments, delivered by themselves (core injected.ts `artifactCommentsNotice`). */
@@ -96,6 +99,9 @@ const ANSWER = [
   "The paragraph under your second comment changed too, but that one is not answered yet: it needs your pick between one real session and the whole board before I go further with it.",
 ].join("\n\n");
 const WHITESPACE = /\s+/g;
+/** What he writes on pin 3 after reopening it, and the agent's answer to that. */
+const LATER_ASK = "One more thing: say it on the phone too.";
+const LATER_ANSWER = "Said it on the phone too, under the headline.";
 
 /** The page as each revision has it: first, the agent's answer, a later change no one asked for. */
 const page = (leg: string, revision: 1 | 2 | 3) => {
@@ -1203,6 +1209,23 @@ const exchangeChecks = async (on: On) => {
     60_000
   ).catch(() => undefined);
   await on.fleet.call(REPLY, { pin: third, text: ANSWER });
+  // Resolved with no words; then he reopens it and writes again, and the agent answers that.
+  await on.fleet.call(RESOLVE, { pin: third });
+  await tellPage(on, { type: "cawco:resolve", pin: third, resolved: false });
+  await tellPage(on, { type: "cawco:reply", pin: third, text: LATER_ASK });
+  await until(
+    "pin 3 reopened with his later words, delivered",
+    async () => ({
+      pin: (await pagePins(on.frame))[third],
+      sent: (await docRead(on.frame)).deliveries[third]?.sentAt,
+    }),
+    (now) =>
+      !now.pin?.resolvedAt &&
+      !!now.pin?.thread.some((entry) => entry.text === LATER_ASK) &&
+      !!now.sent,
+    30_000
+  ).catch(() => undefined);
+  await on.fleet.call(REPLY, { pin: third, text: LATER_ANSWER });
   const pin = `${on.id}/3`;
   const reachable = () =>
     on.screen.evaluate((chipId) => {
@@ -1282,6 +1305,72 @@ const exchangeChecks = async (on: On) => {
     "resting the mouse on the reply row's pin chip opens no peek",
     hovered && peeks === 0,
     `hovered ${hovered}; peeks ${peeks}`
+  );
+  // Pin 3's three rows, in turn order: the reply, the wordless resolve, the reply after he reopened it.
+  const saidIn = (said: { by: string; words: string }[] | undefined) =>
+    JSON.stringify(said?.map((one) => [one.by, one.words]));
+  const want = (...said: [string, string][]) =>
+    JSON.stringify(said.map(([by, text]) => [by, squash(text)]));
+  const rows = await until(
+    "pin 3's later reply drawn, his later words read",
+    () => exchangeRows(on, pin),
+    (now) => (now[2]?.length ?? 0) >= 4,
+    20_000
+  ).catch(() => exchangeRows(on, pin));
+  on.check(
+    "a comment_resolve that said nothing shows the thread as it stood at the resolve: his comment and the reply, none of what he and the agent wrote after he reopened it (which the later reply's row shows)",
+    rows.length === 3 &&
+      saidIn(rows[1]) === want(["person", ASKED], ["agent", ANSWER]) &&
+      saidIn(rows[2]) ===
+        want(
+          ["person", ASKED],
+          ["agent", ANSWER],
+          ["person", LATER_ASK],
+          ["agent", LATER_ANSWER]
+        ),
+    JSON.stringify(
+      rows.map((row) => row.map((one) => [one.by, one.words.slice(0, 40)]))
+    )
+  );
+};
+
+/** Each comment row's exchange that carries pin `chipId`'s chip, in turn order: who said each entry and its words, spaces off. */
+const exchangeRows = (on: On, chipId: string) =>
+  on.screen.evaluate(
+    ({ chipId: wanted, spaces }) =>
+      // Each exchange once, by its list: rows nest, so a row selector meets one call several times.
+      [...document.querySelectorAll('[data-slot="pin-exchange"]')]
+        .filter((list) =>
+          list
+            .closest('[data-slot="row"]')
+            ?.querySelector(`[data-pin-chip="${wanted}"]`)
+        )
+        .map((list) =>
+          [...list.querySelectorAll('[data-slot="exchange-entry"]')].map(
+            (entry) => ({
+              by: entry.getAttribute("data-by") ?? "",
+              words: (
+                entry.querySelector('[data-slot="tprose"]')?.textContent ?? ""
+              ).replace(new RegExp(spaces, "g"), ""),
+            })
+          )
+        ),
+    { chipId, spaces: SPACES.source }
+  );
+
+/**
+ * A message to the page in the pane as a host with no doc of its own sends
+ * it (the app's `cawco:reply`, `cawco:resolve`): the overlay writes it on its
+ * doc as the person's own reply or reopen.
+ */
+const tellPage = async (on: On, message: object) => {
+  const frame = await on.frame.frameElement();
+  await on.screen.evaluate(
+    ([el, sent]) => {
+      const iframe = el as HTMLIFrameElement;
+      iframe.contentWindow?.postMessage(sent, new URL(iframe.src).origin);
+    },
+    [frame, message] as const
   );
 };
 
