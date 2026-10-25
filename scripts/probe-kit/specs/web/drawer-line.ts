@@ -26,6 +26,7 @@
  *    (this spec's `away.json` from another checkout): nothing away from the
  *    line moved. Unset, the run writes `away.json` to its out folder.
  */
+
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,8 +41,17 @@ import { readWithin } from "../../../../packages/core/src/bounded";
 import type { InstancesFrame } from "../../../../packages/core/src/frames";
 import type { Envelope } from "../../../../packages/core/src/index";
 import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
+import { capped } from "../../browser-cap";
 import { launchEnv } from "../../browser-leftovers";
-import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
+import {
+  contextPagesOf,
+  type Kit,
+  open,
+  pagesOf,
+  ROOT,
+  type Spec,
+  settle,
+} from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const EXPORTED_QUERY = /export const DRAWER_QUERY = "([^"]+)"/;
@@ -314,15 +324,20 @@ async function openBench(page: Page, base: string, route = BENCH) {
 async function firefoxAt(
   css: number
 ): Promise<{ browser: Browser; page: Page }> {
-  const browser = await firefox.launch({
-    headless: true,
-    env: launchEnv({
-      ...process.env,
-      MOZ_HEADLESS_WIDTH: String(Math.round(css * 2)),
-      MOZ_HEADLESS_HEIGHT: String(HEIGHT * 2),
-    }),
-    firefoxUserPrefs: { "layout.css.devPixelsPerPx": "2" },
-  });
+  const browser = await capped(
+    "firefox",
+    () =>
+      firefox.launch({
+        headless: true,
+        env: launchEnv({
+          ...process.env,
+          MOZ_HEADLESS_WIDTH: String(Math.round(css * 2)),
+          MOZ_HEADLESS_HEIGHT: String(HEIGHT * 2),
+        }),
+        firefoxUserPrefs: { "layout.css.devPixelsPerPx": "2" },
+      }),
+    pagesOf
+  );
   const context = await browser.newContext({ viewport: null });
   // The kit's `settle` reads `kitRuns` (kit.ts installs it on its own pages).
   await context.addInitScript(() => {
@@ -358,19 +373,24 @@ async function chromiumZoomedAt(
   await writeFile(join(extension, "sw.js"), "");
   const profile = join(kit.out, `zoom-profile-${css}`);
   await rm(profile, { recursive: true, force: true });
-  const context = await chromium.launchPersistentContext(profile, {
-    channel: "chromium",
-    headless: true,
-    viewport: null,
-    env: launchEnv(),
-    args: [
-      "--no-sandbox",
-      "--disable-gpu",
-      `--disable-extensions-except=${extension}`,
-      `--load-extension=${extension}`,
-      `--window-size=${Math.round(css * 2)},${HEIGHT * 2}`,
-    ],
-  });
+  const context = await capped(
+    "chromium",
+    () =>
+      chromium.launchPersistentContext(profile, {
+        channel: "chromium",
+        headless: true,
+        viewport: null,
+        env: launchEnv(),
+        args: [
+          "--no-sandbox",
+          "--disable-gpu",
+          `--disable-extensions-except=${extension}`,
+          `--load-extension=${extension}`,
+          `--window-size=${Math.round(css * 2)},${HEIGHT * 2}`,
+        ],
+      }),
+    contextPagesOf
+  );
   await context.addInitScript(() => {
     window.kitRuns = () => document.getAnimations();
   });

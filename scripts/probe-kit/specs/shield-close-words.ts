@@ -21,6 +21,7 @@
  *
  *   bun scripts/probe-kit/run.ts shield-close-words
  */
+
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
@@ -40,8 +41,9 @@ import {
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
 import { machineId } from "../../../packages/core/src/machine-id";
 import { until } from "../../scratch-fleet";
+import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
-import type { Kit, Spec } from "../kit";
+import { contextPagesOf, type Kit, type Spec } from "../kit";
 
 /** The workspace whose token the tool connects with. */
 const WORKSPACE = "shield-close-probe";
@@ -123,11 +125,16 @@ async function run(kit: Kit): Promise<void> {
   process.env[CAWCO_ENV.browserGatePort] = String(gatePort);
   const profile = join(kit.out, "shield-profile");
   await rm(profile, { recursive: true, force: true });
-  const browser = await chromium.launchPersistentContext(profile, {
-    headless: true,
-    env: launchEnv(),
-    args: ["--no-sandbox", "--remote-debugging-port=0"],
-  });
+  const browser = await capped(
+    "chromium",
+    () =>
+      chromium.launchPersistentContext(profile, {
+        headless: true,
+        env: launchEnv(),
+        args: ["--no-sandbox", "--remote-debugging-port=0"],
+      }),
+    contextPagesOf
+  );
   const key = await keyOfWorkspace(WORKSPACE, await machineId());
   try {
     const devtools = await until(

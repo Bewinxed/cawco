@@ -42,6 +42,7 @@ import {
   scratchFleet,
   until,
 } from "../scratch-fleet";
+import { BROWSER_MEMORY_CAP, capped, reportCapsTo } from "./browser-cap";
 import {
   launchEnv,
   leftBehind,
@@ -55,6 +56,7 @@ import {
   watchBrowser,
   watchContext,
 } from "./crash-watch";
+import { probeSlot } from "./slot";
 
 export const ROOT = resolve(import.meta.dir, "../..");
 
@@ -875,11 +877,28 @@ const benchHub = (): string => {
   return noHub;
 };
 
+/** The addresses a browser has open, for the line its memory cap's kill says (browser-cap.ts). */
+export const pagesOf = (browser: Browser): string[] =>
+  browser.contexts().flatMap((context) => context.pages().map((p) => p.url()));
+
+/** The addresses a persistent context (`launchPersistentContext`) has open, as {@link pagesOf}. */
+export const contextPagesOf = (context: BrowserContext): string[] =>
+  context.pages().map((p) => p.url());
+
 /**
  * What one run holds across its specs: the browsers, the build and its
- * servers. Each `run.ts` process is a run of its own, and starts at once.
+ * servers. Each `run.ts` process is a run of its own. It takes the
+ * machine's probe slot (slot.ts) before its first build, server, browser or
+ * fleet, and holds it to its end; each browser runs under the memory cap
+ * (browser-cap.ts): `browserCap` in bytes, the kit's own unless a spec
+ * proving the cap names a smaller one.
  */
 export class Run {
+  private readonly browserCap: number;
+  constructor(options: { browserCap?: number } = {}) {
+    this.browserCap = options.browserCap ?? BROWSER_MEMORY_CAP;
+  }
+
   failures = 0;
   /** Each failed assertion's line, said again over the run's last line (a report that quotes the run's tail keeps them). */
   readonly failed: string[] = [];
@@ -932,6 +951,7 @@ export class Run {
    */
   build(): Promise<void> {
     this.built ??= (async () => {
+      await probeSlot();
       this.output = await builtOutput();
     })();
     return this.built;
@@ -944,18 +964,20 @@ export class Run {
     port?: number,
     host?: string
   ): Promise<Served> {
-    return serve(
-      how,
-      hub,
-      (why) => {
-        const line = `FAIL the dashboard server: ${why}`;
-        console.log(line);
-        this.failures += 1;
-        this.failed.push(line.slice(0, 1200));
-      },
-      {},
-      port,
-      host
+    return probeSlot().then(() =>
+      serve(
+        how,
+        hub,
+        (why) => {
+          const line = `FAIL the dashboard server: ${why}`;
+          console.log(line);
+          this.failures += 1;
+          this.failed.push(line.slice(0, 1200));
+        },
+        {},
+        port,
+        host
+      )
     );
   }
 
@@ -1041,7 +1063,7 @@ export class Run {
         return browser;
       },
     } satisfies Record<Engine, () => Promise<Browser>>;
-    const launched = launch[engine]();
+    const launched = capped(engine, launch[engine], pagesOf, this.browserCap);
     this.browsers.set(key, launched);
     return launched;
   }
@@ -1292,6 +1314,10 @@ export class Run {
       },
     };
     const started = performance.now();
+    // A browser the memory cap kills while this spec runs fails it, by name.
+    reportCapsTo(spec.name, (line) =>
+      kit.check("its browsers stay under the kit's memory cap", false, line)
+    );
     try {
       await spec.run(kit);
     } catch (error) {
@@ -1319,6 +1345,12 @@ export class Run {
 
   async close(): Promise<void> {
     this.ending.closing = true;
+    reportCapsTo("the run's browsers", (line) => {
+      const said = `FAIL ${line}`;
+      console.log(said);
+      this.failures += 1;
+      this.failed.push(said.slice(0, 600));
+    });
     for (const browser of this.browsers.values()) {
       // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       await (await browser).close().catch(() => undefined);

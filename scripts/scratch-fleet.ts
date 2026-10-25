@@ -64,6 +64,7 @@ import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
 import { welcomed } from "./lib/keeper-dial";
 import { anotherEnds, END_SIGNALS, type EndSignal } from "./lib/stop-signals";
+import { probeSlot } from "./probe-kit/slot";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
 
@@ -1739,7 +1740,8 @@ export interface SendSnapshot {
  * returns what drives it. Nothing runs until the probe launches it. A setup
  * that fails takes what it made and started with it.
  *
- * It starts at once, with room on the disk (lib/disk-room.ts).
+ * It starts with room on the disk (lib/disk-room.ts), once it holds the
+ * machine's probe slot (probe-kit/slot.ts).
  */
 /**
  * Where a fleet's hub listens (`bind`, its `HOST`) and the address its
@@ -1760,6 +1762,9 @@ export async function scratchFleet(options: {
   respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
   requireDiskRoom(`The scratch fleet ${options.name}`);
+  // The machine's probe slot (probe-kit/slot.ts), before anything starts:
+  // the run's own when the kit took it already.
+  await probeSlot();
   holdAwake(`The scratch fleet ${options.name}`);
   const dirs = new FleetDirs();
   // Its hub's preview ports, held from every other run on the machine until it closes.

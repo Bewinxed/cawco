@@ -55,10 +55,12 @@ holdAwake(`bun scripts/probe-kit/run.ts ${process.argv.slice(2).join(" ")}`);
 await ensureDeps();
 const { sweepDeadFleets } = await import("../scratch-fleet");
 const { ENCLOSING_GIT_ENV, OWN_HOME_ENV, Run } = await import("./kit");
+const { nameProbeRun, probeSlot } = await import("./slot");
 
 const args = process.argv.slice(2);
 // The user journeys (journeys/suite.ts): every engine, every size, both data sets.
 if (args[0] === "journeys") {
+  nameProbeRun(args.join(" "));
   const { runJourneys } = await import("./journeys/run");
   process.exit(await runJourneys(args.slice(1)));
 }
@@ -101,6 +103,8 @@ const listed = (dir: string) =>
 // spec of its own in specs/, or one found only in specs/web/, run as that
 // web spec: `run.ts mcp-shared room-held` runs both, in that order.
 const chosen = web && named.length === 0 ? listed(webDir) : named;
+// Its probe slot's holder line names the specs it runs (slot.ts).
+nameProbeRun(web && named.length === 0 ? "web (every spec)" : chosen.join(" "));
 const pathOf = (name: string): string | null => {
   const own = join(specsDir, `${name}.ts`);
   if (!web && existsSync(own)) {
@@ -139,6 +143,9 @@ for (const name of chosen) {
  * host, anything else failed).
  */
 const runOwnHome = async (spec: Spec): Promise<number> => {
+  // Its probe slot is this run's, taken here: its own process reads the
+  // machine's slots under its scratch HOME, where none of them are.
+  await probeSlot();
   const home = mkdtempSync(join(tmpdir(), `probe-${spec.name}-`));
   const env = Object.fromEntries(
     Object.entries(process.env).filter(

@@ -40,6 +40,7 @@
  *   bun scripts/probe-kit/run.ts tailnet-https
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: each state is set, then waited on, before the next
+
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join } from "node:path";
@@ -47,8 +48,16 @@ import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
 import { tailnetWords } from "../../../packages/core/src/words/tailnet";
 import { leasePortRange, until } from "../../scratch-fleet";
+import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  pagesOf,
+  type Spec,
+  settle,
+} from "../kit";
 
 export const NAME = "probe-box.tail0000.ts.net";
 /** How long a state takes to be read: the hub reads Tailscale every 5 s while a step stands, else every 30 s. */
@@ -460,18 +469,23 @@ const doorAndRenewal = async (
  * (hub preview.ts `http2`). Read from the page's own navigation entry.
  */
 async function previewOverH2(kit: Kit, origin: string): Promise<void> {
-  const browser = await chromium.launch({
-    headless: true,
-    env: launchEnv(
-      Object.fromEntries(
-        Object.entries(process.env).filter(
-          (entry): entry is [string, string] =>
-            !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
-        )
-      )
-    ),
-    args: ["--no-sandbox", `--host-resolver-rules=MAP ${NAME} [::1]`],
-  });
+  const browser = await capped(
+    "chromium",
+    () =>
+      chromium.launch({
+        headless: true,
+        env: launchEnv(
+          Object.fromEntries(
+            Object.entries(process.env).filter(
+              (entry): entry is [string, string] =>
+                !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
+            )
+          )
+        ),
+        args: ["--no-sandbox", `--host-resolver-rules=MAP ${NAME} [::1]`],
+      }),
+    pagesOf
+  );
   try {
     const page = await (
       await browser.newContext({ ignoreHTTPSErrors: true })
@@ -834,18 +848,23 @@ const run = async (kit: Kit) => {
   // mapped to the tailnet address, with none of a workspace's proxy
   // variables, which Chromium takes over its own flags and whose proxy can't
   // reach the name (measured: 407, ERR_TUNNEL_CONNECTION_FAILED).
-  const browser = await chromium.launch({
-    headless: true,
-    env: launchEnv(
-      Object.fromEntries(
-        Object.entries(process.env).filter(
-          (entry): entry is [string, string] =>
-            !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
-        )
-      )
-    ),
-    args: ["--no-sandbox", `--host-resolver-rules=MAP ${NAME} [::1]`],
-  });
+  const browser = await capped(
+    "chromium",
+    () =>
+      chromium.launch({
+        headless: true,
+        env: launchEnv(
+          Object.fromEntries(
+            Object.entries(process.env).filter(
+              (entry): entry is [string, string] =>
+                !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
+            )
+          )
+        ),
+        args: ["--no-sandbox", `--host-resolver-rules=MAP ${NAME} [::1]`],
+      }),
+    pagesOf
+  );
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const named = await context.newPage();

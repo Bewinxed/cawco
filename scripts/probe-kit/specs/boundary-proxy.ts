@@ -48,6 +48,7 @@
  *     drops a handshake (its `ListenDrops`). A boundary whose srt predates
  *     0.0.81 bridges with socat's own backlog of 5 and fails the last two.
  */
+
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
@@ -61,8 +62,9 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid, signalGroup } from "../../../packages/core/src/signal";
 import { SOCAT_BACKLOG } from "../../../packages/core/src/socat";
 import { until } from "../../scratch-fleet";
+import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { type Kit, pagesOf, ROOT, type Spec } from "../kit";
 
 type Env = Record<string, string | undefined>;
 
@@ -252,7 +254,11 @@ const browseLeg = async (kit: Kit, env: Env) => {
   const { url } = await tool<{ url: string }>("artifact_browse", {
     id: page.id,
   });
-  const browser = await chromium.launch({ env: launchEnv(env) });
+  const browser = await capped(
+    "chromium",
+    () => chromium.launch({ env: launchEnv(env) }),
+    pagesOf
+  );
   try {
     const tab = await browser.newPage();
     const answered: { path: string; status: number }[] = [];
