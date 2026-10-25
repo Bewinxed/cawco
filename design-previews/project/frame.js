@@ -307,7 +307,7 @@ const S = {
   state: "rest",
   layout: "list",
   project: "cawco-dev",
-  tasks: boardTasks([TIDE]),
+  tasks: boardTasks([CALENDAR, TIDE, VOUCHERS]),
   needs: {},
   selected: null,
   filter: false,
@@ -610,6 +610,58 @@ const markEdges = () => {
     "data-more-below",
     getComputedStyle(board).overflowY !== "visible" && below > 1
   );
+  /* A side's fade is cut short at the open task's column, so the column the
+     pane stands for is never drawn under it (DESIGN.md, Edges of a scrolling
+     strip: "never a tab drawn chosen"). */
+  const len = fadeLength();
+  const chosen = nodes.get(S.selected)?.closest(".col");
+  let start = len;
+  let end = len;
+  if (chosen && board.contains(chosen)) {
+    const b = board.getBoundingClientRect();
+    const c = chosen.getBoundingClientRect();
+    if (c.right > b.left && c.left < b.right) {
+      start = Math.min(len, Math.max(0, c.left - b.left));
+      end = Math.min(len, Math.max(0, b.right - c.right));
+    }
+  }
+  board.style.setProperty("--fade-start", `${start}px`);
+  board.style.setProperty("--fade-end", `${end}px`);
+};
+
+/** The house edge fade's length (a length token, in px). */
+const fadeLength = () => Number.parseFloat(token("--c-edge-fade-len"));
+
+/**
+ * The open task's column shown whole beside the pane: the board scrolls to
+ * the earliest column start that shows it whole and clear of the trailing
+ * fade, and where none does, to its own start (DESIGN.md, Edges of a
+ * scrolling strip: "clear of the fades where there is room … the new tab is
+ * the one shown whole").
+ */
+const showColumn = (card) => {
+  const board = $('[data-slot="board"]');
+  const col = card?.closest(".col");
+  if (!(col && board.contains(col))) {
+    return;
+  }
+  const b = board.getBoundingClientRect();
+  const pad = Number.parseFloat(getComputedStyle(board).paddingInlineStart);
+  const len = fadeLength();
+  const c = col.getBoundingClientRect();
+  if (c.left >= b.left + pad - 0.5 && c.right <= b.right - len + 0.5) {
+    return;
+  }
+  const at = (one) =>
+    board.scrollLeft + one.getBoundingClientRect().left - (b.left + pad);
+  const cols = $$(":scope > .col", board);
+  const upTo = cols.slice(0, cols.indexOf(col) + 1);
+  const fits = upTo.find((one) => {
+    const shift = at(one) - board.scrollLeft;
+    return c.right - shift <= b.right - len + 0.5 && c.left - shift >= b.left + pad - 0.5;
+  });
+  board.scrollLeft = Math.max(0, at(fits ?? col));
+  markEdges();
 };
 
 const rects = () => {
@@ -1025,6 +1077,14 @@ const markPane = () => {
     return;
   }
   scroll.toggleAttribute("data-more-start", scroll.scrollTop > 1);
+  /* The tab's panel scrolls in its own room; its foot fades while more is below. */
+  const panel = $('.pane-tabs [data-slot="panel"]');
+  if (panel) {
+    panel.toggleAttribute(
+      "data-more-below",
+      panel.scrollHeight - panel.clientHeight - panel.scrollTop > 1
+    );
+  }
   const bar = $('[data-slot="decision"]', scroll);
   const card = bar?.closest(".pcard");
   if (bar && card) {
@@ -1051,6 +1111,9 @@ const drawPane = () => {
   for (const part of scroll.children) {
     paneSizes.observe(part);
   }
+  const panel = $('.pane-tabs [data-slot="panel"]', pane);
+  panel.addEventListener("scroll", markPane, { passive: true });
+  paneSizes.observe(panel);
   markPane();
 };
 
@@ -1105,6 +1168,7 @@ const openPane = (id, { animate = true } = {}) => {
   place();
   const card = nodes.get(id);
   if (!PHONE.matches) {
+    showColumn(card);
     card?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   if (!(animate && motionOk()) || wasOpen) {
@@ -1438,6 +1502,8 @@ const chooseTab = (name, animate = true) => {
   placeThumb(tabs, animate && motionOk());
   const panel = $('[data-slot="panel"]');
   panel.innerHTML = tabPanel(task, name);
+  panel.scrollTop = 0;
+  markPane();
   /* We fly instead of teleport: the panel comes in from the side of the tab chosen. */
   if (animate && step !== 0) {
     const keys = motionOk()
@@ -1829,7 +1895,7 @@ const hubAnswers = () => {
   const fault = $(".fault");
   $('[data-act="retry"]').removeAttribute("aria-disabled");
   liftOut(fault, "fault-out");
-  revealBoard(boardTasks([TIDE]), false);
+  revealBoard(boardTasks([CALENDAR, TIDE, VOUCHERS]), false);
   S.state = "rest";
   APP.dataset.state = "rest";
   drawHead(false);
@@ -1947,7 +2013,7 @@ const enter = async (state) => {
     return;
   }
   if (state === "rest") {
-    S.tasks = boardTasks([TIDE]);
+    S.tasks = boardTasks([CALENDAR, TIDE, VOUCHERS]);
     place();
     drawHead(false);
     return;

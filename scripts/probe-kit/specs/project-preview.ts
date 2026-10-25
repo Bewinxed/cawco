@@ -2023,6 +2023,334 @@ const checkPins = async (
   }
 };
 
+/* ---------- The screenshot review's items ---------- */
+
+/**
+ * What the review of the captures read, as boxes: the ask's answers and the
+ * verdict bar, the phone's Caw tab against the screen, the pane's title, the
+ * head capsule's glyph ink, the board's fades against the open task's column
+ * and its cut edge, the open card against an asking one, and the Review
+ * column's count.
+ */
+const reviewParts = (page: Page) =>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: it runs in the page as one function, every item read together
+  page.evaluate(() => {
+    const shown = (element: Element | null): element is Element => {
+      if (!element) {
+        return false;
+      }
+      const box = element.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        getComputedStyle(element).visibility === "visible"
+      );
+    };
+    const pen = document.createElement("canvas").getContext("2d");
+    const rgba = (colour: string): number[] => {
+      if (!pen) {
+        return [0, 0, 0, 0];
+      }
+      pen.clearRect(0, 0, 1, 1);
+      pen.fillStyle = "rgba(0, 0, 0, 0)";
+      pen.fillStyle = colour;
+      pen.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = pen.getImageData(0, 0, 1, 1).data;
+      return [r ?? 0, g ?? 0, b ?? 0, (a ?? 0) / 255];
+    };
+    const over = (top: number[], back: number[]) => {
+      const a = top[3] ?? 1;
+      return [0, 1, 2]
+        .map((c) => (top[c] ?? 0) * a + (back[c] ?? 0) * (1 - a))
+        .concat([1]);
+    };
+    const ground = (element: Element): number[] => {
+      const layers: number[][] = [];
+      for (let at: Element | null = element; at; at = at.parentElement) {
+        const fill = rgba(getComputedStyle(at).backgroundColor);
+        if ((fill[3] ?? 0) > 0) {
+          layers.push(fill);
+        }
+        if ((fill[3] ?? 0) >= 1) {
+          break;
+        }
+      }
+      let base = rgba(getComputedStyle(document.body).backgroundColor);
+      if ((base[3] ?? 0) < 1) {
+        base = [255, 255, 255, 1];
+      }
+      for (const layer of layers.reverse()) {
+        base = over(layer, base);
+      }
+      return base;
+    };
+    const lum = ([r = 0, g = 0, b = 0]: number[]) => {
+      const lin = (v: number) => {
+        const c = v / 255;
+        return c <= 0.040_45 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const ratio = (ink: number[], back: number[]) => {
+      const [hi, lo] = [lum(ink), lum(back)].sort((x, y) => y - x);
+      return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+    };
+    const px = (value: string) => Number.parseFloat(value) || 0;
+
+    // 1, 2: every answer of the ask stands whole, clear of the verdict bar and its fade.
+    const scroll = document.querySelector(".pane-scroll");
+    const bar = document.querySelector('[data-slot="decision"]');
+    const answers = [
+      ...document.querySelectorAll('[data-slot="ask"]:not(.is-answered) .chip'),
+    ].filter(shown);
+    const room = scroll?.getBoundingClientRect();
+    const barTop = bar?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+    const fade =
+      bar?.hasAttribute("data-stuck") === true
+        ? px(getComputedStyle(bar, "::before").height)
+        : 0;
+    const asked = answers.map((chip) => {
+      const box = chip.getBoundingClientRect();
+      let ink = 1;
+      for (let at: Element | null = chip; at; at = at.parentElement) {
+        ink *= Number(getComputedStyle(at).opacity);
+      }
+      return {
+        words: (chip.textContent ?? "").trim().slice(0, 20),
+        clear:
+          Boolean(room) &&
+          box.top >= (room?.top ?? 0) - 0.5 &&
+          box.bottom <= Math.min(room?.bottom ?? 0, barTop - fade) + 0.5,
+        ink,
+      };
+    });
+
+    // 3: the phone's Caw tab, his mark and his arcs, inside the screen.
+    const tab = document.querySelector(".glass-caw");
+    const screen = document.documentElement.clientWidth;
+    const tabParts = tab
+      ? [tab.querySelector("img"), ...tab.querySelectorAll(".caw-ring path")]
+          .filter(shown)
+          .map((part) => {
+            const box = part.getBoundingClientRect();
+            return { left: box.left, right: box.right };
+          })
+      : [];
+
+    // 4: the pane's title spans its column; its lines balanced.
+    const title = document.querySelector('[data-slot="pane-title"]');
+    let heading: {
+      column: number;
+      lines: number[];
+      width: number;
+      wrap: string;
+    } | null = null;
+    if (shown(title)) {
+      const box = title.getBoundingClientRect();
+      const column = (title.parentElement as Element).getBoundingClientRect();
+      const pad = getComputedStyle(title.parentElement as Element);
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const rows = new Map<number, { left: number; right: number }>();
+      for (const rect of range.getClientRects()) {
+        if (rect.width === 0) {
+          continue;
+        }
+        const key = Math.round(rect.top);
+        const row = rows.get(key) ?? { left: rect.left, right: rect.right };
+        rows.set(key, {
+          left: Math.min(row.left, rect.left),
+          right: Math.max(row.right, rect.right),
+        });
+      }
+      heading = {
+        width: box.width,
+        column:
+          column.width - px(pad.paddingInlineStart) - px(pad.paddingInlineEnd),
+        wrap: getComputedStyle(title).textWrap || "",
+        lines: [...rows.values()].map((row) => row.right - row.left),
+      };
+    }
+
+    // 5: each glyph in the head's capsule against the capsule's ground.
+    const glyphs = [...document.querySelectorAll(".head .capsule .bar-item")]
+      .filter(shown)
+      .map((item) => {
+        const ink = rgba(getComputedStyle(item).color);
+        const back = ground(item);
+        return {
+          name: item.getAttribute("aria-label") ?? "",
+          ratio: ratio(over(ink, back), back),
+        };
+      });
+
+    // 6, 7, 8: the board's fades against the open column and its cut edge.
+    const board = document.querySelector<HTMLElement>('[data-slot="board"]');
+    let edges: {
+      cut: string[];
+      endFade: number;
+      len: number;
+      mask: boolean;
+      open: { left: number; right: number; whole: boolean } | null;
+      startFade: number;
+    } | null = null;
+    if (board && shown(board) && board.scrollWidth > board.clientWidth + 1) {
+      const b = board.getBoundingClientRect();
+      const style = getComputedStyle(board);
+      const len = px(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--c-edge-fade-len"
+        )
+      );
+      const startFade = board.hasAttribute("data-more-start")
+        ? px(style.getPropertyValue("--fade-start"))
+        : 0;
+      const endFade = board.hasAttribute("data-more-end")
+        ? px(style.getPropertyValue("--fade-end"))
+        : 0;
+      const card = document.querySelector('.card[aria-current="true"]');
+      const col = card?.closest(".col") ?? null;
+      const c = col?.getBoundingClientRect();
+      const cut = [...board.querySelectorAll(":scope > .col")].filter((one) => {
+        const box = one.getBoundingClientRect();
+        return box.left < b.right - 0.5 && box.right > b.right + 0.5;
+      });
+      edges = {
+        len,
+        startFade,
+        endFade,
+        mask: style.maskImage.includes("gradient"),
+        open: c
+          ? {
+              left: c.left - b.left,
+              right: b.right - c.right,
+              whole: c.left >= b.left - 0.5 && c.right <= b.right + 0.5,
+            }
+          : null,
+        cut: cut.map((one) => (one as HTMLElement).dataset.col ?? ""),
+      };
+    }
+
+    // 6: the open card reads apart from an asking one.
+    const openCard = document.querySelector('.card[aria-current="true"]');
+    const asking = [
+      ...document.querySelectorAll(
+        '.card[data-needs]:not([aria-current="true"])'
+      ),
+    ].find(shown);
+    const cards =
+      shown(openCard) && asking
+        ? {
+            open: getComputedStyle(openCard).boxShadow,
+            asking: getComputedStyle(asking).boxShadow,
+          }
+        : null;
+
+    // 9: the Review column's tasks, the one state of his board every view draws.
+    const review = document.querySelector('.col[data-col="review"]');
+    return {
+      asked,
+      tab: tab && shown(tab) ? { parts: tabParts, screen } : null,
+      heading,
+      glyphs,
+      edges,
+      cards,
+      review: review ? review.querySelectorAll(".card").length : null,
+    };
+  });
+
+/** Each item the review of the captures named, held as boxes. */
+const checkReview = async (
+  kit: Kit,
+  page: Page,
+  where: string,
+  state: string
+): Promise<void> => {
+  const read = await reviewParts(page);
+  if (read.asked.length > 0) {
+    const hidden = read.asked.filter((one) => !one.clear || one.ink < 1);
+    kit.check(
+      `${where}: every answer of the ask stands whole at full ink, clear of the verdict bar and its fade (review items 1, 2)`,
+      hidden.length === 0,
+      `${read.asked.length} answers; ${hidden.map((one) => `“${one.words}” clear ${one.clear}, ink ${one.ink}`).join("; ") || "all clear"}`
+    );
+  }
+  if (read.tab) {
+    const { screen } = read.tab;
+    const out = read.tab.parts.filter(
+      (part) => part.left < -0.5 || part.right > screen + 0.5
+    );
+    kit.check(
+      `${where}: Caw's mark and his arcs stand inside the screen on his tucked tab (review item 3)`,
+      out.length === 0 && read.tab.parts.length > 0,
+      `${read.tab.parts.length} parts, rightmost ${Math.max(...read.tab.parts.map((part) => part.right)).toFixed(1)} of ${read.tab.screen}`
+    );
+  }
+  if (read.heading) {
+    const { heading } = read;
+    const widths = heading.lines;
+    const longest = Math.max(...widths);
+    const shortest = Math.min(...widths);
+    kit.check(
+      `${where}: the pane's title spans its column and wraps balanced (DESIGN.md, Balanced wrapping) (review item 4)`,
+      Math.abs(heading.width - heading.column) <= 1 &&
+        heading.wrap.includes("balance") &&
+        (widths.length < 2 || shortest >= longest * 0.6),
+      `box ${heading.width.toFixed(1)} of ${heading.column.toFixed(1)}, ${heading.wrap}, lines ${widths.map((w) => w.toFixed(0)).join(" / ")}`
+    );
+  }
+  if (read.glyphs.length > 0) {
+    const faint = read.glyphs.filter((one) => one.ratio < 3);
+    kit.check(
+      `${where}: each symbol in the head's capsule holds 3:1 against the capsule's ground (review item 5)`,
+      faint.length === 0,
+      read.glyphs
+        .map((one) => `${one.name} ${one.ratio.toFixed(2)}:1`)
+        .join(", ")
+    );
+  }
+  if (read.edges) {
+    const { edges } = read;
+    if (edges.open) {
+      const { open } = edges;
+      kit.check(
+        `${where}: the open task's column stands whole and under no fade (review items 6, 8)`,
+        open.whole &&
+          open.left >= edges.startFade - 0.5 &&
+          open.right >= edges.endFade - 0.5,
+        `column ${open.left.toFixed(1)}px from the start, ${open.right.toFixed(1)}px from the end; fades ${edges.startFade}px / ${edges.endFade}px`
+      );
+    }
+    if (edges.cut.length > 0) {
+      kit.check(
+        `${where}: a column cut at the board's trailing edge stands under the house edge fade's full length (review items 6, 7)`,
+        edges.mask && Math.abs(edges.endFade - edges.len) <= 0.5,
+        `${edges.cut.join(", ")} cut; fade ${edges.endFade}px of ${edges.len}px, mask ${edges.mask}`
+      );
+    }
+  }
+  if (read.cards) {
+    kit.check(
+      `${where}: the open card reads apart from an asking one, by its ring (review item 6)`,
+      read.cards.open !== read.cards.asking &&
+        read.cards.open.includes("inset"),
+      `open ${read.cards.open.slice(0, 80)}; asking ${read.cards.asking.slice(0, 80)}`
+    );
+  }
+  if (
+    read.review !== null &&
+    ["rest", "waiting", "open"].includes(state) &&
+    !page.url().includes("layout=columns") &&
+    (page.viewportSize()?.width ?? 0) >= 901
+  ) {
+    kit.check(
+      `${where}: the Review column holds the same three tasks at rest, waiting and open (review item 9)`,
+      read.review === 3,
+      `${read.review}`
+    );
+  }
+};
+
 /* ---------- The run ---------- */
 
 /** The house rules, one reader per engine (set as each engine's legs start). */
@@ -2249,6 +2577,7 @@ const checkState = async (
   );
   await checkNeeds(kit, page, where, state);
   await checkPins(kit, page, where, state);
+  await checkReview(kit, page, where, state);
   const boxed = await boxedGlyphs(page);
   kit.check(
     `${where}: no glyph stands in a box of its own`,

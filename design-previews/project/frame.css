@@ -30,6 +30,10 @@
   color-scheme: light;
   /* The pane's width as the split's side card (report §4.3). */
   --pane-w: 480px;
+  /* The most of the pane's height the tabs and their panel take, so the task
+     and what waits on him above them stand whole first (a preview size; it
+     becomes a token in design/tokens once picked). */
+  --pane-tabs-max: 30cqb;
   /* A project's identity ink, turned to its hue (DESIGN.md, Identity). */
   --project-ink: light-dark(oklch(48% 0.12 var(--h, 25)), oklch(74% 0.11 var(--h, 25)));
 }
@@ -723,17 +727,19 @@ pre {
     var(--fade-y, linear-gradient(#000, #000));
   mask-composite: intersect;
 }
+/* Each side's fade is cut short at the open task's column (frame.js,
+   markEdges: --fade-start, --fade-end), so that column is never drawn under it. */
 .board[data-more-end] {
   --fade-x: linear-gradient(
     to right,
-    #000 calc(100% - var(--c-edge-fade-len)),
+    #000 calc(100% - var(--fade-end, var(--c-edge-fade-len))),
     transparent
   );
 }
 .board[data-more-start] {
   --fade-x: linear-gradient(
     to left,
-    #000 calc(100% - var(--c-edge-fade-len)),
+    #000 calc(100% - var(--fade-start, var(--c-edge-fade-len))),
     transparent
   );
 }
@@ -741,8 +747,8 @@ pre {
   --fade-x: linear-gradient(
     to right,
     transparent,
-    #000 var(--c-edge-fade-len),
-    #000 calc(100% - var(--c-edge-fade-len)),
+    #000 var(--fade-start, var(--c-edge-fade-len)),
+    #000 calc(100% - var(--fade-end, var(--c-edge-fade-len))),
     transparent
   );
 }
@@ -1208,9 +1214,11 @@ pre {
 
 /* ---------- The task pane ---------- */
 .pane {
+  container-type: size;
   display: grid;
-  /* The cards give way (they scroll in their own region) before the tab
-     strip and its panel do: the strip always stands over its panel, whole. */
+  /* The cards scroll in their own region over the tabs, which take at most
+     --pane-tabs-max of the pane: the strip always stands over its panel, and
+     the panel scrolls in its own room, its foot under the house edge fade. */
   grid-template-rows: minmax(0, auto) auto auto;
   width: var(--pane-w);
   margin: var(--space-2) var(--space-2) var(--space-2) 0;
@@ -1237,9 +1245,24 @@ pre {
 }
 .pane-tabs {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--space-3);
+  max-block-size: var(--pane-tabs-max);
   padding: var(--space-3) var(--space-5) var(--space-2);
   border-block-start: 1px solid var(--border-hairline);
+}
+.pane-tabs [data-slot="panel"] {
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.pane-tabs [data-slot="panel"][data-more-below] {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
 }
 /* The pane's bar: bare symbols on no ground, Back leading on a phone, the
    capsule trailing; the task's title is the content under it. */
