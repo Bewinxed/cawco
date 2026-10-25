@@ -739,6 +739,7 @@ import {
   mediaBase64,
   mediaContentType,
   mediaFilePath,
+  mediaWriting,
   storedFilePath,
   storeFile,
 } from "./media";
@@ -29595,11 +29596,13 @@ export const createServer = (
       // name can only ever mean the same picture, so the browser keeps it.
       .get("/api/media/:name", async ({ params, status }) => {
         const path = mediaFilePath(params.name);
-        const file = path ? Bun.file(path) : undefined;
-        if (!(file && (await file.exists()))) {
+        // Its write may still be under way (media.ts `writing`).
+        const writing = path ? mediaWriting(params.name) : undefined;
+        const file = path && !writing ? Bun.file(path) : undefined;
+        if (!(writing || (file && (await file.exists())))) {
           return status(404, "no such media");
         }
-        return new Response(file, {
+        return new Response(writing ? new Uint8Array(writing) : file, {
           headers: {
             "Content-Type": mediaContentType(params.name),
             "Cache-Control": "public, max-age=31536000, immutable",
