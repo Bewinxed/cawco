@@ -1512,6 +1512,8 @@ export interface AnchorLookup<E, D> {
   bySelector: (within: D, selector: string) => E | null;
   bySource: (within: D, file: string, line: number) => E[];
   byText: (within: D, text: string) => E | null;
+  /** Whether an element is content, never the page's own box however much of it it covers: it draws words of its own. */
+  content: (el: E) => boolean;
   frame: (within: D, selector: string) => D | null;
   /** The document's page as a whole: its body; null when it has none. */
   page: (within: D) => E | null;
@@ -1576,6 +1578,28 @@ export const stableSelector = (selector: string): boolean =>
   ANCHOR_IDENTITIES.some((name) => selector.startsWith(`[${name}=`));
 
 /**
+ * The page as a whole, where an anchor's kept box was the page's own: a
+ * press in its padding kept on the page-sized container that held it. Never
+ * for a selector that is the element's identity (`stable`), nor for content
+ * the selector still names reading its text: a page of one card has a body
+ * the card's height.
+ */
+function pageOf<E, D>(
+  anchor: PageAnchor,
+  doc: D,
+  lookup: AnchorLookup<E, D>,
+  named: { el: E | null; holds: (el: E) => boolean; stable: boolean }
+): E | null {
+  const { el, holds, stable } = named;
+  if (stable || (el !== null && holds(el) && lookup.content(el))) {
+    return null;
+  }
+  return anchor.box && lookup.pageSized(doc, anchor.box)
+    ? lookup.page(doc)
+    : null;
+}
+
+/**
  * Where a mark stands in the page now, and by which part of its anchor: down
  * its frames, then its source's file:line, then its selector, then its text.
  * A selector of places alone finds its element only while that element
@@ -1584,7 +1608,8 @@ export const stableSelector = (selector: string): boolean =>
  * places whose kept box was the page's own (a press in its padding, kept on
  * the page-sized container that held it, before such a press named the
  * body) stands on the page as a whole, as {@link wholePage} does, whatever
- * its container says now. Null when none of them finds it: the mark goes to
+ * its container says now; content that draws words of its own and still
+ * reads the anchor's is never such a container. Null when none of them finds it: the mark goes to
  * the moved tray.
  */
 export function findAnchor<E, D>(
@@ -1625,10 +1650,7 @@ export function findAnchor<E, D>(
       return among;
     }
   }
-  const page =
-    !stable && anchor.box && lookup.pageSized(doc, anchor.box)
-      ? lookup.page(doc)
-      : null;
+  const page = pageOf(anchor, doc, lookup, { el: named, holds, stable });
   if (page) {
     return { by: "page", el: page };
   }

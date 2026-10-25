@@ -1391,12 +1391,19 @@ const PAGE_SHARE = 0.9;
  * Whether `el` is the page's own box rather than content on it: its
  * document's root or body, or a container nearly as wide and as tall as the
  * body (a `main` holding every card). The body's box, not the document's
- * scroll: the overlay's own layers stand in that.
+ * scroll: the overlay's own layers stand in that. An element that draws
+ * words of its own is content whatever it covers: a page of one card, its
+ * margins collapsed through the body, has a body exactly the card's height
+ * (decision-pages (h): the mockup's `.box` read as the page, so a Comment
+ * tap on it pinned the whole page).
  */
 function pageSized(el: Element): boolean {
   const doc = el.ownerDocument;
   if (el === doc.documentElement || el === doc.body || !doc.body) {
     return true;
+  }
+  if (drawsWords(el)) {
+    return false;
   }
   const page = doc.body.getBoundingClientRect();
   const { width, height } = el.getBoundingClientRect();
@@ -1681,6 +1688,7 @@ function findAnchorHere(anchor: PageAnchor) {
     frame: frameIn,
     page: (within) => within.body,
     pageSized: pageSizedBox,
+    content: drawsWords,
     bySource: (within, file, line) =>
       pageElements(within).filter((el) => {
         const own = ownSource(el);

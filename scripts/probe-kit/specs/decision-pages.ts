@@ -8,6 +8,8 @@
  *
  *   bun scripts/probe-kit/run.ts decision-pages
  *   DECISION_PAGES=a PROBE_ENGINE=webkit bun scripts/probe-kit/run.ts decision-pages
+ *   DECISION_PAGES=h bun scripts/probe-kit/run.ts decision-pages   (h) alone
+ *   DECISION_PAGES=n bun scripts/probe-kit/run.ts decision-pages   (n) alone
  *
  * (a) A page of three decisions (one in a Section) and every media piece
  *     built (Image, Diagram, Canvas, Preview, Dials) draws in the panel's
@@ -591,7 +593,14 @@ const mediaIn = (frame: Frame) =>
         probe.style.display = "flex";
         document.body.append(probe);
         const space = getComputedStyle(probe).columnGap;
+        // The attn badge's own inks, as the host's tokens compute.
+        probe.style.color = "var(--status-attn-ink)";
+        probe.style.backgroundColor = "var(--status-attn-glyph)";
+        const attn = getComputedStyle(probe);
+        const attnInk = attn.color;
+        const attnGlyph = attn.backgroundColor;
         probe.remove();
+        const dot = badge?.querySelector("[data-slot=badge-dot]");
         return {
           space,
           display: rowStyle?.display,
@@ -599,7 +608,10 @@ const mediaIn = (frame: Frame) =>
           wrap: rowStyle?.flexWrap,
           gap: rowStyle?.columnGap,
           font: words ? getComputedStyle(words).fontFamily : "",
-          badge: badge ? getComputedStyle(badge).backgroundColor : "",
+          badge: badge ? getComputedStyle(badge).color : "",
+          dot: dot ? getComputedStyle(dot).backgroundColor : "",
+          attnInk,
+          attnGlyph,
         };
       })(),
       opens: [
@@ -1007,15 +1019,15 @@ const mediaLeg = async (
     JSON.stringify(media.dialValues)
   );
   kit.check(
-    `(a) ${leg}: the house faces loaded in the page, and a Row of Text and a Badge drawn on the host's own styles`,
+    `(a) ${leg}: the house faces loaded in the page, and a Row of Text and a Badge drawn on the host's own styles (the attn Badge in status-attn-ink, its Status dot in status-attn-glyph)`,
     media.faces.some((family) => family.includes("Figtree")) &&
       media.row.display === "flex" &&
       media.row.direction === "row" &&
       media.row.wrap === "wrap" &&
       media.row.gap === media.row.space &&
       media.row.font.includes("Figtree") &&
-      media.row.badge !== "" &&
-      media.row.badge !== "rgba(0, 0, 0, 0)",
+      media.row.badge === media.row.attnInk &&
+      media.row.dot === media.row.attnGlyph,
     JSON.stringify({ faces: media.faces, row: media.row })
   );
   const hero = await frame.evaluate(() => {
@@ -1286,6 +1298,26 @@ const toPaneTop = (target: Locator) =>
   });
 
 /** What the page shows topmost at the middle of `box` (the desk's px), seen through the overlay. */
+/** Inside the option's embed: its box, and what its own document finds at the box's middle. */
+const embedAt = async (frame: Frame) => {
+  const inner = frame
+    .childFrames()
+    .find((one) => one.url().includes("/__cawco/page/"));
+  if (!inner) {
+    return null;
+  }
+  return await inner.evaluate(() => {
+    const box = document.querySelector(".box")?.getBoundingClientRect();
+    const at = box
+      ? document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+      : null;
+    return {
+      box: box && [box.x, box.y, box.width, box.height].map(Math.round),
+      at: at ? `${at.localName}.${at.className}` : null,
+    };
+  });
+};
+
 const topAt = async (
   desk: Page,
   frame: Frame,
@@ -1464,6 +1496,7 @@ const commentInEmbed = async (on: On, frame: Frame) => {
     JSON.stringify({
       anchor: pin?.anchor ?? null,
       top: await topAt(desk, frame, box),
+      inside: await embedAt(frame),
     })
   );
   await desk.keyboard.press("Escape");
@@ -1480,6 +1513,8 @@ const commentInEmbed = async (on: On, frame: Frame) => {
 interface SwitchWatch {
   /** Frames the document's own code asked for in the quiet window. */
   asked: number;
+  /** Who asked them: each asking callback's name and the script frames that asked, the first few. */
+  askers: string[];
   /** The longest gap between two frames from the press until the quiet window, ms. */
   gap: number;
   /** Long tasks (Chromium's `longtask` entries) from the press on, ms each. */
@@ -1490,6 +1525,7 @@ interface SwitchWatch {
 
 interface SwitchState {
   asked: number;
+  askers: string[];
   counting: boolean;
   frames: number[];
   long: number[];
@@ -1513,6 +1549,7 @@ const watchSwitch = () => {
     const own = window.requestAnimationFrame.bind(window);
     const made: SwitchState = {
       asked: 0,
+      askers: [],
       counting: false,
       frames: [],
       long: [],
@@ -1524,12 +1561,22 @@ const watchSwitch = () => {
     // The browser driver's own frame callbacks (on WebKit, its scripts run
     // from `web-inspector://`) are none of the page's.
     w.requestAnimationFrame = (callback) => {
+      const stack = new Error("who asks").stack ?? "";
       if (
         made.counting &&
         callback.name !== "switchTick" &&
-        !(new Error("who asks").stack ?? "").includes("web-inspector://")
+        !stack.includes("web-inspector://")
       ) {
         made.asked += 1;
+        if (made.askers.length < 3) {
+          made.askers.push(
+            `${callback.name || "(anonymous)"} ← ${stack
+              .split("\n")
+              .slice(2, 6)
+              .map((line) => line.trim().slice(0, 120))
+              .join(" ← ")}`
+          );
+        }
       }
       return own(callback);
     };
@@ -1566,6 +1613,7 @@ const quietSwitch = () => {
   const state = (window as unknown as { __switch: SwitchState }).__switch;
   state.timing = false;
   state.asked = 0;
+  state.askers = [];
   state.counting = true;
   state.quietAt = performance.now();
 };
@@ -1627,6 +1675,7 @@ const readSwitch = (scope: string | null): SwitchWatch => {
     });
   return {
     asked: state.asked,
+    askers: state.askers,
     gap: Math.round(gap),
     long: state.long,
     running,
@@ -1865,7 +1914,7 @@ const switchLeg = async (on: On, frame: Frame) => {
   );
   if (rest.desk.asked + rest.frame.asked > 0 || resting.length > 0) {
     fails.push(
-      `at rest: frames asked ${rest.desk.asked}/${rest.frame.asked}, still ${resting.join(", ") || "none"}`
+      `at rest: frames asked ${rest.desk.asked}/${rest.frame.asked}, still ${resting.join(", ") || "none"}; asked by ${[...rest.desk.askers.map((one) => `desk ${one}`), ...rest.frame.askers.map((one) => `page ${one}`)].join(" | ") || "none"}`
     );
   }
   kit.check(
@@ -2807,10 +2856,13 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
   });
   kit.check(
     `(g) 320 ${theme}: an option with a cost, a long unbroken label and a live embed fits: card and frame scroll no wider than they are, the embed inside the card, the cost line wrapped`,
+    // No wider than they are: a scroll width under the client's is no
+    // sideways scroll (Chromium reads the frame's root 294 in its 304 since
+    // f1c6dc6bb's pages grow with the window).
     phone.viewportSize()?.width === 320 &&
-      fit.frame.scroll === fit.frame.client &&
+      fit.frame.scroll <= fit.frame.client &&
       !!fit.card &&
-      fit.card.scroll === fit.card.client &&
+      fit.card.scroll <= fit.card.client &&
       !!fit.cardBox &&
       !!fit.embed &&
       fit.embed.left >= fit.cardBox.left &&
@@ -5921,6 +5973,17 @@ const run = async (kit: Kit) => {
     return;
   }
   const on = await publish(kit, await standUp(kit));
+  // `DECISION_PAGES=h`: (h)'s two legs over the option's live embed alone.
+  if (process.env.DECISION_PAGES === "h") {
+    await drawOverEmbed(on, await frameWith(on.desk, 3));
+    await commentInEmbed(on, await frameWith(on.desk, 3));
+    return;
+  }
+  // `DECISION_PAGES=n`: (n)'s switches alone.
+  if (process.env.DECISION_PAGES === "n") {
+    await switchLeg(on, await frameWith(on.desk, 3));
+    return;
+  }
   for (const view of ["desk", "phone"] as const) {
     for (const theme of ["light", "dark"] as const) {
       await mediaLeg(on, view, theme);
