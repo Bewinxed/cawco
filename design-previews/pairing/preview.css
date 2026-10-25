@@ -612,7 +612,6 @@
       letter-spacing: var(--track-title);
     }
     .kind,
-    .place,
     .alias {
       color: var(--ink-muted);
       font: var(--type-body);
