@@ -216,7 +216,7 @@ import {
   handleStreamMessage,
   latestCommand,
   noteDisconnect,
-  resumeAdopted,
+  resumeHeld,
   resumePendingSends,
   SETTLED_COMMAND_LIMIT,
   SETTLED_COMMAND_TTL_MS,
@@ -239,7 +239,7 @@ import { speakerName } from "./transcript/speaker";
 import type { DelegateAskEvent, Message } from "./types";
 import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
-import { workspace } from "./workspace/workspace.svelte";
+import { contextOf, workspace } from "./workspace/workspace.svelte";
 
 export type ConnectionStatus =
   "connecting" | "connected" | "disconnected" | "error";
@@ -5373,13 +5373,17 @@ export function syncSubscriptions(): void {
  * nothing, and with nothing read again the pane shows that empty moment for
  * good, the agent's every word after it never drawn.
  *
- * `reconnect`: the socket is new, so every one of them is read again, and a
- * read in flight was asked of the connection before. A page's first
- * connection had none before it: a read in flight is joined, and a page that
- * landed before the socket's board (or before its tab was named) resumes its
- * stream from the page's `seq` when the page came from this socket's hub run
- * ({@link resumeAdopted}), and is read again only when it came from another;
- * one whose read failed is left to the read again that failure scheduled.
+ * A stream whose place counts in this socket's hub run resumes from it
+ * instead ({@link resumeHeld}): a page that landed before the socket's
+ * board (or before its tab was named), or the last event a dropped socket
+ * applied, when the socket that replaces it reaches the same hub run. The hub
+ * replays what came after out of its ring, or resets, and the reset reads the
+ * page again. Only a place in another run (the hub restarted) is read again.
+ *
+ * `reconnect`: the socket is new, and a read in flight was asked of the
+ * connection before: it is ended and read again. A page's first connection
+ * had none before it: a read in flight is joined, and one whose read failed
+ * is left to the read again that failure scheduled.
  */
 function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
   if (state.status !== "connected") {
@@ -5389,9 +5393,8 @@ function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
   const first = connections === 1;
   for (const id of ids) {
     if (
-      first &&
       socketRun !== null &&
-      resumeAdopted(streamState, streamHost, id, socketRun)
+      resumeHeld(streamState, streamHost, id, socketRun)
     ) {
       continue;
     }
@@ -5601,18 +5604,16 @@ function connect(): void {
 }
 
 /**
- * A new connection: every transcript the dashboard follows is read again,
- * merged into the rows held ({@link mergeRows}), with this tab's own
- * sends kept in `local` until the hub places them, and the read's page
- * subscribes it on this socket ({@link adoptPage}). Never resumed from the
- * cursor the last connection left: the hub numbers a session's stream in
- * memory, from 1 again after a restart, so that cursor may sit inside
- * another hub process's numbering, and a resume from it would replay that
- * process's events onto rows they do not follow (iOS does the same,
- * `SessionsStore.reconnected`). The page's first connection resumes from a
- * page read before it opened, when the board names the page's hub run
- * ({@link followHeld}). An open tab never read yet waits for its pane's own
- * read.
+ * A new connection: every transcript the dashboard follows resumes its
+ * stream from the place it holds when that place counts in the board's hub
+ * run ({@link followHeld}), and is read again otherwise, merged into the rows
+ * held ({@link mergeRows}), with this tab's own sends kept in `local` until
+ * the hub places them, the read's page subscribing it on this socket
+ * ({@link adoptPage}). Never resumed across hub runs: the hub numbers a
+ * session's stream in memory, from 1 again after a restart, so a place from
+ * another run sits inside another process's numbering, and a resume from it
+ * would replay that process's events onto rows they do not follow. An open
+ * tab never read yet waits for its pane's own read.
  */
 function rereadFollowed(): void {
   connections += 1;
@@ -7955,6 +7956,18 @@ export function clearReadFault(instanceId: string): void {
 }
 
 /**
+ * The server's read of this load found the view's machine away (its served
+ * tail's 503): that is this load's read, kept as the view's fault, and the
+ * view is read again on what can answer it ({@link readFailed}: the machine's
+ * deadline, the board listing it online), never asked again meanwhile.
+ */
+export function keepServedAway(viewId: string, fault: ReadFault): void {
+  if (fault.reason === "offline") {
+    readFailed(session(viewId), fault);
+  }
+}
+
+/**
  * The newest transcript page the server read for a view, or how the hub
  * refused it — what `/session/[id]`'s server load hands the pane it names.
  */
@@ -7987,15 +8000,22 @@ export function readFaultOf(
   away: string | null,
   reconnectingUntil: number | null = null
 ): ReadFault {
-  if (away) {
-    return {
-      reason: "offline",
-      machineId: away,
-      ...(reconnectingUntil === null ? {} : { reconnectingUntil }),
-      message: `${machineName(away)} is offline, so its stored transcript can't be read right now`,
-    };
-  }
-  return { reason: "failed", message: failure.detail };
+  return away
+    ? awayFault(away, reconnectingUntil)
+    : { reason: "failed", message: failure.detail };
+}
+
+/** A read's machine away, as its fault says it ({@link readFaultOf}). */
+function awayFault(
+  machineId: string,
+  reconnectingUntil: number | null
+): ReadFault {
+  return {
+    reason: "offline",
+    machineId,
+    ...(reconnectingUntil === null ? {} : { reconnectingUntil }),
+    message: `${machineName(machineId)} is offline, so its stored transcript can't be read right now`,
+  };
 }
 
 /** A machine as the fleet list names it (its label), else its id. */
@@ -8108,6 +8128,16 @@ export function readTranscript(
   if (cause === "open" && streamState.cursors[viewId]?.subscribed) {
     return Promise.resolve({ ok: true, skipped: true });
   }
+  // A conversation stored on a machine the board lists away is not asked:
+  // the hub could only refuse it (503). The view says the machine is away,
+  // as that refusal would have, and the board listing it online reads it
+  // (`readBehind`).
+  const away = storedAwayOn(viewId);
+  if (away) {
+    const fault = awayFault(away.machineId, away.reconnectingUntil ?? null);
+    readFailed(target, fault);
+    return Promise.resolve({ ok: false, ...fault });
+  }
   const controller = new AbortController();
   const read: Promise<TranscriptOutcome> = readNewestPage(
     target,
@@ -8121,6 +8151,22 @@ export function readTranscript(
   });
   pageReads.set(viewId, { read, cancel: () => controller.abort() });
   return read;
+}
+
+/**
+ * The machine a view's conversation is stored on, when the hub holds no row
+ * for it and the board lists that machine away: the hub reads such a
+ * conversation off its machine alone. A row is read whatever its machine:
+ * the hub may hold its transcript built. Null before the first board, whose
+ * machines are not known yet.
+ */
+function storedAwayOn(viewId: string): Machine | null {
+  if (socketRun === null || instanceIndex.byId.has(viewId)) {
+    return null;
+  }
+  const machineId = contextOf(viewId)?.machine;
+  const machine = state.machines.find((row) => row.machineId === machineId);
+  return machine && machine.status !== "online" ? machine : null;
 }
 
 /**

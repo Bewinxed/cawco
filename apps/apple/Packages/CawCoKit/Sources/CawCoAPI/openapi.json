@@ -45424,6 +45424,13 @@
               "string"
             ]
           },
+          "reconnectingUntil": {
+            "description": "Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this\nmachine as on its way back after its agent's link went: a read off it\nanswers so then (`Retry-After`), and offline after. Null while it is\nconnected or once it is offline. Live, as `status` is: never stored.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "status": {
             "type": "string"
           },

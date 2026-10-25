@@ -18169,9 +18169,17 @@ export const createServer = (
                 .map((owner) => owner.id),
             }
           : custody;
+      const away = machinePresence(row.machineId);
       return {
         ...row,
         custody: visibleCustody,
+        // Live, like `status`: the window a read off it answers
+        // `reconnecting` in (awayHeaders), so a reader that does not ask it
+        // says the same.
+        reconnectingUntil:
+          away.kind === "reconnecting" && !registry.agent(row.machineId)
+            ? away.until
+            : null,
         // Online while its agent holds a link and, when it speaks this
         // hub's contract, once it has answered its welcome (fleet-sync.ts).
         status:

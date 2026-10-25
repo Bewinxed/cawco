@@ -29,17 +29,23 @@
  *    page was read: the page's run is not the socket's, so B's newest page is
  *    read once more after the socket opens (`because reconnect`), and only
  *    once.
+ * f. The page's socket drops and comes back to the same hub run: no
+ *    transcript page is read; B's stream resumes from its place (the hub
+ *    answers with its backlog, no reset; client.svelte.ts `followHeld`).
  * e. A tab on a conversation stored on the machine, which the hub holds no
- *    row for, opened by its address once the machine is offline (past its
- *    reconnecting window): the hub's locate finds it in the machine's last
- *    catalog, and the transcript route answers 503 (the machine away), read
- *    once, and no response is a 404. The page logs nothing; Chromium's own
- *    "Failed to load resource" line for each 503 is the browser's, counted
- *    against the 503s. The pane shows the machine away.
+ *    row for, opened by its address once the machine is away: the hub's
+ *    locate finds it in the machine's last catalog and answers its
+ *    transcript 503 (the machine away), never 404. The page asks for it not
+ *    once, through the machine's reconnecting window and past it: the
+ *    server's read of the load said the machine is away, and the board lists
+ *    it away (`storedAwayOn`). The page logs nothing; Chromium's own "Failed
+ *    to load resource" line for each 503 (Files' attachments) is the
+ *    browser's, counted against the 503s. The pane shows the machine away.
+ *    The machine back, the page reads it once, and the pane says so no more.
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Page, Response } from "playwright-core";
+import type { Page, Response, WebSocketRoute } from "playwright-core";
 import type { AgentRow } from "../../../packages/core/src";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { RECONNECTING_MS } from "../../../packages/core/src/handover";
@@ -65,6 +71,10 @@ const AWAY_TITLE = /This machine is (offline|reconnecting)/;
 /** Chromium's console line for a 503 response: the browser's, not the page's. */
 const AWAY_LOAD_LINE =
   /^\[error\] Failed to load resource: the server responded with a status of 503/;
+/** The hub's answer to a stream's resume (hub stream.ts `subscribe`). */
+const STREAM_ANSWER = /"type":"stream\.(backlog|reset)"/;
+/** Any session's newest transcript page. */
+const TRANSCRIPT_PATH = /^\/api\/instances\/[^/]+\/transcript$/;
 
 /** What a page said and failed, from the moment it is watched. */
 interface Heard {
@@ -292,11 +302,29 @@ const run = async (kit: Kit): Promise<void> => {
 
   // d. The hub restarts between the page's read and its socket.
   const { promise: held, resolve: release } = Promise.withResolvers<void>();
+  /** The page's socket as it stands, how many it has opened, and what the hub said on them that f reads. */
+  const sockets = {
+    live: null as WebSocketRoute | null,
+    opened: 0,
+    resumed: [] as string[],
+  };
   await page.routeWebSocket(
     (url) => url.pathname === "/ws/dashboard",
     async (ws) => {
       await held;
-      ws.connectToServer();
+      const server = ws.connectToServer();
+      sockets.live = ws;
+      sockets.opened += 1;
+      ws.onMessage((message) => server.send(message));
+      server.onMessage((message) => {
+        if (typeof message === "string") {
+          const kind = STREAM_ANSWER.exec(message)?.[1];
+          if (kind && message.includes(busy)) {
+            sockets.resumed.push(kind);
+          }
+        }
+        ws.send(message);
+      });
     }
   );
   const isNewest = (response: Response) =>
@@ -333,6 +361,45 @@ const run = async (kit: Kit): Promise<void> => {
     })
   );
 
+  // f. The socket drops and comes back to the same hub run.
+  const openedBefore = sockets.opened;
+  sockets.resumed.length = 0;
+  take(heard);
+  await sockets.live?.close({ code: 4000, reason: "console-quiet: a drop" });
+  const reopened = await until(
+    "the page's socket back",
+    () => Promise.resolve(sockets.opened),
+    (opened) => opened > openedBefore,
+    30_000
+  ).catch(() => sockets.opened);
+  await until(
+    "the busy session's stream answered on the new socket",
+    () => Promise.resolve(sockets.resumed.length),
+    (answers) => answers > 0,
+    15_000
+  ).catch(() => 0);
+  await page.waitForTimeout(SETTLE_MS);
+  const dropped = take(heard);
+  const pageReads = dropped.asked.filter((path) => TRANSCRIPT_PATH.test(path));
+  kit.check(
+    "f. a socket drop that comes back to the same hub run reads no transcript page: the busy session's stream resumes from its place (the hub's backlog, no reset), and nothing is logged or fails",
+    reopened > openedBefore &&
+      pageReads.length === 0 &&
+      dropped.read.length === 0 &&
+      sockets.resumed.includes("backlog") &&
+      !sockets.resumed.includes("reset") &&
+      dropped.said.length === 0 &&
+      dropped.failed.length === 0,
+    JSON.stringify({
+      opened: reopened - openedBefore,
+      pageReads,
+      why: dropped.read,
+      resumed: sockets.resumed,
+      said: dropped.said,
+      failed: dropped.failed,
+    })
+  );
+
   // e. A stored conversation whose machine is away.
   const rows = fleet.query<{ id: string }>(
     "SELECT id FROM instances WHERE id = ? OR session_id = ?",
@@ -354,16 +421,10 @@ const run = async (kit: Kit): Promise<void> => {
     (status) => status !== "online",
     30_000
   );
-  // Past its reconnecting window, the machine is offline: no read again
-  // waits on the window's deadline (client.svelte.ts `readAtDeadline`).
-  const away = Date.now();
-  await page.waitForTimeout(RECONNECTING_MS + 2000);
   take(heard);
   const stored = `/api/instances/${STORED}/transcript`;
-  const answered = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === stored,
-    { timeout: 60_000 }
-  );
+  // The hub's own answer for it, asked beside the page (not in its log).
+  const hubSays = await page.request.get(`${base}${stored}`);
   await page.goto(
     `${base}/session/${STORED}?${new URLSearchParams({
       machine: MACHINE,
@@ -372,7 +433,6 @@ const run = async (kit: Kit): Promise<void> => {
     })}`,
     { waitUntil: "domcontentloaded" }
   );
-  const storedRead = await answered.catch(() => null);
   const awayShown = await page
     .getByRole("alert")
     .filter({ hasText: AWAY_TITLE })
@@ -380,7 +440,9 @@ const run = async (kit: Kit): Promise<void> => {
     .waitFor({ timeout: 30_000 })
     .then(() => true)
     .catch(() => false);
-  await page.waitForTimeout(SETTLE_MS);
+  // Past the machine's reconnecting window: its deadline asks nothing either
+  // (client.svelte.ts `readAtDeadline`, the board still listing it away).
+  await page.waitForTimeout(RECONNECTING_MS + SETTLE_MS);
   const awayLoad = take(heard);
   // Chromium's own line for each response that is not a 2xx: one for each
   // 503 in the network log, and none of them the page's.
@@ -391,21 +453,50 @@ const run = async (kit: Kit): Promise<void> => {
   const unavailable = awayLoad.failed.filter((line) => line.startsWith("503 "));
   const storedReads = awayLoad.asked.filter((path) => path === stored).length;
   kit.check(
-    "e. the stored conversation's machine away: its transcript is read once and answers 503, every failed response is a 503 (none a 404), the page logs nothing (the browser's line for each 503 aside), and the pane shows the machine away",
-    storedRead?.status() === 503 &&
-      storedReads === 1 &&
+    "e. the stored conversation's machine away: the hub answers its transcript 503, the page asks for it not once through the machine's reconnecting window and past it, every failed response is a 503 (none a 404), the page logs nothing (the browser's line for each 503 aside), and the pane shows the machine away",
+    hubSays.status() === 503 &&
+      storedReads === 0 &&
       unavailable.length === awayLoad.failed.length &&
       browserLines.length === unavailable.length &&
       pageSaid.length === 0 &&
       awayShown,
     JSON.stringify({
-      awayForMs: Date.now() - away,
-      status: storedRead?.status() ?? null,
+      hub: hubSays.status(),
       storedReads,
       why: awayLoad.read,
       failed: awayLoad.failed,
       said: awayLoad.said,
       awayShown,
+    })
+  );
+
+  // The machine back: its conversation is read, once.
+  const answered = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === stored,
+    { timeout: 90_000 }
+  );
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const backRead = await answered.catch(() => null);
+  const awayGone = await page
+    .getByRole("alert")
+    .filter({ hasText: AWAY_TITLE })
+    .first()
+    .waitFor({ state: "detached", timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  await page.waitForTimeout(SETTLE_MS);
+  const backLoad = take(heard);
+  const backReads = backLoad.asked.filter((path) => path === stored).length;
+  kit.check(
+    "e. the machine back: the stored conversation is read once, answers 200, and the pane no longer says the machine is away",
+    backRead?.status() === 200 && backReads === 1 && awayGone,
+    JSON.stringify({
+      status: backRead?.status() ?? null,
+      backReads,
+      why: backLoad.read,
+      awayGone,
+      failed: backLoad.failed,
     })
   );
 };
