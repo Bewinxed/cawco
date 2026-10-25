@@ -164,6 +164,8 @@ const BOARDS: {
     beats: [
       { name: "lead:exit", target: "p[data-line", at: 0, dur: 160 },
       { name: "follow", at: 160, dur: 280 },
+      // Done: up under the facts at 160→440, then down for the line at 1480→1740, one run.
+      { name: "follow", target: "button[primary]", at: 160, dur: 1580 },
     ],
   },
   {
@@ -917,6 +919,46 @@ async function rideRead(
               '[data-slot="primary"] .label'
             ) as HTMLElement
           ).getBoundingClientRect().width,
+          ...(() => {
+            const box = (sel: string) =>
+              (
+                document.querySelector(sel) as HTMLElement
+              ).getBoundingClientRect();
+            const done = box('[data-slot="primary"]');
+            const when = box(".facts .when");
+            const after = box(".after");
+            // The bottom bar's draw (its least dashoffset), the travelling letters' box, the screen's.
+            const bars = [
+              ...document.querySelectorAll(".device .bottom-bar"),
+            ].map((one) =>
+              Number.parseFloat(getComputedStyle(one).strokeDashoffset)
+            );
+            const glyphs = [
+              ...document.querySelectorAll(".screen-letters .g"),
+            ].map((one) => one.getBoundingClientRect());
+            const screen = box(".screen");
+            return {
+              done: done.top,
+              whenBottom: when.bottom,
+              afterTop: after.top,
+              afterBottom: after.bottom,
+              bar: bars.length ? Math.min(...bars) : 1,
+              lettersBox: {
+                top: Math.min(...glyphs.map((g) => g.top)),
+                bottom: Math.max(...glyphs.map((g) => g.bottom)),
+                left: Math.min(...glyphs.map((g) => g.left)),
+                right: Math.max(...glyphs.map((g) => g.right)),
+              },
+              screenBox: {
+                top: screen.top,
+                bottom: screen.bottom,
+                left: screen.left,
+                right: screen.right,
+                w: screen.width,
+                h: screen.height,
+              },
+            };
+          })(),
         })),
     }
   );
@@ -976,6 +1018,62 @@ async function rideLeg(kit: Kit, page: Page, engine: Engine) {
         );
       }
     }
+    // The scan's outline (the designer's ruling): as the bottom bar first draws, the travelling
+    // letters stand wholly inside the screen.
+    const scan = await rideRead(
+      page,
+      "waiting",
+      "checking-tailnet",
+      Array.from({ length: 41 }, (_, i) => (900 + i * 10) / 2000)
+    );
+    const firstBar = scan.findIndex((r) => r.bar < 1);
+    const firstInside = scan.findIndex(
+      (r) =>
+        r.lettersBox.top >= r.screenBox.top - 0.5 &&
+        r.lettersBox.bottom <= r.screenBox.bottom + 0.5 &&
+        r.lettersBox.left >= r.screenBox.left - 0.5 &&
+        r.lettersBox.right <= r.screenBox.right + 0.5
+    );
+    const atBar = scan[firstBar];
+    const inside =
+      atBar !== undefined &&
+      atBar.lettersBox.top >= atBar.screenBox.top - 0.5 &&
+      atBar.lettersBox.bottom <= atBar.screenBox.bottom + 0.5 &&
+      atBar.lettersBox.left >= atBar.screenBox.left - 0.5 &&
+      atBar.lettersBox.right <= atBar.screenBox.right + 0.5;
+    kit.check(
+      `${engine} at ${width}: the outline's bottom bar first draws at ${900 + firstBar * 10}ms, and there the travelling letters (y ${atBar?.lettersBox.top.toFixed(1)}–${atBar?.lettersBox.bottom.toFixed(1)}) stand wholly inside the ${atBar?.screenBox.w.toFixed(0)}×${atBar?.screenBox.h.toFixed(0)} screen (y ${atBar?.screenBox.top.toFixed(1)}–${atBar?.screenBox.bottom.toFixed(1)}; the letters first wholly inside at ${firstInside < 0 ? "never" : `${900 + firstInside * 10}ms`})`,
+      firstBar > 0 && inside
+    );
+    // Paired: no row stands for the lock-screen line before it comes. At 1000ms Done sits under the
+    // facts at space-5; at rest the line stands space-3 under the facts and Done space-5 under it.
+    const paired = await rideRead(page, "checking-tailnet", "approved", [
+      1000 / 1900,
+      1610 / 1900,
+      1,
+    ]);
+    const space = await page.evaluate(() => {
+      const css = getComputedStyle(document.documentElement);
+      return {
+        s3: Number.parseFloat(css.getPropertyValue("--space-3")),
+        s5: Number.parseFloat(css.getPropertyValue("--space-5")),
+      };
+    });
+    const [held, moving, rest] = paired;
+    const underFacts = held ? held.done - held.whenBottom : Number.NaN;
+    const lineGap = rest ? rest.afterTop - rest.whenBottom : Number.NaN;
+    const doneGap = rest ? rest.done - rest.afterBottom : Number.NaN;
+    const midway =
+      held && moving && rest
+        ? moving.done > held.done && moving.done < rest.done
+        : false;
+    kit.check(
+      `${engine} at ${width}: Paired keeps no row for the line before it comes: Done ${underFacts.toFixed(1)}px under the facts at 1000ms (space-5 ${space.s5}), on its way down at 1610ms, then the line ${lineGap.toFixed(1)}px under the facts (space-3 ${space.s3}) and Done ${doneGap.toFixed(1)}px under the line at rest`,
+      Math.abs(underFacts - space.s5) <= 0.5 &&
+        Math.abs(lineGap - space.s3) <= 0.5 &&
+        Math.abs(doneGap - space.s5) <= 0.5 &&
+        midway
+    );
     // Done's label at 380ms (its morph landed at 260, the board held) against its width at rest.
     const reads = await rideRead(page, "checking-tailnet", "approved", [
       380 / 1900,

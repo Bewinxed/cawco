@@ -287,16 +287,25 @@ const MARKS = {
 };
 
 /** The iPhone's wire, nine strokes on a 96 box (its screen 36 × 56 at 30, 20). */
+/**
+ * The iPhone's wire on a 96 box (its screen 36 × 56 at 30, 20), cut for its
+ * draw: two mirrored halves from the top centre down each side, the bottom
+ * bar the last sixth of each, closing at the bottom centre last; the notch,
+ * the side buttons and the home bar drawn as the sides pass them. `from` and
+ * `to` are where each stroke draws in the draw's eased progress.
+ */
 const STROKES = [
-  "M30 20a10 10 0 0 1 10 -10h16a10 10 0 0 1 10 10",
-  "M66 20V76",
-  "M66 76a10 10 0 0 1 -10 10h-16a10 10 0 0 1 -10 -10",
-  "M30 76V20",
-  "M43.5 15.5h9",
-  "M42 81.5h12",
-  "M68.5 32v11",
-  "M27.5 29v6",
-  "M27.5 38v6",
+  { d: "M48 10h8a10 10 0 0 1 10 10V76", from: 0, to: 5 / 6 },
+  { d: "M48 10h-8a10 10 0 0 0 -10 10V76", from: 0, to: 5 / 6 },
+  { d: "M66 76a10 10 0 0 1 -10 10h-8", from: 5 / 6, to: 1, bottom: true },
+  { d: "M30 76a10 10 0 0 0 10 10h8", from: 5 / 6, to: 1, bottom: true },
+  { d: "M48 15.5h4.5", from: 0, to: 1 / 6 },
+  { d: "M48 15.5h-4.5", from: 0, to: 1 / 6 },
+  { d: "M68.5 32v11", from: 0.31, to: 0.41 },
+  { d: "M27.5 29v6", from: 0.29, to: 0.34 },
+  { d: "M27.5 38v6", from: 0.36, to: 0.41 },
+  { d: "M54 81.5h-6", from: 5 / 6, to: 1, bottom: true },
+  { d: "M42 81.5h6", from: 5 / 6, to: 1, bottom: true },
 ];
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -679,10 +688,10 @@ function build() {
   }
 
   // The device's wire: nine strokes, each drawn by its own length (pathLength 1).
-  for (const d of STROKES) {
-    const path = svgEl("path", { d, pathLength: 1 });
+  for (const stroke of STROKES) {
+    const path = svgEl("path", { d: stroke.d, pathLength: 1, class: stroke.bottom ? "bottom-bar" : "side" });
     S.device.append(path);
-    S.strokes.push(path);
+    S.strokes.push({ path, ...stroke });
   }
 
   // The letter run (two groups of three) and the screen's two rows.
@@ -1474,14 +1483,40 @@ function playWords(before, w) {
     const dx = b.rect.x - a.rect.x;
     const dy = b.rect.y - a.rect.y;
     const dw = Math.abs(b.rect.w - a.rect.w) > 0.5 && k === "primary";
-    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5 || dw) {
-      const from = { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)` };
-      const to = { transform: "none" };
-      if (dw) {
-        Object.assign(from, { flexGrow: 0, flexShrink: 0, flexBasis: `${b.rect.w}px` });
-        Object.assign(to, { flexGrow: 0, flexShrink: 0, flexBasis: `${a.rect.w}px` });
+    // An act under a line that arrives later (`w.arrives`, Paired's lock-screen line) rests first
+    // directly under the facts, then makes room for the line on the line's own clock.
+    const room = w.arrives && ["primary", "ghost"].includes(k) ? w.arrives.room() : 0;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5 || dw || room) {
+      const width = (px) => (dw ? { flexGrow: 0, flexShrink: 0, flexBasis: `${px}px` } : {});
+      const start = w.follow ?? D.exit;
+      if (room) {
+        const end = w.arrives.at + D.pop;
+        const span = end - start;
+        part(
+          el,
+          [
+            { offset: 0, transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`, easing: E.out, ...width(b.rect.w) },
+            { offset: D.panel / span, transform: `translate(0px, ${(-room).toFixed(2)}px)`, ...width(a.rect.w) },
+            {
+              offset: (w.arrives.at - start) / span,
+              transform: `translate(0px, ${(-room).toFixed(2)}px)`,
+              easing: E.out,
+              ...width(a.rect.w),
+            },
+            { offset: 1, transform: "translate(0px, 0px)", ...width(a.rect.w) },
+          ],
+          { delay: start, duration: span, easing: "linear", id: "follow" }
+        );
+      } else {
+        part(
+          el,
+          [
+            { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`, ...width(b.rect.w) },
+            { transform: "none", ...width(a.rect.w) },
+          ],
+          { delay: start, duration: D.panel, easing: E.out, id: "follow" }
+        );
       }
-      part(el, [from, to], { delay: w.follow ?? D.exit, duration: D.panel, easing: E.out, id: "follow" });
     }
   }
 }
@@ -1621,14 +1656,21 @@ const BOARDS = {
         easing: E.out,
         id: "run-row",
       });
-      // The phone's outline draws itself round them.
-      for (const path of S.strokes) {
-        part(path, [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], {
-          delay: 840,
-          duration: D.settle,
-          easing: E.out,
-          id: "outline",
-        });
+      // The phone's outline draws itself round them: from the top centre down both sides, the
+      // bottom bar last, closing at the bottom centre as the letters land.
+      for (const { path, from, to } of S.strokes) {
+        const frames = [{ offset: 0, strokeDashoffset: 1 }];
+        if (from > 0) {
+          frames.push({ offset: from, strokeDashoffset: 1 });
+        }
+        frames.push({ offset: to, strokeDashoffset: 0 });
+        if (to < 1) {
+          frames.push({ offset: 1, strokeDashoffset: 0 });
+        }
+        // From 940, not the ruling's 900: at 900 its bottom bar began at 1020, before the letters had
+        // cleared the screen's bottom edge (1030 on the desk, 1040 on the phone). The ruling moves the
+        // outline's start, never the letters.
+        part(path, frames, { delay: 940, duration: D.settle, easing: E.out, id: "outline" });
       }
       // The paper fades beneath.
       S.paper.hidden = false;
@@ -1657,6 +1699,13 @@ const BOARDS = {
       when: [1420, 210],
       enters: { after: [1480, "pop"], ghost: [1480, "pop"] },
       follow: 160,
+      // No row stands for the lock-screen line before it comes: Done rests under the facts from 440,
+      // and moves down by the line's room as the line pops in at 1480 (space-3 and its block).
+      arrives: {
+        at: 1480,
+        // Its laid-out height: its pop's scale (held from 0) draws it smaller than it stands.
+        room: () => S.after.offsetHeight + Number.parseFloat(getComputedStyle(S.after).marginBlockStart),
+      },
     },
     object() {
       lingerScreenLetters(400);
@@ -1941,7 +1990,7 @@ function deviceToCloud(was, mark) {
   S.device.removeAttribute("hidden");
   S.device.style.opacity = "0.5";
   let undrawn = null;
-  for (const path of S.strokes) {
+  for (const { path } of S.strokes) {
     undrawn = part(path, [{ strokeDashoffset: 0 }, { strokeDashoffset: 1 }], {
       delay: 160,
       duration: D.settle,
