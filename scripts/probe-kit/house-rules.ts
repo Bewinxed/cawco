@@ -16,7 +16,7 @@
  * | rule        | read by                     | what it reads |
  * | ----------- | --------------------------- | ------------- |
  * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box |
- * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio is allowed and named |
+ * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, and an identity tile on its mark hue, are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (`header`, toolbars, the bar data-slots, foot bars) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md:665) and a group's capsule (DESIGN.md:666) are named, not failed |
  * | head        | own code                    | a bar's title and controls share one row (centres within 4px), no second line in the bar, the title not repeated by the first heading under it |
@@ -686,6 +686,15 @@ function houseRead(args: InPageArgs): InPageRead {
           continue;
         }
         if (spends.some((one) => one.el.contains(el))) {
+          continue;
+        }
+        // An identity tile stands on its mark hue (DESIGN.md, Identity marks
+        // and tiles: "in a `mark-N` colour"), and a parent's count on it is
+        // on the flat hue: who it is, not an act, whatever hue it was given.
+        if (el.closest("[data-tree-mark]")) {
+          named.push(
+            `an identity tile on its mark hue, not the act (DESIGN.md, Identity marks and tiles): ${describe(el)} (${what})`
+          );
           continue;
         }
         const excuse = args.coralExcept.find((one) => el.closest(one.selector));

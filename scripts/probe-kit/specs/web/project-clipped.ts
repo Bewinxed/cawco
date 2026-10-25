@@ -66,9 +66,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { projectWords } from "../../../../packages/core/src/words/project";
+import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { scan } from "../../journeys/scan";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -747,9 +747,7 @@ const leg = async (
     await stripFills(kit, page, tag, width >= 900 && rail === null);
     await viewsMenu(kit, page, tag, !withTask && rail === null);
   }
-  if (!withTask && rail === null) {
-    await headRow(kit, page, tag, width);
-  }
+  await headRow(kit, page, tag, width, withTask || rail !== null);
   await page.close();
 };
 
@@ -839,7 +837,17 @@ const readHead = (page: Page) =>
  * in its tooltip where a pointer rests (640 and wider). Under 640px its
  * capsule holds More alone. Then the overflow sweep over the board.
  */
-const headRow = async (kit: Kit, page: Page, tag: string, width: number) => {
+const headRow = async (
+  kit: Kit,
+  page: Page,
+  tag: string,
+  width: number,
+  /** A task open or the rail dragged: the board alone reads the head. */
+  aside: boolean
+) => {
+  if (aside) {
+    return;
+  }
   const head = await readHead(page);
   if (!head) {
     kit.check(`${tag}: the project's head stands`, false, "no project-head");
