@@ -103,6 +103,8 @@ export interface TranscriptPorts {
   readonly followed: (instanceId: string) => boolean;
   /** The session's stream head: the seq a page is consistent with. */
   readonly head: (instanceId: string) => number;
+  /** This hub's run, the numbering {@link head} counts in (`TranscriptPage.hubRun`). */
+  readonly hubRun: string;
   /**
    * The hub's laws (laws.ts): a law broken while a frame folds fails that
    * frame (`hold`), while a stored transcript is built fails that read
@@ -575,7 +577,9 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         cwd: "",
         harness: "claude",
       },
-      ...(before === undefined ? { seq: ports.head(instanceId) } : {}),
+      ...(before === undefined
+        ? { seq: ports.head(instanceId), hubRun: ports.hubRun }
+        : {}),
     };
   };
 

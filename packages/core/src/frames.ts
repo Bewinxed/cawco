@@ -393,6 +393,13 @@ export interface InstancesFrame {
   formerIds: Record<string, string>;
   handoffs: Record<string, { from: string; at: number }>;
   hubBuild: BuildInfo;
+  /**
+   * This hub's run, one value per hub start: the numbering every stream on
+   * this socket counts in. A newest transcript page names the run its `seq`
+   * came from (`TranscriptPage.hubRun`); a page of this run resumes its
+   * stream here from that `seq`, and one of another run is read again.
+   */
+  hubRun: string;
   instances: InstanceRow[];
   /** Hub-originated: the complete board on every connection, including reconnects. */
   kind: "instances";

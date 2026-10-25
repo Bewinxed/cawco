@@ -5908,9 +5908,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return db.ofInstance(instance.id).map(summaryOf);
     },
 
-    /** Files' list: the session's artifacts that reached the person, newest first ({@link filesOf}). */
-    files: (instanceId: string): ArtifactSummary[] =>
-      filesOf(sessionOf(instanceId)).map(summaryOf),
+    /**
+     * Files' list: the session's artifacts that reached the person, newest
+     * first ({@link filesOf}). A conversation the hub holds no row for (one
+     * stored on a machine, its machine there or away) holds none: artifacts
+     * are kept by a session's row.
+     */
+    files: (instanceId: string): ArtifactSummary[] => {
+      const row = deps.instance(instanceId);
+      return row ? filesOf(row).map(summaryOf) : [];
+    },
 
     /**
      * Files' search over the artifacts Files lists ({@link filesOf}), by

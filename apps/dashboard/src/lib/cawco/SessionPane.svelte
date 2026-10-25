@@ -423,6 +423,16 @@
       });
       return;
     }
+    // A read that failed waits on what can answer it (client.svelte.ts
+    // `readFailed`: the backoff, its machine's deadline or return) or on Try
+    // again: the socket's status moving is neither, and read again on it, a
+    // transcript whose machine is away was asked once per status it passed.
+    if (
+      nextCause === "open" &&
+      untrack(() => Boolean(held?.readFault || held?.behind))
+    ) {
+      return;
+    }
     untrack(() => {
       const cause = nextCause;
       nextCause = "open";

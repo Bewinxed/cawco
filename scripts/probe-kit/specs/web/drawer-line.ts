@@ -99,6 +99,7 @@ const EMPTY_BOARD: Envelope<InstancesFrame> = {
     formerIds: {},
     handoffs: {},
     hubBuild: { startedAt: 0, version: "0.0.0" },
+    hubRun: "bench",
     instances: [],
     moves: [],
     noticesSeen: [],

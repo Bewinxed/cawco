@@ -216,6 +216,7 @@ import {
   handleStreamMessage,
   latestCommand,
   noteDisconnect,
+  resumeAdopted,
   resumePendingSends,
   SETTLED_COMMAND_LIMIT,
   SETTLED_COMMAND_TTL_MS,
@@ -3881,7 +3882,7 @@ const streamHost: StreamHost = {
     trackWorking(target);
     target.lastActivityAt = new Date();
   },
-  follows: (sessionId) => subscriptionIds().includes(sessionId),
+  follows: (sessionId) => watchedIds().includes(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId, cause) => {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
@@ -5306,8 +5307,14 @@ function isSubscribed(instanceId: string): boolean {
   return workspace.openIds.includes(instanceId) || peekedId === instanceId;
 }
 
-/** The full set of instance ids this dashboard wants `frame` frames for. */
-function subscriptionIds(): string[] {
+/**
+ * Every session something on this page shows: the tabs, the peek, the
+ * delegate cards. A thread's tab streams no frames of its own: they come with
+ * the thread frames, which every dashboard receives. Its streams' places
+ * ({@link forgetUnwatched}) are kept for all of them, a tab waiting on its
+ * name included, so a page read before the tab was asked keeps its `seq`.
+ */
+function watchedIds(): string[] {
   const ids = new Set(workspace.openIds);
   if (peekedId) {
     ids.add(peekedId);
@@ -5315,10 +5322,16 @@ function subscriptionIds(): string[] {
   for (const id of watchedDelegates.keys()) {
     ids.add(id);
   }
-  // A thread's tab streams no frames of its own: they come with the thread
-  // frames, which every dashboard receives. A tab the hub has not named yet
-  // is followed once it has (workspace `named`).
-  return [...ids].filter((id) => !isThreadTab(id) && workspace.named(id));
+  return [...ids].filter((id) => !isThreadTab(id));
+}
+
+/**
+ * The full set of instance ids this dashboard wants `frame` frames for: the
+ * watched ones the hub has named; a tab not named yet is followed once it
+ * has (workspace `named`).
+ */
+function subscriptionIds(): string[] {
+  return watchedIds().filter((id) => workspace.named(id));
 }
 
 /** The last watched set synced, so an unchanged set of tabs stays quiet. */
@@ -5341,7 +5354,7 @@ export function syncSubscriptions(): void {
   }
   lastSubscriptionKey = key;
   untrack(() => {
-    forgetUnwatched(streamState, streamHost, ids);
+    forgetUnwatched(streamState, streamHost, watchedIds());
     followHeld(ids, "follow");
   });
 }
@@ -5361,16 +5374,34 @@ export function syncSubscriptions(): void {
  * good, the agent's every word after it never drawn.
  *
  * `reconnect`: the socket is new, so every one of them is read again, and a
- * read in flight was asked of the connection before (a page's first
- * connection had none before it, and joins its read).
+ * read in flight was asked of the connection before. A page's first
+ * connection had none before it: a read in flight is joined, and a page that
+ * landed before the socket's board (or before its tab was named) resumes its
+ * stream from the page's `seq` when the page came from this socket's hub run
+ * ({@link resumeAdopted}), and is read again only when it came from another;
+ * one whose read failed is left to the read again that failure scheduled.
  */
 function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
   if (state.status !== "connected") {
     return;
   }
   const fresh = cause === "reconnect" && connections > 1;
+  const first = connections === 1;
   for (const id of ids) {
+    if (
+      first &&
+      socketRun !== null &&
+      resumeAdopted(streamState, streamHost, id, socketRun)
+    ) {
+      continue;
+    }
     const held = state.sessions[id];
+    // A read that failed before the first board already waits on what can
+    // answer it (`readFailed`: the backoff, the machine's deadline, or the
+    // board listing its machine online), and a 404 is the hub's answer.
+    if (first && !pageReads.has(id) && (held?.readFault || held?.behind)) {
+      continue;
+    }
     const holds = Boolean(
       streamState.cursors[id] ||
       held?.blocks.length ||
@@ -5578,19 +5609,27 @@ function connect(): void {
  * memory, from 1 again after a restart, so that cursor may sit inside
  * another hub process's numbering, and a resume from it would replay that
  * process's events onto rows they do not follow (iOS does the same,
- * `SessionsStore.reconnected`). An open tab never read yet waits for its
- * pane's own read.
+ * `SessionsStore.reconnected`). The page's first connection resumes from a
+ * page read before it opened, when the board names the page's hub run
+ * ({@link followHeld}). An open tab never read yet waits for its pane's own
+ * read.
  */
 function rereadFollowed(): void {
   connections += 1;
   const ids = subscriptionIds().sort();
   lastSubscriptionKey = ids.join("\u0000");
-  forgetUnwatched(streamState, streamHost, ids);
+  forgetUnwatched(streamState, streamHost, watchedIds());
   followHeld(ids, "reconnect");
 }
 
 /** How many times this page has reached the hub: past one, a connection is a reconnect. */
 let connections = 0;
+/**
+ * The hub run the open socket's board named (`InstancesFrame.hubRun`): the
+ * numbering its streams count in. A page's `seq` resumes a stream on it only
+ * when the page names the same run. Null before the first board.
+ */
+let socketRun: string | null = null;
 
 /** The hub answered on the socket `connect` opened: everything a connection is owed. */
 function hubReached(): void {
@@ -5785,11 +5824,12 @@ function takeMessage(message: unknown): void {
   // message either: until the board is applied the store holds the last
   // hub's machines and rows, and "connected" over them let a page asking
   // after a hub restart ask a machine that wasn't back yet. The board is
-  // applied in this same turn, before anything reads the status.
-  if (
-    state.status !== "connected" &&
-    (message as { payload?: FramePayload }).payload?.kind === "instances"
-  ) {
+  // applied in this same turn, before anything reads the status. Its run is
+  // the numbering this socket's streams count in, read before the
+  // connection's follows are.
+  const board = (message as { payload?: FramePayload }).payload;
+  if (state.status !== "connected" && board?.kind === "instances") {
+    socketRun = board.hubRun;
     hubReached();
   }
   if (olderThanHub(message)) {
@@ -8031,7 +8071,12 @@ export type ReadCause =
    */
   | "deadline"
   /** The last read failed while the hub answered: read again on {@link READ_AGAIN_MS}. */
-  | "backoff";
+  | "backoff"
+  /**
+   * The page landed from another hub run than the socket's board names: its
+   * `seq` counts in a numbering this socket's streams do not.
+   */
+  | "otherRun";
 
 /**
  * A session's transcript, read once: the newest page the hub built, then its
@@ -8304,7 +8349,10 @@ function readLanded(viewId: string): void {
 
 /**
  * The newest page into the view, and its stream resumed from the page's
- * `seq`.
+ * `seq` on the socket whose board names the page's hub run; a page that
+ * lands before any board keeps its place for the first one
+ * ({@link followHeld}), and one of another run than the open socket's is read
+ * again (`otherRun`).
  *
  * A READ AGAIN KEEPS EVERY ROW THE READER HAS. Over rows already held (a
  * resync, a retry, the socket or the machine back, the hub restarted), the
@@ -8361,6 +8409,13 @@ async function readNewestPage(
     if (cancel.aborted) {
       return { ok: true, skipped: true };
     }
+    // A page of another hub run than the open socket's (the hub restarted
+    // between the read and the socket's board) resumes nothing here: it is
+    // read again of the hub that answers now.
+    const run = answer.page.hubRun ?? null;
+    if (state.status === "connected" && run !== socketRun) {
+      return await readNewestPage(target, "otherRun", cancel);
+    }
     target.readFault = null;
     target.behind = null;
     readLanded(viewId);
@@ -8371,7 +8426,11 @@ async function readNewestPage(
       cursor: back.cursor,
     });
     target.olderFault = back.older;
-    adoptPage(streamState, streamHost, viewId, answer.page.seq ?? 0);
+    adoptPage(streamState, streamHost, viewId, {
+      seq: answer.page.seq ?? 0,
+      run,
+      connected: state.status === "connected",
+    });
     trackWorking(target);
     console.info(
       `[cawco] read ${viewId.slice(0, 8)} because ${cause}: ${answer.page.blocks.length} newest, ${back.blocks.length} read, ${heldBefore} held, ${target.blocks.length} rows`

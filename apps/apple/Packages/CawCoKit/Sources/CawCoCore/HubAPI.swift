@@ -109,7 +109,6 @@ public struct HubAPI: Sendable {
         public func update(_ input: Operations.PatchApiInstancesById.Input) async throws -> Operations.PatchApiInstancesById.Output { try await client.patchApiInstancesById(input) }
         public func remove(_ input: Operations.DeleteApiInstancesById.Input) async throws -> Operations.DeleteApiInstancesById.Output { try await client.deleteApiInstancesById(input) }
         public func titles(_ input: Operations.PostApiInstancesTitles.Input) async throws -> Operations.PostApiInstancesTitles.Output { try await client.postApiInstancesTitles(input) }
-        public func tooling(_ input: Operations.GetApiInstancesByIdTooling.Input) async throws -> Operations.GetApiInstancesByIdTooling.Output { try await client.getApiInstancesByIdTooling(input) }
         public func transcript(_ input: Operations.GetApiInstancesByIdTranscript.Input) async throws -> Operations.GetApiInstancesByIdTranscript.Output { try await client.getApiInstancesByIdTranscript(input) }
         public func prepareContinuation(_ input: Operations.GetApiInstancesByIdContinue.Input) async throws -> Operations.GetApiInstancesByIdContinue.Output { try await client.getApiInstancesByIdContinue(input) }
         public func continueSession(_ input: Operations.PostApiInstancesByIdContinue.Input) async throws -> Operations.PostApiInstancesByIdContinue.Output { try await client.postApiInstancesByIdContinue(input) }

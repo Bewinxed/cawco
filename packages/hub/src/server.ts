@@ -1599,6 +1599,8 @@ interface SessionLocation {
  */
 type Located =
   | { kind: "found"; at: SessionLocation }
+  /** Kept on a machine that is away, by that machine's last catalog. */
+  | { kind: "away"; machineId: string }
   | { kind: "nowhere" }
   | { kind: "unanswered"; machines: string[] };
 
@@ -3090,6 +3092,15 @@ export const createServer = (
   // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
   // worth one write at startup.
   db.markAllAgentsOffline();
+
+  /**
+   * This hub's run, one value per start: the streams number each session
+   * from 1 again in every run, so a newest transcript page and every board
+   * snapshot name it (`TranscriptPage.hubRun`, `InstancesFrame.hubRun`), and
+   * a dashboard resumes a stream from a page's `seq` only on a socket of the
+   * same run.
+   */
+  const hubRun = crypto.randomUUID();
 
   /**
    * The system's laws, at the hub (laws.ts): a broken one fails its frame or
@@ -10242,6 +10253,16 @@ export const createServer = (
    */
   const locations = new Map<string, SessionLocation | null>();
 
+  /**
+   * Each machine's catalog of the conversations it keeps, by key, as its
+   * last report in this hub's run said it: its register's `resumable`, and
+   * the keys a beat's `resumableAt` dates (a harness server's catalog). A
+   * machine that is away answers no locate, and this is what tells a
+   * conversation it keeps (its machine away, `locateSession`) from one that
+   * is nowhere.
+   */
+  const keptOn = new Map<string, Set<string>>();
+
   /** Sends `frame` on `socket` and gives it back: what {@link awaitReply} sends again. */
   const sendAnswerable = <T extends Envelope>(
     socket: HubSocket,
@@ -14530,7 +14551,9 @@ export const createServer = (
    * against). Each harness the machine reports is asked, because the control
    * goes to ONE adapter and only the one that wrote the transcript can find
    * it; a machine whose harnesses have not reported yet is asked about every
-   * kind.
+   * kind. A machine that is away cannot be asked: one whose last catalog
+   * ({@link keptOn}) holds the id answers `away`, so its readers wait for it
+   * rather than hear that nothing goes by the id.
    *
    * The answer is kept, so a conversation is located once per hub lifetime
    * and every reader after the first is a map lookup. Deliberately in
@@ -14633,6 +14656,18 @@ export const createServer = (
       return { kind: "found", at: found };
     }
 
+    // A machine that is away keeps it, by its last catalog: not remembered,
+    // so the machine's return finds it.
+    const keeper = db
+      .listAgents()
+      .find(
+        (agent) =>
+          !registry.agent(agent.machineId) &&
+          keptOn.get(agent.machineId)?.has(id)
+      );
+    if (keeper) {
+      return { kind: "away", machineId: keeper.machineId };
+    }
     // Not known: nothing is cached, and the caller says who did not answer.
     if (silent.length > 0) {
       console.warn(
@@ -14685,6 +14720,7 @@ export const createServer = (
         return session(asked);
       case "nowhere":
         return { asked, kind: "none" };
+      case "away":
       case "unanswered":
         return { asked, kind: "unknown" };
       default:
@@ -16302,6 +16338,8 @@ export const createServer = (
         return finishedAnswer(await readMessages(located.at, false), ended);
       case "nowhere":
         return undefined;
+      case "away":
+        throw awayError(located.machineId);
       case "unanswered":
         throw new Error(unlocatedWords(id, located.machines));
       default:
@@ -16672,6 +16710,8 @@ export const createServer = (
             ? `session ${sourceId} has no transcript yet`
             : `no session ${sourceId}`
         );
+      case "away":
+        throw awayError(located.machineId);
       case "unanswered":
         throw new Error(unlocatedWords(sourceId, located.machines));
       case "found":
@@ -18153,8 +18193,8 @@ export const createServer = (
    * no `tooling`. A session's MCP servers and tools were 62% of the first
    * dashboard frame (1.29 MB of 2.1 MB over 1,095 rows) and only the `/`
    * palette of an open session reads them, so they travel per session
-   * instead: `GET /api/instances/:id/tooling` when a view opens, and the live
-   * `init` frame after that.
+   * instead: on the newest transcript page's facts when a view opens, and the
+   * live `init` frame after that.
    */
   const withDelegates = <Row extends { id: string }>(rows: Row[]) => {
     const counts = db.runningDelegateCounts();
@@ -18939,6 +18979,9 @@ export const createServer = (
     // a page built for an older one reloads itself on its first frame.
     hubBuild,
     protocol: WIRE_PROTOCOL,
+    // The numbering this socket's streams count in: a page of the same run
+    // resumes from its `seq`.
+    hubRun,
   });
 
   const instancesFrame = (
@@ -22131,6 +22174,13 @@ export const createServer = (
       switch (located.kind) {
         case "nowhere":
           return { fault: "missing", message: `no session ${instanceId}` };
+        // Its machine's last catalog keeps it: the read waits for the machine.
+        case "away":
+          return {
+            fault: "offline",
+            machineId: located.machineId,
+            message: machineFault(located.machineId, "offline"),
+          };
         case "unanswered":
           return {
             fault: "timeout",
@@ -22689,6 +22739,7 @@ export const createServer = (
       streams.sequence(instanceId, frame);
     },
     head: (instanceId) => streams.head(instanceId),
+    hubRun,
     followed: (instanceId) => streams.followerCount(instanceId) > 0,
     live: (instanceId) => {
       const [row] = db.getInstancesByIds([instanceId]);
@@ -29659,24 +29710,15 @@ export const createServer = (
       // transcript under. An id with no row is a stored session key, located
       // by `locateSession`.
       //
-      // The MCP servers and tools the session's newest `init` announced, as
-      // stored on its row. Read when a view opens, beside its transcript: the
-      // board's rows do not carry them (see boardRows). A session whose
-      // harness announces neither answers empty lists.
-      .get("/api/instances/:id/tooling", ({ params, status }) => {
-        const tooling = db.instanceTooling(params.id);
-        if (tooling === undefined) {
-          return status(404, `no session ${params.id}`);
-        }
-        return tooling ?? { servers: [], tools: [] };
-      })
       // A page of a session's transcript as blocks the hub built, newest
       // first: the newest page carries the sends waiting, the live tail, the
       // session's facts and the stream position it is consistent with, so a
       // reader subscribes with `afterSeq: seq` and applies what follows. An
       // older page is everything before `before`, a block id a newer page
       // named as its cursor. Addressed by id alone: the hub's row names a
-      // session it holds, and any other id is a stored key, located.
+      // session it holds, and any other id is a stored key, located; one
+      // only a machine that is away keeps (its last catalog) is that
+      // machine away, 503, never a 404.
       .get(
         "/api/instances/:id/transcript",
         {
@@ -33426,6 +33468,12 @@ export const createServer = (
                   locations.delete(id);
                 }
               }
+              // Its catalog, as this register reads it: what it keeps while
+              // it is away. A register that could not read it keeps the last.
+              const resumable = peekResumable(message.payload);
+              if (resumable) {
+                keptOn.set(message.machineId, new Set(resumable));
+              }
               // An agent that speaks this hub's contract is online once it has
               // written the fleet's policy its welcome carries (READY,
               // fleet-sync.ts); one older is online as it registers, its
@@ -34114,11 +34162,19 @@ export const createServer = (
               }
               // When the conversations a harness's server lists last moved,
               // read after the register so the register never waits on that
-              // server's start.
+              // server's start. They join the machine's catalog.
+              const served = peekResumableAt(message.payload);
+              if (served) {
+                const kept = keptOn.get(message.machineId) ?? new Set();
+                for (const key of Object.keys(served)) {
+                  kept.add(key);
+                }
+                keptOn.set(message.machineId, kept);
+              }
               const dated = db.dateStoredSessions(
                 message.machineId,
                 beatIds,
-                peekResumableAt(message.payload),
+                served,
                 () => publishInstances(message.machineId)
               );
               if (

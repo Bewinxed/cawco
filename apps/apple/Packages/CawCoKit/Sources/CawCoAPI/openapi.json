@@ -20463,43 +20463,6 @@
         }
       }
     },
-    "/api/instances/{id}/tooling": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiInstancesByIdTooling",
-        "responses": {
-          "200": {
-            "description": "getApiInstancesByIdTooling 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionTooling"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiInstancesByIdTooling 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/instances/{id}/transcript": {
       "get": {
         "parameters": [
@@ -32063,6 +32026,10 @@
           "facts": {
             "$ref": "#/components/schemas/TranscriptFacts",
             "description": "Newest page only: what the session has said about itself."
+          },
+          "hubRun": {
+            "description": "Newest page only: the hub run that numbered `seq`, one value per hub\nstart (frames.ts `InstancesFrame.hubRun`). The hub numbers each stream from 1\nagain when it restarts, so a `seq` resumes a stream only on a socket\nwhose board names the same run.",
+            "type": "string"
           },
           "queued": {
             "description": "Newest page only: the sends waiting to be read.",
@@ -47357,40 +47324,6 @@
           }
         ]
       },
-      "SessionTooling": {
-        "description": "What a session's `init` says about its MCP servers and tools.",
-        "type": "object",
-        "properties": {
-          "servers": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "name",
-                "status"
-              ]
-            }
-          },
-          "tools": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "servers",
-          "tools"
-        ]
-      },
       "BlockMetadata": {
         "description": "Everything a renderer may need beyond `content`, keyed by the kind that uses it.",
         "type": "object",
@@ -57386,6 +57319,10 @@
           "hubBuild": {
             "$ref": "#/components/schemas/BuildInfo"
           },
+          "hubRun": {
+            "description": "This hub's run, one value per hub start: the numbering every stream on\nthis socket counts in. A newest transcript page names the run its `seq`\ncame from (`TranscriptPage.hubRun`); a page of this run resumes its\nstream here from that `seq`, and one of another run is read again.",
+            "type": "string"
+          },
           "instances": {
             "type": "array",
             "items": {
@@ -57436,6 +57373,7 @@
           "formerIds",
           "handoffs",
           "hubBuild",
+          "hubRun",
           "instances",
           "kind",
           "moves",
