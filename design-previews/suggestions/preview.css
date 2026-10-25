@@ -89,6 +89,7 @@
     }
 
     & p {
+      max-inline-size: var(--c-measure-short);
       color: var(--ink-muted);
     }
   }
@@ -330,6 +331,27 @@
     }
   }
 
+  /* Caw's panel, opened by a press on the empty Decisions tab: the card
+     recipe under the page, at the page's padding, its composer holding the
+     words (CawFloat: "a row of its own under the page"). */
+  .caw-dock {
+    margin: 0 var(--space-7) var(--space-7);
+    overflow: clip;
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+
+    .frame-phone & {
+      margin-inline: var(--space-4);
+      margin-block-end: var(--space-4);
+    }
+  }
+
+  .dock-body {
+    padding: var(--space-4);
+    background: var(--surface-recess);
+  }
+
   .send {
     flex: none;
     inline-size: var(--c-composer-field);
@@ -361,6 +383,11 @@
       font: var(--type-meta);
       color: var(--ink-muted);
     }
+  }
+
+  .state-note {
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
 
   .state-well {

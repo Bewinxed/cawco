@@ -22,7 +22,6 @@
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
    * (Event sources), and what its runs asked you to approve (Approved
@@ -89,6 +88,7 @@
   } from "#lib/cawco/routines/ScheduleStrip.svelte";
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
+  import { GLYPHS } from "#lib/cawco/starter-glyphs.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";

@@ -3,8 +3,11 @@
  * Suggestions.svelte, capture/capture.ts) set in the two places it would
  * stand, Caw's first thread and the empty Decisions tab, at a desk and on a
  * phone, then its states (one, seven, the longest, while read). Today's
- * StarterCards lead, for comparison. A press puts the words in the
- * section's composer, the caret after them; nothing is sent.
+ * StarterCards lead, for comparison, in the same states. A press puts the
+ * words where they go, the caret after them, nothing sent: in the thread,
+ * its composer; on the empty Decisions tab, Caw's panel, which opens in
+ * that frame with the words in its composer (StarterCards: a starter
+ * "opens his panel with its words in his composer").
  */
 import { PARTS } from "./parts.js";
 
@@ -19,10 +22,9 @@ const VARIANTS = [
     refs: [],
     gives: "Already shipped; glyph and reason per row.",
     costs:
-      "Two recipes for one job. Outlined rows read as form buttons, the cards carry a border and a shadow both, and neither says where the words go.",
+      "Two recipes for one job: outlined rows as wide as their words in Caw’s column, cards with a glyph each on an empty panel. Nothing is drawn while the starters are read.",
     thread: "today:three",
     panel: "today:decisions",
-    states: [["Longest", "today:long"]],
   },
   {
     look: "list",
@@ -45,7 +47,7 @@ const VARIANTS = [
     gives:
       "Each sentence over its reason, so the person sees why before asking. Raised on the thread’s recess, as content is.",
     costs:
-      "Taller than the list in a narrow column: three with their reasons stand 224px in Caw’s 380px column against the list’s 134px, pushing his earlier threads down.",
+      "Taller than the list in a narrow column: three with their reasons stand 207px in Caw’s 380px column (224px on a phone) against the list’s 134px, pushing his earlier threads down.",
   },
   {
     look: "chips",
@@ -99,7 +101,12 @@ const thread = (key, frame) => `
     </div>
   </article>`;
 
-/** The empty Decisions tab: Caw over the empty state, the suggestions its one action. */
+/**
+ * The empty Decisions tab: Caw over the empty state, the suggestions its
+ * one action. A press opens Caw's panel in the frame, beside the page where
+ * the desk has room and under it where it hasn't (CawFloat), the words in
+ * his composer.
+ */
 const panel = (key, frame) => `
   <article class="frame frame-${frame} frame-page" data-context="panel" data-part-key="${key}" aria-label="The empty Decisions tab, ${frame}">
     <div class="empty">
@@ -108,12 +115,31 @@ const panel = (key, frame) => `
       <p class="empty-line">Caw writes a decision page: the choices this project needs you to make, each with its options.</p>
       <div class="hero-action">${part(key)}</div>
     </div>
+    <aside class="caw-dock" data-slot="caw-dock" aria-label="Caw’s panel" hidden>
+      <header class="panel-head">
+        <img class="panel-mark" src="caw/hero.png" alt="" width="28" height="28" />
+        <span class="panel-words"><strong>Caw</strong><span>Obelisk Site</span></span>
+      </header>
+      <div class="dock-body">
+        <label class="composer">
+          <span class="visually-hidden">Message Caw</span>
+          <textarea rows="1" placeholder="Message Caw…" data-slot="composer-field"></textarea>
+          <span class="send" aria-hidden="true"></span>
+        </label>
+      </div>
+    </aside>
   </article>`;
+
+/** StarterCards has no state while its starters are read: it draws nothing. */
+const NOTHING = {
+  "today:loading":
+    '<p class="state-note">Draws nothing while the starters are read.</p>',
+};
 
 const state = (label, key) => `
   <figure class="state" data-state="${label}">
     <figcaption>${label}</figcaption>
-    <div class="state-well" data-part-key="${key}">${part(key)}</div>
+    <div class="state-well" data-part-key="${key}">${NOTHING[key] ?? part(key)}</div>
   </figure>`;
 
 const section = (v) => {
@@ -151,17 +177,24 @@ const section = (v) => {
 const main = document.querySelector('[data-slot="variants"]');
 main.innerHTML = VARIANTS.map(section).join("");
 
-/** A press: the words into the composer of the frame it stands in (the section's desk thread from a panel), caret after. */
+/**
+ * A press: the words into the composer of the frame it stands in, caret
+ * after them; on the empty Decisions tab, Caw's panel opens there first.
+ * A state's well has no composer, so a press there puts nothing anywhere.
+ */
 main.addEventListener("click", (event) => {
   const button = event.target.closest('[data-slot="suggestion"], [data-slot="starter"]');
-  if (!button) {
+  const frame = button?.closest(".frame");
+  if (!frame) {
     return;
   }
   const words = button.querySelector('[data-slot="suggestion-text"], [data-slot="starter-text"]');
-  const frame = button.closest(".frame");
-  const field =
-    frame?.querySelector('[data-slot="composer-field"]') ??
-    button.closest(".variant")?.querySelector('[data-slot="composer-field"]');
+  const dock = frame.querySelector('[data-slot="caw-dock"]');
+  if (dock) {
+    dock.hidden = false;
+    frame.dataset.docked = "";
+  }
+  const field = frame.querySelector('[data-slot="composer-field"]');
   if (!(words && field)) {
     return;
   }

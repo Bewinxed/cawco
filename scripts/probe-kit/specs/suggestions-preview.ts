@@ -26,6 +26,15 @@
  * 6. The overflow sweep (journeys/scan.ts: nothing spills, no control
  *    covers text) totals zero at 1440, 680 and 390, both schemes.
  * 7. No console or page error.
+ * 8. Where they stand: in Caw's thread each look meets the composer's
+ *    edges (the hero is already the composer's column); in an empty panel
+ *    no item draws a glyph (DESIGN.md, Empty: the mark is "the block's one
+ *    glyph, so its action is words alone"); while read, each look's
+ *    skeletons stand within a tenth of the real three's height in Caw's
+ *    column (The Claim Of Nothing Rule); and a chip's edge holds 3:1 on the
+ *    recess it stands on (DESIGN.md, Borders: `border-row-outline`).
+ * 9. A press on the empty Decisions tab opens Caw's panel in that frame,
+ *    the words in his composer, the caret after them.
  *
  *   bun scripts/probe-kit/run.ts suggestions-preview
  *   SUGGESTIONS_ENGINES=chromium bun scripts/probe-kit/run.ts suggestions-preview
@@ -536,6 +545,176 @@ async function inkLeg(kit: Kit, page: Page, at: string): Promise<void> {
   kit.note(`${at}: three in Caw's 380px thread stand ${read.tall.join(", ")}`);
 }
 
+/** Leg 8: where each look stands, its skeleton's size, and the chip's edge. */
+async function placeLeg(kit: Kit, page: Page, at: string): Promise<void> {
+  const read = await page.evaluate(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, its helpers inside it
+    (looks) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const lum = (color: string) => {
+        if (!ctx) {
+          return 0;
+        }
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        const c = [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)].map(
+          (v) => {
+            const x = v / 255;
+            return x <= 0.040_45 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+          }
+        );
+        return (
+          0.2126 * (c[0] ?? 0) + 0.7152 * (c[1] ?? 0) + 0.0722 * (c[2] ?? 0)
+        );
+      };
+      const ratio = (a: string, b: string) => {
+        const x = lum(a);
+        const y = lum(b);
+        return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+      };
+      const offEdge: string[] = [];
+      const glyphs: string[] = [];
+      const bones: string[] = [];
+      const bonesOff: string[] = [];
+      let edge = 99;
+      for (const look of looks) {
+        const section = document.querySelector(`.variant[data-look="${look}"]`);
+        for (const frame of section?.querySelectorAll<HTMLElement>(
+          '.frame[data-context="thread"]'
+        ) ?? []) {
+          const list = frame
+            .querySelector('[data-slot="suggestions"]')
+            ?.getBoundingClientRect();
+          const field = frame
+            .querySelector(".composer")
+            ?.getBoundingClientRect();
+          if (
+            !(list && field) ||
+            Math.abs(list.left - field.left) > 1 ||
+            Math.abs(list.right - field.right) > 1
+          ) {
+            offEdge.push(
+              `${look}: [${Math.round(list?.left ?? 0)}, ${Math.round(list?.right ?? 0)}] against the composer's [${Math.round(field?.left ?? 0)}, ${Math.round(field?.right ?? 0)}]`
+            );
+          }
+        }
+        const drawn = section?.querySelectorAll(
+          '.frame[data-context="panel"] [data-suggestion-glyph]'
+        ).length;
+        if (drawn) {
+          glyphs.push(`${look}: ${drawn}`);
+        }
+        const real = section
+          ?.querySelector(
+            '.frame-desk[data-context="thread"] [data-slot="suggestions"]'
+          )
+          ?.getBoundingClientRect().height;
+        const held = section
+          ?.querySelector(
+            `[data-part-key="${look}:loading"] [data-slot="suggestions"]`
+          )
+          ?.getBoundingClientRect().height;
+        bones.push(
+          `${look} ${Math.round(held ?? 0)} vs ${Math.round(real ?? 0)}px`
+        );
+        if (!(real && held) || Math.abs(held - real) > real / 10) {
+          bonesOff.push(look);
+        }
+        if (look === "chips") {
+          for (const chip of section?.querySelectorAll<HTMLElement>(
+            '.frame[data-context="thread"] button[data-slot="suggestion"]'
+          ) ?? []) {
+            let under = "";
+            for (
+              let up = chip.closest("ul")?.parentElement ?? null;
+              up && !under;
+              up = up.parentElement
+            ) {
+              const fill = getComputedStyle(up).backgroundColor;
+              if (!fill.endsWith("/ 0)") && fill !== "rgba(0, 0, 0, 0)") {
+                under = fill;
+              }
+            }
+            edge = Math.min(
+              edge,
+              ratio(getComputedStyle(chip).borderTopColor, under)
+            );
+          }
+        }
+      }
+      return { offEdge, glyphs, bones, bonesOff, edge };
+    },
+    [...LOOKS]
+  );
+  kit.check(
+    `${at}: in Caw's thread every look meets the composer's edges`,
+    read.offEdge.length === 0,
+    read.offEdge.slice(0, 4).join(" | ")
+  );
+  kit.check(
+    `${at}: in the empty Decisions tab no item draws a glyph, the empty state's mark its one`,
+    read.glyphs.length === 0,
+    read.glyphs.join(" | ")
+  );
+  kit.check(
+    `${at}: while read, each look's skeletons stand within a tenth of the real three (${read.bones.join(", ")})`,
+    read.bonesOff.length === 0,
+    read.bonesOff.join(", ")
+  );
+  kit.check(
+    `${at}: a chip's edge holds 3:1 on the recess it stands on (lowest ${read.edge.toFixed(2)}:1)`,
+    read.edge >= 3
+  );
+}
+
+/** Leg 9: a press on the empty Decisions tab opens Caw's panel in that frame, the words in his composer. */
+async function panelPressLeg(kit: Kit, page: Page, at: string): Promise<void> {
+  for (const look of LOOKS) {
+    const frame = page
+      .locator(
+        `.variant[data-look="${look}"] .frame-desk[data-context="panel"]`
+      )
+      .first();
+    const item = frame.locator('button[data-slot="suggestion"]').first();
+    // biome-ignore lint/performance/noAwaitInLoops: one press at a time under one mouse
+    await item.click();
+    const words = (
+      (await item.locator('[data-slot="suggestion-text"]').textContent()) ?? ""
+    ).trim();
+    const read = await frame.evaluate((el) => {
+      const dock = el.querySelector<HTMLElement>('[data-slot="caw-dock"]');
+      const field = dock?.querySelector<HTMLTextAreaElement>(
+        '[data-slot="composer-field"]'
+      );
+      const box = dock?.getBoundingClientRect();
+      return {
+        shown: Boolean(dock && !dock.hidden && box && box.height > 0),
+        inside: Boolean(
+          box &&
+          box.left >= el.getBoundingClientRect().left - 1 &&
+          box.right <= el.getBoundingClientRect().right + 1
+        ),
+        value: field?.value ?? "",
+        focused: document.activeElement === field,
+        caret: field ? field.selectionStart === field.value.length : false,
+      };
+    });
+    kit.check(
+      `${at} ${look}: a press on the empty Decisions tab opens Caw's panel in that frame, its words in his composer, the caret after them`,
+      read.shown &&
+        read.inside &&
+        read.value === words &&
+        read.focused &&
+        read.caret,
+      `shown ${read.shown}, inside ${read.inside}, field "${read.value}", focused ${read.focused}, caret ${read.caret}`
+    );
+  }
+}
+
 const spec: Spec = {
   name: "suggestions-preview",
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every engine, width and scheme, each leg in turn
@@ -568,6 +747,7 @@ const spec: Spec = {
             await longLeg(kit, page, at);
             if (view !== "narrowDesk") {
               await inkLeg(kit, page, at);
+              await placeLeg(kit, page, at);
             }
             await page.evaluate(() => window.scrollTo(0, 0));
             const findings = await page.evaluate(scan);
@@ -582,6 +762,7 @@ const spec: Spec = {
           } else {
             await focusLeg(kit, page, at);
             await pressLeg(kit, page, at);
+            await panelPressLeg(kit, page, at);
           }
           await page.close();
         }
