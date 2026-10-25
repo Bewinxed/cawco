@@ -1021,14 +1021,17 @@ const watchParent = (dir: string, look: () => void): (() => void) => {
 /** The proc ids of macOS boundaries stopped because their folder went: their exit is no unasked one ({@link restartUnasked}). */
 const goneStops = new Set<string>();
 
+/** Whether workspace `id` holds a plain folder, not a repository's copy: a place, or a copy of a folder that is no repository (layer.ts), as the host's `plainFolder` (boundary-host.ts). */
+const plainFolder = (id: string): boolean => isPlace(id) || folderSync(id);
+
 /**
  * Why workspace `id`'s folder at `path` is no longer there to hold, when it
  * is not, as the Linux host's `goneReason` reads it (boundary-host.ts): a
- * delegate's clone whose `.git` is no repository, or a place that is no
- * folder.
+ * delegate's copy of a repository whose `.git` is no repository, or a plain
+ * folder ({@link plainFolder}) that is no folder.
  */
 const folderGone = (id: string, path: string): string | undefined => {
-  if (isPlace(id)) {
+  if (plainFolder(id)) {
     let folder = false;
     try {
       folder = lstatSync(path).isDirectory();
@@ -1132,7 +1135,7 @@ const watchCloneOf = (
   };
   cloneLooks.set(procId, look);
   watched(dirname(held.path), () => watchParent(dirname(held.path), look));
-  for (const dir of isPlace(id)
+  for (const dir of plainFolder(id)
     ? [held.path]
     : [held.path, join(held.path, ".git")]) {
     watched(dir, () => {
