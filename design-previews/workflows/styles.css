@@ -21,6 +21,13 @@
   initial-value: 0px;
 }
 
+/* How far a bar's scroll edge effect has come in: 0 at rest, 1 once scrolled. */
+@property --edge-k {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
 @font-face {
   font-display: swap;
   font-family: "Figtree Variable";
@@ -992,54 +999,49 @@
     }
   }
 
-  /* The top bar and its view strip. */
+  /*
+   * The top bar draws no ground (The Title Bars Follow Liquid Glass Rule):
+   * the page runs to the frame's top edge and the bar's glass groups float
+   * over it. The scroller under a bar (the desk's pane, the phone's page)
+   * names its scroll `--content`; the frame scopes that name so its bar's
+   * edge effect reads it.
+   */
+  .frame {
+    timeline-scope: --content;
+  }
+
   .main {
     display: block grid;
-    grid-template-rows: 44px minmax(0, 1fr);
+    grid-template-rows: var(--c-top-bar-h) minmax(0, 1fr);
     min-inline-size: 0;
     min-block-size: 0;
   }
 
   .bar {
+    position: relative;
+    z-index: 1;
     display: block flex;
+    grid-row: 1;
+    grid-column: 1;
     gap: var(--space-3);
-    align-items: end;
+    align-items: center;
     justify-content: space-between;
     padding-inline: var(--space-3);
-    border-block-end: 1px solid var(--border-hairline);
-    background: var(--surface-shelf);
   }
 
+  /* The views: one glass group of words; the chosen one lifted, as a
+     segmented control's thumb. */
   .strip {
-    display: block flex;
-    gap: 2px;
-    align-items: end;
     min-inline-size: 0;
-  }
 
-  .tab {
-    display: block flex;
-    gap: var(--space-1);
-    align-items: center;
-    block-size: 34px;
-    padding-inline: var(--space-4);
-    border-start-start-radius: var(--radius-md);
-    border-start-end-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-    color: var(--ink-muted);
-    font: var(--type-label);
-    white-space: nowrap;
-
-    &.on {
-      background: var(--tab-sheet);
+    [aria-current] {
+      background: var(--surface-lift);
+      box-shadow: var(--shadow-raised);
       color: var(--ink-strong);
-      box-shadow:
-        var(--shadow-tab-start-chosen, none), var(--shadow-tab-end-chosen, none);
     }
 
-    .new {
-      color: var(--brand-ink);
-      font: var(--type-meta);
+    .gi.words:not([aria-current]) {
+      color: var(--ink-muted);
     }
   }
 
@@ -1047,11 +1049,53 @@
     display: block flex;
     gap: var(--space-2);
     align-items: center;
-    align-self: center;
+  }
+
+  /*
+   * The scroll edge effect: what scrolls under a bar blurs (this layer) and
+   * fades (the scroller's own mask, .pane and .pbody), in over the first
+   * 16px of scroll and absent at rest ("Scroll edge effects further enhance
+   * legibility by blurring and reducing the opacity of background content",
+   * HIG, Materials).
+   */
+  .edge {
+    position: absolute;
+    z-index: -1;
+    inset: 0 0 calc(-1 * var(--c-edge-fade-len-phone));
+    opacity: 0;
+    backdrop-filter: blur(var(--material-blur));
+    mask-image: linear-gradient(to bottom, #000 60%, transparent);
+    pointer-events: none;
+    animation-name: edge-in;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: --content;
+    animation-range: 0px var(--c-edge-fade-len-phone);
+  }
+
+  @keyframes edge-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes content-edge-in {
+    from {
+      --edge-k: 0;
+    }
+    to {
+      --edge-k: 1;
+    }
   }
 
   .page {
     display: block grid;
+    grid-row: 1 / -1;
+    grid-column: 1;
     grid-template-columns: minmax(0, 1fr);
     min-block-size: 0;
     overflow: clip;
@@ -1059,16 +1103,52 @@
     &.with-split {
       grid-template-columns: minmax(0, 1fr) 452px;
     }
+
+    > .split {
+      margin-block-start: var(--c-top-bar-h);
+    }
   }
 
+  /* The desk's pane runs under the bar: its first group starts at the bar's
+     foot, and once scrolled what passes under the bar fades out there. */
   .pane {
     display: block flex;
     flex-direction: column;
     gap: var(--space-group);
     min-inline-size: 0;
     min-block-size: 0;
-    padding: 0 var(--space-6) var(--space-6) var(--space-7);
-    overflow: clip;
+    padding: var(--c-top-bar-h) var(--space-6) var(--space-6) var(--space-7);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    scroll-timeline: --content block;
+    --fade-len: var(--c-edge-fade-len);
+
+    mask-image: var(--under-bar-mask);
+    animation-name: content-edge-in, pbody-fade-end;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: --content;
+    animation-range:
+      0px var(--c-edge-fade-len-phone),
+      94% 100%;
+
+    > * {
+      flex: none;
+    }
+  }
+
+  /* A scroller under a bar: its top fades under the bar once scrolled
+     (--edge-k), its foot while more stands below (--fade-end). */
+  :is(.pane, .pbody) {
+    --under-bar-mask: linear-gradient(
+      to bottom,
+      rgb(0 0 0 / calc(1 - var(--edge-k))),
+      #000 calc(var(--c-top-bar-h) + var(--c-edge-fade-len-phone)),
+      #000 calc(100% - var(--fade-end)),
+      transparent
+    );
   }
 
   /* The project's head: one row (The Title Bars Follow Liquid Glass Rule). Its
@@ -2028,21 +2108,25 @@
     color: var(--data-bad);
   }
 
-  /* The phone: a 44px bar, the page, the bottom ViewBar. */
+  /* The phone: a 44px bar floating over the page, the page, the bottom ViewBar. */
   .phone {
     --text-title: 1.125rem;
-    grid-template-rows: 44px minmax(0, 1fr) auto;
+    grid-template-rows: var(--c-top-bar-h) minmax(0, 1fr) auto;
     border-radius: var(--radius-modal);
   }
 
+  /* The phone's bar: no ground; its two symbols each in a glass capsule
+     over the page, the title between them. */
   .pbar {
+    position: relative;
+    z-index: 1;
     display: block grid;
+    grid-row: 1;
+    grid-column: 1;
     gap: var(--space-2);
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    padding-inline: var(--space-1);
-    border-block-end: 1px solid var(--border-hairline);
-    background: var(--surface-shelf);
+    padding-inline: var(--space-2);
 
     .t {
       min-inline-size: 0;
@@ -2054,49 +2138,38 @@
     }
   }
 
-  /* The phone's page scrolls; while more stands past its foot (or above its
-     top) that edge fades out, the house edge fade at the phone's length
-     (apps/dashboard/src/edge-fade.css, kit-edge-fade-block). Its parts keep
-     their own height, so nothing is squeezed and cut. */
+  /* The phone's page runs to the frame's top edge under the bar and
+     scrolls. Once scrolled, what passes under the bar blurs and fades (the
+     scroll edge effect); while more stands past its foot, that edge fades
+     (the house edge fade at the phone's length, kit-edge-fade-block). Its
+     parts keep their own height, so nothing is squeezed and cut. */
   .pbody {
     --fade-len: var(--c-edge-fade-len-phone);
 
     display: block flex;
+    grid-row: 1 / 3;
+    grid-column: 1;
     flex-direction: column;
     gap: var(--space-4);
     min-block-size: 0;
-    padding: var(--space-4) var(--space-5) var(--space-5);
+    padding: calc(var(--c-top-bar-h) + var(--space-4)) var(--space-5) var(--space-5);
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
     isolation: isolate;
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      #000 var(--fade-start),
-      #000 calc(100% - var(--fade-end)),
-      transparent
-    );
-    animation-name: pbody-fade-start, pbody-fade-end;
+    scroll-timeline: --content block;
+    mask-image: var(--under-bar-mask);
+    animation-name: content-edge-in, pbody-fade-end;
     animation-duration: auto;
     animation-timing-function: linear;
     animation-fill-mode: both;
     animation-range:
-      0% 6%,
+      0px var(--c-edge-fade-len-phone),
       94% 100%;
-    animation-timeline: scroll(self block);
+    animation-timeline: --content;
 
     > * {
       flex: none;
-    }
-  }
-
-  @keyframes pbody-fade-start {
-    from {
-      --fade-start: 0px;
-    }
-    to {
-      --fade-start: var(--fade-len);
     }
   }
 

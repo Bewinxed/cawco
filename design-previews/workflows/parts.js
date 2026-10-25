@@ -287,9 +287,19 @@ export const rail = ({
 
 const VIEWS = ["Board", "Table", "Routines", "Workflows", "Decisions"];
 
-export const bar = () => `<header class="bar">
-  <nav class="strip" aria-label="Views">${VIEWS.map((v) => `<span class="tab${v === "Workflows" ? " on" : ""}">${v}</span>`).join("")}</nav>
-  <div class="bar-end">${btn("New task", { size: "sm", icon: "plus" })}</div>
+/** The project's views as one glass group of words, the chosen one lifted. */
+export const viewStrip = () =>
+  `<nav class="glass strip" aria-label="Views">${VIEWS.map((v) => `<span class="gi words"${v === "Workflows" ? ' aria-current="page"' : ""}>${v}</span>`).join("")}</nav>`;
+
+/*
+ * The desk's top bar: no ground of its own (The Title Bars Follow Liquid
+ * Glass Rule). The views and New task float as glass groups over the page,
+ * which runs to the frame's top edge under them; the scroll edge effect
+ * (.edge) blurs and fades what scrolls under them, absent at rest.
+ */
+export const bar = () => `<header class="bar"><span class="edge" aria-hidden="true"></span>
+  ${viewStrip()}
+  <div class="bar-end">${glass([["", "New task"]])}</div>
 </header>`;
 
 /** A machine drawn as a place: its OS mark and its name (The Title Bars Follow Liquid Glass Rule). */
@@ -356,7 +366,7 @@ export const phone = ({
   body,
   foot = "",
 }) => `<div class="frame phone" data-frame="phone">
-  <header class="pbar">${back ? btn("", { v: "ghost", icon: "left" }) : btn("", { v: "ghost", icon: "sidebar" })}<span class="t">${title}</span>${btn("", { v: "ghost", icon: "more" })}</header>
+  <header class="pbar"><span class="edge" aria-hidden="true"></span>${glass([back ? ["left", "Back to Workflows"] : ["sidebar", "Open the sidebar"]])}<span class="t">${title}</span>${glass([["more", "More"]])}</header>
   <div class="pbody">${body}</div>
   <footer class="pfoot">${foot || `${btn("Workflows", { size: "sm", icon: "down" })}${btn("", { size: "sm", icon: "plus" })}`}</footer>
 </div>`;

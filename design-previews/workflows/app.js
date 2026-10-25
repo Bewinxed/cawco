@@ -16,7 +16,7 @@ import { A } from "./opt-a.js";
 import { B } from "./opt-b.js";
 import { C, C_GROWN, C_START, inspectorFor } from "./opt-c.js";
 import { D } from "./opt-d.js";
-import { badge, btn, chip, glyph, ic, seg } from "./parts.js";
+import { badge, btn, chip, glyph, ic, seg, viewStrip } from "./parts.js";
 import { PLAN, shapeView } from "./shape.js";
 
 const OPTIONS = { A, B, C, D };
@@ -118,7 +118,7 @@ const lives = () => `<section class="pv-section pv-col" aria-labelledby="lives">
     ${reach(
       "monitor",
       "On a desk: a tab of its own",
-      `<div class="bar" style="border-radius:var(--radius-md);overflow:clip"><nav class="strip">${["Board", "Table", "Routines", "Workflows", "Decisions"].map((v) => `<span class="tab${v === "Workflows" ? " on" : ""}">${v}</span>`).join("")}</nav></div><code>/project/cawco?view=workflows</code>`,
+      `<div class="row">${viewStrip()}</div><code>/project/cawco?view=workflows</code>`,
       "Between Routines and Decisions. Three blocks: Workflows, Runs, Checks. A workflow opens in place under its row; a run opens as its tree in the Split beside the view."
     )}
     ${reach(
