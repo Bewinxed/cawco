@@ -806,6 +806,126 @@ async function cawLeg(kit: Kit, page: Page, base: string, engine: string) {
   );
 }
 
+/**
+ * The capture review (c5db4620f): the panel's head stands on the very
+ * ground its content does, no band of its own (DESIGN.md, No bar ground:
+ * "The content runs to the surface's top edge"); and the filled drafts'
+ * reason and provenance lines, dimmed to ink-subtle, read their own ratios
+ * on that ground, by day and by night.
+ */
+async function groundLeg(kit: Kit, page: Page, base: string, engine: string) {
+  const bandBad: string[] = [];
+  const bandSaid: string[] = [];
+  const inkSaid: string[] = [];
+  let inkLowest = 99;
+  for (const theme of ["light", "dark"]) {
+    for (const where of ["thread", "phone", "keyboard"]) {
+      const direction = where === "keyboard" ? "tray" : "today";
+      // biome-ignore lint/performance/noAwaitInLoops: one state on the page at a time
+      await go(
+        page,
+        base,
+        `?__state=direction:${direction},where:${where},data:three,theme:${theme}`
+      );
+      const read = await page.evaluate(() => {
+        const ground = (el: Element | null): string => {
+          for (let up = el; up; up = up.parentElement) {
+            const fill = getComputedStyle(up).backgroundColor;
+            if (fill !== "rgba(0, 0, 0, 0)" && fill !== "transparent") {
+              return fill;
+            }
+          }
+          return "none";
+        };
+        return {
+          head: ground(
+            document.querySelector('[data-slot="stage"] .panel-head')
+          ),
+          content: ground(
+            document.querySelector('[data-slot="stage"] [data-slot="surround"]')
+          ),
+        };
+      });
+      bandSaid.push(
+        `${where}/${theme} head ${read.head}, content ${read.content}`
+      );
+      if (read.head !== read.content) {
+        bandBad.push(bandSaid.at(-1) ?? "");
+      }
+    }
+    await go(
+      page,
+      base,
+      `?__state=direction:drafts,where:thread,data:filled,theme:${theme}`
+    );
+    const ratios = await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const rgba = (color: string) => {
+        if (!ctx) {
+          return [0, 0, 0, 0];
+        }
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        return [...ctx.getImageData(0, 0, 1, 1).data];
+      };
+      const lum = (color: string) => {
+        const c = rgba(color)
+          .slice(0, 3)
+          .map((v) => {
+            const x = v / 255;
+            return x <= 0.040_45 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+          });
+        return (
+          0.2126 * (c[0] ?? 0) + 0.7152 * (c[1] ?? 0) + 0.0722 * (c[2] ?? 0)
+        );
+      };
+      const ground = (el: Element | null): string => {
+        for (let up = el; up; up = up.parentElement) {
+          const fill = getComputedStyle(up).backgroundColor;
+          if ((rgba(fill)[3] ?? 0) > 250) {
+            return fill;
+          }
+        }
+        return getComputedStyle(document.documentElement).backgroundColor;
+      };
+      return [".draft", ".reason", ".provenance"].map((at) => {
+        const el = document.querySelector(`[data-slot="stage"] .stack ${at}`);
+        if (!el) {
+          return { at, ratio: 0, opacity: 1 };
+        }
+        const a = lum(getComputedStyle(el).color);
+        const b = lum(ground(el));
+        let opacity = 1;
+        for (let up: Element | null = el; up; up = up.parentElement) {
+          opacity *= Number(getComputedStyle(up).opacity);
+        }
+        return {
+          at,
+          ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+          opacity,
+        };
+      });
+    });
+    for (const one of ratios) {
+      inkLowest = Math.min(inkLowest, one.opacity < 1 ? 0 : one.ratio);
+      inkSaid.push(`${theme} ${one.at} ${one.ratio.toFixed(2)}:1`);
+    }
+  }
+  kit.check(
+    `${engine}: the panel's head stands on its content's own ground, no band of its own (${bandSaid.join("; ")})`,
+    bandBad.length === 0,
+    bandBad.join(" | ")
+  );
+  kit.check(
+    `${engine}: the filled drafts, dimmed by ink, hold 4.5:1 at full opacity (${inkSaid.join("; ")})`,
+    inkLowest >= 4.5
+  );
+}
+
 /** Leg 4: a press's runs held on the clock and sought through: one clock per moment, his words in the box after it. */
 async function pressLeg(
   kit: Kit,
@@ -1217,6 +1337,7 @@ const spec: Spec = {
         }
         await looksLeg(kit, page, base, engine);
         await cawLeg(kit, page, base, engine);
+        await groundLeg(kit, page, base, engine);
         for (const press of PRESSES) {
           // biome-ignore lint/performance/noAwaitInLoops: one press at a time under one mouse
           await pressLeg(kit, page, base, engine, press);

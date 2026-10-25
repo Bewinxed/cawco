@@ -190,7 +190,9 @@
     max-inline-size: 100%;
     overflow: clip;
     border-radius: var(--radius-lg);
-    background: var(--surface-raised);
+    /* One ground from the top edge down: the head stands on the content's
+       own recess, drawing none of its own (DESIGN.md, No bar ground). */
+    background: var(--surface-recess);
     box-shadow: var(--shadow-tile);
   }
 
@@ -208,7 +210,6 @@
   /* The empty board: the page's recessed field at the starters' measure. */
   .frame[data-frame="board"] {
     block-size: var(--c-caw-panel-h);
-    background: var(--surface-recess);
     box-shadow: inset 0 0 0 1px var(--border-hairline);
   }
 
@@ -249,7 +250,6 @@
     min-block-size: 0;
     padding: var(--space-6) var(--space-4) var(--space-4);
     overflow: hidden;
-    background: var(--surface-recess);
 
     [data-frame="board"] > & {
       padding: var(--space-7);
