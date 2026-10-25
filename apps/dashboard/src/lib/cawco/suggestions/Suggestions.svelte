@@ -23,14 +23,12 @@
    *   ideas", Plane AI's Suggestions);
    * - `rows`: raised rows, the sentence over its reason (Cofounder's next
    *   steps in its chat);
-   * - `tiles`: raised tiles, the glyph over the sentence and its reason, as
-   *   many across as fit (Linear's "Get started with some examples");
    * - `chips`: the kit's option chips, each as wide as its words, wrapping
    *   whole, a long one's words wrapping inside it with its glyph on their
    *   first line (Langdock's and AirOps' chips under the field, Relevance
    *   AI's under its own).
    */
-  export const SUGGESTION_LOOKS = ["list", "rows", "tiles", "chips"] as const;
+  export const SUGGESTION_LOOKS = ["list", "rows", "chips"] as const;
   export type SuggestionLook = (typeof SUGGESTION_LOOKS)[number];
 
   /**
@@ -38,7 +36,7 @@
    * - `thread`: under Caw in a thread nothing has been said in, on the
    *   composer's column;
    * - `panel`: an empty panel's one action (The Empty Starts Work Rule), as
-   *   wide as the starters' measure, so tiles stand four across;
+   *   wide as the starters' measure;
    * - `composer`: standing on the composer, where only the sentences are
    *   shown and every reason is left out.
    */
@@ -174,54 +172,6 @@
                   />{/if}</span
               >
               <span class="flex min-w-0 flex-col gap-space-1" data-box>
-                <span
-                  data-slot="suggestion-text"
-                  class="type-label text-pretty wrap-anywhere"
-                  >{suggestion.text}</span
-                >
-                {#if suggestion.reason}
-                  <span
-                    data-slot="suggestion-reason"
-                    class="type-meta text-pretty wrap-anywhere text-ink-muted group-data-[placement=composer]/suggestions:hidden"
-                    >{suggestion.reason}</span
-                  >
-                {/if}
-              </span>
-            </button>
-          </li>
-        {/each}
-      {/if}
-    </ul>
-  {:else if look === "tiles"}
-    <ul
-      aria-busy={waiting || undefined}
-      aria-label={label}
-      class="m-0 grid list-none auto-rows-fr grid-cols-(--tiles-cols) gap-space-2 p-0"
-      style:--tiles-cols={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
-    >
-      {#if waiting}
-        {#each slots as slot (slot)}
-          <li><Skeleton class="w-full" height="plot" radius="card" /></li>
-        {/each}
-      {:else}
-        {#each suggestions as suggestion (suggestion.text)}
-          {@const Glyph = suggestion.glyph ? GLYPHS[suggestion.glyph] : null}
-          <li class="min-w-0">
-            <button
-              data-slot="suggestion"
-              class="press-tint flex size-full flex-col items-start gap-space-3 rounded-lg bg-surface-raised p-space-4 text-start text-ink-strong shadow-tile select-none transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
-              onclick={() => onpick(suggestion)}
-              type="button"
-            >
-              {#if Glyph}
-                <!-- mark-line: the glyph stands above the words, as Linear's examples set it -->
-                <Glyph
-                  aria-hidden="true"
-                  data-suggestion-glyph
-                  class="size-icon-md flex-none text-ink-strong"
-                />
-              {/if}
-              <span class="flex min-w-0 flex-col gap-space-1">
                 <span
                   data-slot="suggestion-text"
                   class="type-label text-pretty wrap-anywhere"

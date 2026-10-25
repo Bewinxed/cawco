@@ -48,16 +48,6 @@ const VARIANTS = [
       "Taller than the list in a narrow column: three with their reasons stand 224px in Caw’s 380px column against the list’s 134px, pushing his earlier threads down.",
   },
   {
-    look: "tiles",
-    name: "Tiles",
-    source: "Linear’s “Get started with some examples”",
-    refs: [["Linear", "a0193431-e1b3-44c4-b1a2-1d1f4a017ccc"]],
-    gives:
-      "On a wide empty panel, three or four across with their reasons: a scan from left to right, the glyph leading each.",
-    costs:
-      "In Caw’s 380px column they fall to one column of cards, glyph over words: three stand 339px, the most of all four.",
-  },
-  {
     look: "chips",
     name: "Chips",
     source: "Langdock’s and AirOps’ chips under the field, Relevance AI’s under its own",
