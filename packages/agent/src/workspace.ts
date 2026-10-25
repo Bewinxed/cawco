@@ -498,12 +498,80 @@ export const accessOf = async (
 };
 
 /**
+ * A linked worktree's copy (its `.git` a file naming the person's git dirs,
+ * layer.ts `kindOf`) made a repository of its own, so nothing the
+ * workspace does writes those dirs and every reader of the copy finds its
+ * `.git` a folder: the `.git` file taken away in the copy (a whiteout in a
+ * Linux view's upper) and a `.git` folder made there that borrows the common
+ * dir's objects (`objects/info/alternates`, gitrepository-layout(5); the
+ * boundary reads them, core workspace-policy.ts `linkedObjects`), on the
+ * worktree's HEAD (its branch made there at the commit it names), with its
+ * index, and the common dir's excludes and shallow list. Its config is made
+ * by {@link ownGitConfig}. Held, it takes the borrowed objects into its own
+ * store before anything else is read ({@link ownObjects}).
+ */
+const ownRepository = async (
+  folder: string,
+  path: string,
+  access: CopyAccess
+): Promise<void> => {
+  const { linked } = access.layer;
+  if (!linked) {
+    return;
+  }
+  const dotGit = join(path, ".git");
+  const here = (...parts: string[]) => access.at(join(dotGit, ...parts));
+  const commit = await gitUntil(Date.now() + WORKSPACE_GIT_TIMEOUT_MS)(
+    folder,
+    "rev-parse",
+    "--verify",
+    "HEAD^{commit}"
+  );
+  const head = (await readFile(join(linked.gitDir, "HEAD"), "utf8")).trim();
+  const branch = head.startsWith("ref: refs/heads/")
+    ? head.slice("ref: ".length)
+    : undefined;
+  await rm(access.at(dotGit), { force: true });
+  for (const dir of [
+    join("objects", "info"),
+    join("refs", "heads"),
+    join("refs", "tags"),
+    "info",
+    ...(branch ? [dirname(branch)] : []),
+  ]) {
+    // biome-ignore lint/performance/noAwaitInLoops: a few dirs, each made whole
+    await mkdir(here(dir), { recursive: true });
+  }
+  await writeFile(
+    here("objects", "info", "alternates"),
+    `${join(linked.common, "objects")}\n`
+  );
+  if (branch) {
+    await writeFile(here(branch), `${commit}\n`);
+  }
+  await writeFile(here("HEAD"), `${branch ? `ref: ${branch}` : commit}\n`);
+  for (const [from, to] of [
+    [join(linked.gitDir, "index"), "index"],
+    [join(linked.common, "info", "exclude"), join("info", "exclude")],
+    [join(linked.common, "shallow"), "shallow"],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: three files, each where it is
+    if (await isFile(from)) {
+      await copyFile(from, here(to));
+    }
+  }
+  console.info(
+    `[workspace] ${folder} is a linked worktree of ${linked.common}: its copy's .git is a repository of its own on ${branch ?? commit.slice(0, 9)}, borrowing that repository's objects`
+  );
+};
+
+/**
  * The copy's own `.git/config`: the keys of the person's that git may run
  * under (core safe-git.ts `allowedConfigKey`), and no other, so the copy's
  * git runs where the person's config would refuse it (a credential helper,
  * a hooks path), and nothing the person's config names runs for the
- * workspace. The person's config is read, never written; a
- * `config.worktree` the copy holds goes.
+ * workspace. The person's config (a linked worktree's: its common git
+ * dir's) is read, never written; a `config.worktree` the copy holds goes.
  */
 const ownGitConfig = async (
   folder: string,
@@ -516,7 +584,7 @@ const ownGitConfig = async (
       ...SAFE_GIT_FLAGS,
       "config",
       "--file",
-      join(folder, ".git", "config"),
+      join(access.layer.linked?.common ?? join(folder, ".git"), "config"),
       "--no-includes",
       "--list",
       "-z",
@@ -989,6 +1057,7 @@ export const createWorkspace = async (
     if (!access) {
       throw new Error(`workspace ${id}'s copy of ${folder} is not there`);
     }
+    await ownRepository(folder, path, access);
     const repo =
       layer.kind === "repo"
         ? await startBranch(workspace, folder, {
