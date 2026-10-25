@@ -374,7 +374,6 @@
           draft={lent.draft}
           mentionsFrom={lent.mentionsFrom}
           onfoot={lent.onfoot}
-          oninterruptsend={lent.oninterruptsend}
           onmenu={lent.onmenu}
           onstop={lent.onstop}
           onsubmit={lent.onsubmit}

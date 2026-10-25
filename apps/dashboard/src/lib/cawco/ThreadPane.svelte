@@ -766,10 +766,6 @@
       return viewId;
     },
     onsubmit,
-    oninterruptsend: (text, extras, id) => {
-      onstop();
-      onsubmit(text, extras, id);
-    },
     onmenu: () => undefined,
     onstop,
     get ask() {
@@ -1170,7 +1166,6 @@
             {draft}
             mentionsFrom={binding.mentionsFrom}
             onfoot={binding.onfoot}
-            oninterruptsend={binding.oninterruptsend}
             onmenu={binding.onmenu}
             {onstop}
             {onsubmit}

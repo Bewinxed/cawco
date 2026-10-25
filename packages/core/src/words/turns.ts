@@ -2,7 +2,8 @@
  * What the agent's log says of a session's turn and its process when CawCo
  * would replace or take that process (agent session.ts `#turnEnded`, its
  * custody attach): a turn is never cut for a start again, and the log says
- * the start waited. Written to the machine's log only: no screen draws it,
+ * the start waited; and what the hub's log says of a stop, who asked for it
+ * (hub server.ts `saidInterrupt`). Written to the machine's log only: no screen draws it,
  * so it is not written into the app (scripts/words-swift.ts).
  */
 export const turnWords = {
@@ -18,4 +19,11 @@ export const turnWords = {
   /** A restarted agent's custody took a live process back, its turn running on. */
   attached: (instanceId: string) =>
     `[custody] ${instanceId}: attached to its live process`,
+  /** The hub's line for a stop of `instanceId`'s turn, opening with who asked. */
+  interruptOpening: (instanceId: string) => `[hub] interrupt -> ${instanceId}`,
+  /** A stop asked from a dashboard or the app: its tab and presence when known. */
+  fromScreen: "from a screen",
+  /** That stop with the tab it came from, read against its presence's lines. */
+  fromScreenBy: (clientId: string, presenceId: string) =>
+    `${turnWords.fromScreen}, client ${clientId} presence ${presenceId}`,
 };

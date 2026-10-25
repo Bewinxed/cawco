@@ -148,7 +148,6 @@
     commands = [],
     mentionsFrom = null,
     onsubmit,
-    oninterruptsend,
     onmenu,
     onstop,
     trayRows = [],
@@ -221,12 +220,6 @@
      * fly into the row that carries it before the send has left.
      */
     onsubmit: (text: string, extras: SendExtras, id: string) => void;
-    /**
-     * The queue-jump (mod+Enter): interrupt the turn in flight, then send.
-     * Optional — a composer without it (the spawn form) treats mod+Enter as a
-     * plain send, which on an idle surface is the same thing.
-     */
-    oninterruptsend?: (text: string, extras: SendExtras, id: string) => void;
     /** Fired when the `/` menu opens, so the session can be re-asked what it has. */
     onmenu?: () => void;
     onstop: () => void;
@@ -1295,9 +1288,7 @@
 
   const pending = $derived(sending || canvasWorking());
 
-  function submit(
-    via: (text: string, extras: SendExtras, id: string) => void = onsubmit
-  ): void {
+  function submit(): void {
     if (held) {
       sendBlock = "Finish switching conversations before sending.";
       return;
@@ -1322,7 +1313,7 @@
       return;
     }
     if (draft.canvas) {
-      sendWithCanvas(via);
+      sendWithCanvas();
       return;
     }
     // The text leaves the field for the one row it becomes (motion/share),
@@ -1332,7 +1323,7 @@
     const id = newId();
     departBox(`sent:${id}`, field as HTMLDivElement);
     dismissed = true;
-    via(text, extras, id);
+    onsubmit(text, extras, id);
   }
 
   /**
@@ -1379,9 +1370,7 @@
    * message becomes when no words go with it; the words do otherwise. What
    * cannot go says why under the chips and nothing is sent.
    */
-  async function sendWithCanvas(
-    via: (text: string, extras: SendExtras, id: string) => void
-  ): Promise<void> {
+  async function sendWithCanvas(): Promise<void> {
     const writing = draft;
     const { canvas } = draft;
     const extra = await room?.extras();
@@ -1402,7 +1391,7 @@
       ...(extra.attachments ?? []),
     ];
     extras.images = [...(extras.images ?? []), ...(extra.images ?? [])];
-    via(text, extras, id);
+    onsubmit(text, extras, id);
     if (canvas) {
       room?.sent(canvas.id);
     }
@@ -1463,12 +1452,13 @@
     if ((recall && wheel?.key(event)) || recallKey(event)) {
       return;
     }
-    // BEFORE the menu: mod+Enter is "interrupt and send" (the shortcut sheet's
-    // long-standing promise), and a half-picked menu must not swallow it — the
-    // urgency is the point. The menu is dismissed by the submit itself.
+    // BEFORE the menu: mod+Enter sends what is written as it stands, a
+    // half-picked menu included; the submit itself dismisses the menu. It is
+    // the same send as Enter, and like every send it never stops a turn: only
+    // the Stop control does (`onstop`).
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      submit(oninterruptsend ?? onsubmit);
+      submit();
       return;
     }
     if (menuOpen ? menuKey(event) : chipKey(event)) {

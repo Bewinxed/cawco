@@ -477,6 +477,7 @@ import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { turnWords } from "@cawco/core/words/turns";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -21982,7 +21983,7 @@ export const createServer = (
 
   /** Every interrupt of a session's turn the hub sends, and who asked for it, in the log. */
   const saidInterrupt = (instanceId: string, by: string): void => {
-    console.log(`[hub] interrupt -> ${instanceId} ${by}`);
+    console.log(`${turnWords.interruptOpening(instanceId)} ${by}`);
   };
 
   /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
@@ -22006,8 +22007,11 @@ export const createServer = (
       saidInterrupt(
         message.instanceId,
         provenance
-          ? `from a screen, client ${provenance.clientId ?? "?"} presence ${provenance.presenceId?.slice(0, 8) ?? "?"}`
-          : "from a screen"
+          ? turnWords.fromScreenBy(
+              provenance.clientId ?? "?",
+              provenance.presenceId?.slice(0, 8) ?? "?"
+            )
+          : turnWords.fromScreen
       );
       noteInterrupt(message.instanceId);
       // The error closing that turn is the stop's receipt, on every screen.

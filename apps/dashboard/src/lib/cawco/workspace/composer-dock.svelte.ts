@@ -34,7 +34,6 @@ export interface ComposerBinding {
   readonly mentionsFrom: string | null;
   /** What the composer stands over the transcript's foot (Composer `ComposerFoot`). */
   readonly onfoot?: (foot: ComposerFoot) => void;
-  oninterruptsend: (text: string, extras: SendExtras, id: string) => void;
   onmenu: () => void;
   onstop: () => void;
   onsubmit: (text: string, extras: SendExtras, id: string) => void;
