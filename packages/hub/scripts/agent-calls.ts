@@ -40,6 +40,21 @@ export const NOT_HUB: { file: string; pattern: string; why: string }[] = [
     why: "the OpenCode server's own route, asked of the server the agent runs",
   },
   {
+    file: "packages/agent/src/harnesses/opencode.ts",
+    pattern: "/api/model",
+    why: "the OpenCode server's own model list, read from the server the agent runs (opencode.ts `catalogRows`)",
+  },
+  {
+    file: "packages/agent/src/harnesses/opencode.ts",
+    pattern: "/api/model/default",
+    why: "the OpenCode server's own default model, read from the server the agent runs",
+  },
+  {
+    file: "packages/agent/src/harnesses/opencode.ts",
+    pattern: "/api/integration",
+    why: "the OpenCode server's own list of integrations, read from the server the agent runs",
+  },
+  {
     file: "packages/agent/src/harnesses/opencode-session.ts",
     pattern: "/mcp",
     why: "an MCP server's own endpoint as OpenCode's config names it",
