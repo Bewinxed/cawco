@@ -43,12 +43,11 @@
       </div>
     {/each}
   {/each}
-  <div data-part="today:three" style="inline-size: 380px">
-    <StarterCards onpick={none} rows starters={today(THREE)} />
-  </div>
-  <div data-part="today:long" style="inline-size: 380px">
-    <StarterCards onpick={none} rows starters={today(LONG)} />
-  </div>
+  {#each [["three", THREE], ["one", ONE], ["many", MANY], ["long", LONG]] as [set, list] (set)}
+    <div data-part="today:{set}" style="inline-size: 380px">
+      <StarterCards onpick={none} rows starters={today(list)} />
+    </div>
+  {/each}
   <div data-part="today:decisions" style="inline-size: 760px">
     <StarterCards onpick={none} starters={today(DECISIONS)} />
   </div>
