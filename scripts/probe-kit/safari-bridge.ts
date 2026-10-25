@@ -1,5 +1,7 @@
 /**
- * Scripts run in the iOS Simulator's own Mobile Safari, from a spec.
+ * Scripts run in the iOS Simulator's own Mobile Safari, from a spec, or in
+ * any browser nothing automates (canvas-cost's `memory` leg: WebKit with
+ * no inspector, whose memory Playwright's own WebKit can't show).
  *
  * A workspace's boundary refuses the simulator's Web Inspector socket
  * (`ios_webkit_debug_proxy -s unix:…/com.apple.webinspectord_sim.socket`:
@@ -44,6 +46,8 @@ export interface SafariBridge {
   front: (upstream: string) => string;
   /** A page of the bridge's own: `body` in a document whose head carries the agent. */
   html: (name: string, head: string, body: string) => string;
+  /** Where the bridge is: a page loads its agent from `<origin>/agent.js`. */
+  origin: string;
   /** The newest page whose address `matches`, once its agent asks (within `ms`). */
   page: (
     matches: (href: string) => boolean,
@@ -215,6 +219,7 @@ export function safariBridge(): SafariBridge {
   });
 
   return {
+    origin,
     html: (name, head, body) => {
       const path = `/${name}`;
       pages.set(

@@ -291,7 +291,14 @@ export interface PageOptions {
    * been started (possibly in another tab)"). Unset, the run's shared one.
    */
   browser?: string;
-  /** WebKit for a spec that reads Safari's engine, Firefox for Gecko's; Chromium otherwise. */
+  /**
+   * WebKit for a spec that reads Safari's engine, Firefox for Gecko's;
+   * Chromium otherwise. A WebKit page here has Playwright's inspector
+   * attached, which keeps every frame the page takes away, a frame of plain
+   * objects as much as an app's, and after `page.requestGC()` too: what a
+   * page lets go of in WebKit is read with no inspector (canvas-cost
+   * `memory`, its `uninspected` runs, through safari-bridge.ts).
+   */
   engine?: Engine;
   /**
    * Chromium only: its `--host-resolver-rules`, where a spec needs a name to

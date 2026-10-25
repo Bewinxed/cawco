@@ -20,13 +20,15 @@
  * - `frame`: one frame's keep on a warm stage, each engine: resources it
  *   asked for and their decoded bytes (scripts, styles), the scripts its
  *   realm parsed and the modules it evaluated (Chromium), its realm's JS
- *   heap after a GC (Chromium) or its web process's memory (WebKit), and the
- *   animation-frame callbacks it runs in 20 s idle.
+ *   heap after a GC (Chromium) or its web process's memory (WebKit, read
+ *   with no inspector), and the animation-frame callbacks it runs in 20 s
+ *   idle.
  * - `page`: a page of `--embeds` (33, caw-panel's count) frames, each on its
  *   turn as embed-turns.ts gives them, each engine: time until every frame
  *   said its shape, the browser's CPU until then, the holding page's frame
  *   cadence while they load (p95), and the browser's memory sampled over
- *   `--idle` seconds (240) after.
+ *   `--idle` seconds (240) after (WebKit's, and its idle CPU, read with no
+ *   inspector).
  * - `shared`: the same stories drawn inline in one frame, read alike.
  * - `decision`: a decision page of `--embeds` Previews on the decision host,
  *   at the owner's window: its first screen until every Preview in it is
@@ -40,12 +42,23 @@
  *   idle, and again once back or scrolled to.
  * - `rekey`: a write no page is served from costs the next frame nothing;
  *   an edit to an imported file reaches the open canvas and the next frame.
+ * - `memory`: a decision page of ten canvas Previews in WebKit, served as
+ *   the hub serves one (the preview overlay in every frame): its web
+ *   process's memory once drawn, over `--idle` seconds untouched, and each
+ *   time it is taken away and opened again (`--rounds`), in WebKit with no
+ *   inspector, beside a control page of frames holding plain objects; and
+ *   the same under Playwright, whose inspector keeps every frame a page
+ *   takes away (`--memory-runs` picks among them).
+ *
+ * Every WebKit memory and idle reading is taken in WebKit with no inspector
+ * (`noInspectorWebKit`): Playwright's own WebKit can't show what a page lets
+ * go of.
  *
  * Numbers go to `numbers.json` in the spec's output folder, and each is a
  * NOTE line. The checks are what a frame owes: it draws, and it loads no
  * module its story's closure does not reach.
  *
- *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf,decision] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200]
+ *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf,decision,memory] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200] [--rounds 6] [--memory-runs uninspected,collected,collected-control,playwright,playwright-control] [--memory-page decision]
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one frame at a time, as the page gives them turns
 import { type ChildProcess, spawn } from "node:child_process";
@@ -59,17 +72,20 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, relative } from "node:path";
-import type { CDPSession, Page } from "playwright-core";
+import { type CDPSession, type Page, webkit } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { until } from "../../scratch-fleet";
 import { scratchCertificate } from "../cloudflare-front";
 import {
   CAWCO_BRIDGE,
+  EMBED_FRAME,
+  embedOrigin,
   idOf as decisionId,
   startDecisionStage,
 } from "../decision-embeds";
 import { type Engine, type Kit, ROOT, type Spec } from "../kit";
+import { type SafariPage, safariBridge } from "../safari-bridge";
 
 const APP = join(ROOT, "apps/dashboard");
 
@@ -928,6 +944,133 @@ async function latencyLeg(kit: Kit, stages: Stage[]): Promise<void> {
   }
 }
 
+/* --- WebKit with no inspector ------------------------------------------- */
+
+/**
+ * WebKit as a person runs it, nothing automating it: Playwright's own WebKit
+ * build (its MiniBrowser, `webkit.executablePath()`) started headless on
+ * `url` with no inspector (no `--inspector-pipe`); `url` carries the kit
+ * bridge's agent (safari-bridge.ts), which runs this spec's calls in it.
+ * Under Playwright, WebKit's inspector keeps every frame a page takes away,
+ * a frame of plain objects as much as an app's, and after
+ * `page.requestGC()` too (the memory leg's `playwright-control`), and its
+ * page runs the kit's own frame loop (crash-watch.ts `readFrames`): every
+ * WebKit memory and idle reading of this spec is taken here.
+ */
+function noInspectorWebKit(
+  url: string,
+  env: Record<string, string> = {}
+): {
+  cpu: () => number;
+  end: () => void;
+  memory: () => number;
+  /** What the browser's processes wrote to stderr, newest last (JSC's GC log where `JSC_logGC` asks for it). */
+  said: () => string[];
+} {
+  const browser = spawn(
+    webkit.executablePath(),
+    ["--headless", "--size=1440x900", url],
+    { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, ...env } }
+  );
+  const lines: string[] = [];
+  let partial = "";
+  browser.stderr?.on("data", (chunk: Buffer) => {
+    const all = (partial + chunk.toString("utf8")).split("\n");
+    partial = all.pop() ?? "";
+    lines.push(...all);
+    if (lines.length > 4000) {
+      lines.splice(0, lines.length - 4000);
+    }
+  });
+  const tree = () => treeOf([browser.pid as number]);
+  return {
+    said: () => lines,
+    memory: () => memoryMb(pageProcesses(tree())),
+    cpu: () => cpuMs(tree()),
+    end: () => {
+      for (const pid of tree().reverse()) {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch {
+          // ended
+        }
+      }
+    },
+  };
+}
+
+/** What the page leg's holder of frames reads in WebKit with no inspector. */
+interface FramesRead {
+  drawnMb: number;
+  idleCpuMs: number;
+  idleMb: [number, number][];
+  said: number;
+  settledMs: number | null;
+}
+
+/**
+ * The page leg's holder of `urls` in WebKit with no inspector, each frame
+ * in its turn: its web process's memory once every frame said its shape
+ * (within {@link DRAW_MS} each), then every 20 s over `idleS` seconds, and
+ * the CPU its processes spent in them.
+ */
+async function framesWithNoInspector(
+  urls: string[],
+  idleS: number
+): Promise<FramesRead> {
+  const bridge = safariBridge();
+  const holder = bridge.html(
+    `frames-${urls.length}-${Date.now()}`,
+    HOLDER_STYLE,
+    HOLDER_BODY(urls)
+  );
+  const browser = noInspectorWebKit(holder);
+  try {
+    const page = await bridge.page((href) => href === holder);
+    const settled = await page.run(
+      async (ms: number) => {
+        const h = (
+          window as unknown as {
+            __holder: { said: number; settledAt: number | null; start: number };
+          }
+        ).__holder;
+        const t0 = Date.now();
+        while (h.settledAt === null && Date.now() - t0 < ms) {
+          await new Promise((done) => setTimeout(done, 250));
+        }
+        return {
+          said: h.said,
+          settledMs:
+            h.settledAt === null ? null : Math.round(h.settledAt - h.start),
+        };
+      },
+      [urls.length * DRAW_MS],
+      urls.length * DRAW_MS + 10_000
+    );
+    // A last second for what the last frame's drawing set off.
+    await Bun.sleep(1000);
+    const drawnMb = browser.memory();
+    const cpu0 = browser.cpu();
+    const idleMb: [number, number][] = [];
+    const from = Date.now();
+    for (let s = 0; s <= idleS; s += 20) {
+      idleMb.push([s, browser.memory()]);
+      if (s < idleS) {
+        await Bun.sleep(Math.max(0, from + (s + 20) * 1000 - Date.now()));
+      }
+    }
+    return {
+      ...settled,
+      drawnMb,
+      idleMb,
+      idleCpuMs: Math.round(browser.cpu() - cpu0),
+    };
+  } finally {
+    browser.end();
+    bridge.stop();
+  }
+}
+
 /* --- One frame's keep ------------------------------------------------------ */
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one frame read whole, its CDP reads beside its timeline's
@@ -1057,7 +1200,11 @@ async function frameLeg(
       heap = Math.round(usage.usedSize / 1024 / 1024);
     }
     const mine = browserPids(stages).filter((pid) => !before.has(pid));
-    const processMb = memoryMb(pageProcesses(mine));
+    // WebKit's, read with no inspector: the frame alone in a holder, drawn.
+    const processMb =
+      engine === "webkit"
+        ? (await framesWithNoInspector([url], 0)).drawnMb
+        : memoryMb(pageProcesses(mine));
     await page.evaluate(() => {
       (window as unknown as { __cost: { raf: number } }).__cost.raf = 0;
     });
@@ -1118,9 +1265,11 @@ async function frameLeg(
 /* --- A page of frames -------------------------------------------------------- */
 
 /** The page holding the frames: each its turn, in order, as embed-turns.ts gives them on a page at its top. */
-const HOLDER = (urls: string[]) => `<!doctype html><meta charset="utf-8">
-<style>body{margin:0;font:14px system-ui}main{height:100vh;overflow:auto}.card{margin:16px;min-height:240px;border:1px solid #ccc}iframe{display:block;inline-size:100%;block-size:240px;border:0}</style>
-<main id="list"></main>
+const HOLDER = (urls: string[]) =>
+  `<!doctype html><meta charset="utf-8">\n${HOLDER_STYLE}\n${HOLDER_BODY(urls)}`;
+const HOLDER_STYLE =
+  "<style>body{margin:0;font:14px system-ui}main{height:100vh;overflow:auto}.card{margin:16px;min-height:240px;border:1px solid #ccc}iframe{display:block;inline-size:100%;block-size:240px;border:0}</style>";
+const HOLDER_BODY = (urls: string[]) => `<main id="list"></main>
 <script>
 const urls = ${JSON.stringify(urls)};
 const list = document.getElementById("list");
@@ -1187,6 +1336,23 @@ const sharedUrl = (
   }
   return url.href;
 };
+
+/** The memory of `pids` every 20 s over `idleS` seconds, and the CPU they spent in them. */
+async function idleOf(
+  pids: () => number[],
+  idleS: number
+): Promise<{ cpuMs: number; memory: [number, number][] }> {
+  const memory: [number, number][] = [];
+  const from = Date.now();
+  const cpu0 = cpuMs(pids());
+  for (let s = 0; s <= idleS; s += 20) {
+    memory.push([s, memoryMb(pageProcesses(pids()))]);
+    if (s < idleS) {
+      await Bun.sleep(Math.max(0, from + (s + 20) * 1000 - Date.now()));
+    }
+  }
+  return { cpuMs: Math.round(cpuMs(pids()) - cpu0), memory };
+}
 
 /**
  * A page of `--embeds` stories, each engine: `cards`, a frame per story as
@@ -1259,18 +1425,16 @@ async function pageLeg(
           frames.map((one) => one.evaluate(timeline).catch(() => null))
         )
       ).filter((one): one is Timeline => one !== null);
-      const memory: [number, number][] = [];
-      const idleStart = Date.now();
-      const cpuIdle0 = cpuMs(mine());
-      for (let s = 0; s <= IDLE_S; s += 20) {
-        memory.push([s, memoryMb(pageProcesses(mine()))]);
-        if (s < IDLE_S) {
-          await Bun.sleep(
-            Math.max(0, idleStart + (s + 20) * 1000 - Date.now())
-          );
-        }
+      // WebKit's memory and idle CPU read with no inspector (noInspectorWebKit), its Playwright page let go first.
+      let idle: { cpuMs: number; memory: [number, number][] };
+      if (engine === "webkit") {
+        await page.close();
+        const read = await framesWithNoInspector(urls, IDLE_S);
+        idle = { cpuMs: read.idleCpuMs, memory: read.idleMb };
+      } else {
+        idle = await idleOf(mine, IDLE_S);
+        await page.close();
       }
-      const idleCpu = Math.round(cpuMs(mine()) - cpuIdle0);
       keep(kit, `page.${label}.${engine}`, {
         stories: EMBEDS,
         frames: urls.length,
@@ -1285,15 +1449,15 @@ async function pageLeg(
         styleBytes: per.reduce((s, one) => s + one.styleBytes, 0),
         storyFrames: per.reduce((s, one) => s + one.frames, 0),
         failed: per.flatMap((one) => one.failed).slice(0, 5),
-        memoryMbOverIdle: memory,
-        idleCpuMs: idleCpu,
+        memoryMbOverIdle: idle.memory,
+        idleCpuMs: idle.cpuMs,
         idleSeconds: IDLE_S,
+        idleRead: engine === "webkit" ? "WebKit with no inspector" : engine,
       });
       kit.check(
         `page ${label} ${engine}: all ${urls.length} frames of ${EMBEDS} stories said their shape (${held.said}) in ${(settledMs / 1000).toFixed(1)} s`,
         held.said === urls.length
       );
-      await page.close();
     }
   } finally {
     holder.stop(true);
@@ -2711,6 +2875,810 @@ async function decisionLeg(kit: Kit): Promise<void> {
   }
 }
 
+/* --- What a decision page's canvases keep in WebKit, idle and gone ------ */
+
+/** The memory leg's Previews: three-designs' count (live-perf.ts `PAGES`), the page the audit watched grow. */
+const MEMORY_PREVIEWS = 10;
+/** How long after its frame is taken away the page's memory is read, s. */
+const GONE_S = 60;
+/**
+ * How many times the page is opened and taken away. What a gone page let go
+ * of is collected when JSC next collects, which nothing in a page can ask
+ * for, and an idle web process allocates little to make it: with no
+ * inspector, six rounds' drawn memory read 1027, 1189, 1258, 1382, 1095,
+ * 1206 MB (its first four alone climbing), and 60 s after each page went
+ * 440, 552, 715, 336, 510, 1030 MB.
+ */
+const MEMORY_ROUNDS = Number(arg("rounds") ?? 6);
+/** How long a page opened again stands before it is taken away, s. */
+const MEMORY_REST_S = 20;
+
+/**
+ * The memory leg's runs. `uninspected`: the hub's page in WebKit as a person
+ * runs it, nothing automating it; `collected`: the same with every
+ * collection full (`JSC_useGenerationalGC=0`) and the holder going on after
+ * each page goes, so what a gone page holds is read, not when JSC next
+ * collects; `playwright`: the same page in WebKit under Playwright, as the
+ * audit read it; each with `-control`, a page of frames holding plain
+ * objects and no app at all, in place of the hub's.
+ */
+const MEMORY_RUNS = (
+  arg("memory-runs") ??
+  "uninspected,collected,collected-control,playwright,playwright-control"
+).split(",") as (
+  | "uninspected"
+  | "uninspected-control"
+  | "collected"
+  | "collected-control"
+  | "playwright"
+  | "playwright-control"
+)[];
+
+/** A decision page of `picks`, a Preview of one story each, on cards of two options. */
+const memoryProgram = (picks: { id: string; story: string }[]): string => {
+  const cards = Array.from(
+    { length: Math.ceil(picks.length / 2) },
+    (_, at) => `c${at}`
+  );
+  return [
+    `root = Decisions("Ten canvases on one page", [${cards.join(", ")}])`,
+    ...cards.flatMap((card, at) => [
+      `${card} = Decision("${card}", "Which reads right, ${at + 1} of ${cards.length}?", [${card}a, ${card}b], "Each option shows a canvas.")`,
+      `${card}a = Option("${card}a", "First", "This canvas.", true, [p${at * 2}], "The other.")`,
+      `${card}b = Option("${card}b", "Second", "That canvas.", false, [p${at * 2 + 1}], "The first.")`,
+    ]),
+    ...picks.map(
+      (one, at) => `p${at} = Preview("${one.id}", "Canvas ${at + 1}", ["${one.story}"])`
+    ),
+  ].join("\n");
+};
+
+/**
+ * What the memory leg opens: `decision`, the hub's decision page of ten
+ * canvas Previews (its overlay in it and in every canvas, as the hub serves
+ * it); `bare`, that page with no overlay anywhere; `canvases`, its ten
+ * canvases alone, no decision page; `loop`, ten canvases of the spec's own
+ * one-element story (the canvas machinery and no dashboard component);
+ * `vite`, the control's frames each with Vite's client (its HMR socket to
+ * the stage) beside its objects; `xorigin`, the control's frames on an
+ * origin of their own, as a canvas stands on the stage's; `cut-…`, ten of
+ * the loop's canvases through a relay of the stage that cuts their page down
+ * ({@link CUTS});
+ * `control`, ten frames of plain objects and no app. `--memory-page` names the one its app runs open (decision by
+ * default); its `-control` runs open the control.
+ */
+type MemoryPage =
+  | "decision"
+  | "bare"
+  | "canvases"
+  | "loop"
+  | "vite"
+  | "xorigin"
+  | `cut-${keyof typeof CUTS}`
+  | "control"
+  | `probe-${keyof typeof PROBES}`;
+/** The pages `--memory-page` names (comma-separated), each read in a browser of its own: decision by default. */
+const MEMORY_PAGES = (arg("memory-page") ?? "decision").split(
+  ","
+) as Exclude<MemoryPage, "control">[];
+
+/**
+ * One engine feature or one of the stage's resources each, in the control's
+ * frame (its callback reaching the frame's objects, `held`), calling
+ * `ready()` once it stands: what a frame still standing on it keeps once it
+ * is gone, read with every collection full. `stage`: the stage's address.
+ */
+const PROBES = {
+  raf: () =>
+    "const tick = () => { void held.length; requestAnimationFrame(tick); }; requestAnimationFrame(tick); ready();",
+  interval: () => "setInterval(() => void held.length, 1000); ready();",
+  resize: () =>
+    "new ResizeObserver(() => void held.length).observe(document.documentElement); ready();",
+  intersection: () =>
+    "new IntersectionObserver(() => void held.length).observe(document.documentElement); ready();",
+  mutation: () =>
+    "new MutationObserver(() => void held.length).observe(document, { subtree: true, childList: true, attributes: true }); setInterval(() => document.documentElement.toggleAttribute('data-x'), 500); ready();",
+  animation: () =>
+    "document.documentElement.held = held; document.documentElement.animate([{ opacity: 1 }, { opacity: 0.5 }], { duration: 1000, iterations: Infinity }); ready();",
+  message: () => "addEventListener('message', () => void held.length); ready();",
+  fonts: () => "document.fonts.ready.then(() => void held.length); ready();",
+  // A big sheet of width rules, as the kit's Tailwind sheet is, never written to.
+  "css-big": () => `${BIG_SHEET} ready();`,
+  // The same sheet, each width rule made a container rule as canvas/width.ts `asFrame` makes it.
+  "css-rewrite": () =>
+    `${BIG_SHEET} const sheet = style.sheet; for (let at = 0; at < sheet.cssRules.length; at += 1) { const rule = sheet.cssRules[at]; if (rule instanceof CSSMediaRule) { const inner = [...rule.cssRules].map((one) => one.cssText).join("\\n"); sheet.insertRule("@container cawco-width " + rule.media.mediaText.replace("width >=", "width >=") + " {\\n" + inner + "\\n}", at + 1); sheet.deleteRule(at); } } ready();`,
+  // A media query's change listener, as the canvas's scheme follows the OS's (canvas/scheme.ts).
+  media: () =>
+    "matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => void held.length); ready();",
+  // A house face piece from the stage, text set in it, as a canvas's kit sets its text.
+  webfont: (stage: string) =>
+    `const face = document.createElement("style"); face.textContent = "@font-face { font-family: Probe; src: url(${stage}/src/house-faces/face-bd695ce806ea7f47.woff2) format('woff2'); }"; document.head.append(face); const line = document.createElement("p"); line.style.fontFamily = "Probe"; line.textContent = "The quick brown fox " + held.length; document.body.append(line); document.fonts.load("16px Probe").then(ready, ready);`,
+  // A component from the stage, and the Svelte runtime it imports, as modules.
+  modules: (stage: string) =>
+    `import("${stage}/src/lib/cawco/probe-canvas-cost/Loop.svelte").then(ready, ready);`,
+  // The kit's stylesheet from the stage, as Vite injects it into a canvas.
+  css: (stage: string) => `import("${stage}/src/app.css").then(ready, ready);`,
+} as const;
+
+/** The canvases alone: a frame of each, counted once it says its shape (`said`), or with `byLoad` once it has loaded (a page that draws nothing). */
+const CANVASES_PAGE = (urls: string[], byLoad = false) =>
+  byLoad
+    ? `<!doctype html><script>window.said = 0;</script>${urls.map((url) => `<iframe src="${url}" onload="window.said += 1"></iframe>`).join("")}`
+    : `<!doctype html><script>window.said = 0; const seen = new Set(); addEventListener("message", (event) => { if (event.data && event.data.type === "cawco:embed-size" && !seen.has(event.source)) { seen.add(event.source); window.said = seen.size; } });</script>${urls.map((url) => `<iframe src="${url}"></iframe>`).join("")}`;
+
+/** What the canvas page's entry imports, at the page's keyed addresses (stage-host host.ts `entryModule`), as the stage served it. */
+interface EntryParts {
+  adapter: string;
+  /** The page's keyed prefix, `/@cawco/m/<key>`: the entry's own `BASE`. */
+  base: string;
+  runtime: string;
+  /** The entry as served. */
+  source: string;
+  styles: string[];
+}
+
+/** The entry's imports, read off its served source, at `src`. */
+const entryPartsOf = (source: string, src: string): EntryParts => {
+  const all = [...source.matchAll(IMPORTED)].map((m) => m[1] as string);
+  return {
+    adapter: all.find((one) => one.includes("adapter.js")) ?? "",
+    base: src.replace(ENTRY_PATH, ""),
+    runtime: all.find((one) => one.includes("runtime.js")) ?? "",
+    source,
+    styles: all.filter((one) => CSS_ADDRESS.test(one)),
+  };
+};
+/** The entry's own address under the page's key. */
+const ENTRY_PATH = /\/@id\/__x00__cawco:stage\/entry\.js$/;
+/** The entry's `BASE` (stage-host host.ts `entryModule`), read off its address, which an inline copy of it doesn't have. */
+const ENTRY_BASE = /const BASE = [^\n]*\n/;
+/** The entry's `load` of a section's module. */
+const ENTRY_LOAD = /load: \(file, fresh\) => import\([^\n]*\n/;
+/** The control's objects, as a script line. */
+const HELD_LINE =
+  'window.held = Array.from({ length: 400000 }, (_, i) => ({ i, s: String(i).padEnd(40, "x") }));';
+
+/** The entry inlined in its place, `edit` made to its source, the control's objects beside it, saying the frame's shape once it has run. */
+const bootOf = (
+  html: string,
+  entry: EntryParts,
+  edit: (source: string) => string
+): string =>
+  html.replace(
+    ENTRY_TAG,
+    `<script type="module">${edit(entry.source.replace(ENTRY_BASE, `const BASE = ${JSON.stringify(entry.base)};\n`))}\n${HELD_LINE}parent.postMessage({ type: "cawco:embed-size", height: 1 }, "*");</script>`
+  );
+/** A static import's address in a module's source. */
+const IMPORTED = /^import\s(?:[^"';]*\sfrom\s)?"([^"]+)";/gm;
+/** A stylesheet's address, a query after it or not. */
+const CSS_ADDRESS = /\.css(?:\?|$)/;
+
+/** The entry's place taken by an inline module importing `addresses`, which says the frame's shape once they have run. */
+const entryOf = (html: string, addresses: string[]): string =>
+  html.replace(
+    ENTRY_TAG,
+    `<script type="module">${addresses.map((one) => `import ${JSON.stringify(one)};`).join("")}window.held = Array.from({ length: 400000 }, (_, i) => ({ i, s: String(i).padEnd(40, "x") }));parent.postMessage({ type: "cawco:embed-size", height: 1 }, "*");</script>`
+  );
+
+/**
+ * Cuts of a canvas page as the stage serves it, each made by a relay of the
+ * stage (decision-embeds.ts `embedOrigin`): `same`, the page as served;
+ * `nopreload`, without its graph's preloads (and their counter); `noentry`,
+ * without the entry module that boots the canvas (Vite's client stays);
+ * `styles`, the entry's global styles alone; `runtime`, those and the canvas
+ * runtime's module, never booted; `adapter`, those and the framework's
+ * adapter, never booted; each of these three with the control's objects
+ * beside it, so a frame kept once gone shows; `boot`, the entry inlined as
+ * served, the objects beside it; `boot-noload`, the same, no section's
+ * module ever loaded; `boot-importonly`, each section's module imported
+ * (evaluated) and never handed to the runtime; `boot-nomount`, each section
+ * loaded, no story mounted; `boot-nofaces`, the whole canvas with no house
+ * faces in its page style.
+ */
+const CUTS = {
+  same: (html: string) => html,
+  nopreload: (html: string) =>
+    html.replace(PRELOAD_LINK, "").replace(PRELOAD_COUNTER, ""),
+  noentry: (html: string) => html.replace(ENTRY_TAG, ""),
+  styles: (html: string, entry: EntryParts) => entryOf(html, entry.styles),
+  runtime: (html: string, entry: EntryParts) =>
+    entryOf(html, [...entry.styles, entry.runtime]),
+  adapter: (html: string, entry: EntryParts) =>
+    entryOf(html, [...entry.styles, entry.adapter]),
+  boot: (html: string, entry: EntryParts) =>
+    bootOf(html, entry, (source) => source),
+  "boot-noload": (html: string, entry: EntryParts) =>
+    bootOf(html, entry, (source) =>
+      source.replace(ENTRY_LOAD, "load: () => new Promise(() => undefined),\n")
+    ),
+  "boot-importonly": (html: string, entry: EntryParts) =>
+    bootOf(html, entry, (source) =>
+      source.replace(
+        ENTRY_LOAD,
+        (line) =>
+          `load: (...asked) => { (${line.slice("load: ".length).replace(TRAILING_COMMA, "")})(...asked); return new Promise(() => undefined); },\n`
+      )
+    ),
+  "boot-nofaces": (html: string, entry: EntryParts) =>
+    bootOf(html, entry, (source) => source.replace(ENTRY_FACES, 'faces: "",\n')),
+  "boot-nomount": (html: string, entry: EntryParts) =>
+    bootOf(html, entry, (source) =>
+      source.replace(
+        ENTRY_ADAPTER,
+        "adapter: { mountStory: () => ({ unmount() {}, update() {} }) },"
+      )
+    ),
+} as const;
+/** The entry's house faces, a JSON string (stage-host host.ts `entryModule`). */
+const ENTRY_FACES = /faces: "(?:[^"\\]|\\.)*",\n/;
+/** A source line's trailing comma and newline. */
+const TRAILING_COMMA = /,\n$/;
+/** The entry's adapter (stage-host host.ts `entryModule`). */
+const ENTRY_ADAPTER = /adapter: \{ mountStory \},/;
+/** A canvas page's preload of its graph (stage-host host.ts `graphPreloads`). */
+const PRELOAD_LINK = /<link rel="modulepreload" href="[^"]*">/g;
+/** The script counting them (`__cawcoGraph`). */
+const PRELOAD_COUNTER =
+  /<script>\(function\(\)\{var g=window\.__cawcoGraph[\s\S]*?<\/script>/;
+/** The canvas page's entry module (stage-host host.ts `CANVAS_ENTRY`, keyed). */
+const ENTRY_TAG = /<script type="module" src="[^"]*entry\.js"><\/script>/;
+/** Its address. */
+const ENTRY_SRC = /<script type="module" src="([^"]*entry\.js)"><\/script>/;
+/** The stage's module key in a page it served. */
+const STAGE_KEY = /\/@cawco\/m\/([^/"]+)\//;
+
+/** The control's frame with Vite's client from `stage` beside its objects: it says so once the client has run. */
+const VITE_CHILD = (stage: string) =>
+  `<!doctype html><script>window.held = Array.from({ length: 400000 }, (_, i) => ({ i, s: String(i).padEnd(40, "x") }));</script><script type="module">import "${stage}/@vite/client"; parent.postMessage({ type: "cawco:embed-size", height: 1 }, "*");</script>`;
+
+/** A sheet of 4000 rules, one in four inside a width `@media`, written as one `<style>` (`style`), the same text in every frame. */
+const BIG_SHEET =
+  'const style = document.createElement("style"); const rules = []; for (let i = 0; i < 4000; i += 1) { const rule = ".p" + i + " { color: rgb(" + (i % 255) + ", 10, 20); padding: " + (i % 13) + "px; }"; rules.push(i % 4 === 0 ? "@media (width >= " + (40 + (i % 5) * 8) + "rem) { " + rule + " }" : rule); } style.textContent = rules.join("\\n"); document.head.append(style);';
+
+/** The control's frame with one of {@link PROBES} standing on its objects: it says so once standing. */
+const PROBE_CHILD = (probe: string) =>
+  `<!doctype html><body><script type="module">window.held = Array.from({ length: 400000 }, (_, i) => ({ i, s: String(i).padEnd(40, "x") })); const ready = () => parent.postMessage({ type: "cawco:embed-size", height: 1 }, "*"); ${probe}</script></body>`;
+
+/** The control's frame: no app at all, some 50 MB of plain objects held on its window. */
+const CONTROL_CHILD = `<!doctype html><script>window.held = Array.from({ length: 400000 }, (_, i) => ({ i, s: String(i).padEnd(40, "x") }));</script>`;
+/** The control: a page of {@link MEMORY_PREVIEWS} such frames, as many as the decision page has Previews. */
+const CONTROL_PAGE = (child: string) =>
+  `<!doctype html>${Array.from({ length: MEMORY_PREVIEWS }, () => `<iframe src="${child}"></iframe>`).join("")}`;
+
+/**
+ * Where the page stands in a frame of its own, as the dashboard's panel
+ * holds one: the frame taken away is the page gone. Served on the page's
+ * own origin, so it is read from here alone, through the page's document,
+ * with no handle into its frames. `window.memoryPage` opens the page at a
+ * URL and answers once it is drawn (every Preview at its drawn shape; the
+ * control's frames each holding their objects), `memoryGone` takes it away,
+ * `memoryFacts` says how the page stands (its visibility, focus, and the
+ * animation frames it is given in a second). `?agent=<bridge>` puts the
+ * kit's bridge's agent in it (safari-bridge.ts), which runs the leg's calls
+ * in a browser nothing automates.
+ */
+const MEMORY_HOLDER = `<!doctype html><meta charset="utf-8"><style>body{margin:0}iframe{display:block;inline-size:1440px;block-size:900px;border:0}</style>
+<script>
+(() => {
+  const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+  const ready = (frame, kind) => {
+    const inner = frame.contentDocument;
+    if (!inner) return false;
+    if (kind === "control") return [...inner.querySelectorAll("iframe")].filter((one) => one.contentWindow && one.contentWindow.held !== undefined).length === ${MEMORY_PREVIEWS};
+    if (kind === "canvases" || kind.startsWith("loop") || kind === "vite" || kind === "xorigin" || kind.startsWith("probe-") || kind.startsWith("cut-")) return inner.defaultView.said === ${MEMORY_PREVIEWS};
+    return [...inner.querySelectorAll(${JSON.stringify(EMBED_FRAME)})].filter((one) => one.dataset.shape === "drawn").length === ${MEMORY_PREVIEWS};
+  };
+  window.memoryPage = async (url, kind) => {
+    const t0 = Date.now();
+    const frame = document.createElement("iframe");
+    frame.id = "page";
+    frame.src = url;
+    document.body.append(frame);
+    while (!ready(frame, kind) && Date.now() - t0 < ${MEMORY_PREVIEWS * 60_000}) await wait(500);
+    return { drawn: ready(frame, kind), ms: Date.now() - t0 };
+  };
+  // The page taken away, then the holder goes on for \`ms\` as a dashboard a person goes on using does: short-lived objects, which drive JSC's own collections; what the gone page let go of goes with the next full one. Answers the objects made.
+  window.memoryGone = async (ms) => {
+    document.getElementById("page")?.remove();
+    const t0 = Date.now();
+    let made = 0;
+    while (Date.now() - t0 < ms) {
+      const junk = [];
+      for (let i = 0; i < 2000; i += 1) junk.push({ i, s: "x".repeat(64) + i });
+      made += junk.length;
+      await new Promise((done) => setTimeout(done, 0));
+    }
+    return made;
+  };
+  window.memoryFacts = () =>
+    new Promise((done) => {
+      let frames = 0;
+      const t0 = performance.now();
+      const tick = () => {
+        frames += 1;
+        if (performance.now() - t0 < 1000) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      setTimeout(() => done({ visibility: document.visibilityState, focus: document.hasFocus(), framesInASecond: frames }), 1500);
+    });
+  // \`?agent=<bridge>\`: the kit's bridge drives the holder in a browser nothing automates (safari-bridge.ts).
+  const agent = new URLSearchParams(location.search).get("agent");
+  if (agent) {
+    const tag = document.createElement("script");
+    tag.src = agent + "/agent.js";
+    document.head.append(tag);
+  }
+})();
+</script>`;
+
+/** One browser the memory leg reads: the page opened and taken away, the facts it states, its web process's memory, and a full collection where the browser takes one. */
+interface MemoryBrowser {
+  end: () => Promise<void>;
+  facts: () => Promise<unknown>;
+  gc: (() => Promise<void>) | null;
+  /** The page taken away, the holder going on {@link GONE_S} s. */
+  gone: () => Promise<void>;
+  /** The JS heap the latest collection left, MB, where the browser says it (JSC's GC log); null where it doesn't. */
+  jsHeap: () => number | null;
+  memory: () => number;
+  open: (url: string, kind: MemoryPage) => Promise<{ drawn: boolean; ms: number }>;
+}
+
+/** The holder's calls in WebKit with no inspector ({@link noInspectorWebKit}), run by the kit's bridge. */
+async function uninspectedWebKit(
+  holder: string,
+  everyCollectionFull: boolean
+): Promise<MemoryBrowser> {
+  const bridge = safariBridge();
+  const url = new URL(holder);
+  url.searchParams.set("agent", bridge.origin);
+  // JSC's own GC log, for what of the JS heap each collection leaves (`jsHeap`).
+  const browser = noInspectorWebKit(
+    url.href,
+    everyCollectionFull
+      ? { JSC_useGenerationalGC: "0", JSC_logGC: "1" }
+      : { JSC_logGC: "1" }
+  );
+  const end = (): Promise<void> => {
+    browser.end();
+    bridge.stop();
+    return Promise.resolve();
+  };
+  let page: SafariPage;
+  try {
+    page = await bridge.page((href) => href.startsWith(holder));
+  } catch (error) {
+    await end();
+    throw error;
+  }
+  return {
+    open: (at, kind) =>
+      page.run(
+        (address: string, which: MemoryPage) =>
+          (window as unknown as Holder).memoryPage(address, which),
+        [at, kind],
+        MEMORY_PREVIEWS * 60_000 + 30_000
+      ),
+    gone: async () => {
+      await page.run(
+        (ms: number) => (window as unknown as Holder).memoryGone(ms),
+        [GONE_S * 1000],
+        GONE_S * 1000 + 30_000
+      );
+    },
+    facts: () => page.run(() => (window as unknown as Holder).memoryFacts()),
+    gc: null,
+    memory: browser.memory,
+    jsHeap: () => jsHeapOf(browser.said()),
+    end,
+  };
+}
+
+/** A collection's line in JSC's GC log (`JSC_logGC`): its heap, and the live size it leaves (`=> 1669kb`). */
+const GC_LEFT = /^\[GC<(0x[0-9a-f]+)>: M .* => (\d+)kb, p=/;
+
+/** The JS heap the latest collection of each of the process's heaps left, MB; null before any. */
+const jsHeapOf = (said: string[]): number | null => {
+  const left = new Map<string, number>();
+  for (const line of said) {
+    const m = line.match(GC_LEFT);
+    if (m) {
+      left.set(m[1] as string, Number(m[2]));
+    }
+  }
+  return left.size === 0
+    ? null
+    : Math.round([...left.values()].reduce((sum, kb) => sum + kb, 0) / 1024);
+};
+
+/** The holder's own steps, as its page gives them (`MEMORY_HOLDER`). */
+interface Holder {
+  memoryFacts: () => Promise<unknown>;
+  memoryGone: (ms: number) => Promise<number>;
+  memoryPage: (
+    url: string,
+    kind: MemoryPage
+  ) => Promise<{ drawn: boolean; ms: number }>;
+}
+
+/** WebKit under Playwright, as the audit read it: the same holder, driven through the page itself. */
+async function playwrightWebKit(
+  kit: Kit,
+  holder: string,
+  label: string
+): Promise<MemoryBrowser> {
+  const before = new Set(browserPids([]));
+  const page = await kit.page("desk", {
+    scale: 1,
+    engine: "webkit",
+    browser: `canvas-cost-memory-${label}`,
+  });
+  await page.goto(holder);
+  return {
+    open: (url, kind) =>
+      page.evaluate(
+        ([at, which]) => (window as unknown as Holder).memoryPage(at, which),
+        [url, kind] as const
+      ),
+    gone: async () => {
+      await page.evaluate(
+        (ms) => (window as unknown as Holder).memoryGone(ms),
+        GONE_S * 1000
+      );
+    },
+    facts: () =>
+      page.evaluate(() => (window as unknown as Holder).memoryFacts()),
+    gc: () => page.requestGC(),
+    jsHeap: () => null,
+    memory: () =>
+      memoryMb(
+        pageProcesses(browserPids([]).filter((pid) => !before.has(pid)))
+      ),
+    end: () => page.close(),
+  };
+}
+
+/** One run's reading: the holder alone, the page drawn and left untouched, then each time it is taken away (and opened again). */
+interface MemoryRead {
+  /** The JS heap with the holder alone, MB (null where the browser says none). */
+  aloneJsMb: number | null;
+  aloneMb: number;
+  facts: unknown;
+  idleMb: [number, number][];
+  rounds: {
+    drawn: boolean;
+    drawnMb: number;
+    gcMb: number | null;
+    goneMb: number;
+    /** The JS heap the latest collection left once the page went, MB (null where the browser says none). */
+    goneJsMb: number | null;
+    /** The stage's module key as the round's page was drawn (`/@cawco/m/<key>/`). */
+    key: string;
+    ms: number;
+  }[];
+}
+
+/**
+ * The page in `browser`: the holder alone, then the page opened, drawn and
+ * left untouched `--idle` s (its memory every 20 s), then
+ * {@link MEMORY_ROUNDS} times taken away ({@link GONE_S} s later read, and
+ * again after a full collection where the browser takes one) and, but for
+ * the last, opened again and left {@link MEMORY_REST_S} s.
+ */
+async function memoryRounds(
+  browser: MemoryBrowser,
+  url: string,
+  kind: MemoryPage,
+  stageKey: () => Promise<string>
+): Promise<MemoryRead> {
+  await Bun.sleep(3000);
+  const aloneMb = browser.memory();
+  const aloneJsMb = browser.jsHeap();
+  const facts = await browser.facts();
+  const rounds: MemoryRead["rounds"] = [];
+  const idleMb: [number, number][] = [];
+  for (let round = 1; round <= MEMORY_ROUNDS; round += 1) {
+    const opened = await browser.open(url, kind);
+    const drawnMb = browser.memory();
+    const key = await stageKey();
+    const stands = round === 1 ? IDLE_S : MEMORY_REST_S;
+    const from = Date.now();
+    for (let at = 0; at <= stands; at += 20) {
+      if (round === 1) {
+        idleMb.push([at, browser.memory()]);
+      }
+      if (at < stands) {
+        await Bun.sleep(Math.max(0, from + (at + 20) * 1000 - Date.now()));
+      }
+    }
+    await browser.gone();
+    const goneMb = browser.memory();
+    let gcMb: number | null = null;
+    if (browser.gc) {
+      await browser.gc();
+      await Bun.sleep(5000);
+      gcMb = browser.memory();
+    }
+    rounds.push({
+      ...opened,
+      drawnMb,
+      goneMb,
+      gcMb,
+      goneJsMb: browser.jsHeap(),
+      key,
+    });
+  }
+  return { aloneMb, aloneJsMb, facts, idleMb, rounds };
+}
+
+/** A reading in words: alone, drawn, after the idle, and each round's drawn → gone (→ after a full collection). */
+const memoryWords = (read: MemoryRead): string =>
+  `keys ${[...new Set(read.rounds.map((one) => one.key))].join(" → ")};${read.aloneJsMb === null ? "" : ` JS heap ${read.aloneJsMb} MB alone, after each page went ${read.rounds.map((one) => one.goneJsMb).join(", ")} MB;`} ${read.aloneMb} MB alone, ${read.idleMb[0]?.[1]} MB drawn, ${read.idleMb.at(-1)?.[1]} MB after ${IDLE_S} s untouched; each round drawn → ${GONE_S} s after the page went${read.rounds[0]?.gcMb === null ? "" : " → after a full collection"}: ${read.rounds.map((one) => [one.drawnMb, one.goneMb, ...(one.gcMb === null ? [] : [one.gcMb])].join(" → ")).join(", ")} MB (${JSON.stringify(read.facts)})`;
+
+/**
+ * A decision page of ten canvas Previews served as the hub serves one (the
+ * preview overlay in the page and in every canvas frame its embed origin
+ * relays, agent preview.ts `injectOverlay`), in WebKit, where every canvas
+ * shares the dashboard's web process: in WebKit as a person runs it, and
+ * under Playwright as the audit read it; beside it, a control page of
+ * frames holding plain objects. What WebKit as a person runs it owes is
+ * {@link memoryCheck}'s.
+ */
+async function memoryLeg(kit: Kit): Promise<void> {
+  const programs = new Map<string, string>();
+  const files: Record<string, string[]> = {};
+  const holderId = decisionId("memory-holder");
+  const controlId = decisionId("memory-control");
+  const childId = decisionId("memory-child");
+  const canvasesId = decisionId("memory-canvases");
+  const loopId = decisionId("memory-loop");
+  const viteId = decisionId("memory-vite");
+  const viteChildId = decisionId("memory-vite-child");
+  /** Read as each is asked for: the canvases page is written once the stage names its stories. */
+  const pages: Record<string, string> = {
+    [holderId]: MEMORY_HOLDER,
+    [controlId]: CONTROL_PAGE(`/__cawco/page/${childId}/`),
+    [childId]: CONTROL_CHILD,
+  };
+  const stage = await startDecisionStage(
+    programs,
+    files,
+    { root: APP, kit: true },
+    pages,
+    new Set(["kept"])
+  );
+  const { origin } = new URL(stage.pageUrl("kept", "light"));
+  const holder = `${origin}/__cawco/page/${holderId}/`;
+  /** The control's frame on an origin of its own (another port), as a canvas stands on the stage's. */
+  /** The entry's imports, read once the stage serves a canvas page (below). */
+  let entry: EntryParts = {
+    adapter: "",
+    base: "",
+    runtime: "",
+    source: "",
+    styles: [],
+  };
+  const cuts = Object.fromEntries(
+    Object.entries(CUTS).map(([name, rewrite]) => [
+      name,
+      embedOrigin(stage.stagePort, null, 0, null, (html) => rewrite(html, entry)),
+    ])
+  ) as Record<keyof typeof CUTS, ReturnType<typeof embedOrigin>>;
+  const elsewhere = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(PROBE_CHILD("ready();"), {
+        headers: { "content-type": "text/html" },
+      }),
+  });
+  try {
+    const all = await storiesOf(
+      `http://127.0.0.1:${stage.stagePort}`,
+      statesFiles()
+    );
+    const picks = Array.from({ length: MEMORY_PREVIEWS }, (_, at) => {
+      const one = all[(at * 7) % all.length] as { file: string; story: string };
+      const id = decisionId(`memory-${at}`);
+      files[id] = [one.file];
+      return { id, ...one };
+    });
+    programs.set("kept", memoryProgram(picks));
+    programs.set("bare", memoryProgram(picks));
+    pages[canvasesId] = CANVASES_PAGE(
+      picks.map((one) =>
+        embedUrl(`http://127.0.0.1:${stage.stagePort}`, one.file, one.story)
+      )
+    );
+    pages[loopId] = CANVASES_PAGE(
+      picks.map(() =>
+        embedUrl(`http://127.0.0.1:${stage.stagePort}`, LOOP_FILE, "Spins")
+      )
+    );
+    pages[viteChildId] = VITE_CHILD(`http://127.0.0.1:${stage.stagePort}`);
+    pages[viteId] = CANVASES_PAGE(
+      picks.map(() => `/__cawco/page/${viteChildId}/`)
+    );
+    const probeAddress = {} as Record<`probe-${keyof typeof PROBES}`, string>;
+    const stageBase = `http://127.0.0.1:${stage.stagePort}`;
+    for (const [name, script] of Object.entries(PROBES)) {
+      // decision-embeds `idOf` keeps 16 characters of a name: each probe's two names apart within them.
+      const probeChildId = decisionId(`pc-${name}`);
+      const pageId = decisionId(`pp-${name}`);
+      pages[probeChildId] = PROBE_CHILD(script(stageBase));
+      pages[pageId] = CANVASES_PAGE(
+        picks.map(() => `/__cawco/page/${probeChildId}/`)
+      );
+      probeAddress[`probe-${name as keyof typeof PROBES}`] =
+        `${origin}/__cawco/page/${pageId}/`;
+    }
+    const cutAddress = {} as Record<`cut-${keyof typeof CUTS}`, string>;
+    for (const [name, relay] of Object.entries(cuts)) {
+      const pageId = decisionId(`cut-${name}`);
+      pages[pageId] = CANVASES_PAGE(
+        picks.map(() =>
+          embedUrl(`http://127.0.0.1:${relay.port}`, LOOP_FILE, "Spins")
+        ),
+        name === "noentry"
+      );
+      cutAddress[`cut-${name as keyof typeof CUTS}`] =
+        `${origin}/__cawco/page/${pageId}/`;
+    }
+    // The entry the canvas page loads, as the stage serves it: what the cuts keep of it.
+    const served = await (
+      await fetch(
+        embedUrl(`http://127.0.0.1:${stage.stagePort}`, LOOP_FILE, "Spins")
+      )
+    ).text();
+    const entrySrc = served.match(ENTRY_SRC)?.[1] ?? "";
+    entry = entryPartsOf(
+      await (
+        await fetch(`http://127.0.0.1:${stage.stagePort}${entrySrc}`)
+      ).text(),
+      entrySrc
+    );
+    kit.note(
+      `memory entry: base ${entry.base}, BASE ${ENTRY_BASE.test(entry.source) ? "found" : "missing"}, load ${ENTRY_LOAD.test(entry.source) ? "found" : "missing"}, adapter ${ENTRY_ADAPTER.test(entry.source) ? "found" : "missing"}, faces ${ENTRY_FACES.test(entry.source) ? "found" : "missing"}`
+    );
+    kit.note(
+      `memory entry ${entrySrc}: runtime ${entry.runtime}, adapter ${entry.adapter}, styles ${entry.styles.join(", ")}`
+    );
+    // Each cut as the browser gets it: what of the page it took away.
+    for (const [name, relay] of Object.entries(cuts)) {
+      const page = await (
+        await fetch(
+          embedUrl(`http://127.0.0.1:${relay.port}`, LOOP_FILE, "Spins")
+        )
+      ).text();
+      kit.note(
+        `memory cut ${name}: ${page.length} chars, ${page.match(PRELOAD_LINK)?.length ?? 0} preloads, ${page.match(ENTRY_TAG)?.length ?? 0} entry tags, ${page.includes("__cawcoGraph") ? "a" : "no"} preload counter`
+      );
+    }
+    const xoriginId = decisionId("memory-xorigin");
+    pages[xoriginId] = CANVASES_PAGE(
+      picks.map(() => `http://127.0.0.1:${elsewhere.port}/`)
+    );
+    const addressOf: Record<MemoryPage, string> = {
+      ...probeAddress,
+      ...cutAddress,
+      xorigin: `${origin}/__cawco/page/${xoriginId}/`,
+      decision: stage.pageUrl("kept", "light"),
+      bare: stage.pageUrl("bare", "light"),
+      canvases: `${origin}/__cawco/page/${canvasesId}/`,
+      loop: `${origin}/__cawco/page/${loopId}/`,
+      vite: `${origin}/__cawco/page/${viteId}/`,
+      control: `${origin}/__cawco/page/${controlId}/`,
+    };
+    const plan = MEMORY_RUNS.flatMap((label) =>
+      label.endsWith("-control")
+        ? [{ label, kind: "control" as MemoryPage }]
+        : MEMORY_PAGES.map((kind) => ({ label, kind: kind as MemoryPage }))
+    );
+    for (const { label: run, kind } of plan) {
+      const browser = run.startsWith("playwright")
+        ? await playwrightWebKit(kit, holder, run)
+        : await uninspectedWebKit(holder, run.startsWith("collected"));
+      let read: MemoryRead;
+      try {
+        read = await memoryRounds(browser, addressOf[kind], kind, async () => {
+          const page = await (
+            await fetch(
+              embedUrl(`http://127.0.0.1:${stage.stagePort}`, LOOP_FILE, "Spins")
+            )
+          ).text();
+          return page.match(STAGE_KEY)?.[1] ?? "";
+        });
+      } finally {
+        await browser.end();
+      }
+      keep(kit, `memory.${run}.${kind}`, {
+        page: kind,
+        stories:
+          kind === "control"
+            ? []
+            : picks.map((one) => `${one.file}#${one.story}`),
+        ...read,
+      });
+      memoryCheck(kit, run, kind, read);
+    }
+  } finally {
+    for (const relay of Object.values(cuts)) {
+      relay.stop(true);
+    }
+    elsewhere.stop(true);
+    await stage.stop();
+  }
+}
+
+/** How much of what the page took it may grow by, left untouched `--idle` s. Our own call: a collection's swing. */
+const IDLE_GROWTH_SHARE = 0.1;
+/** How far over the holder's own JS heap a gone page's may leave it, MB: the holder's own work (its bridge's calls, its allocations) between. Our own call. */
+const JS_LEFT_MB = 5;
+
+/** The least-squares slope of `ys` over their places, a round apart. */
+const slopeOf = (ys: number[]): number => {
+  const mean = (list: number[]) =>
+    list.reduce((sum, one) => sum + one, 0) / Math.max(1, list.length);
+  const xs = ys.map((_, at) => at);
+  const mx = mean(xs);
+  const my = mean(ys);
+  const across = xs.reduce(
+    (sum, x, at) => sum + (x - mx) * ((ys[at] ?? my) - my),
+    0
+  );
+  const spread = xs.reduce((sum, x) => sum + (x - mx) ** 2, 0);
+  return spread === 0 ? 0 : across / spread;
+};
+
+/**
+ * What a run's reading owes. Every run: every page drawn. In WebKit as a
+ * person runs it (`uninspected`), the hub's page left untouched `--idle` s
+ * grows by no more than {@link IDLE_GROWTH_SHARE} of what it took. With
+ * every collection full (`collected`), each time it goes its JS goes with
+ * it: the heap a collection leaves is back within {@link JS_LEFT_MB} of the
+ * holder alone's, every round. What the web process keeps natively past
+ * that is said beside it: WebKit's own caches, which its memory-pressure
+ * handler sheds past its threshold (WTF MemoryPressureHandler.cpp:
+ * `baseThreshold(std::min(3 * GB, ramSize()))`, conservative at 0.33 of it
+ * on a desk, 0.5 on iOS, read every 30 s).
+ */
+function memoryCheck(
+  kit: Kit,
+  label: (typeof MEMORY_RUNS)[number],
+  kind: MemoryPage,
+  read: MemoryRead
+): void {
+  const allDrawn = read.rounds.every((one) => one.drawn);
+  const drawnMb = read.idleMb[0]?.[1] ?? 0;
+  const took = drawnMb - read.aloneMb;
+  const climb = Math.round(slopeOf(read.rounds.map((one) => one.drawnMb)));
+  const said = `its web process ${memoryWords(read)}; drawn memory climbs ${climb} MB a round`;
+  if (label === "uninspected" && kind === "decision") {
+    const idleEnd = read.idleMb.at(-1)?.[1] ?? 0;
+    kit.check(
+      `memory uninspected: in WebKit as a person runs it (no inspector), the hub's page of ${MEMORY_PREVIEWS} canvases, drawn each of ${MEMORY_ROUNDS} times, grows by no more than ${IDLE_GROWTH_SHARE * 100}% of the ${took} MB it took while untouched (${idleEnd - drawnMb} MB over ${IDLE_S} s); ${said}`,
+      allDrawn && took > 0 && idleEnd - drawnMb <= IDLE_GROWTH_SHARE * took
+    );
+    return;
+  }
+  if (label === "collected" && kind === "decision") {
+    const alone = read.aloneJsMb;
+    const left = read.rounds.map((one) => one.goneJsMb);
+    const released =
+      alone !== null &&
+      left.every((one) => one !== null && one <= alone + JS_LEFT_MB);
+    kit.check(
+      `memory collected: with every collection full, each time the hub's page of ${MEMORY_PREVIEWS} canvases went its JS went with it, the heap a collection left back within ${JS_LEFT_MB} MB of the holder alone's ${alone} MB every round (${left.join(", ")} MB); what its web process kept natively over the holder alone each round: ${read.rounds.map((one) => one.goneMb - read.aloneMb).join(", ")} MB (WebKit's caches, shed past its memory-pressure threshold); ${said}`,
+      allDrawn && released
+    );
+    return;
+  }
+  kit.check(
+    `memory ${label} ${kind}: the page drawn each of ${MEMORY_ROUNDS} times (${read.rounds.map((one) => `${(one.ms / 1000).toFixed(1)} s`).join(", ")}); ${said}`,
+    allDrawn
+  );
+}
+
 const run = async (kit: Kit) => {
   const stages: Stage[] = [];
   const loopDir = join(APP, LOOP_DIR);
@@ -2754,6 +3722,9 @@ const run = async (kit: Kit) => {
     }
     if (LEGS.has("decision")) {
       await decisionLeg(kit);
+    }
+    if (LEGS.has("memory")) {
+      await memoryLeg(kit);
     }
   } finally {
     for (const one of stages) {

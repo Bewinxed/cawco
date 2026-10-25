@@ -215,6 +215,21 @@ async function overlayAnswer(
     : null;
 }
 
+/** A page the embed origin relays: with the overlay where `overlaid`, then as `rewrite` makes it. */
+async function relayedPage(
+  answer: Response,
+  headers: Headers,
+  overlaid: boolean,
+  rewrite: ((html: string) => string) | null
+): Promise<Response> {
+  const page = await answer.text();
+  const shown = overlaid ? injectOverlay(page) : page;
+  return new Response(rewrite ? rewrite(shown) : shown, {
+    status: answer.status,
+    headers,
+  });
+}
+
 /**
  * The embed origin: the ping the hub answers on a preview origin, and the
  * stage behind it; with `overlaid`, the overlay too, on every page it relays
@@ -226,12 +241,15 @@ async function overlayAnswer(
  * it, as the hub's preview origin does on the tailnet (hub preview.ts: one
  * connection carries a canvas's whole graph at once, where HTTP/1.1 queues
  * it six at a time); its sockets stay on HTTP/1.1.
+ * With `rewrite`, every page it relays is that page rewritten (canvas-cost
+ * `memory`: a canvas page cut down, to find what in it holds a frame).
  */
 export function embedOrigin(
   stage: number,
   overlaid: (() => readonly string[]) | null = null,
   latencyMs = 0,
-  tls: Pair | null = null
+  tls: Pair | null = null,
+  rewrite: ((html: string) => string) | null = null
 ) {
   return Bun.serve<Socket>({
     hostname: "127.0.0.1",
@@ -279,11 +297,11 @@ export function embedOrigin(
       const out = new Headers(answer.headers);
       out.delete("content-encoding");
       out.delete("content-length");
-      if (overlaid && out.get("content-type")?.startsWith("text/html")) {
-        return new Response(injectOverlay(await answer.text()), {
-          status: answer.status,
-          headers: out,
-        });
+      if (
+        (overlaid || rewrite) &&
+        out.get("content-type")?.startsWith("text/html")
+      ) {
+        return relayedPage(answer, out, overlaid !== null, rewrite);
       }
       return new Response(answer.body, {
         status: answer.status,
