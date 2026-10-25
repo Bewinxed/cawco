@@ -20,14 +20,24 @@ import {
   type FleetItems,
   fleetConfigOf,
   itemKind,
+  placedFolder,
   reportKeyOf,
 } from "@cawco/core/fleet-items";
 
-/** What a delta moved: the items it changed or forced, the ones it took away, and whether the policy is among them. */
+/**
+ * What a delta moved: the items it changed or forced, the ones it took away,
+ * and whether the policy is among them; the folders of the placed copies
+ * among them (core `placedFolder`), and whether any other item moved
+ * (`wide`): a delta that moved only placed copies (the hub's "a place
+ * changed", a delegate's workspace cut or archived) is converged at those
+ * folders alone. The policy is neither: it is written as the delta arrives.
+ */
 export interface DeltaApplied {
   changed: string[];
+  places: string[];
   policy: boolean;
   removed: string[];
+  wide: boolean;
 }
 
 export class FleetDesired {
@@ -59,12 +69,28 @@ export class FleetDesired {
   apply(delta: FleetDelta): DeltaApplied {
     const changed: string[] = [];
     const removed: string[] = [];
+    const places = new Set<string>();
+    let wide = false;
+    // Each item moved, by the value it had (one taken away) or has now.
+    const moved = (id: string, value: unknown): void => {
+      if (id === "policy") {
+        return;
+      }
+      const folder = placedFolder(value);
+      if (folder === undefined) {
+        wide = true;
+      } else {
+        places.add(folder);
+      }
+    };
     const named = new Set<string>();
     for (const item of delta.items) {
       named.add(item.id);
       if (item.value === null) {
+        const held = this.#items.get(item.id);
         if (this.#items.delete(item.id)) {
           removed.push(item.id);
+          moved(item.id, held);
         }
         this.#hashes.delete(item.id);
         this.#forced.delete(item.id);
@@ -75,22 +101,30 @@ export class FleetDesired {
       }
       if (this.#hashes.get(item.id) !== item.hash || item.force) {
         changed.push(item.id);
+        moved(item.id, item.value);
       }
       this.#items.set(item.id, item.value);
       this.#hashes.set(item.id, item.hash);
     }
     if (delta.full) {
-      for (const id of [...this.#items.keys()]) {
+      for (const [id, held] of [...this.#items]) {
         if (!named.has(id)) {
           this.#items.delete(id);
           this.#hashes.delete(id);
           this.#forced.delete(id);
           removed.push(id);
+          moved(id, held);
         }
       }
     }
     this.#rev = delta.rev;
-    return { changed, removed, policy: changed.includes("policy") };
+    return {
+      changed,
+      removed,
+      places: [...places],
+      policy: changed.includes("policy"),
+      wide,
+    };
   }
 
   /** Every item id held now. */

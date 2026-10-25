@@ -186,7 +186,12 @@ import { applyFleetDenials } from "./denied-tools";
 import { forgetFirstSession } from "./first-session";
 import { placeMemoryAtLaunch } from "./fleet";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
-import { writeFleetMcpSet } from "./fleet-mcp-set";
+import {
+  type FleetMcpSet,
+  readFleetMcpSet,
+  within,
+  writeFleetMcpSet,
+} from "./fleet-mcp-set";
 import { expandHome, runFs } from "./fs";
 import type {
   Harness,
@@ -543,6 +548,138 @@ const titled = (info: NeutralSessionInfo): NeutralSessionInfo => {
     : "";
   return firstTitle ? { ...info, firstTitle } : info;
 };
+
+type FleetState = import("@cawco/core").FleetItemState;
+
+/** One row's harness readings in one detail, a line per harness. */
+const readingsDetail = (
+  readings: readonly { item: FleetState; kind: string }[]
+): string =>
+  readings
+    .map(
+      ({ kind, item }) =>
+        `${kind}: ${item.state}${item.detail ? ` — ${item.detail}` : ""}`
+    )
+    .join("\n");
+
+/**
+ * Each hook's row, the worst of its harnesses' words, each harness's said in
+ * its detail: one OpenCode or pi cannot run is unsupported for that harness on
+ * this machine, never left out.
+ */
+const mergedHooks = (
+  byHarness: Partial<Record<HarnessKind, Record<string, FleetState>>>
+): Record<string, FleetState> => {
+  const hooks: Record<string, FleetState> = {};
+  for (const id of new Set(
+    Object.values(byHarness).flatMap((rows) => Object.keys(rows ?? {}))
+  )) {
+    const readings = Object.entries(byHarness).flatMap(([kind, rows]) =>
+      rows?.[id] ? [{ kind, item: rows[id] }] : []
+    );
+    const [only] = readings;
+    hooks[id] =
+      readings.length === 1 && only
+        ? only.item
+        : {
+            ...worstFleetState(readings.map(({ item }) => item)),
+            detail: readingsDetail(readings),
+          };
+  }
+  return hooks;
+};
+
+/** Each of `names`' MCP row: the worst of the readings of the harnesses that read servers (`readers`), every harness's said in its detail. */
+const mergedMcp = (
+  names: Iterable<string>,
+  byHarness: Partial<Record<HarnessKind, Record<string, FleetState>>>,
+  readers: ReadonlySet<HarnessKind>
+): Record<string, FleetState> => {
+  const mcp: Record<string, FleetState> = {};
+  for (const name of names) {
+    const readings = Object.entries(byHarness).flatMap(([kind, rows]) =>
+      rows?.[name] ? [{ kind, item: rows[name] }] : []
+    );
+    mcp[name] = {
+      ...worstFleetState(
+        readings
+          .filter((reading) => readers.has(reading.kind as HarnessKind))
+          .map((reading) => reading.item)
+      ),
+      detail: readingsDetail(readings),
+    };
+  }
+  return mcp;
+};
+
+/** The placed MCP copies every session in their folder takes, as the fleet MCP set keeps them (fleet-mcp-set.ts). */
+const placedMcpOf = (config: MachineFleetConfig): FleetMcpSet["placed"] =>
+  Object.fromEntries(
+    config.placedMcp
+      .filter((row) => row.enabled && row.cwd && row.placeId)
+      .map((row) => [
+        `${row.name}@${row.placeId}`,
+        { cwd: row.cwd as string, name: row.name, config: row.config },
+      ])
+  );
+
+/** Each of `rows` into `into`, a row both hold the worse of the two. */
+const worstInto = (
+  into: Record<string, FleetState>,
+  rows: Record<string, FleetState> | undefined
+): void => {
+  for (const [key, item] of Object.entries(rows ?? {})) {
+    const held = into[key];
+    into[key] = held ? worstFleetState([held, item]) : item;
+  }
+};
+
+/** `rows` with `over` laid on them, a row the earlier pass said removed left out: it was said once. */
+const laidOver = (
+  rows: Record<string, FleetState> | undefined,
+  over: Record<string, FleetState> | undefined
+): Record<string, FleetState> => ({
+  ...Object.fromEntries(
+    Object.entries(rows ?? {}).filter(([, row]) => row.state !== "removed")
+  ),
+  ...over,
+});
+
+/**
+ * The machine's report after a pass of its placed rows alone (`placed`): the
+ * last whole pass's (`last`), each row the placed pass read laid over it, so
+ * the hub keeps one report of everything as it did after a whole pass.
+ */
+const placedOver = (
+  last: FleetSyncReport,
+  placed: FleetSyncReport
+): FleetSyncReport => ({
+  ...last,
+  mcp: laidOver(last.mcp, placed.mcp),
+  ...(last.mcpByHarness || placed.mcpByHarness
+    ? {
+        mcpByHarness: Object.fromEntries(
+          [
+            ...new Set([
+              ...Object.keys(last.mcpByHarness ?? {}),
+              ...Object.keys(placed.mcpByHarness ?? {}),
+            ]),
+          ].map((kind) => [
+            kind,
+            laidOver(
+              last.mcpByHarness?.[kind as HarnessKind],
+              placed.mcpByHarness?.[kind as HarnessKind]
+            ),
+          ])
+        ),
+      }
+    : {}),
+  skills: laidOver(last.skills, placed.skills),
+  memoryDocs: laidOver(last.memoryDocs, placed.memoryDocs),
+  hooks: laidOver(last.hooks, placed.hooks),
+  harnessConfig: laidOver(last.harnessConfig, placed.harnessConfig),
+  at: placed.at,
+});
 
 /** A call for a session this agent runs no process for: a control refusal of kind `not-running`. */
 class NotRunning extends Error {
@@ -1115,6 +1252,16 @@ export class SessionSupervisor {
   /** The items deltas moved since the last converge began, and whether one took any away. */
   readonly #convergeIds = new Set<string>();
   #convergeRemoved = false;
+  /** The folders of the placed copies those deltas moved (fleet-desired.ts `DeltaApplied.places`). */
+  readonly #convergePlaces = new Set<string>();
+  /** One of those deltas moved an item no place alone holds: the next converge is the whole config's. */
+  #convergeWide = false;
+  /**
+   * The last whole converge's report, which a pass of the placed rows alone
+   * lays its rows over ({@link #syncPlaced}); none before the first, and a
+   * placed pass waits for one.
+   */
+  #lastReport: FleetSyncReport | undefined;
   /** A person's Sync: the next converge takes every item, changed or not. */
   #reconverge = false;
   /** A converge is queued and not yet begun: a delta meanwhile joins it ({@link #convergeSoon}). */
@@ -5855,6 +6002,10 @@ export class SessionSupervisor {
       }
     }
     this.#convergeRemoved ||= applied.removed.length > 0;
+    this.#convergeWide ||= applied.wide;
+    for (const place of applied.places) {
+      this.#convergePlaces.add(place);
+    }
     this.#reconverge ||= delta.reconverge === true;
     const denied = this.#desired.deniedTools;
     if (denied && (applied.policy || delta.welcome)) {
@@ -5888,6 +6039,12 @@ export class SessionSupervisor {
    * failed, in the harness's words, as it ends. A delta that comes while one
    * is queued joins it. A delta that moved nothing but the policy converges
    * nothing; one a person asked for (`reconverge`) converges every item.
+   * Deltas that moved only placed copies (the hub's "a place changed": a
+   * delegate's workspace cut, its gate's, its archive) converge at those
+   * places alone ({@link #syncPlaced}): nothing else is written, no server
+   * is read again, only the sessions in those places take their settings
+   * again, and no boundary is looked at, since a place's copies are in no
+   * path a boundary binds for the fleet (core `fleetSyncedPaths`).
    */
   #convergeSoon(): void {
     const owed =
@@ -5905,8 +6062,17 @@ export class SessionSupervisor {
         (this.#reconverge ? [...held] : [...this.#convergeIds]).filter(
           (id) => held.has(id) && id !== "policy"
         );
+      // A pass of the placed rows alone lays its rows over the last whole
+      // pass's report, so it waits for one.
+      const places =
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: set by a delta held after this converge was queued
+        this.#reconverge || this.#convergeWide || !this.#lastReport
+          ? undefined
+          : [...this.#convergePlaces];
       this.#convergeIds.clear();
       this.#convergeRemoved = false;
+      this.#convergePlaces.clear();
+      this.#convergeWide = false;
       this.#reconverge = false;
       const rev = this.#desired.rev ?? 0;
       this.#converging(
@@ -5922,9 +6088,23 @@ export class SessionSupervisor {
       let report: FleetSyncReport | undefined;
       let thrown: string | undefined;
       try {
-        report = await this.#syncFleet(config, "syncFleet");
-        if (this.#harnessFailures.size > 0) {
-          thrown = [...this.#harnessFailures]
+        const failures = new Map<HarnessKind, string>();
+        if (places && this.#lastReport) {
+          report = placedOver(
+            this.#lastReport,
+            await this.#syncPlaced(config, failures)
+          );
+          console.info(
+            `[fleet] rev ${rev}: ${ids.length} placed item(s) converged at ${places.join(", ") || "places gone"} alone`
+          );
+        } else {
+          report = await this.#syncFleet(config, "syncFleet");
+          for (const [harness, error] of this.#harnessFailures) {
+            failures.set(harness, error);
+          }
+        }
+        if (failures.size > 0) {
+          thrown = [...failures]
             .map(([harness, error]) => `${harness}: ${error}`)
             .join("\n");
         }
@@ -5940,6 +6120,7 @@ export class SessionSupervisor {
         itemStatuses(this.#desired, ids, report, Date.now() - started, thrown)
       );
       if (report) {
+        this.#lastReport = report;
         this.emit({
           verb: "frames",
           machineId: "",
@@ -5949,6 +6130,10 @@ export class SessionSupervisor {
             rev,
           } satisfies FleetReportFrame,
         });
+      }
+      if (places) {
+        this.#healFleetMcp(this.#sessionsIn(places));
+        return;
       }
       this.#healFleetMcp([...this.#sessions.keys()]);
       this.#rearmMoved();
@@ -6149,6 +6334,117 @@ export class SessionSupervisor {
       : local;
   }
 
+  /** The live sessions whose folder is one of `places` or inside one; one whose folder this agent does not know, too. */
+  #sessionsIn(places: readonly string[]): string[] {
+    return [...this.#sessions.keys()].filter((instanceId) => {
+      const cwd = this.#resumable.get(instanceId)?.cwd;
+      return cwd === undefined || places.some((place) => within(cwd, place));
+    });
+  }
+
+  /**
+   * Converges the rows placed at the project's places alone, across every
+   * harness that places any (each adapter's `syncPlaced`), for deltas that
+   * moved nothing else ({@link #convergeSoon}): the placed MCP copies are
+   * launched as a whole pass launches them and written into the fleet MCP set
+   * when they moved, its fleet servers left as the last whole pass wrote them,
+   * and the gateway keeps what it hosts. A harness whose pass threw is put in
+   * `failures`. Answers the placed pass's own report.
+   */
+  async #syncPlaced(
+    incoming: MachineFleetConfig,
+    failures: Map<HarnessKind, string>
+  ): Promise<FleetSyncReport> {
+    const placedKeys = incoming.placedMcp
+      .filter((row) => row.enabled)
+      .map((row) => `${row.name}@${row.placeId ?? ""}`);
+    for (const key of placedKeys) {
+      this.#mcpLauncherStates.delete(key);
+    }
+    const config = { ...incoming, ...(await this.#launchRows(incoming, [])) };
+    const set = await readFleetMcpSet();
+    const placed = placedMcpOf(config);
+    if (JSON.stringify(placed) !== JSON.stringify(set.placed)) {
+      await writeFleetMcpSet({ ...set, placed });
+    }
+    const readers = new Set(
+      harnesses()
+        .filter((adapter) => adapter.capabilities.mcpStatus)
+        .map((adapter) => adapter.kind)
+    );
+    const settled = await Promise.all(
+      harnesses().flatMap((adapter) =>
+        adapter.syncPlaced
+          ? [
+              adapter
+                .syncPlaced(adapter.capabilities.mcpStatus ? config : incoming)
+                .then(
+                  (report) => ({ adapter, report }) as const,
+                  (error: unknown) => ({ adapter, error }) as const
+                ),
+            ]
+          : []
+      )
+    );
+    const mcpByHarness: NonNullable<FleetSyncReport["mcpByHarness"]> = {};
+    const hooksByHarness: Partial<
+      Record<HarnessKind, Record<string, FleetState>>
+    > = {};
+    const skills: Record<string, FleetState> = {};
+    const memoryDocs: Record<string, FleetState> = {};
+    const harnessConfig: Record<string, FleetState> = {};
+    for (const outcome of settled) {
+      const { adapter } = outcome;
+      if ("error" in outcome) {
+        const words = errorText(outcome.error);
+        warn(`the placed rows on ${adapter.kind} failed: ${words}`);
+        failures.set(adapter.kind, words);
+        mcpByHarness[adapter.kind] = Object.fromEntries(
+          placedKeys.map((key) => [
+            key,
+            {
+              state: "failed",
+              cause: "unknown",
+              detail: `${adapter.kind}: ${words}`,
+            },
+          ])
+        );
+        continue;
+      }
+      const { report } = outcome;
+      mcpByHarness[adapter.kind] = report.mcp;
+      worstInto(skills, report.skills);
+      worstInto(memoryDocs, report.memoryDocs);
+      worstInto(harnessConfig, report.harnessConfig);
+      if (report.hooks) {
+        hooksByHarness[adapter.kind] = report.hooks;
+      }
+    }
+    const launchStates = placedKeys.flatMap((key) => {
+      const state = this.#mcpLauncherStates.get(key);
+      return state ? [[key, state] as const] : [];
+    });
+    for (const [kind, rows] of Object.entries(mcpByHarness)) {
+      if (readers.has(kind as HarnessKind)) {
+        Object.assign(rows, Object.fromEntries(launchStates));
+      }
+    }
+    const names = new Set(
+      Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {}))
+    );
+    return {
+      mcp: mergedMcp(names, mcpByHarness, readers),
+      mcpByHarness,
+      marketplaces: {},
+      plugins: {},
+      skills,
+      memoryDocs,
+      hooks: mergedHooks(hooksByHarness),
+      harnessConfig,
+      at: Date.now(),
+    };
+  }
+
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
@@ -6177,14 +6473,7 @@ export class SessionSupervisor {
             .filter((row) => row.enabled)
             .map((row) => [row.name, row.config])
         ),
-        placed: Object.fromEntries(
-          config.placedMcp
-            .filter((row) => row.enabled && row.cwd && row.placeId)
-            .map((row) => [
-              `${row.name}@${row.placeId}`,
-              { cwd: row.cwd as string, name: row.name, config: row.config },
-            ])
-        ),
+        placed: placedMcpOf(config),
         // The hub's own word that it holds no sign-in for a server: each
         // harness reports it needing one and starts it for no status read.
         signedOut: config.mcp
@@ -6310,29 +6599,7 @@ export class SessionSupervisor {
         toolchain = { ...toolchain, ...report.toolchain };
       }
     }
-    // A hook's row is the worst of its harnesses' words, each harness's
-    // said in its detail: one OpenCode or pi cannot run is unsupported for
-    // that harness on this machine, never left out.
-    for (const id of new Set(
-      Object.values(hooksByHarness).flatMap((rows) => Object.keys(rows ?? {}))
-    )) {
-      const readings = Object.entries(hooksByHarness).flatMap(([kind, rows]) =>
-        rows?.[id] ? [{ kind, item: rows[id] }] : []
-      );
-      const [only] = readings;
-      hooks[id] =
-        readings.length === 1 && only
-          ? only.item
-          : {
-              ...worstFleetState(readings.map(({ item }) => item)),
-              detail: readings
-                .map(
-                  ({ kind, item }) =>
-                    `${kind}: ${item.state}${item.detail ? ` — ${item.detail}` : ""}`
-                )
-                .join("\n"),
-            };
-    }
+    Object.assign(hooks, mergedHooks(hooksByHarness));
     const names = new Set([
       ...this.#mcpLauncherStates.keys(),
       ...Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {})),
@@ -6356,25 +6623,7 @@ export class SessionSupervisor {
         report[name] = state;
       }
     }
-    for (const name of names) {
-      const readings = Object.entries(mcpByHarness).flatMap(([kind, rows]) =>
-        rows?.[name] ? [{ kind, item: rows[name] }] : []
-      );
-      const worst = worstFleetState(
-        readings
-          .filter((reading) => mcpHarnesses.has(reading.kind as HarnessKind))
-          .map((reading) => reading.item)
-      );
-      mcp[name] = {
-        ...worst,
-        detail: readings
-          .map(
-            ({ kind, item }) =>
-              `${kind}: ${item.state}${item.detail ? ` — ${item.detail}` : ""}`
-          )
-          .join("\n"),
-      };
-    }
+    Object.assign(mcp, mergedMcp(names, mcpByHarness, mcpHarnesses));
     return {
       mcp,
       mcpByHarness,

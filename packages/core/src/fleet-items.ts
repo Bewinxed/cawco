@@ -101,6 +101,20 @@ export const harnessConfigKey = (
   row: Pick<FleetHarnessConfig, "kind" | "name" | "placeId">
 ): string => `${row.kind}:${row.name}${row.placeId ? `@${row.placeId}` : ""}`;
 
+/**
+ * The folder a placed copy is written into: its `cwd`, which the hub sets
+ * only on a project-bound row's copy for one of the project's places (hub
+ * project-placements.ts). None for a row that is every place's on the
+ * machine (a fleet row, the policy, the memory).
+ */
+export const placedFolder = (value: unknown): string | undefined => {
+  const cwd =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as { cwd?: unknown }).cwd
+      : undefined;
+  return typeof cwd === "string" && cwd !== "" ? cwd : undefined;
+};
+
 /** The kind an item id names. */
 export const itemKind = (id: string): FleetItemKind => {
   const colon = id.indexOf(":");

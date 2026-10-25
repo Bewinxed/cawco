@@ -500,6 +500,16 @@ export interface Harness {
   /** Applies the hub's fleet config to this harness's own files; reports per entry. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   syncFleet?(config: MachineFleetConfig): Promise<FleetSyncReport>;
+  /**
+   * Applies only the project rows the hub placed at its places (a skill,
+   * memory document, MCP server, hook or harness setting copied into a
+   * checkout or workspace), when a delta moved nothing else: a delegate's
+   * workspace cut or archived writes that place's copies and leaves every
+   * other file this harness keeps as it is. Reports the placed copies (and
+   * the hooks, whose set it writes again), nothing more.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers keep contravariant parameter checking, like syncFleet
+  syncPlaced?(config: MachineFleetConfig): Promise<FleetSyncReport>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   tagSession(
     sessionKey: string,

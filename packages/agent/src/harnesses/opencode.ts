@@ -5868,6 +5868,34 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
+   * The placed MCP copies alone ({@link placeOpencodeMcp}), for a delta that
+   * moved nothing but places: the fleet's servers, the memory and the server
+   * that runs are left as they are, and the config watcher takes the placed
+   * revision as it takes any change of it.
+   */
+  async syncPlaced(config: MachineFleetConfig): Promise<FleetSyncReport> {
+    this.#syncing += 1;
+    try {
+      return {
+        mcp: await placeOpencodeMcp(
+          config.placedMcp,
+          [...this.#sessions.values()].map((session) => session.directory)
+        ),
+        marketplaces: {},
+        plugins: {},
+        skills: {},
+        hooks: hookStatesOn(
+          "opencode",
+          config.hooks.filter((hook) => hook.enabled)
+        ),
+        at: Date.now(),
+      };
+    } finally {
+      this.#syncing -= 1;
+    }
+  }
+
+  /**
    * One fleet sync, applied as far as it changed what OpenCode runs. The hub
    * sends its whole config each time (a place added or archived, a skill, a
    * sign-in); the fleet's servers as a server's launch takes them are

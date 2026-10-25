@@ -1164,6 +1164,33 @@ export class PiProfile {
     return report;
   }
 
+  /**
+   * The placed copies alone, for a delta that moved nothing but places: pi
+   * takes a placed MCP copy from the fleet MCP set and a placed hook from the
+   * harness set, both written by the pass, so each is said as a whole sync
+   * says it and nothing of pi's is written.
+   */
+  syncPlaced(config: MachineFleetConfig): Promise<FleetSyncReport> {
+    return Promise.resolve({
+      mcp: Object.fromEntries(
+        config.placedMcp
+          .filter((row) => row.enabled && row.cwd && row.placeId)
+          .map((row) => [
+            `${row.name}@${row.placeId}`,
+            { state: "applied" } as const,
+          ])
+      ),
+      marketplaces: {},
+      plugins: {},
+      skills: {},
+      hooks: hookStatesOn(
+        "pi",
+        config.hooks.filter((hook) => hook.enabled)
+      ),
+      at: Date.now(),
+    });
+  }
+
   /** The skills cawco wrote into pi's directory, as they are on disk now. */
   async fleetHoldings(): Promise<FleetHoldings> {
     const sidecar = await readSidecar(PI_SIDECAR);

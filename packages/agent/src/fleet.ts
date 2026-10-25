@@ -2896,6 +2896,102 @@ const syncHooks = async (
   return { records: written, set };
 };
 
+/** The placed skills cawco manages, as the harness set names them (fleet-harness-set.ts). */
+const setSkillsOf = (
+  placed: Sidecar["placedSkills"]
+): FleetHarnessSet["placedSkills"] =>
+  Object.fromEntries(
+    Object.entries(placed).map(([key, { cwd, name }]) => [
+      key,
+      { cwd, name, dir: join(placedSkillsDir(cwd), name) },
+    ])
+  );
+
+/** The harness config rows that failed, as the sidecar keeps them. */
+const failedOf = (
+  states: Record<string, FleetItemState>
+): Sidecar["harnessConfigFailed"] =>
+  Object.fromEntries(
+    Object.entries(states).filter(([, state]) => state.state === "failed")
+  );
+
+/**
+ * {@link converge} of the rows placed at the project's places alone, for a
+ * delta that moved nothing else (the hub's "a place changed": a delegate's
+ * workspace cut or archived). Each placed skill and memory document is
+ * written into its folder or taken out of it, by the rules a whole converge
+ * keeps; the hooks and harness settings are synced as a whole converge syncs
+ * them, which writes a script or a package only for a copy that is new; the
+ * harness set and the sidecar take the placed copies. The fleet's own
+ * servers, plugins, skills and memory, the user settings' registrations and
+ * the account dirs' links are left as the last whole converge made them,
+ * since nothing of theirs moved. The placed MCP copies are the fleet MCP set's
+ * (agent session.ts wrote it first): each is applied once in it.
+ */
+const convergePlaced = async (
+  config: MachineFleetConfig
+): Promise<FleetSyncReport> => {
+  const managed = await readSidecar();
+  const skillStates: Record<string, FleetItemState> = {};
+  const docStates: Record<string, FleetItemState> = {};
+  const hookStates: Record<string, FleetItemState> = {};
+  const harnessStates: Record<string, FleetItemState> = {};
+  const report: FleetSyncReport = {
+    mcp: {},
+    marketplaces: {},
+    plugins: {},
+    skills: skillStates,
+    memoryDocs: docStates,
+    hooks: hookStates,
+    harnessConfig: harnessStates,
+    at: Date.now(),
+  };
+  const set = await readFleetMcpSet();
+  const handed = [...Object.keys(set.servers), ...Object.keys(set.placed)];
+  for (const key of Object.keys(set.placed)) {
+    report.mcp[key] = { state: "applied" };
+  }
+  for (const name of managed.mcpServers) {
+    if (!handed.includes(name)) {
+      report.mcp[name] = { state: "removed" };
+    }
+  }
+  const placedSkills = await syncPlacedSkills(
+    config.placedSkills,
+    managed.placedSkills,
+    skillStates
+  );
+  const placedMemory = await syncPlacedMemory(
+    config.placedMemory,
+    managed.placedMemory,
+    docStates
+  );
+  const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
+  const harnessConfig = await syncHarnessConfig(
+    config.harnessConfig,
+    harnessStates
+  );
+  await writeFleetHarnessSet({
+    ...hooks.set,
+    config: harnessConfig,
+    placedSkills: setSkillsOf(placedSkills),
+  });
+  // Read again in the sidecar's turn: every record this pass did not write
+  // (the denials, the fleet's own rows) stays as it stands now.
+  await sidecarTurn(async () => {
+    const now = await readSidecar();
+    await writeJson(SIDECAR, {
+      ...now,
+      mcpServers: handed,
+      hooks: hooks.records,
+      harnessConfigFailed: failedOf(harnessStates),
+      placedMemory,
+      placedSkills,
+    } satisfies Sidecar);
+  });
+  return { ...report, at: Date.now() };
+};
+
 const converge = async (
   config: MachineFleetConfig
 ): Promise<FleetSyncReport> => {
@@ -2954,12 +3050,7 @@ const converge = async (
   await writeFleetHarnessSet({
     ...hooks.set,
     config: harnessConfig,
-    placedSkills: Object.fromEntries(
-      Object.entries(placedSkills).map(([key, { cwd, name }]) => [
-        key,
-        { cwd, name, dir: join(placedSkillsDir(cwd), name) },
-      ])
-    ),
+    placedSkills: setSkillsOf(placedSkills),
   });
   // The denials are the sync's own write, made as it arrived (denied-tools.ts
   // `applyFleetDenials`): kept as the sidecar holds them now, in the same
@@ -2983,11 +3074,7 @@ const converge = async (
       ...(memory ? { memory } : {}),
       memoryDocs,
       hooks: hooks.records,
-      harnessConfigFailed: Object.fromEntries(
-        Object.entries(harnessStates).filter(
-          ([, state]) => state.state === "failed"
-        )
-      ),
+      harnessConfigFailed: failedOf(harnessStates),
       placedMemory,
       placedSkills,
     } satisfies Sidecar);
@@ -3037,6 +3124,11 @@ export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
 export const syncFleetConfig = (
   config: MachineFleetConfig
 ): Promise<FleetSyncReport> => inFleetQueue(() => converge(config));
+
+/** {@link syncFleetConfig} of the placed rows alone ({@link convergePlaced}), in the same queue. */
+export const syncPlacedConfig = (
+  config: MachineFleetConfig
+): Promise<FleetSyncReport> => inFleetQueue(() => convergePlaced(config));
 
 /**
  * What the machine has of what cawco last put on it, without changing any of

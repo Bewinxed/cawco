@@ -181,6 +181,7 @@ import {
   readMemoryFile,
   readSkillFiles,
   syncFleetConfig,
+  syncPlacedConfig,
 } from "../fleet";
 import {
   configAt,
@@ -5216,6 +5217,10 @@ export class ClaudeHarness implements Harness {
 
   syncFleet(config: import("@cawco/core").MachineFleetConfig) {
     return syncFleetConfig(config);
+  }
+
+  syncPlaced(config: import("@cawco/core").MachineFleetConfig) {
+    return syncPlacedConfig(config);
   }
 
   fleetStatus() {
